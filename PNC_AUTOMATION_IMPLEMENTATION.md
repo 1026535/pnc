@@ -927,23 +927,31 @@ Exit condition:
 
 ### Phase 2: P&C observation baseline
 
-This phase is now owned by [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SELECTOR_REFINEMENT_SUBPLAN.md) and is considered closed in this primary implementation plan.
+This phase is now owned by [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SELECTOR_REFINEMENT_SUBPLAN.md).
+
+Baseline observation code exists, but this primary implementation plan does not treat the phase as closed. Closure remains tracked in the selector-refinement sub-plan because selector coverage and validation evidence are still incomplete.
 
 ### Phase 2.5: Selector refinement
 
-This phase is now owned by [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SELECTOR_REFINEMENT_SUBPLAN.md) and is considered closed in this primary implementation plan.
+This phase is now owned by [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SELECTOR_REFINEMENT_SUBPLAN.md).
+
+Initial registry seeding exists, but this primary implementation plan does not treat the phase as closed. Closure remains tracked in the selector-refinement sub-plan until the required selectors move out of `planned` with the documented screenshot and smoke evidence.
 
 ### Phase 3: Automation framework
 
-This phase is implemented in code and is considered closed in this primary implementation plan.
+This phase is implemented in code and validated by unit tests for runner, script loading, and task-contract behavior.
 
 ### Phase 4: Account login
 
-This phase is now owned by [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md) and is considered closed in this primary implementation plan.
+This phase is now owned by [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md).
+
+Runtime scaffolding exists, but this primary implementation plan does not treat the phase as closed. Closure remains tracked in the account-navigation sub-plan until the required selector maturity and live validation evidence exist.
 
 ### Phase 5: Castle targeting
 
-This phase is now owned by [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md) and is considered closed in this primary implementation plan.
+This phase is now owned by [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md).
+
+Baseline castle-roster parsing and selection scaffolding exist, but this primary implementation plan does not treat the phase as closed. Closure remains tracked in the account-navigation sub-plan until the required smoke validation evidence exists.
 
 ### Phase 6: Castle-management features
 
@@ -977,6 +985,19 @@ Exit condition:
 - add safe stop conditions,
 - consider concurrency only after single-thread stability.
 
+### Phase status summary
+
+| Phase | Status in repo | Validation evidence currently recorded |
+| --- | --- | --- |
+| Phase 1 | implemented | unit tests for config and foundation logic; no emulator smoke evidence recorded in the repo |
+| Phase 2 | baseline implemented, owned by selector refinement | synthetic screenshot tests exist, but broader screenshot fixtures and live smoke evidence remain incomplete |
+| Phase 2.5 | baseline implemented, owned by selector refinement | selector registry and observation tests exist, but required click-mapping and live validation evidence remain incomplete |
+| Phase 3 | implemented | unit tests for runner, script loading, and task contract behavior |
+| Phase 4 | scaffolding implemented, owned by account navigation | no closure evidence recorded in this document yet |
+| Phase 5 | baseline roster parsing implemented, owned by account navigation | screenshot-style parsing tests exist, but required smoke validation evidence is not yet recorded |
+| Phase 6 | baseline task implementations exist | feature-complete validation still depends on selector maturity and live smoke checks |
+| Phase 7 | ongoing hardening backlog | no phase-complete validation evidence recorded |
+
 ## 20. Validation and testing strategy
 
 ### 20.1 Mandatory validation rule
@@ -1009,11 +1030,11 @@ Use the following mapping:
 Each implementation phase should be considered complete only when its required validation gate has been run:
 
 - Phase 1: unit tests for config and foundation logic, plus smoke check for emulator connection and screenshot persistence,
-- Phase 2: owned by [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SELECTOR_REFINEMENT_SUBPLAN.md) and treated as closed in this plan,
-- Phase 2.5: owned by [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SELECTOR_REFINEMENT_SUBPLAN.md) and treated as closed in this plan,
-- Phase 3: implemented in code, validated by unit tests for runner, script loading, and task contract behavior, and treated as closed in this plan,
-- Phase 4: owned by [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md) and treated as closed in this plan,
-- Phase 5: owned by [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md) and treated as closed in this plan,
+- Phase 2: screenshot integration tests plus any targeted smoke checks recorded by [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SELECTOR_REFINEMENT_SUBPLAN.md); baseline code exists, but closure remains pending there until the evidence is complete,
+- Phase 2.5: selector screenshot, click-mapping, and smoke evidence recorded by [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SELECTOR_REFINEMENT_SUBPLAN.md); baseline code exists, but closure remains pending there until the evidence is complete,
+- Phase 3: implemented in code and validated by unit tests for runner, script loading, and task contract behavior,
+- Phase 4: account-navigation screenshot and smoke evidence recorded by [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md); closure remains pending there until the evidence is complete,
+- Phase 5: castle-targeting screenshot and smoke evidence recorded by [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md); closure remains pending there until the evidence is complete,
 - Phase 6: smoke validation per implemented feature, plus lower-level unit or screenshot tests for any logic extracted from the feature,
 - Phase 7: broader regression pass across the relevant unit, screenshot, and smoke suites.
 

@@ -10,9 +10,11 @@ from pnc_automation.vision.ocr_service import OcrLine, OcrService, RapidOcrServi
 from pnc_automation.vision.pnc_observation_enricher import PncObservationEnricher
 from pnc_automation.vision.screen_classifier import ScreenClassifier
 from pnc_automation.vision.selectors import SelectorRegistry, build_default_selector_registry
+from pnc_automation.vision.text_anchors import DetectedTextAnchor, TextAnchorDetector, TextAnchorId, normalize_ocr_text
 from pnc_automation.vision.template_matcher import PillowTemplateMatcher
 
 __all__ = [
+    "DetectedTextAnchor",
     "DefaultObservationEnricher",
     "ObservationBuilder",
     "ObservationService",
@@ -24,6 +26,9 @@ __all__ = [
     "RapidOcrService",
     "ScreenClassifier",
     "SelectorRegistry",
+    "TextAnchorDetector",
+    "TextAnchorId",
     "UnavailableOcrService",
     "build_default_selector_registry",
+    "normalize_ocr_text",
 ]

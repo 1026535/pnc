@@ -1,0 +1,10 @@
+# Example authored castle-roster cache.
+# The runtime-generated cache file lives at config/castles.yaml.
+pnc_accounts:
+  - pnc_account_id: your_pnc_account_id
+    castles:
+      - kingdom: K230
+        castle_name: Main
+        castle_level: 8
+      - kingdom: K230
+        castle_name: Farm

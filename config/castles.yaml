@@ -1,1 +1,2 @@
+# Runtime-generated castle roster cache. Use config/castles.example.yaml for an authored example.
 pnc_accounts: []

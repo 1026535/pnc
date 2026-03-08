@@ -254,6 +254,57 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertTrue(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
             self.assertTrue(observation.has(UiElementId.PNC_BUILDING_UPGRADE_BUTTON))
 
+    def test_observation_builder_rejects_upgrade_like_non_building_screens(self) -> None:
+        """Keeps ambiguous upgrade screens unknown when the building evidence is incomplete."""
+
+        cases = (
+            (
+                "hero_detail_upgrade",
+                (
+                    _ocr_line("Hero", x=120, y=18, width=120, height=30),
+                    _ocr_line("Upgrade", x=682, y=308, width=120, height=40),
+                    _ocr_line("Enhance", x=118, y=210, width=160, height=34),
+                    _ocr_line("Evolve", x=585, y=1220, width=160, height=40),
+                ),
+            ),
+            (
+                "generic_modal_upgrade",
+                (
+                    _ocr_line("Rewards", x=310, y=40, width=180, height=30),
+                    _ocr_line("Upgrade", x=682, y=308, width=120, height=40),
+                    _ocr_line("Claim Available", x=160, y=440, width=220, height=30),
+                ),
+            ),
+        )
+
+        for label, lines in cases:
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as temp_directory:
+                root = Path(temp_directory)
+                screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+                screenshot = screenshot_service.capture(
+                    _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                    artifact_directory="k313_probe",
+                    label=label,
+                )
+                builder = ObservationBuilder(
+                    selector_registry=SelectorRegistry(selectors=()),
+                    selector_engine=PillowSelectorEngine(
+                        template_matcher=PillowTemplateMatcher(),
+                        ocr_service=UnavailableOcrService(),
+                    ),
+                    screen_classifier=ScreenClassifier(),
+                    enricher=PncObservationEnricher(
+                        ocr_service=_FakeOcrService(
+                            lines=lines,
+                        )
+                    ),
+                )
+
+                observation = builder.build(screenshot)
+
+                self.assertEqual(observation.screen_type, ScreenType.UNKNOWN)
+                self.assertFalse(observation.has(UiElementId.PNC_BUILDING_UPGRADE_BUTTON))
+
     def test_observation_builder_classifies_home_city_from_bottom_nav_ocr(self) -> None:
         """Recognizes home city from bottom navigation OCR when templates are unavailable."""
 
@@ -275,6 +326,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                 enricher=PncObservationEnricher(
                     ocr_service=_FakeOcrService(
                         lines=(
+                            _ocr_line("Build", x=120, y=1180, width=90, height=30),
                             _ocr_line("Alliance", x=48, y=1500, width=124, height=32),
                             _ocr_line("More", x=740, y=1500, width=74, height=32),
                         )
@@ -287,6 +339,74 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertEqual(observation.screen_type, ScreenType.PNC_HOME_CITY)
             self.assertTrue(observation.has(UiElementId.PNC_BOTTOM_NAV_ALLIANCE))
             self.assertTrue(observation.has(UiElementId.PNC_BOTTOM_NAV_MORE))
+            self.assertTrue(observation.has(UiElementId.PNC_HOME_BUILD_BUTTON))
+
+    def test_observation_builder_rejects_bottom_nav_only_non_home_screens(self) -> None:
+        """Keeps bag, quest, hero, and mail OCR fixtures unknown without city-only anchors."""
+
+        cases = (
+            (
+                "bag",
+                (
+                    _ocr_line("Bag", x=360, y=240, width=72, height=28),
+                    _ocr_line("Alliance", x=48, y=1500, width=124, height=32),
+                    _ocr_line("More", x=740, y=1500, width=74, height=32),
+                ),
+            ),
+            (
+                "quest",
+                (
+                    _ocr_line("Quest", x=360, y=240, width=92, height=28),
+                    _ocr_line("Alliance", x=48, y=1500, width=124, height=32),
+                    _ocr_line("More", x=740, y=1500, width=74, height=32),
+                ),
+            ),
+            (
+                "hero",
+                (
+                    _ocr_line("Hero", x=360, y=240, width=80, height=28),
+                    _ocr_line("Alliance", x=48, y=1500, width=124, height=32),
+                    _ocr_line("More", x=740, y=1500, width=74, height=32),
+                ),
+            ),
+            (
+                "mail",
+                (
+                    _ocr_line("Mail", x=360, y=240, width=80, height=28),
+                    _ocr_line("Alliance", x=48, y=1500, width=124, height=32),
+                    _ocr_line("More", x=740, y=1500, width=74, height=32),
+                ),
+            ),
+        )
+
+        for label, lines in cases:
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as temp_directory:
+                root = Path(temp_directory)
+                screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+                screenshot = screenshot_service.capture(
+                    _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                    artifact_directory="k230_probe",
+                    label=label,
+                )
+                builder = ObservationBuilder(
+                    selector_registry=SelectorRegistry(selectors=()),
+                    selector_engine=PillowSelectorEngine(
+                        template_matcher=PillowTemplateMatcher(),
+                        ocr_service=UnavailableOcrService(),
+                    ),
+                    screen_classifier=ScreenClassifier(),
+                    enricher=PncObservationEnricher(
+                        ocr_service=_FakeOcrService(
+                            lines=lines,
+                        )
+                    ),
+                )
+
+                observation = builder.build(screenshot)
+
+                self.assertEqual(observation.screen_type, ScreenType.UNKNOWN)
+                self.assertFalse(observation.has(UiElementId.PNC_BOTTOM_NAV_ALLIANCE))
+                self.assertFalse(observation.has(UiElementId.PNC_HOME_BUILD_BUTTON))
 
     def test_observation_service_syncs_castle_roster_cache_from_castle_selection(self) -> None:
         """Persists discovered castle rosters when the Manage Char screen is observed."""
