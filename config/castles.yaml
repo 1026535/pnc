@@ -1,14 +1,1 @@
-pnc_accounts:
-  - pnc_account_id: your_pnc_username
-    castles:
-      - kingdom: K230
-        castle_name: firstCastle
-        castle_level: 8
-  - pnc_account_id: your_second_pnc_username
-    castles:
-      - kingdom: K230
-        castle_name: firstCastle
-        castle_level: 8
-      - kingdom: K231
-        castle_name: Second Castle
-        castle_level: 8
+pnc_accounts: []

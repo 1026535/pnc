@@ -119,6 +119,37 @@ class ConfigLoaderTests(unittest.TestCase):
             self.assertEqual(credentials.username, "inline_user")
             self.assertEqual(credentials.password, "inline_pass")
             self.assertEqual(credentials.source, CredentialSource.INLINE)
+            self.assertEqual(config.require_account("account_a").artifact_directory_name, "k230_main")
+
+    def test_load_app_config_formats_castle_artifact_directory_as_snake_case(self) -> None:
+        """Formats per-castle artifact directories as lowercase snake_case identifiers."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            config_path = Path(temp_directory) / "accounts.yaml"
+            config_path.write_text(
+                textwrap.dedent(
+                    """
+                    instances:
+                      - id: bs-main
+                        device_id: 127.0.0.1:5555
+                        app_package: com.global.ztmslg
+                    accounts:
+                      - id: account_a
+                        instance_id: bs-main
+                        pnc_account_id: inline_user
+                        username: inline_user
+                        password: inline_pass
+                        selected_castle:
+                          kingdom: K313
+                          castle_name: ColdDukeOfTheNorth
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+
+            config = load_app_config(config_path)
+
+            self.assertEqual(config.require_account("account_a").artifact_directory_name, "k313_cold_duke_of_the_north")
 
     def test_load_app_config_loads_castle_rosters_from_sibling_file(self) -> None:
         """Loads the sibling castles.yaml file as an optional discovered roster cache."""

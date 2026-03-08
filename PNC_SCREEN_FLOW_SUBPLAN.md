@@ -7,6 +7,7 @@ This document is the dependency-ordered fourth plan and covers reusable Puzzles 
 It is intentionally separate from:
 
 - [PNC_AUTOMATION_IMPLEMENTATION.md](/c:/Users/lebel/pnc/PNC_AUTOMATION_IMPLEMENTATION.md), which remains the primary platform architecture plan,
+- [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md), which covers account-specific bootstrap and castle-targeting behavior,
 - [PNC_TASK_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_TASK_SUBPLAN.md), which covers concrete task behavior.
 
 This file owns only shared navigation and reusable screen-flow logic.
@@ -96,13 +97,13 @@ The first reusable flows to document and refine are:
 
 ## 6. Relationship to task planning
 
-Tasks in [PNC_TASK_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_TASK_SUBPLAN.md) should consume these flows instead of re-describing their navigation every time.
+Tasks in [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md) and [PNC_TASK_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_TASK_SUBPLAN.md) should consume these flows instead of re-describing their navigation every time.
 
 If a task needs a new reusable navigation path, it should be added here first as a canonical flow, then referenced from the task sub-plan.
 
 ## 7. Relationship to automation orchestration
 
-This sub-plan should be consumed by [PNC_AUTOMATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_AUTOMATION_SUBPLAN.md) and [PNC_TASK_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_TASK_SUBPLAN.md). It must not redefine script-runner policy or task ownership.
+This sub-plan should be consumed by [PNC_AUTOMATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_AUTOMATION_SUBPLAN.md), [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md), and [PNC_TASK_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_TASK_SUBPLAN.md). It must not redefine script-runner policy or task ownership.
 
 ## 8. Relationship to selector refinement
 

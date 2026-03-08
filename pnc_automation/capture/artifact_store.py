@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+from pnc_automation.artifact_naming import sanitize_artifact_segment
+
 
 @dataclass(frozen=True, slots=True)
 class ArtifactRecord:
@@ -30,15 +32,15 @@ class ArtifactStore:
 
         self.root.mkdir(parents=True, exist_ok=True)
 
-    def persist_bytes(self, *, account_id: str, label: str, extension: str, payload: bytes) -> ArtifactRecord:
-        """Writes one artifact to disk and returns its metadata."""
+    def persist_bytes(self, *, artifact_directory: str, label: str, extension: str, payload: bytes) -> ArtifactRecord:
+        """Writes one artifact under the provided per-castle directory and returns its metadata."""
 
         captured_at = datetime.now(tz=UTC)
-        account_directory = self.root / captured_at.strftime("%Y-%m-%d") / _sanitize_path_segment(account_id)
-        account_directory.mkdir(parents=True, exist_ok=True)
+        artifact_directory_path = self.root / captured_at.strftime("%Y-%m-%d") / sanitize_artifact_segment(artifact_directory)
+        artifact_directory_path.mkdir(parents=True, exist_ok=True)
 
-        filename = f"{captured_at.strftime('%Y%m%dT%H%M%SZ')}_{_sanitize_path_segment(label)}.{extension.lstrip('.')}"
-        path = account_directory / filename
+        filename = f"{captured_at.strftime('%Y%m%dT%H%M%SZ')}_{sanitize_artifact_segment(label)}.{extension.lstrip('.')}"
+        path = artifact_directory_path / filename
         path.write_bytes(payload)
 
         return ArtifactRecord(
@@ -48,10 +50,3 @@ class ArtifactStore:
             size_bytes=len(payload),
             sha256=hashlib.sha256(payload).hexdigest(),
         )
-
-
-def _sanitize_path_segment(value: str) -> str:
-    """Produces a stable filesystem-safe artifact path segment."""
-
-    cleaned = "".join(character if character.isalnum() or character in {"-", "_"} else "_" for character in value)
-    return cleaned.strip("_") or "artifact"

@@ -7,11 +7,16 @@ This document is the dependency-ordered third plan and covers iterative selector
 It is intentionally separate from:
 
 - [PNC_AUTOMATION_IMPLEMENTATION.md](/c:/Users/lebel/pnc/PNC_AUTOMATION_IMPLEMENTATION.md), which remains the primary platform architecture plan,
+- [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md), which covers account-specific bootstrap and castle-targeting behavior,
 - [PNC_TASK_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_TASK_SUBPLAN.md), which covers concrete task behavior,
 - [PNC_SCREEN_FLOW_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SCREEN_FLOW_SUBPLAN.md), which covers reusable navigation flows,
 - [PNC_AUTOMATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_AUTOMATION_SUBPLAN.md), which covers orchestration.
 
-This file owns only selector discovery, click-mapping, and registry refinement.
+This file owns the detailed work for former Phase 2 and Phase 2.5 from [PNC_AUTOMATION_IMPLEMENTATION.md](/c:/Users/lebel/pnc/PNC_AUTOMATION_IMPLEMENTATION.md).
+
+Those two phases are now considered closed in the primary implementation plan, and any follow-on work stays here as selector maintenance and refinement.
+
+This file therefore owns selector discovery, observation-baseline refinement, click-mapping, and registry refinement.
 
 ## 2. Why this exists
 
@@ -27,7 +32,42 @@ That is especially important for:
 - rotating UI states where the clickable source is stable but the destination varies slightly,
 - any screen that cannot be modeled correctly from static screenshots alone.
 
-## 3. Scope
+## 3. Former implementation phases now owned here
+
+### Former Phase 2: P&C observation baseline
+
+- build selector registry,
+- implement screen classification for Android home, P&C login, popup, and home city,
+- add OCR for narrow required regions,
+- produce typed observations.
+
+Exit condition:
+
+- the tool can reliably tell whether it is at Android home, P&C login, a popup, or P&C home city.
+
+Status:
+
+- closed in the primary implementation plan,
+- future adjustments stay in this sub-plan as refinement work, not as a reopened platform phase.
+
+### Former Phase 2.5: Selector refinement
+
+- refine screenshot-seeded selectors through controlled click mapping,
+- document source-screen to destination-screen transitions,
+- add missing selectors for unique home-city buildings,
+- add missing selectors for empty building slots and construction menus,
+- advance high-value selectors from `planned` or `screenshot_seeded` to validated statuses.
+
+Exit condition:
+
+- the high-priority selectors required by the next implementation phases are click-mapped and interaction-validated.
+
+Status:
+
+- closed in the primary implementation plan,
+- future selector work stays here as ongoing registry refinement and validation maintenance.
+
+## 4. Scope
 
 This sub-plan should define:
 
@@ -38,7 +78,7 @@ This sub-plan should define:
 - how unique building and empty-slot interactions are refined,
 - how selector metadata is updated without duplicating definitions.
 
-## 4. Refinement principles
+## 5. Refinement principles
 
 - The canonical registry remains singular.
 - Refinement updates the canonical registry; it does not create a second registry.
@@ -46,7 +86,7 @@ This sub-plan should define:
 - If a UI element is dynamic in content but stable in structure, refine the collection selector, not a temporary row id.
 - Unknown click outcomes must be captured with artifacts and documented before automation relies on them.
 
-## 5. Selector lifecycle
+## 6. Selector lifecycle
 
 Each selector should move through explicit statuses:
 
@@ -64,7 +104,7 @@ Meaning:
 - `interaction_validated`: detection and click target are reliable enough for general use.
 - `task_validated`: the selector has been proven inside at least one end-to-end task flow.
 
-## 6. Per-selector refinement template
+## 7. Per-selector refinement template
 
 Each selector refinement entry should capture:
 
@@ -99,7 +139,7 @@ Each selector refinement entry should capture:
 - blockers,
 - follow-up screenshot needs.
 
-## 7. Refinement workflow
+## 8. Refinement workflow
 
 The selector-refinement workflow should be:
 
@@ -111,7 +151,7 @@ The selector-refinement workflow should be:
 6. update the selector entry with click mapping and verification evidence,
 7. mark the selector status forward only when evidence is sufficient.
 
-## 8. Validation requirement
+## 9. Validation requirement
 
 No selector should move forward in status without recorded validation evidence.
 
@@ -122,7 +162,7 @@ Minimum evidence per stage:
 - `interaction_validated`: repeated successful detection and click verification,
 - `task_validated`: successful use inside at least one live feature flow.
 
-## 9. Initial refinement backlog
+## 10. Initial refinement backlog
 
 The first high-value refinement targets are:
 
@@ -136,7 +176,7 @@ The first high-value refinement targets are:
 - popup close and confirmation buttons,
 - castle-selection entries and selection indicators.
 
-## 10. Buildings and empty slots
+## 11. Buildings and empty slots
 
 Home-city building refinement needs special treatment.
 
@@ -150,14 +190,15 @@ Rules:
 
 This is required because home-city building interactions are not uniform and should not be guessed from partial screenshots.
 
-## 11. Relationship to the selector registry
+## 12. Relationship to the selector registry
 
 This sub-plan refines the registry defined in [PNC_AUTOMATION_IMPLEMENTATION.md](/c:/Users/lebel/pnc/PNC_AUTOMATION_IMPLEMENTATION.md). It must not create a parallel selector-definition system.
 
 If a selector is refined here, the canonical selector entry in the main plan or future implementation must be updated accordingly.
 
-## 12. Relationship to other plans
+## 13. Relationship to other plans
 
+- [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md) must consume account-navigation-related selectors only after they are sufficiently refined here.
 - [PNC_TASK_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_TASK_SUBPLAN.md) must consume selectors only after the required selectors are sufficiently refined.
 - [PNC_SCREEN_FLOW_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SCREEN_FLOW_SUBPLAN.md) must reference the refined selectors for reusable navigation flows.
 - [PNC_AUTOMATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_AUTOMATION_SUBPLAN.md) must not redefine refinement rules; it only consumes the resulting registry quality level.

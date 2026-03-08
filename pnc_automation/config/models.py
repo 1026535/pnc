@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
+from pnc_automation.artifact_naming import format_castle_artifact_directory
 from pnc_automation.errors import ConfigurationError
 
 
@@ -35,6 +36,12 @@ class SelectedCastleConfig:
     kingdom: str
     castle_name: str
     castle_level: int | None = None
+
+    @property
+    def artifact_directory_name(self) -> str:
+        """Returns the canonical artifact directory name for this castle."""
+
+        return format_castle_artifact_directory(kingdom=self.kingdom, castle_name=self.castle_name)
 
 
 class CredentialSource(StrEnum):
@@ -70,6 +77,12 @@ class AccountConfig:
         """Returns whether this account can perform credential-based login."""
 
         return self.credentials is not None
+
+    @property
+    def artifact_directory_name(self) -> str:
+        """Returns the canonical artifact directory name for this account's selected castle."""
+
+        return self.selected_castle.artifact_directory_name
 
 
 @dataclass(frozen=True, slots=True)

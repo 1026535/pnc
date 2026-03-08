@@ -25,3 +25,26 @@ class RunScript:
     name: str
     path: Path
     steps: tuple[ScriptStep, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedScriptStep:
+    """One task step after task-specific parameter validation has succeeded."""
+
+    script_step: ScriptStep
+    parsed_params: Any
+
+    @property
+    def task(self) -> TaskId:
+        """Returns the canonical task identifier for the prepared step."""
+
+        return self.script_step.task
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedRunScript:
+    """One execution-ready run script with typed task parameters."""
+
+    name: str
+    path: Path
+    steps: tuple[PreparedScriptStep, ...]

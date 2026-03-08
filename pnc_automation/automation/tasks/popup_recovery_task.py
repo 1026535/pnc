@@ -23,9 +23,10 @@ class PopupRecoveryTask(BaseAutomationTask):
         return None
 
     def is_applicable(self, context: TaskContext, observation: Observation) -> bool:
-        """Runs only when a popup is currently blocking interaction."""
+        """Allows recovery retries even when the popup has already disappeared."""
 
-        return observation.blocking_popup
+        del context, observation
+        return True
 
     def plan(self, context: TaskContext, observation: Observation) -> list[ActionRequest]:
         """Delegates popup dismissal to the canonical flow planner."""

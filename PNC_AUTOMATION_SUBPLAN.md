@@ -4,9 +4,12 @@
 
 This document is the dependency-ordered second plan and covers automation orchestration design.
 
+The automation framework described here is already implemented in code. This document now serves as a fixed reference for later sub-plans instead of a remaining implementation to-do.
+
 It is intentionally separate from:
 
 - [PNC_AUTOMATION_IMPLEMENTATION.md](/c:/Users/lebel/pnc/PNC_AUTOMATION_IMPLEMENTATION.md), which remains the primary platform architecture plan,
+- [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md), which covers account-specific bootstrap and castle-targeting behavior,
 - [PNC_TASK_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_TASK_SUBPLAN.md), which covers concrete task behavior,
 - [PNC_SCREEN_FLOW_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SCREEN_FLOW_SUBPLAN.md), which covers reusable navigation flows.
 
@@ -107,7 +110,9 @@ At this stage, automation should reason about generic task categories, not final
 - world-map task,
 - campaign task.
 
-Concrete behavior for those categories belongs in [PNC_TASK_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_TASK_SUBPLAN.md).
+Concrete behavior for `game bootstrap task`, `popup recovery task`, `login task`, and `castle selection task` belongs in [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md).
+
+Concrete behavior for the remaining task categories belongs in [PNC_TASK_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_TASK_SUBPLAN.md).
 
 ## 8. Module boundaries
 
@@ -117,7 +122,8 @@ Automation consumes:
 - typed run script,
 - typed observations from `pnc`,
 - reusable navigation flows from [PNC_SCREEN_FLOW_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SCREEN_FLOW_SUBPLAN.md),
-- concrete task definitions from [PNC_TASK_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_TASK_SUBPLAN.md).
+- account-navigation task definitions from [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md),
+- concrete post-navigation task definitions from [PNC_TASK_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_TASK_SUBPLAN.md).
 
 Automation produces:
 
@@ -160,7 +166,8 @@ Automation should also define what evidence is recorded when a task verification
 This file must not duplicate:
 
 - concrete selectors from [PNC_AUTOMATION_IMPLEMENTATION.md](/c:/Users/lebel/pnc/PNC_AUTOMATION_IMPLEMENTATION.md),
+- account-navigation task behavior from [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md),
 - reusable screen flows from [PNC_SCREEN_FLOW_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SCREEN_FLOW_SUBPLAN.md),
-- concrete task internals from [PNC_TASK_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_TASK_SUBPLAN.md).
+- concrete post-navigation task internals from [PNC_TASK_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_TASK_SUBPLAN.md).
 
 It is the canonical place for automation orchestration only.
