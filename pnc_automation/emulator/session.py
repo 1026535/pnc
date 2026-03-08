@@ -38,8 +38,8 @@ class BlueStacksSession:
     def ensure_responsive(self) -> None:
         """Ensures the Android session responds to a trivial shell command."""
 
-        result = self.adb_client.shell(self.instance.device_id, "echo", "ready")
-        if not result.succeeded or result.stdout_text.strip() != "ready":
+        result = self.adb_client.shell(self.instance.device_id, "getprop", "ro.product.model")
+        if not result.succeeded or result.stdout_text.strip() == "":
             raise DeviceConnectionError(
                 f"Device '{self.instance.device_id}' did not respond to a readiness check.",
                 device_id=self.instance.device_id,

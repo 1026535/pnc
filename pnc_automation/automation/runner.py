@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from typing import Any
 
 from pnc_automation.automation.action_executor import ActionExecutor
-from pnc_automation.automation.scripts.models import RunScript, ScriptStep
+from pnc_automation.automation.scripts.models import PreparedRunScript, PreparedScriptStep, ScriptStep
 from pnc_automation.automation.scripts.registry import TaskRegistry
-from pnc_automation.automation.task import TaskId, TaskStatus
+from pnc_automation.automation.task import TaskId, TaskResult, TaskStatus
 from pnc_automation.automation.task_context import TaskContext
 from pnc_automation.config.models import AccountConfig, DefaultsConfig
 from pnc_automation.errors import TaskVerificationError
@@ -39,6 +40,31 @@ class RunResult:
     finished_at: datetime
 
 
+@dataclass(frozen=True, slots=True)
+class StepExecutionPolicy:
+    """Centralizes retry and replan limits for one automation runner."""
+
+    max_replans_per_step: int = 5
+    max_retries_per_step: int = 1
+
+    def __post_init__(self) -> None:
+        """Rejects invalid negative execution-policy limits."""
+
+        if self.max_replans_per_step < 0:
+            raise ValueError("StepExecutionPolicy.max_replans_per_step cannot be negative.")
+        if self.max_retries_per_step < 0:
+            raise ValueError("StepExecutionPolicy.max_retries_per_step cannot be negative.")
+
+
+@dataclass(frozen=True, slots=True)
+class _LoopExecutionResult:
+    """Carries one finished task-loop result and the freshest observation."""
+
+    result: TaskResult
+    attempts: int
+    final_observation: Observation
+
+
 @dataclass(slots=True)
 class AutomationRunner:
     """Executes a run script through the canonical observation loop."""
@@ -49,10 +75,9 @@ class AutomationRunner:
     task_registry: TaskRegistry
     flow_planner: ScreenFlowPlanner
     logger: logging.LoggerAdapter
-    max_replans_per_step: int = 5
-    max_retries_per_step: int = 1
+    policy: StepExecutionPolicy = field(default_factory=StepExecutionPolicy)
 
-    def run(self, account: AccountConfig, script: RunScript) -> RunResult:
+    def run(self, account: AccountConfig, script: PreparedRunScript) -> RunResult:
         """Runs the provided script for one account target."""
 
         started_at = datetime.now(tz=UTC)
@@ -66,47 +91,64 @@ class AutomationRunner:
             finished_at=finished_at,
         )
 
-    def _run_step(self, account: AccountConfig, step: ScriptStep) -> StepRunResult:
+    def _run_step(self, account: AccountConfig, step: PreparedScriptStep) -> StepRunResult:
         """Executes one script step until it succeeds or fails."""
 
-        task = self.task_registry.require(step.task)
-        params = task.parse_params(step.params)
-        task_logger = logging.LoggerAdapter(
-            self.logger.logger,
-            extra={**self.logger.extra, "task_id": step.task},
-        )
-        context = TaskContext(
+        before = self.observation_service.observe(f"{step.task.value}_before")
+        execution = self._execute_step_loop(
             account=account,
-            defaults=self.defaults,
-            step=step,
-            params=params,
-            flows=self.flow_planner,
-            logger=task_logger,
+            step=step.script_step,
+            parsed_params=step.parsed_params,
+            before=before,
+            allow_popup_recovery=True,
+        )
+        return StepRunResult(
+            task_id=step.task,
+            status=execution.result.status,
+            attempts=execution.attempts,
+            message=execution.result.message,
         )
 
+    def _execute_step_loop(
+        self,
+        *,
+        account: AccountConfig,
+        step: ScriptStep,
+        parsed_params: Any,
+        before: Observation,
+        allow_popup_recovery: bool,
+    ) -> _LoopExecutionResult:
+        """Runs one task through the canonical plan-act-verify loop."""
+
+        task = self.task_registry.require(step.task)
+        context = self._build_context(account=account, step=step, parsed_params=parsed_params)
         attempts = 0
         replans = 0
-        before = self.observation_service.observe(f"{step.task.value}_before")
+        current_before = before
         while True:
             attempts += 1
-            before = self._ensure_no_blocking_popup(before, account=account)
-            if not task.is_applicable(context, before):
+            if allow_popup_recovery:
+                current_before = self._ensure_no_blocking_popup(current_before, account=account)
+            if not task.is_applicable(context, current_before):
                 raise TaskVerificationError(
-                    f"Task '{step.task}' is not applicable on screen '{before.screen_type}'.",
+                    f"Task '{step.task}' is not applicable on screen '{current_before.screen_type}'.",
                     task_id=step.task,
-                    screen_type=before.screen_type,
-                    artifact_path=str(before.artifact_path) if before.artifact_path else None,
+                    screen_type=current_before.screen_type,
+                    artifact_path=str(current_before.artifact_path) if current_before.artifact_path else None,
                 )
 
-            task_logger.info("Planning task increment.", extra={"screen_type": before.screen_type, "attempt": attempts})
-            actions = task.plan(context, before)
-            after = before if not actions else self.action_executor.execute_actions(
+            context.logger.info(
+                "Planning task increment.",
+                extra={"screen_type": current_before.screen_type, "attempt": attempts},
+            )
+            actions = task.plan(context, current_before)
+            after = current_before if not actions else self.action_executor.execute_actions(
                 actions,
-                before,
+                current_before,
                 observe=lambda label: self.observation_service.observe(f"{step.task.value}_{label}"),
             )
-            result = task.verify(context, before, after)
-            task_logger.info(
+            result = task.verify(context, current_before, after)
+            context.logger.info(
                 "Task increment verified.",
                 extra={
                     "result": result.status,
@@ -115,19 +157,19 @@ class AutomationRunner:
                 },
             )
             if result.succeeded:
-                return StepRunResult(task_id=step.task, status=result.status, attempts=attempts, message=result.message)
+                return _LoopExecutionResult(result=result, attempts=attempts, final_observation=after)
             if result.status == TaskStatus.REPLAN:
                 replans += 1
-                if replans > self.max_replans_per_step:
+                if replans > self.policy.max_replans_per_step:
                     raise TaskVerificationError(
                         f"Task '{step.task}' exceeded the maximum allowed replans.",
                         task_id=step.task,
                         replans=replans,
                     )
-                before = after
+                current_before = after
                 continue
-            if result.retryable and attempts <= self.max_retries_per_step:
-                before = self.observation_service.observe(f"{step.task.value}_retry_{attempts}")
+            if result.retryable and attempts <= self.policy.max_retries_per_step:
+                current_before = self.observation_service.observe(f"{step.task.value}_retry_{attempts}")
                 continue
             raise TaskVerificationError(
                 result.message,
@@ -136,28 +178,33 @@ class AutomationRunner:
                 artifact_path=str(after.artifact_path) if after.artifact_path else None,
             )
 
+    def _build_context(self, *, account: AccountConfig, step: ScriptStep, parsed_params: Any) -> TaskContext:
+        """Builds the shared task context for one canonical task execution."""
+
+        return TaskContext(
+            account=account,
+            defaults=self.defaults,
+            step=step,
+            params=parsed_params,
+            flows=self.flow_planner,
+            logger=logging.LoggerAdapter(
+                self.logger.logger,
+                extra={**self.logger.extra, "task_id": step.task},
+            ),
+        )
+
     def _ensure_no_blocking_popup(self, observation: Observation, *, account: AccountConfig) -> Observation:
         """Executes centralized popup recovery ahead of non-popup tasks."""
 
         if not observation.blocking_popup:
             return observation
-        popup_task = self.task_registry.require(TaskId.POPUP_RECOVERY)
         popup_step = ScriptStep(task=TaskId.POPUP_RECOVERY, params={})
-        popup_context = TaskContext(
+        popup_task = self.task_registry.require(TaskId.POPUP_RECOVERY)
+        execution = self._execute_step_loop(
             account=account,
-            defaults=self.defaults,
             step=popup_step,
-            params=popup_task.parse_params({}),
-            flows=self.flow_planner,
-            logger=logging.LoggerAdapter(self.logger.logger, extra={**self.logger.extra, "task_id": TaskId.POPUP_RECOVERY}),
+            parsed_params=popup_task.parse_params({}),
+            before=observation,
+            allow_popup_recovery=False,
         )
-        actions = popup_task.plan(popup_context, observation)
-        after = self.action_executor.execute_actions(
-            actions,
-            observation,
-            observe=lambda label: self.observation_service.observe(f"popup_recovery_{label}"),
-        )
-        result = popup_task.verify(popup_context, observation, after)
-        if not result.succeeded:
-            raise TaskVerificationError(result.message, task_id=TaskId.POPUP_RECOVERY)
-        return after
+        return execution.final_observation

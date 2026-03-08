@@ -28,13 +28,13 @@ class ScreenshotService:
     artifact_store: ArtifactStore
     screenshot_format: str = "png"
 
-    def capture(self, session: BlueStacksSession, *, account_id: str, label: str) -> CapturedScreenshot:
-        """Captures a screenshot from the session and validates the image bytes."""
+    def capture(self, session: BlueStacksSession, *, artifact_directory: str, label: str) -> CapturedScreenshot:
+        """Captures a screenshot and persists it under the provided per-castle artifact directory."""
 
         payload = session.capture_screenshot_bytes()
         image = _decode_image(payload)
         artifact = self.artifact_store.persist_bytes(
-            account_id=account_id,
+            artifact_directory=artifact_directory,
             label=label,
             extension=self.screenshot_format,
             payload=payload,

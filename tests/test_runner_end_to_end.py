@@ -212,6 +212,7 @@ class RunnerEndToEndTests(unittest.TestCase):
 
         fake_observer = FakeObservationService(observations=observations)
         fake_session = FakeSession()
+        registry = build_default_task_registry()
         runner = AutomationRunner(
             defaults=defaults,
             observation_service=fake_observer,
@@ -222,12 +223,12 @@ class RunnerEndToEndTests(unittest.TestCase):
                 logger=build_logger(),
                 sleep=lambda _: None,
             ),
-            task_registry=build_default_task_registry(),
+            task_registry=registry,
             flow_planner=ScreenFlowPlanner(),
             logger=build_logger(),
         )
 
-        result = runner.run(account, script)
+        result = runner.run(account, registry.prepare_script(script))
 
         self.assertEqual(len(result.steps), 7)
         self.assertEqual(result.steps[-1].status.value, "success")

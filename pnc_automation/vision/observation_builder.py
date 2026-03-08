@@ -37,6 +37,7 @@ class ObservationEnricher(Protocol):
 class ObservationAdditions:
     """Derived observation facts produced after primary screen classification."""
 
+    visible_elements: Mapping[UiElementId, VisibleElement] = field(default_factory=dict)
     list_entries: tuple[DetectedListEntry, ...] = ()
     screen_type_override: ScreenType | None = None
     current_castle_name: str | None = None
@@ -135,6 +136,9 @@ class ObservationBuilder:
         }
         screen_type = self.screen_classifier.classify(visible_elements)
         additions = self.enricher.enrich(screenshot.image, screen_type, visible_elements)
+        visible_elements = dict(additions.visible_elements) | visible_elements
+        if additions.screen_type_override is None:
+            screen_type = self.screen_classifier.classify(visible_elements)
         screen_type = additions.screen_type_override or screen_type
         return Observation(
             screen_type=screen_type,
@@ -156,14 +160,14 @@ class ObservationService:
     screenshot_service: ScreenshotService
     observation_builder: ObservationBuilder
     session: BlueStacksSession
-    account_id: str
+    artifact_directory: str
     pnc_account_id: str | None = None
     castle_roster_store: CastleRosterStore | None = None
 
     def observe(self, label: str) -> Observation:
         """Captures a fresh screenshot artifact and returns the built observation."""
 
-        screenshot = self.screenshot_service.capture(self.session, account_id=self.account_id, label=label)
+        screenshot = self.screenshot_service.capture(self.session, artifact_directory=self.artifact_directory, label=label)
         observation = self.observation_builder.build(screenshot)
         self._sync_castle_roster(observation)
         return observation

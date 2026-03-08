@@ -16,6 +16,15 @@ from pnc_automation.vision.ocr_service import OcrLine, OcrService
 
 _KINGDOM_PATTERN = re.compile(r"\bK\s*(\d{2,4})\b", re.IGNORECASE)
 _CASTLE_LEVEL_PATTERN = re.compile(r"castle\s*level\s*[:.]?\s*(\d+)", re.IGNORECASE)
+_HOME_NAV_BY_LABEL = {
+    "HOME": UiElementId.PNC_BOTTOM_NAV_HOME,
+    "HERO": UiElementId.PNC_BOTTOM_NAV_HERO,
+    "QUEST": UiElementId.PNC_BOTTOM_NAV_QUEST,
+    "BAG": UiElementId.PNC_BOTTOM_NAV_BAG,
+    "MAIL": UiElementId.PNC_BOTTOM_NAV_MAIL,
+    "ALLIANCE": UiElementId.PNC_BOTTOM_NAV_ALLIANCE,
+    "MORE": UiElementId.PNC_BOTTOM_NAV_MORE,
+}
 
 
 @dataclass(slots=True)
@@ -37,6 +46,12 @@ class PncObservationEnricher:
             return ObservationAdditions()
 
         lines = tuple(sorted(self.ocr_service.read_lines(image), key=lambda line: (line.bounds.y, line.bounds.x)))
+        building_detail = _build_building_detail_additions(image, lines)
+        if building_detail is not None:
+            return building_detail
+        home_city = _build_home_city_additions(image, lines)
+        if home_city is not None:
+            return home_city
         entries = _extract_castle_entries(image, lines)
         if not _looks_like_castle_selection(lines, entries):
             return ObservationAdditions()
@@ -47,6 +62,94 @@ class PncObservationEnricher:
             list_entries=entries,
             current_castle_name=current_castle_name,
         )
+
+
+def _build_building_detail_additions(
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Returns derived selectors when OCR matches a building-detail screen."""
+
+    upgrade_line = next(
+        (
+            line
+            for line in lines
+            if _normalize_text(line.text) == "UPGRADE"
+            and line.bounds.x >= int(image.width * 0.55)
+            and line.bounds.y <= int(image.height * 0.42)
+        ),
+        None,
+    )
+    if upgrade_line is None:
+        return None
+    title_line = next(
+        (
+            line
+            for line in lines
+            if line.bounds.y <= int(image.height * 0.09)
+            and _normalize_text(line.text) not in {"UPGRADE", ""}
+            and "MANAGECHAR" not in _normalize_text(line.text)
+        ),
+        None,
+    )
+    if title_line is None:
+        return None
+    return ObservationAdditions(
+        visible_elements={
+            UiElementId.PNC_BACK_BUTTON_TOP_LEFT: _make_visible(
+                selector_id=UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+                x=0,
+                y=0,
+                width=max(1, int(image.width * 0.12)),
+                height=max(1, int(image.height * 0.08)),
+            ),
+            UiElementId.PNC_BUILDING_UPGRADE_BUTTON: _make_visible(
+                selector_id=UiElementId.PNC_BUILDING_UPGRADE_BUTTON,
+                x=max(0, upgrade_line.bounds.x - max(12, upgrade_line.bounds.width // 2)),
+                y=max(0, upgrade_line.bounds.y - max(10, upgrade_line.bounds.height)),
+                width=min(
+                    image.width,
+                    upgrade_line.bounds.width + max(40, upgrade_line.bounds.width),
+                ),
+                height=min(
+                    image.height,
+                    upgrade_line.bounds.height + max(20, upgrade_line.bounds.height),
+                ),
+            ),
+        },
+        screen_type_override=ScreenType.PNC_BUILDING_DETAILS,
+    )
+
+
+def _build_home_city_additions(
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Returns home-city classification when bottom navigation OCR is visible."""
+
+    nav_lines = [line for line in lines if line.bounds.y >= int(image.height * 0.86)]
+    visible_nav_elements: dict[UiElementId, VisibleElement] = {}
+    for line in nav_lines:
+        normalized = _normalize_text(line.text)
+        selector_id = _HOME_NAV_BY_LABEL.get(normalized)
+        if selector_id is None or selector_id in visible_nav_elements:
+            continue
+        visible_nav_elements[selector_id] = _make_visible(
+            selector_id=selector_id,
+            x=line.bounds.x,
+            y=line.bounds.y,
+            width=line.bounds.width,
+            height=line.bounds.height,
+            extracted_text=line.text.strip(),
+        )
+    if len(visible_nav_elements) < 2:
+        return None
+    if UiElementId.PNC_BOTTOM_NAV_MORE not in visible_nav_elements and UiElementId.PNC_BOTTOM_NAV_ALLIANCE not in visible_nav_elements:
+        return None
+    return ObservationAdditions(
+        visible_elements=visible_nav_elements,
+        screen_type_override=ScreenType.PNC_HOME_CITY,
+    )
 
 
 def _looks_like_castle_selection(
@@ -191,3 +294,22 @@ def _normalize_text(text: str) -> str:
     """Normalizes OCR text for tolerant header matching."""
 
     return "".join(character for character in text.upper() if character.isalnum())
+
+
+def _make_visible(
+    *,
+    selector_id: UiElementId,
+    x: int,
+    y: int,
+    width: int,
+    height: int,
+    extracted_text: str | None = None,
+) -> VisibleElement:
+    """Builds one derived visible element from OCR or anchored geometry."""
+
+    return VisibleElement(
+        selector_id=selector_id,
+        bounds=Bounds(x=x, y=y, width=max(1, width), height=max(1, height)),
+        confidence=1.0,
+        extracted_text=extracted_text,
+    )

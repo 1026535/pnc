@@ -91,12 +91,13 @@ class CaptureAndVisionTests(unittest.TestCase):
             service = ScreenshotService(artifact_store=ArtifactStore(root=Path(temp_directory)))
             screenshot = service.capture(
                 _FakeScreenshotSession(build_png_bytes(size=(12, 14))),
-                account_id="account_a",
+                artifact_directory="k313_main_castle",
                 label="home_scan",
             )
 
             self.assertTrue(screenshot.artifact.path.is_file())
             self.assertEqual(screenshot.image.size, (12, 14))
+            self.assertEqual(screenshot.artifact.path.parent.name, "k313_main_castle")
 
     def test_observation_builder_classifies_home_city_from_templates(self) -> None:
         """Builds a home-city observation from synthetic template anchors."""
@@ -149,7 +150,11 @@ class CaptureAndVisionTests(unittest.TestCase):
             with screenshot_path.open("rb") as handle:
                 payload = handle.read()
             screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
-            captured = screenshot_service.capture(_FakeScreenshotSession(payload), account_id="account_a", label="synthetic")
+            captured = screenshot_service.capture(
+                _FakeScreenshotSession(payload),
+                artifact_directory="k230_main_castle",
+                label="synthetic",
+            )
             builder = ObservationBuilder(
                 selector_registry=registry,
                 selector_engine=PillowSelectorEngine(
@@ -178,7 +183,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                     image.putpixel((x, y), (40, 200, 70))
             screenshot = screenshot_service.capture(
                 _FakeScreenshotSession(_encode_png(image)),
-                account_id="account_a",
+                artifact_directory="k304_probe",
                 label="castle_selection",
             )
             builder = ObservationBuilder(
@@ -213,6 +218,75 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertEqual(castle_entries[1].metadata["castle_level"], 9)
             self.assertTrue(castle_entries[1].selected)
             self.assertEqual(observation.current_castle_name, "Lv.5 Hellhound")
+
+    def test_observation_builder_classifies_building_detail_and_exposes_back_click_target(self) -> None:
+        """Recognizes a building-detail screen from OCR and surfaces tappable controls."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                artifact_directory="k313_colddukeofthenorth",
+                label="building_detail",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Castle", x=88, y=16, width=120, height=30),
+                            _ocr_line("Upgrade", x=682, y=308, width=120, height=40),
+                            _ocr_line("ColdDukeOfTheNorth", x=101, y=465, width=256, height=32),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_BUILDING_DETAILS)
+            self.assertTrue(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
+            self.assertTrue(observation.has(UiElementId.PNC_BUILDING_UPGRADE_BUTTON))
+
+    def test_observation_builder_classifies_home_city_from_bottom_nav_ocr(self) -> None:
+        """Recognizes home city from bottom navigation OCR when templates are unavailable."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                artifact_directory="k230_home",
+                label="home_city",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Alliance", x=48, y=1500, width=124, height=32),
+                            _ocr_line("More", x=740, y=1500, width=74, height=32),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_HOME_CITY)
+            self.assertTrue(observation.has(UiElementId.PNC_BOTTOM_NAV_ALLIANCE))
+            self.assertTrue(observation.has(UiElementId.PNC_BOTTOM_NAV_MORE))
 
     def test_observation_service_syncs_castle_roster_cache_from_castle_selection(self) -> None:
         """Persists discovered castle rosters when the Manage Char screen is observed."""
@@ -258,7 +332,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                 screenshot_service=screenshot_service,
                 observation_builder=observation_builder,
                 session=_FakeScreenshotSession(_encode_png(image)),
-                account_id="account_a",
+                artifact_directory="k230_lv_5_hellhound",
                 pnc_account_id="inline_user",
                 castle_roster_store=roster_store,
             )

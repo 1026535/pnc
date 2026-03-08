@@ -35,6 +35,8 @@ class ScriptRunner:
         """Executes the selected script for one configured account target."""
 
         account = self.config.require_account(account_id)
+        run_script = load_run_script(script_path)
+        prepared_script = self.task_registry.prepare_script(run_script)
         instance_config = self.config.require_instance(account.instance_id)
         instance = BlueStacksInstance.from_config(instance_config)
 
@@ -46,7 +48,7 @@ class ScriptRunner:
             screenshot_service=self.screenshot_service,
             observation_builder=self.observation_builder,
             session=session,
-            account_id=account.id,
+            artifact_directory=account.artifact_directory_name,
             pnc_account_id=account.pnc_account_id,
             castle_roster_store=self.castle_roster_store,
         )
@@ -70,5 +72,4 @@ class ScriptRunner:
             flow_planner=flow_planner,
             logger=logging.LoggerAdapter(self.logger.logger, extra={**self.logger.extra, **shared_extra}),
         )
-        run_script = load_run_script(script_path)
-        return runner.run(account, run_script)
+        return runner.run(account, prepared_script)

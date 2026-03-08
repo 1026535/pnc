@@ -1,8 +1,8 @@
-# Step 5: Puzzles & Conquest Task Sub-Plan
+# Step 6: Puzzles & Conquest Task Sub-Plan
 
 ## 1. Purpose
 
-This document is the dependency-ordered fifth plan and covers concrete, screenshot-informed Puzzles & Conquest task design.
+This document is the dependency-ordered sixth plan and covers concrete, screenshot-informed post-account-navigation Puzzles & Conquest task design.
 
 It is intentionally separate from [PNC_AUTOMATION_IMPLEMENTATION.md](/c:/Users/lebel/pnc/PNC_AUTOMATION_IMPLEMENTATION.md), which should remain focused on the primary platform architecture:
 
@@ -14,6 +14,8 @@ It is intentionally separate from [PNC_AUTOMATION_IMPLEMENTATION.md](/c:/Users/l
 - P&C observation model,
 - automation script runner,
 - generic task framework.
+
+Account bootstrap and castle-targeting task design has been moved into [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md).
 
 ## 2. When to use this plan
 
@@ -37,10 +39,6 @@ This task sub-plan should cover:
 
 The concrete task-design follow-up should be organized by these tasks:
 
-- `EnsureGameRunningTask`
-- `PopupRecoveryTask`
-- `LoginTask`
-- `SelectCastleTask`
 - `BuildingUpgradeTask`
 - `ResearchTask`
 - `GatheringTask`
@@ -105,8 +103,6 @@ Each task section should follow one canonical template:
 
 The following task areas still require additional screenshots before their concrete sub-plans should be finalized:
 
-- login,
-- castle selection,
 - building upgrade,
 - academy and research,
 - gathering node and march confirm,
@@ -128,6 +124,8 @@ If a task needs a new reusable navigation path, that path should be defined in t
 ## 9. Relationship to automation orchestration
 
 This sub-plan should consume generic task orchestration rules from [PNC_AUTOMATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_AUTOMATION_SUBPLAN.md). It must not redefine the global task contract, script-runner behavior, or run-level retry policy.
+
+This sub-plan also assumes that account navigation behavior, including login bootstrap and configured castle selection, has already been handled by [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md).
 
 ## 10. Relationship to selector refinement
 

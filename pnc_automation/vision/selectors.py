@@ -274,32 +274,34 @@ def build_default_selector_registry(template_root: Path | None = None) -> Select
         ScreenType.PNC_POPUP: [UiElementId.PNC_POPUP_CLOSE_BUTTON],
     }
 
-    selectors: list[SelectorDefinition] = []
+    selectors_by_id: dict[UiElementId, SelectorDefinition] = {}
     for screen, selector_ids in seeded_by_screen.items():
-        selectors.extend(
-            _create_selector(
-                selector_id=selector_id,
-                screen=screen,
-                root=root,
-                collection_ids=collection_ids,
-                ocr_ids=ocr_ids,
-                status=SelectorStatus.SCREENSHOT_SEEDED,
+        for selector_id in selector_ids:
+            _register_selector(
+                selectors_by_id,
+                _create_selector(
+                    selector_id=selector_id,
+                    screen=screen,
+                    root=root,
+                    collection_ids=collection_ids,
+                    ocr_ids=ocr_ids,
+                    status=SelectorStatus.SCREENSHOT_SEEDED,
+                ),
             )
-            for selector_id in selector_ids
-        )
     for screen, selector_ids in planned_by_screen.items():
-        selectors.extend(
-            _create_selector(
-                selector_id=selector_id,
-                screen=screen,
-                root=root,
-                collection_ids=collection_ids,
-                ocr_ids=ocr_ids,
-                status=SelectorStatus.PLANNED,
+        for selector_id in selector_ids:
+            _register_selector(
+                selectors_by_id,
+                _create_selector(
+                    selector_id=selector_id,
+                    screen=screen,
+                    root=root,
+                    collection_ids=collection_ids,
+                    ocr_ids=ocr_ids,
+                    status=SelectorStatus.PLANNED,
+                ),
             )
-            for selector_id in selector_ids
-        )
-    return SelectorRegistry(selectors=tuple(selectors))
+    return SelectorRegistry(selectors=tuple(selectors_by_id.values()))
 
 
 def _create_selector(
@@ -340,4 +342,38 @@ def _create_selector(
         detection_kind=detection_kind,
         status=status,
         template_path=root / f"{selector_id.value.lower()}.png",
+    )
+
+
+def _register_selector(
+    selectors_by_id: dict[UiElementId, SelectorDefinition],
+    selector: SelectorDefinition,
+) -> None:
+    """Registers one selector or merges it with an existing shared-screen definition."""
+
+    existing = selectors_by_id.get(selector.id)
+    if existing is None:
+        selectors_by_id[selector.id] = selector
+        return
+    if (
+        existing.detection_kind != selector.detection_kind
+        or existing.status != selector.status
+        or existing.template_path != selector.template_path
+        or existing.threshold != selector.threshold
+        or existing.click != selector.click
+        or existing.ocr_region != selector.ocr_region
+    ):
+        raise SelectorResolutionError(
+            "Selector ids reused across screens must keep identical metadata.",
+            selector_id=selector.id,
+        )
+    selectors_by_id[selector.id] = SelectorDefinition(
+        id=existing.id,
+        screens=tuple(dict.fromkeys((*existing.screens, *selector.screens))),
+        detection_kind=existing.detection_kind,
+        status=existing.status,
+        template_path=existing.template_path,
+        threshold=existing.threshold,
+        click=existing.click,
+        ocr_region=existing.ocr_region,
     )
