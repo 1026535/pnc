@@ -1,0 +1,36 @@
+"""Supported Puzzles & Conquest screen states."""
+
+from enum import StrEnum
+
+
+class ScreenType(StrEnum):
+    """Known Android and P&C screens relevant to automation decisions."""
+
+    UNKNOWN = "unknown"
+    ANDROID_HOME = "android_home"
+    PNC_LOADING = "pnc_loading"
+    PNC_LOGIN = "pnc_login"
+    PNC_ACCOUNT_SWITCH = "pnc_account_switch"
+    PNC_CASTLE_SELECTION = "pnc_castle_selection"
+    PNC_HOME_CITY = "pnc_home_city"
+    PNC_BAG = "pnc_bag"
+    PNC_QUEST_DAILY = "pnc_quest_daily"
+    PNC_HERO_LIST = "pnc_hero_list"
+    PNC_HERO_DETAIL_UPGRADE = "pnc_hero_detail_upgrade"
+    PNC_HERO_DETAIL_ENHANCE = "pnc_hero_detail_enhance"
+    PNC_MAIL_LIST = "pnc_mail_list"
+    PNC_SYSTEM_MESSAGE = "pnc_system_message"
+    PNC_ALLIANCE_HOME = "pnc_alliance_home"
+    PNC_CASH_MALL = "pnc_cash_mall"
+    PNC_GIFT_CENTER = "pnc_gift_center"
+    PNC_EVENT_CENTER = "pnc_event_center"
+    PNC_BUILDING_DETAILS = "pnc_building_details"
+    PNC_ACADEMY = "pnc_academy"
+    PNC_RESEARCH_TREE = "pnc_research_tree"
+    PNC_WORLD_MAP = "pnc_world_map"
+    PNC_GATHER_NODE = "pnc_gather_node"
+    PNC_MARCH_CONFIRM = "pnc_march_confirm"
+    PNC_CAMPAIGN = "pnc_campaign"
+    PNC_CAMPAIGN_STAGE = "pnc_campaign_stage"
+    PNC_BATTLE_PREP = "pnc_battle_prep"
+    PNC_POPUP = "pnc_popup"
