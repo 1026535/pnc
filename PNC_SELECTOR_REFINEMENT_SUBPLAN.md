@@ -76,6 +76,7 @@ This sub-plan should define:
 - how selectors move from planned to validated status,
 - how missing screens are requested and documented,
 - how unique building and empty-slot interactions are refined,
+- how OCR output is normalized into reusable text anchors and screen evidence,
 - how selector metadata is updated without duplicating definitions.
 
 ## 5. Refinement principles
@@ -85,6 +86,29 @@ This sub-plan should define:
 - A selector is not fully trusted until its click outcome is mapped and verified.
 - If a UI element is dynamic in content but stable in structure, refine the collection selector, not a temporary row id.
 - Unknown click outcomes must be captured with artifacts and documented before automation relies on them.
+
+### 5.1 OCR and text-evidence architecture target
+
+The current line-based OCR fallbacks are an acceptable bootstrap only. Refinement should move the vision stack toward a stricter evidence model.
+
+Target shape:
+
+- `OcrService` remains the single OCR abstraction, but it should expose richer OCR results, ideally including word-level boxes in addition to line-level groupings.
+- OCR backend choice stays behind that contract. RapidOCR may remain the first backend, but a stronger existing OCR library can replace it without changing downstream consumers.
+- A canonical `TextAnchorDetector` should normalize OCR output and map words or phrases such as `Upgrade`, `Alliance`, `More`, `Manage Char`, kingdom labels, and similar stable UI text into typed anchors.
+- Text normalization, synonym handling, and tolerant matching must live in that detector once, not be reimplemented inside each screen parser.
+- Screen-specific parsers should consume typed text anchors together with visual selectors or layout cues and emit typed screen evidence.
+- `ScreenClassifier` should classify from aggregated screen evidence, not from ad hoc OCR fallbacks that directly override the screen from a couple of loose text hits.
+- If evidence is partial or ambiguous, the result must remain `UNKNOWN`.
+- Synthetic clickable selectors must only be emitted when the parser has strong enough evidence for the target screen and the click target geometry is justified by that screen contract.
+
+### 5.2 Parser ownership rules
+
+- OCR extraction owns raw text and localization only.
+- `TextAnchorDetector` owns normalization and typed text-anchor creation.
+- Screen parsers own screen-specific interpretation of those anchors.
+- `ScreenClassifier` owns the final screen decision from accumulated evidence.
+- Automation tasks must continue consuming only typed observations, never raw OCR output.
 
 ## 6. Selector lifecycle
 
@@ -162,6 +186,13 @@ Minimum evidence per stage:
 - `interaction_validated`: repeated successful detection and click verification,
 - `task_validated`: successful use inside at least one live feature flow.
 
+### 9.1 OCR and parser validation rules
+
+- Every new OCR-driven parser must have both positive and negative coverage.
+- Negative coverage is mandatory when a parser can override screen classification or synthesize clickable selectors.
+- Word or line normalization rules must be tested centrally through the shared text-anchor detector, not duplicated in screen-specific tests.
+- Adjacent screens with similar labels must be part of the negative fixture set so the classifier proves it rejects near-matches.
+
 ## 10. Initial refinement backlog
 
 The first high-value refinement targets are:
@@ -174,7 +205,9 @@ The first high-value refinement targets are:
 - academy and research entry points,
 - world-map gather entry points,
 - popup close and confirmation buttons,
-- castle-selection entries and selection indicators.
+- castle-selection entries and selection indicators,
+- replacing ad hoc OCR fallbacks with a shared text-anchor detector and evidence-based screen parsers,
+- upgrading OCR support from line-only assumptions to richer localized text results where the backend allows it.
 
 ## 11. Buildings and empty slots
 
