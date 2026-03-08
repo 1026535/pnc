@@ -1,0 +1,18 @@
+--------------------------------------------------------------
+The goal for this prompt is to produce a complete and detailled implementation document (new .md file).
+
+The document should include detailled description of the context, vision, goals and requirements.
+The document should also clearly and fully describe the solution to fullfill those goals, and how to implement it in a very clean, coherent, lean, DRY, extensible, well documented, and very well integrated way.
+
+Make sure you have a very deep understanding of the systems and all mentionned components first. Make sure to iterate until we have the best possible solution, with very well integrated and DRY architecture.
+
+Architecture Requirements:
+
+Single canonical implementation per concept.
+No duplicated logic (DRY).
+Fail-fast validation for invalid content.
+Minimal boilerplate.
+
+--------------------------------------------------------------
+
+ENTER_PROMPT_CONTEXT_HERE
