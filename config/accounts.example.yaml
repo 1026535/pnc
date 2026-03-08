@@ -1,0 +1,23 @@
+artifacts:
+  root: artifacts
+
+defaults:
+  adb_path: adb
+  screenshot_format: png
+  stable_click_delay_ms: 300
+  post_action_observe_delay_ms: 800
+
+instances:
+  - id: bs-main
+    device_id: 127.0.0.1:5555
+    app_package: com.global.ztmslg
+
+accounts:
+  - id: primary-account
+    instance_id: bs-main
+    pnc_account_id: your_pnc_account_id
+    username: your-email@example.com
+    password: your-password
+    selected_castle:
+      kingdom: K313
+      castle_name: your_castle_name
