@@ -1,0 +1,5 @@
+The plan XXXXXXXXXXXXX was fully implemented in this commit : "COMMIT_NAME" (COMMIT_HASH)
+
+Please review all changes and identify any bugs, inconsistencies, missing parts, code duplication, possible simplification or any direct improvements to be done.
+
+Produce a new .md document with all your findings and how to cleanly address each problems.

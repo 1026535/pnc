@@ -1,173 +1,147 @@
-# Step 2: Puzzles & Conquest Automation Sub-Plan
+# Review: `PNC_AUTOMATION_IMPLEMENTATION.md`
 
-## 1. Purpose
+Commit reviewed: `completed PNC_AUTOMATION_IMPLEMENTATION.md` (`ab0e296d8947748366d2b0cf246df6f2e3263203`)
 
-This document is the dependency-ordered second plan and covers automation orchestration design.
+Scope reviewed:
 
-The automation framework described here is already implemented in code. This document now serves as a fixed reference for later sub-plans instead of a remaining implementation to-do.
+- runtime changes introduced by the commit,
+- test coverage added by the commit,
+- plan/status documents updated by the commit.
 
-It is intentionally separate from:
+Validation run:
 
-- [PNC_AUTOMATION_IMPLEMENTATION.md](/c:/Users/lebel/pnc/PNC_AUTOMATION_IMPLEMENTATION.md), which remains the primary platform architecture plan,
-- [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md), which covers account-specific bootstrap and castle-targeting behavior,
-- [PNC_TASK_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_TASK_SUBPLAN.md), which covers concrete task behavior,
-- [PNC_SCREEN_FLOW_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SCREEN_FLOW_SUBPLAN.md), which covers reusable navigation flows.
+- `py -3.13 -m unittest discover -s tests -p "test_*.py"`: passed (`30` tests)
 
-This file owns only automation orchestration concepts.
+General assessment:
 
-## 2. Scope
+- The runner and script-preparation refactor is a net improvement.
+- The selector-registry merge fix is correct and removes a real defect.
+- The main remaining problems are in the new OCR fallback heuristics and in the documentation claiming closure beyond the evidence actually added.
 
-This sub-plan should define:
+## Findings
 
-- the canonical execution loop,
-- script loading and script-step execution,
-- the generic task contract,
-- runner and verifier responsibilities,
-- retry and stop policies,
-- sequencing rules between tasks, task sub-plans, and screen flows.
+### 1. High: the new bottom-nav OCR fallback can misclassify non-home screens as `PNC_HOME_CITY`
 
-## 3. Automation ownership
+Evidence:
 
-Automation should own:
+- [_build_home_city_additions()` in `pnc_observation_enricher.py`](/c:/Users/lebel/pnc/pnc_automation/vision/pnc_observation_enricher.py#L124)
+- [the fallback is only validated with a positive case](/c:/Users/lebel/pnc/tests/test_capture_and_vision.py#L257)
 
-- loading a selected run script,
-- resolving steps to registered tasks,
-- validating step parameters,
-- executing tasks in script order,
-- invoking reusable screen flows when tasks require them,
-- verifying task outcomes,
-- deciding whether the run continues, retries, or stops.
+Why this is a problem:
 
-Automation should not own:
+- The fallback now classifies a screen as `PNC_HOME_CITY` when it sees only two OCR labels near the bottom, as long as one of them is `Alliance` or `More`.
+- That is too weak for a fail-fast automation system. Many in-game screens can expose bottom navigation text while not being the city root.
+- If template matching misses the real screen, this heuristic can convert an unknown state into a trusted `PNC_HOME_CITY` state and cause the runner to tap city-only selectors on the wrong UI.
 
-- raw ADB command execution,
-- screenshot capture,
-- low-level image interpretation,
-- game-specific selector definition,
-- reusable screen-flow definitions,
-- concrete task internals.
+Clean fix:
 
-## 4. Canonical execution loop
+1. Keep `UNKNOWN` unless at least one home-city-specific anchor is also proven.
+2. Accept the fallback only when bottom-nav OCR is combined with evidence such as `PNC_HOME_WORLD_SWITCH`, `PNC_HOME_CHARACTER_PANEL`, top resource bar cues, or another city-only visual anchor.
+3. Add negative tests for at least Bag, Quest, Hero, and Mail screenshots or OCR fixtures to prove they do not collapse to `PNC_HOME_CITY`.
 
-For each requested run:
+### 2. High: the new OCR building-detail fallback can fabricate an upgrade button on unrelated screens
 
-1. Load the selected account config and selected run script.
-2. Open or connect to the correct BlueStacks ADB endpoint.
-3. Ensure the Android device is responsive.
-4. Ensure Puzzles & Conquest is running or foregrounded.
-5. Capture an observation.
-6. Execute the next script step when its task is applicable.
-7. Re-capture observation.
-8. Verify the state transition.
-9. Persist logs and screenshots.
-10. Continue until the script completes or a fail-fast condition stops the run.
+Evidence:
 
-Single-account sequential execution should be the only initial mode. Do not add concurrency until selectors, navigation, and recovery are stable.
+- [_build_building_detail_additions()` in `pnc_observation_enricher.py`](/c:/Users/lebel/pnc/pnc_automation/vision/pnc_observation_enricher.py#L67)
+- [the commit only adds a positive test](/c:/Users/lebel/pnc/tests/test_capture_and_vision.py#L222)
 
-## 5. Generic task contract
+Why this is a problem:
 
-Every task should implement the same contract:
+- The fallback upgrades any `UNKNOWN` screen to `PNC_BUILDING_DETAILS` when OCR sees a top title plus the word `Upgrade` in the upper-right region.
+- It also injects synthetic clickable selectors for both `PNC_BACK_BUTTON_TOP_LEFT` and `PNC_BUILDING_UPGRADE_BUTTON`.
+- That is not strong enough evidence for a click-driving screen override. Hero upgrade screens, event/reward modals, or other upgrade-related surfaces can satisfy the same loose pattern.
 
-```python
-class AutomationTask(Protocol):
-    id: TaskId
+Clean fix:
 
-    def is_applicable(self, context: TaskContext, observation: Observation) -> bool: ...
-    def plan(self, context: TaskContext, observation: Observation) -> list[ActionRequest]: ...
-    def verify(self, context: TaskContext, before: Observation, after: Observation) -> TaskResult: ...
-```
+1. Require stronger building-specific evidence before overriding the screen type.
+2. Prefer a conjunction of cues, for example: building title pattern, known building-detail layout anchors, and upgrade button placement.
+3. Add negative tests for at least `PNC_HERO_DETAIL_UPGRADE` and one generic modal containing `Upgrade`.
+4. If the evidence is partial, keep the screen `UNKNOWN` instead of fabricating clickable building selectors.
 
-This is the canonical extension model.
+### 3. Medium: the updated plan now claims phases are closed without the selector maturity or validation evidence required by the same plan
 
-Rules:
+Evidence:
 
-- `is_applicable` prevents invalid task execution.
-- `plan` emits declarative actions and never calls ADB directly.
-- `verify` confirms state change from fresh observation.
-- task-specific parameters come from the current script step, not from account config.
+- [phase closure language in `PNC_AUTOMATION_IMPLEMENTATION.md`](/c:/Users/lebel/pnc/PNC_AUTOMATION_IMPLEMENTATION.md#L928)
+- [phase validation requirements in the same document](/c:/Users/lebel/pnc/PNC_AUTOMATION_IMPLEMENTATION.md#L1009)
+- [critical selectors still marked `planned` in `selectors.py`](/c:/Users/lebel/pnc/pnc_automation/vision/selectors.py#L252)
 
-## 6. Script runner
+Why this is a problem:
 
-The script runner should be intentionally simple:
+- The commit marks Phase 2, Phase 2.5, Phase 4, and Phase 5 as closed in the main plan.
+- The code added in the same commit does not support that claim yet: several selectors required by login, building, research, gathering, campaign, and popup handling are still `planned`, and the added tests are synthetic unit/integration-style checks rather than the live smoke evidence the plan itself requires.
+- That creates a planning inconsistency. Later work will read the architecture doc as if selector refinement and account-navigation validation are finished when they are not.
 
-1. read steps from the selected script in order,
-2. resolve each step to a registered task,
-3. validate the step parameters,
-4. execute the task when its preconditions are satisfied,
-5. stop on fail-fast errors or continue to the next step after verified success.
+Clean fix:
 
-Step ordering belongs to the run script, and script parsing belongs to `automation`, not to account config and not to each task implementation.
+1. Change the main plan wording from `closed` to `implemented in baseline form` or `moved to sub-plan ownership`.
+2. Add an explicit status table per phase: `implemented`, `validated by unit tests`, `validated by screenshot fixtures`, `validated by live smoke`.
+3. Do not mark Phase 2.5, 4, or 5 closed until the required selectors are promoted out of `planned` and the corresponding smoke evidence exists.
 
-## 7. Generic task categories
+### 4. Medium: the commit strengthens fallback classification but does not add the negative coverage needed to make those fallbacks trustworthy
 
-At this stage, automation should reason about generic task categories, not final screen-specific flows:
+Evidence:
 
-- game bootstrap task,
-- popup recovery task,
-- login task,
-- castle selection task,
-- city-management task,
-- world-map task,
-- campaign task.
+- [positive-only tests for the new OCR fallbacks](/c:/Users/lebel/pnc/tests/test_capture_and_vision.py#L222)
 
-Concrete behavior for `game bootstrap task`, `popup recovery task`, `login task`, and `castle selection task` belongs in [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md).
+Why this is a problem:
 
-Concrete behavior for the remaining task categories belongs in [PNC_TASK_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_TASK_SUBPLAN.md).
+- The new heuristics are exactly the kind of logic that fails by over-matching.
+- The added tests prove that the heuristics can recognize one intended case, but they do not prove that the heuristics reject nearby unintended cases.
+- For screenshot-driven automation, false positives are more dangerous than false negatives because they replace safe failure with wrong clicks.
 
-## 8. Module boundaries
+Clean fix:
 
-Automation consumes:
+1. Add negative screenshot/OCR tests alongside every new heuristic classifier.
+2. For each heuristic, test at least one adjacent screen that shares similar text or layout.
+3. Treat negative tests as mandatory whenever a classifier creates synthetic clickable selectors.
 
-- typed account config,
-- typed run script,
-- typed observations from `pnc`,
-- reusable navigation flows from [PNC_SCREEN_FLOW_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SCREEN_FLOW_SUBPLAN.md),
-- account-navigation task definitions from [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md),
-- concrete post-navigation task definitions from [PNC_TASK_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_TASK_SUBPLAN.md).
+### 5. Low: `config/castles.yaml` was converted from a discoverable example into an empty cache file with no companion example
 
-Automation produces:
+Evidence:
 
-- task execution decisions,
-- action execution requests,
-- retry or stop decisions,
-- run-level results and status transitions.
+- [`config/castles.yaml`](/c:/Users/lebel/pnc/config/castles.yaml)
 
-## 9. Failure and stop policy
+Why this is a problem:
 
-Automation should centralize:
+- The loader still supports and benefits from a structured castle-roster file, but the repository no longer shows users what that file should look like.
+- This is a documentation regression for a newly introduced concept.
 
-- fail-fast stop conditions,
-- allowed retry counts,
-- whether a task failure aborts the run,
-- whether popup recovery may be attempted before failing,
-- whether verification mismatch is retryable.
+Clean fix:
 
-The first version should stay conservative:
+1. Add `config/castles.example.yaml` with the expected schema.
+2. Treat `config/castles.yaml` as runtime-owned cache data and either keep it empty intentionally with a short comment or exclude it from authored examples.
 
-- fail fast on unknown screens,
-- allow only small, explicit retry rules,
-- stop the run when verification cannot confirm expected state.
+### 6. Low: the `PncObservationEnricher.enrich()` docstring is now stale
 
-## 10. Validation ownership
+Evidence:
 
-Automation must enforce the rule that work is not complete without validation evidence.
+- [`PncObservationEnricher.enrich()`](/c:/Users/lebel/pnc/pnc_automation/vision/pnc_observation_enricher.py#L36)
 
-At the automation layer, this means:
+Why this is a problem:
 
-- runner and script-loader changes require unit tests,
-- task-contract changes require unit tests,
-- retry and stop-policy changes require unit tests,
-- any orchestration change that affects live execution order must also be checked with a targeted smoke run.
+- The method no longer only recognizes the Manage Char screen. It now also injects building-detail and home-city fallbacks.
+- The stale docstring will mislead the next person touching the classifier.
 
-Automation should also define what evidence is recorded when a task verification fails so the validation result is inspectable.
+Clean fix:
 
-## 11. Relationship to other plans
+1. Update the docstring to describe all current responsibilities.
+2. Mention explicitly that the method performs OCR-based fallback classification and may synthesize visible elements.
 
-This file must not duplicate:
+## Duplication / Simplification Notes
 
-- concrete selectors from [PNC_AUTOMATION_IMPLEMENTATION.md](/c:/Users/lebel/pnc/PNC_AUTOMATION_IMPLEMENTATION.md),
-- account-navigation task behavior from [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md),
-- reusable screen flows from [PNC_SCREEN_FLOW_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SCREEN_FLOW_SUBPLAN.md),
-- concrete post-navigation task internals from [PNC_TASK_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_TASK_SUBPLAN.md).
+I did not find problematic duplication in the new `PreparedRunScript` / `TaskRegistry.prepare_script()` / `AutomationRunner._build_context()` refactor. Those changes are cleaner than the previous shape and should stay.
 
-It is the canonical place for automation orchestration only.
+The best simplification opportunity is to keep OCR fallbacks conservative:
+
+- classify less,
+- prove more,
+- prefer `UNKNOWN` over a guessed actionable screen.
+
+## Recommended Next Order
+
+1. Tighten the two OCR fallback classifiers.
+2. Add negative tests for both classifiers.
+3. Reconcile phase-closure claims in [PNC_AUTOMATION_IMPLEMENTATION.md](/c:/Users/lebel/pnc/PNC_AUTOMATION_IMPLEMENTATION.md) with actual selector maturity and validation evidence.
+4. Restore schema discoverability for the castle-roster file.

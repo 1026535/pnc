@@ -1,0 +1,5 @@
+Implement this plan fully and cleanly : XXXXXXXXXXXXXXXXXXXXXXXXXXXX
+Iterate until it is fully complete (all phases) and until there are no inconsistensies left, and all tests passes (including new ones to validate the changes) 
+Make sure you have a very deep understanding of the systems and all mentionned components first. Make sure to iterate until we have the best possible solution, with very well integrated and DRY architecture.
+
+Thank you for being very thorough with this!
