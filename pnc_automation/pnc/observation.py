@@ -37,6 +37,7 @@ class VisibleElement:
     bounds: Bounds
     confidence: float
     extracted_text: str | None = None
+    action_point: tuple[int, int] | None = None
 
 
 class ListEntryKind(StrEnum):

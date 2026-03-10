@@ -67,6 +67,7 @@ class ScreenFlowPlanner:
             ScreenType.PNC_MAIL_LIST,
             ScreenType.PNC_SYSTEM_MESSAGE,
             ScreenType.PNC_ALLIANCE_HOME,
+            ScreenType.PNC_ALLIANCE_JOIN,
             ScreenType.PNC_CASH_MALL,
             ScreenType.PNC_GIFT_CENTER,
             ScreenType.PNC_EVENT_CENTER,

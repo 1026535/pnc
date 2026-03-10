@@ -21,6 +21,7 @@ class ScreenType(StrEnum):
     PNC_MAIL_LIST = "pnc_mail_list"
     PNC_SYSTEM_MESSAGE = "pnc_system_message"
     PNC_ALLIANCE_HOME = "pnc_alliance_home"
+    PNC_ALLIANCE_JOIN = "pnc_alliance_join"
     PNC_CASH_MALL = "pnc_cash_mall"
     PNC_GIFT_CENTER = "pnc_gift_center"
     PNC_EVENT_CENTER = "pnc_event_center"

@@ -9,7 +9,7 @@ from pnc_automation.automation.tasks.building_upgrade_task import BuildingUpgrad
 from pnc_automation.automation.tasks.gathering_task import GatheringTask
 from pnc_automation.automation.tasks.login_task import LoginTask
 from pnc_automation.config.models import AccountConfig, CredentialSource, DefaultsConfig, ResolvedCredentials, SelectedCastleConfig
-from pnc_automation.pnc.action_requests import InputTextAction, TapAction, TapListEntryAction
+from pnc_automation.pnc.action_requests import InputTextAction, KeyEventAction, TapAction, TapListEntryAction
 from pnc_automation.pnc.observation import ListEntryKind
 from pnc_automation.pnc.policy_models import BuildingUpgradePolicy, GatheringPolicy
 from pnc_automation.pnc.screen_flows import ScreenFlowPlanner
@@ -52,6 +52,17 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertEqual(len(actions), 1)
         self.assertIsInstance(actions[0], TapAction)
         self.assertEqual(actions[0].selector_id, UiElementId.PNC_WORLD_HOME_NAV)
+
+    def test_ensure_home_city_from_alliance_join_uses_back_navigation(self) -> None:
+        """Treats the join-alliance landing as a back-navigable root-adjacent screen."""
+
+        observation = make_observation(ScreenType.PNC_ALLIANCE_JOIN)
+
+        actions = self.flows.ensure_home_city(observation)
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], KeyEventAction)
+        self.assertEqual(actions[0].key_code, "KEYCODE_BACK")
 
     def test_login_task_plans_username_and_password_entry(self) -> None:
         """Builds the expected credential-entry actions on the login screen."""

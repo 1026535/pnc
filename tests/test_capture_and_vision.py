@@ -23,7 +23,7 @@ from pnc_automation.vision.observation_builder import (
     ObservationService,
     PillowSelectorEngine,
 )
-from pnc_automation.vision.ocr_service import OcrLine, UnavailableOcrService
+from pnc_automation.vision.ocr_service import OcrLine, OcrResult, UnavailableOcrService
 from pnc_automation.vision.pnc_observation_enricher import PncObservationEnricher
 from pnc_automation.vision.screen_classifier import ScreenClassifier
 from pnc_automation.vision.selectors import (
@@ -57,6 +57,12 @@ class _FakeOcrService:
     """Returns deterministic OCR lines for castle-selection parsing tests."""
 
     lines: tuple[OcrLine, ...]
+
+    def read_result(self, image: Image.Image, region: Region | None = None) -> OcrResult:
+        """Returns pre-seeded OCR output with line and word-level data."""
+
+        lines = self.read_lines(image, region)
+        return OcrResult(lines=lines, words=tuple(word for line in lines for word in line.words))
 
     def read_lines(self, image: Image.Image, region: Region | None = None) -> tuple[OcrLine, ...]:
         """Returns pre-seeded OCR lines, optionally restricted to a region."""
@@ -340,6 +346,361 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertTrue(observation.has(UiElementId.PNC_BOTTOM_NAV_ALLIANCE))
             self.assertTrue(observation.has(UiElementId.PNC_BOTTOM_NAV_MORE))
             self.assertTrue(observation.has(UiElementId.PNC_HOME_BUILD_BUTTON))
+
+    def test_observation_builder_classifies_live_like_home_city_when_build_anchor_is_left_aligned(self) -> None:
+        """Recognizes home city when the live Build button sits on the left rail instead of the lower action band."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                artifact_directory="k313_live_like_home",
+                label="home_city_left_build",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Build", x=27, y=354, width=65, height=28),
+                            _ocr_line("Hero", x=219, y=1567, width=62, height=25),
+                            _ocr_line("Bag", x=455, y=1565, width=54, height=32),
+                            _ocr_line("Alliance", x=666, y=1567, width=100, height=26),
+                            _ocr_line("Quest", x=333, y=1571, width=69, height=20),
+                            _ocr_line("More", x=795, y=1568, width=70, height=25),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_HOME_CITY)
+            self.assertTrue(observation.has(UiElementId.PNC_HOME_BUILD_BUTTON))
+            self.assertTrue(observation.has(UiElementId.PNC_BOTTOM_NAV_ALLIANCE))
+            self.assertTrue(observation.has(UiElementId.PNC_BOTTOM_NAV_MORE))
+
+    def test_observation_builder_classifies_blocking_popup_over_home_city_from_ocr(self) -> None:
+        """Promotes centered modal cancel buttons into the canonical blocking-popup selector."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                artifact_directory="k313_live_popup",
+                label="home_city_popup",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Build", x=27, y=354, width=65, height=28),
+                            _ocr_line("Bag", x=455, y=1565, width=54, height=32),
+                            _ocr_line("Alliance", x=666, y=1567, width=100, height=26),
+                            _ocr_line("More", x=795, y=1568, width=70, height=25),
+                            _ocr_line("Cancel", x=378, y=888, width=115, height=40),
+                            _ocr_line("Join/Apply", x=607, y=888, width=178, height=44),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_POPUP)
+            self.assertTrue(observation.blocking_popup)
+            self.assertTrue(observation.has(UiElementId.PNC_POPUP_CLOSE_BUTTON))
+
+    def test_observation_builder_classifies_promotional_hero_offer_popup_from_ocr(self) -> None:
+        """Recognizes the observed monetized hero-offer modal as a blocking popup with a close target."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (540, 960), (15, 28, 68)))),
+                artifact_directory="k230_offer_popup",
+                label="hero_offer_popup",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("5 Hero", x=27, y=65, width=138, height=35),
+                            _ocr_line("Savannah", x=68, y=113, width=94, height=22),
+                            _ocr_line("$6.99", x=240, y=805, width=60, height=25),
+                            _ocr_line("One-time", x=230, y=854, width=81, height=21),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_POPUP)
+            self.assertTrue(observation.blocking_popup)
+            self.assertTrue(observation.has(UiElementId.PNC_POPUP_CLOSE_BUTTON))
+
+    def test_observation_builder_rejects_hero_offer_near_match_without_price_and_one_time(self) -> None:
+        """Keeps the screen unknown when the hero-offer popup evidence is incomplete."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (540, 960), (15, 28, 68)))),
+                artifact_directory="k230_offer_probe",
+                label="hero_offer_near_match",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("5 Hero", x=27, y=65, width=138, height=35),
+                            _ocr_line("Savannah", x=68, y=113, width=94, height=22),
+                            _ocr_line("1100", x=236, y=443, width=98, height=44),
+                            _ocr_line("3900%", x=410, y=397, width=87, height=68),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.UNKNOWN)
+            self.assertFalse(observation.blocking_popup)
+            self.assertFalse(observation.has(UiElementId.PNC_POPUP_CLOSE_BUTTON))
+
+    def test_observation_builder_classifies_bag_from_live_like_ocr(self) -> None:
+        """Recognizes the live bag inventory layout when template matches are unavailable."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                artifact_directory="k313_live_bag",
+                label="bag_live_like",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Bag", x=177, y=16, width=100, height=64),
+                            _ocr_line("Bag", x=184, y=123, width=82, height=52),
+                            _ocr_line("Diamond Shop", x=545, y=125, width=259, height=44),
+                            _ocr_line("Resource", x=22, y=220, width=139, height=35),
+                            _ocr_line("Use", x=725, y=327, width=64, height=37),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_BAG)
+            self.assertTrue(observation.has(UiElementId.PNC_BAG_MAIN_TAB_BAG))
+            self.assertTrue(observation.has(UiElementId.PNC_BAG_USE_BUTTON))
+
+    def test_observation_builder_classifies_alliance_join_from_live_like_ocr(self) -> None:
+        """Recognizes the join-alliance landing when the account has no alliance yet."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                artifact_directory="k313_live_alliance_join",
+                label="alliance_join_live_like",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Join Alliance", x=300, y=627, width=305, height=49),
+                            _ocr_line("Join", x=642, y=1198, width=78, height=39),
+                            _ocr_line("Create Alliance", x=131, y=1218, width=259, height=36),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_ALLIANCE_JOIN)
+
+    def test_observation_builder_classifies_research_tree_from_live_like_ocr(self) -> None:
+        """Recognizes the live research grid so flows can back out to home safely."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (540, 960), (15, 28, 68)))),
+                artifact_directory="k230_live_research_tree",
+                label="research_tree_live_like",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Military", x=107, y=9, width=109, height=38),
+                            _ocr_line("Troop Size I", x=229, y=340, width=90, height=20),
+                            _ocr_line("March Speed", x=221, y=714, width=103, height=19),
+                            _ocr_line("0/3", x=106, y=425, width=25, height=14),
+                            _ocr_line("0/5", x=230, y=615, width=27, height=16),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_RESEARCH_TREE)
+
+    def test_observation_builder_classifies_academy_overview_from_live_like_ocr(self) -> None:
+        """Recognizes the live institute overview and exposes a safe back target."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (540, 960), (15, 28, 68)))),
+                artifact_directory="k230_live_academy",
+                label="academy_live_like",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Institute", x=108, y=12, width=115, height=29),
+                            _ocr_line("Upgrade", x=404, y=263, width=88, height=25),
+                            _ocr_line("Development", x=41, y=335, width=111, height=20),
+                            _ocr_line("Economy", x=304, y=333, width=79, height=24),
+                            _ocr_line("Military", x=38, y=412, width=67, height=24),
+                            _ocr_line("Fortification", x=306, y=415, width=99, height=17),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_ACADEMY)
+            self.assertTrue(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
+
+    def test_observation_builder_rejects_academy_title_without_upgrade_and_categories(self) -> None:
+        """Keeps isolated academy-like titles unknown when the overview structure is absent."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (540, 960), (15, 28, 68)))),
+                artifact_directory="k230_academy_probe",
+                label="academy_near_match",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Institute", x=108, y=12, width=115, height=29),
+                            _ocr_line("Rewards", x=220, y=300, width=100, height=24),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.UNKNOWN)
+
+    def test_observation_builder_rejects_research_tree_header_without_grid_evidence(self) -> None:
+        """Keeps isolated research-like headers unknown when the node-grid evidence is absent."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (540, 960), (15, 28, 68)))),
+                artifact_directory="k230_research_tree_probe",
+                label="research_tree_near_match",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Military", x=107, y=9, width=109, height=38),
+                            _ocr_line("Rewards", x=220, y=300, width=100, height=24),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.UNKNOWN)
 
     def test_observation_builder_rejects_bottom_nav_only_non_home_screens(self) -> None:
         """Keeps bag, quest, hero, and mail OCR fixtures unknown without city-only anchors."""

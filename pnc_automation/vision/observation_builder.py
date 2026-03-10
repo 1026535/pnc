@@ -16,7 +16,7 @@ from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
 from pnc_automation.vision.image_models import SelectorMatch
 from pnc_automation.vision.ocr_service import OcrService
-from pnc_automation.vision.screen_classifier import ScreenClassifier
+from pnc_automation.vision.screen_classifier import ScreenClassifier, ScreenEvidence
 from pnc_automation.vision.selectors import DetectionKind, SelectorRegistry
 from pnc_automation.vision.template_matcher import PillowTemplateMatcher
 
@@ -39,9 +39,17 @@ class ObservationAdditions:
 
     visible_elements: Mapping[UiElementId, VisibleElement] = field(default_factory=dict)
     list_entries: tuple[DetectedListEntry, ...] = ()
-    screen_type_override: ScreenType | None = None
+    screen_evidence: tuple[ScreenEvidence, ...] = ()
     current_castle_name: str | None = None
     available_march_slots: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class CapturedObservation:
+    """Pairs one persisted screenshot capture with the built typed observation."""
+
+    screenshot: CapturedScreenshot
+    observation: Observation
 
 
 @dataclass(slots=True)
@@ -137,9 +145,7 @@ class ObservationBuilder:
         screen_type = self.screen_classifier.classify(visible_elements)
         additions = self.enricher.enrich(screenshot.image, screen_type, visible_elements)
         visible_elements = dict(additions.visible_elements) | visible_elements
-        if additions.screen_type_override is None:
-            screen_type = self.screen_classifier.classify(visible_elements)
-        screen_type = additions.screen_type_override or screen_type
+        screen_type = self.screen_classifier.classify(visible_elements, additions.screen_evidence)
         return Observation(
             screen_type=screen_type,
             visible_elements=visible_elements,
@@ -164,13 +170,18 @@ class ObservationService:
     pnc_account_id: str | None = None
     castle_roster_store: CastleRosterStore | None = None
 
-    def observe(self, label: str) -> Observation:
-        """Captures a fresh screenshot artifact and returns the built observation."""
+    def capture_observation(self, label: str) -> CapturedObservation:
+        """Captures a fresh screenshot artifact and returns both the screenshot and typed observation."""
 
         screenshot = self.screenshot_service.capture(self.session, artifact_directory=self.artifact_directory, label=label)
         observation = self.observation_builder.build(screenshot)
         self._sync_castle_roster(observation)
-        return observation
+        return CapturedObservation(screenshot=screenshot, observation=observation)
+
+    def observe(self, label: str) -> Observation:
+        """Captures a fresh screenshot artifact and returns the built observation."""
+
+        return self.capture_observation(label).observation
 
     def _sync_castle_roster(self, observation: Observation) -> None:
         """Persists discovered castle rosters whenever the castle-selection screen is observed."""

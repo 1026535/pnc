@@ -17,4 +17,4 @@ build-backend = "setuptools.build_meta"
 packages = ["pnc_automation"]
 
 [tool.setuptools.package-data]
-"pnc_automation" = ["py.typed"]
+"pnc_automation" = ["py.typed", "vision/data/*.yaml"]

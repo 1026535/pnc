@@ -24,6 +24,13 @@ class SelectorRegistryTests(unittest.TestCase):
             hero_upgrade_tab.screens,
             (ScreenType.PNC_HERO_DETAIL_UPGRADE, ScreenType.PNC_HERO_DETAIL_ENHANCE),
         )
+        cash_mall_shortcut = registry.require(UiElementId.PNC_HOME_RIGHT_RAIL_CASH_MALL_ICON)
+        self.assertEqual(cash_mall_shortcut.status.value, "click_mapped")
+        self.assertEqual(cash_mall_shortcut.click_outcomes[0].target_screen, ScreenType.PNC_CASH_MALL)
+        self.assertEqual(
+            cash_mall_shortcut.click_outcomes[0].verification_selectors,
+            (UiElementId.PNC_CASH_MALL_TAB_DAILY_SALE,),
+        )
 
 
 if __name__ == "__main__":

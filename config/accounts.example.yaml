@@ -9,8 +9,8 @@ defaults:
 
 instances:
   - id: bs-main
-    device_id: 127.0.0.1:5555
-    app_package: com.global.ztmslg
+    device_id: 127.0.0.1:5556
+    app_package: com.global.tmslg
 
 accounts:
   - id: primary-account
