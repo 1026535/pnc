@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import weakref
 from dataclasses import dataclass, field
 from io import BytesIO
 from typing import Any, Protocol
@@ -55,6 +56,39 @@ class OcrService(Protocol):
 
     def read_text(self, image: Image.Image, region: Region) -> str:
         """Returns OCR text for the provided region."""
+
+
+@dataclass(slots=True)
+class CachedOcrService:
+    """Caches the most recent OCR result so adjacent pipeline stages can reuse one screenshot read."""
+
+    inner: OcrService
+    _last_image_ref: weakref.ReferenceType[Image.Image] | None = field(default=None, init=False, repr=False)
+    _last_region_key: tuple[int, int, int, int] | None = field(default=None, init=False, repr=False)
+    _last_result: OcrResult | None = field(default=None, init=False, repr=False)
+
+    def read_result(self, image: Image.Image, region: Region | None = None) -> OcrResult:
+        """Returns cached OCR output when the same image and region are requested consecutively."""
+
+        region_key = None if region is None else (region.x, region.y, region.width, region.height)
+        last_image = None if self._last_image_ref is None else self._last_image_ref()
+        if last_image is image and self._last_region_key == region_key and self._last_result is not None:
+            return self._last_result
+        result = self.inner.read_result(image, region)
+        self._last_image_ref = weakref.ref(image)
+        self._last_region_key = region_key
+        self._last_result = result
+        return result
+
+    def read_lines(self, image: Image.Image, region: Region | None = None) -> tuple[OcrLine, ...]:
+        """Returns OCR lines while reusing the cached result path when available."""
+
+        return self.read_result(image, region).lines
+
+    def read_text(self, image: Image.Image, region: Region) -> str:
+        """Returns OCR text while reusing the cached result path when available."""
+
+        return "\n".join(line.text for line in self.read_result(image, region).lines)
 
 
 @dataclass(slots=True)

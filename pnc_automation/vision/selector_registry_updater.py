@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 import yaml
 
@@ -14,10 +13,14 @@ from pnc_automation.errors import SelectorResolutionError
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.vision.selector_catalog import (
     SelectorCatalogClickDefinition,
-    SelectorCatalogClickOutcome,
     SelectorCatalogDocument,
     SelectorCatalogEntry,
     load_selector_catalog_document,
+    load_selector_schema_click_definition,
+    load_selector_schema_string_sequence,
+    require_selector_schema_mapping,
+    require_selector_schema_sequence,
+    require_selector_schema_string,
     write_selector_catalog_document,
 )
 from pnc_automation.vision.selectors import DetectionKind, SelectorStatus
@@ -55,9 +58,17 @@ def load_selector_update_spec(path: Path) -> tuple[SelectorRegistryUpdate, ...]:
 
     with path.open("r", encoding="utf-8") as handle:
         loaded = yaml.safe_load(handle)
-    document = _require_mapping(loaded, context="selector update spec")
-    updates = _require_sequence(document.get("selectors"), context="selector update spec selectors")
-    return tuple(_load_update(update) for update in updates)
+    document = require_selector_schema_mapping(loaded, context="selector update spec", document_label="selector update spec")
+    updates = tuple(
+        _load_update(update)
+        for update in require_selector_schema_sequence(
+            document.get("selectors"),
+            context="selector update spec selectors",
+            document_label="selector update spec",
+        )
+    )
+    _ensure_unique_update_ids(updates)
+    return updates
 
 
 def apply_selector_updates(
@@ -66,6 +77,7 @@ def apply_selector_updates(
 ) -> tuple[SelectorCatalogDocument, SelectorRegistryUpdateResult]:
     """Applies explicit selector updates to one raw catalog document."""
 
+    _ensure_unique_update_ids(updates)
     selectors_by_id = {selector.id: selector for selector in document.selectors}
     selector_order = [selector.id for selector in document.selectors]
     added_selector_ids: list[str] = []
@@ -184,15 +196,30 @@ def update_selector_registry_files(
 def _load_update(value: object) -> SelectorRegistryUpdate:
     """Builds one typed selector update from the raw YAML spec entry."""
 
-    mapping = _require_mapping(value, context="selector update entry")
-    selector_id = _require_string(mapping.get("id"), context="selector update id")
-    screens = tuple(_load_string_sequence(mapping.get("screens"), context=f"selector update '{selector_id}' screens"))
+    mapping = require_selector_schema_mapping(value, context="selector update entry", document_label="selector update spec")
+    selector_id = require_selector_schema_string(
+        mapping.get("id"),
+        context="selector update id",
+        document_label="selector update spec",
+    )
+    screens = tuple(
+        load_selector_schema_string_sequence(
+            mapping.get("screens"),
+            context=f"selector update '{selector_id}' screens",
+            document_label="selector update spec",
+        )
+    )
     if not screens:
         raise SelectorResolutionError("Selector updates must declare at least one screen.", selector_id=selector_id)
-    status = _require_string(mapping.get("status"), context=f"selector update '{selector_id}' status")
-    detection_kind = _require_string(
+    status = require_selector_schema_string(
+        mapping.get("status"),
+        context=f"selector update '{selector_id}' status",
+        document_label="selector update spec",
+    )
+    detection_kind = require_selector_schema_string(
         mapping.get("detection_kind", DetectionKind.TEMPLATE.value),
         context=f"selector update '{selector_id}' detection_kind",
+        document_label="selector update spec",
     )
     if detection_kind not in {kind.value for kind in DetectionKind}:
         raise SelectorResolutionError(
@@ -203,8 +230,34 @@ def _load_update(value: object) -> SelectorRegistryUpdate:
     if status not in _STATUS_RANK:
         raise SelectorResolutionError("Selector updates must use a known selector status.", selector_id=selector_id, status=status)
     raw_click = mapping.get("click")
-    click = _load_click_definition(raw_click, selector_id=selector_id) if "click" in mapping else None
-    notes = tuple(_load_string_sequence(mapping.get("notes", ()), context=f"selector update '{selector_id}' notes"))
+    if "click" in mapping and raw_click is None:
+        raise SelectorResolutionError(
+            "Selector updates cannot clear reviewed click metadata without a dedicated destructive flag.",
+            selector_id=selector_id,
+        )
+    click = (
+        load_selector_schema_click_definition(
+            raw_click,
+            selector_id=selector_id,
+            document_label="selector update spec",
+            selector_label="selector update",
+            validate_target_screen=lambda screen_name: _validate_update_screens(
+                (screen_name,),
+                selector_id=selector_id,
+                context="click outcome target_screen",
+            ),
+            validate_verification_selector=_validate_selector_id,
+        )
+        if "click" in mapping
+        else None
+    )
+    notes = tuple(
+        load_selector_schema_string_sequence(
+            mapping.get("notes", ()),
+            context=f"selector update '{selector_id}' notes",
+            document_label="selector update spec",
+        )
+    )
     return SelectorRegistryUpdate(
         id=selector_id,
         screens=screens,
@@ -234,102 +287,23 @@ def _promote_status(existing_status: str, requested_status: str, *, selector_id:
     return requested_status
 
 
+def _ensure_unique_update_ids(updates: Sequence[SelectorRegistryUpdate]) -> None:
+    """Rejects one update batch that tries to mutate the same selector twice."""
+
+    selector_ids = [update.id for update in updates]
+    duplicates = {selector_id for selector_id in selector_ids if selector_ids.count(selector_id) > 1}
+    if duplicates:
+        raise SelectorResolutionError(
+            "Selector update specs cannot repeat the same selector id in one run.",
+            duplicates=sorted(duplicates),
+        )
+
+
 def _validate_selector_id(selector_id: str) -> None:
     """Ensures selector identifiers written by the updater remain enum-safe."""
 
     if _UI_ELEMENT_ID_PATTERN.fullmatch(selector_id) is None:
         raise SelectorResolutionError("Selector ids must be uppercase enum-safe identifiers.", selector_id=selector_id)
-
-
-def _load_string_sequence(value: object, *, context: str) -> tuple[str, ...]:
-    """Loads one YAML string sequence while failing fast on invalid content."""
-
-    return tuple(_require_string(item, context=context) for item in _require_sequence(value, context=context))
-
-
-def _require_mapping(value: object, *, context: str) -> Mapping[str, Any]:
-    """Returns one YAML mapping or raises when the loaded content is invalid."""
-
-    if not isinstance(value, Mapping):
-        raise SelectorResolutionError("Expected a mapping in the selector update spec.", context=context)
-    return value
-
-
-def _require_sequence(value: object, *, context: str) -> Sequence[object]:
-    """Returns one YAML sequence or raises when the loaded content is invalid."""
-
-    if not isinstance(value, Sequence) or isinstance(value, str | bytes):
-        raise SelectorResolutionError("Expected a sequence in the selector update spec.", context=context)
-    return value
-
-
-def _require_string(value: object, *, context: str) -> str:
-    """Returns one YAML string or raises when the loaded content is invalid."""
-
-    if not isinstance(value, str) or value == "":
-        raise SelectorResolutionError("Expected a non-empty string in the selector update spec.", context=context)
-    return value
-
-
-def _load_click_definition(value: object, *, selector_id: str) -> SelectorCatalogClickDefinition | None:
-    """Loads optional click metadata from the explicit update spec."""
-
-    if value is None:
-        return None
-    mapping = _require_mapping(value, context=f"selector update '{selector_id}' click")
-    anchor = _require_string(mapping.get("anchor", "center"), context=f"selector update '{selector_id}' click anchor")
-    outcomes = tuple(_load_click_outcomes(mapping.get("outcomes", ()), selector_id=selector_id))
-    return SelectorCatalogClickDefinition(anchor=anchor, outcomes=outcomes)
-
-
-def _load_click_outcomes(value: object, *, selector_id: str) -> tuple[SelectorCatalogClickOutcome, ...]:
-    """Loads reviewed click outcomes from the explicit update spec."""
-
-    outcomes = _require_sequence(value, context=f"selector update '{selector_id}' click outcomes")
-    loaded_outcomes: list[SelectorCatalogClickOutcome] = []
-    for outcome in outcomes:
-        mapping = _require_mapping(outcome, context=f"selector update '{selector_id}' click outcome")
-        target_screen = mapping.get("target_screen")
-        if target_screen is not None:
-            target_screen = _require_string(target_screen, context=f"selector update '{selector_id}' click outcome target_screen")
-            _validate_update_screens((target_screen,), selector_id=selector_id, context="click outcome target_screen")
-        verification_selectors = tuple(
-            _load_string_sequence(
-                mapping.get("verification_selectors", ()),
-                context=f"selector update '{selector_id}' click outcome verification_selectors",
-            )
-        )
-        for verification_selector in verification_selectors:
-            _validate_selector_id(verification_selector)
-        verification_texts = tuple(
-            _load_string_sequence(
-                mapping.get("verification_texts", ()),
-                context=f"selector update '{selector_id}' click outcome verification_texts",
-            )
-        )
-        notes = tuple(
-            _load_string_sequence(
-                mapping.get("notes", ()),
-                context=f"selector update '{selector_id}' click outcome notes",
-            )
-        )
-        loaded_outcomes.append(
-            SelectorCatalogClickOutcome(
-                target_screen=target_screen,
-                verification_selectors=verification_selectors,
-                verification_texts=verification_texts,
-                safe_to_click=_require_bool(
-                    mapping.get("safe_to_click", True),
-                    context=f"selector update '{selector_id}' click outcome safe_to_click",
-                ),
-                monetized=_require_bool(
-                    mapping.get("monetized", False),
-                    context=f"selector update '{selector_id}' click outcome monetized",
-                ),
-                notes=notes,
-            )
-        )
-    return tuple(loaded_outcomes)
 
 
 def _validate_update_screens(screen_names: Sequence[str], *, selector_id: str, context: str) -> None:
@@ -344,11 +318,3 @@ def _validate_update_screens(screen_names: Sequence[str], *, selector_id: str, c
                 context=context,
                 screen_type=screen_name,
             )
-
-
-def _require_bool(value: object, *, context: str) -> bool:
-    """Returns one YAML boolean or raises when the loaded content is invalid."""
-
-    if not isinstance(value, bool):
-        raise SelectorResolutionError("Expected a boolean in the selector update spec.", context=context)
-    return value

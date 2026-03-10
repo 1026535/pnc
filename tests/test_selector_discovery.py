@@ -160,6 +160,62 @@ class SelectorDiscoveryTests(unittest.TestCase):
             ("PNC_BAG_MAIN_TAB_BAG", "PNC_BAG_USE_BUTTON"),
         )
 
+    def test_build_probe_draft_keeps_unknown_destination_as_probe_only(self) -> None:
+        """Does not emit a promotable draft when the reviewed destination screen is still unknown."""
+
+        analyzer = self._build_analyzer(
+            lines=(),
+            catalog=SelectorCatalogDocument(
+                selectors=(
+                    SelectorCatalogEntry(
+                        id="PNC_BOTTOM_NAV_BAG",
+                        screens=("PNC_HOME_CITY",),
+                        status="screenshot_seeded",
+                        detection_kind="template",
+                    ),
+                ),
+            ),
+        )
+
+        probe = analyzer.build_probe_draft(
+            selector_id=UiElementId.PNC_BOTTOM_NAV_BAG,
+            source_observation=make_observation(ScreenType.PNC_HOME_CITY, visible_ids=(UiElementId.PNC_BOTTOM_NAV_BAG,)),
+            destination_observation=make_observation(ScreenType.UNKNOWN, visible_ids=(UiElementId.PNC_BAG_MAIN_TAB_BAG,)),
+            source_artifact_path=Path("source.png"),
+            destination_artifact_path=Path("destination.png"),
+        )
+
+        self.assertIsNone(probe.draft_selector)
+        self.assertEqual(probe.destination_screen_type, ScreenType.UNKNOWN)
+
+    def test_build_probe_draft_requires_verification_selectors(self) -> None:
+        """Does not emit a promotable draft when the destination lacks explicit selector evidence."""
+
+        analyzer = self._build_analyzer(
+            lines=(),
+            catalog=SelectorCatalogDocument(
+                selectors=(
+                    SelectorCatalogEntry(
+                        id="PNC_BOTTOM_NAV_BAG",
+                        screens=("PNC_HOME_CITY",),
+                        status="screenshot_seeded",
+                        detection_kind="template",
+                    ),
+                ),
+            ),
+        )
+
+        probe = analyzer.build_probe_draft(
+            selector_id=UiElementId.PNC_BOTTOM_NAV_BAG,
+            source_observation=make_observation(ScreenType.PNC_HOME_CITY, visible_ids=(UiElementId.PNC_BOTTOM_NAV_BAG,)),
+            destination_observation=make_observation(ScreenType.PNC_BAG),
+            source_artifact_path=Path("source.png"),
+            destination_artifact_path=Path("destination.png"),
+        )
+
+        self.assertIsNone(probe.draft_selector)
+        self.assertEqual(probe.destination_screen_type, ScreenType.PNC_BAG)
+
     def test_build_probe_draft_requires_catalog_backed_selector(self) -> None:
         """Fails fast when a live probe targets a selector missing from the static catalog."""
 

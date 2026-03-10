@@ -24,8 +24,7 @@ from pnc_automation.pnc.observation import Observation
 from pnc_automation.pnc.screen_flows import ScreenFlowPlanner
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
-from pnc_automation.vision.observation_builder import CapturedObservation, ObservationService
-from pnc_automation.vision.ocr_service import RapidOcrService
+from pnc_automation.vision.observation_builder import CapturedObservation, ObservationBuilder, ObservationService
 from pnc_automation.vision.selector_catalog import default_selector_catalog_path, load_selector_catalog_document
 from pnc_automation.vision.selector_discovery import (
     SelectorDiscoveryAnalyzer,
@@ -61,7 +60,7 @@ def main() -> int:
     parser.add_argument(
         "--catalog",
         default=str(default_selector_catalog_path()),
-        help="Path to the selector catalog used to suppress already-refined drafts.",
+        help="Path to the selector catalog used by both runtime observation and draft suppression.",
     )
     parser.add_argument("--account", help="Configured account id to use for live connected discovery.")
     parser.add_argument(
@@ -135,15 +134,31 @@ def main() -> int:
 def _build_runtime(*, config_path: Path, catalog_path: Path, verbose: bool) -> SelectorDiscoveryRuntime:
     """Builds the shared discovery runtime used by artifact and live discovery."""
 
-    application = build_application_runner(config_path, verbose=verbose)
+    application = build_application_runner(config_path, verbose=verbose, catalog_path=catalog_path)
     return SelectorDiscoveryRuntime(
         application=application,
         analyzer=SelectorDiscoveryAnalyzer(
             observation_builder=application.script_runner.observation_builder,
-            ocr_service=RapidOcrService(),
+            ocr_service=_resolve_runtime_ocr_service(application.script_runner.observation_builder),
             catalog=load_selector_catalog_document(catalog_path),
         ),
     )
+
+
+def _resolve_runtime_ocr_service(observation_builder: ObservationBuilder) -> object:
+    """Returns the shared OCR service already used by the runtime observation pipeline."""
+
+    selector_engine_ocr_service = getattr(observation_builder.selector_engine, "ocr_service", None)
+    enricher_ocr_service = getattr(observation_builder.enricher, "ocr_service", None)
+    if selector_engine_ocr_service is None and enricher_ocr_service is None:
+        raise SelectorResolutionError("Selector discovery runtime requires an OCR service on the observation pipeline.")
+    if (
+        selector_engine_ocr_service is not None
+        and enricher_ocr_service is not None
+        and selector_engine_ocr_service is not enricher_ocr_service
+    ):
+        raise SelectorResolutionError("Selector discovery runtime requires one shared OCR service instance.")
+    return selector_engine_ocr_service if selector_engine_ocr_service is not None else enricher_ocr_service
 
 
 def _run_live_discovery(

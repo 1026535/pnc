@@ -19,7 +19,7 @@ from pnc_automation.vision.observation_builder import (
     ObservationBuilder,
     PillowSelectorEngine,
 )
-from pnc_automation.vision.ocr_service import RapidOcrService
+from pnc_automation.vision.ocr_service import CachedOcrService, RapidOcrService
 from pnc_automation.vision.pnc_observation_enricher import PncObservationEnricher
 from pnc_automation.vision.screen_classifier import ScreenClassifier
 from pnc_automation.vision.selectors import build_default_selector_registry
@@ -38,8 +38,13 @@ class ApplicationRunner:
         return self.script_runner.run(account_id=account_id, script_path=script_path)
 
 
-def build_application_runner(config_path: str | Path, *, verbose: bool = False) -> ApplicationRunner:
-    """Builds the configured application runtime for the provided config file."""
+def build_application_runner(
+    config_path: str | Path,
+    *,
+    verbose: bool = False,
+    catalog_path: Path | None = None,
+) -> ApplicationRunner:
+    """Builds the configured application runtime for the provided config and selector catalog."""
 
     root_logger = configure_logging(verbose=verbose)
     logger = logging.LoggerAdapter(root_logger, extra={})
@@ -50,8 +55,8 @@ def build_application_runner(config_path: str | Path, *, verbose: bool = False) 
         artifact_store=artifact_store,
         screenshot_format=app_config.defaults.screenshot_format,
     )
-    ocr_service = RapidOcrService()
-    selector_registry = build_default_selector_registry()
+    ocr_service = CachedOcrService(RapidOcrService())
+    selector_registry = build_default_selector_registry(catalog_path=catalog_path)
     observation_builder = ObservationBuilder(
         selector_registry=selector_registry,
         selector_engine=PillowSelectorEngine(

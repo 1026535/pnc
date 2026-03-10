@@ -109,6 +109,13 @@ This sub-plan should be consumed by [PNC_AUTOMATION_SUBPLAN.md](/c:/Users/lebel/
 
 Reusable flows in this file should rely on selectors that have been refined through [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SELECTOR_REFINEMENT_SUBPLAN.md), especially for unique building entry points and empty-slot construction flows.
 
+Rules:
+
+- a flow only depends on the selector slice required for that flow's current scope,
+- the selector registry is expected to grow flow by flow as new clickable UI elements become necessary,
+- each flow should request only its next required selector increment, not a blanket registry-completion milestone,
+- do not block flow design on a hypothetical fully completed registry; request the missing selectors for the specific reusable path being implemented.
+
 ## 9. Validation requirement
 
 Each reusable flow must define and pass its own validation gate before tasks depend on it broadly.
