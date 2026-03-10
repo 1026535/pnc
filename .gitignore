@@ -6,6 +6,10 @@ __pycache__/
 .venv/
 venv/
 artifacts/
+selector_discovery_output/
+home_city_blended_gui_removed.png
+home_city_landscape_atlas.png
+home_city_map_unlabeled.png
 
 # Local machine / IDE files
 .idea/
