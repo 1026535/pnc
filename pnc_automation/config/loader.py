@@ -39,9 +39,10 @@ def load_app_config(
 
     raw = _require_mapping(raw_data, context="config root")
     environment = env if env is not None else os.environ
+    workspace_root = _resolve_workspace_root(config_path)
 
     defaults = _load_defaults(raw.get("defaults"))
-    artifact_root = _load_artifact_root(raw.get("artifacts"), config_path.parent)
+    artifact_root = _load_artifact_root(raw.get("artifacts"), workspace_root)
     instances = _load_instances(raw.get("instances"))
     accounts = _load_accounts(raw.get("accounts"), environment)
     resolved_castle_roster_path = _resolve_castle_roster_path(config_path, castle_roster_path)
@@ -78,12 +79,27 @@ def _load_defaults(raw_defaults: Any) -> DefaultsConfig:
     )
 
 
-def _load_artifact_root(raw_artifacts: Any, config_dir: Path) -> Path:
-    """Loads and resolves the artifact root relative to the config file."""
+def _resolve_workspace_root(config_path: Path) -> Path:
+    """Returns the workspace root used for repo-owned relative paths.
+
+    The canonical repository layout stores runtime configs under ``config/`` at the
+    workspace root. Relative artifact paths must therefore resolve from the parent of
+    that directory instead of nesting under ``config/``. Standalone configs outside a
+    ``config`` directory continue to resolve relative paths from their own directory.
+    """
+
+    config_dir = config_path.parent
+    if config_dir.name == "config":
+        return config_dir.parent
+    return config_dir
+
+
+def _load_artifact_root(raw_artifacts: Any, workspace_root: Path) -> Path:
+    """Loads and resolves the artifact root relative to the workspace root."""
 
     raw = _require_mapping(raw_artifacts or {}, context="artifacts")
     artifact_root = _require_string(raw.get("root", "artifacts"), context="artifacts.root")
-    return (config_dir / artifact_root).resolve()
+    return (workspace_root / artifact_root).resolve()
 
 
 def _load_instances(raw_instances: Any) -> tuple[BlueStacksInstanceConfig, ...]:

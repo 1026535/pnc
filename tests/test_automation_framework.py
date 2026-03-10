@@ -19,7 +19,7 @@ from pnc_automation.pnc.observation import Observation
 from pnc_automation.pnc.screen_flows import ScreenFlowPlanner
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
-from tests.test_support import FakeObservationService, FakeSession, build_logger, make_observation
+from tests.test_support import FakeObservationService, FakeSession, build_logger, make_observation, make_visible
 
 
 class AutomationFrameworkTests(unittest.TestCase):
@@ -159,6 +159,37 @@ class AutomationFrameworkTests(unittest.TestCase):
             ],
         )
         self.assertEqual(fake_session.taps, [(5, 5)])
+
+    def test_tap_actions_prefer_visible_element_action_points(self) -> None:
+        """Uses selector-specific action points when OCR-derived bounds are not the real touch target."""
+
+        executor = ActionExecutor(
+            session=FakeSession(),
+            stable_click_delay_ms=0,
+            post_action_observe_delay_ms=0,
+            logger=build_logger(),
+            sleep=lambda _: None,
+        )
+        observation = Observation(
+            screen_type=ScreenType.PNC_HOME_CITY,
+            visible_elements={
+                UiElementId.PNC_BOTTOM_NAV_BAG: make_visible(
+                    UiElementId.PNC_BOTTOM_NAV_BAG,
+                    x=440,
+                    y=1560,
+                    width=54,
+                    height=33,
+                    action_point=(482, 1529),
+                )
+            },
+        )
+
+        executor.execute_action(
+            TapAction(selector_id=UiElementId.PNC_BOTTOM_NAV_BAG),
+            observation,
+        )
+
+        self.assertEqual(executor.session.taps, [(482, 1529)])
 
 
 class _TrivialTapTask(BaseAutomationTask):

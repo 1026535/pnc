@@ -16,7 +16,7 @@ class ConfigLoaderTests(unittest.TestCase):
     """Validates typed config loading and fail-fast startup rules."""
 
     def test_load_app_config_resolves_credentials_and_paths(self) -> None:
-        """Loads a valid config and resolves the artifact root relative to the file."""
+        """Loads a valid config and resolves the artifact root under the workspace root."""
 
         with tempfile.TemporaryDirectory() as temp_directory:
             root = Path(temp_directory)
@@ -34,7 +34,7 @@ class ConfigLoaderTests(unittest.TestCase):
                     instances:
                       - id: bs-main
                         device_id: 127.0.0.1:5555
-                        app_package: com.global.ztmslg
+                        app_package: com.global.tmslg
                     accounts:
                       - id: account_a
                         instance_id: bs-main
@@ -54,8 +54,45 @@ class ConfigLoaderTests(unittest.TestCase):
 
             self.assertEqual(config.defaults.stable_click_delay_ms, 111)
             self.assertTrue(config.artifact_root.is_dir())
+            self.assertEqual(config.artifact_root, (root / "artifacts").resolve())
             self.assertEqual(config.require_account("account_a").credentials.username, "user")
             self.assertEqual(config.require_instance("bs-main").device_id, "127.0.0.1:5555")
+
+    def test_load_app_config_resolves_repo_style_config_artifacts_outside_config_directory(self) -> None:
+        """Resolves ``config/accounts.yaml`` artifact roots at the workspace root, not inside ``config``."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            config_dir = root / "config"
+            config_dir.mkdir()
+            config_path = config_dir / "accounts.yaml"
+            config_path.write_text(
+                textwrap.dedent(
+                    """
+                    artifacts:
+                      root: artifacts
+                    instances:
+                      - id: bs-main
+                        device_id: 127.0.0.1:5555
+                        app_package: com.global.tmslg
+                    accounts:
+                      - id: account_a
+                        instance_id: bs-main
+                        pnc_account_id: inline_user
+                        username: inline_user
+                        password: inline_pass
+                        selected_castle:
+                          kingdom: K230
+                          castle_name: Main
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+
+            config = load_app_config(config_path)
+
+            self.assertEqual(config.artifact_root, (root / "artifacts").resolve())
+            self.assertNotEqual(config.artifact_root, (config_dir / "artifacts").resolve())
 
     def test_load_app_config_fails_when_secret_is_missing(self) -> None:
         """Rejects login-enabled accounts that reference missing environment variables."""
@@ -68,7 +105,7 @@ class ConfigLoaderTests(unittest.TestCase):
                     instances:
                       - id: bs-main
                         device_id: 127.0.0.1:5555
-                        app_package: com.global.ztmslg
+                        app_package: com.global.tmslg
                     accounts:
                       - id: account_a
                         instance_id: bs-main
@@ -97,7 +134,7 @@ class ConfigLoaderTests(unittest.TestCase):
                     instances:
                       - id: bs-main
                         device_id: 127.0.0.1:5555
-                        app_package: com.global.ztmslg
+                        app_package: com.global.tmslg
                     accounts:
                       - id: account_a
                         instance_id: bs-main
@@ -132,7 +169,7 @@ class ConfigLoaderTests(unittest.TestCase):
                     instances:
                       - id: bs-main
                         device_id: 127.0.0.1:5555
-                        app_package: com.global.ztmslg
+                        app_package: com.global.tmslg
                     accounts:
                       - id: account_a
                         instance_id: bs-main
@@ -164,7 +201,7 @@ class ConfigLoaderTests(unittest.TestCase):
                     instances:
                       - id: bs-main
                         device_id: 127.0.0.1:5555
-                        app_package: com.global.ztmslg
+                        app_package: com.global.tmslg
                     accounts:
                       - id: account_a
                         instance_id: bs-main
@@ -211,7 +248,7 @@ class ConfigLoaderTests(unittest.TestCase):
                     instances:
                       - id: bs-main
                         device_id: 127.0.0.1:5555
-                        app_package: com.global.ztmslg
+                        app_package: com.global.tmslg
                     accounts:
                       - id: account_a
                         instance_id: bs-main
@@ -240,7 +277,7 @@ class ConfigLoaderTests(unittest.TestCase):
                     instances:
                       - id: bs-main
                         device_id: 127.0.0.1:5555
-                        app_package: com.global.ztmslg
+                        app_package: com.global.tmslg
                     accounts:
                       - id: castle_a
                         instance_id: bs-main
@@ -279,7 +316,7 @@ class ConfigLoaderTests(unittest.TestCase):
                     instances:
                       - id: bs-main
                         device_id: 127.0.0.1:5555
-                        app_package: com.global.ztmslg
+                        app_package: com.global.tmslg
                     accounts:
                       - id: account_a
                         instance_id: bs-main
@@ -323,7 +360,7 @@ class ConfigLoaderTests(unittest.TestCase):
                     instances:
                       - id: bs-main
                         device_id: 127.0.0.1:5555
-                        app_package: com.global.ztmslg
+                        app_package: com.global.tmslg
                     accounts:
                       - id: account_a
                         instance_id: bs-main
@@ -366,7 +403,7 @@ class ConfigLoaderTests(unittest.TestCase):
                     instances:
                       - id: bs-main
                         device_id: 127.0.0.1:5555
-                        app_package: com.global.ztmslg
+                        app_package: com.global.tmslg
                     accounts:
                       - id: account_a
                         instance_id: bs-main

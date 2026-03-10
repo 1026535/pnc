@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 
 from PIL import Image
@@ -13,6 +13,7 @@ from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
 from pnc_automation.vision.observation_builder import ObservationAdditions
 from pnc_automation.vision.ocr_service import OcrLine, OcrService
+from pnc_automation.vision.screen_classifier import ScreenEvidence
 from pnc_automation.vision.text_anchors import (
     DetectedTextAnchor,
     TextAnchorDetector,
@@ -20,8 +21,6 @@ from pnc_automation.vision.text_anchors import (
     normalize_ocr_text,
 )
 
-_KINGDOM_PATTERN = re.compile(r"\bK\s*(\d{2,4})\b", re.IGNORECASE)
-_CASTLE_LEVEL_PATTERN = re.compile(r"castle\s*level\s*[:.]?\s*(\d+)", re.IGNORECASE)
 _HOME_NAV_SELECTOR_BY_TEXT_ANCHOR = {
     TextAnchorId.LABEL_HOME: UiElementId.PNC_BOTTOM_NAV_HOME,
     TextAnchorId.LABEL_HERO: UiElementId.PNC_BOTTOM_NAV_HERO,
@@ -46,6 +45,12 @@ _HOME_CITY_EVIDENCE_SELECTOR_IDS = frozenset(
         UiElementId.PNC_HOME_TOP_RESOURCE_FOOD,
         UiElementId.PNC_HOME_TOP_RESOURCE_WOOD,
         UiElementId.PNC_HOME_TOP_RESOURCE_DIAMOND,
+    }
+)
+_POPUP_PRIMARY_ACTION_ANCHOR_IDS = frozenset(
+    {
+        TextAnchorId.LABEL_CONFIRM,
+        TextAnchorId.LABEL_JOIN_APPLY,
     }
 )
 _BUILDING_DETAIL_CONFLICT_ANCHOR_IDS = frozenset(
@@ -78,6 +83,41 @@ _BUILDING_DETAIL_TITLE_TEXTS = frozenset(
         "WATCHTOWER",
     }
 )
+_CURRENCY_TEXT_PATTERN = re.compile(r"\$\s*\d+(?:[.,]\d+)?")
+_RESEARCH_TREE_HEADER_TEXTS = frozenset(
+    {
+        "MILITARY",
+        "DEVELOPMENT",
+        "ECONOMY",
+        "COMBAT",
+    }
+)
+_ACADEMY_TITLE_TEXTS = frozenset(
+    {
+        "ACADEMY",
+        "INSTITUTE",
+    }
+)
+_ACADEMY_CATEGORY_TEXTS = frozenset(
+    {
+        "DEVELOPMENT",
+        "ECONOMY",
+        "MILITARY",
+        "FORTIFICATION",
+        "UNITTACTICS",
+        "FORMATIONS",
+    }
+)
+_RESEARCH_TREE_SUPPORT_TOKENS = frozenset(
+    {
+        "ATK",
+        "DEF",
+        "HP",
+        "MARCHSPEED",
+        "TROOPSIZE",
+    }
+)
+_PROGRESS_COUNTER_PATTERN = re.compile(r"^\d+/\d+$")
 
 
 @dataclass(slots=True)
@@ -95,11 +135,14 @@ class PncObservationEnricher:
     ) -> ObservationAdditions:
         """Builds OCR-backed fallbacks for dynamic screens and typed castle-roster parsing."""
 
+        ocr_result = self.ocr_service.read_result(image)
+        lines = tuple(sorted(ocr_result.lines, key=lambda line: (line.bounds.y, line.bounds.x)))
+        anchors = self.text_anchor_detector.detect(ocr_result)
+        popup = _build_popup_additions(image=image, lines=lines, anchors=anchors)
+        if popup is not None:
+            return popup
         if screen_type not in {ScreenType.UNKNOWN, ScreenType.PNC_CASTLE_SELECTION}:
             return ObservationAdditions()
-
-        lines = tuple(sorted(self.ocr_service.read_lines(image), key=lambda line: (line.bounds.y, line.bounds.x)))
-        anchors = self.text_anchor_detector.detect(lines)
         building_detail = _build_building_detail_additions(image=image, lines=lines, anchors=anchors)
         if building_detail is not None:
             return building_detail
@@ -110,16 +153,165 @@ class PncObservationEnricher:
         )
         if home_city is not None:
             return home_city
-        entries = _extract_castle_entries(image, lines)
+        bag = _build_bag_additions(image=image, lines=lines, anchors=anchors)
+        if bag is not None:
+            return bag
+        alliance_join = _build_alliance_join_additions(image=image, lines=lines)
+        if alliance_join is not None:
+            return alliance_join
+        academy = _build_academy_additions(image=image, lines=lines, anchors=anchors)
+        if academy is not None:
+            return academy
+        research_tree = _build_research_tree_additions(image=image, lines=lines)
+        if research_tree is not None:
+            return research_tree
+        entries = _extract_castle_entries(image=image, lines=lines, anchors=anchors)
         if not _looks_like_castle_selection(anchors, entries):
             return ObservationAdditions()
 
         current_castle_name = next((entry.title_text for entry in entries if entry.selected), None)
+        visible_elements_by_id: dict[UiElementId, VisibleElement] = {}
+        if entries:
+            visible_elements_by_id[UiElementId.PNC_CASTLE_LIST_ENTRY] = _make_visible_from_entry(
+                selector_id=UiElementId.PNC_CASTLE_LIST_ENTRY,
+                entry=entries[0],
+            )
+        selected_entry = next((entry for entry in entries if entry.selected), None)
+        if selected_entry is not None:
+            visible_elements_by_id[UiElementId.PNC_CASTLE_SELECTED_CHECKMARK] = _make_visible(
+                selector_id=UiElementId.PNC_CASTLE_SELECTED_CHECKMARK,
+                x=max(0, selected_entry.bounds.x + int(selected_entry.bounds.width * 0.82)),
+                y=selected_entry.bounds.y,
+                width=max(1, int(selected_entry.bounds.width * 0.18)),
+                height=selected_entry.bounds.height,
+            )
         return ObservationAdditions(
-            screen_type_override=ScreenType.PNC_CASTLE_SELECTION,
+            visible_elements=visible_elements_by_id,
             list_entries=entries,
+            screen_evidence=(ScreenEvidence(ScreenType.PNC_CASTLE_SELECTION, "manage_char_roster"),),
             current_castle_name=current_castle_name,
         )
+
+
+def _build_popup_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+    anchors: tuple[DetectedTextAnchor, ...],
+) -> ObservationAdditions | None:
+    """Returns popup dismissal controls when OCR matches a blocking modal footer."""
+
+    dismiss_anchor = _find_popup_dismiss_anchor(image=image, anchors=anchors)
+    if dismiss_anchor is not None:
+        return ObservationAdditions(
+            visible_elements={
+                UiElementId.PNC_POPUP_CLOSE_BUTTON: _make_visible_from_anchor(
+                    selector_id=UiElementId.PNC_POPUP_CLOSE_BUTTON,
+                    anchor=dismiss_anchor,
+                )
+            },
+            screen_evidence=(ScreenEvidence(ScreenType.PNC_POPUP, "ocr_popup_cancel_button"),),
+        )
+    return _build_promotional_popup_additions(image=image, lines=lines)
+
+
+def _build_promotional_popup_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Returns a popup close target for the observed monetized hero-offer modal."""
+
+    title_line = _find_line_matching(
+        lines=lines,
+        predicate=lambda line: "HERO" in normalize_ocr_text(line.text),
+        max_y=int(image.height * 0.2),
+    )
+    one_time_line = _find_line_with_normalized_text(
+        lines=lines,
+        normalized_text="ONETIME",
+        min_y=int(image.height * 0.72),
+    )
+    price_line = _find_line_matching(
+        lines=lines,
+        predicate=lambda line: _CURRENCY_TEXT_PATTERN.search(line.text) is not None,
+        min_y=int(image.height * 0.65),
+    )
+    if title_line is None or one_time_line is None or price_line is None:
+        return None
+
+    close_width = max(32, int(image.width * 0.12))
+    close_height = max(32, int(image.height * 0.12))
+    close_left = max(0, image.width - close_width - int(image.width * 0.05))
+    close_top = max(0, int(image.height * 0.02))
+    return ObservationAdditions(
+        visible_elements={
+            UiElementId.PNC_POPUP_CLOSE_BUTTON: _make_visible(
+                selector_id=UiElementId.PNC_POPUP_CLOSE_BUTTON,
+                x=close_left,
+                y=close_top,
+                width=close_width,
+                height=close_height,
+                action_point=(close_left + (close_width // 2), close_top + (close_height // 2)),
+            )
+        },
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_POPUP, "ocr_promotional_offer_popup"),),
+    )
+
+
+def _find_popup_dismiss_anchor(
+    *,
+    image: Image.Image,
+    anchors: tuple[DetectedTextAnchor, ...],
+) -> DetectedTextAnchor | None:
+    """Returns the modal dismiss anchor when a popup action row is present."""
+
+    for anchor in anchors:
+        if anchor.id != TextAnchorId.LABEL_CANCEL:
+            continue
+        if not _is_popup_footer_anchor(image=image, anchor=anchor):
+            continue
+        if _has_popup_primary_action(image=image, anchors=anchors, dismiss_anchor=anchor):
+            return anchor
+    return None
+
+
+def _has_popup_primary_action(
+    *,
+    image: Image.Image,
+    anchors: tuple[DetectedTextAnchor, ...],
+    dismiss_anchor: DetectedTextAnchor,
+) -> bool:
+    """Returns whether the dismiss button is paired with a modal primary action."""
+
+    row_tolerance = max(28, dismiss_anchor.bounds.height * 2)
+    minimum_gap = max(40, int(image.width * 0.08))
+    for anchor in anchors:
+        if anchor.id not in _POPUP_PRIMARY_ACTION_ANCHOR_IDS:
+            continue
+        if not _is_popup_footer_anchor(image=image, anchor=anchor):
+            continue
+        if abs(anchor.bounds.y - dismiss_anchor.bounds.y) > row_tolerance:
+            continue
+        if anchor.bounds.x <= dismiss_anchor.bounds.x + minimum_gap:
+            continue
+        return True
+    return False
+
+
+def _is_popup_footer_anchor(
+    *,
+    image: Image.Image,
+    anchor: DetectedTextAnchor,
+) -> bool:
+    """Returns whether one OCR anchor sits where centered modal buttons normally appear."""
+
+    return (
+        anchor.bounds.y >= int(image.height * 0.45)
+        and anchor.bounds.y <= int(image.height * 0.78)
+        and anchor.bounds.x >= int(image.width * 0.08)
+        and anchor.bounds.x <= int(image.width * 0.85)
+    )
 
 
 def _build_building_detail_additions(
@@ -178,7 +370,7 @@ def _build_building_detail_additions(
                 ),
             ),
         },
-        screen_type_override=ScreenType.PNC_BUILDING_DETAILS,
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_BUILDING_DETAILS, "ocr_building_detail"),),
     )
 
 
@@ -197,7 +389,11 @@ def _build_home_city_additions(
         selector_id = _HOME_NAV_SELECTOR_BY_TEXT_ANCHOR.get(anchor.id)
         if selector_id is None or selector_id in visible_nav_elements:
             continue
-        visible_nav_elements[selector_id] = _make_visible_from_anchor(selector_id=selector_id, anchor=anchor)
+        visible_nav_elements[selector_id] = _make_visible_from_bottom_nav_anchor(
+            image=image,
+            selector_id=selector_id,
+            anchor=anchor,
+        )
     if len(visible_nav_elements) < 2:
         return None
     if UiElementId.PNC_BOTTOM_NAV_MORE not in visible_nav_elements and UiElementId.PNC_BOTTOM_NAV_ALLIANCE not in visible_nav_elements:
@@ -207,8 +403,214 @@ def _build_home_city_additions(
         return None
     return ObservationAdditions(
         visible_elements=visible_nav_elements | visible_home_action_elements,
-        screen_type_override=ScreenType.PNC_HOME_CITY,
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_HOME_CITY, "bottom_nav_and_home_actions"),),
     )
+
+
+def _build_bag_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+    anchors: tuple[DetectedTextAnchor, ...],
+) -> ObservationAdditions | None:
+    """Returns bag-screen selectors when OCR matches the live inventory layout."""
+
+    bag_anchor = _find_bag_tab_anchor(image=image, anchors=anchors)
+    if bag_anchor is None:
+        return None
+    use_line = _find_line_with_normalized_text(
+        lines=lines,
+        normalized_text="USE",
+        min_x=int(image.width * 0.7),
+        min_y=int(image.height * 0.15),
+        max_y=int(image.height * 0.85),
+    )
+    if use_line is None:
+        return None
+    return ObservationAdditions(
+        visible_elements={
+            UiElementId.PNC_BAG_MAIN_TAB_BAG: _make_visible_from_anchor(
+                selector_id=UiElementId.PNC_BAG_MAIN_TAB_BAG,
+                anchor=bag_anchor,
+            ),
+            UiElementId.PNC_BAG_USE_BUTTON: _make_visible(
+                selector_id=UiElementId.PNC_BAG_USE_BUTTON,
+                x=use_line.bounds.x,
+                y=use_line.bounds.y,
+                width=use_line.bounds.width,
+                height=use_line.bounds.height,
+                extracted_text=use_line.text,
+            ),
+        },
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_BAG, "ocr_bag_layout"),),
+    )
+
+
+def _find_bag_tab_anchor(
+    *,
+    image: Image.Image,
+    anchors: tuple[DetectedTextAnchor, ...],
+) -> DetectedTextAnchor | None:
+    """Returns the bag-tab anchor from the header band when it is present."""
+
+    candidates = tuple(
+        anchor
+        for anchor in anchors
+        if anchor.id == TextAnchorId.LABEL_BAG and anchor.bounds.y <= int(image.height * 0.15)
+    )
+    if not candidates:
+        return None
+    return max(candidates, key=lambda anchor: anchor.bounds.y)
+
+
+def _build_alliance_join_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Returns the join-alliance landing screen when the account is not yet in an alliance."""
+
+    header = _find_line_with_normalized_text(
+        lines=lines,
+        normalized_text="JOINALLIANCE",
+        max_y=int(image.height * 0.5),
+    )
+    primary_join = _find_line_with_normalized_text(
+        lines=lines,
+        normalized_text="JOIN",
+        min_y=int(image.height * 0.65),
+    )
+    create_alliance = _find_line_with_normalized_text(
+        lines=lines,
+        normalized_text="CREATEALLIANCE",
+        min_y=int(image.height * 0.65),
+    )
+    if header is None or primary_join is None or create_alliance is None:
+        return None
+    return ObservationAdditions(
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_ALLIANCE_JOIN, "ocr_alliance_join_landing"),),
+    )
+
+
+def _build_research_tree_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Returns the research-tree screen when OCR matches a live research grid."""
+
+    header = _find_line_matching(
+        lines=lines,
+        predicate=lambda line: normalize_ocr_text(line.text) in _RESEARCH_TREE_HEADER_TEXTS,
+        max_y=int(image.height * 0.12),
+    )
+    if header is None:
+        return None
+    support_count = sum(1 for line in lines if _is_research_tree_support_line(line))
+    if support_count < 3:
+        return None
+    return ObservationAdditions(
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_RESEARCH_TREE, "ocr_research_tree"),),
+    )
+
+
+def _build_academy_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+    anchors: tuple[DetectedTextAnchor, ...],
+) -> ObservationAdditions | None:
+    """Returns the academy or institute overview screen from live OCR structure."""
+
+    title_line = _find_line_matching(
+        lines=lines,
+        predicate=lambda line: normalize_ocr_text(line.text) in _ACADEMY_TITLE_TEXTS,
+        max_y=int(image.height * 0.1),
+    )
+    if title_line is None:
+        return None
+    upgrade_anchor = next(
+        (
+            anchor
+            for anchor in anchors
+            if anchor.id == TextAnchorId.LABEL_UPGRADE
+            and anchor.bounds.x >= int(image.width * 0.55)
+            and anchor.bounds.y <= int(image.height * 0.4)
+        ),
+        None,
+    )
+    if upgrade_anchor is None:
+        return None
+    category_count = sum(
+        1
+        for line in lines
+        if normalize_ocr_text(line.text) in _ACADEMY_CATEGORY_TEXTS
+    )
+    if category_count < 3:
+        return None
+    return ObservationAdditions(
+        visible_elements={
+            UiElementId.PNC_BACK_BUTTON_TOP_LEFT: _make_visible(
+                selector_id=UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+                x=0,
+                y=0,
+                width=max(1, int(image.width * 0.12)),
+                height=max(1, int(image.height * 0.08)),
+            )
+        },
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_ACADEMY, "ocr_academy_overview"),),
+    )
+
+
+def _find_line_with_normalized_text(
+    *,
+    lines: tuple[OcrLine, ...],
+    normalized_text: str,
+    min_x: int = 0,
+    min_y: int = 0,
+    max_y: int | None = None,
+) -> OcrLine | None:
+    """Returns the first OCR line whose normalized text and region match the requested filter."""
+
+    return _find_line_matching(
+        lines=lines,
+        predicate=lambda line: normalize_ocr_text(line.text) == normalized_text,
+        min_x=min_x,
+        min_y=min_y,
+        max_y=max_y,
+    )
+
+
+def _find_line_matching(
+    *,
+    lines: tuple[OcrLine, ...],
+    predicate: Callable[[OcrLine], bool],
+    min_x: int = 0,
+    min_y: int = 0,
+    max_y: int | None = None,
+) -> OcrLine | None:
+    """Returns the first OCR line that matches one shared text-and-region predicate."""
+
+    for line in lines:
+        if not predicate(line):
+            continue
+        if line.bounds.x < min_x or line.bounds.y < min_y:
+            continue
+        if max_y is not None and line.bounds.y > max_y:
+            continue
+        return line
+    return None
+
+
+def _is_research_tree_support_line(line: OcrLine) -> bool:
+    """Returns whether one OCR line looks like a research-node label or progress counter."""
+
+    normalized_text = normalize_ocr_text(line.text)
+    if normalized_text == "":
+        return False
+    if _PROGRESS_COUNTER_PATTERN.match(line.text.strip()) is not None:
+        return True
+    return any(token in normalized_text for token in _RESEARCH_TREE_SUPPORT_TOKENS)
 
 
 def _looks_like_castle_selection(
@@ -225,16 +627,22 @@ def _looks_like_castle_selection(
     return leveled_entries >= 2
 
 
-def _extract_castle_entries(image: Image.Image, lines: tuple[OcrLine, ...]) -> tuple[DetectedListEntry, ...]:
+def _extract_castle_entries(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+    anchors: tuple[DetectedTextAnchor, ...],
+) -> tuple[DetectedListEntry, ...]:
     """Extracts typed castle rows from OCR lines on the Manage Char screen."""
 
-    kingdom_line_indexes = [index for index, line in enumerate(lines) if _parse_kingdom(line.text) is not None]
+    kingdom_line_indexes = [index for index, line in enumerate(lines) if _line_has_anchor(line, anchors, TextAnchorId.KINGDOM)]
     entries: list[DetectedListEntry] = []
     for index, start in enumerate(kingdom_line_indexes):
         end = kingdom_line_indexes[index + 1] if index + 1 < len(kingdom_line_indexes) else len(lines)
         entry = _build_castle_entry(
             image=image,
             row_lines=lines[start:end],
+            row_anchors=tuple(anchor for anchor in anchors if _anchor_in_line_range(anchor, lines[start:end])),
             next_row_top=None if end >= len(lines) else lines[end].bounds.y,
         )
         if entry is not None:
@@ -246,18 +654,23 @@ def _build_castle_entry(
     *,
     image: Image.Image,
     row_lines: tuple[OcrLine, ...],
+    row_anchors: tuple[DetectedTextAnchor, ...],
     next_row_top: int | None,
 ) -> DetectedListEntry | None:
     """Builds one detected castle entry from the OCR lines belonging to a row."""
 
     if not row_lines:
         return None
-    kingdom = _parse_kingdom(row_lines[0].text)
-    if kingdom is None:
+    kingdom_anchor = next((anchor for anchor in row_anchors if anchor.id == TextAnchorId.KINGDOM), None)
+    if kingdom_anchor is None:
+        return None
+    kingdom = kingdom_anchor.metadata_value("kingdom")
+    if not isinstance(kingdom, str) or kingdom == "":
         return None
 
-    level_line = next((line for line in row_lines if _parse_castle_level(line.text) is not None), None)
-    castle_name_line = _find_castle_name_line(row_lines, level_line=level_line)
+    level_anchor = next((anchor for anchor in row_anchors if anchor.id == TextAnchorId.CASTLE_LEVEL), None)
+    level_line = next((line for line in row_lines if level_anchor is not None and line.bounds == level_anchor.bounds), None)
+    castle_name_line = _find_castle_name_line(row_lines, row_anchors=row_anchors, level_line=level_line)
     if castle_name_line is None:
         return None
 
@@ -265,7 +678,9 @@ def _build_castle_entry(
     row_bottom = _resolve_row_bottom(row_lines, level_line=level_line, next_row_top=next_row_top, image_height=image.height)
     row_height = max(1, row_bottom - row_top)
     selected = _has_selected_checkmark(image, row_top=row_top, row_bottom=row_bottom)
-    castle_level = _parse_castle_level(level_line.text) if level_line is not None else None
+    castle_level = level_anchor.metadata_value("castle_level") if level_anchor is not None else None
+    if castle_level is not None and not isinstance(castle_level, int):
+        castle_level = None
     return DetectedListEntry(
         kind=ListEntryKind.CASTLE,
         bounds=Bounds(x=0, y=row_top, width=image.width, height=row_height),
@@ -280,13 +695,18 @@ def _build_castle_entry(
     )
 
 
-def _find_castle_name_line(row_lines: tuple[OcrLine, ...], *, level_line: OcrLine | None) -> OcrLine | None:
+def _find_castle_name_line(
+    row_lines: tuple[OcrLine, ...],
+    *,
+    row_anchors: tuple[DetectedTextAnchor, ...],
+    level_line: OcrLine | None,
+) -> OcrLine | None:
     """Returns the OCR line that most likely contains the castle name."""
 
     for line in row_lines[1:]:
-        if _parse_kingdom(line.text) is not None:
+        if _line_has_anchor(line, row_anchors, TextAnchorId.KINGDOM):
             continue
-        if _parse_castle_level(line.text) is not None:
+        if _line_has_anchor(line, row_anchors, TextAnchorId.CASTLE_LEVEL):
             continue
         if level_line is not None and line.bounds.y > level_line.bounds.y:
             continue
@@ -331,24 +751,6 @@ def _has_selected_checkmark(image: Image.Image, *, row_top: int, row_bottom: int
     return False
 
 
-def _parse_kingdom(text: str) -> str | None:
-    """Extracts the normalized kingdom identifier from one OCR line."""
-
-    match = _KINGDOM_PATTERN.search(text)
-    if match is None:
-        return None
-    return f"K{match.group(1)}"
-
-
-def _parse_castle_level(text: str) -> int | None:
-    """Extracts the displayed castle level from one OCR line when present."""
-
-    match = _CASTLE_LEVEL_PATTERN.search(text)
-    if match is None:
-        return None
-    return int(match.group(1))
-
-
 def _build_home_action_additions(
     *,
     image: Image.Image,
@@ -361,19 +763,33 @@ def _build_home_action_additions(
         selector_id = _HOME_ACTION_SELECTOR_BY_TEXT_ANCHOR.get(anchor.id)
         if selector_id is None or selector_id in visible_elements:
             continue
-        if not _is_home_action_anchor(image=image, anchor=anchor):
+        if not _is_home_action_anchor(image=image, anchor=anchor, selector_id=selector_id):
             continue
         visible_elements[selector_id] = _make_visible_from_anchor(selector_id=selector_id, anchor=anchor)
     return visible_elements
 
 
-def _is_home_action_anchor(*, image: Image.Image, anchor: DetectedTextAnchor) -> bool:
+def _is_home_action_anchor(
+    *,
+    image: Image.Image,
+    anchor: DetectedTextAnchor,
+    selector_id: UiElementId,
+) -> bool:
     """Returns whether one OCR anchor sits in the expected home-city action area."""
 
-    return (
+    in_standard_action_band = (
         anchor.bounds.y >= int(image.height * 0.45)
         and anchor.bounds.y <= int(image.height * 0.85)
         and anchor.bounds.x <= int(image.width * 0.85)
+    )
+    if in_standard_action_band:
+        return True
+    if selector_id != UiElementId.PNC_HOME_BUILD_BUTTON:
+        return False
+    return (
+        anchor.bounds.x <= int(image.width * 0.18)
+        and anchor.bounds.y >= int(image.height * 0.15)
+        and anchor.bounds.y <= int(image.height * 0.85)
     )
 
 
@@ -440,6 +856,7 @@ def _make_visible(
     width: int,
     height: int,
     extracted_text: str | None = None,
+    action_point: tuple[int, int] | None = None,
 ) -> VisibleElement:
     """Builds one derived visible element from OCR or anchored geometry."""
 
@@ -448,6 +865,7 @@ def _make_visible(
         bounds=Bounds(x=x, y=y, width=max(1, width), height=max(1, height)),
         confidence=1.0,
         extracted_text=extracted_text,
+        action_point=action_point,
     )
 
 
@@ -462,3 +880,57 @@ def _make_visible_from_anchor(*, selector_id: UiElementId, anchor: DetectedTextA
         height=anchor.bounds.height,
         extracted_text=anchor.text,
     )
+
+
+def _make_visible_from_bottom_nav_anchor(
+    *,
+    image: Image.Image,
+    selector_id: UiElementId,
+    anchor: DetectedTextAnchor,
+) -> VisibleElement:
+    """Builds one bottom-nav selector with a raised tap point instead of the text baseline."""
+
+    label_center_x = anchor.bounds.x + (anchor.bounds.width // 2)
+    target_width = max(anchor.bounds.width * 3, int(image.width * 0.12))
+    target_height = max(anchor.bounds.height * 4, int(image.height * 0.09))
+    target_left = min(max(0, label_center_x - (target_width // 2)), max(0, image.width - target_width))
+    target_top = max(0, anchor.bounds.y - int(target_height * 0.82))
+    action_point = (label_center_x, target_top + (target_height // 2))
+    return _make_visible(
+        selector_id=selector_id,
+        x=target_left,
+        y=target_top,
+        width=target_width,
+        height=target_height,
+        extracted_text=anchor.text,
+        action_point=action_point,
+    )
+
+
+def _make_visible_from_entry(*, selector_id: UiElementId, entry: DetectedListEntry) -> VisibleElement:
+    """Builds one derived visible element from a detected list entry."""
+
+    return _make_visible(
+        selector_id=selector_id,
+        x=entry.bounds.x,
+        y=entry.bounds.y,
+        width=entry.bounds.width,
+        height=entry.bounds.height,
+        extracted_text=entry.title_text,
+    )
+
+
+def _line_has_anchor(line: OcrLine, anchors: tuple[DetectedTextAnchor, ...], anchor_id: TextAnchorId) -> bool:
+    """Returns whether one OCR line produced the requested structured anchor."""
+
+    return any(anchor.id == anchor_id and anchor.bounds == line.bounds for anchor in anchors)
+
+
+def _anchor_in_line_range(anchor: DetectedTextAnchor, row_lines: tuple[OcrLine, ...]) -> bool:
+    """Returns whether one anchor belongs to the provided OCR line range."""
+
+    if not row_lines:
+        return False
+    top = row_lines[0].bounds.y
+    bottom = row_lines[-1].bounds.y + row_lines[-1].bounds.height
+    return anchor.bounds.y >= top and anchor.bounds.y <= bottom

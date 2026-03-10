@@ -351,8 +351,8 @@ defaults:
 
 instances:
   - id: bs-main
-    device_id: 127.0.0.1:5555
-    app_package: com.global.ztmslg
+    device_id: 127.0.0.1:5556
+    app_package: com.global.tmslg
 
 accounts:
   - id: account_a_main_castle
@@ -929,13 +929,13 @@ Exit condition:
 
 This phase is now owned by [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SELECTOR_REFINEMENT_SUBPLAN.md).
 
-Baseline observation code exists, but this primary implementation plan does not treat the phase as closed. Closure remains tracked in the selector-refinement sub-plan because selector coverage and validation evidence are still incomplete.
+Phase closure is recorded in the selector-refinement sub-plan. The repo now carries screenshot coverage, parser/classifier tests, and targeted live smoke evidence recorded on 2026-03-09 and 2026-03-10 across `127.0.0.1:5565` and the corrected first-instance port `127.0.0.1:5556`. Ongoing selector maintenance continues in that sub-plan without reopening this primary phase.
 
 ### Phase 2.5: Selector refinement
 
 This phase is now owned by [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SELECTOR_REFINEMENT_SUBPLAN.md).
 
-Initial registry seeding exists, but this primary implementation plan does not treat the phase as closed. Closure remains tracked in the selector-refinement sub-plan until the required selectors move out of `planned` with the documented screenshot and smoke evidence.
+Phase closure is recorded in the selector-refinement sub-plan. The repo now carries the static catalog/updater path, reviewed discovery tooling for artifact folders and safe live probes, registry and observation tests, and targeted live smoke evidence for popup recovery plus selector-driven `home -> bag -> back` and `home -> alliance join -> back` validation across both configured BlueStacks instances on 2026-03-09 and 2026-03-10. Future selector additions and maintenance remain owned there.
 
 ### Phase 3: Automation framework
 
@@ -990,8 +990,8 @@ Exit condition:
 | Phase | Status in repo | Validation evidence currently recorded |
 | --- | --- | --- |
 | Phase 1 | implemented | unit tests for config and foundation logic; no emulator smoke evidence recorded in the repo |
-| Phase 2 | baseline implemented, owned by selector refinement | synthetic screenshot tests exist, but broader screenshot fixtures and live smoke evidence remain incomplete |
-| Phase 2.5 | baseline implemented, owned by selector refinement | selector registry and observation tests exist, but required click-mapping and live validation evidence remain incomplete |
+| Phase 2 | closed in the primary plan, owned by selector refinement maintenance | screenshot integration tests plus 2026-03-09 and 2026-03-10 live smoke confirmed current-state detection for home, popup, academy, bag, and alliance join across both configured instances |
+| Phase 2.5 | closed in the primary plan, owned by selector refinement maintenance | selector registry/updater tests plus 2026-03-09 and 2026-03-10 live smoke confirmed popup recovery and selector-driven `home -> bag -> back` and `home -> alliance join -> back` flows across both configured instances |
 | Phase 3 | implemented | unit tests for runner, script loading, and task contract behavior |
 | Phase 4 | scaffolding implemented, owned by account navigation | no closure evidence recorded in this document yet |
 | Phase 5 | baseline roster parsing implemented, owned by account navigation | screenshot-style parsing tests exist, but required smoke validation evidence is not yet recorded |
@@ -1030,8 +1030,8 @@ Use the following mapping:
 Each implementation phase should be considered complete only when its required validation gate has been run:
 
 - Phase 1: unit tests for config and foundation logic, plus smoke check for emulator connection and screenshot persistence,
-- Phase 2: screenshot integration tests plus any targeted smoke checks recorded by [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SELECTOR_REFINEMENT_SUBPLAN.md); baseline code exists, but closure remains pending there until the evidence is complete,
-- Phase 2.5: selector screenshot, click-mapping, and smoke evidence recorded by [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SELECTOR_REFINEMENT_SUBPLAN.md); baseline code exists, but closure remains pending there until the evidence is complete,
+- Phase 2: screenshot integration tests plus targeted smoke checks recorded by [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SELECTOR_REFINEMENT_SUBPLAN.md); future maintenance stays there without reopening the primary phase,
+- Phase 2.5: selector screenshot, click-mapping, and smoke evidence recorded by [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SELECTOR_REFINEMENT_SUBPLAN.md); future maintenance stays there without reopening the primary phase,
 - Phase 3: implemented in code and validated by unit tests for runner, script loading, and task contract behavior,
 - Phase 4: account-navigation screenshot and smoke evidence recorded by [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md); closure remains pending there until the evidence is complete,
 - Phase 5: castle-targeting screenshot and smoke evidence recorded by [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md); closure remains pending there until the evidence is complete,

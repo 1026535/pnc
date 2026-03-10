@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from pnc_automation.pnc.observation import VisibleElement
@@ -16,6 +17,14 @@ class ClassificationRule:
     screen_type: ScreenType
     required_all: frozenset[UiElementId]
     required_any: frozenset[UiElementId] = frozenset()
+
+
+@dataclass(frozen=True, slots=True)
+class ScreenEvidence:
+    """Represents one strong parser conclusion about the current screen."""
+
+    screen_type: ScreenType
+    reason: str
 
 
 class ScreenClassifier:
@@ -161,23 +170,39 @@ class ScreenClassifier:
                 required_all=frozenset({UiElementId.PNC_CAMPAIGN_BATTLE_BUTTON}),
             ),
             ClassificationRule(
-                screen_type=ScreenType.PNC_POPUP,
-                required_all=frozenset({UiElementId.PNC_POPUP_CLOSE_BUTTON}),
-            ),
-            ClassificationRule(
                 screen_type=ScreenType.ANDROID_HOME,
                 required_all=frozenset({UiElementId.ANDROID_HOME_PNC_ICON}),
             ),
         )
 
-    def classify(self, visible_elements: dict[UiElementId, VisibleElement]) -> ScreenType:
+    def classify(
+        self,
+        visible_elements: dict[UiElementId, VisibleElement],
+        evidence: Sequence[ScreenEvidence] = (),
+    ) -> ScreenType:
         """Returns the first matching screen classification or UNKNOWN."""
 
         selector_ids = frozenset(visible_elements.keys())
+        evidence_screen_types = {item.screen_type for item in evidence}
+        selector_match = self._classify_from_selectors(selector_ids)
+        if selector_match is not None:
+            if evidence_screen_types and selector_match not in evidence_screen_types:
+                return ScreenType.UNKNOWN
+            return selector_match
+        if len(evidence_screen_types) == 1:
+            return next(iter(evidence_screen_types))
+        return ScreenType.UNKNOWN
+
+    def _classify_from_selectors(self, selector_ids: frozenset[UiElementId]) -> ScreenType | None:
+        """Returns the first screen implied purely by selector anchors."""
+
+        if UiElementId.PNC_POPUP_CLOSE_BUTTON in selector_ids:
+            return ScreenType.PNC_POPUP
+
         for rule in self._rules:
             if not rule.required_all.issubset(selector_ids):
                 continue
             if rule.required_any and rule.required_any.isdisjoint(selector_ids):
                 continue
             return rule.screen_type
-        return ScreenType.UNKNOWN
+        return None

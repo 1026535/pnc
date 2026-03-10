@@ -60,8 +60,9 @@ class ActionExecutor:
 
         self.logger.info("Executing action.", extra={"action_type": type(action).__name__, "screen_type": observation.screen_type})
         if isinstance(action, TapAction):
-            x, y = observation.require(action.selector_id).bounds.center()
-            self.session.tap_point(x, y)
+            element = observation.require(action.selector_id)
+            target = element.action_point if element.action_point is not None else element.bounds.center()
+            self.session.tap_point(*target)
             self._sleep_ms(self.stable_click_delay_ms)
             return
         if isinstance(action, TapPointAction):

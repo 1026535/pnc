@@ -24,10 +24,23 @@ def build_png_bytes(*, size: tuple[int, int] = (20, 20), color: tuple[int, int, 
     return buffer.getvalue()
 
 
-def make_visible(selector_id: UiElementId, *, x: int = 0, y: int = 0, width: int = 10, height: int = 10) -> VisibleElement:
+def make_visible(
+    selector_id: UiElementId,
+    *,
+    x: int = 0,
+    y: int = 0,
+    width: int = 10,
+    height: int = 10,
+    action_point: tuple[int, int] | None = None,
+) -> VisibleElement:
     """Builds a visible selector with deterministic bounds."""
 
-    return VisibleElement(selector_id=selector_id, bounds=Bounds(x=x, y=y, width=width, height=height), confidence=1.0)
+    return VisibleElement(
+        selector_id=selector_id,
+        bounds=Bounds(x=x, y=y, width=width, height=height),
+        confidence=1.0,
+        action_point=action_point,
+    )
 
 
 def make_entry(
