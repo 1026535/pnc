@@ -19,9 +19,9 @@ Account bootstrap and castle-targeting task design has been moved into [PNC_ACCO
 
 ## 2. When to use this plan
 
-This plan should be filled in and refined only after selector-registry screenshots are available for the relevant screens.
+This plan should be filled in and refined once the task-specific screenshots and selector slice for the relevant screens are available.
 
-It should not invent click paths or verification logic before the required screens are documented.
+It should not invent click paths or verification logic before the required screens are documented, but it also should not wait for a globally finished registry when only one task-specific selector increment is missing.
 
 ## 3. Scope
 
@@ -113,7 +113,7 @@ The following task areas still require additional screenshots before their concr
 
 This sub-plan must consume the selector registry as input. It must not create a parallel selector definition system.
 
-If a task needs a new selector, that selector must first be added to the canonical registry in [PNC_AUTOMATION_IMPLEMENTATION.md](/c:/Users/lebel/pnc/PNC_AUTOMATION_IMPLEMENTATION.md), then referenced here.
+If a task needs a new selector, that selector must first be added to the canonical registry through [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SELECTOR_REFINEMENT_SUBPLAN.md) and the reviewed offline update path, then referenced here.
 
 ## 8. Relationship to screen flows
 
@@ -130,6 +130,13 @@ This sub-plan also assumes that account navigation behavior, including login boo
 ## 10. Relationship to selector refinement
 
 This sub-plan should consume selectors only after the required entries are sufficiently refined in [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SELECTOR_REFINEMENT_SUBPLAN.md). It must not assume that screenshot-seeded selectors are already interaction-ready.
+
+Rules:
+
+- selector refinement for tasks proceeds feature by feature as each new clickable UI element becomes necessary,
+- a task can move forward once its own selector slice is refined enough for safe execution and verification,
+- task planning should request only the selector increment needed for the current bounded feature slice,
+- do not treat full-registry completion as a prerequisite for documenting or implementing one bounded task flow.
 
 ## 11. Validation requirement
 

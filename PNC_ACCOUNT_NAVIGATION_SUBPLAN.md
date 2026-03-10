@@ -16,6 +16,8 @@ This file owns only the work required to bring a configured BlueStacks instance 
 
 ## 2. Former implementation phases now owned here
 
+These phases are transferred here for ownership and validation tracking, but they are not yet closed in the primary implementation plan.
+
 ### Former Phase 4: Account login
 
 - implement `EnsureGameRunningTask`,
@@ -28,8 +30,8 @@ Exit condition:
 
 Status:
 
-- closed in the primary implementation plan,
-- future login and bootstrap refinements stay here instead of reopening the primary phase.
+- ownership moved here from the primary implementation plan,
+- phase closure depends on completion of this sub-plan's work and validation evidence.
 
 ### Former Phase 5: Castle targeting
 
@@ -43,8 +45,8 @@ Exit condition:
 
 Status:
 
-- closed in the primary implementation plan,
-- future castle-targeting refinements stay here instead of reopening the primary phase.
+- ownership moved here from the primary implementation plan,
+- phase closure depends on completion of this sub-plan's work and validation evidence.
 
 ## 3. Scope
 
@@ -85,6 +87,16 @@ The following account-navigation areas still belong here when deeper refinement 
 - manage-character and castle-roster variants,
 - wrong-account detection and correction before castle selection,
 - wrong-castle detection and correction before post-navigation tasks begin.
+
+### 5.1 Feature-scoped selector growth
+
+Account-navigation work does not wait for a globally finished selector registry.
+
+Rules:
+
+- refine only the selectors needed for the current bootstrap or castle-targeting slice,
+- when a new login, popup, account-switch, or castle-selection UI element must be clicked, add it through the reviewed selector-refinement workflow first,
+- treat registry growth here as incremental maintenance driven by concrete account-navigation needs, not as a one-time prerequisite to finish up front.
 
 ## 6. Per-task template
 

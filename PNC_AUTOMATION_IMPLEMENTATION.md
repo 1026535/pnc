@@ -545,6 +545,12 @@ The selector registry is the authoritative catalog of UI elements the system can
 - confidence threshold,
 - normalization or scaling rule if needed.
 
+Current scope note:
+
+- the YAML catalog is canonical today for selector ids, screen applicability, refinement status, detection kind, reviewed click outcomes, and notes,
+- template asset paths, thresholds, and OCR-region metadata still use temporary Python-side defaults,
+- those remaining fields should move into the catalog and offline updater together only when the next feature actually needs them, not through ad hoc code-side conventions.
+
 For dynamic-content screens, the registry must define reusable collection selectors rather than hardcoded row identities. In practice, that means:
 
 - define the list row container once,
@@ -945,13 +951,13 @@ This phase is implemented in code and validated by unit tests for runner, script
 
 This phase is now owned by [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md).
 
-Runtime scaffolding exists, but this primary implementation plan does not treat the phase as closed. Closure remains tracked in the account-navigation sub-plan until the required selector maturity and live validation evidence exist.
+Runtime scaffolding exists, but this primary implementation plan does not treat the phase as closed. Closure remains tracked in the account-navigation sub-plan until the required selector maturity and live validation evidence exist. Selector coverage will continue growing incrementally as required by that work rather than as one up-front full-registry milestone.
 
 ### Phase 5: Castle targeting
 
 This phase is now owned by [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md).
 
-Baseline castle-roster parsing and selection scaffolding exist, but this primary implementation plan does not treat the phase as closed. Closure remains tracked in the account-navigation sub-plan until the required smoke validation evidence exists.
+Baseline castle-roster parsing and selection scaffolding exist, but this primary implementation plan does not treat the phase as closed. Closure remains tracked in the account-navigation sub-plan until the required smoke validation evidence exists. Selector coverage will continue growing incrementally as required by that work rather than as one up-front full-registry milestone.
 
 ### Phase 6: Castle-management features
 

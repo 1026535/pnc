@@ -71,42 +71,79 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
         self.assertIn('    NEW_SELECTOR = "NEW_SELECTOR"', updated_text)
         self.assertEqual(updated_text.count('    EXISTING = "EXISTING"'), 1)
 
+    def test_load_selector_update_spec_rejects_duplicate_selector_ids(self) -> None:
+        """Fails fast when one update spec repeats the same selector id."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            spec_path = root / "updates.yaml"
+            spec_path.write_text(
+                yaml.safe_dump(
+                    {
+                        "selectors": [
+                            {
+                                "id": "PNC_HOME_BUILD_BUTTON",
+                                "screens": ["PNC_HOME_CITY"],
+                                "status": "screenshot_seeded",
+                                "detection_kind": "template",
+                            },
+                            {
+                                "id": "PNC_HOME_BUILD_BUTTON",
+                                "screens": ["PNC_BUILDING_DETAILS"],
+                                "status": "click_mapped",
+                                "detection_kind": "template",
+                            },
+                        ]
+                    },
+                    sort_keys=False,
+                ),
+                encoding="utf-8",
+                newline="\n",
+            )
+
+            with self.assertRaises(SelectorResolutionError):
+                update_selector_registry_files(
+                    spec_path=spec_path,
+                    catalog_path=self._write_catalog(
+                        root,
+                        selectors=(
+                            SelectorCatalogEntry(
+                                id="PNC_HOME_BUILD_BUTTON",
+                                screens=("PNC_HOME_CITY",),
+                                status="screenshot_seeded",
+                                detection_kind="template",
+                            ),
+                        ),
+                    ),
+                    ui_element_id_path=self._write_ui_element_ids(root, selector_ids=("PNC_HOME_BUILD_BUTTON",)),
+                )
+
     def test_update_selector_registry_files_writes_catalog_and_ui_element_ids(self) -> None:
         """Writes both the static catalog and enum source for explicit selector additions."""
 
         with tempfile.TemporaryDirectory() as temp_directory:
             root = Path(temp_directory)
-            catalog_path = root / "selector_registry.yaml"
-            ui_element_id_path = root / "ui_element_id.py"
             spec_path = root / "updates.yaml"
-
-            write_selector_catalog_document(
-                catalog_path,
-                SelectorCatalogDocument(
-                    selectors=(
-                        SelectorCatalogEntry(
-                            id="PNC_HOME_BUILD_BUTTON",
-                            screens=("PNC_HOME_CITY",),
-                            status="screenshot_seeded",
-                            detection_kind="template",
-                        ),
+            catalog_path = self._write_catalog(
+                root,
+                selectors=(
+                    SelectorCatalogEntry(
+                        id="PNC_HOME_BUILD_BUTTON",
+                        screens=("PNC_HOME_CITY",),
+                        status="screenshot_seeded",
+                        detection_kind="template",
+                    ),
+                    SelectorCatalogEntry(
+                        id="PNC_BUILDING_UPGRADE_BUTTON",
+                        screens=("PNC_BUILDING_DETAILS",),
+                        status="planned",
+                        detection_kind="template",
                     ),
                 ),
             )
-            ui_element_id_path.write_text(
-                "\n".join(
-                    (
-                        '"""Canonical selector identifiers."""',
-                        "",
-                        "from enum import StrEnum",
-                        "",
-                        "class UiElementId(StrEnum):",
-                        '    PNC_HOME_BUILD_BUTTON = "PNC_HOME_BUILD_BUTTON"',
-                        "",
-                    )
-                ),
-                encoding="utf-8",
-                newline="\n",
+            ui_element_id_path = self._write_ui_element_ids(
+                root,
+                selector_ids=("PNC_HOME_BUILD_BUTTON", "PNC_BUILDING_UPGRADE_BUTTON"),
             )
             spec_path.write_text(
                 yaml.safe_dump(
@@ -170,43 +207,60 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                 ui_element_id_path.read_text(encoding="utf-8"),
             )
 
+    def test_update_selector_registry_files_rejects_click_clearing(self) -> None:
+        """Fails fast when an update tries to clear reviewed click metadata with `click: null`."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            catalog_path = self._write_catalog(
+                root,
+                selectors=(
+                    SelectorCatalogEntry(
+                        id="PNC_HOME_BUILD_BUTTON",
+                        screens=("PNC_HOME_CITY",),
+                        status="click_mapped",
+                        detection_kind="template",
+                    ),
+                ),
+            )
+            ui_element_id_path = self._write_ui_element_ids(root, selector_ids=("PNC_HOME_BUILD_BUTTON",))
+            spec_path = root / "updates.yaml"
+            spec_path.write_text(
+                "selectors:\n"
+                "  - id: PNC_HOME_BUILD_BUTTON\n"
+                "    screens: [PNC_HOME_CITY]\n"
+                "    status: click_mapped\n"
+                "    detection_kind: template\n"
+                "    click: null\n",
+                encoding="utf-8",
+                newline="\n",
+            )
+
+            with self.assertRaises(SelectorResolutionError):
+                update_selector_registry_files(
+                    spec_path=spec_path,
+                    catalog_path=catalog_path,
+                    ui_element_id_path=ui_element_id_path,
+                )
+
     def test_update_selector_registry_files_rejects_unknown_click_outcome_screen(self) -> None:
         """Fails fast when a reviewed click outcome references an unknown screen."""
 
         with tempfile.TemporaryDirectory() as temp_directory:
             root = Path(temp_directory)
-            catalog_path = root / "selector_registry.yaml"
-            ui_element_id_path = root / "ui_element_id.py"
-            spec_path = root / "updates.yaml"
-
-            write_selector_catalog_document(
-                catalog_path,
-                SelectorCatalogDocument(
-                    selectors=(
-                        SelectorCatalogEntry(
-                            id="PNC_HOME_BUILD_BUTTON",
-                            screens=("PNC_HOME_CITY",),
-                            status="screenshot_seeded",
-                            detection_kind="template",
-                        ),
+            catalog_path = self._write_catalog(
+                root,
+                selectors=(
+                    SelectorCatalogEntry(
+                        id="PNC_HOME_BUILD_BUTTON",
+                        screens=("PNC_HOME_CITY",),
+                        status="screenshot_seeded",
+                        detection_kind="template",
                     ),
                 ),
             )
-            ui_element_id_path.write_text(
-                "\n".join(
-                    (
-                        '"""Canonical selector identifiers."""',
-                        "",
-                        "from enum import StrEnum",
-                        "",
-                        "class UiElementId(StrEnum):",
-                        '    PNC_HOME_BUILD_BUTTON = "PNC_HOME_BUILD_BUTTON"',
-                        "",
-                    )
-                ),
-                encoding="utf-8",
-                newline="\n",
-            )
+            ui_element_id_path = self._write_ui_element_ids(root, selector_ids=("PNC_HOME_BUILD_BUTTON",))
+            spec_path = root / "updates.yaml"
             spec_path.write_text(
                 yaml.safe_dump(
                     {
@@ -238,6 +292,85 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                     catalog_path=catalog_path,
                     ui_element_id_path=ui_element_id_path,
                 )
+
+    def test_update_selector_registry_files_rejects_unknown_verification_selector(self) -> None:
+        """Fails fast when reviewed verification evidence references a selector missing from the final catalog."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            catalog_path = self._write_catalog(
+                root,
+                selectors=(
+                    SelectorCatalogEntry(
+                        id="PNC_HOME_BUILD_BUTTON",
+                        screens=("PNC_HOME_CITY",),
+                        status="screenshot_seeded",
+                        detection_kind="template",
+                    ),
+                ),
+            )
+            ui_element_id_path = self._write_ui_element_ids(root, selector_ids=("PNC_HOME_BUILD_BUTTON",))
+            spec_path = root / "updates.yaml"
+            spec_path.write_text(
+                yaml.safe_dump(
+                    {
+                        "selectors": [
+                            {
+                                "id": "PNC_HOME_BUILD_BUTTON",
+                                "screens": ["PNC_HOME_CITY", "PNC_BUILDING_DETAILS"],
+                                "status": "click_mapped",
+                                "detection_kind": "template",
+                                "click": {
+                                    "outcomes": [
+                                        {
+                                            "target_screen": "PNC_BUILDING_DETAILS",
+                                            "verification_selectors": ["PNC_BUILDING_UPGRADE_BUTTON"],
+                                        }
+                                    ]
+                                },
+                            }
+                        ]
+                    },
+                    sort_keys=False,
+                ),
+                encoding="utf-8",
+                newline="\n",
+            )
+
+            with self.assertRaises(SelectorResolutionError):
+                update_selector_registry_files(
+                    spec_path=spec_path,
+                    catalog_path=catalog_path,
+                    ui_element_id_path=ui_element_id_path,
+                )
+
+    def _write_catalog(self, root: Path, *, selectors: tuple[SelectorCatalogEntry, ...]) -> Path:
+        """Writes one temporary selector catalog and returns its path."""
+
+        catalog_path = root / "selector_registry.yaml"
+        write_selector_catalog_document(catalog_path, SelectorCatalogDocument(selectors=selectors))
+        return catalog_path
+
+    def _write_ui_element_ids(self, root: Path, *, selector_ids: tuple[str, ...]) -> Path:
+        """Writes one temporary `UiElementId` module and returns its path."""
+
+        ui_element_id_path = root / "ui_element_id.py"
+        ui_element_id_path.write_text(
+            "\n".join(
+                (
+                    '"""Canonical selector identifiers."""',
+                    "",
+                    "from enum import StrEnum",
+                    "",
+                    "class UiElementId(StrEnum):",
+                    *(f'    {selector_id} = "{selector_id}"' for selector_id in selector_ids),
+                    "",
+                )
+            ),
+            encoding="utf-8",
+            newline="\n",
+        )
+        return ui_element_id_path
 
 
 if __name__ == "__main__":
