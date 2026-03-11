@@ -172,6 +172,7 @@ Minimum evidence:
 
 - screenshot integration tests for login-screen interpretation and other bootstrap-only states,
 - screenshot or OCR validation for castle-roster interpretation and selected-castle verification,
+- targeted smoke validation that opens the castle-management (`manage-character`) screen, switches castles successfully, and verifies the newly selected castle,
 - targeted smoke validation for a full bootstrap path to the configured selected castle,
 - artifact capture when credential entry, popup recovery, castle selection, or verification fails.
 
