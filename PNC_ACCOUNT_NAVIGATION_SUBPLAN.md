@@ -31,7 +31,9 @@ Exit condition:
 Status:
 
 - ownership moved here from the primary implementation plan,
-- phase closure depends on completion of this sub-plan's work and validation evidence.
+- runtime implementation now covers loading/login/account-switch interpretation plus popup-aware bootstrap,
+- automated screenshot and unit coverage now exists for bootstrap-only states,
+- phase closure still depends on the remaining live validation evidence required by this sub-plan.
 
 ### Former Phase 5: Castle targeting
 
@@ -46,7 +48,9 @@ Exit condition:
 Status:
 
 - ownership moved here from the primary implementation plan,
-- phase closure depends on completion of this sub-plan's work and validation evidence.
+- runtime implementation now covers castle-roster parsing, roster-aware off-screen selection, and selected-castle verification,
+- automated screenshot and unit coverage now exists for roster interpretation and castle targeting,
+- phase closure still depends on the remaining live validation evidence required by this sub-plan.
 
 ## 3. Scope
 
@@ -175,6 +179,16 @@ Minimum evidence:
 - targeted smoke validation that opens the castle-management (`manage-character`) screen, switches castles successfully, and verifies the newly selected castle,
 - targeted smoke validation for a full bootstrap path to the configured selected castle,
 - artifact capture when credential entry, popup recovery, castle selection, or verification fails.
+
+### 8.1 Current smoke evidence
+
+Recorded live smoke evidence for this sub-plan:
+
+- On 2026-03-11, `BlueStacks App Player 1` on `127.0.0.1:5565` was observed on the Manage Char roster with `K314 / K314e66ab29777` selected and `K304 / K304554ca2797` visible as an alternate castle.
+- The configured selected castle for that account was corrected to the live roster-backed target `K304 / K304554ca2797` with `castle_level: 5`.
+- The new opt-in live smoke suite in `tests/test_live_account_navigation_smoke.py` was run against `scripts/account_navigation_smoke.yaml` and passed, validating `ensure_game_running -> login -> select_castle` on the real emulator.
+- A post-smoke live probe confirmed the session on `127.0.0.1:5565` ended on the Manage Char roster with `K304 / K304554ca2797` selected.
+- The smoke artifacts for this run were recorded under `artifacts/2026-03-11/k304_k304554ca2797/`.
 
 ## 9. Relationship to other plans
 

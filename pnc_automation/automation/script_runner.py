@@ -12,7 +12,7 @@ from pnc_automation.automation.scripts.loader import load_run_script
 from pnc_automation.automation.scripts.registry import TaskRegistry
 from pnc_automation.capture.screenshot_service import ScreenshotService
 from pnc_automation.config.castle_roster_store import CastleRosterStore
-from pnc_automation.config.models import AppConfig
+from pnc_automation.config.models import AppConfig, PncAccountCastleRosterConfig
 from pnc_automation.emulator.bluestacks_instance import BlueStacksInstance
 from pnc_automation.emulator.session import BlueStacksSession
 from pnc_automation.pnc.screen_flows import ScreenFlowPlanner
@@ -39,6 +39,13 @@ class ScriptRunner:
         prepared_script = self.task_registry.prepare_script(run_script)
         instance_config = self.config.require_instance(account.instance_id)
         instance = BlueStacksInstance.from_config(instance_config)
+
+        def castle_roster_provider() -> PncAccountCastleRosterConfig | None:
+            """Returns the freshest roster snapshot for the active account throughout the run."""
+
+            if self.castle_roster_store is not None:
+                return self.castle_roster_store.get(account.pnc_account_id)
+            return self.config.find_castle_roster(account.pnc_account_id)
 
         session = BlueStacksSession(adb_client=self.adb_client, instance=instance)
         session.connect()
@@ -72,4 +79,4 @@ class ScriptRunner:
             flow_planner=flow_planner,
             logger=logging.LoggerAdapter(self.logger.logger, extra={**self.logger.extra, **shared_extra}),
         )
-        return runner.run(account, prepared_script)
+        return runner.run(account, prepared_script, castle_roster_provider=castle_roster_provider)

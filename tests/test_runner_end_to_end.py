@@ -92,7 +92,14 @@ class RunnerEndToEndTests(unittest.TestCase):
             ),
             make_observation(
                 ScreenType.PNC_CASTLE_SELECTION,
-                list_entries=(make_entry(ListEntryKind.CASTLE, title="Main", selected=False),),
+                list_entries=(
+                    make_entry(
+                        ListEntryKind.CASTLE,
+                        title="Main",
+                        selected=False,
+                        metadata={"kingdom": "K230", "castle_level": 8},
+                    ),
+                ),
             ),
             make_observation(
                 ScreenType.PNC_HOME_CITY,

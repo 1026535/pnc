@@ -1,0 +1,6 @@
+name: account_navigation_smoke
+
+steps:
+  - task: ensure_game_running
+  - task: login
+  - task: select_castle

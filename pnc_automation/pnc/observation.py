@@ -9,6 +9,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from pnc_automation.config.models import SelectedCastleConfig
 from pnc_automation.errors import SelectorResolutionError
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
@@ -90,8 +91,17 @@ class Observation:
     image_size: tuple[int, int] | None = None
     captured_at: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
     blocking_popup: bool = False
-    current_castle_name: str | None = None
+    current_castle: SelectedCastleConfig | None = None
+    current_pnc_account_id: str | None = None
     available_march_slots: int | None = None
+
+    @property
+    def current_castle_name(self) -> str | None:
+        """Returns the currently selected castle name when known."""
+
+        if self.current_castle is None:
+            return None
+        return self.current_castle.castle_name
 
     def has(self, selector_id: UiElementId) -> bool:
         """Returns whether one selector is visible in the observation."""
@@ -119,3 +129,47 @@ class Observation:
         """Returns all observed entries of the requested dynamic collection kind."""
 
         return tuple(entry for entry in self.list_entries if entry.kind == kind)
+
+    def matches_current_castle(self, castle: SelectedCastleConfig) -> bool:
+        """Returns whether the observed active castle matches the requested identity."""
+
+        current_castle = self.current_castle
+        if current_castle is None:
+            return False
+        return castle_identities_match(current_castle, castle)
+
+    def find_castle_entry(self, castle: SelectedCastleConfig) -> DetectedListEntry | None:
+        """Returns the observed castle-roster entry matching the requested identity when visible."""
+
+        for entry in self.entries(ListEntryKind.CASTLE):
+            if castle_entry_matches(entry, castle):
+                return entry
+        return None
+
+
+def castle_entry_matches(entry: DetectedListEntry, castle: SelectedCastleConfig) -> bool:
+    """Returns whether one detected castle row matches the configured castle identity."""
+
+    if entry.kind != ListEntryKind.CASTLE:
+        return False
+    if entry.title_text != castle.castle_name:
+        return False
+    kingdom = entry.metadata.get("kingdom")
+    if kingdom != castle.kingdom:
+        return False
+    level = entry.metadata.get("castle_level")
+    if castle.castle_level is None or level is None:
+        return True
+    return level == castle.castle_level
+
+
+def castle_identities_match(left: SelectedCastleConfig, right: SelectedCastleConfig) -> bool:
+    """Returns whether two castle identities describe the same managed castle."""
+
+    if left.castle_name != right.castle_name:
+        return False
+    if left.kingdom != "" and right.kingdom != "" and left.kingdom != right.kingdom:
+        return False
+    if left.castle_level is None or right.castle_level is None:
+        return True
+    return left.castle_level == right.castle_level

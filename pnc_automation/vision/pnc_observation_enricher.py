@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 
 from PIL import Image
 
+from pnc_automation.config.models import SelectedCastleConfig
 from pnc_automation.pnc.observation import Bounds, DetectedListEntry, ListEntryKind, VisibleElement
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
@@ -118,6 +119,43 @@ _RESEARCH_TREE_SUPPORT_TOKENS = frozenset(
     }
 )
 _PROGRESS_COUNTER_PATTERN = re.compile(r"^\d+/\d+$")
+_PERCENT_PROGRESS_PATTERN = re.compile(r"^\d{1,3}%$")
+_ACCOUNT_IDENTIFIER_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+_LOADING_TEXTS = frozenset(
+    {
+        "LOADING",
+        "CONNECTING",
+        "PLEASEWAIT",
+    }
+)
+_LOADING_SUPPORT_TOKENS = frozenset(
+    {
+        "CONNECT",
+        "NETWORK",
+        "RETRY",
+        "FAILED",
+        "WAIT",
+    }
+)
+_LOGIN_USERNAME_LABEL_TEXTS = frozenset(
+    {
+        "EMAIL",
+        "USERNAME",
+    }
+)
+_LOGIN_SUBMIT_TEXTS = frozenset(
+    {
+        "LOGIN",
+        "SIGNIN",
+    }
+)
+_ACCOUNT_SWITCH_HEADER_TEXTS = frozenset(
+    {
+        "SWITCHACCOUNT",
+        "CHOOSEACCOUNT",
+        "SELECTACCOUNT",
+    }
+)
 
 
 @dataclass(slots=True)
@@ -133,7 +171,7 @@ class PncObservationEnricher:
         screen_type: ScreenType,
         visible_elements: Mapping[UiElementId, VisibleElement],
     ) -> ObservationAdditions:
-        """Builds OCR-backed fallbacks for dynamic screens and typed castle-roster parsing."""
+        """Builds OCR-backed bootstrap, fallback-classification, and castle-roster observations."""
 
         ocr_result = self.ocr_service.read_result(image)
         lines = tuple(sorted(ocr_result.lines, key=lambda line: (line.bounds.y, line.bounds.x)))
@@ -141,6 +179,18 @@ class PncObservationEnricher:
         popup = _build_popup_additions(image=image, lines=lines, anchors=anchors)
         if popup is not None:
             return popup
+        if screen_type in {ScreenType.UNKNOWN, ScreenType.PNC_LOADING}:
+            loading = _build_loading_additions(image=image, lines=lines)
+            if loading is not None:
+                return loading
+        if screen_type in {ScreenType.UNKNOWN, ScreenType.PNC_LOGIN}:
+            login = _build_login_additions(image=image, lines=lines)
+            if login is not None:
+                return login
+        if screen_type in {ScreenType.UNKNOWN, ScreenType.PNC_ACCOUNT_SWITCH}:
+            account_switch = _build_account_switch_additions(image=image, lines=lines)
+            if account_switch is not None:
+                return account_switch
         if screen_type not in {ScreenType.UNKNOWN, ScreenType.PNC_CASTLE_SELECTION}:
             return ObservationAdditions()
         building_detail = _build_building_detail_additions(image=image, lines=lines, anchors=anchors)
@@ -169,7 +219,6 @@ class PncObservationEnricher:
         if not _looks_like_castle_selection(anchors, entries):
             return ObservationAdditions()
 
-        current_castle_name = next((entry.title_text for entry in entries if entry.selected), None)
         visible_elements_by_id: dict[UiElementId, VisibleElement] = {}
         if entries:
             visible_elements_by_id[UiElementId.PNC_CASTLE_LIST_ENTRY] = _make_visible_from_entry(
@@ -189,7 +238,7 @@ class PncObservationEnricher:
             visible_elements=visible_elements_by_id,
             list_entries=entries,
             screen_evidence=(ScreenEvidence(ScreenType.PNC_CASTLE_SELECTION, "manage_char_roster"),),
-            current_castle_name=current_castle_name,
+            current_castle=_entry_to_current_castle(selected_entry),
         )
 
 
@@ -311,6 +360,191 @@ def _is_popup_footer_anchor(
         and anchor.bounds.y <= int(image.height * 0.78)
         and anchor.bounds.x >= int(image.width * 0.08)
         and anchor.bounds.x <= int(image.width * 0.85)
+    )
+
+
+def _build_loading_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Returns loading or reconnect-state evidence when OCR matches bootstrap waits."""
+
+    splash = _build_loading_splash_additions(image=image, lines=lines)
+    if splash is not None:
+        return splash
+    loading_line = _find_line_matching(
+        lines=lines,
+        predicate=lambda line: normalize_ocr_text(line.text) in _LOADING_TEXTS,
+        max_y=int(image.height * 0.45),
+    )
+    reconnect_line = _find_line_with_normalized_text(
+        lines=lines,
+        normalized_text="RECONNECT",
+        min_y=int(image.height * 0.4),
+    )
+    if loading_line is None and reconnect_line is None:
+        return None
+    if reconnect_line is not None and not _has_loading_support(lines):
+        return None
+    visible_elements: dict[UiElementId, VisibleElement] = {}
+    reason = "ocr_loading_state"
+    if reconnect_line is not None:
+        visible_elements[UiElementId.PNC_LOADING_RECONNECT_BUTTON] = _make_visible(
+            selector_id=UiElementId.PNC_LOADING_RECONNECT_BUTTON,
+            x=max(0, reconnect_line.bounds.x - max(20, reconnect_line.bounds.width // 2)),
+            y=max(0, reconnect_line.bounds.y - max(16, reconnect_line.bounds.height // 2)),
+            width=reconnect_line.bounds.width + max(40, reconnect_line.bounds.width),
+            height=reconnect_line.bounds.height + max(24, reconnect_line.bounds.height),
+            extracted_text=reconnect_line.text,
+        )
+        reason = "ocr_loading_reconnect"
+    return ObservationAdditions(
+        visible_elements=visible_elements,
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_LOADING, reason),),
+    )
+
+
+def _build_loading_splash_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Returns loading-state evidence when OCR matches the branded game splash screen."""
+
+    conquest_line = _find_line_matching(
+        lines=lines,
+        predicate=lambda line: "CONQUEST" in normalize_ocr_text(line.text),
+        max_y=int(image.height * 0.18),
+    )
+    progress_line = _find_line_matching(
+        lines=lines,
+        predicate=lambda line: _PERCENT_PROGRESS_PATTERN.match(line.text.strip()) is not None,
+        min_y=int(image.height * 0.7),
+    )
+    if conquest_line is None or progress_line is None:
+        return None
+    return ObservationAdditions(
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_LOADING, "ocr_loading_splash"),),
+    )
+
+
+def _build_login_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Returns login-screen selectors and the visible username when OCR matches the credential form."""
+
+    username_label = _find_line_matching(
+        lines=lines,
+        predicate=lambda line: normalize_ocr_text(line.text) in _LOGIN_USERNAME_LABEL_TEXTS,
+        max_y=int(image.height * 0.65),
+    )
+    password_label = _find_line_with_normalized_text(
+        lines=lines,
+        normalized_text="PASSWORD",
+        max_y=int(image.height * 0.8),
+    )
+    submit_line = _find_line_matching(
+        lines=lines,
+        predicate=lambda line: normalize_ocr_text(line.text) in _LOGIN_SUBMIT_TEXTS,
+        min_y=int(image.height * 0.35),
+    )
+    if username_label is None or password_label is None or submit_line is None:
+        return None
+    if username_label.bounds.y >= password_label.bounds.y or password_label.bounds.y >= submit_line.bounds.y:
+        return None
+
+    username_field = _build_labeled_field(
+        image=image,
+        selector_id=UiElementId.PNC_LOGIN_USERNAME_FIELD,
+        label_line=username_label,
+        next_line=password_label,
+    )
+    password_field = _build_labeled_field(
+        image=image,
+        selector_id=UiElementId.PNC_LOGIN_PASSWORD_FIELD,
+        label_line=password_label,
+        next_line=submit_line,
+    )
+    current_pnc_account_id = _find_account_identifier(
+        lines=lines,
+        min_y=username_field.bounds.y,
+        max_y=username_field.bounds.y + username_field.bounds.height,
+    )
+    return ObservationAdditions(
+        visible_elements={
+            UiElementId.PNC_LOGIN_USERNAME_FIELD: username_field,
+            UiElementId.PNC_LOGIN_PASSWORD_FIELD: password_field,
+            UiElementId.PNC_LOGIN_SUBMIT_BUTTON: _make_visible(
+                selector_id=UiElementId.PNC_LOGIN_SUBMIT_BUTTON,
+                x=max(0, submit_line.bounds.x - max(16, submit_line.bounds.width // 2)),
+                y=max(0, submit_line.bounds.y - max(12, submit_line.bounds.height // 2)),
+                width=submit_line.bounds.width + max(32, submit_line.bounds.width),
+                height=submit_line.bounds.height + max(20, submit_line.bounds.height),
+                extracted_text=submit_line.text,
+            ),
+        },
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_LOGIN, "ocr_login_form"),),
+        current_pnc_account_id=current_pnc_account_id,
+    )
+
+
+def _build_account_switch_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Returns account-switch actions and the visible account identifier when OCR matches the chooser."""
+
+    header = _find_line_matching(
+        lines=lines,
+        predicate=lambda line: normalize_ocr_text(line.text) in _ACCOUNT_SWITCH_HEADER_TEXTS,
+        max_y=int(image.height * 0.25),
+    )
+    if header is None:
+        return None
+    continue_line = _find_line_with_normalized_text(
+        lines=lines,
+        normalized_text="CONTINUE",
+        min_y=int(image.height * 0.4),
+    )
+    change_account_line = _find_line_with_normalized_text(
+        lines=lines,
+        normalized_text="CHANGEACCOUNT",
+        min_y=int(image.height * 0.4),
+    )
+    if continue_line is None and change_account_line is None:
+        return None
+
+    visible_elements: dict[UiElementId, VisibleElement] = {}
+    if continue_line is not None:
+        visible_elements[UiElementId.PNC_ACCOUNT_SWITCH_CONTINUE_BUTTON] = _make_visible(
+            selector_id=UiElementId.PNC_ACCOUNT_SWITCH_CONTINUE_BUTTON,
+            x=max(0, continue_line.bounds.x - max(16, continue_line.bounds.width // 2)),
+            y=max(0, continue_line.bounds.y - max(12, continue_line.bounds.height // 2)),
+            width=continue_line.bounds.width + max(32, continue_line.bounds.width),
+            height=continue_line.bounds.height + max(20, continue_line.bounds.height),
+            extracted_text=continue_line.text,
+        )
+    if change_account_line is not None:
+        visible_elements[UiElementId.PNC_ACCOUNT_SWITCH_CHANGE_ACCOUNT_BUTTON] = _make_visible(
+            selector_id=UiElementId.PNC_ACCOUNT_SWITCH_CHANGE_ACCOUNT_BUTTON,
+            x=max(0, change_account_line.bounds.x - max(16, change_account_line.bounds.width // 2)),
+            y=max(0, change_account_line.bounds.y - max(12, change_account_line.bounds.height // 2)),
+            width=change_account_line.bounds.width + max(32, change_account_line.bounds.width),
+            height=change_account_line.bounds.height + max(20, change_account_line.bounds.height),
+            extracted_text=change_account_line.text,
+        )
+    return ObservationAdditions(
+        visible_elements=visible_elements,
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_ACCOUNT_SWITCH, "ocr_account_switch"),),
+        current_pnc_account_id=_find_account_identifier(
+            lines=lines,
+            min_y=header.bounds.y + header.bounds.height,
+            max_y=int(image.height * 0.78),
+        ),
     )
 
 
@@ -562,6 +796,57 @@ def _build_academy_additions(
     )
 
 
+def _has_loading_support(lines: tuple[OcrLine, ...]) -> bool:
+    """Returns whether OCR around a reconnect button also contains loading-related language."""
+
+    return any(
+        (normalized_text := normalize_ocr_text(line.text)) not in {"", "RECONNECT"}
+        and (normalized_text in _LOADING_TEXTS or any(token in normalized_text for token in _LOADING_SUPPORT_TOKENS))
+        for line in lines
+    )
+
+
+def _build_labeled_field(
+    *,
+    image: Image.Image,
+    selector_id: UiElementId,
+    label_line: OcrLine,
+    next_line: OcrLine,
+) -> VisibleElement:
+    """Builds one large input target from a field label and the next stacked control."""
+
+    left = max(0, min(label_line.bounds.x, next_line.bounds.x) - max(20, image.width // 30))
+    right = min(image.width, max(label_line.bounds.x + label_line.bounds.width, next_line.bounds.x + next_line.bounds.width) + max(20, image.width // 20))
+    top = max(0, label_line.bounds.y - max(12, label_line.bounds.height // 2))
+    bottom = max(top + 1, next_line.bounds.y - max(10, next_line.bounds.height // 2))
+    return _make_visible(
+        selector_id=selector_id,
+        x=left,
+        y=top,
+        width=max(1, right - left),
+        height=max(1, bottom - top),
+        extracted_text=label_line.text,
+    )
+
+
+def _find_account_identifier(
+    *,
+    lines: tuple[OcrLine, ...],
+    min_y: int,
+    max_y: int,
+) -> str | None:
+    """Returns a visible account identifier when OCR exposes an email-like username."""
+
+    for line in lines:
+        if line.bounds.y < min_y or line.bounds.y > max_y:
+            continue
+        candidate = line.text.strip()
+        if _ACCOUNT_IDENTIFIER_PATTERN.fullmatch(candidate) is None:
+            continue
+        return candidate
+    return None
+
+
 def _find_line_with_normalized_text(
     *,
     lines: tuple[OcrLine, ...],
@@ -692,6 +977,24 @@ def _build_castle_entry(
             "kingdom": kingdom,
             "castle_level": castle_level,
         },
+    )
+
+
+def _entry_to_current_castle(entry: DetectedListEntry | None) -> SelectedCastleConfig | None:
+    """Converts the selected castle-roster row into the active castle identity when available."""
+
+    if entry is None or entry.title_text is None:
+        return None
+    kingdom = entry.metadata.get("kingdom")
+    castle_level = entry.metadata.get("castle_level")
+    if not isinstance(kingdom, str) or kingdom == "":
+        return None
+    if castle_level is not None and not isinstance(castle_level, int):
+        return None
+    return SelectedCastleConfig(
+        kingdom=kingdom,
+        castle_name=entry.title_text,
+        castle_level=castle_level,
     )
 
 
