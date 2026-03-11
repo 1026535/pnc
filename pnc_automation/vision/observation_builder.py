@@ -45,6 +45,7 @@ class ObservationAdditions:
     """Derived observation facts produced after primary screen classification."""
 
     visible_elements: Mapping[UiElementId, VisibleElement] = field(default_factory=dict)
+    suppress_geometry_selector_ids: frozenset[UiElementId] = frozenset()
     list_entries: tuple[DetectedListEntry, ...] = ()
     screen_evidence: tuple[ScreenEvidence, ...] = ()
     current_castle: SelectedCastleConfig | None = None
@@ -184,7 +185,7 @@ class ObservationBuilder:
                 for element in self.selector_registry.materialize_for_screen(
                     screen_type,
                     image_size=screenshot.image.size,
-                    exclude_selector_ids=frozenset(visible_elements),
+                    exclude_selector_ids=frozenset(visible_elements) | additions.suppress_geometry_selector_ids,
                 )
             }
             visible_elements = geometry_elements | visible_elements

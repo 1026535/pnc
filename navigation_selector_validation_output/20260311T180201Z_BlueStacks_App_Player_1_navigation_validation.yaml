@@ -1,0 +1,24 @@
+summary:
+  passed: 0
+  failed: 2
+  skipped: 0
+results:
+- selector_id: PNC_HOME_WORLD_SWITCH
+  source_screen: PNC_HOME_CITY
+  status: failed
+  reason: Observed destination screen did not match any reviewed click outcome.
+  expected_target_screens:
+  - PNC_WORLD_MAP
+  observed_selectors: []
+  source_artifact_path: C:\Users\lebel\pnc\artifacts\2026-03-11\k304_k304554ca2797\20260311T180054Z_navigation_validation_start.png
+  destination_artifact_path: C:\Users\lebel\pnc\artifacts\2026-03-11\k304_k304554ca2797\20260311T180100Z_navigation_validation_1_tap_pnc_home_world_switch_post_action_1.png
+  destination_screen: UNKNOWN
+- selector_id: PNC_WORLD_HOME_NAV
+  source_screen: PNC_WORLD_MAP
+  status: failed
+  reason: Could not recover the live validation session to home city within the configured
+    step budget.
+  expected_target_screens:
+  - PNC_HOME_CITY
+  observed_selectors: []
+  source_artifact_path: C:\Users\lebel\pnc\artifacts\2026-03-11\k304_k304554ca2797\20260311T180100Z_navigation_validation_1_tap_pnc_home_world_switch_post_action_1.png

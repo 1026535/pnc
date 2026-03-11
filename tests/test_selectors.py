@@ -43,10 +43,16 @@ class SelectorRegistryTests(unittest.TestCase):
         home_lord_info_shortcut = registry.require(UiElementId.PNC_HOME_LORD_INFO_SHORTCUT)
         self.assertIsNotNone(home_lord_info_shortcut.relative_bounds)
         self.assertAlmostEqual(home_lord_info_shortcut.relative_bounds.action_x_ratio, 0.11)
+        home_world_switch = registry.require(UiElementId.PNC_HOME_WORLD_SWITCH)
+        self.assertEqual(home_world_switch.interaction_kind, SelectorInteractionKind.NAVIGATION)
+        self.assertEqual(home_world_switch.click_outcomes[0].target_screen, ScreenType.PNC_WORLD_MAP)
+        self.assertIsNotNone(home_world_switch.relative_bounds)
+        self.assertAlmostEqual(home_world_switch.relative_bounds.action_y_ratio, 0.95)
         login_submit_button = registry.require(UiElementId.PNC_LOGIN_SUBMIT_BUTTON)
         self.assertEqual(login_submit_button.interaction_kind, SelectorInteractionKind.ACTION)
         self.assertIsNotNone(login_submit_button.relative_bounds)
         self.assertAlmostEqual(login_submit_button.relative_bounds.width_ratio, 0.388888888889, places=9)
+        self.assertFalse(registry.require(UiElementId.PNC_MORE_MANAGE_CHAR).materialize_relative_bounds)
         self.assertEqual(
             registry.require(UiElementId.PNC_LORD_INFO_HEADER).interaction_kind,
             SelectorInteractionKind.LABEL,

@@ -74,6 +74,14 @@ class ScreenFlowPlanner:
                         observe_after=True,
                     )
                 ]
+            if observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT):
+                return [
+                    TapAction(
+                        selector_id=UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+                        reason="leave_more_submenu",
+                        observe_after=True,
+                    )
+                ]
             if observation.has(UiElementId.PNC_MORE_MANAGE_CHAR):
                 return [KeyEventAction(key_code="KEYCODE_BACK", reason="leave_settings_menu", observe_after=True)]
         if observation.screen_type in {
@@ -100,6 +108,7 @@ class ScreenFlowPlanner:
             ScreenType.PNC_CAMPAIGN,
             ScreenType.PNC_CAMPAIGN_STAGE,
             ScreenType.PNC_BATTLE_PREP,
+            ScreenType.PNC_CASTLE_SELECTION,
         }:
             if observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT):
                 return [

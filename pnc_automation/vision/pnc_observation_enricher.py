@@ -53,6 +53,22 @@ _MORE_MENU_SUPPORT_TEXTS = frozenset(
         "SETTINGS",
     }
 )
+_MORE_SETTINGS_MENU_SUPPORT_TEXTS = frozenset(
+    {
+        "ACCOUNT",
+        "MANAGECHAR",
+        "SEARCH",
+        "RANK",
+        "SETTINGS",
+        "BLACKLIST",
+        "LANGUAGE",
+        "NOTIFICATIONS",
+        "FANPAGE",
+        "HELP",
+        "FANEVENT",
+        "PACK",
+    }
+)
 _LORD_INFO_TAB_TEXTS = frozenset(
     {
         "BOOSTINFO",
@@ -255,6 +271,9 @@ class PncObservationEnricher:
             if improve_might is not None:
                 return improve_might
         if screen_type in {ScreenType.UNKNOWN, ScreenType.PNC_HOME_CITY, ScreenType.PNC_MORE_MENU}:
+            more_settings_menu = _build_more_settings_menu_additions(image=image, lines=lines)
+            if more_settings_menu is not None:
+                return more_settings_menu
             more_menu = _build_more_menu_additions(image=image, lines=lines, anchors=anchors)
             if more_menu is not None:
                 return more_menu
@@ -336,7 +355,7 @@ def _build_promotional_popup_additions(
     image: Image.Image,
     lines: tuple[OcrLine, ...],
 ) -> ObservationAdditions | None:
-    """Returns a popup close target for the observed monetized hero-offer modal."""
+    """Returns a popup close target for the observed monetized offer modals."""
 
     title_line = _find_line_matching(
         lines=lines,
@@ -354,7 +373,30 @@ def _build_promotional_popup_additions(
         min_y=int(image.height * 0.65),
     )
     if title_line is None or one_time_line is None or price_line is None:
-        return None
+        top_up_button_line = _find_line_with_normalized_text(
+            lines=lines,
+            normalized_text="TOPUP",
+            min_y=int(image.height * 0.72),
+        )
+        obtain_now_line = _find_line_with_normalized_text(
+            lines=lines,
+            normalized_text="OBTAINNOW",
+            min_y=int(image.height * 0.35),
+        )
+        claim_next_day_line = _find_line_with_normalized_text(
+            lines=lines,
+            normalized_text="CLAIMNEXTDAY",
+            min_y=int(image.height * 0.45),
+        )
+        if top_up_button_line is None or (obtain_now_line is None and claim_next_day_line is None):
+            return None
+        return _build_top_right_popup_close_additions(image=image, reason="ocr_top_up_offer_popup")
+
+    return _build_top_right_popup_close_additions(image=image, reason="ocr_promotional_offer_popup")
+
+
+def _build_top_right_popup_close_additions(*, image: Image.Image, reason: str) -> ObservationAdditions:
+    """Builds the canonical close target for offer popups that dismiss from the top-right corner."""
 
     close_width = max(32, int(image.width * 0.12))
     close_height = max(32, int(image.height * 0.12))
@@ -371,7 +413,7 @@ def _build_promotional_popup_additions(
                 action_point=(close_left + (close_width // 2), close_top + (close_height // 2)),
             )
         },
-        screen_evidence=(ScreenEvidence(ScreenType.PNC_POPUP, "ocr_promotional_offer_popup"),),
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_POPUP, reason),),
     )
 
 
@@ -684,6 +726,48 @@ def _build_more_menu_additions(
     return ObservationAdditions(
         visible_elements=visible_elements,
         screen_evidence=(ScreenEvidence(ScreenType.PNC_MORE_MENU, "ocr_more_menu_overlay"),),
+    )
+
+
+def _build_more_settings_menu_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Returns the full-screen Settings submenu shown after opening More > Settings."""
+
+    header = _find_line_with_normalized_text(
+        lines=lines,
+        normalized_text="SETTINGS",
+        max_y=int(image.height * 0.1),
+    )
+    if header is None:
+        return None
+    support_count = sum(
+        1
+        for line in lines
+        if normalize_ocr_text(line.text) in _MORE_SETTINGS_MENU_SUPPORT_TEXTS
+    )
+    if support_count < 4:
+        return None
+    visible_elements = {
+        UiElementId.PNC_BACK_BUTTON_TOP_LEFT: _make_visible(
+            selector_id=UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+            x=0,
+            y=0,
+            width=max(1, int(image.width * 0.14)),
+            height=max(1, int(image.height * 0.1)),
+        )
+    }
+    for normalized_text, selector_id in _MORE_MENU_SELECTOR_BY_TEXT.items():
+        line = _find_line_with_normalized_text(lines=lines, normalized_text=normalized_text)
+        if line is None:
+            continue
+        visible_elements[selector_id] = _make_visible_from_line(selector_id=selector_id, line=line)
+    return ObservationAdditions(
+        visible_elements=visible_elements,
+        suppress_geometry_selector_ids=frozenset({UiElementId.PNC_BOTTOM_NAV_MORE}),
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_MORE_MENU, "ocr_more_settings_menu"),),
     )
 
 

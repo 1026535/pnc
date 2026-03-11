@@ -1,0 +1,156 @@
+summary:
+  passed: 5
+  failed: 5
+  skipped: 0
+results:
+- selector_id: PNC_BOTTOM_NAV_BAG
+  source_screen: PNC_HOME_CITY
+  status: passed
+  reason: Observed destination matched a reviewed click outcome.
+  expected_target_screens:
+  - PNC_BAG
+  observed_selectors:
+  - PNC_BAG_MAIN_TAB_BAG
+  - PNC_BAG_USE_BUTTON
+  source_artifact_path: C:\Users\lebel\pnc\artifacts\2026-03-11\k304_k304554ca2797\20260311T164952Z_navigation_validation_start.png
+  destination_artifact_path: C:\Users\lebel\pnc\artifacts\2026-03-11\k304_k304554ca2797\20260311T164956Z_navigation_validation_1_tap_pnc_bottom_nav_bag_post_action_1.png
+  destination_screen: PNC_BAG
+  matched_target_screen: PNC_BAG
+- selector_id: PNC_BOTTOM_NAV_MORE
+  source_screen: PNC_HOME_CITY
+  status: passed
+  reason: Observed destination matched a reviewed click outcome.
+  expected_target_screens:
+  - PNC_MORE_MENU
+  - PNC_HOME_CITY
+  observed_selectors:
+  - PNC_BOTTOM_NAV_MORE
+  - PNC_MORE_MANAGE_CHAR
+  - PNC_MORE_SETTINGS
+  source_artifact_path: C:\Users\lebel\pnc\artifacts\2026-03-11\k304_k304554ca2797\20260311T165001Z_navigation_validation_2_before_case_1_post_action_1.png
+  destination_artifact_path: C:\Users\lebel\pnc\artifacts\2026-03-11\k304_k304554ca2797\20260311T165006Z_navigation_validation_2_tap_pnc_bottom_nav_more_post_action_1.png
+  destination_screen: PNC_MORE_MENU
+  matched_target_screen: PNC_MORE_MENU
+- selector_id: PNC_HOME_LORD_INFO_SHORTCUT
+  source_screen: PNC_HOME_CITY
+  status: passed
+  reason: Observed destination matched a reviewed click outcome.
+  expected_target_screens:
+  - PNC_LORD_INFO
+  observed_selectors:
+  - PNC_LORD_INFO_HEADER
+  - PNC_LORD_INFO_NAME_LABEL
+  source_artifact_path: C:\Users\lebel\pnc\artifacts\2026-03-11\k304_k304554ca2797\20260311T165010Z_navigation_validation_3_before_case_1_post_action_1.png
+  destination_artifact_path: C:\Users\lebel\pnc\artifacts\2026-03-11\k304_k304554ca2797\20260311T165015Z_navigation_validation_3_tap_pnc_home_lord_info_shortcut_post_action_1.png
+  destination_screen: PNC_LORD_INFO
+  matched_target_screen: PNC_LORD_INFO
+- selector_id: PNC_HOME_RIGHT_RAIL_CASH_MALL_ICON
+  source_screen: PNC_HOME_CITY
+  status: failed
+  reason: Could not make the reviewed navigation selector visible from its declared
+    source screen.
+  expected_target_screens:
+  - PNC_CASH_MALL
+  observed_selectors:
+  - PNC_BOTTOM_NAV_ALLIANCE
+  - PNC_BOTTOM_NAV_BAG
+  - PNC_BOTTOM_NAV_HERO
+  - PNC_BOTTOM_NAV_MAIL
+  - PNC_BOTTOM_NAV_MORE
+  - PNC_BOTTOM_NAV_QUEST
+  - PNC_HOME_BUILD_BUTTON
+  - PNC_HOME_IMPROVE_MIGHT_SHORTCUT
+  - PNC_HOME_LORD_INFO_SHORTCUT
+  - PNC_HOME_VIP_SHORTCUT
+  source_artifact_path: C:\Users\lebel\pnc\artifacts\2026-03-11\k304_k304554ca2797\20260311T165018Z_navigation_validation_4_before_case_1_post_action_1.png
+- selector_id: PNC_HOME_RIGHT_RAIL_EVENT_CENTER_ICON
+  source_screen: PNC_HOME_CITY
+  status: failed
+  reason: Could not make the reviewed navigation selector visible from its declared
+    source screen.
+  expected_target_screens:
+  - PNC_EVENT_CENTER
+  observed_selectors:
+  - PNC_BOTTOM_NAV_ALLIANCE
+  - PNC_BOTTOM_NAV_BAG
+  - PNC_BOTTOM_NAV_HERO
+  - PNC_BOTTOM_NAV_MAIL
+  - PNC_BOTTOM_NAV_MORE
+  - PNC_BOTTOM_NAV_QUEST
+  - PNC_HOME_BUILD_BUTTON
+  - PNC_HOME_IMPROVE_MIGHT_SHORTCUT
+  - PNC_HOME_LORD_INFO_SHORTCUT
+  - PNC_HOME_VIP_SHORTCUT
+  source_artifact_path: C:\Users\lebel\pnc\artifacts\2026-03-11\k304_k304554ca2797\20260311T165018Z_navigation_validation_4_before_case_1_post_action_1.png
+- selector_id: PNC_HOME_RIGHT_RAIL_GIFT_CENTER_ICON
+  source_screen: PNC_HOME_CITY
+  status: failed
+  reason: Could not make the reviewed navigation selector visible from its declared
+    source screen.
+  expected_target_screens:
+  - PNC_GIFT_CENTER
+  observed_selectors:
+  - PNC_BOTTOM_NAV_ALLIANCE
+  - PNC_BOTTOM_NAV_BAG
+  - PNC_BOTTOM_NAV_HERO
+  - PNC_BOTTOM_NAV_MAIL
+  - PNC_BOTTOM_NAV_MORE
+  - PNC_BOTTOM_NAV_QUEST
+  - PNC_HOME_BUILD_BUTTON
+  - PNC_HOME_IMPROVE_MIGHT_SHORTCUT
+  - PNC_HOME_LORD_INFO_SHORTCUT
+  - PNC_HOME_VIP_SHORTCUT
+  source_artifact_path: C:\Users\lebel\pnc\artifacts\2026-03-11\k304_k304554ca2797\20260311T165018Z_navigation_validation_4_before_case_1_post_action_1.png
+- selector_id: PNC_HOME_VIP_SHORTCUT
+  source_screen: PNC_HOME_CITY
+  status: passed
+  reason: Observed destination matched a reviewed click outcome.
+  expected_target_screens:
+  - PNC_VIP
+  observed_selectors:
+  - PNC_VIP_HEADER
+  source_artifact_path: C:\Users\lebel\pnc\artifacts\2026-03-11\k304_k304554ca2797\20260311T165018Z_navigation_validation_4_before_case_1_post_action_1.png
+  destination_artifact_path: C:\Users\lebel\pnc\artifacts\2026-03-11\k304_k304554ca2797\20260311T165023Z_navigation_validation_7_tap_pnc_home_vip_shortcut_post_action_1.png
+  destination_screen: PNC_VIP
+  matched_target_screen: PNC_VIP
+- selector_id: PNC_BOTTOM_NAV_MORE
+  source_screen: PNC_MORE_MENU
+  status: passed
+  reason: Observed destination matched a reviewed click outcome.
+  expected_target_screens:
+  - PNC_MORE_MENU
+  - PNC_HOME_CITY
+  observed_selectors:
+  - PNC_BOTTOM_NAV_ALLIANCE
+  - PNC_BOTTOM_NAV_BAG
+  - PNC_BOTTOM_NAV_HERO
+  - PNC_BOTTOM_NAV_MAIL
+  - PNC_BOTTOM_NAV_MORE
+  - PNC_BOTTOM_NAV_QUEST
+  - PNC_HOME_BUILD_BUTTON
+  - PNC_HOME_IMPROVE_MIGHT_SHORTCUT
+  - PNC_HOME_LORD_INFO_SHORTCUT
+  - PNC_HOME_VIP_SHORTCUT
+  source_artifact_path: C:\Users\lebel\pnc\artifacts\2026-03-11\k304_k304554ca2797\20260311T165031Z_navigation_validation_8_prepare_1_post_action_1.png
+  destination_artifact_path: C:\Users\lebel\pnc\artifacts\2026-03-11\k304_k304554ca2797\20260311T165035Z_navigation_validation_8_tap_pnc_bottom_nav_more_post_action_1.png
+  destination_screen: PNC_HOME_CITY
+  matched_target_screen: PNC_HOME_CITY
+- selector_id: PNC_MORE_MANAGE_CHAR
+  source_screen: PNC_MORE_MENU
+  status: failed
+  reason: Observed destination screen did not match any reviewed click outcome.
+  expected_target_screens:
+  - PNC_CASTLE_SELECTION
+  observed_selectors: []
+  source_artifact_path: C:\Users\lebel\pnc\artifacts\2026-03-11\k304_k304554ca2797\20260311T165039Z_navigation_validation_9_prepare_1_post_action_1.png
+  destination_artifact_path: C:\Users\lebel\pnc\artifacts\2026-03-11\k304_k304554ca2797\20260311T165043Z_navigation_validation_9_tap_pnc_more_manage_char_post_action_1.png
+  destination_screen: UNKNOWN
+- selector_id: PNC_MORE_SETTINGS
+  source_screen: PNC_MORE_MENU
+  status: failed
+  reason: Could not recover the live validation session to home city within the configured
+    step budget.
+  expected_target_screens:
+  - PNC_MORE_MENU
+  observed_selectors: []
+  source_artifact_path: C:\Users\lebel\pnc\artifacts\2026-03-11\k304_k304554ca2797\20260311T165043Z_navigation_validation_9_tap_pnc_more_manage_char_post_action_1.png

@@ -12,6 +12,19 @@ import yaml
 from pnc_automation.errors import SelectorResolutionError
 from pnc_automation.vision.selector_interaction_kind import SelectorInteractionKind
 
+_CATALOG_HEADER_LINES = (
+    "# `relative_bounds` is always normalized to the current screenshot size:",
+    "# - `x_ratio` / `y_ratio`: top-left corner of the clickable region, not the center",
+    "# - `width_ratio` / `height_ratio`: size of the clickable region",
+    "# - `action_x_ratio` / `action_y_ratio`: optional explicit click point",
+    "#   If omitted, the runtime clicks the center of the defined region.",
+    "# - `materialize_relative_bounds: false`: keep the relative click region without auto-marking the selector visible",
+    "# `interaction_kind` is optional during migration:",
+    "# - `navigation`: clicking is expected to navigate and must have reviewed click outcomes",
+    "# - `action`: clicking performs an in-screen or stateful action, not a reviewed navigation contract",
+    "# - `label`: non-interactive screen evidence; it must not declare click metadata",
+)
+
 
 @dataclass(frozen=True, slots=True)
 class SelectorCatalogClickOutcome:
@@ -114,6 +127,7 @@ class SelectorCatalogEntry:
     interaction_kind: str | None = None
     click: SelectorCatalogClickDefinition | None = None
     relative_bounds: SelectorCatalogRelativeBounds | None = None
+    materialize_relative_bounds: bool = True
     notes: tuple[str, ...] = ()
 
     def to_document(self) -> dict[str, object]:
@@ -131,6 +145,8 @@ class SelectorCatalogEntry:
             document["click"] = self.click.to_document()
         if self.relative_bounds is not None:
             document["relative_bounds"] = self.relative_bounds.to_document()
+        if not self.materialize_relative_bounds:
+            document["materialize_relative_bounds"] = False
         if self.notes:
             document["notes"] = list(self.notes)
         return document
@@ -175,10 +191,12 @@ def load_selector_catalog_document(path: Path | None = None) -> SelectorCatalogD
 
 
 def write_selector_catalog_document(path: Path, document: SelectorCatalogDocument) -> None:
-    """Writes one selector catalog document back to disk."""
+    """Writes one selector catalog document back to disk with the canonical schema header."""
 
+    serialized_document = yaml.safe_dump(document.to_document(), sort_keys=False)
+    header = "\n".join(_CATALOG_HEADER_LINES)
     with path.open("w", encoding="utf-8", newline="\n") as handle:
-        yaml.safe_dump(document.to_document(), handle, sort_keys=False)
+        handle.write(f"{header}\n{serialized_document}")
 
 
 def _load_selector_entries(value: object) -> tuple[SelectorCatalogEntry, ...]:
@@ -229,6 +247,15 @@ def _load_selector_entries(value: object) -> tuple[SelectorCatalogEntry, ...]:
             document_label="selector catalog",
             selector_label="selector",
         )
+        materialize_relative_bounds = (
+            require_selector_schema_bool(
+                mapping.get("materialize_relative_bounds"),
+                context=f"selector '{selector_id}' materialize_relative_bounds",
+                document_label="selector catalog",
+            )
+            if "materialize_relative_bounds" in mapping
+            else True
+        )
         notes = tuple(
             load_selector_schema_string_sequence(
                 mapping.get("notes", ()),
@@ -245,6 +272,7 @@ def _load_selector_entries(value: object) -> tuple[SelectorCatalogEntry, ...]:
                 interaction_kind=interaction_kind,
                 click=click,
                 relative_bounds=relative_bounds,
+                materialize_relative_bounds=materialize_relative_bounds,
                 notes=notes,
             )
         )
@@ -273,6 +301,11 @@ def validate_selector_catalog_interactions(document: SelectorCatalogDocument) ->
     """Rejects selector interaction metadata that contradicts the declared click contract."""
 
     for selector in document.selectors:
+        if selector.relative_bounds is None and not selector.materialize_relative_bounds:
+            raise SelectorResolutionError(
+                "Selector materialize_relative_bounds requires relative_bounds.",
+                selector_id=selector.id,
+            )
         interaction_kind_name = selector.interaction_kind
         if interaction_kind_name is None:
             continue
