@@ -564,6 +564,21 @@ selectors:
   - PNC_LOGIN
   status: planned
   detection_kind: planned
+- id: PNC_ACCOUNT_SWITCH_CONTINUE_BUTTON
+  screens:
+  - PNC_ACCOUNT_SWITCH
+  status: planned
+  detection_kind: planned
+- id: PNC_ACCOUNT_SWITCH_CHANGE_ACCOUNT_BUTTON
+  screens:
+  - PNC_ACCOUNT_SWITCH
+  status: planned
+  detection_kind: planned
+- id: PNC_LOADING_RECONNECT_BUTTON
+  screens:
+  - PNC_LOADING
+  status: planned
+  detection_kind: planned
 - id: PNC_CASTLE_LIST_ENTRY
   screens:
   - PNC_CASTLE_SELECTION

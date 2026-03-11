@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -12,7 +13,7 @@ from pnc_automation.automation.scripts.models import PreparedRunScript, Prepared
 from pnc_automation.automation.scripts.registry import TaskRegistry
 from pnc_automation.automation.task import TaskId, TaskResult, TaskStatus
 from pnc_automation.automation.task_context import TaskContext
-from pnc_automation.config.models import AccountConfig, DefaultsConfig
+from pnc_automation.config.models import AccountConfig, DefaultsConfig, PncAccountCastleRosterConfig
 from pnc_automation.errors import TaskVerificationError
 from pnc_automation.pnc.observation import Observation
 from pnc_automation.pnc.screen_flows import ScreenFlowPlanner
@@ -77,11 +78,20 @@ class AutomationRunner:
     logger: logging.LoggerAdapter
     policy: StepExecutionPolicy = field(default_factory=StepExecutionPolicy)
 
-    def run(self, account: AccountConfig, script: PreparedRunScript) -> RunResult:
+    def run(
+        self,
+        account: AccountConfig,
+        script: PreparedRunScript,
+        *,
+        castle_roster_provider: Callable[[], PncAccountCastleRosterConfig | None] | None = None,
+    ) -> RunResult:
         """Runs the provided script for one account target."""
 
         started_at = datetime.now(tz=UTC)
-        step_results = [self._run_step(account, step) for step in script.steps]
+        step_results = [
+            self._run_step(account, step, castle_roster_provider=castle_roster_provider)
+            for step in script.steps
+        ]
         finished_at = datetime.now(tz=UTC)
         return RunResult(
             account_id=account.id,
@@ -91,12 +101,19 @@ class AutomationRunner:
             finished_at=finished_at,
         )
 
-    def _run_step(self, account: AccountConfig, step: PreparedScriptStep) -> StepRunResult:
+    def _run_step(
+        self,
+        account: AccountConfig,
+        step: PreparedScriptStep,
+        *,
+        castle_roster_provider: Callable[[], PncAccountCastleRosterConfig | None] | None,
+    ) -> StepRunResult:
         """Executes one script step until it succeeds or fails."""
 
         before = self.observation_service.observe(f"{step.task.value}_before")
         execution = self._execute_step_loop(
             account=account,
+            castle_roster_provider=castle_roster_provider,
             step=step.script_step,
             parsed_params=step.parsed_params,
             before=before,
@@ -113,6 +130,7 @@ class AutomationRunner:
         self,
         *,
         account: AccountConfig,
+        castle_roster_provider: Callable[[], PncAccountCastleRosterConfig | None] | None,
         step: ScriptStep,
         parsed_params: Any,
         before: Observation,
@@ -121,7 +139,12 @@ class AutomationRunner:
         """Runs one task through the canonical plan-act-verify loop."""
 
         task = self.task_registry.require(step.task)
-        context = self._build_context(account=account, step=step, parsed_params=parsed_params)
+        context = self._build_context(
+            account=account,
+            castle_roster_provider=castle_roster_provider,
+            step=step,
+            parsed_params=parsed_params,
+        )
         attempts = 0
         replans = 0
         current_before = before
@@ -178,11 +201,19 @@ class AutomationRunner:
                 artifact_path=str(after.artifact_path) if after.artifact_path else None,
             )
 
-    def _build_context(self, *, account: AccountConfig, step: ScriptStep, parsed_params: Any) -> TaskContext:
+    def _build_context(
+        self,
+        *,
+        account: AccountConfig,
+        castle_roster_provider: Callable[[], PncAccountCastleRosterConfig | None] | None,
+        step: ScriptStep,
+        parsed_params: Any,
+    ) -> TaskContext:
         """Builds the shared task context for one canonical task execution."""
 
         return TaskContext(
             account=account,
+            castle_roster_provider=castle_roster_provider or (lambda: None),
             defaults=self.defaults,
             step=step,
             params=parsed_params,
@@ -202,6 +233,7 @@ class AutomationRunner:
         popup_task = self.task_registry.require(TaskId.POPUP_RECOVERY)
         execution = self._execute_step_loop(
             account=account,
+            castle_roster_provider=None,
             step=popup_step,
             parsed_params=popup_task.parse_params({}),
             before=observation,

@@ -10,6 +10,7 @@ from typing import Any
 
 from PIL import Image
 
+from pnc_automation.config.models import SelectedCastleConfig
 from pnc_automation.pnc.observation import Bounds, DetectedListEntry, ListEntryKind, Observation, VisibleElement
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
@@ -70,6 +71,8 @@ def make_observation(
     list_entries: tuple[DetectedListEntry, ...] = (),
     blocking_popup: bool = False,
     current_castle_name: str | None = None,
+    current_castle: SelectedCastleConfig | None = None,
+    current_pnc_account_id: str | None = None,
     available_march_slots: int | None = None,
     artifact_path: Path | None = None,
 ) -> Observation:
@@ -84,11 +87,20 @@ def make_observation(
         visible_elements=visible_elements,
         list_entries=list_entries,
         blocking_popup=blocking_popup,
-        current_castle_name=current_castle_name,
+        current_castle=current_castle or _make_current_castle(current_castle_name),
+        current_pnc_account_id=current_pnc_account_id,
         available_march_slots=available_march_slots,
         artifact_path=artifact_path,
         image_size=(200, 100),
     )
+
+
+def _make_current_castle(current_castle_name: str | None) -> SelectedCastleConfig | None:
+    """Builds a minimal current-castle identity for legacy test fixtures that only provide the name."""
+
+    if current_castle_name is None:
+        return None
+    return SelectedCastleConfig(kingdom="", castle_name=current_castle_name)
 
 
 @dataclass

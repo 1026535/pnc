@@ -8,8 +8,15 @@ from pnc_automation.automation.task_context import TaskContext
 from pnc_automation.automation.tasks.building_upgrade_task import BuildingUpgradeTask
 from pnc_automation.automation.tasks.gathering_task import GatheringTask
 from pnc_automation.automation.tasks.login_task import LoginTask
-from pnc_automation.config.models import AccountConfig, CredentialSource, DefaultsConfig, ResolvedCredentials, SelectedCastleConfig
-from pnc_automation.pnc.action_requests import InputTextAction, KeyEventAction, TapAction, TapListEntryAction
+from pnc_automation.config.models import (
+    AccountConfig,
+    CredentialSource,
+    DefaultsConfig,
+    PncAccountCastleRosterConfig,
+    ResolvedCredentials,
+    SelectedCastleConfig,
+)
+from pnc_automation.pnc.action_requests import InputTextAction, KeyEventAction, SwipeAction, TapAction, TapListEntryAction, WaitAction
 from pnc_automation.pnc.observation import ListEntryKind
 from pnc_automation.pnc.policy_models import BuildingUpgradePolicy, GatheringPolicy
 from pnc_automation.pnc.screen_flows import ScreenFlowPlanner
@@ -70,6 +77,7 @@ class FlowAndTaskTests(unittest.TestCase):
         task = LoginTask()
         context = TaskContext(
             account=self.account,
+            castle_roster_provider=lambda: None,
             defaults=self.defaults,
             step=type("Step", (), {"task": None, "params": {}})(),
             params=None,
@@ -87,10 +95,101 @@ class FlowAndTaskTests(unittest.TestCase):
 
         actions = task.plan(context, observation)
 
-        self.assertEqual(len(actions), 5)
-        self.assertIsInstance(actions[1], InputTextAction)
-        self.assertEqual(actions[1].text, "user@example.com")
-        self.assertEqual(actions[3].text, "secret")
+        self.assertEqual(len(actions), 3)
+        self.assertIsInstance(actions[0], InputTextAction)
+        self.assertEqual(actions[0].text, "user@example.com")
+        self.assertEqual(actions[1].text, "secret")
+
+    def test_login_task_uses_change_account_when_switch_screen_shows_wrong_account(self) -> None:
+        """Forces a clean relogin when account-switch OCR exposes a different remembered account."""
+
+        task = LoginTask()
+        context = TaskContext(
+            account=self.account,
+            castle_roster_provider=lambda: None,
+            defaults=self.defaults,
+            step=type("Step", (), {"task": None, "params": {}})(),
+            params=None,
+            flows=self.flows,
+            logger=self.logger,
+        )
+        observation = make_observation(
+            ScreenType.PNC_ACCOUNT_SWITCH,
+            visible_ids=(UiElementId.PNC_ACCOUNT_SWITCH_CHANGE_ACCOUNT_BUTTON,),
+            current_pnc_account_id="other@example.com",
+        )
+
+        actions = task.plan(context, observation)
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], TapAction)
+        self.assertEqual(actions[0].selector_id, UiElementId.PNC_ACCOUNT_SWITCH_CHANGE_ACCOUNT_BUTTON)
+
+    def test_login_task_waits_when_loading_screen_has_no_reconnect_action(self) -> None:
+        """Uses one canonical observed wait when bootstrap is still loading."""
+
+        task = LoginTask()
+        context = TaskContext(
+            account=self.account,
+            castle_roster_provider=lambda: None,
+            defaults=self.defaults,
+            step=type("Step", (), {"task": None, "params": {}})(),
+            params=None,
+            flows=self.flows,
+            logger=self.logger,
+        )
+
+        actions = task.plan(context, make_observation(ScreenType.PNC_LOADING))
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], WaitAction)
+        self.assertTrue(actions[0].observe_after)
+
+    def test_ensure_correct_castle_selected_scrolls_toward_target_using_cached_roster_order(self) -> None:
+        """Plans a deterministic swipe when the target castle is outside the visible roster window."""
+
+        roster = PncAccountCastleRosterConfig(
+            pnc_account_id=self.account.pnc_account_id,
+            castles=(
+                SelectedCastleConfig(kingdom="K226", castle_name="Alpha", castle_level=3),
+                SelectedCastleConfig(kingdom="K227", castle_name="Bravo", castle_level=4),
+                self.account.selected_castle,
+            ),
+        )
+        observation = make_observation(
+            ScreenType.PNC_CASTLE_SELECTION,
+            list_entries=(
+                make_entry(ListEntryKind.CASTLE, title="Alpha", metadata={"kingdom": "K226", "castle_level": 3}),
+                make_entry(ListEntryKind.CASTLE, title="Bravo", metadata={"kingdom": "K227", "castle_level": 4}),
+            ),
+        )
+
+        actions = self.flows.ensure_correct_castle_selected(observation, self.account.selected_castle, roster)
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], SwipeAction)
+        self.assertEqual(actions[0].direction, "up")
+
+    def test_ensure_correct_castle_selected_waits_after_tapping_visible_target(self) -> None:
+        """Plans a post-tap stabilization wait so live castle switching can pass through loading safely."""
+
+        observation = make_observation(
+            ScreenType.PNC_CASTLE_SELECTION,
+            list_entries=(
+                make_entry(
+                    ListEntryKind.CASTLE,
+                    title="Main",
+                    metadata={"kingdom": "K230", "castle_level": 8},
+                ),
+            ),
+        )
+
+        actions = self.flows.ensure_correct_castle_selected(observation, self.account.selected_castle, None)
+
+        self.assertEqual(len(actions), 2)
+        self.assertIsInstance(actions[0], TapListEntryAction)
+        self.assertIsInstance(actions[1], WaitAction)
+        self.assertTrue(actions[1].observe_after)
 
     def test_building_upgrade_task_chooses_highest_priority_candidate(self) -> None:
         """Selects the configured highest-priority building candidate from visible entries."""
@@ -98,6 +197,7 @@ class FlowAndTaskTests(unittest.TestCase):
         task = BuildingUpgradeTask()
         context = TaskContext(
             account=self.account,
+            castle_roster_provider=lambda: None,
             defaults=self.defaults,
             step=type("Step", (), {"task": None, "params": {}})(),
             params=BuildingUpgradePolicy(),
@@ -129,6 +229,7 @@ class FlowAndTaskTests(unittest.TestCase):
         task = GatheringTask()
         context = TaskContext(
             account=self.account,
+            castle_roster_provider=lambda: None,
             defaults=self.defaults,
             step=type("Step", (), {"task": None, "params": {}})(),
             params=GatheringPolicy(),

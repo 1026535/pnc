@@ -8,6 +8,7 @@ from typing import Protocol
 
 from PIL import Image
 
+from pnc_automation.config.models import SelectedCastleConfig
 from pnc_automation.capture.screenshot_service import CapturedScreenshot, ScreenshotService
 from pnc_automation.config.castle_roster_store import CastleRosterStore
 from pnc_automation.emulator.session import BlueStacksSession
@@ -40,7 +41,8 @@ class ObservationAdditions:
     visible_elements: Mapping[UiElementId, VisibleElement] = field(default_factory=dict)
     list_entries: tuple[DetectedListEntry, ...] = ()
     screen_evidence: tuple[ScreenEvidence, ...] = ()
-    current_castle_name: str | None = None
+    current_castle: SelectedCastleConfig | None = None
+    current_pnc_account_id: str | None = None
     available_march_slots: int | None = None
 
 
@@ -154,7 +156,8 @@ class ObservationBuilder:
             image_size=screenshot.image.size,
             captured_at=screenshot.artifact.captured_at,
             blocking_popup=screen_type == ScreenType.PNC_POPUP or UiElementId.PNC_POPUP_CLOSE_BUTTON in visible_elements,
-            current_castle_name=additions.current_castle_name,
+            current_castle=additions.current_castle,
+            current_pnc_account_id=additions.current_pnc_account_id,
             available_march_slots=additions.available_march_slots,
         )
 

@@ -225,6 +225,181 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertTrue(castle_entries[1].selected)
             self.assertEqual(observation.current_castle_name, "Lv.5 Hellhound")
 
+    def test_observation_builder_classifies_login_from_live_like_ocr(self) -> None:
+        """Recognizes the credential form from OCR and exposes the actionable login controls."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (540, 960), (15, 28, 68)))),
+                artifact_directory="k230_login",
+                label="login_live_like",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Email", x=80, y=225, width=70, height=26),
+                            _ocr_line("user@example.com", x=92, y=276, width=188, height=22),
+                            _ocr_line("Password", x=82, y=365, width=110, height=26),
+                            _ocr_line("Log In", x=211, y=566, width=105, height=30),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_LOGIN)
+            self.assertTrue(observation.has(UiElementId.PNC_LOGIN_USERNAME_FIELD))
+            self.assertTrue(observation.has(UiElementId.PNC_LOGIN_PASSWORD_FIELD))
+            self.assertTrue(observation.has(UiElementId.PNC_LOGIN_SUBMIT_BUTTON))
+            self.assertEqual(observation.current_pnc_account_id, "user@example.com")
+
+    def test_observation_builder_classifies_account_switch_from_live_like_ocr(self) -> None:
+        """Recognizes account-switch UI and exposes the verified-account continuation controls."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (540, 960), (15, 28, 68)))),
+                artifact_directory="k230_account_switch",
+                label="account_switch_live_like",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Switch Account", x=134, y=42, width=180, height=28),
+                            _ocr_line("user@example.com", x=116, y=292, width=188, height=22),
+                            _ocr_line("Continue", x=210, y=576, width=102, height=28),
+                            _ocr_line("Change Account", x=165, y=654, width=170, height=28),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_ACCOUNT_SWITCH)
+            self.assertTrue(observation.has(UiElementId.PNC_ACCOUNT_SWITCH_CONTINUE_BUTTON))
+            self.assertTrue(observation.has(UiElementId.PNC_ACCOUNT_SWITCH_CHANGE_ACCOUNT_BUTTON))
+            self.assertEqual(observation.current_pnc_account_id, "user@example.com")
+
+    def test_observation_builder_classifies_loading_reconnect_from_live_like_ocr(self) -> None:
+        """Recognizes reconnect prompts as loading-state bootstrap screens."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (540, 960), (15, 28, 68)))),
+                artifact_directory="k230_loading",
+                label="loading_reconnect_live_like",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Connecting", x=188, y=108, width=116, height=28),
+                            _ocr_line("Network unstable", x=142, y=342, width=170, height=24),
+                            _ocr_line("Reconnect", x=195, y=668, width=112, height=30),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_LOADING)
+            self.assertTrue(observation.has(UiElementId.PNC_LOADING_RECONNECT_BUTTON))
+
+    def test_observation_builder_classifies_loading_splash_from_live_like_ocr(self) -> None:
+        """Recognizes the branded game splash as a loading transition during castle switching or launch."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                artifact_directory="k230_loading_splash",
+                label="loading_splash_live_like",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("CONQUEST", x=310, y=41, width=190, height=34),
+                            _ocr_line("8%", x=430, y=1390, width=42, height=20),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_LOADING)
+            self.assertFalse(observation.has(UiElementId.PNC_LOADING_RECONNECT_BUTTON))
+
+    def test_observation_builder_rejects_reconnect_without_loading_support(self) -> None:
+        """Keeps isolated reconnect text unknown so bootstrap recovery stays conservative."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (540, 960), (15, 28, 68)))),
+                artifact_directory="k230_loading_probe",
+                label="reconnect_near_match",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Rewards", x=210, y=112, width=90, height=24),
+                            _ocr_line("Reconnect", x=195, y=668, width=112, height=30),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.UNKNOWN)
+            self.assertFalse(observation.has(UiElementId.PNC_LOADING_RECONNECT_BUTTON))
+
     def test_observation_builder_classifies_building_detail_and_exposes_back_click_target(self) -> None:
         """Recognizes a building-detail screen from OCR and surfaces tappable controls."""
 

@@ -951,13 +951,13 @@ This phase is implemented in code and validated by unit tests for runner, script
 
 This phase is now owned by [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md).
 
-Runtime scaffolding exists, but this primary implementation plan does not treat the phase as closed. Closure remains tracked in the account-navigation sub-plan until the required selector maturity and live validation evidence exist. Selector coverage will continue growing incrementally as required by that work rather than as one up-front full-registry milestone.
+Runtime implementation now covers loading, login-form OCR fallback, account-switch correction, popup recovery integration, and verified transition into in-game bootstrap states with automated unit and screenshot coverage. This primary implementation plan still does not treat the phase as closed because live validation evidence remains tracked in the account-navigation sub-plan. Selector coverage will continue growing incrementally as required by that work rather than as one up-front full-registry milestone.
 
 ### Phase 5: Castle targeting
 
 This phase is now owned by [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md).
 
-Baseline castle-roster parsing and selection scaffolding exist, but this primary implementation plan does not treat the phase as closed. Closure remains tracked in the account-navigation sub-plan until the required smoke validation evidence exists. Selector coverage will continue growing incrementally as required by that work rather than as one up-front full-registry milestone.
+Castle-roster parsing, full castle-identity matching, roster-aware off-screen scrolling, and selected-castle verification now exist in code with automated unit and screenshot coverage. This primary implementation plan still does not treat the phase as closed because the required live smoke validation evidence remains tracked in the account-navigation sub-plan. Selector coverage will continue growing incrementally as required by that work rather than as one up-front full-registry milestone.
 
 ### Phase 6: Castle-management features
 
@@ -999,8 +999,8 @@ Exit condition:
 | Phase 2 | closed in the primary plan, owned by selector refinement maintenance | screenshot integration tests plus 2026-03-09 and 2026-03-10 live smoke confirmed current-state detection for home, popup, academy, bag, and alliance join across both configured instances |
 | Phase 2.5 | closed in the primary plan, owned by selector refinement maintenance | selector registry/updater tests plus 2026-03-09 and 2026-03-10 live smoke confirmed popup recovery and selector-driven `home -> bag -> back` and `home -> alliance join -> back` flows across both configured instances |
 | Phase 3 | implemented | unit tests for runner, script loading, and task contract behavior |
-| Phase 4 | scaffolding implemented, owned by account navigation | no closure evidence recorded in this document yet |
-| Phase 5 | baseline roster parsing implemented, owned by account navigation | screenshot-style parsing tests exist, but required smoke validation evidence is not yet recorded |
+| Phase 4 | implemented in code with automated account-navigation coverage, owned by account navigation | unit and screenshot tests cover loading, login-form interpretation, account-switch correction, and verified in-game bootstrap; 2026-03-11 live smoke on `BlueStacks App Player 1` also passed `ensure_game_running -> login -> select_castle`, but full bootstrap-from-Android closure evidence is still not recorded |
+| Phase 5 | implemented in code with automated castle-targeting coverage, owned by account navigation | unit and screenshot tests cover roster parsing, roster-aware scrolling, and selected-castle verification; 2026-03-11 live smoke on `127.0.0.1:5565` switched the live selected castle from `K314 / K314e66ab29777` to `K304 / K304554ca2797` and verified the result |
 | Phase 6 | baseline task implementations exist | feature-complete validation still depends on selector maturity and live smoke checks |
 | Phase 7 | ongoing hardening backlog | no phase-complete validation evidence recorded |
 
