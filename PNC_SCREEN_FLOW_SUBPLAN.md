@@ -2,19 +2,19 @@
 
 ## 1. Purpose
 
-This document is the dependency-ordered fourth plan and covers reusable Puzzles & Conquest navigation and screen-flow design.
+This document is the dependency-ordered fourth plan and owns only canonical reusable navigation and screen-flow logic.
 
 It is intentionally separate from:
 
 - [PNC_AUTOMATION_IMPLEMENTATION.md](/c:/Users/lebel/pnc/PNC_AUTOMATION_IMPLEMENTATION.md), which remains the primary platform architecture plan,
-- [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md), which covers account-specific bootstrap and castle-targeting behavior,
-- [PNC_TASK_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_TASK_SUBPLAN.md), which covers concrete task behavior.
+- [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md), which covers bootstrap, login, and castle-targeting behavior,
+- [PNC_TASK_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_TASK_SUBPLAN.md), which now defines the feature-based tracer-bullet planning model for post-navigation work.
 
-This file owns only shared navigation and reusable screen-flow logic.
+This file is not the active feature backlog. Feature slices and account-navigation work may drive additions here, but only flows that are reusable or foundational should be promoted into this document.
 
 ## 2. Scope
 
-This sub-plan should define shared flows that many tasks consume, such as:
+This sub-plan should define shared flows that many tasks or features consume, such as:
 
 - `ensure_android_home()`
 - `ensure_pnc_foreground()`
@@ -27,18 +27,53 @@ This sub-plan should define shared flows that many tasks consume, such as:
 
 The list can grow, but the principle must remain the same: one canonical implementation per reusable flow.
 
-## 3. Why this is separate
+A flow belongs here only when at least one of the following is true:
 
-Reusable screen flows are not the same thing as tasks:
+- it is required by both account navigation and later feature work,
+- it is reused by two or more post-navigation features,
+- it represents core safety or recovery behavior many tasks depend on.
 
-- tasks own goals and verification of business outcomes,
-- screen flows own reusable navigation between screens.
+Feature-local click paths should stay in the active feature plan until the reuse boundary is clear.
 
-If flows stay mixed into task plans, navigation logic will get duplicated quickly across login, castle selection, research, gathering, and campaign work.
+## 3. Why this remains separate
 
-## 4. Per-flow template
+Reusable screen flows are not the same thing as features:
 
-Each screen flow should follow one canonical template:
+- feature plans own bounded outcomes and end-to-end validation,
+- screen flows own reusable navigation guarantees between screens,
+- keeping flows central prevents login, chat, building, research, gathering, and campaign work from each re-describing the same navigation logic.
+
+## 4. Feature-driven expansion model
+
+Flow work should now be driven by bounded feature slices instead of by a separate horizontal backlog.
+
+Rules:
+
+- do not wait for a hypothetical fully completed flow catalog before implementing one bounded feature,
+- add or refine only the next reusable navigation increment required by the active feature or account-navigation slice,
+- when a feature discovers a path that is clearly reusable, promote it here and remove duplicate descriptions elsewhere,
+- if a path is still one-off, provisional, or poorly understood, keep it in the active feature plan until reuse is proven,
+- flow promotion must simplify the rest of the planning set, not create parallel descriptions.
+
+## 5. Promotion gate
+
+No feature-local navigation path should be promoted into this document until it passes the promotion gate.
+
+Required promotion conditions:
+
+- the path has a clearly reusable responsibility instead of serving only one temporary feature detail,
+- the source and destination guarantees are explicit,
+- the required selectors already exist canonically or have a defined selector-refinement increment,
+- the path has one owning canonical name,
+- the feature plan that discovered the path is updated to reference the canonical flow instead of restating it,
+- the promotion removes duplication from at least one other planning document,
+- the validation gate for the promoted flow is explicit.
+
+If a navigation path does not yet satisfy those conditions, it must stay feature-local until the boundary is clear.
+
+## 6. Per-flow template
+
+Each canonical flow should follow one template:
 
 ### Flow purpose
 
@@ -80,11 +115,11 @@ Each screen flow should follow one canonical template:
 
 - selectors required from the canonical registry,
 - OCR fields if any,
-- task types that consume this flow.
+- account-navigation or feature plans that consume the flow.
 
-## 5. Initial flow backlog
+## 7. Initial canonical flow backlog
 
-The first reusable flows to document and refine are:
+The first reusable flows to keep canonical here are:
 
 - `ensure_android_home()`
 - `ensure_pnc_foreground()`
@@ -95,27 +130,50 @@ The first reusable flows to document and refine are:
 - `close_blocking_popup()`
 - `return_to_safe_root_screen()`
 
-## 6. Relationship to task planning
+Additional flows should be added only when active feature work proves that they are genuinely reusable.
 
-Tasks in [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md) and [PNC_TASK_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_TASK_SUBPLAN.md) should consume these flows instead of re-describing their navigation every time.
+## 8. Relationship to feature planning
 
-If a task needs a new reusable navigation path, it should be added here first as a canonical flow, then referenced from the task sub-plan.
+Feature work defined through [PNC_TASK_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_TASK_SUBPLAN.md) should consume these flows instead of re-describing navigation in every feature plan.
 
-## 7. Relationship to automation orchestration
+If a feature needs a new reusable navigation path:
 
-This sub-plan should be consumed by [PNC_AUTOMATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_AUTOMATION_SUBPLAN.md), [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md), and [PNC_TASK_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_TASK_SUBPLAN.md). It must not redefine script-runner policy or task ownership.
+- first define the path as a candidate inside the active feature plan,
+- promote it here once the reuse boundary is clear,
+- then remove the duplicated navigation detail from the feature plan and replace it with a reference to the canonical flow.
 
-## 8. Relationship to selector refinement
+This keeps feature plans focused on feature-specific decisions, not on re-explaining shared navigation.
 
-Reusable flows in this file should rely on selectors that have been refined through [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SELECTOR_REFINEMENT_SUBPLAN.md), especially for unique building entry points and empty-slot construction flows.
+## 9. Relationship to account navigation
+
+[PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md) should continue consuming the canonical flows in this file for bootstrap, popup recovery, and castle targeting.
+
+If account navigation needs a reusable path that later features will also depend on, that path belongs here rather than as duplicated bootstrap-only logic.
+
+## 10. Relationship to automation orchestration
+
+This sub-plan should be consumed by [PNC_AUTOMATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_AUTOMATION_SUBPLAN.md), [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md), and the feature plans governed by [PNC_TASK_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_TASK_SUBPLAN.md).
+
+It must not redefine script-runner policy, task ownership, or feature-specific business rules.
+
+## 11. Relationship to selector refinement
+
+Reusable flows in this file should rely on selectors refined through [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SELECTOR_REFINEMENT_SUBPLAN.md).
 
 Rules:
 
 - a flow only depends on the selector slice required for that flow's current scope,
-- the selector registry is expected to grow flow by flow as new clickable UI elements become necessary,
-- each flow should request only its next required selector increment, not a blanket registry-completion milestone,
-- do not block flow design on a hypothetical fully completed registry; request the missing selectors for the specific reusable path being implemented.
+- selector growth should happen flow by flow as new clickable UI elements become necessary,
+- each flow should request only its next required selector increment,
+- do not block one bounded reusable flow on a hypothetical fully completed registry.
 
-## 9. Validation requirement
+## 12. Validation requirement
 
-Each reusable flow must define and pass its own validation gate before tasks depend on it broadly.
+Each reusable flow must define and pass its own validation gate before broad reuse.
+
+No flow should be treated as canonical only because one feature happened to use it once. Canonical status requires:
+
+- a clearly reusable responsibility,
+- explicit source and destination guarantees,
+- selectors mature enough for safe reuse,
+- validation evidence that the flow works from its supported entry states.
