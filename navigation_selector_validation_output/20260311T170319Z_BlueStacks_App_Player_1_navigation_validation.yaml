@@ -1,0 +1,14 @@
+summary:
+  passed: 0
+  failed: 1
+  skipped: 0
+results:
+- selector_id: PNC_BOTTOM_NAV_BAG
+  source_screen: PNC_HOME_CITY
+  status: failed
+  reason: Could not recover the live validation session to home city within the configured
+    step budget.
+  expected_target_screens:
+  - PNC_BAG
+  observed_selectors: []
+  source_artifact_path: C:\Users\lebel\pnc\artifacts\2026-03-11\k304_k304554ca2797\20260311T170219Z_navigation_validation_start.png

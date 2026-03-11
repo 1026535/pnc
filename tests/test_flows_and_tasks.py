@@ -74,6 +74,17 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertIsInstance(actions[0], KeyEventAction)
         self.assertEqual(actions[0].key_code, "KEYCODE_BACK")
 
+    def test_ensure_home_city_from_castle_selection_uses_back_navigation(self) -> None:
+        """Treats the Manage Char roster as a back-navigable root-adjacent screen."""
+
+        observation = make_observation(ScreenType.PNC_CASTLE_SELECTION)
+
+        actions = self.flows.ensure_home_city(observation)
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], KeyEventAction)
+        self.assertEqual(actions[0].key_code, "KEYCODE_BACK")
+
     def test_login_task_plans_username_and_password_entry(self) -> None:
         """Builds the expected credential-entry actions on the login screen."""
 
@@ -406,6 +417,34 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertEqual(len(actions), 1)
         self.assertIsInstance(actions[0], TapAction)
         self.assertEqual(actions[0].selector_id, UiElementId.PNC_BOTTOM_NAV_MORE)
+
+    def test_return_to_safe_root_screen_closes_more_settings_submenu_with_toggle(self) -> None:
+        """Uses the More toggle to exit the live submenu state that back turns into a popup loop."""
+
+        observation = make_observation(
+            ScreenType.PNC_MORE_MENU,
+            visible_ids=(UiElementId.PNC_BOTTOM_NAV_MORE, UiElementId.PNC_MORE_SETTINGS, UiElementId.PNC_MORE_MANAGE_CHAR),
+        )
+
+        actions = self.flows.return_to_safe_root_screen(observation)
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], TapAction)
+        self.assertEqual(actions[0].selector_id, UiElementId.PNC_BOTTOM_NAV_MORE)
+
+    def test_return_to_safe_root_screen_uses_top_left_back_for_fullscreen_more_settings(self) -> None:
+        """Uses the visible top-left back target when the full-screen Settings page hides the More toggle."""
+
+        observation = make_observation(
+            ScreenType.PNC_MORE_MENU,
+            visible_ids=(UiElementId.PNC_BACK_BUTTON_TOP_LEFT, UiElementId.PNC_MORE_MANAGE_CHAR),
+        )
+
+        actions = self.flows.return_to_safe_root_screen(observation)
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], TapAction)
+        self.assertEqual(actions[0].selector_id, UiElementId.PNC_BACK_BUTTON_TOP_LEFT)
 
     def test_select_castle_succeeds_on_lord_info_confirmation_for_target(self) -> None:
         """Treats the post-switch Lord Info confirmation as a terminal success condition."""

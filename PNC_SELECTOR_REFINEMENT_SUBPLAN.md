@@ -10,6 +10,7 @@ It is intentionally separate from:
 - [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md), which covers account-specific bootstrap and castle-targeting behavior,
 - [PNC_TASK_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_TASK_SUBPLAN.md), which covers concrete task behavior,
 - [PNC_SCREEN_FLOW_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SCREEN_FLOW_SUBPLAN.md), which covers reusable navigation flows,
+- [PNC_SPATIAL_SURFACE_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SPATIAL_SURFACE_SUBPLAN.md), which covers scrollable world-map and home-city spatial-surface modeling,
 - [PNC_AUTOMATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_AUTOMATION_SUBPLAN.md), which covers orchestration.
 
 This file owns the detailed work for former Phase 2 and Phase 2.5 from [PNC_AUTOMATION_IMPLEMENTATION.md](/c:/Users/lebel/pnc/PNC_AUTOMATION_IMPLEMENTATION.md).
@@ -321,6 +322,7 @@ The first high-value refinement targets are:
 - build and upgrade entry buttons,
 - academy and research entry points,
 - world-map gather entry points,
+- world-map fixed overlay selectors and spatial-surface parser fixtures requested by [PNC_SPATIAL_SURFACE_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SPATIAL_SURFACE_SUBPLAN.md),
 - popup close and confirmation buttons,
 - castle-selection entries and selection indicators,
 - replacing ad hoc OCR fallbacks with a shared text-anchor detector and evidence-based screen parsers,
@@ -365,4 +367,5 @@ If a selector is refined here, the canonical static selector catalog and selecto
 - [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md) must consume account-navigation-related selectors only after they are sufficiently refined here.
 - [PNC_TASK_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_TASK_SUBPLAN.md) must consume selectors only after the required selectors are sufficiently refined.
 - [PNC_SCREEN_FLOW_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SCREEN_FLOW_SUBPLAN.md) must reference the refined selectors for reusable navigation flows.
+- [PNC_SPATIAL_SURFACE_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SPATIAL_SURFACE_SUBPLAN.md) must request fixed overlay selector maturity and parser-fixture increments here rather than redefining registry ownership.
 - [PNC_AUTOMATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_AUTOMATION_SUBPLAN.md) must not redefine refinement rules; it only consumes the resulting registry quality level.

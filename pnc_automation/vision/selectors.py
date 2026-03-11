@@ -130,6 +130,7 @@ class SelectorDefinition:
     threshold: float = 0.98
     click: ClickDefinition | None = field(default_factory=ClickDefinition)
     relative_bounds: RelativeBounds | None = None
+    materialize_relative_bounds: bool = True
     ocr_region: Region | None = None
     click_outcomes: tuple[ClickOutcome, ...] = ()
     notes: tuple[str, ...] = ()
@@ -179,7 +180,11 @@ class SelectorRegistry:
         return tuple(
             selector.relative_bounds.materialize(selector_id=selector.id, image_size=image_size)
             for selector in self.for_screen(screen_type)
-            if selector.relative_bounds is not None and selector.id not in exclude_selector_ids
+            if (
+                selector.relative_bounds is not None
+                and selector.materialize_relative_bounds
+                and selector.id not in exclude_selector_ids
+            )
         )
 
 
@@ -217,6 +222,7 @@ def _create_selector_from_catalog_entry(*, selector: object, root: Path) -> Sele
             click=selector.click,
         ),
         relative_bounds=_create_relative_bounds(getattr(selector, "relative_bounds", None)),
+        materialize_relative_bounds=getattr(selector, "materialize_relative_bounds", True),
         click_outcomes=tuple(_create_click_outcome(outcome) for outcome in selector.click.outcomes) if selector.click is not None else (),
         notes=selector.notes,
     )
@@ -232,6 +238,7 @@ def _create_selector(
     interaction_kind: SelectorInteractionKind,
     click: ClickDefinition | None,
     relative_bounds: RelativeBounds | None,
+    materialize_relative_bounds: bool,
     click_outcomes: tuple[ClickOutcome, ...],
     notes: tuple[str, ...],
 ) -> SelectorDefinition:
@@ -247,6 +254,7 @@ def _create_selector(
             template_path=None,
             click=click,
             relative_bounds=relative_bounds,
+            materialize_relative_bounds=materialize_relative_bounds,
             click_outcomes=click_outcomes,
             notes=notes,
         )
@@ -261,6 +269,7 @@ def _create_selector(
             template_path=None,
             click=click,
             relative_bounds=relative_bounds,
+            materialize_relative_bounds=materialize_relative_bounds,
             click_outcomes=click_outcomes,
             notes=notes,
         )
@@ -274,6 +283,7 @@ def _create_selector(
         template_path=(root / f"{selector_id.value.lower()}.png") if detection_kind in {DetectionKind.TEMPLATE, DetectionKind.COLLECTION} else None,
         click=click,
         relative_bounds=relative_bounds,
+        materialize_relative_bounds=materialize_relative_bounds,
         click_outcomes=click_outcomes,
         notes=notes,
     )

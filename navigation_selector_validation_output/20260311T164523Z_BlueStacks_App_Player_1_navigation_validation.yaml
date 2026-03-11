@@ -1,0 +1,45 @@
+summary:
+  passed: 2
+  failed: 1
+  skipped: 0
+results:
+- selector_id: PNC_BOTTOM_NAV_BAG
+  source_screen: PNC_HOME_CITY
+  status: passed
+  reason: Observed destination matched a reviewed click outcome.
+  expected_target_screens:
+  - PNC_BAG
+  observed_selectors:
+  - PNC_BAG_MAIN_TAB_BAG
+  - PNC_BAG_USE_BUTTON
+  source_artifact_path: C:\Users\lebel\pnc\artifacts\2026-03-11\k304_k304554ca2797\20260311T164436Z_navigation_validation_1_before_case_1_post_action_1.png
+  destination_artifact_path: C:\Users\lebel\pnc\artifacts\2026-03-11\k304_k304554ca2797\20260311T164441Z_navigation_validation_1_tap_pnc_bottom_nav_bag_post_action_1.png
+  destination_screen: PNC_BAG
+  matched_target_screen: PNC_BAG
+- selector_id: PNC_BOTTOM_NAV_MORE
+  source_screen: PNC_HOME_CITY
+  status: passed
+  reason: Observed destination matched a reviewed click outcome.
+  expected_target_screens:
+  - PNC_MORE_MENU
+  - PNC_HOME_CITY
+  observed_selectors:
+  - PNC_BOTTOM_NAV_MORE
+  - PNC_MORE_MANAGE_CHAR
+  - PNC_MORE_SETTINGS
+  source_artifact_path: C:\Users\lebel\pnc\artifacts\2026-03-11\k304_k304554ca2797\20260311T164445Z_navigation_validation_2_before_case_1_post_action_1.png
+  destination_artifact_path: C:\Users\lebel\pnc\artifacts\2026-03-11\k304_k304554ca2797\20260311T164449Z_navigation_validation_2_tap_pnc_bottom_nav_more_post_action_1.png
+  destination_screen: PNC_MORE_MENU
+  matched_target_screen: PNC_MORE_MENU
+- selector_id: PNC_HOME_LORD_INFO_SHORTCUT
+  source_screen: PNC_HOME_CITY
+  status: failed
+  reason: Could not recover the live validation session to home city within the configured
+    step budget.
+  expected_target_screens:
+  - PNC_LORD_INFO
+  observed_selectors:
+  - PNC_BOTTOM_NAV_MORE
+  - PNC_MORE_MANAGE_CHAR
+  - PNC_MORE_SETTINGS
+  source_artifact_path: C:\Users\lebel\pnc\artifacts\2026-03-11\k304_k304554ca2797\20260311T164449Z_navigation_validation_2_tap_pnc_bottom_nav_more_post_action_1.png

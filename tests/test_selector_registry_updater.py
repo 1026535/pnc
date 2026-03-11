@@ -9,7 +9,12 @@ from pathlib import Path
 import yaml
 
 from pnc_automation.errors import SelectorResolutionError
-from pnc_automation.vision.selector_catalog import SelectorCatalogDocument, SelectorCatalogEntry, write_selector_catalog_document
+from pnc_automation.vision.selector_catalog import (
+    SelectorCatalogDocument,
+    SelectorCatalogEntry,
+    SelectorCatalogRelativeBounds,
+    write_selector_catalog_document,
+)
 from pnc_automation.vision.selector_registry_updater import (
     SelectorRegistryUpdate,
     apply_selector_updates,
@@ -154,6 +159,13 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                                 "screens": ["PNC_HOME_CITY", "PNC_BUILDING_DETAILS"],
                                 "status": "click_mapped",
                                 "detection_kind": "template",
+                                "interaction_kind": "navigation",
+                                "relative_bounds": {
+                                    "x_ratio": 0.1,
+                                    "y_ratio": 0.2,
+                                    "width_ratio": 0.3,
+                                    "height_ratio": 0.15,
+                                },
                                 "click": {
                                     "anchor": "center",
                                     "outcomes": [
@@ -190,6 +202,9 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
             self.assertEqual(result.added_ui_element_ids, ("PNC_HOME_CASTLE_BUILDING",))
 
             catalog = yaml.safe_load(catalog_path.read_text(encoding="utf-8"))
+            self.assertTrue(
+                catalog_path.read_text(encoding="utf-8").startswith("# `relative_bounds` is always normalized"),
+            )
             selector_by_id = {selector["id"]: selector for selector in catalog["selectors"]}
             self.assertEqual(
                 selector_by_id["PNC_HOME_BUILD_BUTTON"]["screens"],
@@ -197,6 +212,16 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
             )
             self.assertEqual(selector_by_id["PNC_HOME_BUILD_BUTTON"]["status"], "click_mapped")
             self.assertEqual(selector_by_id["PNC_HOME_BUILD_BUTTON"]["detection_kind"], "template")
+            self.assertEqual(selector_by_id["PNC_HOME_BUILD_BUTTON"]["interaction_kind"], "navigation")
+            self.assertEqual(
+                selector_by_id["PNC_HOME_BUILD_BUTTON"]["relative_bounds"],
+                {
+                    "x_ratio": 0.1,
+                    "y_ratio": 0.2,
+                    "width_ratio": 0.3,
+                    "height_ratio": 0.15,
+                },
+            )
             self.assertEqual(
                 selector_by_id["PNC_HOME_BUILD_BUTTON"]["click"]["outcomes"][0]["target_screen"],
                 "PNC_BUILDING_DETAILS",
@@ -206,6 +231,58 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                 '    PNC_HOME_CASTLE_BUILDING = "PNC_HOME_CASTLE_BUILDING"',
                 ui_element_id_path.read_text(encoding="utf-8"),
             )
+
+    def test_update_selector_registry_files_writes_materialize_relative_bounds_override(self) -> None:
+        """Persists explicit geometry-materialization overrides in the canonical catalog."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            spec_path = root / "updates.yaml"
+            catalog_path = self._write_catalog(
+                root,
+                selectors=(
+                    SelectorCatalogEntry(
+                        id="PNC_MORE_MANAGE_CHAR",
+                        screens=("PNC_MORE_MENU",),
+                        status="click_mapped",
+                        detection_kind="planned",
+                        relative_bounds=SelectorCatalogRelativeBounds(
+                            x_ratio=0.6,
+                            y_ratio=0.1,
+                            width_ratio=0.2,
+                            height_ratio=0.05,
+                        ),
+                    ),
+                ),
+            )
+            ui_element_id_path = self._write_ui_element_ids(root, selector_ids=("PNC_MORE_MANAGE_CHAR",))
+            spec_path.write_text(
+                yaml.safe_dump(
+                    {
+                        "selectors": [
+                            {
+                                "id": "PNC_MORE_MANAGE_CHAR",
+                                "screens": ["PNC_MORE_MENU"],
+                                "status": "click_mapped",
+                                "detection_kind": "planned",
+                                "materialize_relative_bounds": False,
+                            },
+                        ]
+                    },
+                    sort_keys=False,
+                ),
+                encoding="utf-8",
+                newline="\n",
+            )
+
+            update_selector_registry_files(
+                spec_path=spec_path,
+                catalog_path=catalog_path,
+                ui_element_id_path=ui_element_id_path,
+            )
+
+            selector_by_id = {selector["id"]: selector for selector in yaml.safe_load(catalog_path.read_text(encoding="utf-8"))["selectors"]}
+            self.assertFalse(selector_by_id["PNC_MORE_MANAGE_CHAR"]["materialize_relative_bounds"])
 
     def test_update_selector_registry_files_rejects_click_clearing(self) -> None:
         """Fails fast when an update tries to clear reviewed click metadata with `click: null`."""
@@ -232,6 +309,93 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                 "    status: click_mapped\n"
                 "    detection_kind: template\n"
                 "    click: null\n",
+                encoding="utf-8",
+                newline="\n",
+            )
+
+            with self.assertRaises(SelectorResolutionError):
+                update_selector_registry_files(
+                    spec_path=spec_path,
+                    catalog_path=catalog_path,
+                    ui_element_id_path=ui_element_id_path,
+                )
+
+    def test_update_selector_registry_files_rejects_relative_bounds_clearing(self) -> None:
+        """Fails fast when an update tries to clear relative geometry with `relative_bounds: null`."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            catalog_path = self._write_catalog(
+                root,
+                selectors=(
+                    SelectorCatalogEntry(
+                        id="PNC_HOME_BUILD_BUTTON",
+                        screens=("PNC_HOME_CITY",),
+                        status="click_mapped",
+                        detection_kind="template",
+                        interaction_kind="action",
+                        relative_bounds=SelectorCatalogRelativeBounds(
+                            x_ratio=0.1,
+                            y_ratio=0.2,
+                            width_ratio=0.3,
+                            height_ratio=0.15,
+                        ),
+                    ),
+                ),
+            )
+            ui_element_id_path = self._write_ui_element_ids(root, selector_ids=("PNC_HOME_BUILD_BUTTON",))
+            spec_path = root / "updates.yaml"
+            spec_path.write_text(
+                "selectors:\n"
+                "  - id: PNC_HOME_BUILD_BUTTON\n"
+                "    screens: [PNC_HOME_CITY]\n"
+                "    status: click_mapped\n"
+                "    detection_kind: template\n"
+                "    relative_bounds: null\n",
+                encoding="utf-8",
+                newline="\n",
+            )
+
+            with self.assertRaises(SelectorResolutionError):
+                update_selector_registry_files(
+                    spec_path=spec_path,
+                    catalog_path=catalog_path,
+                    ui_element_id_path=ui_element_id_path,
+                )
+
+    def test_update_selector_registry_files_rejects_unknown_interaction_kind(self) -> None:
+        """Fails fast when an update uses an interaction kind outside the supported enum."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            catalog_path = self._write_catalog(
+                root,
+                selectors=(
+                    SelectorCatalogEntry(
+                        id="PNC_HOME_BUILD_BUTTON",
+                        screens=("PNC_HOME_CITY",),
+                        status="screenshot_seeded",
+                        detection_kind="template",
+                    ),
+                ),
+            )
+            ui_element_id_path = self._write_ui_element_ids(root, selector_ids=("PNC_HOME_BUILD_BUTTON",))
+            spec_path = root / "updates.yaml"
+            spec_path.write_text(
+                yaml.safe_dump(
+                    {
+                        "selectors": [
+                            {
+                                "id": "PNC_HOME_BUILD_BUTTON",
+                                "screens": ["PNC_HOME_CITY"],
+                                "status": "screenshot_seeded",
+                                "detection_kind": "template",
+                                "interaction_kind": "not_supported",
+                            }
+                        ]
+                    },
+                    sort_keys=False,
+                ),
                 encoding="utf-8",
                 newline="\n",
             )

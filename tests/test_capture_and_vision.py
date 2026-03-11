@@ -30,6 +30,7 @@ from pnc_automation.vision.screen_classifier import ScreenClassifier
 from pnc_automation.vision.selectors import (
     ClickDefinition,
     DetectionKind,
+    RelativeBounds,
     Region,
     SelectorDefinition,
     SelectorRegistry,
@@ -233,7 +234,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="castle_selection",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=build_default_selector_registry(),
                 selector_engine=PillowSelectorEngine(
                     template_matcher=PillowTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
@@ -456,6 +457,45 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertTrue(observation.has(UiElementId.PNC_MORE_VIP))
             self.assertTrue(observation.has(UiElementId.PNC_MORE_IMPROVE_MIGHT))
             self.assertTrue(observation.has(UiElementId.PNC_BOTTOM_NAV_MORE))
+
+    def test_observation_builder_classifies_more_settings_submenu_with_top_left_back(self) -> None:
+        """Recognizes the full-screen Settings submenu and exposes the canonical back target."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (540, 960), (15, 28, 68)))),
+                artifact_directory="k304_more_settings_menu",
+                label="more_settings_menu_live_like",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Settings", x=112, y=20, width=128, height=28),
+                            _ocr_line("Account", x=120, y=94, width=102, height=24),
+                            _ocr_line("Manage Char.", x=304, y=94, width=134, height=24),
+                            _ocr_line("Search", x=122, y=188, width=88, height=24),
+                            _ocr_line("Rank", x=344, y=188, width=64, height=24),
+                            _ocr_line("Blacklist", x=320, y=374, width=104, height=24),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_MORE_MENU)
+            self.assertTrue(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
+            self.assertTrue(observation.has(UiElementId.PNC_MORE_MANAGE_CHAR))
+            self.assertFalse(observation.has(UiElementId.PNC_BOTTOM_NAV_MORE))
 
     def test_observation_builder_classifies_lord_info_and_extracts_displayed_name(self) -> None:
         """Recognizes the Lord Info screen and exposes the OCR-backed displayed lord name."""
@@ -834,6 +874,42 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("Savannah", x=68, y=113, width=94, height=22),
                             _ocr_line("$6.99", x=240, y=805, width=60, height=25),
                             _ocr_line("One-time", x=230, y=854, width=81, height=21),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_POPUP)
+            self.assertTrue(observation.blocking_popup)
+            self.assertTrue(observation.has(UiElementId.PNC_POPUP_CLOSE_BUTTON))
+
+    def test_observation_builder_classifies_top_up_offer_popup_from_ocr(self) -> None:
+        """Recognizes the observed top-up reward modal as a blocking popup with a close target."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (540, 960), (15, 28, 68)))),
+                artifact_directory="k230_top_up_popup",
+                label="top_up_offer_popup",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Complete 1st Top-up to Obtain Yune", x=72, y=352, width=382, height=68),
+                            _ocr_line("Obtain Now", x=176, y=500, width=180, height=28),
+                            _ocr_line("Claim Next Day", x=160, y=612, width=210, height=30),
+                            _ocr_line("Top Up", x=188, y=856, width=150, height=34),
                         )
                     )
                 ),
@@ -1242,6 +1318,90 @@ class CaptureAndVisionTests(unittest.TestCase):
         self.assertNotIn(UiElementId.PNC_HOME_RIGHT_RAIL_EVENT_CENTER_ICON, selector_engine.requested_selector_ids[0])
         self.assertIn(UiElementId.PNC_HOME_RIGHT_RAIL_EVENT_CENTER_ICON, selector_engine.requested_selector_ids[1])
         self.assertNotIn(UiElementId.PNC_BAG_MAIN_TAB_BAG, selector_engine.requested_selector_ids[1])
+
+    def test_observation_builder_keeps_click_only_geometry_hidden_without_detection(self) -> None:
+        """Does not auto-materialize relative click regions that still require explicit visibility proof."""
+
+        registry = SelectorRegistry(
+            selectors=(
+                SelectorDefinition(
+                    id=UiElementId.PNC_HOME_WORLD_SWITCH,
+                    screens=(ScreenType.PNC_HOME_CITY,),
+                    detection_kind=DetectionKind.TEMPLATE,
+                    status=SelectorStatus.SCREENSHOT_SEEDED,
+                    click=ClickDefinition(),
+                ),
+                SelectorDefinition(
+                    id=UiElementId.PNC_HOME_CHARACTER_PANEL,
+                    screens=(ScreenType.PNC_HOME_CITY,),
+                    detection_kind=DetectionKind.TEMPLATE,
+                    status=SelectorStatus.SCREENSHOT_SEEDED,
+                    click=ClickDefinition(),
+                ),
+                SelectorDefinition(
+                    id=UiElementId.PNC_HOME_RESEARCH_BUTTON,
+                    screens=(ScreenType.PNC_HOME_CITY,),
+                    detection_kind=DetectionKind.TEMPLATE,
+                    status=SelectorStatus.SCREENSHOT_SEEDED,
+                    click=ClickDefinition(),
+                ),
+                SelectorDefinition(
+                    id=UiElementId.PNC_HOME_BUILD_BUTTON,
+                    screens=(ScreenType.PNC_HOME_CITY,),
+                    detection_kind=DetectionKind.PLANNED,
+                    status=SelectorStatus.PLANNED,
+                    click=ClickDefinition(),
+                    relative_bounds=RelativeBounds(
+                        x_ratio=0.1,
+                        y_ratio=0.1,
+                        width_ratio=0.2,
+                        height_ratio=0.2,
+                    ),
+                    materialize_relative_bounds=False,
+                ),
+            )
+        )
+        selector_engine = _RecordingSelectorEngine(
+            responses=[
+                (
+                    SelectorMatch(
+                        selector_id=UiElementId.PNC_HOME_WORLD_SWITCH,
+                        bounds=Region(x=10, y=10, width=20, height=20),
+                        confidence=1.0,
+                    ),
+                    SelectorMatch(
+                        selector_id=UiElementId.PNC_HOME_CHARACTER_PANEL,
+                        bounds=Region(x=40, y=10, width=20, height=20),
+                        confidence=1.0,
+                    ),
+                    SelectorMatch(
+                        selector_id=UiElementId.PNC_HOME_RESEARCH_BUTTON,
+                        bounds=Region(x=70, y=10, width=20, height=20),
+                        confidence=1.0,
+                    ),
+                ),
+                (),
+            ]
+        )
+        builder = ObservationBuilder(
+            selector_registry=registry,
+            selector_engine=selector_engine,
+            screen_classifier=ScreenClassifier(),
+            enricher=DefaultObservationEnricher(),
+        )
+        screenshot = type(
+            "Captured",
+            (),
+            {
+                "image": Image.new("RGB", (100, 100), (0, 0, 0)),
+                "artifact": type("Artifact", (), {"path": Path("synthetic.png"), "captured_at": None})(),
+            },
+        )()
+
+        observation = builder.build(screenshot)
+
+        self.assertEqual(observation.screen_type, ScreenType.PNC_HOME_CITY)
+        self.assertFalse(observation.has(UiElementId.PNC_HOME_BUILD_BUTTON))
 
     def test_observation_service_syncs_castle_roster_cache_only_after_account_verification(self) -> None:
         """Persists discovered castle rosters only when the visible roster matches a trusted snapshot."""

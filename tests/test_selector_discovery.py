@@ -153,6 +153,10 @@ class SelectorDiscoveryTests(unittest.TestCase):
         self.assertEqual(probe.destination_screen_type, ScreenType.PNC_BAG)
         self.assertEqual(probe.draft_selector.status, "click_mapped")
         self.assertEqual(probe.draft_selector.detection_kind, "template")
+        self.assertEqual(probe.draft_selector.interaction_kind, "navigation")
+        self.assertIsNotNone(probe.draft_selector.relative_bounds)
+        self.assertEqual(probe.draft_selector.relative_bounds.x_ratio, 0.0)
+        self.assertEqual(probe.draft_selector.relative_bounds.width_ratio, 0.05)
         self.assertEqual(probe.draft_selector.click.anchor, "center")
         self.assertEqual(probe.draft_selector.click.outcomes[0].target_screen, "PNC_BAG")
         self.assertEqual(
