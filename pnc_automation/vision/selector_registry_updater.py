@@ -93,7 +93,9 @@ def apply_selector_updates(
                 screens=update.screens,
                 status=update.status,
                 detection_kind=update.detection_kind,
+                interaction_kind=None,
                 click=update.click,
+                relative_bounds=None,
                 notes=update.notes,
             )
             selector_order.append(update.id)
@@ -116,7 +118,9 @@ def apply_selector_updates(
                 screens=merged_screens,
                 status=promoted_status,
                 detection_kind=update.detection_kind,
+                interaction_kind=entry.interaction_kind,
                 click=merged_click,
+                relative_bounds=entry.relative_bounds,
                 notes=merged_notes,
             )
 

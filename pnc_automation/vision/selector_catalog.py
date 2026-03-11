@@ -10,6 +10,7 @@ from typing import Any, Callable
 import yaml
 
 from pnc_automation.errors import SelectorResolutionError
+from pnc_automation.vision.selector_interaction_kind import SelectorInteractionKind
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,6 +59,51 @@ class SelectorCatalogClickDefinition:
 
 
 @dataclass(frozen=True, slots=True)
+class SelectorCatalogRelativeBounds:
+    """Stores one screen-relative selector region as top-left plus size and optional tap point."""
+
+    x_ratio: float
+    y_ratio: float
+    width_ratio: float
+    height_ratio: float
+    action_x_ratio: float | None = None
+    action_y_ratio: float | None = None
+
+    def __post_init__(self) -> None:
+        """Rejects invalid ratio content before it reaches the runtime registry."""
+
+        _require_ratio(self.x_ratio, field_name="x_ratio", inclusive_zero=True)
+        _require_ratio(self.y_ratio, field_name="y_ratio", inclusive_zero=True)
+        _require_ratio(self.width_ratio, field_name="width_ratio", inclusive_zero=False)
+        _require_ratio(self.height_ratio, field_name="height_ratio", inclusive_zero=False)
+        if self.x_ratio + self.width_ratio > 1:
+            raise SelectorResolutionError("Selector relative_bounds x_ratio + width_ratio must not exceed 1.")
+        if self.y_ratio + self.height_ratio > 1:
+            raise SelectorResolutionError("Selector relative_bounds y_ratio + height_ratio must not exceed 1.")
+        if (self.action_x_ratio is None) != (self.action_y_ratio is None):
+            raise SelectorResolutionError(
+                "Selector relative_bounds must either declare both action ratios or neither one.",
+            )
+        if self.action_x_ratio is not None:
+            _require_ratio(self.action_x_ratio, field_name="action_x_ratio", inclusive_zero=True)
+            _require_ratio(self.action_y_ratio, field_name="action_y_ratio", inclusive_zero=True)
+
+    def to_document(self) -> dict[str, float]:
+        """Returns the YAML-ready representation of one relative selector region."""
+
+        document: dict[str, float] = {
+            "x_ratio": self.x_ratio,
+            "y_ratio": self.y_ratio,
+            "width_ratio": self.width_ratio,
+            "height_ratio": self.height_ratio,
+        }
+        if self.action_x_ratio is not None and self.action_y_ratio is not None:
+            document["action_x_ratio"] = self.action_x_ratio
+            document["action_y_ratio"] = self.action_y_ratio
+        return document
+
+
+@dataclass(frozen=True, slots=True)
 class SelectorCatalogEntry:
     """Represents one raw selector entry as stored in the static catalog document."""
 
@@ -65,7 +111,9 @@ class SelectorCatalogEntry:
     screens: tuple[str, ...]
     status: str
     detection_kind: str
+    interaction_kind: str | None = None
     click: SelectorCatalogClickDefinition | None = None
+    relative_bounds: SelectorCatalogRelativeBounds | None = None
     notes: tuple[str, ...] = ()
 
     def to_document(self) -> dict[str, object]:
@@ -77,8 +125,12 @@ class SelectorCatalogEntry:
             "status": self.status,
             "detection_kind": self.detection_kind,
         }
+        if self.interaction_kind is not None:
+            document["interaction_kind"] = self.interaction_kind
         if self.click is not None:
             document["click"] = self.click.to_document()
+        if self.relative_bounds is not None:
+            document["relative_bounds"] = self.relative_bounds.to_document()
         if self.notes:
             document["notes"] = list(self.notes)
         return document
@@ -98,6 +150,7 @@ class SelectorCatalogDocument:
         if duplicates:
             raise SelectorResolutionError("Duplicate selector ids are not allowed in the selector catalog.", duplicates=sorted(duplicates))
         validate_selector_catalog_references(self)
+        validate_selector_catalog_interactions(self)
 
     def to_document(self) -> dict[str, object]:
         """Returns the YAML-ready representation of the full selector catalog."""
@@ -155,8 +208,23 @@ def _load_selector_entries(value: object) -> tuple[SelectorCatalogEntry, ...]:
             context=f"selector '{selector_id}' detection_kind",
             document_label="selector catalog",
         )
+        interaction_kind = (
+            require_selector_schema_string(
+                mapping.get("interaction_kind"),
+                context=f"selector '{selector_id}' interaction_kind",
+                document_label="selector catalog",
+            )
+            if "interaction_kind" in mapping
+            else None
+        )
         click = load_selector_schema_click_definition(
             mapping.get("click"),
+            selector_id=selector_id,
+            document_label="selector catalog",
+            selector_label="selector",
+        )
+        relative_bounds = load_selector_schema_relative_bounds(
+            mapping.get("relative_bounds"),
             selector_id=selector_id,
             document_label="selector catalog",
             selector_label="selector",
@@ -174,7 +242,9 @@ def _load_selector_entries(value: object) -> tuple[SelectorCatalogEntry, ...]:
                 screens=screens,
                 status=status,
                 detection_kind=detection_kind,
+                interaction_kind=interaction_kind,
                 click=click,
+                relative_bounds=relative_bounds,
                 notes=notes,
             )
         )
@@ -197,6 +267,46 @@ def validate_selector_catalog_references(document: SelectorCatalogDocument) -> N
                         selector_id=selector.id,
                         verification_selector=verification_selector,
                     )
+
+
+def validate_selector_catalog_interactions(document: SelectorCatalogDocument) -> None:
+    """Rejects selector interaction metadata that contradicts the declared click contract."""
+
+    for selector in document.selectors:
+        interaction_kind_name = selector.interaction_kind
+        if interaction_kind_name is None:
+            continue
+        try:
+            interaction_kind = SelectorInteractionKind(interaction_kind_name)
+        except ValueError as error:
+            raise SelectorResolutionError(
+                "Selector interaction kinds must use a supported value.",
+                selector_id=selector.id,
+                interaction_kind=interaction_kind_name,
+            ) from error
+        if interaction_kind == SelectorInteractionKind.UNKNOWN:
+            continue
+        if interaction_kind == SelectorInteractionKind.NAVIGATION:
+            click = selector.click
+            if click is None or not click.outcomes:
+                raise SelectorResolutionError(
+                    "Navigation selectors must declare reviewed click outcomes.",
+                    selector_id=selector.id,
+                    interaction_kind=interaction_kind.value,
+                )
+            if not any(outcome.target_screen is not None for outcome in click.outcomes):
+                raise SelectorResolutionError(
+                    "Navigation selectors must declare at least one target_screen outcome.",
+                    selector_id=selector.id,
+                    interaction_kind=interaction_kind.value,
+                )
+            continue
+        if interaction_kind == SelectorInteractionKind.LABEL and selector.click is not None:
+            raise SelectorResolutionError(
+                "Label selectors must not declare click metadata.",
+                selector_id=selector.id,
+                interaction_kind=interaction_kind.value,
+            )
 
 
 def load_selector_schema_click_definition(
@@ -314,6 +424,60 @@ def load_selector_schema_click_outcomes(
     return tuple(loaded_outcomes)
 
 
+def load_selector_schema_relative_bounds(
+    value: object,
+    *,
+    selector_id: str,
+    document_label: str,
+    selector_label: str,
+) -> SelectorCatalogRelativeBounds | None:
+    """Loads optional screen-relative selector geometry from one YAML mapping."""
+
+    if value is None:
+        return None
+    mapping = require_selector_schema_mapping(
+        value,
+        context=f"{selector_label} '{selector_id}' relative_bounds",
+        document_label=document_label,
+    )
+    return SelectorCatalogRelativeBounds(
+        x_ratio=require_selector_schema_number(
+            mapping.get("x_ratio"),
+            context=f"{selector_label} '{selector_id}' relative_bounds x_ratio",
+            document_label=document_label,
+        ),
+        y_ratio=require_selector_schema_number(
+            mapping.get("y_ratio"),
+            context=f"{selector_label} '{selector_id}' relative_bounds y_ratio",
+            document_label=document_label,
+        ),
+        width_ratio=require_selector_schema_number(
+            mapping.get("width_ratio"),
+            context=f"{selector_label} '{selector_id}' relative_bounds width_ratio",
+            document_label=document_label,
+        ),
+        height_ratio=require_selector_schema_number(
+            mapping.get("height_ratio"),
+            context=f"{selector_label} '{selector_id}' relative_bounds height_ratio",
+            document_label=document_label,
+        ),
+        action_x_ratio=None
+        if "action_x_ratio" not in mapping
+        else require_selector_schema_number(
+            mapping.get("action_x_ratio"),
+            context=f"{selector_label} '{selector_id}' relative_bounds action_x_ratio",
+            document_label=document_label,
+        ),
+        action_y_ratio=None
+        if "action_y_ratio" not in mapping
+        else require_selector_schema_number(
+            mapping.get("action_y_ratio"),
+            context=f"{selector_label} '{selector_id}' relative_bounds action_y_ratio",
+            document_label=document_label,
+        ),
+    )
+
+
 def load_selector_schema_string_sequence(
     value: object,
     *,
@@ -358,3 +522,22 @@ def require_selector_schema_bool(value: object, *, context: str, document_label:
     if not isinstance(value, bool):
         raise SelectorResolutionError(f"Expected a boolean in the {document_label}.", context=context)
     return value
+
+
+def require_selector_schema_number(value: object, *, context: str, document_label: str) -> float:
+    """Returns one YAML numeric scalar or raises when the loaded content is invalid."""
+
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise SelectorResolutionError(f"Expected a number in the {document_label}.", context=context)
+    return float(value)
+
+
+def _require_ratio(value: float, *, field_name: str, inclusive_zero: bool) -> None:
+    """Rejects ratios outside the supported normalized range."""
+
+    if inclusive_zero:
+        if not 0 <= value <= 1:
+            raise SelectorResolutionError("Selector relative_bounds ratios must stay within [0, 1].", field_name=field_name)
+        return
+    if not 0 < value <= 1:
+        raise SelectorResolutionError("Selector relative_bounds sizes must stay within (0, 1].", field_name=field_name)

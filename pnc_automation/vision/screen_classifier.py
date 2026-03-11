@@ -191,6 +191,21 @@ class ScreenClassifier:
                 required_all=frozenset({UiElementId.ANDROID_HOME_PNC_ICON}),
             ),
         )
+        self._probe_selector_ids = tuple(
+            sorted(
+                {
+                    UiElementId.PNC_POPUP_CLOSE_BUTTON,
+                    *(selector_id for rule in self._rules for selector_id in rule.required_all),
+                    *(selector_id for rule in self._rules for selector_id in rule.required_any),
+                },
+                key=lambda selector_id: selector_id.value,
+            )
+        )
+
+    def probe_selector_ids(self) -> tuple[UiElementId, ...]:
+        """Returns the small selector set needed for the initial classification pass."""
+
+        return self._probe_selector_ids
 
     def classify(
         self,
