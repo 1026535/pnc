@@ -62,6 +62,13 @@ class ResolvedCredentials:
     password_ref: str | None = None
 
 
+class CastleRosterOrdering(StrEnum):
+    """Describes whether a cached castle roster preserves trustworthy in-game ordering."""
+
+    UNKNOWN = "unknown"
+    FULL_SCAN = "full_scan"
+
+
 @dataclass(frozen=True, slots=True)
 class AccountConfig:
     """Represents one automation target bound to one emulator instance and one identified P&C login."""
@@ -91,6 +98,13 @@ class PncAccountCastleRosterConfig:
 
     pnc_account_id: str
     castles: tuple[SelectedCastleConfig, ...]
+    ordering: CastleRosterOrdering = CastleRosterOrdering.UNKNOWN
+
+    @property
+    def has_trusted_ordering(self) -> bool:
+        """Returns whether the cached roster can drive directional off-screen scrolling."""
+
+        return self.ordering == CastleRosterOrdering.FULL_SCAN
 
 
 @dataclass(frozen=True, slots=True)

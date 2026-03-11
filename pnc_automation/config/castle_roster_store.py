@@ -7,7 +7,7 @@ from pathlib import Path
 
 import yaml
 
-from pnc_automation.config.models import PncAccountCastleRosterConfig, SelectedCastleConfig
+from pnc_automation.config.models import CastleRosterOrdering, PncAccountCastleRosterConfig, SelectedCastleConfig
 from pnc_automation.errors import ConfigurationError
 
 
@@ -17,7 +17,7 @@ class CastleRosterStore:
 
     path: Path
     rosters: tuple[PncAccountCastleRosterConfig, ...] = ()
-    _castle_maps: dict[str, dict[tuple[str, str], SelectedCastleConfig]] = field(init=False, repr=False)
+    _rosters_by_account: dict[str, PncAccountCastleRosterConfig] = field(init=False, repr=False)
     _account_order: list[str] = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -25,15 +25,18 @@ class CastleRosterStore:
 
         self.path = self.path.resolve()
         self._account_order = []
-        self._castle_maps = {}
+        self._rosters_by_account = {}
         for roster in self.rosters:
             self._account_order.append(roster.pnc_account_id)
-            self._castle_maps[roster.pnc_account_id] = {
-                (castle.kingdom, castle.castle_name): castle
-                for castle in roster.castles
-            }
+            self._rosters_by_account[roster.pnc_account_id] = roster
 
-    def sync(self, pnc_account_id: str, castles: tuple[SelectedCastleConfig, ...]) -> PncAccountCastleRosterConfig:
+    def sync(
+        self,
+        pnc_account_id: str,
+        castles: tuple[SelectedCastleConfig, ...],
+        *,
+        ordering: CastleRosterOrdering = CastleRosterOrdering.UNKNOWN,
+    ) -> PncAccountCastleRosterConfig:
         """Merges discovered castles into the cache and persists the canonical YAML file."""
 
         if pnc_account_id.strip() == "":
@@ -44,28 +47,21 @@ class CastleRosterStore:
                 pnc_account_id=pnc_account_id,
             )
 
-        existing_map = dict(self._castle_maps.get(pnc_account_id, {}))
-        merged_map = dict(existing_map)
-        for castle in castles:
-            castle_key = (castle.kingdom, castle.castle_name)
-            merged_map[castle_key] = _merge_castle(existing_map.get(castle_key), castle)
-
-        if pnc_account_id not in self._castle_maps:
+        existing_roster = self._rosters_by_account.get(pnc_account_id)
+        merged_roster = _merge_roster(existing_roster, pnc_account_id=pnc_account_id, castles=castles, ordering=ordering)
+        if pnc_account_id not in self._rosters_by_account:
             self._account_order.append(pnc_account_id)
-        if existing_map == merged_map:
-            return PncAccountCastleRosterConfig(pnc_account_id=pnc_account_id, castles=tuple(merged_map.values()))
+        if existing_roster == merged_roster:
+            return merged_roster
 
-        self._castle_maps[pnc_account_id] = merged_map
+        self._rosters_by_account[pnc_account_id] = merged_roster
         self._write()
-        return PncAccountCastleRosterConfig(pnc_account_id=pnc_account_id, castles=tuple(merged_map.values()))
+        return merged_roster
 
     def get(self, pnc_account_id: str) -> PncAccountCastleRosterConfig | None:
         """Returns one cached roster when it exists."""
 
-        castle_map = self._castle_maps.get(pnc_account_id)
-        if castle_map is None:
-            return None
-        return PncAccountCastleRosterConfig(pnc_account_id=pnc_account_id, castles=tuple(castle_map.values()))
+        return self._rosters_by_account.get(pnc_account_id)
 
     def _write(self) -> None:
         """Writes the current cache to disk using the canonical YAML schema."""
@@ -75,7 +71,8 @@ class CastleRosterStore:
             "pnc_accounts": [
                 {
                     "pnc_account_id": pnc_account_id,
-                    "castles": [_serialize_castle(castle) for castle in self._castle_maps.get(pnc_account_id, {}).values()],
+                    "ordering": self._rosters_by_account[pnc_account_id].ordering.value,
+                    "castles": [_serialize_castle(castle) for castle in self._rosters_by_account[pnc_account_id].castles],
                 }
                 for pnc_account_id in self._account_order
             ]
@@ -94,6 +91,107 @@ def _merge_castle(existing: SelectedCastleConfig | None, discovered: SelectedCas
         castle_name=discovered.castle_name,
         castle_level=discovered.castle_level if discovered.castle_level is not None else existing.castle_level,
     )
+
+
+def _merge_roster(
+    existing: PncAccountCastleRosterConfig | None,
+    *,
+    pnc_account_id: str,
+    castles: tuple[SelectedCastleConfig, ...],
+    ordering: CastleRosterOrdering,
+) -> PncAccountCastleRosterConfig:
+    """Builds the next canonical roster snapshot from one observed castle window."""
+
+    if ordering == CastleRosterOrdering.FULL_SCAN:
+        return _merge_full_scan(existing, pnc_account_id=pnc_account_id, castles=castles)
+
+    existing_castles = () if existing is None else existing.castles
+    merged_castles = _merge_partial_window(existing_castles, castles)
+    merged_ordering = _merge_partial_ordering(existing, castles)
+    return PncAccountCastleRosterConfig(
+        pnc_account_id=pnc_account_id,
+        castles=merged_castles,
+        ordering=merged_ordering,
+    )
+
+
+def _merge_full_scan(
+    existing: PncAccountCastleRosterConfig | None,
+    *,
+    pnc_account_id: str,
+    castles: tuple[SelectedCastleConfig, ...],
+) -> PncAccountCastleRosterConfig:
+    """Replaces one roster using a deterministic full-scan ordering."""
+
+    existing_map = {} if existing is None else _castle_map(existing.castles)
+    merged_castles = tuple(_merge_castle(existing_map.get(_castle_key(castle)), castle) for castle in castles)
+    return PncAccountCastleRosterConfig(
+        pnc_account_id=pnc_account_id,
+        castles=merged_castles,
+        ordering=CastleRosterOrdering.FULL_SCAN,
+    )
+
+
+def _merge_partial_window(
+    existing_castles: tuple[SelectedCastleConfig, ...],
+    castles: tuple[SelectedCastleConfig, ...],
+) -> tuple[SelectedCastleConfig, ...]:
+    """Updates one roster window without inventing canonical ordering."""
+
+    merged_order: list[SelectedCastleConfig] = list(existing_castles)
+    existing_indexes = {_castle_key(castle): index for index, castle in enumerate(existing_castles)}
+    for castle in castles:
+        castle_key = _castle_key(castle)
+        if castle_key in existing_indexes:
+            merged_order[existing_indexes[castle_key]] = _merge_castle(merged_order[existing_indexes[castle_key]], castle)
+            continue
+        existing_indexes[castle_key] = len(merged_order)
+        merged_order.append(castle)
+    return tuple(merged_order)
+
+
+def _merge_partial_ordering(
+    existing: PncAccountCastleRosterConfig | None,
+    castles: tuple[SelectedCastleConfig, ...],
+) -> CastleRosterOrdering:
+    """Preserves full-scan ordering only while partial updates remain compatible."""
+
+    if existing is None or not existing.has_trusted_ordering:
+        return CastleRosterOrdering.UNKNOWN
+    existing_keys = {_castle_key(castle) for castle in existing.castles}
+    observed_keys = tuple(_castle_key(castle) for castle in castles)
+    if any(castle_key not in existing_keys for castle_key in observed_keys):
+        return CastleRosterOrdering.UNKNOWN
+    if not _is_in_order_subsequence(tuple(_castle_key(castle) for castle in existing.castles), observed_keys):
+        return CastleRosterOrdering.UNKNOWN
+    return CastleRosterOrdering.FULL_SCAN
+
+
+def _castle_map(castles: tuple[SelectedCastleConfig, ...]) -> dict[tuple[str, str], SelectedCastleConfig]:
+    """Indexes castle identities by their stable kingdom/name key."""
+
+    return {_castle_key(castle): castle for castle in castles}
+
+
+def _castle_key(castle: SelectedCastleConfig) -> tuple[str, str]:
+    """Returns the stable storage key for one castle identity."""
+
+    return (castle.kingdom, castle.castle_name)
+
+
+def _is_in_order_subsequence(
+    ordering: tuple[tuple[str, str], ...],
+    observed: tuple[tuple[str, str], ...],
+) -> bool:
+    """Returns whether one partial observation preserves the known canonical ordering."""
+
+    next_index = 0
+    for castle_key in observed:
+        try:
+            next_index = ordering.index(castle_key, next_index) + 1
+        except ValueError:
+            return False
+    return True
 
 
 def _serialize_castle(castle: SelectedCastleConfig) -> dict[str, str | int]:

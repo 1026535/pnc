@@ -76,6 +76,26 @@ class TextAnchorTests(unittest.TestCase):
         self.assertEqual(kingdom_anchor.metadata_value("kingdom"), "K230")
         self.assertEqual(castle_level_anchor.metadata_value("castle_level"), 11)
 
+    def test_text_anchor_detector_accepts_merged_kingdom_labels_without_matching_castle_names(self) -> None:
+        """Parses merged `K313Kingdom` OCR while rejecting castle-name rows that only start with a kingdom token."""
+
+        detector = TextAnchorDetector()
+
+        anchors = detector.detect(
+            OcrResult(
+                lines=(
+                    OcrLine(text="K313Kingdom", bounds=Region(x=20, y=40, width=120, height=20), confidence=0.99),
+                    OcrLine(text="ColdDukeOfTheNorth", bounds=Region(x=20, y=70, width=180, height=20), confidence=0.99),
+                    OcrLine(text="K304554ca2797", bounds=Region(x=20, y=100, width=140, height=20), confidence=0.99),
+                ),
+                words=(),
+            )
+        )
+
+        kingdom_anchors = tuple(anchor for anchor in anchors if anchor.id == TextAnchorId.KINGDOM)
+        self.assertEqual(len(kingdom_anchors), 1)
+        self.assertEqual(kingdom_anchors[0].metadata_value("kingdom"), "K313")
+
 
 if __name__ == "__main__":
     unittest.main()

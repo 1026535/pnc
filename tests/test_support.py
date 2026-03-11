@@ -10,7 +10,7 @@ from typing import Any
 
 from PIL import Image
 
-from pnc_automation.config.models import SelectedCastleConfig
+from pnc_automation.config.models import PncAccountCastleRosterConfig, SelectedCastleConfig
 from pnc_automation.pnc.observation import Bounds, DetectedListEntry, ListEntryKind, Observation, VisibleElement
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
@@ -73,6 +73,8 @@ def make_observation(
     current_castle_name: str | None = None,
     current_castle: SelectedCastleConfig | None = None,
     current_pnc_account_id: str | None = None,
+    verified_pnc_account_id: str | None = None,
+    castle_roster_snapshot: PncAccountCastleRosterConfig | None = None,
     available_march_slots: int | None = None,
     artifact_path: Path | None = None,
 ) -> Observation:
@@ -89,6 +91,8 @@ def make_observation(
         blocking_popup=blocking_popup,
         current_castle=current_castle or _make_current_castle(current_castle_name),
         current_pnc_account_id=current_pnc_account_id,
+        verified_pnc_account_id=verified_pnc_account_id,
+        castle_roster_snapshot=castle_roster_snapshot,
         available_march_slots=available_march_slots,
         artifact_path=artifact_path,
         image_size=(200, 100),

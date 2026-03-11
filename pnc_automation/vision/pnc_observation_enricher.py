@@ -36,6 +36,57 @@ _HOME_ACTION_SELECTOR_BY_TEXT_ANCHOR = {
     TextAnchorId.LABEL_RESEARCH: UiElementId.PNC_HOME_RESEARCH_BUTTON,
     TextAnchorId.LABEL_CAMPAIGN: UiElementId.PNC_HOME_CAMPAIGN_ENTRY,
 }
+_MORE_OVERLAY_SELECTOR_BY_TEXT = {
+    "SETTINGS": UiElementId.PNC_MORE_SETTINGS,
+}
+_MORE_MENU_SELECTOR_BY_TEXT = {
+    "MANAGECHAR": UiElementId.PNC_MORE_MANAGE_CHAR,
+    "LORDINFO": UiElementId.PNC_MORE_LORD_INFO,
+    "VIP": UiElementId.PNC_MORE_VIP,
+    "IMPROVEMIGHT": UiElementId.PNC_MORE_IMPROVE_MIGHT,
+}
+_MORE_MENU_SUPPORT_TEXTS = frozenset(
+    {
+        "RANK",
+        "FRIEND",
+        "GUIDES",
+        "SETTINGS",
+    }
+)
+_LORD_INFO_TAB_TEXTS = frozenset(
+    {
+        "BOOSTINFO",
+        "ALLIANCEINFO",
+        "ACHIEVEMENTS",
+    }
+)
+_LORD_INFO_EXCLUDED_NAME_TEXTS = frozenset(
+    {
+        "LORDINFO",
+        "GEAR",
+        "GEM",
+        "SAURGEM",
+        "WARSIGIL",
+        "SAURGIL",
+        "WARSET",
+        "BUILDERSET",
+        "TECHSET",
+        "TRAINERGEAR",
+        "TALENT",
+        "BOOSTINFO",
+        "ALLIANCEINFO",
+        "ACHIEVEMENTS",
+    }
+)
+_VIP_SUPPORT_TEXTS = frozenset(
+    {
+        "GETPTS",
+        "CURRENT",
+        "NEXTLEVEL",
+        "VIP1",
+        "VIP2",
+    }
+)
 _HOME_CITY_EVIDENCE_SELECTOR_IDS = frozenset(
     {
         UiElementId.PNC_HOME_BUILD_BUTTON,
@@ -47,6 +98,11 @@ _HOME_CITY_EVIDENCE_SELECTOR_IDS = frozenset(
         UiElementId.PNC_HOME_TOP_RESOURCE_WOOD,
         UiElementId.PNC_HOME_TOP_RESOURCE_DIAMOND,
     }
+)
+_HOME_SHORTCUT_SPECS = (
+    (UiElementId.PNC_HOME_LORD_INFO_SHORTCUT, 0.02, 0.04, 0.14, 0.09, 0.11, 0.075),
+    (UiElementId.PNC_HOME_VIP_SHORTCUT, 0.15, 0.04, 0.15, 0.08, 0.23, 0.07),
+    (UiElementId.PNC_HOME_IMPROVE_MIGHT_SHORTCUT, 0.29, 0.04, 0.15, 0.09, 0.355, 0.08),
 )
 _POPUP_PRIMARY_ACTION_ANCHOR_IDS = frozenset(
     {
@@ -191,7 +247,23 @@ class PncObservationEnricher:
             account_switch = _build_account_switch_additions(image=image, lines=lines)
             if account_switch is not None:
                 return account_switch
-        if screen_type not in {ScreenType.UNKNOWN, ScreenType.PNC_CASTLE_SELECTION}:
+        if screen_type in {ScreenType.UNKNOWN, ScreenType.PNC_LORD_INFO}:
+            lord_info = _build_lord_info_additions(image=image, lines=lines)
+            if lord_info is not None:
+                return lord_info
+        if screen_type in {ScreenType.UNKNOWN, ScreenType.PNC_VIP}:
+            vip = _build_vip_additions(image=image, lines=lines)
+            if vip is not None:
+                return vip
+        if screen_type in {ScreenType.UNKNOWN, ScreenType.PNC_IMPROVE_MIGHT}:
+            improve_might = _build_improve_might_additions(image=image, lines=lines)
+            if improve_might is not None:
+                return improve_might
+        if screen_type in {ScreenType.UNKNOWN, ScreenType.PNC_HOME_CITY, ScreenType.PNC_MORE_MENU}:
+            more_menu = _build_more_menu_additions(image=image, lines=lines, anchors=anchors)
+            if more_menu is not None:
+                return more_menu
+        if screen_type not in {ScreenType.UNKNOWN, ScreenType.PNC_CASTLE_SELECTION, ScreenType.PNC_HOME_CITY, ScreenType.PNC_MORE_MENU}:
             return ObservationAdditions()
         building_detail = _build_building_detail_additions(image=image, lines=lines, anchors=anchors)
         if building_detail is not None:
@@ -608,6 +680,159 @@ def _build_building_detail_additions(
     )
 
 
+def _build_more_menu_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+    anchors: tuple[DetectedTextAnchor, ...],
+) -> ObservationAdditions | None:
+    """Returns the More overlay when OCR exposes multiple More-menu actions."""
+
+    visible_elements: dict[UiElementId, VisibleElement] = {}
+    for normalized_text, selector_id in _MORE_OVERLAY_SELECTOR_BY_TEXT.items():
+        line = _find_line_with_normalized_text(
+            lines=lines,
+            normalized_text=normalized_text,
+            min_y=int(image.height * 0.82),
+        )
+        if line is None:
+            continue
+        visible_elements[selector_id] = _make_visible_from_more_overlay_line(
+            image=image,
+            selector_id=selector_id,
+            line=line,
+        )
+    for normalized_text, selector_id in _MORE_MENU_SELECTOR_BY_TEXT.items():
+        line = _find_line_with_normalized_text(lines=lines, normalized_text=normalized_text)
+        if line is None:
+            continue
+        visible_elements[selector_id] = _make_visible_from_line(selector_id=selector_id, line=line)
+    more_anchor = next(
+        (
+            anchor
+            for anchor in anchors
+            if anchor.id == TextAnchorId.LABEL_MORE and anchor.bounds.y >= int(image.height * 0.86)
+        ),
+        None,
+    )
+    if more_anchor is not None:
+        visible_elements[UiElementId.PNC_BOTTOM_NAV_MORE] = _make_visible_from_bottom_nav_anchor(
+            image=image,
+            selector_id=UiElementId.PNC_BOTTOM_NAV_MORE,
+            anchor=more_anchor,
+        )
+    support_count = sum(1 for line in lines if normalize_ocr_text(line.text) in _MORE_MENU_SUPPORT_TEXTS)
+    if support_count + len(visible_elements) < 3:
+        return None
+    return ObservationAdditions(
+        visible_elements=visible_elements,
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_MORE_MENU, "ocr_more_menu_overlay"),),
+    )
+
+
+def _build_lord_info_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Returns the Lord Info screen and the visible lord name label when OCR matches the profile layout."""
+
+    header = _find_line_with_normalized_text(
+        lines=lines,
+        normalized_text="LORDINFO",
+        max_y=int(image.height * 0.08),
+    )
+    if header is None:
+        return None
+    tab_count = sum(1 for line in lines if normalize_ocr_text(line.text) in _LORD_INFO_TAB_TEXTS)
+    if tab_count < 2:
+        return None
+    name_line = _find_lord_info_name_line(image=image, lines=lines)
+    if name_line is None:
+        return None
+    return ObservationAdditions(
+        visible_elements={
+            UiElementId.PNC_LORD_INFO_HEADER: _make_visible_from_line(
+                selector_id=UiElementId.PNC_LORD_INFO_HEADER,
+                line=header,
+            ),
+            UiElementId.PNC_LORD_INFO_NAME_LABEL: _make_visible_from_line(
+                selector_id=UiElementId.PNC_LORD_INFO_NAME_LABEL,
+                line=name_line,
+            ),
+        },
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_LORD_INFO, "ocr_lord_info"),),
+        current_castle=_lord_info_name_to_current_castle(name_line.text),
+    )
+
+
+def _build_vip_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Returns the VIP screen when OCR matches the live VIP benefits layout."""
+
+    header = _find_line_with_normalized_text(
+        lines=lines,
+        normalized_text="VIP",
+        max_y=int(image.height * 0.08),
+    )
+    if header is None:
+        return None
+    support_count = sum(1 for line in lines if normalize_ocr_text(line.text) in _VIP_SUPPORT_TEXTS)
+    if support_count < 3:
+        return None
+    return ObservationAdditions(
+        visible_elements={
+            UiElementId.PNC_VIP_HEADER: _make_visible_from_line(
+                selector_id=UiElementId.PNC_VIP_HEADER,
+                line=header,
+            )
+        },
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_VIP, "ocr_vip_screen"),),
+    )
+
+
+def _build_improve_might_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Returns the Improve Might screen when OCR matches the guided-upgrade prompt."""
+
+    header = _find_line_with_normalized_text(
+        lines=lines,
+        normalized_text="IMPROVEMIGHT",
+        min_y=int(image.height * 0.12),
+        max_y=int(image.height * 0.35),
+    )
+    if header is None:
+        return None
+    improve_line = _find_line_with_normalized_text(
+        lines=lines,
+        normalized_text="IMPROVE",
+        min_y=header.bounds.y,
+        max_y=int(image.height * 0.45),
+    )
+    support_line = _find_line_matching(
+        lines=lines,
+        predicate=lambda line: "IMPROVEMIGHT" in normalize_ocr_text(line.text),
+        min_y=int(image.height * 0.6),
+    )
+    if improve_line is None or support_line is None:
+        return None
+    return ObservationAdditions(
+        visible_elements={
+            UiElementId.PNC_IMPROVE_MIGHT_HEADER: _make_visible_from_line(
+                selector_id=UiElementId.PNC_IMPROVE_MIGHT_HEADER,
+                line=header,
+            )
+        },
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_IMPROVE_MIGHT, "ocr_improve_might_screen"),),
+    )
+
+
 def _build_home_city_additions(
     *,
     image: Image.Image,
@@ -635,8 +860,9 @@ def _build_home_city_additions(
     visible_home_action_elements = _build_home_action_additions(image=image, anchors=anchors)
     if not visible_home_action_elements and _HOME_CITY_EVIDENCE_SELECTOR_IDS.isdisjoint(visible_elements):
         return None
+    visible_home_shortcuts = _build_home_shortcut_additions(image=image)
     return ObservationAdditions(
-        visible_elements=visible_nav_elements | visible_home_action_elements,
+        visible_elements=visible_nav_elements | visible_home_action_elements | visible_home_shortcuts,
         screen_evidence=(ScreenEvidence(ScreenType.PNC_HOME_CITY, "bottom_nav_and_home_actions"),),
     )
 
@@ -887,6 +1113,41 @@ def _find_line_matching(
     return None
 
 
+def _find_lord_info_name_line(*, image: Image.Image, lines: tuple[OcrLine, ...]) -> OcrLine | None:
+    """Returns the displayed lord name from the Lord Info profile band."""
+
+    min_y = int(image.height * 0.6)
+    max_y = int(image.height * 0.72)
+    candidates = [
+        line
+        for line in lines
+        if _looks_like_lord_info_name(line) and min_y <= line.bounds.y <= max_y
+    ]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda line: len(normalize_ocr_text(line.text)))
+
+
+def _looks_like_lord_info_name(line: OcrLine) -> bool:
+    """Returns whether one OCR line looks like the dynamic lord name in the profile view."""
+
+    normalized_text = normalize_ocr_text(line.text)
+    if normalized_text == "" or normalized_text in _LORD_INFO_EXCLUDED_NAME_TEXTS:
+        return False
+    if any(token in line.text for token in ("/", ":", "$")):
+        return False
+    return len(normalized_text) >= 5
+
+
+def _lord_info_name_to_current_castle(name_text: str) -> SelectedCastleConfig:
+    """Converts the displayed Lord Info name into the current-castle identity signal."""
+
+    return SelectedCastleConfig(
+        kingdom="",
+        castle_name=name_text.strip(),
+    )
+
+
 def _is_research_tree_support_line(line: OcrLine) -> bool:
     """Returns whether one OCR line looks like a research-node label or progress counter."""
 
@@ -1072,6 +1333,29 @@ def _build_home_action_additions(
     return visible_elements
 
 
+def _build_home_shortcut_additions(
+    *,
+    image: Image.Image,
+) -> dict[UiElementId, VisibleElement]:
+    """Returns fixed home-city shortcut tap targets validated from live top-left probes."""
+
+    visible_elements: dict[UiElementId, VisibleElement] = {}
+    for selector_id, left_ratio, top_ratio, width_ratio, height_ratio, action_x_ratio, action_y_ratio in _HOME_SHORTCUT_SPECS:
+        left = int(image.width * left_ratio)
+        top = int(image.height * top_ratio)
+        width = max(1, int(image.width * width_ratio))
+        height = max(1, int(image.height * height_ratio))
+        visible_elements[selector_id] = _make_visible(
+            selector_id=selector_id,
+            x=left,
+            y=top,
+            width=width,
+            height=height,
+            action_point=(int(image.width * action_x_ratio), int(image.height * action_y_ratio)),
+        )
+    return visible_elements
+
+
 def _is_home_action_anchor(
     *,
     image: Image.Image,
@@ -1185,6 +1469,19 @@ def _make_visible_from_anchor(*, selector_id: UiElementId, anchor: DetectedTextA
     )
 
 
+def _make_visible_from_line(*, selector_id: UiElementId, line: OcrLine) -> VisibleElement:
+    """Builds one derived visible element from one OCR line region."""
+
+    return _make_visible(
+        selector_id=selector_id,
+        x=line.bounds.x,
+        y=line.bounds.y,
+        width=line.bounds.width,
+        height=line.bounds.height,
+        extracted_text=line.text,
+    )
+
+
 def _make_visible_from_bottom_nav_anchor(
     *,
     image: Image.Image,
@@ -1206,6 +1503,31 @@ def _make_visible_from_bottom_nav_anchor(
         width=target_width,
         height=target_height,
         extracted_text=anchor.text,
+        action_point=action_point,
+    )
+
+
+def _make_visible_from_more_overlay_line(
+    *,
+    image: Image.Image,
+    selector_id: UiElementId,
+    line: OcrLine,
+) -> VisibleElement:
+    """Builds one More-overlay action target with a tap point raised above the footer label."""
+
+    label_center_x = line.bounds.x + (line.bounds.width // 2)
+    target_width = max(line.bounds.width + 36, int(image.width * 0.12))
+    target_height = max(line.bounds.height + 72, int(image.height * 0.07))
+    target_left = min(max(0, label_center_x - (target_width // 2)), max(0, image.width - target_width))
+    target_top = max(0, line.bounds.y - int(target_height * 0.8))
+    action_point = (label_center_x, max(0, line.bounds.y - max(24, line.bounds.height)))
+    return _make_visible(
+        selector_id=selector_id,
+        x=target_left,
+        y=target_top,
+        width=target_width,
+        height=target_height,
+        extracted_text=line.text,
         action_point=action_point,
     )
 

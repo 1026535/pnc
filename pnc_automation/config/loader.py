@@ -13,6 +13,7 @@ from pnc_automation.config.models import (
     AccountConfig,
     AppConfig,
     BlueStacksInstanceConfig,
+    CastleRosterOrdering,
     CredentialSource,
     DefaultsConfig,
     PncAccountCastleRosterConfig,
@@ -167,6 +168,10 @@ def _load_castle_rosters(path: Path) -> tuple[PncAccountCastleRosterConfig, ...]
             PncAccountCastleRosterConfig(
                 pnc_account_id=_require_string(roster.get("pnc_account_id"), context=f"pnc_accounts[{index}].pnc_account_id"),
                 castles=castles,
+                ordering=_load_castle_roster_ordering(
+                    roster.get("ordering"),
+                    context=f"pnc_accounts[{index}].ordering",
+                ),
             )
         )
     return tuple(rosters)
@@ -188,6 +193,22 @@ def _load_castle_entry(raw_castle: Any, *, context: str) -> SelectedCastleConfig
         castle_name=_require_string(raw.get("castle_name"), context=f"{context}.castle_name"),
         castle_level=None if level_value is None else _require_int(level_value, context=f"{context}.castle_level"),
     )
+
+
+def _load_castle_roster_ordering(value: Any, *, context: str) -> CastleRosterOrdering:
+    """Loads the explicit roster-ordering metadata used by directional castle scrolling."""
+
+    if value is None:
+        return CastleRosterOrdering.UNKNOWN
+    raw_value = _require_string(value, context=context)
+    try:
+        return CastleRosterOrdering(raw_value)
+    except ValueError as error:
+        raise ConfigurationError(
+            f"Expected {context} to be one of {[ordering.value for ordering in CastleRosterOrdering]}.",
+            context=context,
+            ordering=raw_value,
+        ) from error
 
 
 def _load_credentials(raw_account: Mapping[str, Any], env: Mapping[str, str], *, index: int) -> ResolvedCredentials | None:

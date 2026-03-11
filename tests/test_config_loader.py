@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 
 from pnc_automation.config.loader import load_app_config
-from pnc_automation.config.models import CredentialSource
+from pnc_automation.config.models import CastleRosterOrdering, CredentialSource
 from pnc_automation.errors import ConfigurationError
 
 
@@ -220,6 +220,7 @@ class ConfigLoaderTests(unittest.TestCase):
                     """
                     pnc_accounts:
                       - pnc_account_id: inline_user
+                        ordering: full_scan
                         castles:
                           - kingdom: K230
                             castle_name: Main
@@ -235,6 +236,7 @@ class ConfigLoaderTests(unittest.TestCase):
             self.assertEqual(len(config.castle_rosters), 1)
             self.assertEqual(config.castle_rosters[0].pnc_account_id, "inline_user")
             self.assertEqual(len(config.castle_rosters[0].castles), 2)
+            self.assertEqual(config.castle_rosters[0].ordering, CastleRosterOrdering.FULL_SCAN)
             self.assertEqual(config.castle_roster_path, castles_path.resolve())
 
     def test_load_app_config_rejects_mixed_inline_and_environment_credentials(self) -> None:
@@ -382,6 +384,50 @@ class ConfigLoaderTests(unittest.TestCase):
                         castles:
                           - kingdom: K230
                             castle_name: Main
+                          - kingdom: K230
+                            castle_name: Main
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(ConfigurationError):
+                load_app_config(config_path)
+
+    def test_load_app_config_rejects_unknown_castle_roster_ordering(self) -> None:
+        """Rejects roster cache files that claim an unsupported ordering mode."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            config_path = root / "accounts.yaml"
+            castles_path = root / "castles.yaml"
+            config_path.write_text(
+                textwrap.dedent(
+                    """
+                    instances:
+                      - id: bs-main
+                        device_id: 127.0.0.1:5555
+                        app_package: com.global.tmslg
+                    accounts:
+                      - id: account_a
+                        instance_id: bs-main
+                        pnc_account_id: inline_user
+                        username: inline_user
+                        password: inline_pass
+                        selected_castle:
+                          kingdom: K230
+                          castle_name: Main
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+            castles_path.write_text(
+                textwrap.dedent(
+                    """
+                    pnc_accounts:
+                      - pnc_account_id: inline_user
+                        ordering: guessed
+                        castles:
                           - kingdom: K230
                             castle_name: Main
                     """

@@ -35,7 +35,7 @@ from pnc_automation.vision.selectors import (
     SelectorStatus,
 )
 from pnc_automation.vision.template_matcher import PillowTemplateMatcher
-from tests.test_support import build_png_bytes
+from tests.test_support import build_png_bytes, make_observation
 
 
 class _FakeScreenshotSession:
@@ -85,6 +85,21 @@ class _FakeOcrService:
         """Returns newline-joined OCR text for the requested region."""
 
         return "\n".join(line.text for line in self.read_lines(image, region))
+
+
+@dataclass(slots=True)
+class _SequencedObservationBuilder:
+    """Returns a pre-seeded sequence of built observations."""
+
+    observations: list
+
+    def build(self, screenshot: object) -> object:
+        """Returns the next queued observation for one capture request."""
+
+        del screenshot
+        if not self.observations:
+            raise AssertionError("No observation queued for ObservationService.")
+        return self.observations.pop(0)
 
 
 class CaptureAndVisionTests(unittest.TestCase):
@@ -367,6 +382,167 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertEqual(observation.screen_type, ScreenType.PNC_LOADING)
             self.assertFalse(observation.has(UiElementId.PNC_LOADING_RECONNECT_BUTTON))
 
+    def test_observation_builder_classifies_more_menu_and_exposes_requested_actions(self) -> None:
+        """Recognizes More-related overlays and exposes both the footer Settings action and direct menu entries."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                artifact_directory="k304_more_menu",
+                label="more_menu_live_like",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Manage Char", x=78, y=1330, width=178, height=34),
+                            _ocr_line("Lord Info", x=315, y=1332, width=154, height=34),
+                            _ocr_line("VIP", x=562, y=1333, width=58, height=34),
+                            _ocr_line("Improve Might", x=690, y=1330, width=184, height=34),
+                            _ocr_line("Rank", x=105, y=1444, width=72, height=31),
+                            _ocr_line("Friend", x=318, y=1444, width=88, height=31),
+                            _ocr_line("Guides", x=520, y=1444, width=91, height=31),
+                            _ocr_line("Settings", x=742, y=1444, width=112, height=31),
+                            _ocr_line("More", x=794, y=1567, width=71, height=27),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_MORE_MENU)
+            self.assertTrue(observation.has(UiElementId.PNC_MORE_SETTINGS))
+            self.assertTrue(observation.has(UiElementId.PNC_MORE_MANAGE_CHAR))
+            self.assertTrue(observation.has(UiElementId.PNC_MORE_LORD_INFO))
+            self.assertTrue(observation.has(UiElementId.PNC_MORE_VIP))
+            self.assertTrue(observation.has(UiElementId.PNC_MORE_IMPROVE_MIGHT))
+            self.assertTrue(observation.has(UiElementId.PNC_BOTTOM_NAV_MORE))
+
+    def test_observation_builder_classifies_lord_info_and_extracts_displayed_name(self) -> None:
+        """Recognizes the Lord Info screen and exposes the OCR-backed displayed lord name."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                artifact_directory="k304_lord_info",
+                label="lord_info_live_like",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Lord Info", x=184, y=20, width=208, height=48),
+                            _ocr_line("Gear", x=52, y=111, width=83, height=42),
+                            _ocr_line("K304554ca2797", x=240, y=1048, width=210, height=27),
+                            _ocr_line("Talent", x=68, y=1560, width=82, height=28),
+                            _ocr_line("Lord Info", x=220, y=1559, width=114, height=30),
+                            _ocr_line("Boost Info", x=386, y=1561, width=124, height=27),
+                            _ocr_line("Alliance Info", x=561, y=1561, width=120, height=26),
+                            _ocr_line("Achievements", x=731, y=1567, width=115, height=17),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_LORD_INFO)
+            self.assertTrue(observation.has(UiElementId.PNC_LORD_INFO_HEADER))
+            self.assertEqual(
+                observation.require(UiElementId.PNC_LORD_INFO_NAME_LABEL).extracted_text,
+                "K304554ca2797",
+            )
+            self.assertEqual(observation.current_castle_name, "K304554ca2797")
+
+    def test_observation_builder_classifies_vip_from_live_like_ocr(self) -> None:
+        """Recognizes the VIP benefits screen from its header and support text."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                artifact_directory="k304_vip",
+                label="vip_live_like",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("VIP", x=180, y=19, width=83, height=48),
+                            _ocr_line("Get Pts", x=741, y=254, width=108, height=31),
+                            _ocr_line("Current", x=177, y=409, width=98, height=29),
+                            _ocr_line("Next Level", x=612, y=410, width=128, height=27),
+                            _ocr_line("VIP 1", x=180, y=460, width=89, height=36),
+                            _ocr_line("VIP 2", x=625, y=457, width=101, height=41),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_VIP)
+            self.assertTrue(observation.has(UiElementId.PNC_VIP_HEADER))
+
+    def test_observation_builder_classifies_improve_might_from_live_like_ocr(self) -> None:
+        """Recognizes the Improve Might prompt from its title and explanatory guidance."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                artifact_directory="k304_improve_might",
+                label="improve_might_live_like",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Improve Might", x=296, y=352, width=307, height=49),
+                            _ocr_line("Improve", x=685, y=494, width=122, height=37),
+                            _ocr_line("Can also train units, research techs, upgrade buildings,", x=86, y=1164, width=729, height=36),
+                            _ocr_line("or craft traps to improve Might.", x=236, y=1196, width=426, height=30),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_IMPROVE_MIGHT)
+            self.assertTrue(observation.has(UiElementId.PNC_IMPROVE_MIGHT_HEADER))
+
     def test_observation_builder_rejects_reconnect_without_loading_support(self) -> None:
         """Keeps isolated reconnect text unknown so bootstrap recovery stays conservative."""
 
@@ -521,6 +697,9 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertTrue(observation.has(UiElementId.PNC_BOTTOM_NAV_ALLIANCE))
             self.assertTrue(observation.has(UiElementId.PNC_BOTTOM_NAV_MORE))
             self.assertTrue(observation.has(UiElementId.PNC_HOME_BUILD_BUTTON))
+            self.assertTrue(observation.has(UiElementId.PNC_HOME_LORD_INFO_SHORTCUT))
+            self.assertTrue(observation.has(UiElementId.PNC_HOME_VIP_SHORTCUT))
+            self.assertTrue(observation.has(UiElementId.PNC_HOME_IMPROVE_MIGHT_SHORTCUT))
 
     def test_observation_builder_classifies_live_like_home_city_when_build_anchor_is_left_aligned(self) -> None:
         """Recognizes home city when the live Build button sits on the left rail instead of the lower action band."""
@@ -560,6 +739,7 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertTrue(observation.has(UiElementId.PNC_HOME_BUILD_BUTTON))
             self.assertTrue(observation.has(UiElementId.PNC_BOTTOM_NAV_ALLIANCE))
             self.assertTrue(observation.has(UiElementId.PNC_BOTTOM_NAV_MORE))
+            self.assertTrue(observation.has(UiElementId.PNC_HOME_LORD_INFO_SHORTCUT))
 
     def test_observation_builder_classifies_blocking_popup_over_home_city_from_ocr(self) -> None:
         """Promotes centered modal cancel buttons into the canonical blocking-popup selector."""
@@ -944,8 +1124,8 @@ class CaptureAndVisionTests(unittest.TestCase):
                 self.assertFalse(observation.has(UiElementId.PNC_BOTTOM_NAV_ALLIANCE))
                 self.assertFalse(observation.has(UiElementId.PNC_HOME_BUILD_BUTTON))
 
-    def test_observation_service_syncs_castle_roster_cache_from_castle_selection(self) -> None:
-        """Persists discovered castle rosters when the Manage Char screen is observed."""
+    def test_observation_service_syncs_castle_roster_cache_only_after_account_verification(self) -> None:
+        """Persists discovered castle rosters only when the visible roster matches a trusted snapshot."""
 
         with tempfile.TemporaryDirectory() as temp_directory:
             root = Path(temp_directory)
@@ -980,7 +1160,10 @@ class CaptureAndVisionTests(unittest.TestCase):
                 rosters=(
                     PncAccountCastleRosterConfig(
                         pnc_account_id="inline_user",
-                        castles=(SelectedCastleConfig(kingdom="K230", castle_name="Lv.5 Hellhound", castle_level=8),),
+                        castles=(
+                            SelectedCastleConfig(kingdom="K230", castle_name="Lv.5 Hellhound", castle_level=8),
+                            SelectedCastleConfig(kingdom="K226", castle_name="please b gentle", castle_level=10),
+                        ),
                     ),
                 ),
             )
@@ -993,14 +1176,104 @@ class CaptureAndVisionTests(unittest.TestCase):
                 castle_roster_store=roster_store,
             )
 
-            service.observe("scan")
+            observation = service.observe("scan")
 
             persisted = (root / "castles.yaml").read_text(encoding="utf-8")
+            self.assertEqual(observation.verified_pnc_account_id, "inline_user")
             self.assertIn("inline_user", persisted)
+            self.assertIn("ordering: unknown", persisted)
             self.assertIn("Lv.5 Hellhound", persisted)
             self.assertIn("castle_level: 9", persisted)
             self.assertIn("please b gentle", persisted)
             self.assertIn("castle_level: 11", persisted)
+
+    def test_observation_service_does_not_sync_castle_roster_cache_without_account_verification(self) -> None:
+        """Leaves the cache untouched when the visible castle roster cannot prove account ownership."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            image = Image.new("RGB", (480, 854), (15, 28, 68))
+            for x in range(410, 470):
+                for y in range(520, 590):
+                    image.putpixel((x, y), (40, 200, 70))
+            observation_builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Manage Char.", x=132, y=18, width=152, height=24),
+                            _ocr_line("K230 Kingdom", x=98, y=494, width=128, height=18),
+                            _ocr_line("Lv.5 Hellhound", x=99, y=522, width=139, height=19),
+                            _ocr_line("Castle Level 9", x=98, y=549, width=126, height=18),
+                        )
+                    )
+                ),
+            )
+            roster_store = CastleRosterStore(
+                path=root / "castles.yaml",
+                rosters=(
+                    PncAccountCastleRosterConfig(
+                        pnc_account_id="inline_user",
+                        castles=(SelectedCastleConfig(kingdom="K999", castle_name="Other Castle", castle_level=1),),
+                    ),
+                ),
+            )
+            service = ObservationService(
+                screenshot_service=screenshot_service,
+                observation_builder=observation_builder,
+                session=_FakeScreenshotSession(_encode_png(image)),
+                artifact_directory="k230_lv_5_hellhound",
+                pnc_account_id="inline_user",
+                castle_roster_store=roster_store,
+            )
+
+            observation = service.observe("scan")
+
+            self.assertIsNone(observation.verified_pnc_account_id)
+            self.assertFalse((root / "castles.yaml").exists())
+
+    def test_observation_service_carries_lord_info_castle_name_back_to_home_adjacent_screens(self) -> None:
+        """Keeps the last Lord Info castle name on home and More screens until the switch flow starts."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            payload = _encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))
+            service = ObservationService(
+                screenshot_service=screenshot_service,
+                observation_builder=_SequencedObservationBuilder(
+                    observations=[
+                        make_observation(ScreenType.PNC_LORD_INFO, current_castle_name="K304554ca2797"),
+                        make_observation(ScreenType.PNC_HOME_CITY, visible_ids=(UiElementId.PNC_BOTTOM_NAV_MORE,)),
+                        make_observation(ScreenType.PNC_MORE_MENU, visible_ids=(UiElementId.PNC_MORE_MANAGE_CHAR,)),
+                        make_observation(
+                            ScreenType.PNC_CASTLE_SELECTION,
+                            current_castle=SelectedCastleConfig(kingdom="K313", castle_name="K313alpha"),
+                        ),
+                        make_observation(ScreenType.PNC_HOME_CITY, visible_ids=(UiElementId.PNC_BOTTOM_NAV_MORE,)),
+                    ]
+                ),
+                session=_FakeScreenshotSession(payload),
+                artifact_directory="k304_validation",
+            )
+
+            lord_info = service.observe("lord_info")
+            home_city = service.observe("home_city")
+            more_menu = service.observe("more_menu")
+            castle_selection = service.observe("castle_selection")
+            post_switch_home = service.observe("post_switch_home")
+
+            self.assertEqual(lord_info.current_castle_name, "K304554ca2797")
+            self.assertEqual(home_city.current_castle_name, "K304554ca2797")
+            self.assertEqual(more_menu.current_castle_name, "K304554ca2797")
+            self.assertEqual(castle_selection.current_castle_name, "K313alpha")
+            self.assertIsNone(post_switch_home.current_castle)
 
 
 def _ocr_line(text: str, *, x: int, y: int, width: int, height: int) -> OcrLine:
