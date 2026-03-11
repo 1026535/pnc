@@ -99,11 +99,6 @@ _HOME_CITY_EVIDENCE_SELECTOR_IDS = frozenset(
         UiElementId.PNC_HOME_TOP_RESOURCE_DIAMOND,
     }
 )
-_HOME_SHORTCUT_SPECS = (
-    (UiElementId.PNC_HOME_LORD_INFO_SHORTCUT, 0.02, 0.04, 0.14, 0.09, 0.11, 0.075),
-    (UiElementId.PNC_HOME_VIP_SHORTCUT, 0.15, 0.04, 0.15, 0.08, 0.23, 0.07),
-    (UiElementId.PNC_HOME_IMPROVE_MIGHT_SHORTCUT, 0.29, 0.04, 0.15, 0.09, 0.355, 0.08),
-)
 _POPUP_PRIMARY_ACTION_ANCHOR_IDS = frozenset(
     {
         TextAnchorId.LABEL_CONFIRM,
@@ -506,7 +501,7 @@ def _build_login_additions(
     image: Image.Image,
     lines: tuple[OcrLine, ...],
 ) -> ObservationAdditions | None:
-    """Returns login-screen selectors and the visible username when OCR matches the credential form."""
+    """Returns login-screen evidence and the visible username when OCR matches the credential form."""
 
     username_label = _find_line_matching(
         lines=lines,
@@ -534,30 +529,12 @@ def _build_login_additions(
         label_line=username_label,
         next_line=password_label,
     )
-    password_field = _build_labeled_field(
-        image=image,
-        selector_id=UiElementId.PNC_LOGIN_PASSWORD_FIELD,
-        label_line=password_label,
-        next_line=submit_line,
-    )
     current_pnc_account_id = _find_account_identifier(
         lines=lines,
         min_y=username_field.bounds.y,
         max_y=username_field.bounds.y + username_field.bounds.height,
     )
     return ObservationAdditions(
-        visible_elements={
-            UiElementId.PNC_LOGIN_USERNAME_FIELD: username_field,
-            UiElementId.PNC_LOGIN_PASSWORD_FIELD: password_field,
-            UiElementId.PNC_LOGIN_SUBMIT_BUTTON: _make_visible(
-                selector_id=UiElementId.PNC_LOGIN_SUBMIT_BUTTON,
-                x=max(0, submit_line.bounds.x - max(16, submit_line.bounds.width // 2)),
-                y=max(0, submit_line.bounds.y - max(12, submit_line.bounds.height // 2)),
-                width=submit_line.bounds.width + max(32, submit_line.bounds.width),
-                height=submit_line.bounds.height + max(20, submit_line.bounds.height),
-                extracted_text=submit_line.text,
-            ),
-        },
         screen_evidence=(ScreenEvidence(ScreenType.PNC_LOGIN, "ocr_login_form"),),
         current_pnc_account_id=current_pnc_account_id,
     )
@@ -568,7 +545,7 @@ def _build_account_switch_additions(
     image: Image.Image,
     lines: tuple[OcrLine, ...],
 ) -> ObservationAdditions | None:
-    """Returns account-switch actions and the visible account identifier when OCR matches the chooser."""
+    """Returns account-switch evidence and the visible account identifier when OCR matches the chooser."""
 
     header = _find_line_matching(
         lines=lines,
@@ -590,27 +567,7 @@ def _build_account_switch_additions(
     if continue_line is None and change_account_line is None:
         return None
 
-    visible_elements: dict[UiElementId, VisibleElement] = {}
-    if continue_line is not None:
-        visible_elements[UiElementId.PNC_ACCOUNT_SWITCH_CONTINUE_BUTTON] = _make_visible(
-            selector_id=UiElementId.PNC_ACCOUNT_SWITCH_CONTINUE_BUTTON,
-            x=max(0, continue_line.bounds.x - max(16, continue_line.bounds.width // 2)),
-            y=max(0, continue_line.bounds.y - max(12, continue_line.bounds.height // 2)),
-            width=continue_line.bounds.width + max(32, continue_line.bounds.width),
-            height=continue_line.bounds.height + max(20, continue_line.bounds.height),
-            extracted_text=continue_line.text,
-        )
-    if change_account_line is not None:
-        visible_elements[UiElementId.PNC_ACCOUNT_SWITCH_CHANGE_ACCOUNT_BUTTON] = _make_visible(
-            selector_id=UiElementId.PNC_ACCOUNT_SWITCH_CHANGE_ACCOUNT_BUTTON,
-            x=max(0, change_account_line.bounds.x - max(16, change_account_line.bounds.width // 2)),
-            y=max(0, change_account_line.bounds.y - max(12, change_account_line.bounds.height // 2)),
-            width=change_account_line.bounds.width + max(32, change_account_line.bounds.width),
-            height=change_account_line.bounds.height + max(20, change_account_line.bounds.height),
-            extracted_text=change_account_line.text,
-        )
     return ObservationAdditions(
-        visible_elements=visible_elements,
         screen_evidence=(ScreenEvidence(ScreenType.PNC_ACCOUNT_SWITCH, "ocr_account_switch"),),
         current_pnc_account_id=_find_account_identifier(
             lines=lines,
@@ -860,9 +817,8 @@ def _build_home_city_additions(
     visible_home_action_elements = _build_home_action_additions(image=image, anchors=anchors)
     if not visible_home_action_elements and _HOME_CITY_EVIDENCE_SELECTOR_IDS.isdisjoint(visible_elements):
         return None
-    visible_home_shortcuts = _build_home_shortcut_additions(image=image)
     return ObservationAdditions(
-        visible_elements=visible_nav_elements | visible_home_action_elements | visible_home_shortcuts,
+        visible_elements=visible_nav_elements | visible_home_action_elements,
         screen_evidence=(ScreenEvidence(ScreenType.PNC_HOME_CITY, "bottom_nav_and_home_actions"),),
     )
 
@@ -1330,29 +1286,6 @@ def _build_home_action_additions(
         if not _is_home_action_anchor(image=image, anchor=anchor, selector_id=selector_id):
             continue
         visible_elements[selector_id] = _make_visible_from_anchor(selector_id=selector_id, anchor=anchor)
-    return visible_elements
-
-
-def _build_home_shortcut_additions(
-    *,
-    image: Image.Image,
-) -> dict[UiElementId, VisibleElement]:
-    """Returns fixed home-city shortcut tap targets validated from live top-left probes."""
-
-    visible_elements: dict[UiElementId, VisibleElement] = {}
-    for selector_id, left_ratio, top_ratio, width_ratio, height_ratio, action_x_ratio, action_y_ratio in _HOME_SHORTCUT_SPECS:
-        left = int(image.width * left_ratio)
-        top = int(image.height * top_ratio)
-        width = max(1, int(image.width * width_ratio))
-        height = max(1, int(image.height * height_ratio))
-        visible_elements[selector_id] = _make_visible(
-            selector_id=selector_id,
-            x=left,
-            y=top,
-            width=width,
-            height=height,
-            action_point=(int(image.width * action_x_ratio), int(image.height * action_y_ratio)),
-        )
     return visible_elements
 
 

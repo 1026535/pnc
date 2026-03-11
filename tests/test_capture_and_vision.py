@@ -5,7 +5,7 @@ from __future__ import annotations
 import io
 import tempfile
 import unittest
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from PIL import Image
@@ -23,6 +23,7 @@ from pnc_automation.vision.observation_builder import (
     ObservationService,
     PillowSelectorEngine,
 )
+from pnc_automation.vision.image_models import SelectorMatch
 from pnc_automation.vision.ocr_service import OcrLine, OcrResult, UnavailableOcrService
 from pnc_automation.vision.pnc_observation_enricher import PncObservationEnricher
 from pnc_automation.vision.screen_classifier import ScreenClassifier
@@ -33,6 +34,7 @@ from pnc_automation.vision.selectors import (
     SelectorDefinition,
     SelectorRegistry,
     SelectorStatus,
+    build_default_selector_registry,
 )
 from pnc_automation.vision.template_matcher import PillowTemplateMatcher
 from tests.test_support import build_png_bytes, make_observation
@@ -100,6 +102,29 @@ class _SequencedObservationBuilder:
         if not self.observations:
             raise AssertionError("No observation queued for ObservationService.")
         return self.observations.pop(0)
+
+
+@dataclass(slots=True)
+class _RecordingSelectorEngine:
+    """Records selector-engine requests so observation scans stay scoped."""
+
+    responses: list[tuple[SelectorMatch, ...]]
+    requested_selector_ids: list[tuple[UiElementId, ...]] = field(default_factory=list)
+
+    def detect(
+        self,
+        image: Image.Image,
+        registry: SelectorRegistry,
+        *,
+        selector_ids: tuple[UiElementId, ...] | None = None,
+    ) -> tuple[SelectorMatch, ...]:
+        """Records one selector request and returns the queued response."""
+
+        del image, registry
+        self.requested_selector_ids.append(()) if selector_ids is None else self.requested_selector_ids.append(tuple(selector_ids))
+        if not self.responses:
+            raise AssertionError("No selector-engine response queued.")
+        return self.responses.pop(0)
 
 
 class CaptureAndVisionTests(unittest.TestCase):
@@ -252,7 +277,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="login_live_like",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=build_default_selector_registry(),
                 selector_engine=PillowSelectorEngine(
                     template_matcher=PillowTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
@@ -276,6 +301,9 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertTrue(observation.has(UiElementId.PNC_LOGIN_USERNAME_FIELD))
             self.assertTrue(observation.has(UiElementId.PNC_LOGIN_PASSWORD_FIELD))
             self.assertTrue(observation.has(UiElementId.PNC_LOGIN_SUBMIT_BUTTON))
+            self.assertEqual(observation.require(UiElementId.PNC_LOGIN_USERNAME_FIELD).bounds.x, 59)
+            self.assertEqual(observation.require(UiElementId.PNC_LOGIN_PASSWORD_FIELD).bounds.y, 352)
+            self.assertEqual(observation.require(UiElementId.PNC_LOGIN_SUBMIT_BUTTON).bounds.width, 210)
             self.assertEqual(observation.current_pnc_account_id, "user@example.com")
 
     def test_observation_builder_classifies_account_switch_from_live_like_ocr(self) -> None:
@@ -290,7 +318,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="account_switch_live_like",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=build_default_selector_registry(),
                 selector_engine=PillowSelectorEngine(
                     template_matcher=PillowTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
@@ -313,6 +341,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertEqual(observation.screen_type, ScreenType.PNC_ACCOUNT_SWITCH)
             self.assertTrue(observation.has(UiElementId.PNC_ACCOUNT_SWITCH_CONTINUE_BUTTON))
             self.assertTrue(observation.has(UiElementId.PNC_ACCOUNT_SWITCH_CHANGE_ACCOUNT_BUTTON))
+            self.assertEqual(observation.require(UiElementId.PNC_ACCOUNT_SWITCH_CONTINUE_BUTTON).bounds.x, 158)
+            self.assertEqual(observation.require(UiElementId.PNC_ACCOUNT_SWITCH_CHANGE_ACCOUNT_BUTTON).bounds.width, 340)
             self.assertEqual(observation.current_pnc_account_id, "user@example.com")
 
     def test_observation_builder_classifies_loading_reconnect_from_live_like_ocr(self) -> None:
@@ -674,7 +704,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="home_city",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=build_default_selector_registry(),
                 selector_engine=PillowSelectorEngine(
                     template_matcher=PillowTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
@@ -713,7 +743,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="home_city_left_build",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=build_default_selector_registry(),
                 selector_engine=PillowSelectorEngine(
                     template_matcher=PillowTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
@@ -1118,11 +1148,100 @@ class CaptureAndVisionTests(unittest.TestCase):
                     ),
                 )
 
-                observation = builder.build(screenshot)
+            observation = builder.build(screenshot)
 
-                self.assertEqual(observation.screen_type, ScreenType.UNKNOWN)
-                self.assertFalse(observation.has(UiElementId.PNC_BOTTOM_NAV_ALLIANCE))
-                self.assertFalse(observation.has(UiElementId.PNC_HOME_BUILD_BUTTON))
+            self.assertEqual(observation.screen_type, ScreenType.UNKNOWN)
+            self.assertFalse(observation.has(UiElementId.PNC_BOTTOM_NAV_ALLIANCE))
+            self.assertFalse(observation.has(UiElementId.PNC_HOME_BUILD_BUTTON))
+
+    def test_observation_builder_scans_only_probes_then_current_screen_selectors(self) -> None:
+        """Limits template detection to classifier probes first, then the resolved screen slice."""
+
+        registry = SelectorRegistry(
+            selectors=(
+                SelectorDefinition(
+                    id=UiElementId.PNC_HOME_WORLD_SWITCH,
+                    screens=(ScreenType.PNC_HOME_CITY,),
+                    detection_kind=DetectionKind.TEMPLATE,
+                    status=SelectorStatus.SCREENSHOT_SEEDED,
+                    click=ClickDefinition(),
+                ),
+                SelectorDefinition(
+                    id=UiElementId.PNC_HOME_CHARACTER_PANEL,
+                    screens=(ScreenType.PNC_HOME_CITY,),
+                    detection_kind=DetectionKind.TEMPLATE,
+                    status=SelectorStatus.SCREENSHOT_SEEDED,
+                    click=ClickDefinition(),
+                ),
+                SelectorDefinition(
+                    id=UiElementId.PNC_HOME_BUILD_BUTTON,
+                    screens=(ScreenType.PNC_HOME_CITY,),
+                    detection_kind=DetectionKind.TEMPLATE,
+                    status=SelectorStatus.SCREENSHOT_SEEDED,
+                    click=ClickDefinition(),
+                ),
+                SelectorDefinition(
+                    id=UiElementId.PNC_HOME_RIGHT_RAIL_EVENT_CENTER_ICON,
+                    screens=(ScreenType.PNC_HOME_CITY,),
+                    detection_kind=DetectionKind.TEMPLATE,
+                    status=SelectorStatus.SCREENSHOT_SEEDED,
+                    click=ClickDefinition(),
+                ),
+                SelectorDefinition(
+                    id=UiElementId.PNC_BAG_SUBTAB_RESOURCE,
+                    screens=(ScreenType.PNC_BAG,),
+                    detection_kind=DetectionKind.TEMPLATE,
+                    status=SelectorStatus.SCREENSHOT_SEEDED,
+                    click=ClickDefinition(),
+                ),
+            )
+        )
+        selector_engine = _RecordingSelectorEngine(
+            responses=[
+                (
+                    SelectorMatch(
+                        selector_id=UiElementId.PNC_HOME_WORLD_SWITCH,
+                        bounds=Region(x=10, y=10, width=20, height=20),
+                        confidence=1.0,
+                    ),
+                    SelectorMatch(
+                        selector_id=UiElementId.PNC_HOME_CHARACTER_PANEL,
+                        bounds=Region(x=40, y=10, width=20, height=20),
+                        confidence=1.0,
+                    ),
+                    SelectorMatch(
+                        selector_id=UiElementId.PNC_HOME_BUILD_BUTTON,
+                        bounds=Region(x=70, y=10, width=20, height=20),
+                        confidence=1.0,
+                    ),
+                ),
+                (),
+            ]
+        )
+        builder = ObservationBuilder(
+            selector_registry=registry,
+            selector_engine=selector_engine,
+            screen_classifier=ScreenClassifier(),
+            enricher=DefaultObservationEnricher(),
+        )
+        screenshot = type(
+            "Captured",
+            (),
+            {
+                "image": Image.new("RGB", (100, 100), (0, 0, 0)),
+                "artifact": type("Artifact", (), {"path": Path("synthetic.png"), "captured_at": None})(),
+            },
+        )()
+
+        observation = builder.build(screenshot)
+
+        self.assertEqual(observation.screen_type, ScreenType.PNC_HOME_CITY)
+        self.assertEqual(len(selector_engine.requested_selector_ids), 2)
+        self.assertIn(UiElementId.PNC_HOME_WORLD_SWITCH, selector_engine.requested_selector_ids[0])
+        self.assertIn(UiElementId.PNC_BAG_MAIN_TAB_BAG, selector_engine.requested_selector_ids[0])
+        self.assertNotIn(UiElementId.PNC_HOME_RIGHT_RAIL_EVENT_CENTER_ICON, selector_engine.requested_selector_ids[0])
+        self.assertIn(UiElementId.PNC_HOME_RIGHT_RAIL_EVENT_CENTER_ICON, selector_engine.requested_selector_ids[1])
+        self.assertNotIn(UiElementId.PNC_BAG_MAIN_TAB_BAG, selector_engine.requested_selector_ids[1])
 
     def test_observation_service_syncs_castle_roster_cache_only_after_account_verification(self) -> None:
         """Persists discovered castle rosters only when the visible roster matches a trusted snapshot."""

@@ -79,7 +79,13 @@ class DefaultObservationEnricher:
 class SelectorEngine(Protocol):
     """Detects selectors from a screenshot using the registry metadata."""
 
-    def detect(self, image: Image.Image, registry: SelectorRegistry) -> Sequence[SelectorMatch]:
+    def detect(
+        self,
+        image: Image.Image,
+        registry: SelectorRegistry,
+        *,
+        selector_ids: Sequence[UiElementId] | None = None,
+    ) -> Sequence[SelectorMatch]:
         """Returns all selectors detected in the image."""
 
 
@@ -90,11 +96,20 @@ class PillowSelectorEngine:
     template_matcher: PillowTemplateMatcher
     ocr_service: OcrService
 
-    def detect(self, image: Image.Image, registry: SelectorRegistry) -> Sequence[SelectorMatch]:
+    def detect(
+        self,
+        image: Image.Image,
+        registry: SelectorRegistry,
+        *,
+        selector_ids: Sequence[UiElementId] | None = None,
+    ) -> Sequence[SelectorMatch]:
         """Detects selectors supported by the configured engines."""
 
+        requested_selector_ids = None if selector_ids is None else frozenset(selector_ids)
         matches: list[SelectorMatch] = []
         for selector in registry.all():
+            if requested_selector_ids is not None and selector.id not in requested_selector_ids:
+                continue
             if selector.detection_kind == DetectionKind.PLANNED:
                 continue
             if selector.detection_kind in {DetectionKind.TEMPLATE, DetectionKind.COLLECTION}:
@@ -140,20 +155,39 @@ class ObservationBuilder:
     def build(self, screenshot: CapturedScreenshot) -> Observation:
         """Builds one observation from a captured screenshot."""
 
-        matches = self.selector_engine.detect(screenshot.image, self.selector_registry)
-        visible_elements = {
-            match.selector_id: VisibleElement(
-                selector_id=match.selector_id,
-                bounds=match.bounds,
-                confidence=match.confidence,
-                extracted_text=match.extracted_text,
-            )
-            for match in matches
-        }
+        probe_matches = self.selector_engine.detect(
+            screenshot.image,
+            self.selector_registry,
+            selector_ids=self.screen_classifier.probe_selector_ids(),
+        )
+        visible_elements = _matches_to_visible_elements(probe_matches)
         screen_type = self.screen_classifier.classify(visible_elements)
         additions = self.enricher.enrich(screenshot.image, screen_type, visible_elements)
         visible_elements = dict(additions.visible_elements) | visible_elements
         screen_type = self.screen_classifier.classify(visible_elements, additions.screen_evidence)
+        if screen_type != ScreenType.UNKNOWN:
+            screen_selector_ids = tuple(
+                selector.id
+                for selector in self.selector_registry.for_screen(screen_type)
+                if selector.id not in visible_elements
+            )
+            if screen_selector_ids:
+                visible_elements = visible_elements | _matches_to_visible_elements(
+                    self.selector_engine.detect(
+                        screenshot.image,
+                        self.selector_registry,
+                        selector_ids=screen_selector_ids,
+                    )
+                )
+            geometry_elements = {
+                element.selector_id: element
+                for element in self.selector_registry.materialize_for_screen(
+                    screen_type,
+                    image_size=screenshot.image.size,
+                    exclude_selector_ids=frozenset(visible_elements),
+                )
+            }
+            visible_elements = geometry_elements | visible_elements
         return Observation(
             screen_type=screen_type,
             visible_elements=visible_elements,
@@ -282,6 +316,20 @@ def selector_to_bounds(region: object) -> object:
     from pnc_automation.pnc.observation import Bounds
 
     return Bounds(x=region.x, y=region.y, width=region.width, height=region.height)
+
+
+def _matches_to_visible_elements(matches: Sequence[SelectorMatch]) -> dict[UiElementId, VisibleElement]:
+    """Converts selector-engine output into the observation's visible-element map."""
+
+    return {
+        match.selector_id: VisibleElement(
+            selector_id=match.selector_id,
+            bounds=match.bounds,
+            confidence=match.confidence,
+            extracted_text=match.extracted_text,
+        )
+        for match in matches
+    }
 
 
 def _entry_to_selected_castle(entry: DetectedListEntry) -> "SelectedCastleConfig":

@@ -1,3 +1,12 @@
+# `relative_bounds` is always normalized to the current screenshot size:
+# - `x_ratio` / `y_ratio`: top-left corner of the clickable region, not the center
+# - `width_ratio` / `height_ratio`: size of the clickable region
+# - `action_x_ratio` / `action_y_ratio`: optional explicit click point
+#   If omitted, the runtime clicks the center of the defined region.
+# `interaction_kind` is optional during migration:
+# - `navigation`: clicking is expected to navigate and must have reviewed click outcomes
+# - `action`: clicking performs an in-screen or stateful action, not a reviewed navigation contract
+# - `label`: non-interactive screen evidence; it must not declare click metadata
 selectors:
 - id: PNC_BOTTOM_NAV_HOME
   screens:
@@ -19,6 +28,7 @@ selectors:
   - PNC_HOME_CITY
   status: click_mapped
   detection_kind: template
+  interaction_kind: navigation
   click:
     anchor: center
     outcomes:
@@ -109,36 +119,61 @@ selectors:
   - PNC_HOME_CITY
   status: planned
   detection_kind: planned
+  relative_bounds:
+    x_ratio: 0.02
+    y_ratio: 0.04
+    width_ratio: 0.14
+    height_ratio: 0.09
+    action_x_ratio: 0.11
+    action_y_ratio: 0.075
 - id: PNC_HOME_VIP_SHORTCUT
   screens:
   - PNC_HOME_CITY
   status: planned
   detection_kind: planned
+  relative_bounds:
+    x_ratio: 0.15
+    y_ratio: 0.04
+    width_ratio: 0.15
+    height_ratio: 0.08
+    action_x_ratio: 0.23
+    action_y_ratio: 0.07
 - id: PNC_HOME_IMPROVE_MIGHT_SHORTCUT
   screens:
   - PNC_HOME_CITY
   status: planned
   detection_kind: planned
+  relative_bounds:
+    x_ratio: 0.29
+    y_ratio: 0.04
+    width_ratio: 0.15
+    height_ratio: 0.09
+    action_x_ratio: 0.355
+    action_y_ratio: 0.08
 - id: PNC_LORD_INFO_HEADER
   screens:
   - PNC_LORD_INFO
   status: screenshot_seeded
   detection_kind: planned
+  interaction_kind: label
 - id: PNC_LORD_INFO_NAME_LABEL
   screens:
   - PNC_LORD_INFO
   status: screenshot_seeded
   detection_kind: planned
+  interaction_kind: label
 - id: PNC_VIP_HEADER
   screens:
   - PNC_VIP
   status: screenshot_seeded
   detection_kind: planned
+  interaction_kind: label
 - id: PNC_IMPROVE_MIGHT_HEADER
   screens:
   - PNC_IMPROVE_MIGHT
   status: screenshot_seeded
   detection_kind: planned
+  interaction_kind: label
 - id: PNC_HOME_TOP_RESOURCE_FOOD
   screens:
   - PNC_HOME_CITY
@@ -159,6 +194,7 @@ selectors:
   - PNC_HOME_CITY
   status: click_mapped
   detection_kind: template
+  interaction_kind: navigation
   click:
     anchor: center
     outcomes:
@@ -174,6 +210,7 @@ selectors:
   - PNC_HOME_CITY
   status: click_mapped
   detection_kind: template
+  interaction_kind: navigation
   click:
     anchor: center
     outcomes:
@@ -189,6 +226,7 @@ selectors:
   - PNC_HOME_CITY
   status: click_mapped
   detection_kind: template
+  interaction_kind: navigation
   click:
     anchor: center
     outcomes:
@@ -578,6 +616,7 @@ selectors:
   - PNC_WORLD_MAP
   status: click_mapped
   detection_kind: template
+  interaction_kind: navigation
   click:
     anchor: center
     outcomes:
@@ -614,26 +653,56 @@ selectors:
   - PNC_LOGIN
   status: planned
   detection_kind: planned
+  interaction_kind: action
+  relative_bounds:
+    x_ratio: 0.111111111111
+    y_ratio: 0.220833333333
+    width_ratio: 0.294444444444
+    height_ratio: 0.145833333333
 - id: PNC_LOGIN_PASSWORD_FIELD
   screens:
   - PNC_LOGIN
   status: planned
   detection_kind: planned
+  interaction_kind: action
+  relative_bounds:
+    x_ratio: 0.114814814815
+    y_ratio: 0.366666666667
+    width_ratio: 0.520370370370
+    height_ratio: 0.207291666667
 - id: PNC_LOGIN_SUBMIT_BUTTON
   screens:
   - PNC_LOGIN
   status: planned
   detection_kind: planned
+  interaction_kind: action
+  relative_bounds:
+    x_ratio: 0.294444444444
+    y_ratio: 0.573958333333
+    width_ratio: 0.388888888889
+    height_ratio: 0.062500
 - id: PNC_ACCOUNT_SWITCH_CONTINUE_BUTTON
   screens:
   - PNC_ACCOUNT_SWITCH
   status: planned
   detection_kind: planned
+  interaction_kind: action
+  relative_bounds:
+    x_ratio: 0.294444444444
+    y_ratio: 0.585416666667
+    width_ratio: 0.377777777778
+    height_ratio: 0.058333333333
 - id: PNC_ACCOUNT_SWITCH_CHANGE_ACCOUNT_BUTTON
   screens:
   - PNC_ACCOUNT_SWITCH
   status: planned
   detection_kind: planned
+  interaction_kind: action
+  relative_bounds:
+    x_ratio: 0.148148148148
+    y_ratio: 0.666667
+    width_ratio: 0.629629629630
+    height_ratio: 0.058333333333
 - id: PNC_LOADING_RECONNECT_BUTTON
   screens:
   - PNC_LOADING
