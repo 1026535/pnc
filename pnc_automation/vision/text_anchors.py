@@ -104,7 +104,7 @@ _ANCHOR_IDS_BY_NORMALIZED_TEXT: dict[str, TextAnchorId] = {
 }
 
 _STRUCTURED_ANCHOR_PATTERNS: tuple[tuple[re.Pattern[str], TextAnchorId, str], ...] = (
-    (re.compile(r"\bK\s*(\d{2,4})\b", re.IGNORECASE), TextAnchorId.KINGDOM, "kingdom"),
+    (re.compile(r"\bK\s*(\d{2,4})(?:\s*KINGDOM\b|\b)", re.IGNORECASE), TextAnchorId.KINGDOM, "kingdom"),
     (re.compile(r"castle\s*level\s*[:.]?\s*(\d+)", re.IGNORECASE), TextAnchorId.CASTLE_LEVEL, "castle_level"),
 )
 

@@ -15,7 +15,12 @@ from pnc_automation.pnc.action_requests import (
     TapListEntryAction,
     WaitAction,
 )
-from pnc_automation.pnc.observation import ListEntryKind, Observation, castle_entry_matches, castle_identities_match
+from pnc_automation.pnc.observation import (
+    ListEntryKind,
+    Observation,
+    castle_entry_identity_matches,
+    castle_identities_match,
+)
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
 
@@ -60,6 +65,17 @@ class ScreenFlowPlanner:
             return [TapAction(selector_id=UiElementId.PNC_WORLD_HOME_NAV, reason="return_to_city", observe_after=True)]
         if observation.screen_type == ScreenType.PNC_POPUP or observation.blocking_popup:
             return self.close_blocking_popup(observation)
+        if observation.screen_type == ScreenType.PNC_MORE_MENU:
+            if observation.has(UiElementId.PNC_MORE_SETTINGS) and observation.has(UiElementId.PNC_BOTTOM_NAV_MORE):
+                return [
+                    TapAction(
+                        selector_id=UiElementId.PNC_BOTTOM_NAV_MORE,
+                        reason="close_more_menu",
+                        observe_after=True,
+                    )
+                ]
+            if observation.has(UiElementId.PNC_MORE_MANAGE_CHAR):
+                return [KeyEventAction(key_code="KEYCODE_BACK", reason="leave_settings_menu", observe_after=True)]
         if observation.screen_type in {
             ScreenType.PNC_BAG,
             ScreenType.PNC_QUEST_DAILY,
@@ -74,6 +90,9 @@ class ScreenFlowPlanner:
             ScreenType.PNC_GIFT_CENTER,
             ScreenType.PNC_EVENT_CENTER,
             ScreenType.PNC_BUILDING_DETAILS,
+            ScreenType.PNC_LORD_INFO,
+            ScreenType.PNC_VIP,
+            ScreenType.PNC_IMPROVE_MIGHT,
             ScreenType.PNC_ACADEMY,
             ScreenType.PNC_RESEARCH_TREE,
             ScreenType.PNC_GATHER_NODE,
@@ -106,6 +125,130 @@ class ScreenFlowPlanner:
         if observation.screen_type in {ScreenType.ANDROID_HOME, ScreenType.UNKNOWN}:
             return self.ensure_pnc_foreground(observation)
         return self.return_to_safe_root_screen(observation)
+
+    def open_more_menu(self, observation: Observation) -> list[ActionRequest]:
+        """Plans navigation from home city to the More-menu overlay."""
+
+        if observation.screen_type == ScreenType.PNC_MORE_MENU:
+            return []
+        if observation.screen_type == ScreenType.PNC_HOME_CITY:
+            return [TapAction(selector_id=UiElementId.PNC_BOTTOM_NAV_MORE, reason="open_more_menu", observe_after=True)]
+        raise SelectorResolutionError(
+            "Opening the More menu requires the home city or the More-menu overlay.",
+            screen_type=observation.screen_type,
+        )
+
+    def open_lord_info(self, observation: Observation) -> list[ActionRequest]:
+        """Plans navigation from home-adjacent screens to the Lord Info profile screen."""
+
+        if observation.screen_type == ScreenType.PNC_LORD_INFO:
+            return []
+        if observation.screen_type == ScreenType.PNC_HOME_CITY:
+            if not observation.has(UiElementId.PNC_HOME_LORD_INFO_SHORTCUT):
+                raise SelectorResolutionError(
+                    "Home city is visible but the Lord Info shortcut is not available.",
+                    screen_type=observation.screen_type,
+                )
+            return [
+                TapAction(
+                    selector_id=UiElementId.PNC_HOME_LORD_INFO_SHORTCUT,
+                    reason="open_lord_info",
+                    observe_after=True,
+                )
+            ]
+        if observation.screen_type != ScreenType.PNC_MORE_MENU:
+            raise SelectorResolutionError(
+                "Lord Info navigation requires home city, the More overlay, or the Lord Info screen itself.",
+                screen_type=observation.screen_type,
+            )
+        if observation.has(UiElementId.PNC_MORE_SETTINGS):
+            return [
+                TapAction(
+                    selector_id=UiElementId.PNC_BOTTOM_NAV_MORE,
+                    reason="close_more_menu",
+                    observe_after=True,
+                ),
+                TapAction(
+                    selector_id=UiElementId.PNC_HOME_LORD_INFO_SHORTCUT,
+                    reason="open_lord_info",
+                    observe_after=True,
+                ),
+            ]
+        if observation.has(UiElementId.PNC_MORE_MANAGE_CHAR):
+            return [
+                KeyEventAction(key_code="KEYCODE_BACK", reason="leave_settings_menu", observe_after=True),
+                TapAction(
+                    selector_id=UiElementId.PNC_BOTTOM_NAV_MORE,
+                    reason="close_more_menu",
+                    observe_after=True,
+                ),
+                TapAction(
+                    selector_id=UiElementId.PNC_HOME_LORD_INFO_SHORTCUT,
+                    reason="open_lord_info",
+                    observe_after=True,
+                ),
+            ]
+        raise SelectorResolutionError(
+            "More-menu navigation cannot locate a safe path back to the home-city Lord Info shortcut.",
+            screen_type=observation.screen_type,
+        )
+
+    def open_castle_selection(self, observation: Observation) -> list[ActionRequest]:
+        """Plans navigation from home-adjacent screens to the Manage Char roster."""
+
+        if observation.screen_type == ScreenType.PNC_CASTLE_SELECTION:
+            return []
+        if observation.screen_type == ScreenType.PNC_MORE_MENU:
+            if observation.has(UiElementId.PNC_MORE_MANAGE_CHAR):
+                return [
+                    TapAction(
+                        selector_id=UiElementId.PNC_MORE_MANAGE_CHAR,
+                        reason="open_castle_selection",
+                        observe_after=True,
+                    )
+                ]
+            if observation.has(UiElementId.PNC_MORE_SETTINGS):
+                return [
+                    TapAction(
+                        selector_id=UiElementId.PNC_MORE_SETTINGS,
+                        reason="open_settings_menu",
+                        observe_after=True,
+                    ),
+                    TapAction(
+                        selector_id=UiElementId.PNC_MORE_MANAGE_CHAR,
+                        reason="open_castle_selection",
+                        observe_after=True,
+                    ),
+                ]
+            raise SelectorResolutionError(
+                "More menu is open but neither Settings nor Manage Char is visible.",
+                screen_type=observation.screen_type,
+            )
+        if observation.screen_type == ScreenType.PNC_HOME_CITY:
+            if not observation.has(UiElementId.PNC_BOTTOM_NAV_MORE):
+                raise SelectorResolutionError(
+                    "Home city is visible but the More navigation button is not available.",
+                    screen_type=observation.screen_type,
+                )
+            return [
+                TapAction(selector_id=UiElementId.PNC_BOTTOM_NAV_MORE, reason="open_more_menu", observe_after=True),
+                TapAction(selector_id=UiElementId.PNC_MORE_SETTINGS, reason="open_settings_menu", observe_after=True),
+                TapAction(selector_id=UiElementId.PNC_MORE_MANAGE_CHAR, reason="open_castle_selection", observe_after=True),
+            ]
+        if observation.screen_type in {
+            ScreenType.PNC_LORD_INFO,
+            ScreenType.PNC_VIP,
+            ScreenType.PNC_IMPROVE_MIGHT,
+        }:
+            return self.return_to_safe_root_screen(observation) + [
+                TapAction(selector_id=UiElementId.PNC_BOTTOM_NAV_MORE, reason="open_more_menu", observe_after=True),
+                TapAction(selector_id=UiElementId.PNC_MORE_SETTINGS, reason="open_settings_menu", observe_after=True),
+                TapAction(selector_id=UiElementId.PNC_MORE_MANAGE_CHAR, reason="open_castle_selection", observe_after=True),
+            ]
+        raise SelectorResolutionError(
+            "Castle selection flow requires home city, the More menu, or the Manage Char roster.",
+            screen_type=observation.screen_type,
+        )
 
     def open_world_map(self, observation: Observation) -> list[ActionRequest]:
         """Plans navigation from home city to world map."""
@@ -144,15 +287,8 @@ class ScreenFlowPlanner:
         if selected_entry is not None and selected_entry.selected:
             return []
         actions: list[ActionRequest] = []
-        if observation.screen_type == ScreenType.PNC_HOME_CITY:
-            actions.append(
-                TapAction(
-                    selector_id=UiElementId.PNC_HOME_CHARACTER_PANEL,
-                    reason="open_castle_selection",
-                    observe_after=True,
-                )
-            )
-            return actions
+        if observation.screen_type in {ScreenType.PNC_HOME_CITY, ScreenType.PNC_MORE_MENU}:
+            return self.open_castle_selection(observation)
         elif observation.screen_type != ScreenType.PNC_CASTLE_SELECTION:
             raise SelectorResolutionError(
                 "Castle selection flow requires home city or castle selection screen.",
@@ -207,6 +343,12 @@ def _plan_castle_roster_scroll(
             castle_name=selected_castle.castle_name,
             kingdom=selected_castle.kingdom,
         )
+    if not castle_roster.has_trusted_ordering:
+        raise SelectorResolutionError(
+            "Castle-selection scrolling requires a full-scan roster ordering for off-screen targets.",
+            castle_name=selected_castle.castle_name,
+            kingdom=selected_castle.kingdom,
+        )
 
     target_index = _find_castle_index(castle_roster.castles, selected_castle)
     if target_index is None:
@@ -219,7 +361,7 @@ def _plan_castle_roster_scroll(
     visible_indexes = [
         index
         for index, castle in enumerate(castle_roster.castles)
-        if any(castle_entry_matches(entry, castle) for entry in visible_entries)
+        if any(castle_entry_identity_matches(entry, castle) for entry in visible_entries)
     ]
     if not visible_indexes:
         raise SelectorResolutionError(

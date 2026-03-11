@@ -9,7 +9,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from pnc_automation.config.models import SelectedCastleConfig
+from pnc_automation.config.models import PncAccountCastleRosterConfig, SelectedCastleConfig
 from pnc_automation.errors import SelectorResolutionError
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
@@ -93,6 +93,8 @@ class Observation:
     blocking_popup: bool = False
     current_castle: SelectedCastleConfig | None = None
     current_pnc_account_id: str | None = None
+    verified_pnc_account_id: str | None = None
+    castle_roster_snapshot: PncAccountCastleRosterConfig | None = None
     available_march_slots: int | None = None
 
     @property
@@ -150,17 +152,22 @@ class Observation:
 def castle_entry_matches(entry: DetectedListEntry, castle: SelectedCastleConfig) -> bool:
     """Returns whether one detected castle row matches the configured castle identity."""
 
-    if entry.kind != ListEntryKind.CASTLE:
-        return False
-    if entry.title_text != castle.castle_name:
-        return False
-    kingdom = entry.metadata.get("kingdom")
-    if kingdom != castle.kingdom:
+    if not castle_entry_identity_matches(entry, castle):
         return False
     level = entry.metadata.get("castle_level")
     if castle.castle_level is None or level is None:
         return True
     return level == castle.castle_level
+
+
+def castle_entry_identity_matches(entry: DetectedListEntry, castle: SelectedCastleConfig) -> bool:
+    """Returns whether one detected castle row matches a castle by stable kingdom/name identity."""
+
+    if entry.kind != ListEntryKind.CASTLE:
+        return False
+    if entry.title_text != castle.castle_name:
+        return False
+    return entry.metadata.get("kingdom") == castle.kingdom
 
 
 def castle_identities_match(left: SelectedCastleConfig, right: SelectedCastleConfig) -> bool:

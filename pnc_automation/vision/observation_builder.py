@@ -3,16 +3,22 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Protocol
 
 from PIL import Image
 
-from pnc_automation.config.models import SelectedCastleConfig
+from pnc_automation.config.models import CastleRosterOrdering, PncAccountCastleRosterConfig, SelectedCastleConfig
 from pnc_automation.capture.screenshot_service import CapturedScreenshot, ScreenshotService
 from pnc_automation.config.castle_roster_store import CastleRosterStore
 from pnc_automation.emulator.session import BlueStacksSession
-from pnc_automation.pnc.observation import DetectedListEntry, ListEntryKind, Observation, VisibleElement
+from pnc_automation.pnc.observation import (
+    DetectedListEntry,
+    ListEntryKind,
+    Observation,
+    VisibleElement,
+    castle_entry_identity_matches,
+)
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
 from pnc_automation.vision.image_models import SelectorMatch
@@ -172,12 +178,25 @@ class ObservationService:
     artifact_directory: str
     pnc_account_id: str | None = None
     castle_roster_store: CastleRosterStore | None = None
+    verified_pnc_account_id: str | None = None
+    validated_current_castle: SelectedCastleConfig | None = None
 
     def capture_observation(self, label: str) -> CapturedObservation:
         """Captures a fresh screenshot artifact and returns both the screenshot and typed observation."""
 
         screenshot = self.screenshot_service.capture(self.session, artifact_directory=self.artifact_directory, label=label)
+        roster_snapshot = self._get_castle_roster_snapshot()
         observation = self.observation_builder.build(screenshot)
+        current_castle = self._resolve_current_castle(observation)
+        verified_pnc_account_id = self._resolve_verified_pnc_account_id(observation, roster_snapshot)
+        observation = replace(
+            observation,
+            current_castle=current_castle,
+            verified_pnc_account_id=verified_pnc_account_id,
+            castle_roster_snapshot=roster_snapshot,
+        )
+        self.verified_pnc_account_id = verified_pnc_account_id
+        self._update_validated_current_castle(observation)
         self._sync_castle_roster(observation)
         return CapturedObservation(screenshot=screenshot, observation=observation)
 
@@ -193,10 +212,68 @@ class ObservationService:
             return
         if observation.screen_type != ScreenType.PNC_CASTLE_SELECTION:
             return
+        if observation.verified_pnc_account_id != self.pnc_account_id:
+            return
         castles = tuple(_entry_to_selected_castle(entry) for entry in observation.entries(ListEntryKind.CASTLE))
         if not castles:
             return
-        self.castle_roster_store.sync(self.pnc_account_id, castles)
+        self.castle_roster_store.sync(
+            self.pnc_account_id,
+            castles,
+            ordering=CastleRosterOrdering.UNKNOWN,
+        )
+
+    def _get_castle_roster_snapshot(self) -> PncAccountCastleRosterConfig | None:
+        """Returns the immutable pre-observation roster snapshot for the configured account."""
+
+        if self.castle_roster_store is None or self.pnc_account_id is None:
+            return None
+        return self.castle_roster_store.get(self.pnc_account_id)
+
+    def _resolve_current_castle(self, observation: Observation) -> SelectedCastleConfig | None:
+        """Carries one Lord Info castle-name validation back across home-adjacent screens."""
+
+        if observation.current_castle is not None:
+            return observation.current_castle
+        if observation.screen_type in {ScreenType.PNC_HOME_CITY, ScreenType.PNC_MORE_MENU}:
+            return self.validated_current_castle
+        return None
+
+    def _update_validated_current_castle(self, observation: Observation) -> None:
+        """Keeps Lord Info validation only while the session remains on home-adjacent screens."""
+
+        if observation.screen_type == ScreenType.PNC_LORD_INFO and observation.current_castle is not None:
+            self.validated_current_castle = observation.current_castle
+            return
+        if observation.screen_type not in {ScreenType.PNC_HOME_CITY, ScreenType.PNC_MORE_MENU}:
+            self.validated_current_castle = None
+
+    def _resolve_verified_pnc_account_id(
+        self,
+        observation: Observation,
+        roster_snapshot: PncAccountCastleRosterConfig | None,
+    ) -> str | None:
+        """Carries forward trusted account ownership evidence across observations."""
+
+        observed_account_id = _trusted_observed_account_id(observation)
+        if observed_account_id is not None:
+            return observed_account_id
+        if self.verified_pnc_account_id is not None:
+            if (
+                self.pnc_account_id is not None
+                and self.verified_pnc_account_id != self.pnc_account_id
+                and observation.screen_type not in {ScreenType.PNC_LOGIN, ScreenType.PNC_ACCOUNT_SWITCH}
+            ):
+                return None
+            return self.verified_pnc_account_id
+        if (
+            self.pnc_account_id is not None
+            and roster_snapshot is not None
+            and observation.screen_type == ScreenType.PNC_CASTLE_SELECTION
+            and _castle_selection_matches_snapshot(observation, roster_snapshot)
+        ):
+            return self.pnc_account_id
+        return None
 
 
 def selector_to_bounds(region: object) -> object:
@@ -230,3 +307,29 @@ def _entry_to_selected_castle(entry: DetectedListEntry) -> "SelectedCastleConfig
         castle_name=entry.title_text,
         castle_level=castle_level,
     )
+
+
+def _trusted_observed_account_id(observation: Observation) -> str | None:
+    """Returns account evidence only for screens that expose an explicit login identity."""
+
+    if observation.screen_type not in {ScreenType.PNC_LOGIN, ScreenType.PNC_ACCOUNT_SWITCH}:
+        return None
+    return observation.current_pnc_account_id
+
+
+def _castle_selection_matches_snapshot(
+    observation: Observation,
+    roster_snapshot: PncAccountCastleRosterConfig,
+) -> bool:
+    """Returns whether the visible roster window fully matches the trusted cached roster snapshot."""
+
+    visible_castles = observation.entries(ListEntryKind.CASTLE)
+    if not visible_castles:
+        return False
+    matched_castles = 0
+    for entry in visible_castles:
+        if any(castle_entry_identity_matches(entry, castle) for castle in roster_snapshot.castles):
+            matched_castles += 1
+            continue
+        return False
+    return matched_castles > 0

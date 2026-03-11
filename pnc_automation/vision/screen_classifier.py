@@ -49,6 +49,23 @@ class ScreenClassifier:
                 required_all=frozenset({UiElementId.PNC_CASTLE_LIST_ENTRY}),
             ),
             ClassificationRule(
+                screen_type=ScreenType.PNC_LORD_INFO,
+                required_all=frozenset(
+                    {
+                        UiElementId.PNC_LORD_INFO_HEADER,
+                        UiElementId.PNC_LORD_INFO_NAME_LABEL,
+                    }
+                ),
+            ),
+            ClassificationRule(
+                screen_type=ScreenType.PNC_VIP,
+                required_all=frozenset({UiElementId.PNC_VIP_HEADER}),
+            ),
+            ClassificationRule(
+                screen_type=ScreenType.PNC_IMPROVE_MIGHT,
+                required_all=frozenset({UiElementId.PNC_IMPROVE_MIGHT_HEADER}),
+            ),
+            ClassificationRule(
                 screen_type=ScreenType.PNC_WORLD_MAP,
                 required_all=frozenset(
                     {

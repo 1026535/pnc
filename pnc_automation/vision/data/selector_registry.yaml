@@ -49,6 +49,31 @@ selectors:
   - PNC_HOME_CITY
   status: screenshot_seeded
   detection_kind: template
+- id: PNC_MORE_SETTINGS
+  screens:
+  - PNC_MORE_MENU
+  status: planned
+  detection_kind: planned
+- id: PNC_MORE_MANAGE_CHAR
+  screens:
+  - PNC_MORE_MENU
+  status: planned
+  detection_kind: planned
+- id: PNC_MORE_LORD_INFO
+  screens:
+  - PNC_MORE_MENU
+  status: planned
+  detection_kind: planned
+- id: PNC_MORE_VIP
+  screens:
+  - PNC_MORE_MENU
+  status: planned
+  detection_kind: planned
+- id: PNC_MORE_IMPROVE_MIGHT
+  screens:
+  - PNC_MORE_MENU
+  status: planned
+  detection_kind: planned
 - id: PNC_BACK_BUTTON_TOP_LEFT
   screens:
   - PNC_HOME_CITY
@@ -79,6 +104,41 @@ selectors:
   - PNC_HOME_CITY
   status: screenshot_seeded
   detection_kind: template
+- id: PNC_HOME_LORD_INFO_SHORTCUT
+  screens:
+  - PNC_HOME_CITY
+  status: planned
+  detection_kind: planned
+- id: PNC_HOME_VIP_SHORTCUT
+  screens:
+  - PNC_HOME_CITY
+  status: planned
+  detection_kind: planned
+- id: PNC_HOME_IMPROVE_MIGHT_SHORTCUT
+  screens:
+  - PNC_HOME_CITY
+  status: planned
+  detection_kind: planned
+- id: PNC_LORD_INFO_HEADER
+  screens:
+  - PNC_LORD_INFO
+  status: screenshot_seeded
+  detection_kind: planned
+- id: PNC_LORD_INFO_NAME_LABEL
+  screens:
+  - PNC_LORD_INFO
+  status: screenshot_seeded
+  detection_kind: planned
+- id: PNC_VIP_HEADER
+  screens:
+  - PNC_VIP
+  status: screenshot_seeded
+  detection_kind: planned
+- id: PNC_IMPROVE_MIGHT_HEADER
+  screens:
+  - PNC_IMPROVE_MIGHT
+  status: screenshot_seeded
+  detection_kind: planned
 - id: PNC_HOME_TOP_RESOURCE_FOOD
   screens:
   - PNC_HOME_CITY

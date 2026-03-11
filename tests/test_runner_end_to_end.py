@@ -59,6 +59,7 @@ class RunnerEndToEndTests(unittest.TestCase):
                     UiElementId.PNC_LOGIN_PASSWORD_FIELD,
                     UiElementId.PNC_LOGIN_SUBMIT_BUTTON,
                 ),
+                current_pnc_account_id="user@example.com",
             ),
             make_observation(
                 ScreenType.PNC_LOGIN,
@@ -67,12 +68,29 @@ class RunnerEndToEndTests(unittest.TestCase):
                     UiElementId.PNC_LOGIN_PASSWORD_FIELD,
                     UiElementId.PNC_LOGIN_SUBMIT_BUTTON,
                 ),
+                current_pnc_account_id="user@example.com",
             ),
             make_observation(
                 ScreenType.PNC_HOME_CITY,
                 visible_ids=(
                     UiElementId.PNC_HOME_WORLD_SWITCH,
-                    UiElementId.PNC_HOME_CHARACTER_PANEL,
+                    UiElementId.PNC_BOTTOM_NAV_MORE,
+                    UiElementId.PNC_HOME_LORD_INFO_SHORTCUT,
+                    UiElementId.PNC_HOME_BUILD_BUTTON,
+                    UiElementId.PNC_HOME_RESEARCH_BUTTON,
+                    UiElementId.PNC_HOME_CAMPAIGN_ENTRY,
+                ),
+            ),
+            make_observation(
+                ScreenType.PNC_LORD_INFO,
+                current_castle_name="Wrong",
+            ),
+            make_observation(
+                ScreenType.PNC_HOME_CITY,
+                visible_ids=(
+                    UiElementId.PNC_HOME_WORLD_SWITCH,
+                    UiElementId.PNC_BOTTOM_NAV_MORE,
+                    UiElementId.PNC_HOME_LORD_INFO_SHORTCUT,
                     UiElementId.PNC_HOME_BUILD_BUTTON,
                     UiElementId.PNC_HOME_RESEARCH_BUTTON,
                     UiElementId.PNC_HOME_CAMPAIGN_ENTRY,
@@ -80,14 +98,13 @@ class RunnerEndToEndTests(unittest.TestCase):
                 current_castle_name="Wrong",
             ),
             make_observation(
-                ScreenType.PNC_HOME_CITY,
-                visible_ids=(
-                    UiElementId.PNC_HOME_WORLD_SWITCH,
-                    UiElementId.PNC_HOME_CHARACTER_PANEL,
-                    UiElementId.PNC_HOME_BUILD_BUTTON,
-                    UiElementId.PNC_HOME_RESEARCH_BUTTON,
-                    UiElementId.PNC_HOME_CAMPAIGN_ENTRY,
-                ),
+                ScreenType.PNC_MORE_MENU,
+                visible_ids=(UiElementId.PNC_BOTTOM_NAV_MORE, UiElementId.PNC_MORE_SETTINGS),
+                current_castle_name="Wrong",
+            ),
+            make_observation(
+                ScreenType.PNC_MORE_MENU,
+                visible_ids=(UiElementId.PNC_MORE_MANAGE_CHAR,),
                 current_castle_name="Wrong",
             ),
             make_observation(
@@ -105,18 +122,23 @@ class RunnerEndToEndTests(unittest.TestCase):
                 ScreenType.PNC_HOME_CITY,
                 visible_ids=(
                     UiElementId.PNC_HOME_WORLD_SWITCH,
-                    UiElementId.PNC_HOME_CHARACTER_PANEL,
+                    UiElementId.PNC_BOTTOM_NAV_MORE,
+                    UiElementId.PNC_HOME_LORD_INFO_SHORTCUT,
                     UiElementId.PNC_HOME_BUILD_BUTTON,
                     UiElementId.PNC_HOME_RESEARCH_BUTTON,
                     UiElementId.PNC_HOME_CAMPAIGN_ENTRY,
                 ),
+            ),
+            make_observation(
+                ScreenType.PNC_LORD_INFO,
                 current_castle_name="Main",
             ),
             make_observation(
                 ScreenType.PNC_HOME_CITY,
                 visible_ids=(
                     UiElementId.PNC_HOME_WORLD_SWITCH,
-                    UiElementId.PNC_HOME_CHARACTER_PANEL,
+                    UiElementId.PNC_BOTTOM_NAV_MORE,
+                    UiElementId.PNC_HOME_LORD_INFO_SHORTCUT,
                     UiElementId.PNC_HOME_BUILD_BUTTON,
                     UiElementId.PNC_HOME_RESEARCH_BUTTON,
                     UiElementId.PNC_HOME_CAMPAIGN_ENTRY,
@@ -142,7 +164,8 @@ class RunnerEndToEndTests(unittest.TestCase):
                 ScreenType.PNC_HOME_CITY,
                 visible_ids=(
                     UiElementId.PNC_HOME_WORLD_SWITCH,
-                    UiElementId.PNC_HOME_CHARACTER_PANEL,
+                    UiElementId.PNC_BOTTOM_NAV_MORE,
+                    UiElementId.PNC_HOME_LORD_INFO_SHORTCUT,
                     UiElementId.PNC_HOME_BUILD_BUTTON,
                     UiElementId.PNC_HOME_RESEARCH_BUTTON,
                     UiElementId.PNC_HOME_CAMPAIGN_ENTRY,
@@ -164,7 +187,8 @@ class RunnerEndToEndTests(unittest.TestCase):
                 ScreenType.PNC_HOME_CITY,
                 visible_ids=(
                     UiElementId.PNC_HOME_WORLD_SWITCH,
-                    UiElementId.PNC_HOME_CHARACTER_PANEL,
+                    UiElementId.PNC_BOTTOM_NAV_MORE,
+                    UiElementId.PNC_HOME_LORD_INFO_SHORTCUT,
                     UiElementId.PNC_HOME_BUILD_BUTTON,
                     UiElementId.PNC_HOME_RESEARCH_BUTTON,
                     UiElementId.PNC_HOME_CAMPAIGN_ENTRY,
@@ -199,7 +223,7 @@ class RunnerEndToEndTests(unittest.TestCase):
                 ScreenType.PNC_HOME_CITY,
                 visible_ids=(
                     UiElementId.PNC_HOME_WORLD_SWITCH,
-                    UiElementId.PNC_HOME_CHARACTER_PANEL,
+                    UiElementId.PNC_BOTTOM_NAV_MORE,
                     UiElementId.PNC_HOME_BUILD_BUTTON,
                     UiElementId.PNC_HOME_RESEARCH_BUTTON,
                     UiElementId.PNC_HOME_CAMPAIGN_ENTRY,
