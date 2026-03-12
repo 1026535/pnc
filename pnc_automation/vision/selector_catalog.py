@@ -10,19 +10,19 @@ from typing import Any, Callable
 import yaml
 
 from pnc_automation.errors import SelectorResolutionError
+from pnc_automation.pnc.observation import SelectorResolutionKind
+from pnc_automation.vision.pnc_parser_candidates import SUPPORTED_PARSER_CANDIDATE_IDS
 from pnc_automation.vision.selector_interaction_kind import SelectorInteractionKind
 
 _CATALOG_HEADER_LINES = (
-    "# `relative_bounds` is always normalized to the current screenshot size:",
-    "# - `x_ratio` / `y_ratio`: top-left corner of the clickable region, not the center",
-    "# - `width_ratio` / `height_ratio`: size of the clickable region",
-    "# - `action_x_ratio` / `action_y_ratio`: optional explicit click point",
-    "#   If omitted, the runtime clicks the center of the defined region.",
-    "# - `materialize_relative_bounds: false`: keep the relative click region without auto-marking the selector visible",
+    "# `resolution` is the canonical ordered runtime selector policy:",
+    "# - `template`: explicit template match using `template_path` and optional `threshold`",
+    "# - `parser_candidate`: trusted screen-interpreter candidate keyed by the canonical selector id",
+    "# - `relative_bounds`: normalized fallback geometry using `x_ratio` / `y_ratio` plus size and optional action point",
     "# `interaction_kind` is optional during migration:",
     "# - `navigation`: clicking is expected to navigate and must have reviewed click outcomes",
     "# - `action`: clicking performs an in-screen or stateful action, not a reviewed navigation contract",
-    "# - `label`: non-interactive screen evidence; it must not declare click metadata",
+    "# - `label`: non-interactive screen evidence; it must not declare click metadata or geometry fallback",
 )
 
 
@@ -117,17 +117,96 @@ class SelectorCatalogRelativeBounds:
 
 
 @dataclass(frozen=True, slots=True)
+class SelectorCatalogRegion:
+    """Stores one OCR extraction region in absolute screenshot coordinates."""
+
+    x: int
+    y: int
+    width: int
+    height: int
+
+    def __post_init__(self) -> None:
+        """Rejects non-positive OCR regions."""
+
+        if self.width <= 0 or self.height <= 0:
+            raise SelectorResolutionError("OCR regions must have positive width and height.", width=self.width, height=self.height)
+
+    def to_document(self) -> dict[str, int]:
+        """Returns the YAML-ready representation of one OCR region."""
+
+        return {
+            "x": self.x,
+            "y": self.y,
+            "width": self.width,
+            "height": self.height,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class SelectorCatalogResolutionStep:
+    """Represents one authored resolution step stored in the static catalog."""
+
+    kind: str
+    template_path: str | None = None
+    threshold: float = 0.98
+    relative_bounds: SelectorCatalogRelativeBounds | None = None
+    ocr_region: SelectorCatalogRegion | None = None
+    label: str | None = None
+
+    def __post_init__(self) -> None:
+        """Rejects inconsistent authored resolution-step content."""
+
+        resolution_kind = _require_resolution_kind(self.kind)
+        if resolution_kind == SelectorResolutionKind.TEMPLATE:
+            if self.template_path is None or self.template_path == "":
+                raise SelectorResolutionError("Template resolution steps must declare template_path.")
+            if not 0 < self.threshold <= 1:
+                raise SelectorResolutionError("Template resolution thresholds must stay within (0, 1].", threshold=self.threshold)
+            return
+        if resolution_kind == SelectorResolutionKind.PARSER_CANDIDATE:
+            if any(value is not None for value in (self.template_path, self.relative_bounds, self.ocr_region)):
+                raise SelectorResolutionError("Parser-candidate steps must not declare extra geometry or assets.")
+            return
+        if resolution_kind == SelectorResolutionKind.RELATIVE_BOUNDS:
+            if self.relative_bounds is None:
+                raise SelectorResolutionError("Relative-bounds steps must declare normalized geometry.")
+            return
+        if resolution_kind == SelectorResolutionKind.OCR_REGION:
+            return
+
+    def to_document(self) -> dict[str, object]:
+        """Returns the YAML-ready representation of one resolution step."""
+
+        document: dict[str, object] = {"kind": self.kind}
+        if self.label is not None:
+            document["label"] = self.label
+        resolution_kind = _require_resolution_kind(self.kind)
+        if resolution_kind == SelectorResolutionKind.TEMPLATE:
+            document["template_path"] = self.template_path
+            if self.threshold != 0.98:
+                document["threshold"] = self.threshold
+            return document
+        if resolution_kind == SelectorResolutionKind.RELATIVE_BOUNDS:
+            if self.relative_bounds is None:
+                raise SelectorResolutionError("Relative-bounds steps must serialize authored geometry.")
+            document.update(self.relative_bounds.to_document())
+            return document
+        if resolution_kind == SelectorResolutionKind.OCR_REGION:
+            if self.ocr_region is not None:
+                document["ocr_region"] = self.ocr_region.to_document()
+        return document
+
+
+@dataclass(frozen=True, slots=True)
 class SelectorCatalogEntry:
     """Represents one raw selector entry as stored in the static catalog document."""
 
     id: str
     screens: tuple[str, ...]
     status: str
-    detection_kind: str
     interaction_kind: str | None = None
     click: SelectorCatalogClickDefinition | None = None
-    relative_bounds: SelectorCatalogRelativeBounds | None = None
-    materialize_relative_bounds: bool = True
+    resolution: tuple[SelectorCatalogResolutionStep, ...] = ()
     notes: tuple[str, ...] = ()
 
     def to_document(self) -> dict[str, object]:
@@ -137,16 +216,13 @@ class SelectorCatalogEntry:
             "id": self.id,
             "screens": list(self.screens),
             "status": self.status,
-            "detection_kind": self.detection_kind,
         }
         if self.interaction_kind is not None:
             document["interaction_kind"] = self.interaction_kind
         if self.click is not None:
             document["click"] = self.click.to_document()
-        if self.relative_bounds is not None:
-            document["relative_bounds"] = self.relative_bounds.to_document()
-        if not self.materialize_relative_bounds:
-            document["materialize_relative_bounds"] = False
+        if self.resolution:
+            document["resolution"] = [step.to_document() for step in self.resolution]
         if self.notes:
             document["notes"] = list(self.notes)
         return document
@@ -221,11 +297,6 @@ def _load_selector_entries(value: object) -> tuple[SelectorCatalogEntry, ...]:
             context=f"selector '{selector_id}' status",
             document_label="selector catalog",
         )
-        detection_kind = require_selector_schema_string(
-            mapping.get("detection_kind"),
-            context=f"selector '{selector_id}' detection_kind",
-            document_label="selector catalog",
-        )
         interaction_kind = (
             require_selector_schema_string(
                 mapping.get("interaction_kind"),
@@ -241,20 +312,15 @@ def _load_selector_entries(value: object) -> tuple[SelectorCatalogEntry, ...]:
             document_label="selector catalog",
             selector_label="selector",
         )
-        relative_bounds = load_selector_schema_relative_bounds(
-            mapping.get("relative_bounds"),
-            selector_id=selector_id,
-            document_label="selector catalog",
-            selector_label="selector",
-        )
-        materialize_relative_bounds = (
-            require_selector_schema_bool(
-                mapping.get("materialize_relative_bounds"),
-                context=f"selector '{selector_id}' materialize_relative_bounds",
+        resolution = (
+            load_selector_schema_resolution_steps(
+                mapping.get("resolution"),
+                selector_id=selector_id,
                 document_label="selector catalog",
+                selector_label="selector",
             )
-            if "materialize_relative_bounds" in mapping
-            else True
+            if "resolution" in mapping
+            else ()
         )
         notes = tuple(
             load_selector_schema_string_sequence(
@@ -268,11 +334,9 @@ def _load_selector_entries(value: object) -> tuple[SelectorCatalogEntry, ...]:
                 id=selector_id,
                 screens=screens,
                 status=status,
-                detection_kind=detection_kind,
                 interaction_kind=interaction_kind,
                 click=click,
-                relative_bounds=relative_bounds,
-                materialize_relative_bounds=materialize_relative_bounds,
+                resolution=resolution,
                 notes=notes,
             )
         )
@@ -300,12 +364,9 @@ def validate_selector_catalog_references(document: SelectorCatalogDocument) -> N
 def validate_selector_catalog_interactions(document: SelectorCatalogDocument) -> None:
     """Rejects selector interaction metadata that contradicts the declared click contract."""
 
+    supported_parser_candidate_ids = {selector_id.name for selector_id in SUPPORTED_PARSER_CANDIDATE_IDS}
     for selector in document.selectors:
-        if selector.relative_bounds is None and not selector.materialize_relative_bounds:
-            raise SelectorResolutionError(
-                "Selector materialize_relative_bounds requires relative_bounds.",
-                selector_id=selector.id,
-            )
+        _validate_selector_resolution_steps(selector, supported_parser_candidate_ids=supported_parser_candidate_ids)
         interaction_kind_name = selector.interaction_kind
         if interaction_kind_name is None:
             continue
@@ -333,12 +394,69 @@ def validate_selector_catalog_interactions(document: SelectorCatalogDocument) ->
                     selector_id=selector.id,
                     interaction_kind=interaction_kind.value,
                 )
+            if any(
+                _require_resolution_kind(step.kind) == SelectorResolutionKind.RELATIVE_BOUNDS
+                for step in selector.resolution
+            ) and not any(
+                outcome.target_screen is not None and (outcome.verification_selectors or outcome.verification_texts)
+                for outcome in click.outcomes
+            ):
+                raise SelectorResolutionError(
+                    "Navigation selectors with geometry fallback must declare reviewed destination verification evidence.",
+                    selector_id=selector.id,
+                    interaction_kind=interaction_kind.value,
+                )
             continue
-        if interaction_kind == SelectorInteractionKind.LABEL and selector.click is not None:
+        if interaction_kind == SelectorInteractionKind.LABEL:
+            if selector.click is not None:
+                raise SelectorResolutionError(
+                    "Label selectors must not declare click metadata.",
+                    selector_id=selector.id,
+                    interaction_kind=interaction_kind.value,
+                )
+            if any(
+                _require_resolution_kind(step.kind) == SelectorResolutionKind.RELATIVE_BOUNDS
+                for step in selector.resolution
+            ):
+                raise SelectorResolutionError(
+                    "Label selectors must not declare geometry fallback.",
+                    selector_id=selector.id,
+                    interaction_kind=interaction_kind.value,
+                )
+
+
+def _validate_selector_resolution_steps(
+    selector: SelectorCatalogEntry,
+    *,
+    supported_parser_candidate_ids: set[str],
+) -> None:
+    """Rejects invalid selector-resolution policies in the static catalog."""
+
+    if selector.status != "planned" and not selector.resolution:
+        raise SelectorResolutionError(
+            "Selectors above planned must declare at least one resolution step.",
+            selector_id=selector.id,
+            status=selector.status,
+        )
+    seen_kinds: set[SelectorResolutionKind] = set()
+    for index, step in enumerate(selector.resolution):
+        resolution_kind = _require_resolution_kind(step.kind)
+        if resolution_kind in seen_kinds:
             raise SelectorResolutionError(
-                "Label selectors must not declare click metadata.",
+                "Selectors must not declare duplicate resolution steps.",
                 selector_id=selector.id,
-                interaction_kind=interaction_kind.value,
+                resolution_kind=resolution_kind.value,
+            )
+        seen_kinds.add(resolution_kind)
+        if resolution_kind == SelectorResolutionKind.RELATIVE_BOUNDS and index != len(selector.resolution) - 1:
+            raise SelectorResolutionError(
+                "Relative-bounds fallback must be the final selector resolution step.",
+                selector_id=selector.id,
+            )
+        if resolution_kind == SelectorResolutionKind.PARSER_CANDIDATE and selector.id not in supported_parser_candidate_ids:
+            raise SelectorResolutionError(
+                "Parser-candidate resolution requires trusted screen-interpreter support for the selector id.",
+                selector_id=selector.id,
             )
 
 
@@ -457,6 +575,87 @@ def load_selector_schema_click_outcomes(
     return tuple(loaded_outcomes)
 
 
+def load_selector_schema_resolution_steps(
+    value: object,
+    *,
+    selector_id: str,
+    document_label: str,
+    selector_label: str,
+) -> tuple[SelectorCatalogResolutionStep, ...]:
+    """Loads the ordered authored resolution steps for one selector."""
+
+    steps = require_selector_schema_sequence(
+        value,
+        context=f"{selector_label} '{selector_id}' resolution",
+        document_label=document_label,
+    )
+    loaded_steps: list[SelectorCatalogResolutionStep] = []
+    for step in steps:
+        mapping = require_selector_schema_mapping(
+            step,
+            context=f"{selector_label} '{selector_id}' resolution step",
+            document_label=document_label,
+        )
+        kind = require_selector_schema_string(
+            mapping.get("kind"),
+            context=f"{selector_label} '{selector_id}' resolution step kind",
+            document_label=document_label,
+        )
+        loaded_steps.append(
+            SelectorCatalogResolutionStep(
+                kind=kind,
+                template_path=(
+                    require_selector_schema_string(
+                        mapping.get("template_path"),
+                        context=f"{selector_label} '{selector_id}' template_path",
+                        document_label=document_label,
+                    )
+                    if "template_path" in mapping
+                    else None
+                ),
+                threshold=(
+                    require_selector_schema_number(
+                        mapping.get("threshold", 0.98),
+                        context=f"{selector_label} '{selector_id}' threshold",
+                        document_label=document_label,
+                    )
+                    if kind == SelectorResolutionKind.TEMPLATE.value or "threshold" in mapping
+                    else 0.98
+                ),
+                relative_bounds=(
+                    load_selector_schema_relative_bounds(
+                        mapping,
+                        selector_id=selector_id,
+                        document_label=document_label,
+                        selector_label=f"{selector_label} resolution step",
+                    )
+                    if kind == SelectorResolutionKind.RELATIVE_BOUNDS.value
+                    else None
+                ),
+                ocr_region=(
+                    load_selector_schema_region(
+                        mapping.get("ocr_region"),
+                        selector_id=selector_id,
+                        document_label=document_label,
+                        selector_label=f"{selector_label} resolution step",
+                    )
+                    if kind == SelectorResolutionKind.OCR_REGION.value or "ocr_region" in mapping
+                    else None
+                ),
+                label=(
+                    require_selector_schema_string(
+                        mapping.get("label"),
+                        context=f"{selector_label} '{selector_id}' resolution label",
+                        document_label=document_label,
+                    )
+                    if "label" in mapping
+                    else None
+                ),
+            )
+        )
+    return tuple(loaded_steps)
+
+
 def load_selector_schema_relative_bounds(
     value: object,
     *,
@@ -507,6 +706,54 @@ def load_selector_schema_relative_bounds(
             mapping.get("action_y_ratio"),
             context=f"{selector_label} '{selector_id}' relative_bounds action_y_ratio",
             document_label=document_label,
+        ),
+    )
+
+
+def load_selector_schema_region(
+    value: object,
+    *,
+    selector_id: str,
+    document_label: str,
+    selector_label: str,
+) -> SelectorCatalogRegion | None:
+    """Loads one authored OCR region from a YAML mapping."""
+
+    if value is None:
+        return None
+    mapping = require_selector_schema_mapping(
+        value,
+        context=f"{selector_label} '{selector_id}' ocr_region",
+        document_label=document_label,
+    )
+    return SelectorCatalogRegion(
+        x=int(
+            require_selector_schema_number(
+                mapping.get("x"),
+                context=f"{selector_label} '{selector_id}' ocr_region x",
+                document_label=document_label,
+            )
+        ),
+        y=int(
+            require_selector_schema_number(
+                mapping.get("y"),
+                context=f"{selector_label} '{selector_id}' ocr_region y",
+                document_label=document_label,
+            )
+        ),
+        width=int(
+            require_selector_schema_number(
+                mapping.get("width"),
+                context=f"{selector_label} '{selector_id}' ocr_region width",
+                document_label=document_label,
+            )
+        ),
+        height=int(
+            require_selector_schema_number(
+                mapping.get("height"),
+                context=f"{selector_label} '{selector_id}' ocr_region height",
+                document_label=document_label,
+            )
         ),
     )
 
@@ -574,3 +821,12 @@ def _require_ratio(value: float, *, field_name: str, inclusive_zero: bool) -> No
         return
     if not 0 < value <= 1:
         raise SelectorResolutionError("Selector relative_bounds sizes must stay within (0, 1].", field_name=field_name)
+
+
+def _require_resolution_kind(kind_name: str) -> SelectorResolutionKind:
+    """Converts one raw resolution kind into the typed enum value."""
+
+    try:
+        return SelectorResolutionKind(kind_name)
+    except ValueError as error:
+        raise SelectorResolutionError("Unsupported selector resolution kind in the selector catalog.", resolution_kind=kind_name) from error

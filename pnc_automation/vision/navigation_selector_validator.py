@@ -75,6 +75,9 @@ class NavigationSelectorValidationResult:
     matched_target_screen: ScreenType | None = None
     missing_verification_selectors: tuple[UiElementId, ...] = ()
     observed_selectors: tuple[UiElementId, ...] = ()
+    retry_attempted: bool = False
+    retry_source_artifact_path: Path | None = None
+    retry_destination_artifact_path: Path | None = None
 
     def to_document(self) -> dict[str, object]:
         """Returns the YAML-ready representation of one navigation validation result."""
@@ -91,6 +94,10 @@ class NavigationSelectorValidationResult:
             document["source_artifact_path"] = str(self.source_artifact_path)
         if self.destination_artifact_path is not None:
             document["destination_artifact_path"] = str(self.destination_artifact_path)
+        if self.retry_source_artifact_path is not None:
+            document["retry_source_artifact_path"] = str(self.retry_source_artifact_path)
+        if self.retry_destination_artifact_path is not None:
+            document["retry_destination_artifact_path"] = str(self.retry_destination_artifact_path)
         if self.destination_screen is not None:
             document["destination_screen"] = self.destination_screen.name
         if self.matched_target_screen is not None:
@@ -289,19 +296,29 @@ class NavigationSelectorValidator:
         if matched_outcome is not None:
             return (
                 NavigationSelectorValidationResult(
-                    selector_id=case.selector_id,
-                    source_screen=case.source_screen,
-                    status=NavigationValidationStatus.PASSED,
-                    reason="Observed destination matched a reviewed click outcome.",
+                selector_id=case.selector_id,
+                source_screen=case.source_screen,
+                status=NavigationValidationStatus.PASSED,
+                reason="Observed destination matched a reviewed click outcome.",
                     expected_target_screens=case.expected_target_screens,
                     source_artifact_path=source_capture.screenshot.artifact.path,
                     destination_artifact_path=destination_capture.screenshot.artifact.path,
-                    destination_screen=destination_capture.observation.screen_type,
-                    matched_target_screen=matched_outcome.target_screen,
-                    observed_selectors=_sorted_selector_ids(destination_capture.observation),
-                ),
-                destination_capture,
-            )
+                destination_screen=destination_capture.observation.screen_type,
+                matched_target_screen=matched_outcome.target_screen,
+                observed_selectors=_sorted_selector_ids(destination_capture.observation),
+            ),
+            destination_capture,
+        )
+
+        retry_result = self._maybe_retry_with_stronger_resolution(
+            case=case,
+            source_capture=source_capture,
+            first_destination_capture=destination_capture,
+            first_missing_selectors=missing_selectors,
+            case_index=case_index,
+        )
+        if retry_result is not None:
+            return retry_result
 
         reason = (
             "Observed destination screen matched a reviewed target but required verification selectors were missing."
@@ -322,6 +339,92 @@ class NavigationSelectorValidator:
                 observed_selectors=_sorted_selector_ids(destination_capture.observation),
             ),
             destination_capture,
+        )
+
+    def _maybe_retry_with_stronger_resolution(
+        self,
+        *,
+        case: NavigationSelectorValidationCase,
+        source_capture: CapturedObservation,
+        first_destination_capture: CapturedObservation,
+        first_missing_selectors: tuple[UiElementId, ...],
+        case_index: int,
+    ) -> tuple[NavigationSelectorValidationResult, CapturedObservation] | None:
+        """Retries one navigation validation once when the first tap came from geometry fallback."""
+
+        source_element = source_capture.observation.get(case.selector_id)
+        if source_element is None or source_element.source is None:
+            return None
+        if source_element.source.resolution_kind.value != "relative_bounds":
+            return None
+        selector = self.selector_registry.require(case.selector_id)
+        if not selector.resolution.stronger_step_indexes(source_element.source.strategy_index):
+            return None
+        retry_source_capture = self._prepare_source_capture(case, first_destination_capture, case_index=case_index)
+        retry_source_element = retry_source_capture.observation.require(case.selector_id)
+        if retry_source_element.source is None or retry_source_element.source.strategy_index >= source_element.source.strategy_index:
+            return None
+        retry_destination_capture = self._execute_actions(
+            (
+                TapAction(
+                    selector_id=case.selector_id,
+                    reason="retry_navigation_selector_with_stronger_resolution",
+                    observe_after=True,
+                ),
+            ),
+            retry_source_capture,
+            label_prefix=f"navigation_validation_{case_index}_retry_{case.selector_id.value.lower()}",
+        )
+        retry_destination_capture = self._settle_destination_capture(
+            case,
+            retry_destination_capture,
+            case_index=case_index,
+        )
+        matched_outcome, missing_selectors = match_reviewed_navigation_outcome(
+            retry_destination_capture.observation,
+            case.reviewed_outcomes,
+        )
+        if matched_outcome is not None:
+            return (
+                NavigationSelectorValidationResult(
+                    selector_id=case.selector_id,
+                    source_screen=case.source_screen,
+                    status=NavigationValidationStatus.PASSED,
+                    reason="Observed destination matched a reviewed click outcome after one stronger selector-resolution retry.",
+                    expected_target_screens=case.expected_target_screens,
+                    source_artifact_path=source_capture.screenshot.artifact.path,
+                    destination_artifact_path=first_destination_capture.screenshot.artifact.path,
+                    destination_screen=retry_destination_capture.observation.screen_type,
+                    matched_target_screen=matched_outcome.target_screen,
+                    observed_selectors=_sorted_selector_ids(retry_destination_capture.observation),
+                    retry_attempted=True,
+                    retry_source_artifact_path=retry_source_capture.screenshot.artifact.path,
+                    retry_destination_artifact_path=retry_destination_capture.screenshot.artifact.path,
+                ),
+                retry_destination_capture,
+            )
+        reason = (
+            "Observed destination still missed reviewed verification selectors after one stronger selector-resolution retry."
+            if missing_selectors or first_missing_selectors
+            else "Observed destination did not match any reviewed click outcome after one stronger selector-resolution retry."
+        )
+        return (
+            NavigationSelectorValidationResult(
+                selector_id=case.selector_id,
+                source_screen=case.source_screen,
+                status=NavigationValidationStatus.FAILED,
+                reason=reason,
+                expected_target_screens=case.expected_target_screens,
+                source_artifact_path=source_capture.screenshot.artifact.path,
+                destination_artifact_path=first_destination_capture.screenshot.artifact.path,
+                destination_screen=retry_destination_capture.observation.screen_type,
+                missing_verification_selectors=missing_selectors,
+                observed_selectors=_sorted_selector_ids(retry_destination_capture.observation),
+                retry_attempted=True,
+                retry_source_artifact_path=retry_source_capture.screenshot.artifact.path,
+                retry_destination_artifact_path=retry_destination_capture.screenshot.artifact.path,
+            ),
+            retry_destination_capture,
         )
 
     def _settle_destination_capture(

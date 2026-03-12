@@ -12,6 +12,7 @@ from PIL import Image
 from pnc_automation.automation.action_executor import ActionExecutor
 from pnc_automation.capture.artifact_store import ArtifactRecord
 from pnc_automation.capture.screenshot_service import CapturedScreenshot
+from pnc_automation.pnc.observation import ResolvedSelectorSource, SelectorResolutionKind
 from pnc_automation.pnc.screen_flows import ScreenFlowPlanner
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
@@ -23,8 +24,17 @@ from pnc_automation.vision.navigation_selector_validator import (
 )
 from pnc_automation.vision.observation_builder import CapturedObservation
 from pnc_automation.vision.selector_interaction_kind import SelectorInteractionKind
-from pnc_automation.vision.selectors import ClickDefinition, ClickOutcome, DetectionKind, SelectorDefinition, SelectorRegistry, SelectorStatus
-from tests.test_support import FakeSession, build_logger, make_observation
+from pnc_automation.vision.selectors import (
+    ClickDefinition,
+    ClickOutcome,
+    RelativeBounds,
+    SelectorDefinition,
+    SelectorRegistry,
+    SelectorResolutionPolicy,
+    SelectorResolutionStep,
+    SelectorStatus,
+)
+from tests.test_support import FakeSession, build_logger, make_observation, make_visible
 
 
 class NavigationSelectorValidatorTests(unittest.TestCase):
@@ -38,18 +48,18 @@ class NavigationSelectorValidatorTests(unittest.TestCase):
                 SelectorDefinition(
                     id=UiElementId.PNC_BOTTOM_NAV_MORE,
                     screens=(ScreenType.PNC_HOME_CITY, ScreenType.PNC_MORE_MENU),
-                    detection_kind=DetectionKind.PLANNED,
                     status=SelectorStatus.CLICK_MAPPED,
                     interaction_kind=SelectorInteractionKind.NAVIGATION,
+                    resolution=_resolution(SelectorResolutionKind.PARSER_CANDIDATE),
                     click=ClickDefinition(),
                     click_outcomes=(ClickOutcome(target_screen=ScreenType.PNC_MORE_MENU),),
                 ),
                 SelectorDefinition(
                     id=UiElementId.PNC_LOGIN_SUBMIT_BUTTON,
                     screens=(ScreenType.PNC_LOGIN,),
-                    detection_kind=DetectionKind.PLANNED,
                     status=SelectorStatus.PLANNED,
                     interaction_kind=SelectorInteractionKind.ACTION,
+                    resolution=_resolution(SelectorResolutionKind.PARSER_CANDIDATE),
                     click=None,
                 ),
             )
@@ -93,9 +103,9 @@ class NavigationSelectorValidatorTests(unittest.TestCase):
                 SelectorDefinition(
                     id=UiElementId.PNC_MORE_MANAGE_CHAR,
                     screens=(ScreenType.PNC_MORE_MENU,),
-                    detection_kind=DetectionKind.PLANNED,
                     status=SelectorStatus.CLICK_MAPPED,
                     interaction_kind=SelectorInteractionKind.NAVIGATION,
+                    resolution=_resolution(SelectorResolutionKind.PARSER_CANDIDATE),
                     click=ClickDefinition(),
                     click_outcomes=(
                         ClickOutcome(
@@ -179,9 +189,9 @@ class NavigationSelectorValidatorTests(unittest.TestCase):
                 SelectorDefinition(
                     id=UiElementId.PNC_HOME_WORLD_SWITCH,
                     screens=(ScreenType.PNC_HOME_CITY,),
-                    detection_kind=DetectionKind.PLANNED,
                     status=SelectorStatus.CLICK_MAPPED,
                     interaction_kind=SelectorInteractionKind.NAVIGATION,
+                    resolution=_resolution(SelectorResolutionKind.RELATIVE_BOUNDS, relative_bounds=_bounds()),
                     click=ClickDefinition(),
                     click_outcomes=(
                         ClickOutcome(
@@ -251,9 +261,9 @@ class NavigationSelectorValidatorTests(unittest.TestCase):
                 SelectorDefinition(
                     id=UiElementId.PNC_HOME_WORLD_SWITCH,
                     screens=(ScreenType.PNC_HOME_CITY,),
-                    detection_kind=DetectionKind.PLANNED,
                     status=SelectorStatus.CLICK_MAPPED,
                     interaction_kind=SelectorInteractionKind.NAVIGATION,
+                    resolution=_resolution(SelectorResolutionKind.RELATIVE_BOUNDS, relative_bounds=_bounds()),
                     click=ClickDefinition(),
                     click_outcomes=(
                         ClickOutcome(
@@ -322,6 +332,258 @@ class NavigationSelectorValidatorTests(unittest.TestCase):
         )
         self.assertEqual(report.results[0].destination_screen, ScreenType.PNC_WORLD_MAP)
 
+    def test_validator_retries_once_when_geometry_source_can_re_resolve_with_stronger_step(self) -> None:
+        """Retries one reviewed navigation when the first tap used geometry and a fresh observation exposes a stronger step."""
+
+        registry = SelectorRegistry(
+            selectors=(
+                SelectorDefinition(
+                    id=UiElementId.PNC_HOME_WORLD_SWITCH,
+                    screens=(ScreenType.PNC_HOME_CITY,),
+                    status=SelectorStatus.CLICK_MAPPED,
+                    interaction_kind=SelectorInteractionKind.NAVIGATION,
+                    resolution=_resolution(
+                        SelectorResolutionKind.TEMPLATE,
+                        SelectorResolutionKind.RELATIVE_BOUNDS,
+                        relative_bounds=_bounds(),
+                    ),
+                    click=ClickDefinition(),
+                    click_outcomes=(
+                        ClickOutcome(
+                            target_screen=ScreenType.PNC_WORLD_MAP,
+                            verification_selectors=(UiElementId.PNC_WORLD_HOME_NAV,),
+                        ),
+                    ),
+                ),
+            )
+        )
+        fallback_source = ResolvedSelectorSource(
+            resolution_kind=SelectorResolutionKind.RELATIVE_BOUNDS,
+            strategy_index=1,
+            strategy_label="relative_bounds",
+            is_fallback=True,
+        )
+        stronger_source = ResolvedSelectorSource(
+            resolution_kind=SelectorResolutionKind.TEMPLATE,
+            strategy_index=0,
+            strategy_label="template",
+            is_fallback=False,
+        )
+        capture_service = _FakeCapturedObservationService(
+            captures=[
+                _make_captured_observation(
+                    _observation_with_source(
+                        source=fallback_source,
+                        artifact_path=Path("home.png"),
+                    ),
+                    label="home",
+                ),
+                _make_captured_observation(
+                    make_observation(
+                        ScreenType.ANDROID_HOME,
+                        artifact_path=Path("geometry_miss.png"),
+                    ),
+                    label="geometry_miss",
+                ),
+                _make_captured_observation(
+                    _observation_with_source(
+                        source=stronger_source,
+                        artifact_path=Path("stronger_source.png"),
+                    ),
+                    label="stronger_source",
+                ),
+                _make_captured_observation(
+                    make_observation(
+                        ScreenType.PNC_WORLD_MAP,
+                        visible_ids=(UiElementId.PNC_WORLD_HOME_NAV,),
+                        artifact_path=Path("world.png"),
+                    ),
+                    label="world",
+                ),
+            ]
+        )
+        session = FakeSession()
+        validator = NavigationSelectorValidator(
+            selector_registry=registry,
+            observation_service=capture_service,
+            action_executor=ActionExecutor(
+                session=session,
+                stable_click_delay_ms=0,
+                post_action_observe_delay_ms=0,
+                logger=build_logger(),
+                sleep=lambda _: None,
+            ),
+            screen_flows=ScreenFlowPlanner(),
+            logger=build_logger(),
+            max_destination_settle_observations=1,
+            sleep=lambda _: None,
+        )
+
+        report = validator.validate(selector_ids=(UiElementId.PNC_HOME_WORLD_SWITCH,))
+
+        self.assertEqual(report.passed_count, 1)
+        self.assertTrue(report.results[0].retry_attempted)
+        self.assertEqual(report.results[0].retry_source_artifact_path, Path("stronger_source.png"))
+        self.assertEqual(report.results[0].retry_destination_artifact_path, Path("world.png"))
+        self.assertEqual(session.taps, [(5, 5), (5, 5)])
+
+    def test_validator_does_not_retry_when_first_source_was_not_geometry(self) -> None:
+        """Does not perform the guarded retry for template- or parser-resolved taps."""
+
+        registry = SelectorRegistry(
+            selectors=(
+                SelectorDefinition(
+                    id=UiElementId.PNC_HOME_WORLD_SWITCH,
+                    screens=(ScreenType.PNC_HOME_CITY,),
+                    status=SelectorStatus.CLICK_MAPPED,
+                    interaction_kind=SelectorInteractionKind.NAVIGATION,
+                    resolution=_resolution(SelectorResolutionKind.TEMPLATE, SelectorResolutionKind.RELATIVE_BOUNDS, relative_bounds=_bounds()),
+                    click=ClickDefinition(),
+                    click_outcomes=(
+                        ClickOutcome(
+                            target_screen=ScreenType.PNC_WORLD_MAP,
+                            verification_selectors=(UiElementId.PNC_WORLD_HOME_NAV,),
+                        ),
+                    ),
+                ),
+            )
+        )
+        template_source = ResolvedSelectorSource(
+            resolution_kind=SelectorResolutionKind.TEMPLATE,
+            strategy_index=0,
+            strategy_label="template",
+            is_fallback=False,
+        )
+        capture_service = _FakeCapturedObservationService(
+            captures=[
+                _make_captured_observation(
+                    _observation_with_source(source=template_source),
+                    label="home",
+                ),
+                _make_captured_observation(
+                    make_observation(ScreenType.PNC_HOME_CITY),
+                    label="miss",
+                ),
+            ]
+        )
+        session = FakeSession()
+        validator = NavigationSelectorValidator(
+            selector_registry=registry,
+            observation_service=capture_service,
+            action_executor=ActionExecutor(
+                session=session,
+                stable_click_delay_ms=0,
+                post_action_observe_delay_ms=0,
+                logger=build_logger(),
+                sleep=lambda _: None,
+            ),
+            screen_flows=ScreenFlowPlanner(),
+            logger=build_logger(),
+            max_destination_settle_observations=1,
+            sleep=lambda _: None,
+        )
+
+        report = validator.validate(selector_ids=(UiElementId.PNC_HOME_WORLD_SWITCH,))
+
+        self.assertEqual(report.failed_count, 1)
+        self.assertFalse(report.results[0].retry_attempted)
+        self.assertEqual(session.taps, [(5, 5)])
+
+    def test_validator_stops_after_one_stronger_retry_failure(self) -> None:
+        """Attempts at most one stronger retry when geometry misses and the stronger tap still fails."""
+
+        registry = SelectorRegistry(
+            selectors=(
+                SelectorDefinition(
+                    id=UiElementId.PNC_HOME_WORLD_SWITCH,
+                    screens=(ScreenType.PNC_HOME_CITY,),
+                    status=SelectorStatus.CLICK_MAPPED,
+                    interaction_kind=SelectorInteractionKind.NAVIGATION,
+                    resolution=_resolution(
+                        SelectorResolutionKind.TEMPLATE,
+                        SelectorResolutionKind.RELATIVE_BOUNDS,
+                        relative_bounds=_bounds(),
+                    ),
+                    click=ClickDefinition(),
+                    click_outcomes=(
+                        ClickOutcome(
+                            target_screen=ScreenType.PNC_WORLD_MAP,
+                            verification_selectors=(UiElementId.PNC_WORLD_HOME_NAV,),
+                        ),
+                    ),
+                ),
+            )
+        )
+        fallback_source = ResolvedSelectorSource(
+            resolution_kind=SelectorResolutionKind.RELATIVE_BOUNDS,
+            strategy_index=1,
+            strategy_label="relative_bounds",
+            is_fallback=True,
+        )
+        stronger_source = ResolvedSelectorSource(
+            resolution_kind=SelectorResolutionKind.TEMPLATE,
+            strategy_index=0,
+            strategy_label="template",
+            is_fallback=False,
+        )
+        capture_service = _FakeCapturedObservationService(
+            captures=[
+                _make_captured_observation(
+                    _observation_with_source(
+                        source=fallback_source,
+                        artifact_path=Path("home.png"),
+                    ),
+                    label="home",
+                ),
+                _make_captured_observation(
+                    make_observation(
+                        ScreenType.ANDROID_HOME,
+                        artifact_path=Path("geometry_miss.png"),
+                    ),
+                    label="geometry_miss",
+                ),
+                _make_captured_observation(
+                    _observation_with_source(
+                        source=stronger_source,
+                        artifact_path=Path("stronger_source.png"),
+                    ),
+                    label="stronger_source",
+                ),
+                _make_captured_observation(
+                    make_observation(
+                        ScreenType.PNC_HOME_CITY,
+                        visible_ids=(UiElementId.PNC_HOME_WORLD_SWITCH,),
+                        artifact_path=Path("still_home.png"),
+                    ),
+                    label="still_home",
+                ),
+            ]
+        )
+        session = FakeSession()
+        validator = NavigationSelectorValidator(
+            selector_registry=registry,
+            observation_service=capture_service,
+            action_executor=ActionExecutor(
+                session=session,
+                stable_click_delay_ms=0,
+                post_action_observe_delay_ms=0,
+                logger=build_logger(),
+                sleep=lambda _: None,
+            ),
+            screen_flows=ScreenFlowPlanner(),
+            logger=build_logger(),
+            max_destination_settle_observations=1,
+            sleep=lambda _: None,
+        )
+
+        report = validator.validate(selector_ids=(UiElementId.PNC_HOME_WORLD_SWITCH,))
+
+        self.assertEqual(report.failed_count, 1)
+        self.assertTrue(report.results[0].retry_attempted)
+        self.assertEqual(report.results[0].retry_source_artifact_path, Path("stronger_source.png"))
+        self.assertEqual(report.results[0].retry_destination_artifact_path, Path("still_home.png"))
+        self.assertEqual(session.taps, [(5, 5), (5, 5)])
+
 
 @dataclass
 class _FakeCapturedObservationService:
@@ -337,6 +599,74 @@ class _FakeCapturedObservationService:
         if not self.captures:
             raise AssertionError(f"No captured observation queued for label '{label}'.")
         return self.captures.pop(0)
+
+
+def _resolution(
+    *kinds: SelectorResolutionKind,
+    relative_bounds: RelativeBounds | None = None,
+) -> SelectorResolutionPolicy:
+    """Builds one typed selector-resolution policy for validator fixtures."""
+
+    steps: list[SelectorResolutionStep] = []
+    for kind in kinds:
+        if kind == SelectorResolutionKind.RELATIVE_BOUNDS:
+            steps.append(
+                SelectorResolutionStep(
+                    kind=kind,
+                    relative_bounds=relative_bounds if relative_bounds is not None else _bounds(),
+                )
+            )
+            continue
+        steps.append(
+            SelectorResolutionStep(
+                kind=kind,
+                template_path=Path("synthetic.png") if kind == SelectorResolutionKind.TEMPLATE else None,
+            )
+        )
+    return SelectorResolutionPolicy(steps=tuple(steps))
+
+
+def _bounds() -> RelativeBounds:
+    """Builds one deterministic geometry fallback for validator fixtures."""
+
+    return RelativeBounds(
+        x_ratio=0.1,
+        y_ratio=0.1,
+        width_ratio=0.2,
+        height_ratio=0.2,
+    )
+
+
+def _observation_with_source(
+    *,
+    source: ResolvedSelectorSource,
+    artifact_path: Path | None = None,
+) -> object:
+    """Builds one observation whose selector carries explicit resolution provenance."""
+
+    observation = make_observation(
+        ScreenType.PNC_HOME_CITY,
+        artifact_path=artifact_path,
+    )
+    visible_elements = dict(observation.visible_elements)
+    visible_elements[UiElementId.PNC_HOME_WORLD_SWITCH] = make_visible(
+        UiElementId.PNC_HOME_WORLD_SWITCH,
+        source=source,
+    )
+    return observation.__class__(
+        screen_type=observation.screen_type,
+        visible_elements=visible_elements,
+        list_entries=observation.list_entries,
+        artifact_path=observation.artifact_path,
+        image_size=observation.image_size,
+        captured_at=observation.captured_at,
+        blocking_popup=observation.blocking_popup,
+        current_castle=observation.current_castle,
+        current_pnc_account_id=observation.current_pnc_account_id,
+        verified_pnc_account_id=observation.verified_pnc_account_id,
+        castle_roster_snapshot=observation.castle_roster_snapshot,
+        available_march_slots=observation.available_march_slots,
+    )
 
 
 def _make_captured_observation(observation: object, *, label: str) -> CapturedObservation:

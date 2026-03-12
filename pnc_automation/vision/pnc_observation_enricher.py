@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from PIL import Image
 
@@ -12,15 +12,17 @@ from pnc_automation.config.models import SelectedCastleConfig
 from pnc_automation.pnc.observation import Bounds, DetectedListEntry, ListEntryKind, VisibleElement
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
-from pnc_automation.vision.observation_builder import ObservationAdditions
 from pnc_automation.vision.ocr_service import OcrLine, OcrService
 from pnc_automation.vision.screen_classifier import ScreenEvidence
+from pnc_automation.vision.selector_resolution import ScreenInterpretation
 from pnc_automation.vision.text_anchors import (
     DetectedTextAnchor,
     TextAnchorDetector,
     TextAnchorId,
     normalize_ocr_text,
 )
+
+ObservationAdditions = ScreenInterpretation
 
 _HOME_NAV_SELECTOR_BY_TEXT_ANCHOR = {
     TextAnchorId.LABEL_HOME: UiElementId.PNC_BOTTOM_NAV_HOME,
@@ -232,100 +234,91 @@ class PncObservationEnricher:
     ocr_service: OcrService
     text_anchor_detector: TextAnchorDetector = field(default_factory=TextAnchorDetector)
 
+    def interpret(
+        self,
+        image: Image.Image,
+        screen_type_hint: ScreenType,
+        visible_elements: Mapping[UiElementId, VisibleElement],
+    ) -> ScreenInterpretation:
+        """Builds one OCR-backed screen interpretation before selector resolution."""
+
+        ocr_result = self.ocr_service.read_result(image)
+        lines = tuple(sorted(ocr_result.lines, key=lambda line: (line.bounds.y, line.bounds.x)))
+        anchors = self.text_anchor_detector.detect(ocr_result)
+        interpretation = ScreenInterpretation()
+        popup = _build_popup_additions(image=image, lines=lines, anchors=anchors)
+        if popup is not None:
+            interpretation = popup
+        elif screen_type_hint in {ScreenType.UNKNOWN, ScreenType.PNC_LOADING}:
+            loading = _build_loading_additions(image=image, lines=lines)
+            if loading is not None:
+                interpretation = loading
+        if interpretation == ScreenInterpretation() and screen_type_hint in {ScreenType.UNKNOWN, ScreenType.PNC_LOGIN}:
+            login = _build_login_additions(image=image, lines=lines)
+            if login is not None:
+                interpretation = login
+        if interpretation == ScreenInterpretation() and screen_type_hint in {ScreenType.UNKNOWN, ScreenType.PNC_ACCOUNT_SWITCH}:
+            account_switch = _build_account_switch_additions(image=image, lines=lines)
+            if account_switch is not None:
+                interpretation = account_switch
+        if interpretation == ScreenInterpretation() and screen_type_hint in {ScreenType.UNKNOWN, ScreenType.PNC_LORD_INFO}:
+            lord_info = _build_lord_info_additions(image=image, lines=lines)
+            if lord_info is not None:
+                interpretation = lord_info
+        if interpretation == ScreenInterpretation() and screen_type_hint in {ScreenType.UNKNOWN, ScreenType.PNC_VIP}:
+            vip = _build_vip_additions(image=image, lines=lines)
+            if vip is not None:
+                interpretation = vip
+        if interpretation == ScreenInterpretation() and screen_type_hint in {ScreenType.UNKNOWN, ScreenType.PNC_IMPROVE_MIGHT}:
+            improve_might = _build_improve_might_additions(image=image, lines=lines)
+            if improve_might is not None:
+                interpretation = improve_might
+        if interpretation == ScreenInterpretation() and screen_type_hint in {ScreenType.UNKNOWN, ScreenType.PNC_HOME_CITY, ScreenType.PNC_MORE_MENU}:
+            more_settings_menu = _build_more_settings_menu_additions(image=image, lines=lines)
+            if more_settings_menu is not None:
+                interpretation = more_settings_menu
+            elif (more_menu := _build_more_menu_additions(image=image, lines=lines, anchors=anchors)) is not None:
+                interpretation = more_menu
+        if interpretation == ScreenInterpretation():
+            if screen_type_hint not in {ScreenType.UNKNOWN, ScreenType.PNC_CASTLE_SELECTION, ScreenType.PNC_HOME_CITY, ScreenType.PNC_MORE_MENU}:
+                interpretation = ScreenInterpretation()
+            elif (building_detail := _build_building_detail_additions(image=image, lines=lines, anchors=anchors)) is not None:
+                interpretation = building_detail
+            elif (
+                home_city := _build_home_city_additions(
+                    image=image,
+                    anchors=anchors,
+                    visible_elements=visible_elements,
+                )
+            ) is not None:
+                interpretation = home_city
+            elif (bag := _build_bag_additions(image=image, lines=lines, anchors=anchors)) is not None:
+                interpretation = bag
+            elif (alliance_join := _build_alliance_join_additions(image=image, lines=lines)) is not None:
+                interpretation = alliance_join
+            elif (academy := _build_academy_additions(image=image, lines=lines, anchors=anchors)) is not None:
+                interpretation = academy
+            elif (research_tree := _build_research_tree_additions(image=image, lines=lines)) is not None:
+                interpretation = research_tree
+            else:
+                entries = _extract_castle_entries(image=image, lines=lines, anchors=anchors)
+                if _looks_like_castle_selection(anchors, entries):
+                    interpretation = _build_castle_selection_interpretation(entries)
+        return replace(
+            interpretation,
+            ocr_result=ocr_result,
+            text_anchors=anchors,
+        )
+
     def enrich(
         self,
         image: Image.Image,
         screen_type: ScreenType,
         visible_elements: Mapping[UiElementId, VisibleElement],
-    ) -> ObservationAdditions:
-        """Builds OCR-backed bootstrap, fallback-classification, and castle-roster observations."""
+    ) -> ScreenInterpretation:
+        """Maintains the legacy method name while delegating to the canonical interpreter API."""
 
-        ocr_result = self.ocr_service.read_result(image)
-        lines = tuple(sorted(ocr_result.lines, key=lambda line: (line.bounds.y, line.bounds.x)))
-        anchors = self.text_anchor_detector.detect(ocr_result)
-        popup = _build_popup_additions(image=image, lines=lines, anchors=anchors)
-        if popup is not None:
-            return popup
-        if screen_type in {ScreenType.UNKNOWN, ScreenType.PNC_LOADING}:
-            loading = _build_loading_additions(image=image, lines=lines)
-            if loading is not None:
-                return loading
-        if screen_type in {ScreenType.UNKNOWN, ScreenType.PNC_LOGIN}:
-            login = _build_login_additions(image=image, lines=lines)
-            if login is not None:
-                return login
-        if screen_type in {ScreenType.UNKNOWN, ScreenType.PNC_ACCOUNT_SWITCH}:
-            account_switch = _build_account_switch_additions(image=image, lines=lines)
-            if account_switch is not None:
-                return account_switch
-        if screen_type in {ScreenType.UNKNOWN, ScreenType.PNC_LORD_INFO}:
-            lord_info = _build_lord_info_additions(image=image, lines=lines)
-            if lord_info is not None:
-                return lord_info
-        if screen_type in {ScreenType.UNKNOWN, ScreenType.PNC_VIP}:
-            vip = _build_vip_additions(image=image, lines=lines)
-            if vip is not None:
-                return vip
-        if screen_type in {ScreenType.UNKNOWN, ScreenType.PNC_IMPROVE_MIGHT}:
-            improve_might = _build_improve_might_additions(image=image, lines=lines)
-            if improve_might is not None:
-                return improve_might
-        if screen_type in {ScreenType.UNKNOWN, ScreenType.PNC_HOME_CITY, ScreenType.PNC_MORE_MENU}:
-            more_settings_menu = _build_more_settings_menu_additions(image=image, lines=lines)
-            if more_settings_menu is not None:
-                return more_settings_menu
-            more_menu = _build_more_menu_additions(image=image, lines=lines, anchors=anchors)
-            if more_menu is not None:
-                return more_menu
-        if screen_type not in {ScreenType.UNKNOWN, ScreenType.PNC_CASTLE_SELECTION, ScreenType.PNC_HOME_CITY, ScreenType.PNC_MORE_MENU}:
-            return ObservationAdditions()
-        building_detail = _build_building_detail_additions(image=image, lines=lines, anchors=anchors)
-        if building_detail is not None:
-            return building_detail
-        home_city = _build_home_city_additions(
-            image=image,
-            anchors=anchors,
-            visible_elements=visible_elements,
-        )
-        if home_city is not None:
-            return home_city
-        bag = _build_bag_additions(image=image, lines=lines, anchors=anchors)
-        if bag is not None:
-            return bag
-        alliance_join = _build_alliance_join_additions(image=image, lines=lines)
-        if alliance_join is not None:
-            return alliance_join
-        academy = _build_academy_additions(image=image, lines=lines, anchors=anchors)
-        if academy is not None:
-            return academy
-        research_tree = _build_research_tree_additions(image=image, lines=lines)
-        if research_tree is not None:
-            return research_tree
-        entries = _extract_castle_entries(image=image, lines=lines, anchors=anchors)
-        if not _looks_like_castle_selection(anchors, entries):
-            return ObservationAdditions()
-
-        visible_elements_by_id: dict[UiElementId, VisibleElement] = {}
-        if entries:
-            visible_elements_by_id[UiElementId.PNC_CASTLE_LIST_ENTRY] = _make_visible_from_entry(
-                selector_id=UiElementId.PNC_CASTLE_LIST_ENTRY,
-                entry=entries[0],
-            )
-        selected_entry = next((entry for entry in entries if entry.selected), None)
-        if selected_entry is not None:
-            visible_elements_by_id[UiElementId.PNC_CASTLE_SELECTED_CHECKMARK] = _make_visible(
-                selector_id=UiElementId.PNC_CASTLE_SELECTED_CHECKMARK,
-                x=max(0, selected_entry.bounds.x + int(selected_entry.bounds.width * 0.82)),
-                y=selected_entry.bounds.y,
-                width=max(1, int(selected_entry.bounds.width * 0.18)),
-                height=selected_entry.bounds.height,
-            )
-        return ObservationAdditions(
-            visible_elements=visible_elements_by_id,
-            list_entries=entries,
-            screen_evidence=(ScreenEvidence(ScreenType.PNC_CASTLE_SELECTION, "manage_char_roster"),),
-            current_castle=_entry_to_current_castle(selected_entry),
-        )
+        return self.interpret(image, screen_type, visible_elements)
 
 
 def _build_popup_additions(
@@ -348,6 +341,32 @@ def _build_popup_additions(
             screen_evidence=(ScreenEvidence(ScreenType.PNC_POPUP, "ocr_popup_cancel_button"),),
         )
     return _build_promotional_popup_additions(image=image, lines=lines)
+
+
+def _build_castle_selection_interpretation(entries: tuple[DetectedListEntry, ...]) -> ScreenInterpretation:
+    """Builds the trusted Manage Char interpretation from the extracted castle rows."""
+
+    visible_elements_by_id: dict[UiElementId, VisibleElement] = {}
+    if entries:
+        visible_elements_by_id[UiElementId.PNC_CASTLE_LIST_ENTRY] = _make_visible_from_entry(
+            selector_id=UiElementId.PNC_CASTLE_LIST_ENTRY,
+            entry=entries[0],
+        )
+    selected_entry = next((entry for entry in entries if entry.selected), None)
+    if selected_entry is not None:
+        visible_elements_by_id[UiElementId.PNC_CASTLE_SELECTED_CHECKMARK] = _make_visible(
+            selector_id=UiElementId.PNC_CASTLE_SELECTED_CHECKMARK,
+            x=max(0, selected_entry.bounds.x + int(selected_entry.bounds.width * 0.82)),
+            y=selected_entry.bounds.y,
+            width=max(1, int(selected_entry.bounds.width * 0.18)),
+            height=selected_entry.bounds.height,
+        )
+    return ScreenInterpretation(
+        visible_elements=visible_elements_by_id,
+        list_entries=entries,
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_CASTLE_SELECTION, "manage_char_roster"),),
+        current_castle=_entry_to_current_castle(selected_entry),
+    )
 
 
 def _build_promotional_popup_additions(
@@ -571,12 +590,30 @@ def _build_login_additions(
         label_line=username_label,
         next_line=password_label,
     )
+    password_field = _build_labeled_field(
+        image=image,
+        selector_id=UiElementId.PNC_LOGIN_PASSWORD_FIELD,
+        label_line=password_label,
+        next_line=submit_line,
+    )
     current_pnc_account_id = _find_account_identifier(
         lines=lines,
         min_y=username_field.bounds.y,
         max_y=username_field.bounds.y + username_field.bounds.height,
     )
     return ObservationAdditions(
+        visible_elements={
+            UiElementId.PNC_LOGIN_USERNAME_FIELD: username_field,
+            UiElementId.PNC_LOGIN_PASSWORD_FIELD: password_field,
+            UiElementId.PNC_LOGIN_SUBMIT_BUTTON: _make_visible(
+                selector_id=UiElementId.PNC_LOGIN_SUBMIT_BUTTON,
+                x=max(0, submit_line.bounds.x - max(24, submit_line.bounds.width // 2)),
+                y=max(0, submit_line.bounds.y - max(14, submit_line.bounds.height // 2)),
+                width=submit_line.bounds.width + max(48, submit_line.bounds.width),
+                height=submit_line.bounds.height + max(20, submit_line.bounds.height),
+                extracted_text=submit_line.text,
+            ),
+        },
         screen_evidence=(ScreenEvidence(ScreenType.PNC_LOGIN, "ocr_login_form"),),
         current_pnc_account_id=current_pnc_account_id,
     )
@@ -609,7 +646,27 @@ def _build_account_switch_additions(
     if continue_line is None and change_account_line is None:
         return None
 
+    visible_elements: dict[UiElementId, VisibleElement] = {}
+    if continue_line is not None:
+        visible_elements[UiElementId.PNC_ACCOUNT_SWITCH_CONTINUE_BUTTON] = _make_visible(
+            selector_id=UiElementId.PNC_ACCOUNT_SWITCH_CONTINUE_BUTTON,
+            x=max(0, continue_line.bounds.x - max(24, continue_line.bounds.width // 2)),
+            y=max(0, continue_line.bounds.y - max(14, continue_line.bounds.height // 2)),
+            width=continue_line.bounds.width + max(48, continue_line.bounds.width),
+            height=continue_line.bounds.height + max(20, continue_line.bounds.height),
+            extracted_text=continue_line.text,
+        )
+    if change_account_line is not None:
+        visible_elements[UiElementId.PNC_ACCOUNT_SWITCH_CHANGE_ACCOUNT_BUTTON] = _make_visible(
+            selector_id=UiElementId.PNC_ACCOUNT_SWITCH_CHANGE_ACCOUNT_BUTTON,
+            x=max(0, change_account_line.bounds.x - max(24, change_account_line.bounds.width // 2)),
+            y=max(0, change_account_line.bounds.y - max(14, change_account_line.bounds.height // 2)),
+            width=change_account_line.bounds.width + max(48, change_account_line.bounds.width),
+            height=change_account_line.bounds.height + max(20, change_account_line.bounds.height),
+            extracted_text=change_account_line.text,
+        )
     return ObservationAdditions(
+        visible_elements=visible_elements,
         screen_evidence=(ScreenEvidence(ScreenType.PNC_ACCOUNT_SWITCH, "ocr_account_switch"),),
         current_pnc_account_id=_find_account_identifier(
             lines=lines,
