@@ -26,7 +26,12 @@ from pnc_automation.pnc.ui_element_id import UiElementId
 from pnc_automation.vision.observation_builder import CapturedObservation
 from pnc_automation.vision.observation_request import ObservationRequest
 from pnc_automation.vision.selector_interaction_kind import SelectorInteractionKind
-from pnc_automation.vision.selector_interactions import match_reviewed_navigation_outcome, safe_navigation_outcomes
+from pnc_automation.vision.selector_interactions import (
+    is_popup_observation,
+    match_reviewed_navigation_outcome,
+    safe_navigation_outcomes,
+    settle_reviewed_navigation_observation,
+)
 from pnc_automation.vision.selectors import ClickOutcome, SelectorRegistry
 
 
@@ -379,21 +384,54 @@ class NavigationSelectorValidator:
         """Dismisses blocking popups that remain after the shared selector-tap execution path returns."""
 
         latest_capture = destination_capture
-        for settle_index in range(self.max_destination_settle_observations):
+        for popup_index in range(self.max_destination_settle_observations):
             matched_outcome, _ = match_reviewed_navigation_outcome(
                 latest_capture.observation,
                 case.reviewed_outcomes,
             )
             if matched_outcome is not None:
                 return latest_capture
-            if latest_capture.observation.blocking_popup or latest_capture.observation.screen_type == ScreenType.PNC_POPUP:
+            if is_popup_observation(latest_capture.observation):
+                popup_label_prefix = f"navigation_validation_{case_index}_settle_popup_{popup_index + 1}"
                 _, latest_capture = self._execute_actions(
                     self.screen_flows.close_blocking_popup(latest_capture.observation),
                     latest_capture,
-                    label_prefix=f"navigation_validation_{case_index}_settle_popup_{settle_index + 1}",
+                    label_prefix=popup_label_prefix,
+                )
+                latest_capture = self._settle_destination_capture(
+                    case,
+                    latest_capture,
+                    label_prefix=f"{popup_label_prefix}_post_action_1",
                 )
                 continue
             return latest_capture
+        return latest_capture
+
+    def _settle_destination_capture(
+        self,
+        case: NavigationSelectorValidationCase,
+        destination_capture: CapturedObservation,
+        *,
+        label_prefix: str,
+    ) -> CapturedObservation:
+        """Passively re-observes one destination capture until reviewed matching or a non-transient state appears."""
+
+        latest_capture = destination_capture
+
+        def observe(label: str, request: ObservationRequest | None = None) -> Observation:
+            nonlocal latest_capture
+            latest_capture = self.observation_service.capture_observation(label, request=request)
+            return latest_capture.observation
+
+        settle_reviewed_navigation_observation(
+            first_observation=latest_capture.observation,
+            label_prefix=label_prefix,
+            request=ObservationRequest.navigation_follow_up(case.reviewed_outcomes),
+            reviewed_outcomes=case.reviewed_outcomes,
+            max_settle_observations=self.max_destination_settle_observations,
+            observe=observe,
+            sleep=self._sleep_for_destination_settle,
+        )
         return latest_capture
 
     def _recover_to_home(
@@ -449,6 +487,14 @@ class NavigationSelectorValidator:
                 selector_interactions=execution.selector_interactions,
             )
         return execution, latest_capture
+
+    def _sleep_for_destination_settle(self) -> None:
+        """Applies the shared post-action observe delay before passive validation re-observation."""
+
+        delay_ms = self.action_executor.action_executor.post_action_observe_delay_ms
+        if delay_ms <= 0:
+            return
+        self.sleep(delay_ms / 1000.0)
 
 
 def build_navigation_validation_cases(

@@ -27,6 +27,12 @@ from pnc_automation.vision.image_models import SelectorMatch
 from pnc_automation.vision.observation_request import ObservationRequest
 from pnc_automation.vision.ocr_service import OcrLine, OcrResult, UnavailableOcrService
 from pnc_automation.vision.pnc_observation_enricher import PncObservationEnricher
+from pnc_automation.vision.selector_catalog import (
+    SelectorCatalogDocument,
+    SelectorCatalogEntry,
+    SelectorCatalogRelativeBounds,
+    write_selector_catalog_document,
+)
 from pnc_automation.vision.screen_classifier import ScreenClassifier
 from pnc_automation.vision.selectors import (
     ClickDefinition,
@@ -239,6 +245,52 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertTrue(observation.has(UiElementId.PNC_HOME_WORLD_SWITCH))
             self.assertTrue(observation.has(UiElementId.PNC_HOME_CHARACTER_PANEL))
 
+    def test_pillow_selector_engine_detects_catalog_backed_ocr_regions(self) -> None:
+        """Resolves catalog-defined normalized OCR regions through the runtime selector engine."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            catalog_path = root / "selector_registry.yaml"
+            write_selector_catalog_document(
+                catalog_path,
+                SelectorCatalogDocument(
+                    selectors=(
+                        SelectorCatalogEntry(
+                            id="PNC_CASH_MALL_ENTRY_TITLE_REGION",
+                            screens=("PNC_CASH_MALL",),
+                            status="screenshot_seeded",
+                            detection_kind="ocr_region",
+                            relative_bounds=SelectorCatalogRelativeBounds(
+                                x_ratio=0.1,
+                                y_ratio=0.2,
+                                width_ratio=0.4,
+                                height_ratio=0.18,
+                            ),
+                        ),
+                    )
+                ),
+            )
+            registry = build_default_selector_registry(catalog_path=catalog_path, template_root=root)
+            selector_engine = PillowSelectorEngine(
+                template_matcher=PillowTemplateMatcher(),
+                ocr_service=_FakeOcrService(
+                    lines=(
+                        _ocr_line("Daily Sale", x=12, y=22, width=32, height=12),
+                    )
+                ),
+            )
+
+            matches = selector_engine.detect(Image.new("RGB", (100, 100), (0, 0, 0)), registry)
+
+            self.assertEqual(len(matches), 1)
+            self.assertEqual(matches[0].selector_id, UiElementId.PNC_CASH_MALL_ENTRY_TITLE_REGION)
+            self.assertEqual(matches[0].source_kind, VisibleElementSourceKind.OCR)
+            self.assertEqual(matches[0].extracted_text, "Daily Sale")
+            self.assertEqual(
+                registry.require(UiElementId.PNC_CASH_MALL_ENTRY_TITLE_REGION).relative_bounds,
+                RelativeBounds(x_ratio=0.1, y_ratio=0.2, width_ratio=0.4, height_ratio=0.18),
+            )
+
     def test_observation_builder_parses_castle_selection_from_manage_char_ocr(self) -> None:
         """Classifies the Manage Char screen from OCR and extracts castle rows."""
 
@@ -323,7 +375,7 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertTrue(observation.has(UiElementId.PNC_LOGIN_USERNAME_FIELD))
             self.assertTrue(observation.has(UiElementId.PNC_LOGIN_PASSWORD_FIELD))
             self.assertTrue(observation.has(UiElementId.PNC_LOGIN_SUBMIT_BUTTON))
-            self.assertEqual(observation.require(UiElementId.PNC_LOGIN_USERNAME_FIELD).bounds.x, 59)
+            self.assertEqual(observation.require(UiElementId.PNC_LOGIN_USERNAME_FIELD).bounds.x, 60)
             self.assertEqual(observation.require(UiElementId.PNC_LOGIN_PASSWORD_FIELD).bounds.y, 352)
             self.assertEqual(observation.require(UiElementId.PNC_LOGIN_SUBMIT_BUTTON).bounds.width, 210)
             self.assertEqual(observation.current_pnc_account_id, "user@example.com")
@@ -363,7 +415,7 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertEqual(observation.screen_type, ScreenType.PNC_ACCOUNT_SWITCH)
             self.assertTrue(observation.has(UiElementId.PNC_ACCOUNT_SWITCH_CONTINUE_BUTTON))
             self.assertTrue(observation.has(UiElementId.PNC_ACCOUNT_SWITCH_CHANGE_ACCOUNT_BUTTON))
-            self.assertEqual(observation.require(UiElementId.PNC_ACCOUNT_SWITCH_CONTINUE_BUTTON).bounds.x, 158)
+            self.assertEqual(observation.require(UiElementId.PNC_ACCOUNT_SWITCH_CONTINUE_BUTTON).bounds.x, 159)
             self.assertEqual(observation.require(UiElementId.PNC_ACCOUNT_SWITCH_CHANGE_ACCOUNT_BUTTON).bounds.width, 340)
             self.assertEqual(observation.current_pnc_account_id, "user@example.com")
 

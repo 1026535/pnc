@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 from pnc_automation.errors import SelectorResolutionError
 from pnc_automation.pnc.observation import Observation, VisibleElement, VisibleElementSourceKind
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
+from pnc_automation.vision.observation_request import ObservationRequest
 from pnc_automation.vision.selector_interaction_kind import SelectorInteractionKind
 from pnc_automation.vision.selectors import ClickOutcome, SelectorDefinition
 
@@ -34,6 +35,7 @@ def match_reviewed_navigation_outcome(
 
     closest_missing_selectors: tuple[UiElementId, ...] = ()
     for outcome in reviewed_outcomes:
+        _require_supported_reviewed_outcome(outcome)
         if outcome.target_screen is not None and observation.screen_type != outcome.target_screen:
             continue
         missing_selectors = tuple(
@@ -46,6 +48,36 @@ def match_reviewed_navigation_outcome(
         if not closest_missing_selectors or len(missing_selectors) < len(closest_missing_selectors):
             closest_missing_selectors = missing_selectors
     return None, closest_missing_selectors
+
+
+def settle_reviewed_navigation_observation(
+    *,
+    first_observation: Observation,
+    reviewed_outcomes: Sequence[ClickOutcome],
+    label_prefix: str,
+    request: ObservationRequest | None,
+    max_settle_observations: int,
+    observe: Callable[[str, ObservationRequest | None], Observation],
+    sleep: Callable[[], None] | None = None,
+) -> Observation:
+    """Passively re-observes one reviewed navigation destination until it settles."""
+
+    if max_settle_observations < 0:
+        raise ValueError("settle_reviewed_navigation_observation max_settle_observations cannot be negative.")
+    latest_observation = first_observation
+    for settle_index in range(max_settle_observations):
+        matched_outcome, _ = match_reviewed_navigation_outcome(latest_observation, reviewed_outcomes)
+        if matched_outcome is not None or is_popup_observation(latest_observation):
+            return latest_observation
+        if not is_transitional_observation(latest_observation):
+            return latest_observation
+        if sleep is not None:
+            sleep()
+        latest_observation = observe(
+            f"{label_prefix}_settle_{settle_index + 1}",
+            request,
+        )
+    return latest_observation
 
 
 def is_popup_observation(observation: Observation) -> bool:
@@ -85,3 +117,15 @@ def is_settled_primary_navigation_miss(
     if is_popup_observation(after) or is_transitional_observation(after):
         return False
     return after.screen_type == before.screen_type
+
+
+def _require_supported_reviewed_outcome(outcome: ClickOutcome) -> None:
+    """Rejects reviewed navigation contracts that runtime matching cannot yet verify."""
+
+    if not outcome.verification_texts:
+        return
+    raise SelectorResolutionError(
+        "Reviewed navigation verification_texts are not supported at runtime.",
+        target_screen=None if outcome.target_screen is None else outcome.target_screen.name,
+        verification_texts=outcome.verification_texts,
+    )

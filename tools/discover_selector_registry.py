@@ -16,6 +16,7 @@ root = ensure_repo_root_on_path()
 from pnc_automation.app import ApplicationRunner, build_application_runner
 from pnc_automation.artifact_naming import sanitize_artifact_segment
 from pnc_automation.automation.action_executor import ActionExecutor
+from pnc_automation.automation.observed_action_executor import ObservedActionExecutor
 from pnc_automation.emulator.bluestacks_instance import BlueStacksInstance
 from pnc_automation.emulator.session import BlueStacksSession
 from pnc_automation.errors import SelectorResolutionError
@@ -25,9 +26,11 @@ from pnc_automation.pnc.screen_flows import ScreenFlowPlanner
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
 from pnc_automation.vision.observation_builder import CapturedObservation, ObservationBuilder, ObservationService
+from pnc_automation.vision.observation_request import ObservationRequest
 from pnc_automation.vision.selector_catalog import default_selector_catalog_path, load_selector_catalog_document
 from pnc_automation.vision.selector_discovery import (
     SelectorDiscoveryAnalyzer,
+    SelectorDiscoveryDraft,
     SelectorDiscoveryProbe,
     SelectorDiscoverySnapshot,
     load_artifact_paths,
@@ -50,6 +53,7 @@ class SelectorDiscoverySession:
 
     snapshots: tuple[SelectorDiscoverySnapshot, ...]
     probes: tuple[SelectorDiscoveryProbe, ...]
+    draft_selectors: tuple[SelectorDiscoveryDraft, ...] = ()
 
 
 def main() -> int:
@@ -78,6 +82,12 @@ def main() -> int:
         help="UiElementId name to tap during live discovery. May be provided multiple times.",
     )
     parser.add_argument(
+        "--stage-visible-selector",
+        action="append",
+        default=[],
+        help="UiElementId name to stage from live visible runtime evidence. May be provided multiple times.",
+    )
+    parser.add_argument(
         "--output-dir",
         default=str(root / "selector_discovery_output"),
         help="Directory where the report and draft spec should be written.",
@@ -88,12 +98,17 @@ def main() -> int:
     has_artifact_inputs = bool(arguments.artifact) or arguments.artifact_dir is not None
     if arguments.account is None and not has_artifact_inputs:
         raise SelectorResolutionError("Discovery requires artifact inputs, --account, or both.")
-    if arguments.account is None and (arguments.settle_home_city or arguments.probe_selector):
+    if arguments.account is None and (
+        arguments.settle_home_city or arguments.probe_selector or arguments.stage_visible_selector
+    ):
         raise SelectorResolutionError("Live-only discovery flags require --account.", account_id=arguments.account)
+
+    live_stage_selector_ids = tuple(_require_ui_element_id(name) for name in arguments.stage_visible_selector)
 
     runtime = _build_runtime(config_path=Path(arguments.config), catalog_path=Path(arguments.catalog), verbose=arguments.verbose)
     snapshots = []
     probes: list[SelectorDiscoveryProbe] = []
+    extra_drafts: list[SelectorDiscoveryDraft] = []
 
     if has_artifact_inputs:
         artifact_paths = load_artifact_paths(
@@ -108,11 +123,13 @@ def main() -> int:
             account_id=arguments.account,
             settle_home_city=arguments.settle_home_city,
             probe_selectors=tuple(arguments.probe_selector),
+            stage_visible_selectors=live_stage_selector_ids,
         )
         snapshots.extend(live_session.snapshots)
         probes.extend(live_session.probes)
+        extra_drafts.extend(live_session.draft_selectors)
 
-    report = runtime.analyzer.build_report(snapshots=tuple(snapshots), probes=tuple(probes))
+    report = runtime.analyzer.build_report(snapshots=tuple(snapshots), probes=tuple(probes), extra_drafts=tuple(extra_drafts))
     output_prefix = _build_output_prefix(
         base_directory=Path(arguments.output_dir),
         stem=_build_output_stem(account_id=arguments.account, includes_artifacts=has_artifact_inputs),
@@ -167,6 +184,7 @@ def _run_live_discovery(
     account_id: str,
     settle_home_city: bool,
     probe_selectors: tuple[str, ...],
+    stage_visible_selectors: tuple[UiElementId, ...],
  ) -> SelectorDiscoverySession:
     """Runs one live connected discovery session and returns the gathered evidence."""
 
@@ -188,22 +206,38 @@ def _run_live_discovery(
         pnc_account_id=account.pnc_account_id,
         castle_roster_store=script_runner.castle_roster_store,
     )
-    action_executor = ActionExecutor(
+    low_level_action_executor = ActionExecutor(
         session=session,
         stable_click_delay_ms=script_runner.config.defaults.stable_click_delay_ms,
         post_action_observe_delay_ms=script_runner.config.defaults.post_action_observe_delay_ms,
+        logger=logging.LoggerAdapter(script_runner.logger.logger, extra={}),
+    )
+    action_executor = ObservedActionExecutor(
+        selector_registry=script_runner.observation_builder.selector_registry,
+        action_executor=low_level_action_executor,
         logger=logging.LoggerAdapter(script_runner.logger.logger, extra={}),
     )
     flows = ScreenFlowPlanner()
 
     snapshots = []
     probes: list[SelectorDiscoveryProbe] = []
+    staged_drafts: list[SelectorDiscoveryDraft] = []
+    staged_selector_ids: set[UiElementId] = set()
     latest_capture: CapturedObservation | None = None
 
-    def capture(label: str) -> CapturedObservation:
+    def capture(label: str, request: ObservationRequest | None = None) -> CapturedObservation:
         nonlocal latest_capture
-        latest_capture = observation_service.capture_observation(label)
+        latest_capture = observation_service.capture_observation(label, request=request)
         snapshots.append(runtime.analyzer.analyze_captured_observation(latest_capture))
+        if stage_visible_selectors:
+            drafts = runtime.analyzer.build_visible_selector_drafts(
+                observation=latest_capture.observation,
+                artifact_path=latest_capture.screenshot.artifact.path,
+                selector_ids=stage_visible_selectors,
+                image=latest_capture.screenshot.image,
+            )
+            staged_drafts.extend(drafts)
+            staged_selector_ids.update(UiElementId[draft.id] for draft in drafts)
         return latest_capture
 
     current_capture = capture("discovery_start")
@@ -236,7 +270,10 @@ def _run_live_discovery(
                 ),
             ),
             current_capture.observation,
-            observe=lambda label, selector_id=selector_id: capture(f"probe_{selector_id.value.lower()}_{label}").observation,
+            observe=lambda label, request=None, selector_id=selector_id: capture(
+                f"probe_{selector_id.value.lower()}_{label}",
+                request=request,
+            ).observation,
         )
         if latest_capture is None:
             raise SelectorResolutionError("Live selector discovery probes must end with a captured destination observation.", selector_id=selector_id)
@@ -251,14 +288,34 @@ def _run_live_discovery(
         )
         current_capture = latest_capture
 
-    return SelectorDiscoverySession(snapshots=tuple(snapshots), probes=tuple(probes))
+    if stage_visible_selectors:
+        unresolved_selector_ids = tuple(
+            selector_id.value for selector_id in stage_visible_selectors if selector_id not in staged_selector_ids
+        )
+        if unresolved_selector_ids:
+            raise SelectorResolutionError(
+                "Live selector discovery could not observe the requested visible selectors.",
+                selector_ids=unresolved_selector_ids,
+                screen_type=current_capture.observation.screen_type.name,
+                artifact_path=(
+                    str(current_capture.observation.artifact_path)
+                    if current_capture.observation.artifact_path is not None
+                    else None
+                ),
+            )
+
+    return SelectorDiscoverySession(
+        snapshots=tuple(snapshots),
+        probes=tuple(probes),
+        draft_selectors=tuple(staged_drafts),
+    )
 
 
 def _settle_to_home_city(
     *,
     current_capture: CapturedObservation,
-    capture: Callable[[str], CapturedObservation],
-    action_executor: ActionExecutor,
+    capture: Callable[[str, ObservationRequest | None], CapturedObservation],
+    action_executor: ObservedActionExecutor,
     flows: ScreenFlowPlanner,
     session: BlueStacksSession,
     max_steps: int = 10,
@@ -279,9 +336,9 @@ def _settle_to_home_city(
             )
         candidate_capture: CapturedObservation | None = None
 
-        def observe_callback(label: str) -> object:
+        def observe_callback(label: str, request: ObservationRequest | None = None) -> object:
             nonlocal candidate_capture
-            candidate_capture = capture(f"settle_home_{index + 1}_{label}")
+            candidate_capture = capture(f"settle_home_{index + 1}_{label}", request=request)
             return candidate_capture.observation
 
         action_executor.execute_actions(planned_actions, observation, observe=observe_callback)

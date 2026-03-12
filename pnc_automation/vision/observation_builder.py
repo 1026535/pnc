@@ -133,15 +133,16 @@ class PillowSelectorEngine:
                 )
                 continue
             if selector.detection_kind == DetectionKind.OCR_REGION:
-                if selector.ocr_region is None:
+                if selector.relative_bounds is None:
                     continue
-                text = self.ocr_service.read_text(image, selector.ocr_region).strip()
+                region = selector.relative_bounds.materialize_region(image_size=image.size)
+                text = self.ocr_service.read_text(image, region).strip()
                 if text == "":
                     continue
                 matches.append(
                     SelectorMatch(
                         selector_id=selector.id,
-                        bounds=selector_to_bounds(selector.ocr_region),
+                        bounds=selector_to_bounds(region),
                         confidence=1.0,
                         source_kind=VisibleElementSourceKind.OCR,
                         extracted_text=text,
@@ -162,7 +163,7 @@ class ObservationBuilder:
     def build(self, screenshot: CapturedScreenshot, *, request: ObservationRequest | None = None) -> Observation:
         """Builds one observation from a captured screenshot."""
 
-        active_request = request or ObservationRequest.runtime_default()
+        active_request = request or ObservationRequest.full_runtime_default()
         probe_matches = self.selector_engine.detect(
             screenshot.image,
             self.selector_registry,

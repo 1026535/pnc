@@ -18,11 +18,9 @@ from pnc_automation.pnc.ui_element_id import UiElementId
 from pnc_automation.vision.observation_request import ObservationRequest
 from pnc_automation.vision.selector_interaction_kind import SelectorInteractionKind
 from pnc_automation.vision.selector_interactions import (
-    is_popup_observation,
     is_settled_primary_navigation_miss,
-    is_transitional_observation,
-    match_reviewed_navigation_outcome,
     safe_navigation_outcomes,
+    settle_reviewed_navigation_observation,
 )
 from pnc_automation.vision.selectors import ClickOutcome, SelectorDefinition, SelectorRegistry
 
@@ -172,12 +170,14 @@ class ObservedActionExecutor:
         self.action_executor.execute_action(action, before)
         self._sleep_for_observe()
         first_after = observe(label_prefix, request=follow_up_request)
-        settled_after = self._settle_follow_up_observation(
-            first_after=first_after,
+        settled_after = settle_reviewed_navigation_observation(
+            first_observation=first_after,
             label_prefix=label_prefix,
             request=follow_up_request,
             reviewed_outcomes=candidate.reviewed_outcomes,
+            max_settle_observations=self.policy.max_settle_observations,
             observe=observe,
+            sleep=self._sleep_for_observe,
         )
         final_after = settled_after
         fallback_attempted = False
@@ -195,7 +195,16 @@ class ObservedActionExecutor:
                 fallback_source_kind = retry_element.source_kind
                 self.action_executor.execute_action(action, retry_source)
                 self._sleep_for_observe()
-                final_after = observe(f"{label_prefix}_ocr_retry_after", request=follow_up_request)
+                retry_after = observe(f"{label_prefix}_ocr_retry_after", request=follow_up_request)
+                final_after = settle_reviewed_navigation_observation(
+                    first_observation=retry_after,
+                    label_prefix=f"{label_prefix}_ocr_retry_after",
+                    request=follow_up_request,
+                    reviewed_outcomes=candidate.reviewed_outcomes,
+                    max_settle_observations=self.policy.max_settle_observations,
+                    observe=observe,
+                    sleep=self._sleep_for_observe,
+                )
             else:
                 final_after = retry_source
         interaction = SelectorInteractionResult(
@@ -226,31 +235,6 @@ class ObservedActionExecutor:
             observation=final_after,
             selector_interactions=(interaction,),
         )
-
-    def _settle_follow_up_observation(
-        self,
-        *,
-        first_after: Observation,
-        label_prefix: str,
-        request: ObservationRequest,
-        reviewed_outcomes: tuple[ClickOutcome, ...],
-        observe: ObservationCallback,
-    ) -> Observation:
-        """Passively re-observes transitional post-tap states before any OCR retry decision."""
-
-        latest_observation = first_after
-        for settle_index in range(self.policy.max_settle_observations):
-            matched_outcome, _ = match_reviewed_navigation_outcome(latest_observation, reviewed_outcomes)
-            if matched_outcome is not None or is_popup_observation(latest_observation):
-                return latest_observation
-            if not is_transitional_observation(latest_observation):
-                return latest_observation
-            self._sleep_for_observe()
-            latest_observation = observe(
-                f"{label_prefix}_settle_{settle_index + 1}",
-                request=request,
-            )
-        return latest_observation
 
     def _sleep_for_observe(self) -> None:
         """Applies the shared post-action observe delay used by follow-up captures."""

@@ -508,6 +508,98 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                     ui_element_id_path=ui_element_id_path,
                 )
 
+    def test_update_selector_registry_files_rejects_legacy_ocr_region_schema(self) -> None:
+        """Fails fast when an update spec still uses the obsolete absolute OCR rectangle field."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            catalog_path = self._write_catalog(
+                root,
+                selectors=(
+                    SelectorCatalogEntry(
+                        id="PNC_CASH_MALL_ENTRY_TITLE_REGION",
+                        screens=("PNC_CASH_MALL",),
+                        status="planned",
+                        detection_kind="planned",
+                    ),
+                ),
+            )
+            ui_element_id_path = self._write_ui_element_ids(root, selector_ids=("PNC_CASH_MALL_ENTRY_TITLE_REGION",))
+            spec_path = root / "updates.yaml"
+            spec_path.write_text(
+                "selectors:\n"
+                "  - id: PNC_CASH_MALL_ENTRY_TITLE_REGION\n"
+                "    screens: [PNC_CASH_MALL]\n"
+                "    status: screenshot_seeded\n"
+                "    detection_kind: ocr_region\n"
+                "    ocr_region:\n"
+                "      x: 10\n"
+                "      y: 20\n"
+                "      width: 30\n"
+                "      height: 12\n",
+                encoding="utf-8",
+                newline="\n",
+            )
+
+            with self.assertRaises(SelectorResolutionError):
+                update_selector_registry_files(
+                    spec_path=spec_path,
+                    catalog_path=catalog_path,
+                    ui_element_id_path=ui_element_id_path,
+                )
+
+    def test_update_selector_registry_files_rejects_verification_texts(self) -> None:
+        """Fails fast when an update spec requests runtime text verification that is not implemented."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            catalog_path = self._write_catalog(
+                root,
+                selectors=(
+                    SelectorCatalogEntry(
+                        id="PNC_BOTTOM_NAV_BAG",
+                        screens=("PNC_HOME_CITY",),
+                        status="screenshot_seeded",
+                        detection_kind="template",
+                    ),
+                ),
+            )
+            ui_element_id_path = self._write_ui_element_ids(root, selector_ids=("PNC_BOTTOM_NAV_BAG",))
+            spec_path = root / "updates.yaml"
+            spec_path.write_text(
+                yaml.safe_dump(
+                    {
+                        "selectors": [
+                            {
+                                "id": "PNC_BOTTOM_NAV_BAG",
+                                "screens": ["PNC_HOME_CITY"],
+                                "status": "click_mapped",
+                                "detection_kind": "template",
+                                "interaction_kind": "navigation",
+                                "click": {
+                                    "outcomes": [
+                                        {
+                                            "target_screen": "PNC_BAG",
+                                            "verification_texts": ["Bag"],
+                                        }
+                                    ]
+                                },
+                            }
+                        ]
+                    },
+                    sort_keys=False,
+                ),
+                encoding="utf-8",
+                newline="\n",
+            )
+
+            with self.assertRaises(SelectorResolutionError):
+                update_selector_registry_files(
+                    spec_path=spec_path,
+                    catalog_path=catalog_path,
+                    ui_element_id_path=ui_element_id_path,
+                )
+
     def _write_catalog(self, root: Path, *, selectors: tuple[SelectorCatalogEntry, ...]) -> Path:
         """Writes one temporary selector catalog and returns its path."""
 

@@ -6,25 +6,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from pnc_automation.pnc.screen_type import ScreenType
+from pnc_automation.vision.pnc_ocr_capabilities import runtime_screen_family_ocr_types
 from pnc_automation.vision.selectors import ClickOutcome
-
-_RUNTIME_OCR_SCREEN_TYPES = frozenset(
-    {
-        ScreenType.PNC_LOGIN,
-        ScreenType.PNC_ACCOUNT_SWITCH,
-        ScreenType.PNC_CASTLE_SELECTION,
-        ScreenType.PNC_HOME_CITY,
-        ScreenType.PNC_MORE_MENU,
-        ScreenType.PNC_LORD_INFO,
-        ScreenType.PNC_VIP,
-        ScreenType.PNC_IMPROVE_MIGHT,
-        ScreenType.PNC_BAG,
-        ScreenType.PNC_ALLIANCE_JOIN,
-        ScreenType.PNC_BUILDING_DETAILS,
-        ScreenType.PNC_ACADEMY,
-        ScreenType.PNC_RESEARCH_TREE,
-    }
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,14 +25,20 @@ class ObservationRequest:
         return cls()
 
     @classmethod
-    def runtime_default(cls) -> "ObservationRequest":
-        """Returns the broad runtime request used for full step observations."""
+    def full_runtime_default(cls) -> "ObservationRequest":
+        """Returns the broad full-frame OCR request used for unattended runtime observations."""
 
         return cls(
-            ocr_screen_types=_RUNTIME_OCR_SCREEN_TYPES,
+            ocr_screen_types=runtime_screen_family_ocr_types(),
             include_popup_guard=True,
             include_loading_guard=True,
         )
+
+    @classmethod
+    def runtime_default(cls) -> "ObservationRequest":
+        """Returns the legacy alias for the canonical full-frame runtime request."""
+
+        return cls.full_runtime_default()
 
     @classmethod
     def navigation_follow_up(cls, reviewed_outcomes: Sequence[ClickOutcome]) -> "ObservationRequest":

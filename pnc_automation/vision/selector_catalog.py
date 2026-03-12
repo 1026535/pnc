@@ -13,10 +13,11 @@ from pnc_automation.errors import SelectorResolutionError
 from pnc_automation.vision.selector_interaction_kind import SelectorInteractionKind
 
 _CATALOG_HEADER_LINES = (
-    "# `relative_bounds` is always normalized to the current screenshot size:",
+    "# `relative_bounds` is always normalized to the current screenshot size and is the canonical region schema",
+    "# for both click geometry and `detection_kind: ocr_region` OCR crops:",
     "# - `x_ratio` / `y_ratio`: top-left corner of the clickable region, not the center",
     "# - `width_ratio` / `height_ratio`: size of the clickable region",
-    "# - `action_x_ratio` / `action_y_ratio`: optional explicit click point",
+    "# - `action_x_ratio` / `action_y_ratio`: optional explicit click point for tap-capable selectors",
     "#   If omitted, the runtime clicks the center of the defined region.",
     "# - `materialize_relative_bounds: false`: keep the relative click region without auto-marking the selector visible",
     "# `interaction_kind` is optional during migration:",
@@ -235,6 +236,11 @@ def _load_selector_entries(value: object) -> tuple[SelectorCatalogEntry, ...]:
             if "interaction_kind" in mapping
             else None
         )
+        if "ocr_region" in mapping:
+            raise SelectorResolutionError(
+                "Selector catalog entries must use normalized relative_bounds instead of legacy ocr_region rectangles.",
+                selector_id=selector_id,
+            )
         click = load_selector_schema_click_definition(
             mapping.get("click"),
             selector_id=selector_id,
@@ -306,7 +312,22 @@ def validate_selector_catalog_interactions(document: SelectorCatalogDocument) ->
                 "Selector materialize_relative_bounds requires relative_bounds.",
                 selector_id=selector.id,
             )
+        if selector.detection_kind == "ocr_region" and selector.status != "planned" and selector.relative_bounds is None:
+            raise SelectorResolutionError(
+                "Non-planned ocr_region selectors must declare normalized relative_bounds.",
+                selector_id=selector.id,
+                detection_kind=selector.detection_kind,
+                status=selector.status,
+            )
         interaction_kind_name = selector.interaction_kind
+        if selector.click is not None:
+            for outcome in selector.click.outcomes:
+                if outcome.verification_texts:
+                    raise SelectorResolutionError(
+                        "Reviewed click outcomes do not support verification_texts at runtime.",
+                        selector_id=selector.id,
+                        verification_texts=outcome.verification_texts,
+                    )
         if interaction_kind_name is None:
             continue
         try:
@@ -437,6 +458,12 @@ def load_selector_schema_click_outcomes(
                 document_label=document_label,
             )
         )
+        if verification_texts:
+            raise SelectorResolutionError(
+                "Reviewed click outcomes do not support verification_texts at runtime.",
+                selector_id=selector_id,
+                verification_texts=verification_texts,
+            )
         notes = tuple(
             load_selector_schema_string_sequence(
                 mapping.get("notes", ()),
