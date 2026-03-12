@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from pnc_automation.automation.action_executor import ActionExecutor
+from pnc_automation.automation.observed_action_executor import ObservedActionExecutor
 from pnc_automation.automation.runner import AutomationRunner
 from pnc_automation.automation.scripts.models import RunScript, ScriptStep
 from pnc_automation.automation.scripts.registry import build_default_task_registry
@@ -15,6 +16,7 @@ from pnc_automation.pnc.observation import ListEntryKind
 from pnc_automation.pnc.screen_flows import ScreenFlowPlanner
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
+from pnc_automation.vision.selectors import build_default_selector_registry
 from tests.test_support import FakeObservationService, FakeSession, build_logger, make_entry, make_observation
 
 
@@ -247,10 +249,15 @@ class RunnerEndToEndTests(unittest.TestCase):
         runner = AutomationRunner(
             defaults=defaults,
             observation_service=fake_observer,
-            action_executor=ActionExecutor(
-                session=fake_session,
-                stable_click_delay_ms=0,
-                post_action_observe_delay_ms=0,
+            action_executor=ObservedActionExecutor(
+                selector_registry=build_default_selector_registry(),
+                action_executor=ActionExecutor(
+                    session=fake_session,
+                    stable_click_delay_ms=0,
+                    post_action_observe_delay_ms=0,
+                    logger=build_logger(),
+                    sleep=lambda _: None,
+                ),
                 logger=build_logger(),
                 sleep=lambda _: None,
             ),

@@ -17,11 +17,13 @@ from pnc_automation.pnc.observation import (
     ListEntryKind,
     Observation,
     VisibleElement,
+    VisibleElementSourceKind,
     castle_entry_identity_matches,
 )
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
 from pnc_automation.vision.image_models import SelectorMatch
+from pnc_automation.vision.observation_request import ObservationRequest
 from pnc_automation.vision.ocr_service import OcrService
 from pnc_automation.vision.screen_classifier import ScreenClassifier, ScreenEvidence
 from pnc_automation.vision.selectors import DetectionKind, SelectorRegistry
@@ -36,6 +38,7 @@ class ObservationEnricher(Protocol):
         image: Image.Image,
         screen_type: ScreenType,
         visible_elements: Mapping[UiElementId, VisibleElement],
+        request: ObservationRequest,
     ) -> "ObservationAdditions":
         """Returns derived observation additions."""
 
@@ -70,10 +73,11 @@ class DefaultObservationEnricher:
         image: Image.Image,
         screen_type: ScreenType,
         visible_elements: Mapping[UiElementId, VisibleElement],
+        request: ObservationRequest,
     ) -> ObservationAdditions:
         """Returns an empty enrichment result."""
 
-        del image, screen_type, visible_elements
+        del image, screen_type, visible_elements, request
         return ObservationAdditions()
 
 
@@ -124,6 +128,7 @@ class PillowSelectorEngine:
                         selector_id=selector.id,
                         bounds=match.bounds,
                         confidence=match.confidence,
+                        source_kind=VisibleElementSourceKind.TEMPLATE,
                     )
                 )
                 continue
@@ -138,6 +143,7 @@ class PillowSelectorEngine:
                         selector_id=selector.id,
                         bounds=selector_to_bounds(selector.ocr_region),
                         confidence=1.0,
+                        source_kind=VisibleElementSourceKind.OCR,
                         extracted_text=text,
                     )
                 )
@@ -153,9 +159,10 @@ class ObservationBuilder:
     screen_classifier: ScreenClassifier
     enricher: ObservationEnricher = field(default_factory=DefaultObservationEnricher)
 
-    def build(self, screenshot: CapturedScreenshot) -> Observation:
+    def build(self, screenshot: CapturedScreenshot, *, request: ObservationRequest | None = None) -> Observation:
         """Builds one observation from a captured screenshot."""
 
+        active_request = request or ObservationRequest.runtime_default()
         probe_matches = self.selector_engine.detect(
             screenshot.image,
             self.selector_registry,
@@ -163,32 +170,35 @@ class ObservationBuilder:
         )
         visible_elements = _matches_to_visible_elements(probe_matches)
         screen_type = self.screen_classifier.classify(visible_elements)
-        additions = self.enricher.enrich(screenshot.image, screen_type, visible_elements)
-        visible_elements = dict(additions.visible_elements) | visible_elements
-        screen_type = self.screen_classifier.classify(visible_elements, additions.screen_evidence)
-        if screen_type != ScreenType.UNKNOWN:
-            screen_selector_ids = tuple(
-                selector.id
-                for selector in self.selector_registry.for_screen(screen_type)
-                if selector.id not in visible_elements
+        visible_elements, screen_type = self._complete_screen_scope(
+            screenshot=screenshot,
+            visible_elements=visible_elements,
+            screen_type=screen_type,
+        )
+        additions = ObservationAdditions()
+        if active_request.requires_ocr(screen_type):
+            base_screen_type = screen_type
+            additions = self.enricher.enrich(
+                screenshot.image,
+                screen_type,
+                visible_elements,
+                active_request,
             )
-            if screen_selector_ids:
-                visible_elements = visible_elements | _matches_to_visible_elements(
-                    self.selector_engine.detect(
-                        screenshot.image,
-                        self.selector_registry,
-                        selector_ids=screen_selector_ids,
-                    )
+            visible_elements = _merge_visible_element_maps(visible_elements, additions.visible_elements)
+            screen_type = self.screen_classifier.classify(visible_elements, additions.screen_evidence)
+            if (
+                additions.visible_elements
+                or additions.screen_evidence
+                or additions.suppress_geometry_selector_ids
+                or screen_type != base_screen_type
+            ):
+                visible_elements, screen_type = self._complete_screen_scope(
+                    screenshot=screenshot,
+                    visible_elements=visible_elements,
+                    screen_type=screen_type,
+                    evidence=additions.screen_evidence,
+                    suppress_geometry_selector_ids=additions.suppress_geometry_selector_ids,
                 )
-            geometry_elements = {
-                element.selector_id: element
-                for element in self.selector_registry.materialize_for_screen(
-                    screen_type,
-                    image_size=screenshot.image.size,
-                    exclude_selector_ids=frozenset(visible_elements) | additions.suppress_geometry_selector_ids,
-                )
-            }
-            visible_elements = geometry_elements | visible_elements
         return Observation(
             screen_type=screen_type,
             visible_elements=visible_elements,
@@ -201,6 +211,47 @@ class ObservationBuilder:
             current_pnc_account_id=additions.current_pnc_account_id,
             available_march_slots=additions.available_march_slots,
         )
+
+    def _complete_screen_scope(
+        self,
+        *,
+        screenshot: CapturedScreenshot,
+        visible_elements: Mapping[UiElementId, VisibleElement],
+        screen_type: ScreenType,
+        evidence: Sequence[ScreenEvidence] = (),
+        suppress_geometry_selector_ids: frozenset[UiElementId] = frozenset(),
+    ) -> tuple[dict[UiElementId, VisibleElement], ScreenType]:
+        """Completes screen-scoped selector detection and geometry for one classified screen."""
+
+        if screen_type == ScreenType.UNKNOWN:
+            return dict(visible_elements), screen_type
+        screen_selector_ids = tuple(
+            selector.id
+            for selector in self.selector_registry.for_screen(screen_type)
+            if selector.id not in visible_elements
+        )
+        completed_visible_elements = dict(visible_elements)
+        if screen_selector_ids:
+            completed_visible_elements = _merge_visible_element_maps(
+                completed_visible_elements,
+                _matches_to_visible_elements(
+                    self.selector_engine.detect(
+                        screenshot.image,
+                        self.selector_registry,
+                        selector_ids=screen_selector_ids,
+                    )
+                ),
+            )
+        geometry_elements = {
+            element.selector_id: element
+            for element in self.selector_registry.materialize_for_screen(
+                screen_type,
+                image_size=screenshot.image.size,
+                exclude_selector_ids=frozenset(completed_visible_elements) | suppress_geometry_selector_ids,
+            )
+        }
+        completed_visible_elements = _merge_visible_element_maps(completed_visible_elements, geometry_elements)
+        return completed_visible_elements, self.screen_classifier.classify(completed_visible_elements, evidence)
 
 
 @dataclass(slots=True)
@@ -216,12 +267,16 @@ class ObservationService:
     verified_pnc_account_id: str | None = None
     validated_current_castle: SelectedCastleConfig | None = None
 
-    def capture_observation(self, label: str) -> CapturedObservation:
+    def capture_observation(
+        self,
+        label: str,
+        request: ObservationRequest | None = None,
+    ) -> CapturedObservation:
         """Captures a fresh screenshot artifact and returns both the screenshot and typed observation."""
 
         screenshot = self.screenshot_service.capture(self.session, artifact_directory=self.artifact_directory, label=label)
         roster_snapshot = self._get_castle_roster_snapshot()
-        observation = self.observation_builder.build(screenshot)
+        observation = self.observation_builder.build(screenshot, request=request)
         current_castle = self._resolve_current_castle(observation)
         verified_pnc_account_id = self._resolve_verified_pnc_account_id(observation, roster_snapshot)
         observation = replace(
@@ -235,10 +290,10 @@ class ObservationService:
         self._sync_castle_roster(observation)
         return CapturedObservation(screenshot=screenshot, observation=observation)
 
-    def observe(self, label: str) -> Observation:
+    def observe(self, label: str, request: ObservationRequest | None = None) -> Observation:
         """Captures a fresh screenshot artifact and returns the built observation."""
 
-        return self.capture_observation(label).observation
+        return self.capture_observation(label, request=request).observation
 
     def _sync_castle_roster(self, observation: Observation) -> None:
         """Persists discovered castle rosters whenever the castle-selection screen is observed."""
@@ -327,10 +382,47 @@ def _matches_to_visible_elements(matches: Sequence[SelectorMatch]) -> dict[UiEle
             selector_id=match.selector_id,
             bounds=match.bounds,
             confidence=match.confidence,
+            source_kind=match.source_kind,
             extracted_text=match.extracted_text,
         )
         for match in matches
     }
+
+
+def _merge_visible_element_maps(
+    *maps: Mapping[UiElementId, VisibleElement],
+) -> dict[UiElementId, VisibleElement]:
+    """Merges visible-element maps while keeping the strongest selector source."""
+
+    merged: dict[UiElementId, VisibleElement] = {}
+    for mapping in maps:
+        for selector_id, element in mapping.items():
+            current = merged.get(selector_id)
+            if current is None or _should_replace_visible_element(current=current, candidate=element):
+                merged[selector_id] = element
+    return merged
+
+
+def _should_replace_visible_element(*, current: VisibleElement, candidate: VisibleElement) -> bool:
+    """Returns whether one visible element should replace the current canonical entry."""
+
+    current_priority = _visible_element_priority(current)
+    candidate_priority = _visible_element_priority(candidate)
+    if candidate_priority != current_priority:
+        return candidate_priority > current_priority
+    return candidate.confidence >= current.confidence
+
+
+def _visible_element_priority(element: VisibleElement) -> int:
+    """Returns the canonical source precedence for one visible selector."""
+
+    if element.source_kind == VisibleElementSourceKind.GEOMETRY:
+        return 0
+    if element.source_kind == VisibleElementSourceKind.TEMPLATE:
+        return 1
+    if element.source_kind == VisibleElementSourceKind.OCR:
+        return 2
+    raise ValueError(f"Unsupported visible-element source kind '{element.source_kind}'.")
 
 
 def _entry_to_selected_castle(entry: DetectedListEntry) -> "SelectedCastleConfig":

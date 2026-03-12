@@ -9,10 +9,11 @@ from dataclasses import dataclass, field
 from PIL import Image
 
 from pnc_automation.config.models import SelectedCastleConfig
-from pnc_automation.pnc.observation import Bounds, DetectedListEntry, ListEntryKind, VisibleElement
+from pnc_automation.pnc.observation import Bounds, DetectedListEntry, ListEntryKind, VisibleElement, VisibleElementSourceKind
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
 from pnc_automation.vision.observation_builder import ObservationAdditions
+from pnc_automation.vision.observation_request import ObservationRequest
 from pnc_automation.vision.ocr_service import OcrLine, OcrService
 from pnc_automation.vision.screen_classifier import ScreenEvidence
 from pnc_automation.vision.text_anchors import (
@@ -237,40 +238,44 @@ class PncObservationEnricher:
         image: Image.Image,
         screen_type: ScreenType,
         visible_elements: Mapping[UiElementId, VisibleElement],
+        request: ObservationRequest,
     ) -> ObservationAdditions:
         """Builds OCR-backed bootstrap, fallback-classification, and castle-roster observations."""
 
+        if not request.requires_ocr(screen_type):
+            return ObservationAdditions()
         ocr_result = self.ocr_service.read_result(image)
         lines = tuple(sorted(ocr_result.lines, key=lambda line: (line.bounds.y, line.bounds.x)))
         anchors = self.text_anchor_detector.detect(ocr_result)
-        popup = _build_popup_additions(image=image, lines=lines, anchors=anchors)
-        if popup is not None:
-            return popup
-        if screen_type in {ScreenType.UNKNOWN, ScreenType.PNC_LOADING}:
+        if request.include_popup_guard:
+            popup = _build_popup_additions(image=image, lines=lines, anchors=anchors)
+            if popup is not None:
+                return popup
+        if request.include_loading_guard and screen_type in {ScreenType.UNKNOWN, ScreenType.PNC_LOADING}:
             loading = _build_loading_additions(image=image, lines=lines)
             if loading is not None:
                 return loading
-        if screen_type in {ScreenType.UNKNOWN, ScreenType.PNC_LOGIN}:
+        if request.allows_screen(ScreenType.PNC_LOGIN) and screen_type in {ScreenType.UNKNOWN, ScreenType.PNC_LOGIN}:
             login = _build_login_additions(image=image, lines=lines)
             if login is not None:
                 return login
-        if screen_type in {ScreenType.UNKNOWN, ScreenType.PNC_ACCOUNT_SWITCH}:
+        if request.allows_screen(ScreenType.PNC_ACCOUNT_SWITCH) and screen_type in {ScreenType.UNKNOWN, ScreenType.PNC_ACCOUNT_SWITCH}:
             account_switch = _build_account_switch_additions(image=image, lines=lines)
             if account_switch is not None:
                 return account_switch
-        if screen_type in {ScreenType.UNKNOWN, ScreenType.PNC_LORD_INFO}:
+        if request.allows_screen(ScreenType.PNC_LORD_INFO) and screen_type in {ScreenType.UNKNOWN, ScreenType.PNC_LORD_INFO}:
             lord_info = _build_lord_info_additions(image=image, lines=lines)
             if lord_info is not None:
                 return lord_info
-        if screen_type in {ScreenType.UNKNOWN, ScreenType.PNC_VIP}:
+        if request.allows_screen(ScreenType.PNC_VIP) and screen_type in {ScreenType.UNKNOWN, ScreenType.PNC_VIP}:
             vip = _build_vip_additions(image=image, lines=lines)
             if vip is not None:
                 return vip
-        if screen_type in {ScreenType.UNKNOWN, ScreenType.PNC_IMPROVE_MIGHT}:
+        if request.allows_screen(ScreenType.PNC_IMPROVE_MIGHT) and screen_type in {ScreenType.UNKNOWN, ScreenType.PNC_IMPROVE_MIGHT}:
             improve_might = _build_improve_might_additions(image=image, lines=lines)
             if improve_might is not None:
                 return improve_might
-        if screen_type in {ScreenType.UNKNOWN, ScreenType.PNC_HOME_CITY, ScreenType.PNC_MORE_MENU}:
+        if request.allows_screen(ScreenType.PNC_MORE_MENU) and screen_type in {ScreenType.UNKNOWN, ScreenType.PNC_HOME_CITY, ScreenType.PNC_MORE_MENU}:
             more_settings_menu = _build_more_settings_menu_additions(image=image, lines=lines)
             if more_settings_menu is not None:
                 return more_settings_menu
@@ -279,28 +284,36 @@ class PncObservationEnricher:
                 return more_menu
         if screen_type not in {ScreenType.UNKNOWN, ScreenType.PNC_CASTLE_SELECTION, ScreenType.PNC_HOME_CITY, ScreenType.PNC_MORE_MENU}:
             return ObservationAdditions()
-        building_detail = _build_building_detail_additions(image=image, lines=lines, anchors=anchors)
-        if building_detail is not None:
-            return building_detail
-        home_city = _build_home_city_additions(
-            image=image,
-            anchors=anchors,
-            visible_elements=visible_elements,
-        )
-        if home_city is not None:
-            return home_city
-        bag = _build_bag_additions(image=image, lines=lines, anchors=anchors)
-        if bag is not None:
-            return bag
-        alliance_join = _build_alliance_join_additions(image=image, lines=lines)
-        if alliance_join is not None:
-            return alliance_join
-        academy = _build_academy_additions(image=image, lines=lines, anchors=anchors)
-        if academy is not None:
-            return academy
-        research_tree = _build_research_tree_additions(image=image, lines=lines)
-        if research_tree is not None:
-            return research_tree
+        if request.allows_screen(ScreenType.PNC_BUILDING_DETAILS):
+            building_detail = _build_building_detail_additions(image=image, lines=lines, anchors=anchors)
+            if building_detail is not None:
+                return building_detail
+        if request.allows_screen(ScreenType.PNC_HOME_CITY):
+            home_city = _build_home_city_additions(
+                image=image,
+                anchors=anchors,
+                visible_elements=visible_elements,
+            )
+            if home_city is not None:
+                return home_city
+        if request.allows_screen(ScreenType.PNC_BAG):
+            bag = _build_bag_additions(image=image, lines=lines, anchors=anchors)
+            if bag is not None:
+                return bag
+        if request.allows_screen(ScreenType.PNC_ALLIANCE_JOIN):
+            alliance_join = _build_alliance_join_additions(image=image, lines=lines)
+            if alliance_join is not None:
+                return alliance_join
+        if request.allows_screen(ScreenType.PNC_ACADEMY):
+            academy = _build_academy_additions(image=image, lines=lines, anchors=anchors)
+            if academy is not None:
+                return academy
+        if request.allows_screen(ScreenType.PNC_RESEARCH_TREE):
+            research_tree = _build_research_tree_additions(image=image, lines=lines)
+            if research_tree is not None:
+                return research_tree
+        if not request.allows_screen(ScreenType.PNC_CASTLE_SELECTION):
+            return ObservationAdditions()
         entries = _extract_castle_entries(image=image, lines=lines, anchors=anchors)
         if not _looks_like_castle_selection(anchors, entries):
             return ObservationAdditions()
@@ -1468,6 +1481,7 @@ def _make_visible(
         selector_id=selector_id,
         bounds=Bounds(x=x, y=y, width=max(1, width), height=max(1, height)),
         confidence=1.0,
+        source_kind=VisibleElementSourceKind.OCR,
         extracted_text=extracted_text,
         action_point=action_point,
     )

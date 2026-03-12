@@ -19,6 +19,18 @@ This file owns only the missing selector-resolution behavior:
 - one canonical runtime path shared by automation and selector validation,
 - provenance and diagnostics required to make that behavior reliable and reviewable.
 
+## 1.1 Implementation status
+
+Status:
+
+- completed in repo on 2026-03-12,
+- runtime observation is now staged through typed observation requests instead of unconditional OCR,
+- selector provenance is now recorded as canonical runtime data,
+- reviewed navigation outcome matching and settled-primary-miss evaluation are now centralized,
+- automation and live validation now share one observed selector-interaction path with bounded settle and one OCR retry for eligible geometry-backed navigation taps,
+- popup states remain handled through the existing shared popup recovery flow rather than through selector-level double taps,
+- automated validation now covers staged observation cost, provenance, selector fallback behavior, validator reporting, and negative retry cases.
+
 ## 2. Why this is needed
 
 The current repository already has the required building blocks, but they are not yet connected into one explicit selector-resolution policy.
