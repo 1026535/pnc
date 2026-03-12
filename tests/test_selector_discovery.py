@@ -11,6 +11,7 @@ from PIL import Image
 from pnc_automation.capture.artifact_store import ArtifactStore
 from pnc_automation.capture.screenshot_service import ScreenshotService
 from pnc_automation.errors import SelectorResolutionError
+from pnc_automation.pnc.observation import Bounds, Observation, VisibleElement, VisibleElementSourceKind
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
 from pnc_automation.vision.observation_builder import ObservationBuilder, PillowSelectorEngine
@@ -233,6 +234,272 @@ class SelectorDiscoveryTests(unittest.TestCase):
                 source_artifact_path=Path("source.png"),
                 destination_artifact_path=Path("destination.png"),
             )
+
+    def test_build_visible_selector_drafts_promotes_ocr_backed_labels_to_relative_ocr_regions(self) -> None:
+        """Promotes OCR-backed label selectors to normalized OCR-region draft updates."""
+
+        analyzer = self._build_analyzer(
+            lines=(),
+            catalog=SelectorCatalogDocument(
+                selectors=(
+                    SelectorCatalogEntry(
+                        id="PNC_VIP_HEADER",
+                        screens=("PNC_VIP",),
+                        status="screenshot_seeded",
+                        detection_kind="planned",
+                        interaction_kind="label",
+                    ),
+                ),
+            ),
+        )
+        observation = Observation(
+            screen_type=ScreenType.PNC_VIP,
+            visible_elements={
+                UiElementId.PNC_VIP_HEADER: VisibleElement(
+                    selector_id=UiElementId.PNC_VIP_HEADER,
+                    bounds=Bounds(x=24, y=9, width=84, height=18),
+                    confidence=1.0,
+                    source_kind=VisibleElementSourceKind.OCR,
+                    extracted_text="VIP",
+                ),
+            },
+            artifact_path=Path("vip.png"),
+            image_size=(200, 100),
+        )
+
+        drafts = analyzer.build_visible_selector_drafts(
+            observation=observation,
+            artifact_path=Path("vip.png"),
+            selector_ids=(UiElementId.PNC_VIP_HEADER,),
+        )
+
+        self.assertEqual(len(drafts), 1)
+        self.assertEqual(drafts[0].detection_kind, "ocr_region")
+        self.assertIsNotNone(drafts[0].relative_bounds)
+        self.assertAlmostEqual(drafts[0].relative_bounds.x_ratio, 0.12)
+        self.assertAlmostEqual(drafts[0].relative_bounds.y_ratio, 0.09)
+        self.assertAlmostEqual(drafts[0].relative_bounds.width_ratio, 0.42)
+        self.assertAlmostEqual(drafts[0].relative_bounds.height_ratio, 0.18)
+
+    def test_build_visible_selector_drafts_seed_relative_bounds_for_planned_geometry(self) -> None:
+        """Stages screenshot-seeded geometry when a planned selector becomes visible live."""
+
+        analyzer = self._build_analyzer(
+            lines=(),
+            catalog=SelectorCatalogDocument(
+                selectors=(
+                    SelectorCatalogEntry(
+                        id="PNC_MORE_LORD_INFO",
+                        screens=("PNC_MORE_MENU",),
+                        status="planned",
+                        detection_kind="planned",
+                    ),
+                ),
+            ),
+        )
+        observation = Observation(
+            screen_type=ScreenType.PNC_MORE_MENU,
+            visible_elements={
+                UiElementId.PNC_MORE_LORD_INFO: VisibleElement(
+                    selector_id=UiElementId.PNC_MORE_LORD_INFO,
+                    bounds=Bounds(x=20, y=10, width=40, height=30),
+                    confidence=1.0,
+                    source_kind=VisibleElementSourceKind.GEOMETRY,
+                    action_point=(80, 40),
+                ),
+            },
+            artifact_path=Path("more_menu.png"),
+            image_size=(200, 100),
+        )
+
+        drafts = analyzer.build_visible_selector_drafts(
+            observation=observation,
+            artifact_path=Path("more_menu.png"),
+            selector_ids=(UiElementId.PNC_MORE_LORD_INFO,),
+        )
+
+        self.assertEqual(len(drafts), 1)
+        self.assertEqual(drafts[0].status, "screenshot_seeded")
+        self.assertEqual(drafts[0].detection_kind, "planned")
+        self.assertIsNotNone(drafts[0].relative_bounds)
+        self.assertAlmostEqual(drafts[0].relative_bounds.x_ratio, 0.1)
+        self.assertAlmostEqual(drafts[0].relative_bounds.y_ratio, 0.1)
+        self.assertAlmostEqual(drafts[0].relative_bounds.width_ratio, 0.2)
+        self.assertAlmostEqual(drafts[0].relative_bounds.height_ratio, 0.3)
+        self.assertAlmostEqual(drafts[0].relative_bounds.action_x_ratio, 0.4)
+        self.assertAlmostEqual(drafts[0].relative_bounds.action_y_ratio, 0.4)
+
+    def test_build_visible_selector_drafts_stage_collection_title_and_timer_regions(self) -> None:
+        """Stages row child OCR regions as normalized geometry from a visible Cash Mall collection row."""
+
+        analyzer = self._build_analyzer(
+            lines=(
+                _ocr_line("Super Sale Bundle", x=18, y=36, width=120, height=16),
+                _ocr_line("01:23:45", x=22, y=58, width=64, height=14),
+            ),
+            catalog=SelectorCatalogDocument(
+                selectors=(
+                    SelectorCatalogEntry(
+                        id="PNC_CASH_MALL_ENTRY_TITLE_REGION",
+                        screens=("PNC_CASH_MALL",),
+                        status="planned",
+                        detection_kind="planned",
+                    ),
+                    SelectorCatalogEntry(
+                        id="PNC_CASH_MALL_ENTRY_TIMER_REGION",
+                        screens=("PNC_CASH_MALL",),
+                        status="planned",
+                        detection_kind="planned",
+                    ),
+                ),
+            ),
+        )
+        observation = Observation(
+            screen_type=ScreenType.PNC_CASH_MALL,
+            visible_elements={
+                UiElementId.PNC_CASH_MALL_ENTRY_ROW: VisibleElement(
+                    selector_id=UiElementId.PNC_CASH_MALL_ENTRY_ROW,
+                    bounds=Bounds(x=0, y=24, width=180, height=60),
+                    confidence=1.0,
+                    source_kind=VisibleElementSourceKind.TEMPLATE,
+                ),
+            },
+            artifact_path=Path("cash_mall.png"),
+            image_size=(200, 100),
+        )
+
+        drafts = analyzer.build_visible_selector_drafts(
+            observation=observation,
+            artifact_path=Path("cash_mall.png"),
+            selector_ids=(
+                UiElementId.PNC_CASH_MALL_ENTRY_TITLE_REGION,
+                UiElementId.PNC_CASH_MALL_ENTRY_TIMER_REGION,
+            ),
+            image=Image.new("RGB", (200, 100), (0, 0, 0)),
+        )
+        draft_by_id = {draft.id: draft for draft in drafts}
+
+        self.assertEqual(draft_by_id["PNC_CASH_MALL_ENTRY_TITLE_REGION"].detection_kind, "ocr_region")
+        self.assertEqual(draft_by_id["PNC_CASH_MALL_ENTRY_TITLE_REGION"].status, "screenshot_seeded")
+        self.assertAlmostEqual(draft_by_id["PNC_CASH_MALL_ENTRY_TITLE_REGION"].relative_bounds.x_ratio, 0.09)
+        self.assertAlmostEqual(draft_by_id["PNC_CASH_MALL_ENTRY_TITLE_REGION"].relative_bounds.y_ratio, 0.36)
+        self.assertAlmostEqual(draft_by_id["PNC_CASH_MALL_ENTRY_TIMER_REGION"].relative_bounds.x_ratio, 0.11)
+        self.assertAlmostEqual(draft_by_id["PNC_CASH_MALL_ENTRY_TIMER_REGION"].relative_bounds.y_ratio, 0.58)
+
+    def test_build_visible_selector_drafts_stage_collection_subtitle_and_expiry_regions(self) -> None:
+        """Stages Gift Center subtitle and expiry OCR regions from the visible first row."""
+
+        analyzer = self._build_analyzer(
+            lines=(
+                _ocr_line("Gift Pack", x=18, y=36, width=70, height=16),
+                _ocr_line("Exclusive Rewards", x=18, y=56, width=110, height=16),
+                _ocr_line("2d 03:12:44", x=18, y=76, width=86, height=16),
+            ),
+            catalog=SelectorCatalogDocument(
+                selectors=(
+                    SelectorCatalogEntry(
+                        id="PNC_GIFT_CENTER_ENTRY_TITLE_REGION",
+                        screens=("PNC_GIFT_CENTER",),
+                        status="planned",
+                        detection_kind="planned",
+                    ),
+                    SelectorCatalogEntry(
+                        id="PNC_GIFT_CENTER_ENTRY_SUBTITLE_REGION",
+                        screens=("PNC_GIFT_CENTER",),
+                        status="planned",
+                        detection_kind="planned",
+                    ),
+                    SelectorCatalogEntry(
+                        id="PNC_GIFT_CENTER_ENTRY_EXPIRY_REGION",
+                        screens=("PNC_GIFT_CENTER",),
+                        status="planned",
+                        detection_kind="planned",
+                    ),
+                ),
+            ),
+        )
+        observation = Observation(
+            screen_type=ScreenType.PNC_GIFT_CENTER,
+            visible_elements={
+                UiElementId.PNC_GIFT_CENTER_ENTRY_ROW: VisibleElement(
+                    selector_id=UiElementId.PNC_GIFT_CENTER_ENTRY_ROW,
+                    bounds=Bounds(x=0, y=24, width=180, height=72),
+                    confidence=1.0,
+                    source_kind=VisibleElementSourceKind.TEMPLATE,
+                ),
+            },
+            artifact_path=Path("gift_center.png"),
+            image_size=(200, 100),
+        )
+
+        drafts = analyzer.build_visible_selector_drafts(
+            observation=observation,
+            artifact_path=Path("gift_center.png"),
+            selector_ids=(
+                UiElementId.PNC_GIFT_CENTER_ENTRY_TITLE_REGION,
+                UiElementId.PNC_GIFT_CENTER_ENTRY_SUBTITLE_REGION,
+                UiElementId.PNC_GIFT_CENTER_ENTRY_EXPIRY_REGION,
+            ),
+            image=Image.new("RGB", (200, 100), (0, 0, 0)),
+        )
+        draft_by_id = {draft.id: draft for draft in drafts}
+
+        self.assertAlmostEqual(draft_by_id["PNC_GIFT_CENTER_ENTRY_TITLE_REGION"].relative_bounds.y_ratio, 0.36)
+        self.assertAlmostEqual(draft_by_id["PNC_GIFT_CENTER_ENTRY_SUBTITLE_REGION"].relative_bounds.y_ratio, 0.56)
+        self.assertAlmostEqual(draft_by_id["PNC_GIFT_CENTER_ENTRY_EXPIRY_REGION"].relative_bounds.y_ratio, 0.76)
+
+    def test_build_visible_selector_drafts_stage_event_center_title_and_timer_regions(self) -> None:
+        """Stages Event Center title and timer OCR regions from the visible first row."""
+
+        analyzer = self._build_analyzer(
+            lines=(
+                _ocr_line("Alliance Clash", x=22, y=34, width=94, height=16),
+                _ocr_line("12:45:10", x=24, y=58, width=66, height=16),
+            ),
+            catalog=SelectorCatalogDocument(
+                selectors=(
+                    SelectorCatalogEntry(
+                        id="PNC_EVENT_CENTER_ENTRY_TITLE_REGION",
+                        screens=("PNC_EVENT_CENTER",),
+                        status="planned",
+                        detection_kind="planned",
+                    ),
+                    SelectorCatalogEntry(
+                        id="PNC_EVENT_CENTER_ENTRY_TIMER_REGION",
+                        screens=("PNC_EVENT_CENTER",),
+                        status="planned",
+                        detection_kind="planned",
+                    ),
+                ),
+            ),
+        )
+        observation = Observation(
+            screen_type=ScreenType.PNC_EVENT_CENTER,
+            visible_elements={
+                UiElementId.PNC_EVENT_CENTER_EVENT_ROW: VisibleElement(
+                    selector_id=UiElementId.PNC_EVENT_CENTER_EVENT_ROW,
+                    bounds=Bounds(x=0, y=24, width=180, height=60),
+                    confidence=1.0,
+                    source_kind=VisibleElementSourceKind.TEMPLATE,
+                ),
+            },
+            artifact_path=Path("event_center.png"),
+            image_size=(200, 100),
+        )
+
+        drafts = analyzer.build_visible_selector_drafts(
+            observation=observation,
+            artifact_path=Path("event_center.png"),
+            selector_ids=(
+                UiElementId.PNC_EVENT_CENTER_ENTRY_TITLE_REGION,
+                UiElementId.PNC_EVENT_CENTER_ENTRY_TIMER_REGION,
+            ),
+            image=Image.new("RGB", (200, 100), (0, 0, 0)),
+        )
+        draft_by_id = {draft.id: draft for draft in drafts}
+
+        self.assertAlmostEqual(draft_by_id["PNC_EVENT_CENTER_ENTRY_TITLE_REGION"].relative_bounds.y_ratio, 0.34)
+        self.assertAlmostEqual(draft_by_id["PNC_EVENT_CENTER_ENTRY_TIMER_REGION"].relative_bounds.y_ratio, 0.58)
 
     def test_load_artifact_paths_deduplicates_and_accepts_uppercase_pngs(self) -> None:
         """Loads explicit and directory-sourced artifacts without duplicate resolved paths."""

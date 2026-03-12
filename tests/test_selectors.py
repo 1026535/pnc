@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import tempfile
 import unittest
+from pathlib import Path
 
 from pnc_automation.errors import SelectorResolutionError
 from pnc_automation.pnc.screen_type import ScreenType
@@ -102,6 +104,106 @@ class SelectorRegistryTests(unittest.TestCase):
                     ),
                 )
             )
+
+    def test_selector_catalog_allows_empty_verification_texts(self) -> None:
+        """Accepts reviewed click outcomes whose unsupported text-verification field stays empty."""
+
+        document = SelectorCatalogDocument(
+            selectors=(
+                SelectorCatalogEntry(
+                    id="PNC_BOTTOM_NAV_BAG",
+                    screens=("PNC_HOME_CITY",),
+                    status="click_mapped",
+                    detection_kind="template",
+                    interaction_kind="navigation",
+                    click=SelectorCatalogClickDefinition(
+                        anchor="center",
+                        outcomes=(
+                            SelectorCatalogClickOutcome(
+                                target_screen="PNC_BAG",
+                                verification_selectors=(),
+                                verification_texts=(),
+                                safe_to_click=True,
+                                monetized=False,
+                                notes=(),
+                            ),
+                        ),
+                    ),
+                ),
+            )
+        )
+
+        self.assertEqual(document.selectors[0].click.outcomes[0].verification_texts, ())
+
+    def test_selector_catalog_rejects_verification_texts_until_runtime_support_exists(self) -> None:
+        """Fails fast when catalog content requests text verification that runtime matching does not support."""
+
+        with self.assertRaises(SelectorResolutionError):
+            SelectorCatalogDocument(
+                selectors=(
+                    SelectorCatalogEntry(
+                        id="PNC_BOTTOM_NAV_BAG",
+                        screens=("PNC_HOME_CITY",),
+                        status="click_mapped",
+                        detection_kind="template",
+                        interaction_kind="navigation",
+                        click=SelectorCatalogClickDefinition(
+                            anchor="center",
+                            outcomes=(
+                                SelectorCatalogClickOutcome(
+                                    target_screen="PNC_BAG",
+                                    verification_selectors=(),
+                                    verification_texts=("Bag",),
+                                    safe_to_click=True,
+                                    monetized=False,
+                                    notes=(),
+                                ),
+                            ),
+                        ),
+                    ),
+                )
+            )
+
+    def test_build_default_selector_registry_rejects_ocr_region_selectors_without_relative_bounds(self) -> None:
+        """Fails fast when a live ocr_region selector omits the required normalized geometry."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            catalog_path = Path(temp_directory) / "selector_registry.yaml"
+            catalog_path.write_text(
+                "selectors:\n"
+                "  - id: PNC_CASH_MALL_ENTRY_TITLE_REGION\n"
+                "    screens: [PNC_CASH_MALL]\n"
+                "    status: screenshot_seeded\n"
+                "    detection_kind: ocr_region\n",
+                encoding="utf-8",
+                newline="\n",
+            )
+
+            with self.assertRaises(SelectorResolutionError):
+                build_default_selector_registry(catalog_path=catalog_path, template_root=Path(temp_directory))
+
+    def test_build_default_selector_registry_rejects_legacy_ocr_region_schema(self) -> None:
+        """Fails fast when catalog content still uses the obsolete absolute OCR rectangle field."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            catalog_path = Path(temp_directory) / "selector_registry.yaml"
+            catalog_path.write_text(
+                "selectors:\n"
+                "  - id: PNC_CASH_MALL_ENTRY_TITLE_REGION\n"
+                "    screens: [PNC_CASH_MALL]\n"
+                "    status: screenshot_seeded\n"
+                "    detection_kind: ocr_region\n"
+                "    ocr_region:\n"
+                "      x: 10\n"
+                "      y: 20\n"
+                "      width: 30\n"
+                "      height: 12\n",
+                encoding="utf-8",
+                newline="\n",
+            )
+
+            with self.assertRaises(SelectorResolutionError):
+                build_default_selector_registry(catalog_path=catalog_path, template_root=Path(temp_directory))
 
 
 if __name__ == "__main__":

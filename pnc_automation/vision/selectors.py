@@ -93,21 +93,25 @@ class RelativeBounds:
             _require_ratio(self.action_x_ratio, field_name="action_x_ratio", inclusive_zero=True)
             _require_ratio(self.action_y_ratio, field_name="action_y_ratio", inclusive_zero=True)
 
+    def materialize_region(self, *, image_size: tuple[int, int]) -> Region:
+        """Builds one concrete screenshot region from normalized bounds."""
+
+        image_width, image_height = _require_positive_image_size(image_size)
+        x, width = _materialize_axis(start_ratio=self.x_ratio, size_ratio=self.width_ratio, total=image_width)
+        y, height = _materialize_axis(start_ratio=self.y_ratio, size_ratio=self.height_ratio, total=image_height)
+        return Region(x=x, y=y, width=width, height=height)
+
     def materialize(self, *, selector_id: UiElementId, image_size: tuple[int, int]) -> VisibleElement:
         """Builds one visible selector using normalized top-left/size data for the current screenshot dimensions."""
 
-        image_width, image_height = image_size
-        bounds = Bounds(
-            x=_clamp_coordinate(int(image_width * self.x_ratio), maximum=max(0, image_width - 1)),
-            y=_clamp_coordinate(int(image_height * self.y_ratio), maximum=max(0, image_height - 1)),
-            width=max(1, int(image_width * self.width_ratio)),
-            height=max(1, int(image_height * self.height_ratio)),
-        )
+        image_width, image_height = _require_positive_image_size(image_size)
+        region = self.materialize_region(image_size=image_size)
+        bounds = Bounds(x=region.x, y=region.y, width=region.width, height=region.height)
         action_point = None
         if self.action_x_ratio is not None and self.action_y_ratio is not None:
             action_point = (
-                _clamp_coordinate(int(image_width * self.action_x_ratio), maximum=max(0, image_width - 1)),
-                _clamp_coordinate(int(image_height * self.action_y_ratio), maximum=max(0, image_height - 1)),
+                _clamp_coordinate(int(round(image_width * self.action_x_ratio)), maximum=max(0, image_width - 1)),
+                _clamp_coordinate(int(round(image_height * self.action_y_ratio)), maximum=max(0, image_height - 1)),
             )
         return VisibleElement(
             selector_id=selector_id,
@@ -132,7 +136,6 @@ class SelectorDefinition:
     click: ClickDefinition | None = field(default_factory=ClickDefinition)
     relative_bounds: RelativeBounds | None = None
     materialize_relative_bounds: bool = True
-    ocr_region: Region | None = None
     click_outcomes: tuple[ClickOutcome, ...] = ()
     notes: tuple[str, ...] = ()
 
@@ -184,6 +187,7 @@ class SelectorRegistry:
             if (
                 selector.relative_bounds is not None
                 and selector.materialize_relative_bounds
+                and selector.detection_kind != DetectionKind.OCR_REGION
                 and selector.id not in exclude_selector_ids
             )
         )
@@ -388,6 +392,12 @@ def _create_click_outcome(outcome: object) -> ClickOutcome:
         _require_selector_id(selector_id) for selector_id in getattr(outcome, "verification_selectors")
     )
     verification_texts = tuple(getattr(outcome, "verification_texts"))
+    if verification_texts:
+        raise SelectorResolutionError(
+            "Reviewed click outcomes do not support verification_texts at runtime.",
+            target_screen=target_screen,
+            verification_texts=verification_texts,
+        )
     notes = tuple(getattr(outcome, "notes"))
     return ClickOutcome(
         target_screen=None if target_screen is None else _require_screen_type(target_screen),
@@ -426,3 +436,26 @@ def _clamp_coordinate(value: int, *, maximum: int) -> int:
     """Clamps one pixel coordinate to the current screenshot bounds."""
 
     return min(max(0, value), maximum)
+
+
+def _materialize_axis(*, start_ratio: float, size_ratio: float, total: int) -> tuple[int, int]:
+    """Converts one normalized axis into a bounded pixel start and size."""
+
+    start = _clamp_coordinate(int(round(total * start_ratio)), maximum=max(0, total - 1))
+    end = _clamp_edge(int(round(total * (start_ratio + size_ratio))), minimum=start + 1, maximum=total)
+    return start, max(1, end - start)
+
+
+def _clamp_edge(value: int, *, minimum: int, maximum: int) -> int:
+    """Clamps one rectangle edge to the current screenshot size."""
+
+    return min(max(minimum, value), maximum)
+
+
+def _require_positive_image_size(image_size: tuple[int, int]) -> tuple[int, int]:
+    """Rejects non-positive screenshot sizes before geometry materialization."""
+
+    width, height = image_size
+    if width <= 0 or height <= 0:
+        raise SelectorResolutionError("Selector geometry requires positive screenshot dimensions.", image_size=image_size)
+    return width, height

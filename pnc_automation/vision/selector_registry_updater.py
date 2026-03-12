@@ -296,6 +296,11 @@ def _load_update(value: object) -> SelectorRegistryUpdate:
     )
     if interaction_kind is not None:
         _validate_interaction_kind(interaction_kind, selector_id=selector_id)
+    if "ocr_region" in mapping:
+        raise SelectorResolutionError(
+            "Selector updates must use normalized relative_bounds instead of legacy ocr_region rectangles.",
+            selector_id=selector_id,
+        )
     raw_relative_bounds = mapping.get("relative_bounds")
     if "relative_bounds" in mapping and raw_relative_bounds is None:
         raise SelectorResolutionError(
