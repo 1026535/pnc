@@ -6,6 +6,7 @@ from pnc_automation.vision.observation_builder import (
     ObservationService,
     PillowSelectorEngine,
 )
+from pnc_automation.vision.observation_request import ObservationRequest
 from pnc_automation.vision.ocr_service import OcrLine, OcrResult, OcrService, OcrWord, RapidOcrService, UnavailableOcrService
 from pnc_automation.vision.pnc_observation_enricher import PncObservationEnricher
 from pnc_automation.vision.screen_classifier import ScreenClassifier, ScreenEvidence
@@ -27,6 +28,7 @@ __all__ = [
     "DetectedTextAnchor",
     "DefaultObservationEnricher",
     "ObservationBuilder",
+    "ObservationRequest",
     "ObservationService",
     "OcrLine",
     "OcrResult",

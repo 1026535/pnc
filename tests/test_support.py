@@ -11,9 +11,17 @@ from typing import Any
 from PIL import Image
 
 from pnc_automation.config.models import PncAccountCastleRosterConfig, SelectedCastleConfig
-from pnc_automation.pnc.observation import Bounds, DetectedListEntry, ListEntryKind, Observation, VisibleElement
+from pnc_automation.pnc.observation import (
+    Bounds,
+    DetectedListEntry,
+    ListEntryKind,
+    Observation,
+    VisibleElement,
+    VisibleElementSourceKind,
+)
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
+from pnc_automation.vision.observation_request import ObservationRequest
 
 
 def build_png_bytes(*, size: tuple[int, int] = (20, 20), color: tuple[int, int, int, int] = (255, 255, 255, 255)) -> bytes:
@@ -32,6 +40,7 @@ def make_visible(
     y: int = 0,
     width: int = 10,
     height: int = 10,
+    source_kind: VisibleElementSourceKind = VisibleElementSourceKind.TEMPLATE,
     action_point: tuple[int, int] | None = None,
 ) -> VisibleElement:
     """Builds a visible selector with deterministic bounds."""
@@ -40,6 +49,7 @@ def make_visible(
         selector_id=selector_id,
         bounds=Bounds(x=x, y=y, width=width, height=height),
         confidence=1.0,
+        source_kind=source_kind,
         action_point=action_point,
     )
 
@@ -68,6 +78,7 @@ def make_observation(
     screen_type: ScreenType,
     *,
     visible_ids: tuple[UiElementId, ...] = (),
+    source_kinds: dict[UiElementId, VisibleElementSourceKind] | None = None,
     list_entries: tuple[DetectedListEntry, ...] = (),
     blocking_popup: bool = False,
     current_castle_name: str | None = None,
@@ -81,7 +92,12 @@ def make_observation(
     """Builds a typed observation with synthetic visible elements."""
 
     visible_elements = {
-        selector_id: make_visible(selector_id, x=index * 15, y=index * 15)
+        selector_id: make_visible(
+            selector_id,
+            x=index * 15,
+            y=index * 15,
+            source_kind=(source_kinds or {}).get(selector_id, VisibleElementSourceKind.TEMPLATE),
+        )
         for index, selector_id in enumerate(visible_ids)
     }
     return Observation(
@@ -149,11 +165,13 @@ class FakeObservationService:
 
     observations: list[Observation]
     labels: list[str] = field(default_factory=list)
+    requests: list[ObservationRequest | None] = field(default_factory=list)
 
-    def observe(self, label: str) -> Observation:
+    def observe(self, label: str, request: ObservationRequest | None = None) -> Observation:
         """Returns the next queued observation."""
 
         self.labels.append(label)
+        self.requests.append(request)
         if not self.observations:
             raise AssertionError(f"No observation queued for label '{label}'.")
         return self.observations.pop(0)

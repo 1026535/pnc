@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-from pnc_automation.automation.action_executor import ActionExecutor
+from pnc_automation.automation.observed_action_executor import ObservedActionExecutor
 from pnc_automation.automation.scripts.models import PreparedRunScript, PreparedScriptStep, ScriptStep
 from pnc_automation.automation.scripts.registry import TaskRegistry
 from pnc_automation.automation.task import TaskId, TaskResult, TaskStatus
@@ -72,7 +72,7 @@ class AutomationRunner:
 
     defaults: DefaultsConfig
     observation_service: ObservationService
-    action_executor: ActionExecutor
+    action_executor: ObservedActionExecutor
     task_registry: TaskRegistry
     flow_planner: ScreenFlowPlanner
     logger: logging.LoggerAdapter
@@ -165,11 +165,17 @@ class AutomationRunner:
                 extra={"screen_type": current_before.screen_type, "attempt": attempts},
             )
             actions = task.plan(context, current_before)
-            after = current_before if not actions else self.action_executor.execute_actions(
-                actions,
-                current_before,
-                observe=lambda label: self.observation_service.observe(f"{step.task.value}_{label}"),
-            )
+            after = current_before
+            if actions:
+                execution = self.action_executor.execute_actions(
+                    actions,
+                    current_before,
+                    observe=lambda label, request=None: self.observation_service.observe(
+                        f"{step.task.value}_{label}",
+                        request=request,
+                    ),
+                )
+                after = execution.observation
             result = task.verify(context, current_before, after)
             context.logger.info(
                 "Task increment verified.",

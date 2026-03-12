@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from pnc_automation.pnc.observation import Bounds
+from pnc_automation.pnc.observation import Bounds, VisibleElementSourceKind
 from pnc_automation.pnc.ui_element_id import UiElementId
 
 
@@ -23,4 +23,5 @@ class SelectorMatch:
     selector_id: UiElementId
     bounds: Bounds
     confidence: float
+    source_kind: VisibleElementSourceKind = VisibleElementSourceKind.TEMPLATE
     extracted_text: str | None = None

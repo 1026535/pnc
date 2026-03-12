@@ -30,6 +30,14 @@ class Bounds:
         return (self.x + self.width // 2, self.y + self.height // 2)
 
 
+class VisibleElementSourceKind(StrEnum):
+    """Identifies the canonical runtime source for one visible selector."""
+
+    TEMPLATE = "template"
+    OCR = "ocr"
+    GEOMETRY = "geometry"
+
+
 @dataclass(frozen=True, slots=True)
 class VisibleElement:
     """Represents one detected selector anchored on the current screen."""
@@ -37,6 +45,7 @@ class VisibleElement:
     selector_id: UiElementId
     bounds: Bounds
     confidence: float
+    source_kind: VisibleElementSourceKind = VisibleElementSourceKind.TEMPLATE
     extracted_text: str | None = None
     action_point: tuple[int, int] | None = None
 

@@ -1,0 +1,261 @@
+"""Higher-level action execution that can re-observe and promote selector taps to OCR."""
+
+from __future__ import annotations
+
+import logging
+import time
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Protocol
+
+from pnc_automation.automation.action_executor import ActionExecutor
+from pnc_automation.errors import SelectorResolutionError
+from pnc_automation.pnc.action_requests import ActionRequest, TapAction
+from pnc_automation.pnc.observation import Observation, VisibleElement, VisibleElementSourceKind
+from pnc_automation.pnc.screen_type import ScreenType
+from pnc_automation.pnc.ui_element_id import UiElementId
+from pnc_automation.vision.observation_request import ObservationRequest
+from pnc_automation.vision.selector_interaction_kind import SelectorInteractionKind
+from pnc_automation.vision.selector_interactions import (
+    is_popup_observation,
+    is_settled_primary_navigation_miss,
+    is_transitional_observation,
+    match_reviewed_navigation_outcome,
+    safe_navigation_outcomes,
+)
+from pnc_automation.vision.selectors import ClickOutcome, SelectorDefinition, SelectorRegistry
+
+
+class ObservationCallback(Protocol):
+    """Captures a fresh observation for one action label and request."""
+
+    def __call__(self, label: str, request: ObservationRequest | None = None) -> Observation:
+        """Returns the freshly captured observation."""
+
+
+@dataclass(frozen=True, slots=True)
+class ObservedActionExecutionPolicy:
+    """Centralizes bounded settle behavior for observed selector taps."""
+
+    max_settle_observations: int = 3
+
+    def __post_init__(self) -> None:
+        """Rejects invalid negative settle budgets."""
+
+        if self.max_settle_observations < 0:
+            raise ValueError("ObservedActionExecutionPolicy.max_settle_observations cannot be negative.")
+
+
+@dataclass(frozen=True, slots=True)
+class SelectorInteractionResult:
+    """Summarizes one selector-backed tap observed through the shared interaction path."""
+
+    selector_id: UiElementId
+    source_screen: ScreenType
+    initial_source_kind: VisibleElementSourceKind
+    first_after_screen: ScreenType
+    final_after_screen: ScreenType
+    initial_destination_artifact_path: Path | None = None
+    final_destination_artifact_path: Path | None = None
+    fallback_attempted: bool = False
+    fallback_used: bool = False
+    fallback_source_kind: VisibleElementSourceKind | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ObservedActionExecutionResult:
+    """Returns the final observation plus selector-interaction diagnostics."""
+
+    observation: Observation
+    selector_interactions: tuple[SelectorInteractionResult, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class _ObservedNavigationTap:
+    """Carries the shared metadata required for one fallback-eligible navigation tap."""
+
+    selector: SelectorDefinition
+    source_element: VisibleElement
+    reviewed_outcomes: tuple[ClickOutcome, ...]
+
+
+@dataclass(slots=True)
+class ObservedActionExecutor:
+    """Executes actions while sharing the canonical selector-level fallback policy."""
+
+    selector_registry: SelectorRegistry
+    action_executor: ActionExecutor
+    logger: logging.LoggerAdapter
+    policy: ObservedActionExecutionPolicy = field(default_factory=ObservedActionExecutionPolicy)
+    sleep: Callable[[float], None] = time.sleep
+
+    def execute_actions(
+        self,
+        actions: Sequence[ActionRequest],
+        initial_observation: Observation,
+        *,
+        observe: ObservationCallback,
+    ) -> ObservedActionExecutionResult:
+        """Executes the action sequence and returns the freshest observed result."""
+
+        current_observation = initial_observation
+        observed_after_action = False
+        selector_interactions: list[SelectorInteractionResult] = []
+        for index, action in enumerate(actions):
+            candidate = self._resolve_observed_navigation_tap(action, current_observation)
+            if candidate is not None:
+                interaction_result = self._execute_observed_navigation_tap(
+                    action=action,
+                    before=current_observation,
+                    candidate=candidate,
+                    label_prefix=f"post_action_{index + 1}",
+                    observe=observe,
+                )
+                current_observation = interaction_result.observation
+                selector_interactions.extend(interaction_result.selector_interactions)
+                observed_after_action = True
+                continue
+            self.action_executor.execute_action(action, current_observation)
+            if getattr(action, "observe_after", False):
+                self._sleep_for_observe()
+                current_observation = observe(f"post_action_{index + 1}")
+                observed_after_action = True
+        if actions and not observed_after_action:
+            self._sleep_for_observe()
+            current_observation = observe("post_actions")
+        return ObservedActionExecutionResult(
+            observation=current_observation,
+            selector_interactions=tuple(selector_interactions),
+        )
+
+    def _resolve_observed_navigation_tap(
+        self,
+        action: ActionRequest,
+        observation: Observation,
+    ) -> _ObservedNavigationTap | None:
+        """Returns one reviewed navigation tap or `None` when normal execution is sufficient."""
+
+        if not isinstance(action, TapAction) or not action.observe_after:
+            return None
+        selector = self.selector_registry.require(action.selector_id)
+        source_element = observation.require(action.selector_id)
+        if selector.interaction_kind != SelectorInteractionKind.NAVIGATION:
+            return None
+        reviewed_outcomes = safe_navigation_outcomes(selector)
+        if not reviewed_outcomes:
+            if source_element.source_kind == VisibleElementSourceKind.GEOMETRY:
+                raise SelectorResolutionError(
+                    "Geometry-backed navigation fallback requires at least one safe reviewed click outcome.",
+                    selector_id=selector.id,
+                    screen_type=observation.screen_type,
+                )
+            return None
+        return _ObservedNavigationTap(
+            selector=selector,
+            source_element=source_element,
+            reviewed_outcomes=reviewed_outcomes,
+        )
+
+    def _execute_observed_navigation_tap(
+        self,
+        *,
+        action: TapAction,
+        before: Observation,
+        candidate: _ObservedNavigationTap,
+        label_prefix: str,
+        observe: ObservationCallback,
+    ) -> ObservedActionExecutionResult:
+        """Executes one geometry-backed navigation tap through the shared primary-to-OCR flow."""
+
+        follow_up_request = ObservationRequest.navigation_follow_up(candidate.reviewed_outcomes)
+        self.action_executor.execute_action(action, before)
+        self._sleep_for_observe()
+        first_after = observe(label_prefix, request=follow_up_request)
+        settled_after = self._settle_follow_up_observation(
+            first_after=first_after,
+            label_prefix=label_prefix,
+            request=follow_up_request,
+            reviewed_outcomes=candidate.reviewed_outcomes,
+            observe=observe,
+        )
+        final_after = settled_after
+        fallback_attempted = False
+        fallback_used = False
+        fallback_source_kind: VisibleElementSourceKind | None = None
+        if is_settled_primary_navigation_miss(candidate.selector, before, settled_after, candidate.source_element):
+            fallback_attempted = True
+            retry_source = observe(
+                f"{label_prefix}_ocr_retry_source",
+                request=ObservationRequest.source_screen_retry(before.screen_type),
+            )
+            retry_element = retry_source.get(action.selector_id)
+            if retry_element is not None and retry_element.source_kind == VisibleElementSourceKind.OCR:
+                fallback_used = True
+                fallback_source_kind = retry_element.source_kind
+                self.action_executor.execute_action(action, retry_source)
+                self._sleep_for_observe()
+                final_after = observe(f"{label_prefix}_ocr_retry_after", request=follow_up_request)
+            else:
+                final_after = retry_source
+        interaction = SelectorInteractionResult(
+            selector_id=action.selector_id,
+            source_screen=before.screen_type,
+            initial_source_kind=candidate.source_element.source_kind,
+            first_after_screen=first_after.screen_type,
+            final_after_screen=final_after.screen_type,
+            initial_destination_artifact_path=first_after.artifact_path,
+            final_destination_artifact_path=final_after.artifact_path,
+            fallback_attempted=fallback_attempted,
+            fallback_used=fallback_used,
+            fallback_source_kind=fallback_source_kind,
+        )
+        self.logger.info(
+            "Observed selector interaction resolved.",
+            extra={
+                "selector_id": action.selector_id.value,
+                "source_screen": before.screen_type.name,
+                "initial_source_kind": interaction.initial_source_kind.value,
+                "fallback_attempted": interaction.fallback_attempted,
+                "fallback_source_kind": None if interaction.fallback_source_kind is None else interaction.fallback_source_kind.value,
+                "first_after_screen": interaction.first_after_screen.name,
+                "final_after_screen": interaction.final_after_screen.name,
+            },
+        )
+        return ObservedActionExecutionResult(
+            observation=final_after,
+            selector_interactions=(interaction,),
+        )
+
+    def _settle_follow_up_observation(
+        self,
+        *,
+        first_after: Observation,
+        label_prefix: str,
+        request: ObservationRequest,
+        reviewed_outcomes: tuple[ClickOutcome, ...],
+        observe: ObservationCallback,
+    ) -> Observation:
+        """Passively re-observes transitional post-tap states before any OCR retry decision."""
+
+        latest_observation = first_after
+        for settle_index in range(self.policy.max_settle_observations):
+            matched_outcome, _ = match_reviewed_navigation_outcome(latest_observation, reviewed_outcomes)
+            if matched_outcome is not None or is_popup_observation(latest_observation):
+                return latest_observation
+            if not is_transitional_observation(latest_observation):
+                return latest_observation
+            self._sleep_for_observe()
+            latest_observation = observe(
+                f"{label_prefix}_settle_{settle_index + 1}",
+                request=request,
+            )
+        return latest_observation
+
+    def _sleep_for_observe(self) -> None:
+        """Applies the shared post-action observe delay used by follow-up captures."""
+
+        delay_ms = self.action_executor.post_action_observe_delay_ms
+        if delay_ms <= 0:
+            return
+        self.sleep(delay_ms / 1000.0)

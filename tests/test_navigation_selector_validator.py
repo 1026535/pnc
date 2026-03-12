@@ -10,8 +10,10 @@ from pathlib import Path
 from PIL import Image
 
 from pnc_automation.automation.action_executor import ActionExecutor
+from pnc_automation.automation.observed_action_executor import ObservedActionExecutor
 from pnc_automation.capture.artifact_store import ArtifactRecord
 from pnc_automation.capture.screenshot_service import CapturedScreenshot
+from pnc_automation.pnc.observation import VisibleElementSourceKind
 from pnc_automation.pnc.screen_flows import ScreenFlowPlanner
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
@@ -22,8 +24,17 @@ from pnc_automation.vision.navigation_selector_validator import (
     match_reviewed_navigation_outcome,
 )
 from pnc_automation.vision.observation_builder import CapturedObservation
+from pnc_automation.vision.observation_request import ObservationRequest
 from pnc_automation.vision.selector_interaction_kind import SelectorInteractionKind
-from pnc_automation.vision.selectors import ClickDefinition, ClickOutcome, DetectionKind, SelectorDefinition, SelectorRegistry, SelectorStatus
+from pnc_automation.vision.selectors import (
+    ClickDefinition,
+    ClickOutcome,
+    DetectionKind,
+    SelectorDefinition,
+    SelectorRegistry,
+    SelectorStatus,
+    build_default_selector_registry,
+)
 from tests.test_support import FakeSession, build_logger, make_observation
 
 
@@ -146,13 +157,7 @@ class NavigationSelectorValidatorTests(unittest.TestCase):
         validator = NavigationSelectorValidator(
             selector_registry=registry,
             observation_service=capture_service,
-            action_executor=ActionExecutor(
-                session=session,
-                stable_click_delay_ms=0,
-                post_action_observe_delay_ms=0,
-                logger=build_logger(),
-                sleep=lambda _: None,
-            ),
+            action_executor=_make_validator_action_executor(session, registry),
             screen_flows=ScreenFlowPlanner(),
             logger=build_logger(),
         )
@@ -223,13 +228,7 @@ class NavigationSelectorValidatorTests(unittest.TestCase):
         validator = NavigationSelectorValidator(
             selector_registry=registry,
             observation_service=capture_service,
-            action_executor=ActionExecutor(
-                session=session,
-                stable_click_delay_ms=0,
-                post_action_observe_delay_ms=0,
-                logger=build_logger(),
-                sleep=lambda _: None,
-            ),
+            action_executor=_make_validator_action_executor(session, registry),
             screen_flows=ScreenFlowPlanner(),
             logger=build_logger(),
             sleep=lambda _: None,
@@ -241,7 +240,10 @@ class NavigationSelectorValidatorTests(unittest.TestCase):
         self.assertEqual(report.failed_count, 0)
         self.assertEqual(report.results[0].destination_screen, ScreenType.PNC_WORLD_MAP)
         self.assertEqual(session.taps, [(5, 5)])
-        self.assertIn("navigation_validation_1_settle_1", capture_service.labels)
+        self.assertIn(
+            "navigation_validation_1_tap_pnc_home_world_switch_post_action_1_settle_1",
+            capture_service.labels,
+        )
 
     def test_validator_closes_a_blocking_popup_before_matching_the_reviewed_destination(self) -> None:
         """Dismisses one blocking popup encountered after the click and then validates the destination contract."""
@@ -297,13 +299,7 @@ class NavigationSelectorValidatorTests(unittest.TestCase):
         validator = NavigationSelectorValidator(
             selector_registry=registry,
             observation_service=capture_service,
-            action_executor=ActionExecutor(
-                session=session,
-                stable_click_delay_ms=0,
-                post_action_observe_delay_ms=0,
-                logger=build_logger(),
-                sleep=lambda _: None,
-            ),
+            action_executor=_make_validator_action_executor(session, registry),
             screen_flows=ScreenFlowPlanner(),
             logger=build_logger(),
             sleep=lambda _: None,
@@ -322,6 +318,96 @@ class NavigationSelectorValidatorTests(unittest.TestCase):
         )
         self.assertEqual(report.results[0].destination_screen, ScreenType.PNC_WORLD_MAP)
 
+    def test_validator_reports_shared_ocr_fallback_metadata(self) -> None:
+        """Records the shared geometry-to-OCR fallback details and the correct destination artifacts."""
+
+        registry = SelectorRegistry(
+            selectors=(
+                SelectorDefinition(
+                    id=UiElementId.PNC_BOTTOM_NAV_MORE,
+                    screens=(ScreenType.PNC_HOME_CITY,),
+                    detection_kind=DetectionKind.PLANNED,
+                    status=SelectorStatus.CLICK_MAPPED,
+                    interaction_kind=SelectorInteractionKind.NAVIGATION,
+                    click=ClickDefinition(),
+                    click_outcomes=(
+                        ClickOutcome(
+                            target_screen=ScreenType.PNC_MORE_MENU,
+                            verification_selectors=(UiElementId.PNC_MORE_SETTINGS,),
+                        ),
+                    ),
+                ),
+            )
+        )
+        capture_service = _FakeCapturedObservationService(
+            captures=[
+                _make_captured_observation(
+                    make_observation(
+                        ScreenType.PNC_HOME_CITY,
+                        visible_ids=(UiElementId.PNC_BOTTOM_NAV_MORE,),
+                        source_kinds={UiElementId.PNC_BOTTOM_NAV_MORE: VisibleElementSourceKind.GEOMETRY},
+                        artifact_path=Path("home.png"),
+                    ),
+                    label="home",
+                ),
+                _make_captured_observation(
+                    make_observation(
+                        ScreenType.PNC_HOME_CITY,
+                        visible_ids=(UiElementId.PNC_BOTTOM_NAV_MORE,),
+                        source_kinds={UiElementId.PNC_BOTTOM_NAV_MORE: VisibleElementSourceKind.GEOMETRY},
+                        artifact_path=Path("primary_miss.png"),
+                    ),
+                    label="primary_miss",
+                ),
+                _make_captured_observation(
+                    make_observation(
+                        ScreenType.PNC_HOME_CITY,
+                        visible_ids=(UiElementId.PNC_BOTTOM_NAV_MORE,),
+                        source_kinds={UiElementId.PNC_BOTTOM_NAV_MORE: VisibleElementSourceKind.OCR},
+                        artifact_path=Path("ocr_retry_source.png"),
+                    ),
+                    label="ocr_retry_source",
+                ),
+                _make_captured_observation(
+                    make_observation(
+                        ScreenType.PNC_MORE_MENU,
+                        visible_ids=(UiElementId.PNC_MORE_SETTINGS,),
+                        artifact_path=Path("final_more.png"),
+                    ),
+                    label="final_more",
+                ),
+            ]
+        )
+        session = FakeSession()
+        validator = NavigationSelectorValidator(
+            selector_registry=registry,
+            observation_service=capture_service,
+            action_executor=_make_validator_action_executor(session, registry),
+            screen_flows=ScreenFlowPlanner(),
+            logger=build_logger(),
+        )
+
+        report = validator.validate(selector_ids=(UiElementId.PNC_BOTTOM_NAV_MORE,))
+
+        self.assertEqual(report.passed_count, 1)
+        result = report.results[0]
+        self.assertEqual(result.status, NavigationValidationStatus.PASSED)
+        self.assertEqual(result.initial_source_kind, VisibleElementSourceKind.GEOMETRY)
+        self.assertTrue(result.fallback_used)
+        self.assertEqual(result.fallback_source_kind, VisibleElementSourceKind.OCR)
+        self.assertEqual(result.initial_destination_artifact_path, Path("primary_miss.png"))
+        self.assertEqual(result.final_destination_artifact_path, Path("final_more.png"))
+        self.assertEqual(result.destination_artifact_path, Path("final_more.png"))
+        self.assertEqual(
+            capture_service.requests,
+            [
+                None,
+                ObservationRequest.navigation_follow_up(registry.selectors[0].click_outcomes),
+                ObservationRequest.source_screen_retry(ScreenType.PNC_HOME_CITY),
+                ObservationRequest.navigation_follow_up(registry.selectors[0].click_outcomes),
+            ],
+        )
+
 
 @dataclass
 class _FakeCapturedObservationService:
@@ -329,11 +415,17 @@ class _FakeCapturedObservationService:
 
     captures: list[CapturedObservation]
     labels: list[str] = field(default_factory=list)
+    requests: list[ObservationRequest | None] = field(default_factory=list)
 
-    def capture_observation(self, label: str) -> CapturedObservation:
+    def capture_observation(
+        self,
+        label: str,
+        request: ObservationRequest | None = None,
+    ) -> CapturedObservation:
         """Returns the next queued captured observation."""
 
         self.labels.append(label)
+        self.requests.append(request)
         if not self.captures:
             raise AssertionError(f"No captured observation queued for label '{label}'.")
         return self.captures.pop(0)
@@ -354,6 +446,28 @@ def _make_captured_observation(observation: object, *, label: str) -> CapturedOb
         image_format="PNG",
     )
     return CapturedObservation(screenshot=screenshot, observation=observation)
+
+
+def _make_validator_action_executor(session: FakeSession, registry: SelectorRegistry) -> ObservedActionExecutor:
+    """Builds the shared observed-action executor used by validator tests."""
+
+    merged_selectors = {
+        selector.id: selector
+        for selector in build_default_selector_registry().all()
+    }
+    merged_selectors.update({selector.id: selector for selector in registry.all()})
+    return ObservedActionExecutor(
+        selector_registry=SelectorRegistry(selectors=tuple(merged_selectors.values())),
+        action_executor=ActionExecutor(
+            session=session,
+            stable_click_delay_ms=0,
+            post_action_observe_delay_ms=0,
+            logger=build_logger(),
+            sleep=lambda _: None,
+        ),
+        logger=build_logger(),
+        sleep=lambda _: None,
+    )
 
 
 if __name__ == "__main__":

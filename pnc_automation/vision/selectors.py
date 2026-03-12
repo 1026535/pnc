@@ -7,7 +7,7 @@ from enum import StrEnum
 from pathlib import Path
 
 from pnc_automation.errors import SelectorResolutionError
-from pnc_automation.pnc.observation import Bounds, VisibleElement
+from pnc_automation.pnc.observation import Bounds, VisibleElement, VisibleElementSourceKind
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
 from pnc_automation.vision.selector_catalog import load_selector_catalog_document
@@ -113,6 +113,7 @@ class RelativeBounds:
             selector_id=selector_id,
             bounds=bounds,
             confidence=1.0,
+            source_kind=VisibleElementSourceKind.GEOMETRY,
             action_point=action_point,
         )
 

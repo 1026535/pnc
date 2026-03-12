@@ -12,15 +12,21 @@ from typing import Protocol
 
 import yaml
 
-from pnc_automation.automation.action_executor import ActionExecutor
+from pnc_automation.automation.observed_action_executor import (
+    ObservedActionExecutionResult,
+    ObservedActionExecutor,
+    SelectorInteractionResult,
+)
 from pnc_automation.errors import SelectorResolutionError
 from pnc_automation.pnc.action_requests import TapAction
-from pnc_automation.pnc.observation import Observation
+from pnc_automation.pnc.observation import Observation, VisibleElementSourceKind
 from pnc_automation.pnc.screen_flows import ScreenFlowPlanner
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
 from pnc_automation.vision.observation_builder import CapturedObservation
+from pnc_automation.vision.observation_request import ObservationRequest
 from pnc_automation.vision.selector_interaction_kind import SelectorInteractionKind
+from pnc_automation.vision.selector_interactions import match_reviewed_navigation_outcome, safe_navigation_outcomes
 from pnc_automation.vision.selectors import ClickOutcome, SelectorRegistry
 
 
@@ -35,7 +41,11 @@ class NavigationValidationStatus(StrEnum):
 class ObservationCaptureService(Protocol):
     """Captures typed observations for live validation runs."""
 
-    def capture_observation(self, label: str) -> CapturedObservation:
+    def capture_observation(
+        self,
+        label: str,
+        request: ObservationRequest | None = None,
+    ) -> CapturedObservation:
         """Captures one fresh observation with an artifact-backed screenshot."""
 
 
@@ -71,8 +81,13 @@ class NavigationSelectorValidationResult:
     expected_target_screens: tuple[ScreenType, ...]
     source_artifact_path: Path | None = None
     destination_artifact_path: Path | None = None
+    initial_destination_artifact_path: Path | None = None
+    final_destination_artifact_path: Path | None = None
     destination_screen: ScreenType | None = None
     matched_target_screen: ScreenType | None = None
+    initial_source_kind: VisibleElementSourceKind | None = None
+    fallback_used: bool = False
+    fallback_source_kind: VisibleElementSourceKind | None = None
     missing_verification_selectors: tuple[UiElementId, ...] = ()
     observed_selectors: tuple[UiElementId, ...] = ()
 
@@ -91,10 +106,19 @@ class NavigationSelectorValidationResult:
             document["source_artifact_path"] = str(self.source_artifact_path)
         if self.destination_artifact_path is not None:
             document["destination_artifact_path"] = str(self.destination_artifact_path)
+        if self.initial_destination_artifact_path is not None:
+            document["initial_destination_artifact_path"] = str(self.initial_destination_artifact_path)
+        if self.final_destination_artifact_path is not None:
+            document["final_destination_artifact_path"] = str(self.final_destination_artifact_path)
         if self.destination_screen is not None:
             document["destination_screen"] = self.destination_screen.name
         if self.matched_target_screen is not None:
             document["matched_target_screen"] = self.matched_target_screen.name
+        if self.initial_source_kind is not None:
+            document["initial_source_kind"] = self.initial_source_kind.value
+        document["fallback_used"] = self.fallback_used
+        if self.fallback_source_kind is not None:
+            document["fallback_source_kind"] = self.fallback_source_kind.value
         if self.missing_verification_selectors:
             document["missing_verification_selectors"] = [
                 selector_id.value for selector_id in self.missing_verification_selectors
@@ -145,7 +169,7 @@ class NavigationSelectorValidator:
 
     selector_registry: SelectorRegistry
     observation_service: ObservationCaptureService
-    action_executor: ActionExecutor
+    action_executor: ObservedActionExecutor
     screen_flows: ScreenFlowPlanner
     logger: logging.LoggerAdapter
     max_prepare_steps: int = 10
@@ -244,7 +268,7 @@ class NavigationSelectorValidator:
                     observed_screen=observation.screen_type.name,
                     artifact_path=str(latest_capture.screenshot.artifact.path),
                 )
-            latest_capture = self._execute_actions(
+            _, latest_capture = self._execute_actions(
                 planned_actions,
                 latest_capture,
                 label_prefix=f"navigation_validation_{case_index}_prepare_{step_index + 1}",
@@ -266,7 +290,7 @@ class NavigationSelectorValidator:
     ) -> tuple[NavigationSelectorValidationResult, CapturedObservation]:
         """Clicks one reviewed selector and verifies the observed destination against the stored contract."""
 
-        destination_capture = self._execute_actions(
+        execution, destination_capture = self._execute_actions(
             (
                 TapAction(
                     selector_id=case.selector_id,
@@ -277,7 +301,7 @@ class NavigationSelectorValidator:
             source_capture,
             label_prefix=f"navigation_validation_{case_index}_tap_{case.selector_id.value.lower()}",
         )
-        destination_capture = self._settle_destination_capture(
+        destination_capture = self._recover_destination_capture(
             case,
             destination_capture,
             case_index=case_index,
@@ -285,6 +309,17 @@ class NavigationSelectorValidator:
         matched_outcome, missing_selectors = match_reviewed_navigation_outcome(
             destination_capture.observation,
             case.reviewed_outcomes,
+        )
+        interaction = _first_selector_interaction(execution)
+        initial_source_kind = (
+            source_capture.observation.require(case.selector_id).source_kind
+            if interaction is None
+            else interaction.initial_source_kind
+        )
+        initial_destination_artifact_path = (
+            destination_capture.screenshot.artifact.path
+            if interaction is None or interaction.initial_destination_artifact_path is None
+            else interaction.initial_destination_artifact_path
         )
         if matched_outcome is not None:
             return (
@@ -296,8 +331,13 @@ class NavigationSelectorValidator:
                     expected_target_screens=case.expected_target_screens,
                     source_artifact_path=source_capture.screenshot.artifact.path,
                     destination_artifact_path=destination_capture.screenshot.artifact.path,
+                    initial_destination_artifact_path=initial_destination_artifact_path,
+                    final_destination_artifact_path=destination_capture.screenshot.artifact.path,
                     destination_screen=destination_capture.observation.screen_type,
                     matched_target_screen=matched_outcome.target_screen,
+                    initial_source_kind=initial_source_kind,
+                    fallback_used=False if interaction is None else interaction.fallback_used,
+                    fallback_source_kind=None if interaction is None else interaction.fallback_source_kind,
                     observed_selectors=_sorted_selector_ids(destination_capture.observation),
                 ),
                 destination_capture,
@@ -317,21 +357,26 @@ class NavigationSelectorValidator:
                 expected_target_screens=case.expected_target_screens,
                 source_artifact_path=source_capture.screenshot.artifact.path,
                 destination_artifact_path=destination_capture.screenshot.artifact.path,
+                initial_destination_artifact_path=initial_destination_artifact_path,
+                final_destination_artifact_path=destination_capture.screenshot.artifact.path,
                 destination_screen=destination_capture.observation.screen_type,
+                initial_source_kind=initial_source_kind,
+                fallback_used=False if interaction is None else interaction.fallback_used,
+                fallback_source_kind=None if interaction is None else interaction.fallback_source_kind,
                 missing_verification_selectors=missing_selectors,
                 observed_selectors=_sorted_selector_ids(destination_capture.observation),
             ),
             destination_capture,
         )
 
-    def _settle_destination_capture(
+    def _recover_destination_capture(
         self,
         case: NavigationSelectorValidationCase,
         destination_capture: CapturedObservation,
         *,
         case_index: int,
     ) -> CapturedObservation:
-        """Waits through transient post-click states and dismisses blocking popups before evaluating the result."""
+        """Dismisses blocking popups that remain after the shared selector-tap execution path returns."""
 
         latest_capture = destination_capture
         for settle_index in range(self.max_destination_settle_observations):
@@ -342,18 +387,13 @@ class NavigationSelectorValidator:
             if matched_outcome is not None:
                 return latest_capture
             if latest_capture.observation.blocking_popup or latest_capture.observation.screen_type == ScreenType.PNC_POPUP:
-                latest_capture = self._execute_actions(
+                _, latest_capture = self._execute_actions(
                     self.screen_flows.close_blocking_popup(latest_capture.observation),
                     latest_capture,
                     label_prefix=f"navigation_validation_{case_index}_settle_popup_{settle_index + 1}",
                 )
                 continue
-            if settle_index == self.max_destination_settle_observations - 1:
-                break
-            self._sleep_for_destination_settle()
-            latest_capture = self.observation_service.capture_observation(
-                f"navigation_validation_{case_index}_settle_{settle_index + 1}"
-            )
+            return latest_capture
         return latest_capture
 
     def _recover_to_home(
@@ -373,7 +413,7 @@ class NavigationSelectorValidator:
             planned_actions = self.screen_flows.ensure_home_city(observation)
             if not planned_actions:
                 return latest_capture
-            latest_capture = self._execute_actions(
+            _, latest_capture = self._execute_actions(
                 planned_actions,
                 latest_capture,
                 label_prefix=f"navigation_validation_{case_index}_{step_label}_{step_index + 1}",
@@ -391,28 +431,24 @@ class NavigationSelectorValidator:
         current_capture: CapturedObservation,
         *,
         label_prefix: str,
-    ) -> CapturedObservation:
-        """Executes one observed action sequence and returns the latest captured observation."""
+    ) -> tuple[ObservedActionExecutionResult, CapturedObservation]:
+        """Executes one observed action sequence and returns the execution plus latest capture."""
 
         latest_capture: CapturedObservation | None = None
 
-        def observe(label: str) -> Observation:
+        def observe(label: str, request: ObservationRequest | None = None) -> Observation:
             nonlocal latest_capture
-            latest_capture = self.observation_service.capture_observation(f"{label_prefix}_{label}")
+            latest_capture = self.observation_service.capture_observation(f"{label_prefix}_{label}", request=request)
             return latest_capture.observation
 
-        self.action_executor.execute_actions(actions, current_capture.observation, observe=observe)
+        execution = self.action_executor.execute_actions(actions, current_capture.observation, observe=observe)
         if latest_capture is None:
             latest_capture = self.observation_service.capture_observation(f"{label_prefix}_confirm")
-        return latest_capture
-
-    def _sleep_for_destination_settle(self) -> None:
-        """Applies the standard post-action settle delay between passive follow-up observations."""
-
-        delay_ms = self.action_executor.post_action_observe_delay_ms
-        if delay_ms <= 0:
-            return
-        self.sleep(delay_ms / 1000.0)
+            execution = ObservedActionExecutionResult(
+                observation=latest_capture.observation,
+                selector_interactions=execution.selector_interactions,
+            )
+        return execution, latest_capture
 
 
 def build_navigation_validation_cases(
@@ -429,7 +465,7 @@ def build_navigation_validation_cases(
             continue
         if requested_selector_ids is not None and selector.id not in requested_selector_ids:
             continue
-        safe_outcomes = tuple(outcome for outcome in selector.click_outcomes if outcome.safe_to_click)
+        safe_outcomes = safe_navigation_outcomes(selector)
         for source_screen in selector.screens:
             cases.append(
                 NavigationSelectorValidationCase(
@@ -439,28 +475,6 @@ def build_navigation_validation_cases(
                 )
             )
     return tuple(sorted(cases, key=lambda case: (case.source_screen.value, case.selector_id.value)))
-
-
-def match_reviewed_navigation_outcome(
-    destination_observation: Observation,
-    reviewed_outcomes: Sequence[ClickOutcome],
-) -> tuple[ClickOutcome | None, tuple[UiElementId, ...]]:
-    """Returns the reviewed click outcome that matches the observed destination, if any."""
-
-    closest_missing_selectors: tuple[UiElementId, ...] = ()
-    for outcome in reviewed_outcomes:
-        if outcome.target_screen is not None and destination_observation.screen_type != outcome.target_screen:
-            continue
-        missing_selectors = tuple(
-            selector_id
-            for selector_id in outcome.verification_selectors
-            if not destination_observation.has(selector_id)
-        )
-        if not missing_selectors:
-            return outcome, ()
-        if not closest_missing_selectors or len(missing_selectors) < len(closest_missing_selectors):
-            closest_missing_selectors = missing_selectors
-    return None, closest_missing_selectors
 
 
 def write_navigation_selector_validation_report(path: Path, report: NavigationSelectorValidationReport) -> None:
@@ -507,3 +521,11 @@ def _sorted_selector_ids(observation: Observation) -> tuple[UiElementId, ...]:
     """Returns the visible selector ids in deterministic enum-value order for report serialization."""
 
     return tuple(sorted(observation.visible_elements, key=lambda selector_id: selector_id.value))
+
+
+def _first_selector_interaction(execution: ObservedActionExecutionResult) -> SelectorInteractionResult | None:
+    """Returns the first selector-interaction diagnostic emitted by one observed action sequence."""
+
+    if not execution.selector_interactions:
+        return None
+    return execution.selector_interactions[0]

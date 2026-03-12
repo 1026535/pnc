@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from pnc_automation.adb.client import AdbClient
 from pnc_automation.automation.action_executor import ActionExecutor
+from pnc_automation.automation.observed_action_executor import ObservedActionExecutor
 from pnc_automation.automation.runner import AutomationRunner, RunResult
 from pnc_automation.automation.scripts.loader import load_run_script
 from pnc_automation.automation.scripts.registry import TaskRegistry
@@ -74,7 +75,11 @@ class ScriptRunner:
         runner = AutomationRunner(
             defaults=self.config.defaults,
             observation_service=observation_service,
-            action_executor=action_executor,
+            action_executor=ObservedActionExecutor(
+                selector_registry=self.observation_builder.selector_registry,
+                action_executor=action_executor,
+                logger=logging.LoggerAdapter(self.logger.logger, extra={**self.logger.extra, **shared_extra}),
+            ),
             task_registry=self.task_registry,
             flow_planner=flow_planner,
             logger=logging.LoggerAdapter(self.logger.logger, extra={**self.logger.extra, **shared_extra}),

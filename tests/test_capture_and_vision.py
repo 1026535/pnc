@@ -14,7 +14,7 @@ from pnc_automation.capture.artifact_store import ArtifactStore
 from pnc_automation.capture.screenshot_service import ScreenshotService
 from pnc_automation.config.castle_roster_store import CastleRosterStore
 from pnc_automation.config.models import PncAccountCastleRosterConfig, SelectedCastleConfig
-from pnc_automation.pnc.observation import ListEntryKind
+from pnc_automation.pnc.observation import ListEntryKind, VisibleElementSourceKind
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
 from pnc_automation.vision.observation_builder import (
@@ -24,6 +24,7 @@ from pnc_automation.vision.observation_builder import (
     PillowSelectorEngine,
 )
 from pnc_automation.vision.image_models import SelectorMatch
+from pnc_automation.vision.observation_request import ObservationRequest
 from pnc_automation.vision.ocr_service import OcrLine, OcrResult, UnavailableOcrService
 from pnc_automation.vision.pnc_observation_enricher import PncObservationEnricher
 from pnc_automation.vision.screen_classifier import ScreenClassifier
@@ -91,15 +92,35 @@ class _FakeOcrService:
 
 
 @dataclass(slots=True)
+class _RecordingOcrService(_FakeOcrService):
+    """Counts OCR calls so staged-observation tests can assert cost control."""
+
+    read_result_calls: int = 0
+    read_text_calls: int = 0
+
+    def read_result(self, image: Image.Image, region: Region | None = None) -> OcrResult:
+        """Records full-image OCR requests before returning deterministic lines."""
+
+        self.read_result_calls += 1
+        return _FakeOcrService.read_result(self, image, region)
+
+    def read_text(self, image: Image.Image, region: Region) -> str:
+        """Records region OCR reads before returning deterministic text."""
+
+        self.read_text_calls += 1
+        return _FakeOcrService.read_text(self, image, region)
+
+
+@dataclass(slots=True)
 class _SequencedObservationBuilder:
     """Returns a pre-seeded sequence of built observations."""
 
     observations: list
 
-    def build(self, screenshot: object) -> object:
+    def build(self, screenshot: object, *, request: ObservationRequest | None = None) -> object:
         """Returns the next queued observation for one capture request."""
 
-        del screenshot
+        del screenshot, request
         if not self.observations:
             raise AssertionError("No observation queued for ObservationService.")
         return self.observations.pop(0)
@@ -1402,6 +1423,243 @@ class CaptureAndVisionTests(unittest.TestCase):
 
         self.assertEqual(observation.screen_type, ScreenType.PNC_HOME_CITY)
         self.assertFalse(observation.has(UiElementId.PNC_HOME_BUILD_BUTTON))
+
+    def test_observation_builder_skips_ocr_for_base_requests(self) -> None:
+        """Leaves OCR idle when the caller requests only the cheap selector-and-geometry base pass."""
+
+        ocr_service = _RecordingOcrService(lines=())
+        builder = ObservationBuilder(
+            selector_registry=SelectorRegistry(selectors=()),
+            selector_engine=PillowSelectorEngine(
+                template_matcher=PillowTemplateMatcher(),
+                ocr_service=ocr_service,
+            ),
+            screen_classifier=ScreenClassifier(),
+            enricher=PncObservationEnricher(ocr_service=ocr_service),
+        )
+        screenshot = type(
+            "Captured",
+            (),
+            {
+                "image": Image.new("RGB", (100, 100), (0, 0, 0)),
+                "artifact": type("Artifact", (), {"path": Path("synthetic.png"), "captured_at": None})(),
+            },
+        )()
+
+        builder.build(screenshot, request=ObservationRequest.base())
+
+        self.assertEqual(ocr_service.read_result_calls, 0)
+        self.assertEqual(ocr_service.read_text_calls, 0)
+
+    def test_observation_builder_runs_ocr_when_requested(self) -> None:
+        """Invokes OCR when the observation request explicitly asks for OCR-backed facts."""
+
+        ocr_service = _RecordingOcrService(lines=())
+        builder = ObservationBuilder(
+            selector_registry=SelectorRegistry(selectors=()),
+            selector_engine=PillowSelectorEngine(
+                template_matcher=PillowTemplateMatcher(),
+                ocr_service=ocr_service,
+            ),
+            screen_classifier=ScreenClassifier(),
+            enricher=PncObservationEnricher(ocr_service=ocr_service),
+        )
+        screenshot = type(
+            "Captured",
+            (),
+            {
+                "image": Image.new("RGB", (100, 100), (0, 0, 0)),
+                "artifact": type("Artifact", (), {"path": Path("synthetic.png"), "captured_at": None})(),
+            },
+        )()
+
+        builder.build(screenshot, request=ObservationRequest.runtime_default())
+
+        self.assertEqual(ocr_service.read_result_calls, 1)
+
+    def test_observation_builder_tags_template_and_geometry_sources(self) -> None:
+        """Carries template and geometry provenance onto the final visible-element map."""
+
+        registry = SelectorRegistry(
+            selectors=(
+                SelectorDefinition(
+                    id=UiElementId.PNC_HOME_WORLD_SWITCH,
+                    screens=(ScreenType.PNC_HOME_CITY,),
+                    detection_kind=DetectionKind.TEMPLATE,
+                    status=SelectorStatus.SCREENSHOT_SEEDED,
+                    click=ClickDefinition(),
+                ),
+                SelectorDefinition(
+                    id=UiElementId.PNC_HOME_CHARACTER_PANEL,
+                    screens=(ScreenType.PNC_HOME_CITY,),
+                    detection_kind=DetectionKind.TEMPLATE,
+                    status=SelectorStatus.SCREENSHOT_SEEDED,
+                    click=ClickDefinition(),
+                ),
+                SelectorDefinition(
+                    id=UiElementId.PNC_HOME_BUILD_BUTTON,
+                    screens=(ScreenType.PNC_HOME_CITY,),
+                    detection_kind=DetectionKind.TEMPLATE,
+                    status=SelectorStatus.SCREENSHOT_SEEDED,
+                    click=ClickDefinition(),
+                ),
+                SelectorDefinition(
+                    id=UiElementId.PNC_BOTTOM_NAV_MORE,
+                    screens=(ScreenType.PNC_HOME_CITY,),
+                    detection_kind=DetectionKind.PLANNED,
+                    status=SelectorStatus.CLICK_MAPPED,
+                    click=ClickDefinition(),
+                    relative_bounds=RelativeBounds(
+                        x_ratio=0.70,
+                        y_ratio=0.80,
+                        width_ratio=0.10,
+                        height_ratio=0.10,
+                    ),
+                ),
+            )
+        )
+        selector_engine = _RecordingSelectorEngine(
+            responses=[
+                (
+                    SelectorMatch(
+                        selector_id=UiElementId.PNC_HOME_WORLD_SWITCH,
+                        bounds=Region(x=10, y=10, width=20, height=20),
+                        confidence=1.0,
+                    ),
+                    SelectorMatch(
+                        selector_id=UiElementId.PNC_HOME_CHARACTER_PANEL,
+                        bounds=Region(x=40, y=10, width=20, height=20),
+                        confidence=1.0,
+                    ),
+                    SelectorMatch(
+                        selector_id=UiElementId.PNC_HOME_BUILD_BUTTON,
+                        bounds=Region(x=70, y=10, width=20, height=20),
+                        confidence=1.0,
+                    ),
+                ),
+                (),
+            ]
+        )
+        builder = ObservationBuilder(
+            selector_registry=registry,
+            selector_engine=selector_engine,
+            screen_classifier=ScreenClassifier(),
+            enricher=DefaultObservationEnricher(),
+        )
+        screenshot = type(
+            "Captured",
+            (),
+            {
+                "image": Image.new("RGB", (100, 100), (0, 0, 0)),
+                "artifact": type("Artifact", (), {"path": Path("synthetic.png"), "captured_at": None})(),
+            },
+        )()
+
+        observation = builder.build(screenshot, request=ObservationRequest.base())
+
+        self.assertEqual(
+            observation.require(UiElementId.PNC_HOME_WORLD_SWITCH).source_kind,
+            VisibleElementSourceKind.TEMPLATE,
+        )
+        self.assertEqual(
+            observation.require(UiElementId.PNC_BOTTOM_NAV_MORE).source_kind,
+            VisibleElementSourceKind.GEOMETRY,
+        )
+
+    def test_observation_builder_tags_ocr_sources(self) -> None:
+        """Keeps OCR-synthesized selectors distinct from geometry-backed visibility."""
+
+        registry = SelectorRegistry(
+            selectors=(
+                SelectorDefinition(
+                    id=UiElementId.PNC_HOME_WORLD_SWITCH,
+                    screens=(ScreenType.PNC_HOME_CITY,),
+                    detection_kind=DetectionKind.TEMPLATE,
+                    status=SelectorStatus.SCREENSHOT_SEEDED,
+                    click=ClickDefinition(),
+                ),
+                SelectorDefinition(
+                    id=UiElementId.PNC_HOME_CHARACTER_PANEL,
+                    screens=(ScreenType.PNC_HOME_CITY,),
+                    detection_kind=DetectionKind.TEMPLATE,
+                    status=SelectorStatus.SCREENSHOT_SEEDED,
+                    click=ClickDefinition(),
+                ),
+                SelectorDefinition(
+                    id=UiElementId.PNC_HOME_BUILD_BUTTON,
+                    screens=(ScreenType.PNC_HOME_CITY,),
+                    detection_kind=DetectionKind.TEMPLATE,
+                    status=SelectorStatus.SCREENSHOT_SEEDED,
+                    click=ClickDefinition(),
+                ),
+                SelectorDefinition(
+                    id=UiElementId.PNC_BOTTOM_NAV_MORE,
+                    screens=(ScreenType.PNC_HOME_CITY,),
+                    detection_kind=DetectionKind.PLANNED,
+                    status=SelectorStatus.CLICK_MAPPED,
+                    click=ClickDefinition(),
+                    relative_bounds=RelativeBounds(
+                        x_ratio=0.70,
+                        y_ratio=0.80,
+                        width_ratio=0.10,
+                        height_ratio=0.10,
+                    ),
+                ),
+            )
+        )
+        selector_engine = _RecordingSelectorEngine(
+            responses=[
+                (
+                    SelectorMatch(
+                        selector_id=UiElementId.PNC_HOME_WORLD_SWITCH,
+                        bounds=Region(x=10, y=10, width=20, height=20),
+                        confidence=1.0,
+                    ),
+                    SelectorMatch(
+                        selector_id=UiElementId.PNC_HOME_CHARACTER_PANEL,
+                        bounds=Region(x=40, y=10, width=20, height=20),
+                        confidence=1.0,
+                    ),
+                    SelectorMatch(
+                        selector_id=UiElementId.PNC_HOME_BUILD_BUTTON,
+                        bounds=Region(x=70, y=10, width=20, height=20),
+                        confidence=1.0,
+                    ),
+                ),
+                (),
+            ]
+        )
+        builder = ObservationBuilder(
+            selector_registry=registry,
+            selector_engine=selector_engine,
+            screen_classifier=ScreenClassifier(),
+            enricher=PncObservationEnricher(
+                ocr_service=_FakeOcrService(
+                    lines=(
+                        _ocr_line("Alliance", x=48, y=92, width=124, height=8),
+                        _ocr_line("More", x=160, y=92, width=74, height=8),
+                    )
+                )
+            ),
+        )
+        screenshot = type(
+            "Captured",
+            (),
+            {
+                "image": Image.new("RGB", (240, 100), (0, 0, 0)),
+                "artifact": type("Artifact", (), {"path": Path("synthetic.png"), "captured_at": None})(),
+            },
+        )()
+
+        observation = builder.build(
+            screenshot,
+            request=ObservationRequest.source_screen_retry(ScreenType.PNC_HOME_CITY),
+        )
+
+        self.assertEqual(
+            observation.require(UiElementId.PNC_BOTTOM_NAV_MORE).source_kind,
+            VisibleElementSourceKind.OCR,
+        )
 
     def test_observation_service_syncs_castle_roster_cache_only_after_account_verification(self) -> None:
         """Persists discovered castle rosters only when the visible roster matches a trusted snapshot."""

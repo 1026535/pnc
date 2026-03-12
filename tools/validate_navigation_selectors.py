@@ -14,6 +14,7 @@ root = ensure_repo_root_on_path()
 from pnc_automation.app import build_application_runner
 from pnc_automation.artifact_naming import sanitize_artifact_segment
 from pnc_automation.automation.action_executor import ActionExecutor
+from pnc_automation.automation.observed_action_executor import ObservedActionExecutor
 from pnc_automation.emulator.bluestacks_instance import BlueStacksInstance
 from pnc_automation.emulator.session import BlueStacksSession
 from pnc_automation.errors import SelectorResolutionError
@@ -65,13 +66,18 @@ def main() -> int:
         script_runner=script_runner,
         session=session,
     )
+    raw_action_executor = ActionExecutor(
+        session=session,
+        stable_click_delay_ms=script_runner.config.defaults.stable_click_delay_ms,
+        post_action_observe_delay_ms=script_runner.config.defaults.post_action_observe_delay_ms,
+        logger=logging.LoggerAdapter(script_runner.logger.logger, extra={}),
+    )
     validator = NavigationSelectorValidator(
         selector_registry=script_runner.observation_builder.selector_registry,
         observation_service=observation_service,
-        action_executor=ActionExecutor(
-            session=session,
-            stable_click_delay_ms=script_runner.config.defaults.stable_click_delay_ms,
-            post_action_observe_delay_ms=script_runner.config.defaults.post_action_observe_delay_ms,
+        action_executor=ObservedActionExecutor(
+            selector_registry=script_runner.observation_builder.selector_registry,
+            action_executor=raw_action_executor,
             logger=logging.LoggerAdapter(script_runner.logger.logger, extra={}),
         ),
         screen_flows=ScreenFlowPlanner(),
