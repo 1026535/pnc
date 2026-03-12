@@ -14,7 +14,7 @@ from pnc_automation.capture.artifact_store import ArtifactStore
 from pnc_automation.capture.screenshot_service import ScreenshotService
 from pnc_automation.config.castle_roster_store import CastleRosterStore
 from pnc_automation.config.models import PncAccountCastleRosterConfig, SelectedCastleConfig
-from pnc_automation.pnc.observation import ListEntryKind
+from pnc_automation.pnc.observation import ListEntryKind, SelectorResolutionKind
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
 from pnc_automation.vision.observation_builder import (
@@ -26,14 +26,16 @@ from pnc_automation.vision.observation_builder import (
 from pnc_automation.vision.image_models import SelectorMatch
 from pnc_automation.vision.ocr_service import OcrLine, OcrResult, UnavailableOcrService
 from pnc_automation.vision.pnc_observation_enricher import PncObservationEnricher
-from pnc_automation.vision.screen_classifier import ScreenClassifier
+from pnc_automation.vision.screen_classifier import ScreenClassifier, ScreenEvidence
+from pnc_automation.vision.selector_resolution import ScreenInterpretation
 from pnc_automation.vision.selectors import (
     ClickDefinition,
-    DetectionKind,
     RelativeBounds,
     Region,
     SelectorDefinition,
     SelectorRegistry,
+    SelectorResolutionPolicy,
+    SelectorResolutionStep,
     SelectorStatus,
     build_default_selector_registry,
 )
@@ -128,6 +130,24 @@ class _RecordingSelectorEngine:
         return self.responses.pop(0)
 
 
+@dataclass(slots=True)
+class _FixedScreenInterpreter:
+    """Returns one pre-seeded interpretation for deterministic selector-resolution tests."""
+
+    interpretation: ScreenInterpretation
+
+    def interpret(
+        self,
+        image: Image.Image,
+        screen_type_hint: ScreenType,
+        visible_elements: dict[UiElementId, object],
+    ) -> ScreenInterpretation:
+        """Returns the pre-seeded screen interpretation."""
+
+        del image, screen_type_hint, visible_elements
+        return self.interpretation
+
+
 class CaptureAndVisionTests(unittest.TestCase):
     """Validates screenshot persistence and synthetic vision classification."""
 
@@ -170,25 +190,22 @@ class CaptureAndVisionTests(unittest.TestCase):
                     SelectorDefinition(
                         id=UiElementId.PNC_HOME_WORLD_SWITCH,
                         screens=(ScreenType.PNC_HOME_CITY,),
-                        detection_kind=DetectionKind.TEMPLATE,
                         status=SelectorStatus.SCREENSHOT_SEEDED,
-                        template_path=world_switch_template,
+                        resolution=_template_policy(world_switch_template),
                         click=ClickDefinition(),
                     ),
                     SelectorDefinition(
                         id=UiElementId.PNC_HOME_CHARACTER_PANEL,
                         screens=(ScreenType.PNC_HOME_CITY,),
-                        detection_kind=DetectionKind.TEMPLATE,
                         status=SelectorStatus.SCREENSHOT_SEEDED,
-                        template_path=character_panel_template,
+                        resolution=_template_policy(character_panel_template),
                         click=ClickDefinition(),
                     ),
                     SelectorDefinition(
                         id=UiElementId.PNC_HOME_BUILD_BUTTON,
                         screens=(ScreenType.PNC_HOME_CITY,),
-                        detection_kind=DetectionKind.TEMPLATE,
                         status=SelectorStatus.SCREENSHOT_SEEDED,
-                        template_path=build_button_template,
+                        resolution=_template_policy(build_button_template),
                         click=ClickDefinition(),
                     ),
                 )
@@ -217,6 +234,10 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertEqual(observation.screen_type, ScreenType.PNC_HOME_CITY)
             self.assertTrue(observation.has(UiElementId.PNC_HOME_WORLD_SWITCH))
             self.assertTrue(observation.has(UiElementId.PNC_HOME_CHARACTER_PANEL))
+            self.assertEqual(
+                observation.require(UiElementId.PNC_HOME_WORLD_SWITCH).source.resolution_kind,
+                SelectorResolutionKind.TEMPLATE,
+            )
 
     def test_observation_builder_parses_castle_selection_from_manage_char_ocr(self) -> None:
         """Classifies the Manage Char screen from OCR and extracts castle rows."""
@@ -302,7 +323,11 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertTrue(observation.has(UiElementId.PNC_LOGIN_USERNAME_FIELD))
             self.assertTrue(observation.has(UiElementId.PNC_LOGIN_PASSWORD_FIELD))
             self.assertTrue(observation.has(UiElementId.PNC_LOGIN_SUBMIT_BUTTON))
-            self.assertEqual(observation.require(UiElementId.PNC_LOGIN_USERNAME_FIELD).bounds.x, 59)
+            self.assertEqual(
+                observation.require(UiElementId.PNC_LOGIN_USERNAME_FIELD).source.resolution_kind,
+                SelectorResolutionKind.PARSER_CANDIDATE,
+            )
+            self.assertEqual(observation.require(UiElementId.PNC_LOGIN_USERNAME_FIELD).bounds.x, 60)
             self.assertEqual(observation.require(UiElementId.PNC_LOGIN_PASSWORD_FIELD).bounds.y, 352)
             self.assertEqual(observation.require(UiElementId.PNC_LOGIN_SUBMIT_BUTTON).bounds.width, 210)
             self.assertEqual(observation.current_pnc_account_id, "user@example.com")
@@ -342,7 +367,11 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertEqual(observation.screen_type, ScreenType.PNC_ACCOUNT_SWITCH)
             self.assertTrue(observation.has(UiElementId.PNC_ACCOUNT_SWITCH_CONTINUE_BUTTON))
             self.assertTrue(observation.has(UiElementId.PNC_ACCOUNT_SWITCH_CHANGE_ACCOUNT_BUTTON))
-            self.assertEqual(observation.require(UiElementId.PNC_ACCOUNT_SWITCH_CONTINUE_BUTTON).bounds.x, 158)
+            self.assertEqual(
+                observation.require(UiElementId.PNC_ACCOUNT_SWITCH_CONTINUE_BUTTON).source.resolution_kind,
+                SelectorResolutionKind.PARSER_CANDIDATE,
+            )
+            self.assertEqual(observation.require(UiElementId.PNC_ACCOUNT_SWITCH_CONTINUE_BUTTON).bounds.x, 159)
             self.assertEqual(observation.require(UiElementId.PNC_ACCOUNT_SWITCH_CHANGE_ACCOUNT_BUTTON).bounds.width, 340)
             self.assertEqual(observation.current_pnc_account_id, "user@example.com")
 
@@ -358,7 +387,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="loading_reconnect_live_like",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=build_default_selector_registry(),
                 selector_engine=PillowSelectorEngine(
                     template_matcher=PillowTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
@@ -379,6 +408,10 @@ class CaptureAndVisionTests(unittest.TestCase):
 
             self.assertEqual(observation.screen_type, ScreenType.PNC_LOADING)
             self.assertTrue(observation.has(UiElementId.PNC_LOADING_RECONNECT_BUTTON))
+            self.assertEqual(
+                observation.require(UiElementId.PNC_LOADING_RECONNECT_BUTTON).source.resolution_kind,
+                SelectorResolutionKind.PARSER_CANDIDATE,
+            )
 
     def test_observation_builder_classifies_loading_splash_from_live_like_ocr(self) -> None:
         """Recognizes the branded game splash as a loading transition during castle switching or launch."""
@@ -392,7 +425,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="loading_splash_live_like",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=build_default_selector_registry(),
                 selector_engine=PillowSelectorEngine(
                     template_matcher=PillowTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
@@ -425,7 +458,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="more_menu_live_like",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=build_default_selector_registry(),
                 selector_engine=PillowSelectorEngine(
                     template_matcher=PillowTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
@@ -457,6 +490,14 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertTrue(observation.has(UiElementId.PNC_MORE_VIP))
             self.assertTrue(observation.has(UiElementId.PNC_MORE_IMPROVE_MIGHT))
             self.assertTrue(observation.has(UiElementId.PNC_BOTTOM_NAV_MORE))
+            self.assertEqual(
+                observation.require(UiElementId.PNC_MORE_MANAGE_CHAR).source.resolution_kind,
+                SelectorResolutionKind.PARSER_CANDIDATE,
+            )
+            self.assertEqual(
+                observation.require(UiElementId.PNC_BOTTOM_NAV_MORE).source.resolution_kind,
+                SelectorResolutionKind.PARSER_CANDIDATE,
+            )
 
     def test_observation_builder_classifies_more_settings_submenu_with_top_left_back(self) -> None:
         """Recognizes the full-screen Settings submenu and exposes the canonical back target."""
@@ -470,7 +511,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="more_settings_menu_live_like",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=build_default_selector_registry(),
                 selector_engine=PillowSelectorEngine(
                     template_matcher=PillowTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
@@ -496,6 +537,10 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertTrue(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
             self.assertTrue(observation.has(UiElementId.PNC_MORE_MANAGE_CHAR))
             self.assertFalse(observation.has(UiElementId.PNC_BOTTOM_NAV_MORE))
+            self.assertEqual(
+                observation.require(UiElementId.PNC_BACK_BUTTON_TOP_LEFT).source.resolution_kind,
+                SelectorResolutionKind.PARSER_CANDIDATE,
+            )
 
     def test_observation_builder_classifies_lord_info_and_extracts_displayed_name(self) -> None:
         """Recognizes the Lord Info screen and exposes the OCR-backed displayed lord name."""
@@ -509,7 +554,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="lord_info_live_like",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=build_default_selector_registry(),
                 selector_engine=PillowSelectorEngine(
                     template_matcher=PillowTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
@@ -536,6 +581,10 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertEqual(observation.screen_type, ScreenType.PNC_LORD_INFO)
             self.assertTrue(observation.has(UiElementId.PNC_LORD_INFO_HEADER))
             self.assertEqual(
+                observation.require(UiElementId.PNC_LORD_INFO_HEADER).source.resolution_kind,
+                SelectorResolutionKind.PARSER_CANDIDATE,
+            )
+            self.assertEqual(
                 observation.require(UiElementId.PNC_LORD_INFO_NAME_LABEL).extracted_text,
                 "K304554ca2797",
             )
@@ -553,7 +602,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="vip_live_like",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=build_default_selector_registry(),
                 selector_engine=PillowSelectorEngine(
                     template_matcher=PillowTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
@@ -590,7 +639,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="improve_might_live_like",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=build_default_selector_registry(),
                 selector_engine=PillowSelectorEngine(
                     template_matcher=PillowTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
@@ -625,7 +674,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="reconnect_near_match",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=build_default_selector_registry(),
                 selector_engine=PillowSelectorEngine(
                     template_matcher=PillowTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
@@ -658,7 +707,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="building_detail",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=build_default_selector_registry(),
                 selector_engine=PillowSelectorEngine(
                     template_matcher=PillowTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
@@ -714,7 +763,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                     label=label,
                 )
                 builder = ObservationBuilder(
-                    selector_registry=SelectorRegistry(selectors=()),
+                    selector_registry=build_default_selector_registry(),
                     selector_engine=PillowSelectorEngine(
                         template_matcher=PillowTemplateMatcher(),
                         ocr_service=UnavailableOcrService(),
@@ -770,6 +819,18 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertTrue(observation.has(UiElementId.PNC_HOME_LORD_INFO_SHORTCUT))
             self.assertTrue(observation.has(UiElementId.PNC_HOME_VIP_SHORTCUT))
             self.assertTrue(observation.has(UiElementId.PNC_HOME_IMPROVE_MIGHT_SHORTCUT))
+            self.assertEqual(
+                observation.require(UiElementId.PNC_BOTTOM_NAV_MORE).source.resolution_kind,
+                SelectorResolutionKind.PARSER_CANDIDATE,
+            )
+            self.assertEqual(
+                observation.require(UiElementId.PNC_HOME_BUILD_BUTTON).source.resolution_kind,
+                SelectorResolutionKind.PARSER_CANDIDATE,
+            )
+            self.assertEqual(
+                observation.require(UiElementId.PNC_HOME_LORD_INFO_SHORTCUT).source.resolution_kind,
+                SelectorResolutionKind.RELATIVE_BOUNDS,
+            )
 
     def test_observation_builder_classifies_live_like_home_city_when_build_anchor_is_left_aligned(self) -> None:
         """Recognizes home city when the live Build button sits on the left rail instead of the lower action band."""
@@ -823,7 +884,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="home_city_popup",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=build_default_selector_registry(),
                 selector_engine=PillowSelectorEngine(
                     template_matcher=PillowTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
@@ -861,7 +922,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="hero_offer_popup",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=build_default_selector_registry(),
                 selector_engine=PillowSelectorEngine(
                     template_matcher=PillowTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
@@ -897,7 +958,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="top_up_offer_popup",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=build_default_selector_registry(),
                 selector_engine=PillowSelectorEngine(
                     template_matcher=PillowTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
@@ -933,7 +994,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="hero_offer_near_match",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=build_default_selector_registry(),
                 selector_engine=PillowSelectorEngine(
                     template_matcher=PillowTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
@@ -969,7 +1030,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="bag_live_like",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=build_default_selector_registry(),
                 selector_engine=PillowSelectorEngine(
                     template_matcher=PillowTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
@@ -993,6 +1054,10 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertEqual(observation.screen_type, ScreenType.PNC_BAG)
             self.assertTrue(observation.has(UiElementId.PNC_BAG_MAIN_TAB_BAG))
             self.assertTrue(observation.has(UiElementId.PNC_BAG_USE_BUTTON))
+            self.assertEqual(
+                observation.require(UiElementId.PNC_BAG_MAIN_TAB_BAG).source.resolution_kind,
+                SelectorResolutionKind.PARSER_CANDIDATE,
+            )
 
     def test_observation_builder_classifies_alliance_join_from_live_like_ocr(self) -> None:
         """Recognizes the join-alliance landing when the account has no alliance yet."""
@@ -1006,7 +1071,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="alliance_join_live_like",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=build_default_selector_registry(),
                 selector_engine=PillowSelectorEngine(
                     template_matcher=PillowTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
@@ -1039,7 +1104,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="research_tree_live_like",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=build_default_selector_registry(),
                 selector_engine=PillowSelectorEngine(
                     template_matcher=PillowTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
@@ -1074,7 +1139,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="academy_live_like",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=build_default_selector_registry(),
                 selector_engine=PillowSelectorEngine(
                     template_matcher=PillowTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
@@ -1238,36 +1303,36 @@ class CaptureAndVisionTests(unittest.TestCase):
                 SelectorDefinition(
                     id=UiElementId.PNC_HOME_WORLD_SWITCH,
                     screens=(ScreenType.PNC_HOME_CITY,),
-                    detection_kind=DetectionKind.TEMPLATE,
                     status=SelectorStatus.SCREENSHOT_SEEDED,
+                    resolution=_template_policy(Path("world_switch.png")),
                     click=ClickDefinition(),
                 ),
                 SelectorDefinition(
                     id=UiElementId.PNC_HOME_CHARACTER_PANEL,
                     screens=(ScreenType.PNC_HOME_CITY,),
-                    detection_kind=DetectionKind.TEMPLATE,
                     status=SelectorStatus.SCREENSHOT_SEEDED,
+                    resolution=_template_policy(Path("character_panel.png")),
                     click=ClickDefinition(),
                 ),
                 SelectorDefinition(
                     id=UiElementId.PNC_HOME_BUILD_BUTTON,
                     screens=(ScreenType.PNC_HOME_CITY,),
-                    detection_kind=DetectionKind.TEMPLATE,
                     status=SelectorStatus.SCREENSHOT_SEEDED,
+                    resolution=_template_policy(Path("build_button.png")),
                     click=ClickDefinition(),
                 ),
                 SelectorDefinition(
                     id=UiElementId.PNC_HOME_RIGHT_RAIL_EVENT_CENTER_ICON,
                     screens=(ScreenType.PNC_HOME_CITY,),
-                    detection_kind=DetectionKind.TEMPLATE,
                     status=SelectorStatus.SCREENSHOT_SEEDED,
+                    resolution=_template_policy(Path("event_center.png")),
                     click=ClickDefinition(),
                 ),
                 SelectorDefinition(
                     id=UiElementId.PNC_BAG_SUBTAB_RESOURCE,
                     screens=(ScreenType.PNC_BAG,),
-                    detection_kind=DetectionKind.TEMPLATE,
                     status=SelectorStatus.SCREENSHOT_SEEDED,
+                    resolution=_template_policy(Path("bag_resource.png")),
                     click=ClickDefinition(),
                 ),
             )
@@ -1275,21 +1340,9 @@ class CaptureAndVisionTests(unittest.TestCase):
         selector_engine = _RecordingSelectorEngine(
             responses=[
                 (
-                    SelectorMatch(
-                        selector_id=UiElementId.PNC_HOME_WORLD_SWITCH,
-                        bounds=Region(x=10, y=10, width=20, height=20),
-                        confidence=1.0,
-                    ),
-                    SelectorMatch(
-                        selector_id=UiElementId.PNC_HOME_CHARACTER_PANEL,
-                        bounds=Region(x=40, y=10, width=20, height=20),
-                        confidence=1.0,
-                    ),
-                    SelectorMatch(
-                        selector_id=UiElementId.PNC_HOME_BUILD_BUTTON,
-                        bounds=Region(x=70, y=10, width=20, height=20),
-                        confidence=1.0,
-                    ),
+                    _template_match(UiElementId.PNC_HOME_WORLD_SWITCH, x=10, y=10),
+                    _template_match(UiElementId.PNC_HOME_CHARACTER_PANEL, x=40, y=10),
+                    _template_match(UiElementId.PNC_HOME_BUILD_BUTTON, x=70, y=10),
                 ),
                 (),
             ]
@@ -1318,74 +1371,153 @@ class CaptureAndVisionTests(unittest.TestCase):
         self.assertNotIn(UiElementId.PNC_HOME_RIGHT_RAIL_EVENT_CENTER_ICON, selector_engine.requested_selector_ids[0])
         self.assertIn(UiElementId.PNC_HOME_RIGHT_RAIL_EVENT_CENTER_ICON, selector_engine.requested_selector_ids[1])
         self.assertNotIn(UiElementId.PNC_BAG_MAIN_TAB_BAG, selector_engine.requested_selector_ids[1])
+        self.assertFalse(observation.has(UiElementId.PNC_HOME_RIGHT_RAIL_EVENT_CENTER_ICON))
 
-    def test_observation_builder_keeps_click_only_geometry_hidden_without_detection(self) -> None:
-        """Does not auto-materialize relative click regions that still require explicit visibility proof."""
+    def test_observation_builder_uses_template_resolution_before_parser_candidate(self) -> None:
+        """Prefers the earlier template step when exact detection and parser evidence both exist."""
 
         registry = SelectorRegistry(
             selectors=(
                 SelectorDefinition(
                     id=UiElementId.PNC_HOME_WORLD_SWITCH,
                     screens=(ScreenType.PNC_HOME_CITY,),
-                    detection_kind=DetectionKind.TEMPLATE,
                     status=SelectorStatus.SCREENSHOT_SEEDED,
+                    resolution=_template_policy(Path("world_switch.png")),
                     click=ClickDefinition(),
                 ),
                 SelectorDefinition(
                     id=UiElementId.PNC_HOME_CHARACTER_PANEL,
                     screens=(ScreenType.PNC_HOME_CITY,),
-                    detection_kind=DetectionKind.TEMPLATE,
                     status=SelectorStatus.SCREENSHOT_SEEDED,
-                    click=ClickDefinition(),
-                ),
-                SelectorDefinition(
-                    id=UiElementId.PNC_HOME_RESEARCH_BUTTON,
-                    screens=(ScreenType.PNC_HOME_CITY,),
-                    detection_kind=DetectionKind.TEMPLATE,
-                    status=SelectorStatus.SCREENSHOT_SEEDED,
+                    resolution=_template_policy(Path("character_panel.png")),
                     click=ClickDefinition(),
                 ),
                 SelectorDefinition(
                     id=UiElementId.PNC_HOME_BUILD_BUTTON,
                     screens=(ScreenType.PNC_HOME_CITY,),
-                    detection_kind=DetectionKind.PLANNED,
-                    status=SelectorStatus.PLANNED,
-                    click=ClickDefinition(),
-                    relative_bounds=RelativeBounds(
-                        x_ratio=0.1,
-                        y_ratio=0.1,
-                        width_ratio=0.2,
-                        height_ratio=0.2,
+                    status=SelectorStatus.SCREENSHOT_SEEDED,
+                    resolution=_resolution_policy(
+                        _template_step(Path("build_button.png")),
+                        SelectorResolutionStep(kind=SelectorResolutionKind.PARSER_CANDIDATE),
+                        _relative_bounds_step(),
                     ),
-                    materialize_relative_bounds=False,
+                    click=ClickDefinition(),
                 ),
             )
         )
         selector_engine = _RecordingSelectorEngine(
             responses=[
                 (
-                    SelectorMatch(
-                        selector_id=UiElementId.PNC_HOME_WORLD_SWITCH,
-                        bounds=Region(x=10, y=10, width=20, height=20),
-                        confidence=1.0,
-                    ),
-                    SelectorMatch(
-                        selector_id=UiElementId.PNC_HOME_CHARACTER_PANEL,
-                        bounds=Region(x=40, y=10, width=20, height=20),
-                        confidence=1.0,
-                    ),
-                    SelectorMatch(
-                        selector_id=UiElementId.PNC_HOME_RESEARCH_BUTTON,
-                        bounds=Region(x=70, y=10, width=20, height=20),
-                        confidence=1.0,
-                    ),
+                    _template_match(UiElementId.PNC_HOME_WORLD_SWITCH, x=10, y=10),
+                    _template_match(UiElementId.PNC_HOME_CHARACTER_PANEL, x=40, y=10),
+                    _template_match(UiElementId.PNC_HOME_BUILD_BUTTON, x=70, y=10),
                 ),
-                (),
+                (
+                    _template_match(UiElementId.PNC_HOME_WORLD_SWITCH, x=10, y=10),
+                    _template_match(UiElementId.PNC_HOME_CHARACTER_PANEL, x=40, y=10),
+                    _template_match(UiElementId.PNC_HOME_BUILD_BUTTON, x=70, y=10),
+                ),
             ]
         )
         builder = ObservationBuilder(
             selector_registry=registry,
             selector_engine=selector_engine,
+            screen_classifier=ScreenClassifier(),
+            enricher=_FixedScreenInterpreter(
+                ScreenInterpretation(
+                    visible_elements={
+                        UiElementId.PNC_HOME_BUILD_BUTTON: make_observation(
+                            ScreenType.PNC_HOME_CITY,
+                            visible_ids=(UiElementId.PNC_HOME_BUILD_BUTTON,),
+                        ).require(UiElementId.PNC_HOME_BUILD_BUTTON)
+                    },
+                    screen_evidence=(ScreenEvidence(ScreenType.PNC_HOME_CITY, "synthetic_parser_home"),),
+                )
+            ),
+        )
+        screenshot = type(
+            "Captured",
+            (),
+            {
+                "image": Image.new("RGB", (100, 100), (0, 0, 0)),
+                "artifact": type("Artifact", (), {"path": Path("synthetic.png"), "captured_at": None})(),
+            },
+        )()
+
+        observation = builder.build(screenshot)
+
+        self.assertEqual(observation.screen_type, ScreenType.PNC_HOME_CITY)
+        self.assertTrue(observation.has(UiElementId.PNC_HOME_BUILD_BUTTON))
+        self.assertEqual(
+            observation.require(UiElementId.PNC_HOME_BUILD_BUTTON).source.resolution_kind,
+            SelectorResolutionKind.TEMPLATE,
+        )
+        self.assertEqual(observation.require(UiElementId.PNC_HOME_BUILD_BUTTON).bounds.x, 70)
+
+    def test_observation_builder_uses_relative_bounds_only_after_stronger_steps_fail(self) -> None:
+        """Falls back to geometry only when earlier template and parser-candidate steps are unavailable."""
+
+        registry = SelectorRegistry(
+            selectors=(
+                SelectorDefinition(
+                    id=UiElementId.PNC_HOME_BUILD_BUTTON,
+                    screens=(ScreenType.PNC_HOME_CITY,),
+                    status=SelectorStatus.CLICK_MAPPED,
+                    resolution=_resolution_policy(
+                        _template_step(Path("build_button.png")),
+                        SelectorResolutionStep(kind=SelectorResolutionKind.PARSER_CANDIDATE),
+                        _relative_bounds_step(),
+                    ),
+                    click=ClickDefinition(),
+                ),
+            )
+        )
+        builder = ObservationBuilder(
+            selector_registry=registry,
+            selector_engine=_RecordingSelectorEngine(responses=[(), ()]),
+            screen_classifier=ScreenClassifier(),
+            enricher=_FixedScreenInterpreter(
+                ScreenInterpretation(
+                    screen_evidence=(ScreenEvidence(ScreenType.PNC_HOME_CITY, "synthetic_home_city"),),
+                )
+            ),
+        )
+        screenshot = type(
+            "Captured",
+            (),
+            {
+                "image": Image.new("RGB", (100, 100), (0, 0, 0)),
+                "artifact": type("Artifact", (), {"path": Path("synthetic.png"), "captured_at": None})(),
+            },
+        )()
+
+        observation = builder.build(screenshot)
+
+        self.assertEqual(observation.screen_type, ScreenType.PNC_HOME_CITY)
+        self.assertTrue(observation.has(UiElementId.PNC_HOME_BUILD_BUTTON))
+        self.assertEqual(
+            observation.require(UiElementId.PNC_HOME_BUILD_BUTTON).source.resolution_kind,
+            SelectorResolutionKind.RELATIVE_BOUNDS,
+        )
+        self.assertTrue(observation.require(UiElementId.PNC_HOME_BUILD_BUTTON).source.is_fallback)
+
+    def test_observation_builder_does_not_materialize_geometry_on_unknown_screen(self) -> None:
+        """Does not fabricate geometry-backed selectors when the screen could not be trusted."""
+
+        registry = SelectorRegistry(
+            selectors=(
+                SelectorDefinition(
+                    id=UiElementId.PNC_HOME_BUILD_BUTTON,
+                    screens=(ScreenType.PNC_HOME_CITY,),
+                    status=SelectorStatus.CLICK_MAPPED,
+                    resolution=_resolution_policy(_relative_bounds_step()),
+                    click=ClickDefinition(),
+                ),
+            )
+        )
+        builder = ObservationBuilder(
+            selector_registry=registry,
+            selector_engine=_RecordingSelectorEngine(responses=[()]),
             screen_classifier=ScreenClassifier(),
             enricher=DefaultObservationEnricher(),
         )
@@ -1400,7 +1532,7 @@ class CaptureAndVisionTests(unittest.TestCase):
 
         observation = builder.build(screenshot)
 
-        self.assertEqual(observation.screen_type, ScreenType.PNC_HOME_CITY)
+        self.assertEqual(observation.screen_type, ScreenType.UNKNOWN)
         self.assertFalse(observation.has(UiElementId.PNC_HOME_BUILD_BUTTON))
 
     def test_observation_service_syncs_castle_roster_cache_only_after_account_verification(self) -> None:
@@ -1553,6 +1685,54 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertEqual(more_menu.current_castle_name, "K304554ca2797")
             self.assertEqual(castle_selection.current_castle_name, "K313alpha")
             self.assertIsNone(post_switch_home.current_castle)
+
+
+def _template_policy(template_path: Path) -> SelectorResolutionPolicy:
+    """Builds a one-step template resolution policy for deterministic test selectors."""
+
+    return _resolution_policy(_template_step(template_path))
+
+
+def _resolution_policy(*steps: SelectorResolutionStep) -> SelectorResolutionPolicy:
+    """Builds one runtime resolution policy for synthetic selector fixtures."""
+
+    return SelectorResolutionPolicy(steps=steps)
+
+
+def _template_step(template_path: Path) -> SelectorResolutionStep:
+    """Builds one template resolution step for synthetic selector fixtures."""
+
+    return SelectorResolutionStep(
+        kind=SelectorResolutionKind.TEMPLATE,
+        template_path=template_path,
+    )
+
+
+def _relative_bounds_step(relative_bounds: RelativeBounds | None = None) -> SelectorResolutionStep:
+    """Builds one relative-bounds fallback step for synthetic selector fixtures."""
+
+    return SelectorResolutionStep(
+        kind=SelectorResolutionKind.RELATIVE_BOUNDS,
+        relative_bounds=relative_bounds
+        or RelativeBounds(
+            x_ratio=0.1,
+            y_ratio=0.1,
+            width_ratio=0.2,
+            height_ratio=0.2,
+        ),
+    )
+
+
+def _template_match(selector_id: UiElementId, *, x: int, y: int, strategy_index: int = 0) -> SelectorMatch:
+    """Builds one exact template match with canonical provenance for selector-engine fixtures."""
+
+    return SelectorMatch(
+        selector_id=selector_id,
+        bounds=Region(x=x, y=y, width=20, height=20),
+        confidence=1.0,
+        resolution_kind=SelectorResolutionKind.TEMPLATE,
+        strategy_index=strategy_index,
+    )
 
 
 def _ocr_line(text: str, *, x: int, y: int, width: int, height: int) -> OcrLine:

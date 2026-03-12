@@ -8,14 +8,16 @@ from typing import Protocol
 
 from PIL import Image
 
-from pnc_automation.config.models import CastleRosterOrdering, PncAccountCastleRosterConfig, SelectedCastleConfig
 from pnc_automation.capture.screenshot_service import CapturedScreenshot, ScreenshotService
 from pnc_automation.config.castle_roster_store import CastleRosterStore
+from pnc_automation.config.models import CastleRosterOrdering, PncAccountCastleRosterConfig, SelectedCastleConfig
 from pnc_automation.emulator.session import BlueStacksSession
+from pnc_automation.errors import SelectorResolutionError
 from pnc_automation.pnc.observation import (
     DetectedListEntry,
     ListEntryKind,
     Observation,
+    SelectorResolutionKind,
     VisibleElement,
     castle_entry_identity_matches,
 )
@@ -23,34 +25,22 @@ from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
 from pnc_automation.vision.image_models import SelectorMatch
 from pnc_automation.vision.ocr_service import OcrService
-from pnc_automation.vision.screen_classifier import ScreenClassifier, ScreenEvidence
-from pnc_automation.vision.selectors import DetectionKind, SelectorRegistry
+from pnc_automation.vision.screen_classifier import ScreenClassifier
+from pnc_automation.vision.selector_resolution import ScreenInterpretation, SelectorResolutionContext, SelectorResolver
+from pnc_automation.vision.selectors import SelectorRegistry
 from pnc_automation.vision.template_matcher import PillowTemplateMatcher
 
 
-class ObservationEnricher(Protocol):
-    """Adds higher-level facts after basic selector detection."""
+class ScreenInterpreter(Protocol):
+    """Builds one trusted screen interpretation before selector resolution."""
 
-    def enrich(
+    def interpret(
         self,
         image: Image.Image,
-        screen_type: ScreenType,
+        screen_type_hint: ScreenType,
         visible_elements: Mapping[UiElementId, VisibleElement],
-    ) -> "ObservationAdditions":
-        """Returns derived observation additions."""
-
-
-@dataclass(frozen=True, slots=True)
-class ObservationAdditions:
-    """Derived observation facts produced after primary screen classification."""
-
-    visible_elements: Mapping[UiElementId, VisibleElement] = field(default_factory=dict)
-    suppress_geometry_selector_ids: frozenset[UiElementId] = frozenset()
-    list_entries: tuple[DetectedListEntry, ...] = ()
-    screen_evidence: tuple[ScreenEvidence, ...] = ()
-    current_castle: SelectedCastleConfig | None = None
-    current_pnc_account_id: str | None = None
-    available_march_slots: int | None = None
+    ) -> ScreenInterpretation:
+        """Returns one OCR-backed screen interpretation for the current screenshot."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,22 +53,32 @@ class CapturedObservation:
 
 @dataclass(slots=True)
 class DefaultObservationEnricher:
-    """Default no-op enricher used until screenshot-specific extraction is added."""
+    """Default no-op screen interpreter used until screenshot-specific extraction is added."""
+
+    def interpret(
+        self,
+        image: Image.Image,
+        screen_type_hint: ScreenType,
+        visible_elements: Mapping[UiElementId, VisibleElement],
+    ) -> ScreenInterpretation:
+        """Returns an empty interpretation result."""
+
+        del image, screen_type_hint, visible_elements
+        return ScreenInterpretation()
 
     def enrich(
         self,
         image: Image.Image,
         screen_type: ScreenType,
         visible_elements: Mapping[UiElementId, VisibleElement],
-    ) -> ObservationAdditions:
-        """Returns an empty enrichment result."""
+    ) -> ScreenInterpretation:
+        """Maintains the legacy method name while delegating to the canonical interpreter API."""
 
-        del image, screen_type, visible_elements
-        return ObservationAdditions()
+        return self.interpret(image, screen_type, visible_elements)
 
 
 class SelectorEngine(Protocol):
-    """Detects selectors from a screenshot using the registry metadata."""
+    """Detects exact selector matches from a screenshot using the registry metadata."""
 
     def detect(
         self,
@@ -87,12 +87,12 @@ class SelectorEngine(Protocol):
         *,
         selector_ids: Sequence[UiElementId] | None = None,
     ) -> Sequence[SelectorMatch]:
-        """Returns all selectors detected in the image."""
+        """Returns exact selector matches that succeeded for the requested selector ids."""
 
 
 @dataclass(slots=True)
 class PillowSelectorEngine:
-    """Detects selectors using template matching and optional OCR."""
+    """Detects exact selector matches using template matching and optional OCR regions."""
 
     template_matcher: PillowTemplateMatcher
     ocr_service: OcrService
@@ -104,44 +104,50 @@ class PillowSelectorEngine:
         *,
         selector_ids: Sequence[UiElementId] | None = None,
     ) -> Sequence[SelectorMatch]:
-        """Detects selectors supported by the configured engines."""
+        """Detects the first successful exact resolution step for each requested selector."""
 
         requested_selector_ids = None if selector_ids is None else frozenset(selector_ids)
         matches: list[SelectorMatch] = []
         for selector in registry.all():
             if requested_selector_ids is not None and selector.id not in requested_selector_ids:
                 continue
-            if selector.detection_kind == DetectionKind.PLANNED:
-                continue
-            if selector.detection_kind in {DetectionKind.TEMPLATE, DetectionKind.COLLECTION}:
-                if selector.template_path is None or not selector.template_path.is_file():
+            match = self._detect_selector(image=image, selector=selector)
+            if match is not None:
+                matches.append(match)
+        return matches
+
+    def _detect_selector(self, *, image: Image.Image, selector: object) -> SelectorMatch | None:
+        """Returns the first successful exact step for one selector, if any."""
+
+        for index, step in enumerate(selector.resolution.steps):
+            if step.kind == SelectorResolutionKind.TEMPLATE:
+                if step.template_path is None or not step.template_path.is_file():
                     continue
-                match = self.template_matcher.find_best_match(image, selector.template_path, threshold=selector.threshold)
+                match = self.template_matcher.find_best_match(image, step.template_path, threshold=step.threshold)
                 if match is None:
                     continue
-                matches.append(
-                    SelectorMatch(
-                        selector_id=selector.id,
-                        bounds=match.bounds,
-                        confidence=match.confidence,
-                    )
+                return SelectorMatch(
+                    selector_id=selector.id,
+                    bounds=match.bounds,
+                    confidence=match.confidence,
+                    resolution_kind=SelectorResolutionKind.TEMPLATE,
+                    strategy_index=index,
                 )
-                continue
-            if selector.detection_kind == DetectionKind.OCR_REGION:
-                if selector.ocr_region is None:
+            if step.kind == SelectorResolutionKind.OCR_REGION:
+                if step.ocr_region is None:
                     continue
-                text = self.ocr_service.read_text(image, selector.ocr_region).strip()
+                text = self.ocr_service.read_text(image, step.ocr_region).strip()
                 if text == "":
                     continue
-                matches.append(
-                    SelectorMatch(
-                        selector_id=selector.id,
-                        bounds=selector_to_bounds(selector.ocr_region),
-                        confidence=1.0,
-                        extracted_text=text,
-                    )
+                return SelectorMatch(
+                    selector_id=selector.id,
+                    bounds=selector_to_bounds(step.ocr_region),
+                    confidence=1.0,
+                    resolution_kind=SelectorResolutionKind.OCR_REGION,
+                    strategy_index=index,
+                    extracted_text=text,
                 )
-        return matches
+        return None
 
 
 @dataclass(slots=True)
@@ -151,7 +157,8 @@ class ObservationBuilder:
     selector_registry: SelectorRegistry
     selector_engine: SelectorEngine
     screen_classifier: ScreenClassifier
-    enricher: ObservationEnricher = field(default_factory=DefaultObservationEnricher)
+    enricher: ScreenInterpreter = field(default_factory=DefaultObservationEnricher)
+    selector_resolver: SelectorResolver = field(default_factory=SelectorResolver)
 
     def build(self, screenshot: CapturedScreenshot) -> Observation:
         """Builds one observation from a captured screenshot."""
@@ -161,46 +168,56 @@ class ObservationBuilder:
             self.selector_registry,
             selector_ids=self.screen_classifier.probe_selector_ids(),
         )
-        visible_elements = _matches_to_visible_elements(probe_matches)
-        screen_type = self.screen_classifier.classify(visible_elements)
-        additions = self.enricher.enrich(screenshot.image, screen_type, visible_elements)
-        visible_elements = dict(additions.visible_elements) | visible_elements
-        screen_type = self.screen_classifier.classify(visible_elements, additions.screen_evidence)
+        probe_visible_elements = _matches_to_visible_elements(probe_matches)
+        screen_type_hint = self.screen_classifier.classify(probe_visible_elements)
+        interpretation = self._interpret(
+            image=screenshot.image,
+            screen_type_hint=screen_type_hint,
+            visible_elements=probe_visible_elements,
+        )
+        screen_type = self.screen_classifier.classify(probe_visible_elements, interpretation.screen_evidence)
+        visible_elements: dict[UiElementId, VisibleElement] = {}
         if screen_type != ScreenType.UNKNOWN:
-            screen_selector_ids = tuple(
-                selector.id
-                for selector in self.selector_registry.for_screen(screen_type)
-                if selector.id not in visible_elements
+            screen_matches = self.selector_engine.detect(
+                screenshot.image,
+                self.selector_registry,
+                selector_ids=tuple(selector.id for selector in self.selector_registry.for_screen(screen_type)),
             )
-            if screen_selector_ids:
-                visible_elements = visible_elements | _matches_to_visible_elements(
-                    self.selector_engine.detect(
-                        screenshot.image,
-                        self.selector_registry,
-                        selector_ids=screen_selector_ids,
-                    )
-                )
-            geometry_elements = {
-                element.selector_id: element
-                for element in self.selector_registry.materialize_for_screen(
-                    screen_type,
-                    image_size=screenshot.image.size,
-                    exclude_selector_ids=frozenset(visible_elements) | additions.suppress_geometry_selector_ids,
-                )
-            }
-            visible_elements = geometry_elements | visible_elements
+            exact_matches = _exact_matches_by_selector((*probe_matches, *screen_matches))
+            visible_elements = self.selector_resolver.resolve_for_screen(
+                selectors=self.selector_registry.for_screen(screen_type),
+                context=SelectorResolutionContext(
+                    image=screenshot.image,
+                    screen_type=screen_type,
+                    exact_matches=exact_matches,
+                    interpretation=interpretation,
+                ),
+            )
         return Observation(
             screen_type=screen_type,
             visible_elements=visible_elements,
-            list_entries=additions.list_entries,
+            list_entries=interpretation.list_entries,
             artifact_path=screenshot.artifact.path,
             image_size=screenshot.image.size,
             captured_at=screenshot.artifact.captured_at,
             blocking_popup=screen_type == ScreenType.PNC_POPUP or UiElementId.PNC_POPUP_CLOSE_BUTTON in visible_elements,
-            current_castle=additions.current_castle,
-            current_pnc_account_id=additions.current_pnc_account_id,
-            available_march_slots=additions.available_march_slots,
+            current_castle=interpretation.current_castle,
+            current_pnc_account_id=interpretation.current_pnc_account_id,
+            available_march_slots=interpretation.available_march_slots,
         )
+
+    def _interpret(
+        self,
+        *,
+        image: Image.Image,
+        screen_type_hint: ScreenType,
+        visible_elements: Mapping[UiElementId, VisibleElement],
+    ) -> ScreenInterpretation:
+        """Calls the configured screen interpreter through the canonical API."""
+
+        if hasattr(self.enricher, "interpret"):
+            return self.enricher.interpret(image, screen_type_hint, visible_elements)
+        return self.enricher.enrich(image, screen_type_hint, visible_elements)
 
 
 @dataclass(slots=True)
@@ -320,7 +337,7 @@ def selector_to_bounds(region: object) -> object:
 
 
 def _matches_to_visible_elements(matches: Sequence[SelectorMatch]) -> dict[UiElementId, VisibleElement]:
-    """Converts selector-engine output into the observation's visible-element map."""
+    """Converts exact selector matches into a selector-id keyed visible-element map."""
 
     return {
         match.selector_id: VisibleElement(
@@ -333,11 +350,14 @@ def _matches_to_visible_elements(matches: Sequence[SelectorMatch]) -> dict[UiEle
     }
 
 
-def _entry_to_selected_castle(entry: DetectedListEntry) -> "SelectedCastleConfig":
-    """Converts one observed castle row into the shared typed castle identity model."""
+def _exact_matches_by_selector(matches: Sequence[SelectorMatch]) -> dict[UiElementId, SelectorMatch]:
+    """Returns the exact selector matches keyed by selector id."""
 
-    from pnc_automation.config.models import SelectedCastleConfig
-    from pnc_automation.errors import SelectorResolutionError
+    return {match.selector_id: match for match in matches}
+
+
+def _entry_to_selected_castle(entry: DetectedListEntry) -> SelectedCastleConfig:
+    """Converts one observed castle row into the shared typed castle identity model."""
 
     if entry.title_text is None or entry.title_text.strip() == "":
         raise SelectorResolutionError("Observed castle entry is missing its castle name.", entry_kind=entry.kind)

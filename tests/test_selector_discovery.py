@@ -11,13 +11,18 @@ from PIL import Image
 from pnc_automation.capture.artifact_store import ArtifactStore
 from pnc_automation.capture.screenshot_service import ScreenshotService
 from pnc_automation.errors import SelectorResolutionError
+from pnc_automation.pnc.observation import SelectorResolutionKind
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
 from pnc_automation.vision.observation_builder import ObservationBuilder, PillowSelectorEngine
 from pnc_automation.vision.ocr_service import UnavailableOcrService
 from pnc_automation.vision.pnc_observation_enricher import PncObservationEnricher
 from pnc_automation.vision.screen_classifier import ScreenClassifier
-from pnc_automation.vision.selector_catalog import SelectorCatalogDocument, SelectorCatalogEntry
+from pnc_automation.vision.selector_catalog import (
+    SelectorCatalogDocument,
+    SelectorCatalogEntry,
+    SelectorCatalogResolutionStep,
+)
 from pnc_automation.vision.selector_discovery import SelectorDiscoveryAnalyzer, load_artifact_paths
 from pnc_automation.vision.selectors import SelectorRegistry
 from pnc_automation.vision.template_matcher import PillowTemplateMatcher
@@ -83,7 +88,7 @@ class SelectorDiscoveryTests(unittest.TestCase):
                             id="PNC_ACADEMY_CATEGORY_ECONOMY",
                             screens=("PNC_ACADEMY",),
                             status="screenshot_seeded",
-                            detection_kind="template",
+                            resolution=_template_resolution("PNC_ACADEMY_CATEGORY_ECONOMY"),
                         ),
                     ),
                 ),
@@ -97,7 +102,7 @@ class SelectorDiscoveryTests(unittest.TestCase):
             self.assertNotIn("PNC_ACADEMY_CATEGORY_ECONOMY", draft_ids)
 
     def test_analyze_artifact_path_discovers_research_tree_collection_selector(self) -> None:
-        """Builds the research-node collection draft from one research-tree artifact."""
+        """Builds the research-node draft using the canonical template-backed resolution policy."""
 
         with tempfile.TemporaryDirectory() as temp_directory:
             root = Path(temp_directory)
@@ -116,7 +121,14 @@ class SelectorDiscoveryTests(unittest.TestCase):
             draft_by_id = {draft.id: draft for draft in snapshot.draft_selectors}
 
             self.assertEqual(snapshot.screen_type, ScreenType.PNC_RESEARCH_TREE)
-            self.assertEqual(draft_by_id["PNC_RESEARCH_NODE_ENTRY"].detection_kind, "collection")
+            self.assertEqual(
+                tuple(step.kind for step in draft_by_id["PNC_RESEARCH_NODE_ENTRY"].resolution),
+                (SelectorResolutionKind.TEMPLATE.value,),
+            )
+            self.assertEqual(
+                draft_by_id["PNC_RESEARCH_NODE_ENTRY"].resolution[0].template_path,
+                "pnc_research_node_entry.png",
+            )
             self.assertEqual(draft_by_id["PNC_RESEARCH_NODE_ENTRY"].status, "screenshot_seeded")
 
     def test_build_probe_draft_promotes_click_mapping_for_existing_selector(self) -> None:
@@ -130,7 +142,7 @@ class SelectorDiscoveryTests(unittest.TestCase):
                         id="PNC_BOTTOM_NAV_BAG",
                         screens=("PNC_HOME_CITY",),
                         status="screenshot_seeded",
-                        detection_kind="template",
+                        resolution=_template_resolution("PNC_BOTTOM_NAV_BAG"),
                     ),
                 ),
             ),
@@ -152,11 +164,13 @@ class SelectorDiscoveryTests(unittest.TestCase):
         self.assertIsNotNone(probe.draft_selector)
         self.assertEqual(probe.destination_screen_type, ScreenType.PNC_BAG)
         self.assertEqual(probe.draft_selector.status, "click_mapped")
-        self.assertEqual(probe.draft_selector.detection_kind, "template")
+        self.assertEqual(
+            tuple(step.kind for step in probe.draft_selector.resolution),
+            (SelectorResolutionKind.TEMPLATE.value, SelectorResolutionKind.RELATIVE_BOUNDS.value),
+        )
+        self.assertEqual(_relative_bounds_step(probe.draft_selector).x_ratio, 0.0)
+        self.assertEqual(_relative_bounds_step(probe.draft_selector).width_ratio, 0.05)
         self.assertEqual(probe.draft_selector.interaction_kind, "navigation")
-        self.assertIsNotNone(probe.draft_selector.relative_bounds)
-        self.assertEqual(probe.draft_selector.relative_bounds.x_ratio, 0.0)
-        self.assertEqual(probe.draft_selector.relative_bounds.width_ratio, 0.05)
         self.assertEqual(probe.draft_selector.click.anchor, "center")
         self.assertEqual(probe.draft_selector.click.outcomes[0].target_screen, "PNC_BAG")
         self.assertEqual(
@@ -175,7 +189,7 @@ class SelectorDiscoveryTests(unittest.TestCase):
                         id="PNC_BOTTOM_NAV_BAG",
                         screens=("PNC_HOME_CITY",),
                         status="screenshot_seeded",
-                        detection_kind="template",
+                        resolution=_template_resolution("PNC_BOTTOM_NAV_BAG"),
                     ),
                 ),
             ),
@@ -203,7 +217,7 @@ class SelectorDiscoveryTests(unittest.TestCase):
                         id="PNC_BOTTOM_NAV_BAG",
                         screens=("PNC_HOME_CITY",),
                         status="screenshot_seeded",
-                        detection_kind="template",
+                        resolution=_template_resolution("PNC_BOTTOM_NAV_BAG"),
                     ),
                 ),
             ),
@@ -286,6 +300,29 @@ class SelectorDiscoveryTests(unittest.TestCase):
             artifact_directory="k230_discovery",
             label=label,
         )
+
+
+def _template_resolution(selector_id: str) -> tuple[SelectorCatalogResolutionStep, ...]:
+    """Builds the canonical single-step template resolution for draft catalog fixtures."""
+
+    return (
+        SelectorCatalogResolutionStep(
+            kind=SelectorResolutionKind.TEMPLATE.value,
+            template_path=f"{selector_id.lower()}.png",
+        ),
+    )
+
+
+def _relative_bounds_step(draft: object) -> object:
+    """Returns the authored relative-bounds step geometry from one discovery draft."""
+
+    step = next(
+        (step for step in draft.resolution if step.kind == SelectorResolutionKind.RELATIVE_BOUNDS.value),
+        None,
+    )
+    if step is None or step.relative_bounds is None:
+        raise AssertionError(f"Draft '{draft.id}' is missing relative-bounds fallback.")
+    return step.relative_bounds
 
 
 if __name__ == "__main__":

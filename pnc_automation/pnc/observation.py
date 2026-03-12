@@ -30,6 +30,25 @@ class Bounds:
         return (self.x + self.width // 2, self.y + self.height // 2)
 
 
+class SelectorResolutionKind(StrEnum):
+    """Enumerates the supported runtime selector-resolution strategies."""
+
+    TEMPLATE = "template"
+    OCR_REGION = "ocr_region"
+    PARSER_CANDIDATE = "parser_candidate"
+    RELATIVE_BOUNDS = "relative_bounds"
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvedSelectorSource:
+    """Captures which selector-resolution strategy produced one visible element."""
+
+    resolution_kind: SelectorResolutionKind
+    strategy_index: int
+    strategy_label: str
+    is_fallback: bool
+
+
 @dataclass(frozen=True, slots=True)
 class VisibleElement:
     """Represents one detected selector anchored on the current screen."""
@@ -39,6 +58,7 @@ class VisibleElement:
     confidence: float
     extracted_text: str | None = None
     action_point: tuple[int, int] | None = None
+    source: ResolvedSelectorSource | None = None
 
 
 class ListEntryKind(StrEnum):

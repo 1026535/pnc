@@ -11,7 +11,14 @@ from typing import Any
 from PIL import Image
 
 from pnc_automation.config.models import PncAccountCastleRosterConfig, SelectedCastleConfig
-from pnc_automation.pnc.observation import Bounds, DetectedListEntry, ListEntryKind, Observation, VisibleElement
+from pnc_automation.pnc.observation import (
+    Bounds,
+    DetectedListEntry,
+    ListEntryKind,
+    Observation,
+    ResolvedSelectorSource,
+    VisibleElement,
+)
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
 
@@ -33,6 +40,7 @@ def make_visible(
     width: int = 10,
     height: int = 10,
     action_point: tuple[int, int] | None = None,
+    source: ResolvedSelectorSource | None = None,
 ) -> VisibleElement:
     """Builds a visible selector with deterministic bounds."""
 
@@ -41,6 +49,7 @@ def make_visible(
         bounds=Bounds(x=x, y=y, width=width, height=height),
         confidence=1.0,
         action_point=action_point,
+        source=source,
     )
 
 
