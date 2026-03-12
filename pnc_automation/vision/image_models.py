@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from pnc_automation.pnc.observation import Bounds, SelectorResolutionKind
+from pnc_automation.pnc.observation import Bounds
 from pnc_automation.pnc.ui_element_id import UiElementId
 
 
@@ -23,6 +23,4 @@ class SelectorMatch:
     selector_id: UiElementId
     bounds: Bounds
     confidence: float
-    resolution_kind: SelectorResolutionKind
-    strategy_index: int
     extracted_text: str | None = None

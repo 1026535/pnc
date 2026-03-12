@@ -9,12 +9,10 @@ from pathlib import Path
 import yaml
 
 from pnc_automation.errors import SelectorResolutionError
-from pnc_automation.pnc.observation import SelectorResolutionKind
 from pnc_automation.vision.selector_catalog import (
     SelectorCatalogDocument,
     SelectorCatalogEntry,
     SelectorCatalogRelativeBounds,
-    SelectorCatalogResolutionStep,
     write_selector_catalog_document,
 )
 from pnc_automation.vision.selector_registry_updater import (
@@ -39,7 +37,7 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                             id="PNC_HOME_BUILD_BUTTON",
                             screens=("PNC_HOME_CITY",),
                             status="click_mapped",
-                            resolution=_template_resolution("PNC_HOME_BUILD_BUTTON"),
+                            detection_kind="template",
                         ),
                     ),
                 ),
@@ -48,6 +46,11 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                         id="PNC_HOME_BUILD_BUTTON",
                         screens=("PNC_HOME_CITY",),
                         status="screenshot_seeded",
+                        detection_kind="template",
+                        click=None,
+                        update_click=False,
+                        notes=(),
+                        update_notes=False,
                     ),
                 ),
             )
@@ -87,23 +90,13 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                                 "id": "PNC_HOME_BUILD_BUTTON",
                                 "screens": ["PNC_HOME_CITY"],
                                 "status": "screenshot_seeded",
-                                "resolution": [
-                                    {
-                                        "kind": "template",
-                                        "template_path": "pnc_home_build_button.png",
-                                    }
-                                ],
+                                "detection_kind": "template",
                             },
                             {
                                 "id": "PNC_HOME_BUILD_BUTTON",
                                 "screens": ["PNC_BUILDING_DETAILS"],
                                 "status": "click_mapped",
-                                "resolution": [
-                                    {
-                                        "kind": "template",
-                                        "template_path": "pnc_home_build_button.png",
-                                    }
-                                ],
+                                "detection_kind": "template",
                             },
                         ]
                     },
@@ -123,7 +116,7 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                                 id="PNC_HOME_BUILD_BUTTON",
                                 screens=("PNC_HOME_CITY",),
                                 status="screenshot_seeded",
-                                resolution=_template_resolution("PNC_HOME_BUILD_BUTTON"),
+                                detection_kind="template",
                             ),
                         ),
                     ),
@@ -143,12 +136,13 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                         id="PNC_HOME_BUILD_BUTTON",
                         screens=("PNC_HOME_CITY",),
                         status="screenshot_seeded",
-                        resolution=_template_resolution("PNC_HOME_BUILD_BUTTON"),
+                        detection_kind="template",
                     ),
                     SelectorCatalogEntry(
                         id="PNC_BUILDING_UPGRADE_BUTTON",
                         screens=("PNC_BUILDING_DETAILS",),
                         status="planned",
+                        detection_kind="template",
                     ),
                 ),
             )
@@ -164,20 +158,14 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                                 "id": "PNC_HOME_BUILD_BUTTON",
                                 "screens": ["PNC_HOME_CITY", "PNC_BUILDING_DETAILS"],
                                 "status": "click_mapped",
+                                "detection_kind": "template",
                                 "interaction_kind": "navigation",
-                                "resolution": [
-                                    {
-                                        "kind": "template",
-                                        "template_path": "pnc_home_build_button.png",
-                                    },
-                                    {
-                                        "kind": "relative_bounds",
-                                        "x_ratio": 0.1,
-                                        "y_ratio": 0.2,
-                                        "width_ratio": 0.3,
-                                        "height_ratio": 0.15,
-                                    },
-                                ],
+                                "relative_bounds": {
+                                    "x_ratio": 0.1,
+                                    "y_ratio": 0.2,
+                                    "width_ratio": 0.3,
+                                    "height_ratio": 0.15,
+                                },
                                 "click": {
                                     "anchor": "center",
                                     "outcomes": [
@@ -194,12 +182,7 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                                 "id": "PNC_HOME_CASTLE_BUILDING",
                                 "screens": ["PNC_HOME_CITY"],
                                 "status": "screenshot_seeded",
-                                "resolution": [
-                                    {
-                                        "kind": "template",
-                                        "template_path": "pnc_home_castle_building.png",
-                                    }
-                                ],
+                                "detection_kind": "template",
                             },
                         ]
                     },
@@ -216,34 +199,28 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
             )
 
             self.assertEqual(result.added_selector_ids, ("PNC_HOME_CASTLE_BUILDING",))
-            self.assertEqual(result.updated_selector_ids, ("PNC_HOME_BUILD_BUTTON",))
             self.assertEqual(result.added_ui_element_ids, ("PNC_HOME_CASTLE_BUILDING",))
 
-            catalog_text = catalog_path.read_text(encoding="utf-8")
-            catalog = yaml.safe_load(catalog_text)
-            self.assertTrue(catalog_text.startswith("# `resolution` is the canonical ordered runtime selector policy:"))
+            catalog = yaml.safe_load(catalog_path.read_text(encoding="utf-8"))
+            self.assertTrue(
+                catalog_path.read_text(encoding="utf-8").startswith("# `relative_bounds` is always normalized"),
+            )
             selector_by_id = {selector["id"]: selector for selector in catalog["selectors"]}
             self.assertEqual(
                 selector_by_id["PNC_HOME_BUILD_BUTTON"]["screens"],
                 ["PNC_HOME_CITY", "PNC_BUILDING_DETAILS"],
             )
             self.assertEqual(selector_by_id["PNC_HOME_BUILD_BUTTON"]["status"], "click_mapped")
+            self.assertEqual(selector_by_id["PNC_HOME_BUILD_BUTTON"]["detection_kind"], "template")
             self.assertEqual(selector_by_id["PNC_HOME_BUILD_BUTTON"]["interaction_kind"], "navigation")
             self.assertEqual(
-                selector_by_id["PNC_HOME_BUILD_BUTTON"]["resolution"],
-                [
-                    {
-                        "kind": "template",
-                        "template_path": "pnc_home_build_button.png",
-                    },
-                    {
-                        "kind": "relative_bounds",
-                        "x_ratio": 0.1,
-                        "y_ratio": 0.2,
-                        "width_ratio": 0.3,
-                        "height_ratio": 0.15,
-                    },
-                ],
+                selector_by_id["PNC_HOME_BUILD_BUTTON"]["relative_bounds"],
+                {
+                    "x_ratio": 0.1,
+                    "y_ratio": 0.2,
+                    "width_ratio": 0.3,
+                    "height_ratio": 0.15,
+                },
             )
             self.assertEqual(
                 selector_by_id["PNC_HOME_BUILD_BUTTON"]["click"]["outcomes"][0]["target_screen"],
@@ -255,8 +232,8 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                 ui_element_id_path.read_text(encoding="utf-8"),
             )
 
-    def test_update_selector_registry_files_writes_explicit_relative_bounds_fallback(self) -> None:
-        """Persists explicit geometry fallback as an ordered resolution step in the canonical catalog."""
+    def test_update_selector_registry_files_writes_materialize_relative_bounds_override(self) -> None:
+        """Persists explicit geometry-materialization overrides in the canonical catalog."""
 
         with tempfile.TemporaryDirectory() as temp_directory:
             root = Path(temp_directory)
@@ -267,7 +244,14 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                     SelectorCatalogEntry(
                         id="PNC_MORE_MANAGE_CHAR",
                         screens=("PNC_MORE_MENU",),
-                        status="planned",
+                        status="click_mapped",
+                        detection_kind="planned",
+                        relative_bounds=SelectorCatalogRelativeBounds(
+                            x_ratio=0.6,
+                            y_ratio=0.1,
+                            width_ratio=0.2,
+                            height_ratio=0.05,
+                        ),
                     ),
                 ),
             )
@@ -280,18 +264,8 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                                 "id": "PNC_MORE_MANAGE_CHAR",
                                 "screens": ["PNC_MORE_MENU"],
                                 "status": "click_mapped",
-                                "resolution": [
-                                    {
-                                        "kind": "parser_candidate",
-                                    },
-                                    {
-                                        "kind": "relative_bounds",
-                                        "x_ratio": 0.6,
-                                        "y_ratio": 0.1,
-                                        "width_ratio": 0.2,
-                                        "height_ratio": 0.05,
-                                    },
-                                ],
+                                "detection_kind": "planned",
+                                "materialize_relative_bounds": False,
                             },
                         ]
                     },
@@ -308,19 +282,7 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
             )
 
             selector_by_id = {selector["id"]: selector for selector in yaml.safe_load(catalog_path.read_text(encoding="utf-8"))["selectors"]}
-            self.assertEqual(
-                selector_by_id["PNC_MORE_MANAGE_CHAR"]["resolution"],
-                [
-                    {"kind": "parser_candidate"},
-                    {
-                        "kind": "relative_bounds",
-                        "x_ratio": 0.6,
-                        "y_ratio": 0.1,
-                        "width_ratio": 0.2,
-                        "height_ratio": 0.05,
-                    },
-                ],
-            )
+            self.assertFalse(selector_by_id["PNC_MORE_MANAGE_CHAR"]["materialize_relative_bounds"])
 
     def test_update_selector_registry_files_rejects_click_clearing(self) -> None:
         """Fails fast when an update tries to clear reviewed click metadata with `click: null`."""
@@ -334,7 +296,7 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                         id="PNC_HOME_BUILD_BUTTON",
                         screens=("PNC_HOME_CITY",),
                         status="click_mapped",
-                        resolution=_template_resolution("PNC_HOME_BUILD_BUTTON"),
+                        detection_kind="template",
                     ),
                 ),
             )
@@ -345,9 +307,7 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                 "  - id: PNC_HOME_BUILD_BUTTON\n"
                 "    screens: [PNC_HOME_CITY]\n"
                 "    status: click_mapped\n"
-                "    resolution:\n"
-                "      - kind: template\n"
-                "        template_path: pnc_home_build_button.png\n"
+                "    detection_kind: template\n"
                 "    click: null\n",
                 encoding="utf-8",
                 newline="\n",
@@ -360,8 +320,8 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                     ui_element_id_path=ui_element_id_path,
                 )
 
-    def test_update_selector_registry_files_rejects_resolution_clearing(self) -> None:
-        """Fails fast when an update tries to clear the selector resolution policy with `resolution: null`."""
+    def test_update_selector_registry_files_rejects_relative_bounds_clearing(self) -> None:
+        """Fails fast when an update tries to clear relative geometry with `relative_bounds: null`."""
 
         with tempfile.TemporaryDirectory() as temp_directory:
             root = Path(temp_directory)
@@ -372,7 +332,14 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                         id="PNC_HOME_BUILD_BUTTON",
                         screens=("PNC_HOME_CITY",),
                         status="click_mapped",
-                        resolution=_relative_bounds_resolution(),
+                        detection_kind="template",
+                        interaction_kind="action",
+                        relative_bounds=SelectorCatalogRelativeBounds(
+                            x_ratio=0.1,
+                            y_ratio=0.2,
+                            width_ratio=0.3,
+                            height_ratio=0.15,
+                        ),
                     ),
                 ),
             )
@@ -383,7 +350,8 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                 "  - id: PNC_HOME_BUILD_BUTTON\n"
                 "    screens: [PNC_HOME_CITY]\n"
                 "    status: click_mapped\n"
-                "    resolution: null\n",
+                "    detection_kind: template\n"
+                "    relative_bounds: null\n",
                 encoding="utf-8",
                 newline="\n",
             )
@@ -407,7 +375,7 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                         id="PNC_HOME_BUILD_BUTTON",
                         screens=("PNC_HOME_CITY",),
                         status="screenshot_seeded",
-                        resolution=_template_resolution("PNC_HOME_BUILD_BUTTON"),
+                        detection_kind="template",
                     ),
                 ),
             )
@@ -421,12 +389,7 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                                 "id": "PNC_HOME_BUILD_BUTTON",
                                 "screens": ["PNC_HOME_CITY"],
                                 "status": "screenshot_seeded",
-                                "resolution": [
-                                    {
-                                        "kind": "template",
-                                        "template_path": "pnc_home_build_button.png",
-                                    }
-                                ],
+                                "detection_kind": "template",
                                 "interaction_kind": "not_supported",
                             }
                         ]
@@ -456,7 +419,7 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                         id="PNC_HOME_BUILD_BUTTON",
                         screens=("PNC_HOME_CITY",),
                         status="screenshot_seeded",
-                        resolution=_template_resolution("PNC_HOME_BUILD_BUTTON"),
+                        detection_kind="template",
                     ),
                 ),
             )
@@ -470,12 +433,7 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                                 "id": "PNC_HOME_BUILD_BUTTON",
                                 "screens": ["PNC_HOME_CITY"],
                                 "status": "click_mapped",
-                                "resolution": [
-                                    {
-                                        "kind": "template",
-                                        "template_path": "pnc_home_build_button.png",
-                                    }
-                                ],
+                                "detection_kind": "template",
                                 "click": {
                                     "outcomes": [
                                         {
@@ -511,7 +469,7 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                         id="PNC_HOME_BUILD_BUTTON",
                         screens=("PNC_HOME_CITY",),
                         status="screenshot_seeded",
-                        resolution=_template_resolution("PNC_HOME_BUILD_BUTTON"),
+                        detection_kind="template",
                     ),
                 ),
             )
@@ -525,12 +483,7 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                                 "id": "PNC_HOME_BUILD_BUTTON",
                                 "screens": ["PNC_HOME_CITY", "PNC_BUILDING_DETAILS"],
                                 "status": "click_mapped",
-                                "resolution": [
-                                    {
-                                        "kind": "template",
-                                        "template_path": "pnc_home_build_button.png",
-                                    }
-                                ],
+                                "detection_kind": "template",
                                 "click": {
                                     "outcomes": [
                                         {
@@ -582,33 +535,6 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
             newline="\n",
         )
         return ui_element_id_path
-
-
-def _template_resolution(selector_id: str) -> tuple[SelectorCatalogResolutionStep, ...]:
-    """Builds a one-step template-backed resolution policy for catalog fixtures."""
-
-    return (
-        SelectorCatalogResolutionStep(
-            kind=SelectorResolutionKind.TEMPLATE.value,
-            template_path=f"{selector_id.lower()}.png",
-        ),
-    )
-
-
-def _relative_bounds_resolution() -> tuple[SelectorCatalogResolutionStep, ...]:
-    """Builds a one-step geometry-backed resolution policy for catalog fixtures."""
-
-    return (
-        SelectorCatalogResolutionStep(
-            kind=SelectorResolutionKind.RELATIVE_BOUNDS.value,
-            relative_bounds=SelectorCatalogRelativeBounds(
-                x_ratio=0.1,
-                y_ratio=0.2,
-                width_ratio=0.3,
-                height_ratio=0.15,
-            ),
-        ),
-    )
 
 
 if __name__ == "__main__":

@@ -15,18 +15,19 @@ from pnc_automation.vision.selector_catalog import (
     SelectorCatalogClickDefinition,
     SelectorCatalogDocument,
     SelectorCatalogEntry,
-    SelectorCatalogResolutionStep,
+    SelectorCatalogRelativeBounds,
     load_selector_catalog_document,
     load_selector_schema_click_definition,
-    load_selector_schema_resolution_steps,
+    load_selector_schema_relative_bounds,
     load_selector_schema_string_sequence,
+    require_selector_schema_bool,
     require_selector_schema_mapping,
     require_selector_schema_sequence,
     require_selector_schema_string,
     write_selector_catalog_document,
 )
 from pnc_automation.vision.selector_interaction_kind import SelectorInteractionKind
-from pnc_automation.vision.selectors import SelectorStatus
+from pnc_automation.vision.selectors import DetectionKind, SelectorStatus
 
 _UI_ELEMENT_ID_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
 _ENUM_MEMBER_PATTERN = re.compile(r"^\s+([A-Z][A-Z0-9_]*)\s*=")
@@ -40,12 +41,15 @@ class SelectorRegistryUpdate:
     id: str
     screens: tuple[str, ...]
     status: str
+    detection_kind: str
     click: SelectorCatalogClickDefinition | None = None
     update_click: bool = False
     interaction_kind: str | None = None
     update_interaction_kind: bool = False
-    resolution: tuple[SelectorCatalogResolutionStep, ...] | None = None
-    update_resolution: bool = False
+    relative_bounds: SelectorCatalogRelativeBounds | None = None
+    update_relative_bounds: bool = False
+    materialize_relative_bounds: bool | None = None
+    update_materialize_relative_bounds: bool = False
     notes: tuple[str, ...] = ()
     update_notes: bool = False
 
@@ -98,39 +102,51 @@ def apply_selector_updates(
                 id=update.id,
                 screens=update.screens,
                 status=update.status,
+                detection_kind=update.detection_kind,
                 interaction_kind=update.interaction_kind,
                 click=update.click,
-                resolution=() if not update.update_resolution or update.resolution is None else update.resolution,
+                relative_bounds=update.relative_bounds,
+                materialize_relative_bounds=(
+                    update.materialize_relative_bounds if update.update_materialize_relative_bounds else True
+                ),
                 notes=update.notes,
             )
             selector_order.append(update.id)
             added_selector_ids.append(update.id)
-            continue
-
-        promoted_status = _promote_status(entry.status, update.status, selector_id=update.id)
-        merged_screens = tuple(dict.fromkeys((*entry.screens, *update.screens)))
-        merged_click = update.click if update.update_click else entry.click
-        merged_interaction_kind = update.interaction_kind if update.update_interaction_kind else entry.interaction_kind
-        merged_resolution = update.resolution if update.update_resolution and update.resolution is not None else entry.resolution
-        merged_notes = update.notes if update.update_notes else entry.notes
-        if (
-            promoted_status != entry.status
-            or merged_screens != entry.screens
-            or merged_click != entry.click
-            or merged_interaction_kind != entry.interaction_kind
-            or merged_resolution != entry.resolution
-            or merged_notes != entry.notes
-        ):
-            updated_selector_ids.append(update.id)
-        selectors_by_id[update.id] = SelectorCatalogEntry(
-            id=entry.id,
-            screens=merged_screens,
-            status=promoted_status,
-            interaction_kind=merged_interaction_kind,
-            click=merged_click,
-            resolution=merged_resolution,
-            notes=merged_notes,
-        )
+        else:
+            promoted_status = _promote_status(entry.status, update.status, selector_id=update.id)
+            merged_screens = tuple(dict.fromkeys((*entry.screens, *update.screens)))
+            merged_click = update.click if update.update_click else entry.click
+            merged_interaction_kind = update.interaction_kind if update.update_interaction_kind else entry.interaction_kind
+            merged_relative_bounds = update.relative_bounds if update.update_relative_bounds else entry.relative_bounds
+            merged_materialize_relative_bounds = (
+                update.materialize_relative_bounds
+                if update.update_materialize_relative_bounds
+                else entry.materialize_relative_bounds
+            )
+            merged_notes = update.notes if update.update_notes else entry.notes
+            if (
+                promoted_status != entry.status
+                or merged_screens != entry.screens
+                or update.detection_kind != entry.detection_kind
+                or merged_click != entry.click
+                or merged_interaction_kind != entry.interaction_kind
+                or merged_relative_bounds != entry.relative_bounds
+                or merged_materialize_relative_bounds != entry.materialize_relative_bounds
+                or merged_notes != entry.notes
+            ):
+                updated_selector_ids.append(update.id)
+            selectors_by_id[update.id] = SelectorCatalogEntry(
+                id=entry.id,
+                screens=merged_screens,
+                status=promoted_status,
+                detection_kind=update.detection_kind,
+                interaction_kind=merged_interaction_kind,
+                click=merged_click,
+                relative_bounds=merged_relative_bounds,
+                materialize_relative_bounds=merged_materialize_relative_bounds,
+                notes=merged_notes,
+            )
 
     updated_document = SelectorCatalogDocument(selectors=tuple(selectors_by_id[selector_id] for selector_id in selector_order))
     return updated_document, SelectorRegistryUpdateResult(
@@ -228,6 +244,17 @@ def _load_update(value: object) -> SelectorRegistryUpdate:
         context=f"selector update '{selector_id}' status",
         document_label="selector update spec",
     )
+    detection_kind = require_selector_schema_string(
+        mapping.get("detection_kind", DetectionKind.TEMPLATE.value),
+        context=f"selector update '{selector_id}' detection_kind",
+        document_label="selector update spec",
+    )
+    if detection_kind not in {kind.value for kind in DetectionKind}:
+        raise SelectorResolutionError(
+            "Selector updates must use a supported detection kind.",
+            selector_id=selector_id,
+            detection_kind=detection_kind,
+        )
     if status not in _STATUS_RANK:
         raise SelectorResolutionError("Selector updates must use a known selector status.", selector_id=selector_id, status=status)
     raw_click = mapping.get("click")
@@ -269,20 +296,29 @@ def _load_update(value: object) -> SelectorRegistryUpdate:
     )
     if interaction_kind is not None:
         _validate_interaction_kind(interaction_kind, selector_id=selector_id)
-    raw_resolution = mapping.get("resolution")
-    if "resolution" in mapping and raw_resolution is None:
+    raw_relative_bounds = mapping.get("relative_bounds")
+    if "relative_bounds" in mapping and raw_relative_bounds is None:
         raise SelectorResolutionError(
-            "Selector updates cannot clear resolution without a dedicated destructive flag.",
+            "Selector updates cannot clear relative_bounds without a dedicated destructive flag.",
             selector_id=selector_id,
         )
-    resolution = (
-        load_selector_schema_resolution_steps(
-            raw_resolution,
+    relative_bounds = (
+        load_selector_schema_relative_bounds(
+            raw_relative_bounds,
             selector_id=selector_id,
             document_label="selector update spec",
             selector_label="selector update",
         )
-        if "resolution" in mapping
+        if "relative_bounds" in mapping
+        else None
+    )
+    materialize_relative_bounds = (
+        require_selector_schema_bool(
+            mapping.get("materialize_relative_bounds"),
+            context=f"selector update '{selector_id}' materialize_relative_bounds",
+            document_label="selector update spec",
+        )
+        if "materialize_relative_bounds" in mapping
         else None
     )
     notes = tuple(
@@ -296,12 +332,15 @@ def _load_update(value: object) -> SelectorRegistryUpdate:
         id=selector_id,
         screens=screens,
         status=status,
+        detection_kind=detection_kind,
         click=click,
         update_click="click" in mapping,
         interaction_kind=interaction_kind,
         update_interaction_kind="interaction_kind" in mapping,
-        resolution=resolution,
-        update_resolution="resolution" in mapping,
+        relative_bounds=relative_bounds,
+        update_relative_bounds="relative_bounds" in mapping,
+        materialize_relative_bounds=materialize_relative_bounds,
+        update_materialize_relative_bounds="materialize_relative_bounds" in mapping,
         notes=notes,
         update_notes="notes" in mapping,
     )
