@@ -109,6 +109,7 @@ class ScreenFlowPlanner:
             ScreenType.PNC_IMPROVE_MIGHT,
             ScreenType.PNC_ACADEMY,
             ScreenType.PNC_RESEARCH_TREE,
+            ScreenType.PNC_DAILY_TO_DO,
             ScreenType.PNC_GATHER_NODE,
             ScreenType.PNC_MARCH_CONFIRM,
             ScreenType.PNC_CAMPAIGN,
@@ -319,6 +320,8 @@ class ScreenFlowPlanner:
                 SelectChatChannelAction(
                     channel=channel,
                     reason=f"select_chat_channel_{channel.value}",
+                    observe_after=True,
+                    follow_up_request=ObservationRequest.source_screen_retry(ScreenType.PNC_CHAT),
                     timing_profile=ActionTimingProfile.CHAT,
                 ),
                 InputTextAction(

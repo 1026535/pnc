@@ -9,6 +9,11 @@ from pnc_automation.automation.tasks.building_upgrade_task import BuildingUpgrad
 from pnc_automation.automation.tasks.gathering_task import GatheringTask
 from pnc_automation.automation.tasks.login_task import LoginTask
 from pnc_automation.automation.tasks.select_castle_task import SelectCastleTask
+from pnc_automation.automation.tasks.send_chat_message_task import (
+    ChatMessageTaskParams,
+    SendAllianceChatMessageTask,
+    SendWorldChatMessageTask,
+)
 from pnc_automation.config.models import (
     AccountConfig,
     CastleRosterOrdering,
@@ -18,7 +23,7 @@ from pnc_automation.config.models import (
     ResolvedCredentials,
     SelectedCastleConfig,
 )
-from pnc_automation.errors import SelectorResolutionError
+from pnc_automation.errors import ScriptValidationError, SelectorResolutionError
 from pnc_automation.pnc.action_requests import (
     ActionTimingProfile,
     InputTextAction,
@@ -59,6 +64,19 @@ class FlowAndTaskTests(unittest.TestCase):
         self.flows = ScreenFlowPlanner()
         self.logger = build_logger()
 
+    def _make_context(self, *, params: object) -> TaskContext:
+        """Builds one task context with the shared test account and flow planner."""
+
+        return TaskContext(
+            account=self.account,
+            castle_roster_provider=lambda: None,
+            defaults=self.defaults,
+            step=type("Step", (), {"task": None, "params": {}})(),
+            params=params,
+            flows=self.flows,
+            logger=self.logger,
+        )
+
     def test_ensure_home_city_from_world_map_uses_world_home_nav(self) -> None:
         """Ensures the reusable flow maps world map back to city with one canonical selector."""
 
@@ -88,6 +106,17 @@ class FlowAndTaskTests(unittest.TestCase):
         """Treats the Manage Char roster as a back-navigable root-adjacent screen."""
 
         observation = make_observation(ScreenType.PNC_CASTLE_SELECTION)
+
+        actions = self.flows.ensure_home_city(observation)
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], KeyEventAction)
+        self.assertEqual(actions[0].key_code, "KEYCODE_BACK")
+
+    def test_ensure_home_city_from_daily_to_do_uses_back_navigation(self) -> None:
+        """Treats the Daily To-Do overlay as a dismissible back-navigable screen."""
+
+        observation = make_observation(ScreenType.PNC_DAILY_TO_DO)
 
         actions = self.flows.ensure_home_city(observation)
 
@@ -129,6 +158,8 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertTrue(actions[0].observe_after)
         self.assertIsInstance(actions[1], SelectChatChannelAction)
         self.assertEqual(actions[1].channel, ChatChannel.ALLIANCE)
+        self.assertTrue(actions[1].observe_after)
+        self.assertEqual(actions[1].follow_up_request, ObservationRequest.source_screen_retry(ScreenType.PNC_CHAT))
         self.assertEqual(actions[1].timing_profile, ActionTimingProfile.CHAT)
         self.assertIsInstance(actions[2], InputTextAction)
         self.assertEqual(actions[2].selector_id, UiElementId.PNC_CHAT_INPUT_FIELD)
@@ -155,7 +186,8 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertEqual(len(actions), 3)
         self.assertIsInstance(actions[0], SelectChatChannelAction)
         self.assertEqual(actions[0].channel, ChatChannel.WORLD)
-        self.assertFalse(actions[0].observe_after)
+        self.assertTrue(actions[0].observe_after)
+        self.assertEqual(actions[0].follow_up_request, ObservationRequest.source_screen_retry(ScreenType.PNC_CHAT))
 
     def test_send_chat_message_uses_narrow_chat_open_follow_up_request(self) -> None:
         """Uses the shared chat-specific navigation follow-up instead of a broad default observation."""
@@ -194,6 +226,114 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertEqual(len(actions), 3)
         self.assertIsInstance(actions[0], SelectChatChannelAction)
         self.assertEqual(actions[0].channel, ChatChannel.ALLIANCE)
+        self.assertTrue(actions[0].observe_after)
+        self.assertEqual(actions[0].follow_up_request, ObservationRequest.source_screen_retry(ScreenType.PNC_CHAT))
+
+    def test_send_alliance_chat_message_task_parses_one_required_message(self) -> None:
+        """Accepts only the single script-facing message parameter for alliance chat sends."""
+
+        task = SendAllianceChatMessageTask()
+
+        params = task.parse_params({"message": "bot shall invade"})
+
+        self.assertEqual(params, ChatMessageTaskParams(message="bot shall invade"))
+        with self.assertRaises(ScriptValidationError):
+            task.parse_params({})
+        with self.assertRaises(ScriptValidationError):
+            task.parse_params({"message": " ", "channel": "alliance"})
+
+    def test_send_alliance_chat_message_task_delegates_to_the_canonical_chat_flow(self) -> None:
+        """Plans the existing alliance chat flow without reimplementing any chat actions."""
+
+        task = SendAllianceChatMessageTask()
+        observation = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            visible_ids=(UiElementId.PNC_CHAT_SHORTCUT,),
+        )
+        context = self._make_context(params=ChatMessageTaskParams(message="hello alliance"))
+
+        actions = task.plan(context, observation)
+
+        self.assertEqual(
+            actions,
+            self.flows.send_chat_message(
+                observation,
+                message="hello alliance",
+                channel=ChatChannel.ALLIANCE,
+            ),
+        )
+
+    def test_send_world_chat_message_task_returns_one_recovery_increment_until_chat_ready(self) -> None:
+        """Uses the canonical root-return flow before attempting the fixed world-chat send."""
+
+        task = SendWorldChatMessageTask()
+        observation = make_observation(
+            ScreenType.PNC_MORE_MENU,
+            visible_ids=(UiElementId.PNC_MORE_SETTINGS, UiElementId.PNC_BOTTOM_NAV_MORE),
+        )
+        context = self._make_context(params=ChatMessageTaskParams(message="hello world"))
+
+        actions = task.plan(context, observation)
+
+        self.assertEqual(actions, self.flows.ensure_home_city(observation))
+
+    def test_send_world_chat_message_task_waits_through_loading(self) -> None:
+        """Waits for loading to settle before attempting the reusable chat workflow."""
+
+        task = SendWorldChatMessageTask()
+        context = self._make_context(params=ChatMessageTaskParams(message="hello world"))
+
+        actions = task.plan(context, make_observation(ScreenType.PNC_LOADING))
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], WaitAction)
+        self.assertTrue(actions[0].observe_after)
+
+    def test_send_alliance_chat_message_task_verifies_a_successful_send(self) -> None:
+        """Succeeds only when the final observation proves the expected alliance chat state."""
+
+        task = SendAllianceChatMessageTask()
+        result = task.verify(
+            self._make_context(params=ChatMessageTaskParams(message="hello alliance")),
+            make_observation(ScreenType.PNC_HOME_CITY),
+            make_observation(
+                ScreenType.PNC_CHAT,
+                active_chat_channel=ChatChannel.ALLIANCE,
+                chat_draft_empty=True,
+            ),
+        )
+
+        self.assertTrue(result.succeeded)
+
+    def test_send_world_chat_message_task_replans_while_returning_to_a_chat_ready_screen(self) -> None:
+        """Replans between recovery increments instead of trying to send from unsupported screens."""
+
+        task = SendWorldChatMessageTask()
+        result = task.verify(
+            self._make_context(params=ChatMessageTaskParams(message="hello world")),
+            make_observation(ScreenType.PNC_VIP),
+            make_observation(ScreenType.PNC_HOME_CITY),
+        )
+
+        self.assertEqual(result.status.value, "replan")
+
+    def test_send_world_chat_message_task_fails_when_the_final_chat_state_is_not_cleared(self) -> None:
+        """Fails fast when the reusable send flow does not leave the shared chat draft empty."""
+
+        task = SendWorldChatMessageTask()
+        result = task.verify(
+            self._make_context(params=ChatMessageTaskParams(message="hello world")),
+            make_observation(ScreenType.PNC_HOME_CITY),
+            make_observation(
+                ScreenType.PNC_CHAT,
+                active_chat_channel=ChatChannel.WORLD,
+                chat_draft_empty=False,
+                chat_draft_text="hello world",
+            ),
+        )
+
+        self.assertFalse(result.succeeded)
+        self.assertTrue(result.retryable)
 
     def test_login_task_plans_username_and_password_entry(self) -> None:
         """Builds the expected credential-entry actions on the login screen."""

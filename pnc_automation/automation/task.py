@@ -22,6 +22,8 @@ class TaskId(StrEnum):
     POPUP_RECOVERY = "popup_recovery"
     LOGIN = "login"
     SELECT_CASTLE = "select_castle"
+    SEND_ALLIANCE_CHAT_MESSAGE = "send_alliance_chat_message"
+    SEND_WORLD_CHAT_MESSAGE = "send_world_chat_message"
     BUILDING_UPGRADE = "building_upgrade"
     RESEARCH = "research"
     GATHERING = "gathering"

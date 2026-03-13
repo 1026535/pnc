@@ -99,6 +99,7 @@ class ObservedActionExecutor:
 
         current_observation = initial_observation
         observed_after_action = False
+        executed_any_action = False
         selector_interactions: list[SelectorInteractionResult] = []
         for index, action in enumerate(actions):
             candidate = self._resolve_observed_navigation_tap(action, current_observation)
@@ -112,14 +113,17 @@ class ObservedActionExecutor:
                 )
                 current_observation = interaction_result.observation
                 selector_interactions.extend(interaction_result.selector_interactions)
+                executed_any_action = True
                 observed_after_action = True
                 continue
-            self.action_executor.execute_action(action, current_observation)
-            if getattr(action, "observe_after", False):
+            action_executed = self.action_executor.execute_action(action, current_observation)
+            executed_any_action = executed_any_action or action_executed
+            if getattr(action, "observe_after", False) and action_executed:
                 self._sleep_for_observe(action)
                 current_observation = observe(f"post_action_{index + 1}", action.follow_up_request)
+                self.action_executor.validate_follow_up(action, current_observation)
                 observed_after_action = True
-        if actions and not observed_after_action:
+        if executed_any_action and not observed_after_action:
             self._sleep_for_observe()
             current_observation = observe("post_actions")
         return ObservedActionExecutionResult(

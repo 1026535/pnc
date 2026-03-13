@@ -52,19 +52,22 @@ class ActionExecutor:
 
         current_observation = initial_observation
         observed_after_action = False
+        executed_any_action = False
         for index, action in enumerate(actions):
-            self.execute_action(action, current_observation)
-            if getattr(action, "observe_after", False):
+            action_executed = self.execute_action(action, current_observation)
+            executed_any_action = executed_any_action or action_executed
+            if getattr(action, "observe_after", False) and action_executed:
                 self._sleep_ms(self._observe_delay_ms_for(action))
                 current_observation = observe(f"post_action_{index + 1}", action.follow_up_request)
+                self.validate_follow_up(action, current_observation)
                 observed_after_action = True
-        if actions and not observed_after_action:
+        if executed_any_action and not observed_after_action:
             self._sleep_ms(self.post_action_observe_delay_ms)
             return observe("post_actions", None)
         return current_observation
 
-    def execute_action(self, action: ActionRequest, observation: Observation) -> None:
-        """Executes one declarative action against the current observation."""
+    def execute_action(self, action: ActionRequest, observation: Observation) -> bool:
+        """Executes one declarative action and returns whether it changed emulator state."""
 
         self.logger.info("Executing action.", extra={"action_type": type(action).__name__, "screen_type": observation.screen_type})
         if isinstance(action, TapAction):
@@ -72,17 +75,17 @@ class ActionExecutor:
             target = element.action_point if element.action_point is not None else element.bounds.center()
             self.session.tap_point(*target)
             self._sleep_ms(self._stable_delay_ms_for(action))
-            return
+            return True
         if isinstance(action, TapPointAction):
             self.session.tap_point(action.x, action.y)
             self._sleep_ms(self._stable_delay_ms_for(action))
-            return
+            return True
         if isinstance(action, TapListEntryAction):
             entry = self._require_entry(action, observation)
             target = entry.action_point if action.use_action_point and entry.action_point is not None else entry.bounds.center()
             self.session.tap_point(*target)
             self._sleep_ms(self._stable_delay_ms_for(action))
-            return
+            return True
         if isinstance(action, SelectChatChannelAction):
             if observation.screen_type != ScreenType.PNC_CHAT:
                 raise SelectorResolutionError(
@@ -90,12 +93,12 @@ class ActionExecutor:
                     screen_type=observation.screen_type,
                 )
             if observation.is_chat_channel_active(action.channel):
-                return
+                return False
             element = observation.require(chat_channel_selector_id(action.channel))
             target = element.action_point if element.action_point is not None else element.bounds.center()
             self.session.tap_point(*target)
             self._sleep_ms(self._stable_delay_ms_for(action))
-            return
+            return True
         if isinstance(action, InputTextAction):
             if action.selector_id is not None:
                 element = observation.require(action.selector_id)
@@ -105,18 +108,18 @@ class ActionExecutor:
                 self._clear_existing_text(action, observation)
             self.session.input_text(action.text)
             self._sleep_ms(self._stable_delay_ms_for(action))
-            return
+            return True
         if isinstance(action, KeyEventAction):
             self.session.press_key(action.key_code)
             self._sleep_ms(self._stable_delay_ms_for(action))
-            return
+            return True
         if isinstance(action, WaitAction):
             self._sleep_ms(action.milliseconds)
-            return
+            return True
         if isinstance(action, LaunchAppAction):
             self.session.launch_app()
             self._sleep_ms(self._stable_delay_ms_for(action))
-            return
+            return True
         if isinstance(action, SwipeAction):
             if observation.image_size is None:
                 raise SelectorResolutionError("Swipe actions require the current screenshot dimensions.")
@@ -129,8 +132,32 @@ class ActionExecutor:
             )
             self.session.swipe(start_x, start_y, end_x, end_y, duration_ms=action.duration_ms)
             self._sleep_ms(self._stable_delay_ms_for(action))
-            return
+            return True
         raise SelectorResolutionError(f"Unsupported action type '{type(action).__name__}'.", action_type=type(action).__name__)
+
+    def validate_follow_up(self, action: ActionRequest, observation: Observation) -> None:
+        """Rejects follow-up observations that are insufficient for the requested action to continue safely."""
+
+        if not isinstance(action, SelectChatChannelAction):
+            return
+        if observation.screen_type != ScreenType.PNC_CHAT:
+            raise SelectorResolutionError(
+                "Chat channel selection follow-up must remain on the shared chat screen.",
+                expected_screen=ScreenType.PNC_CHAT,
+                screen_type=observation.screen_type,
+            )
+        if not observation.is_chat_channel_active(action.channel):
+            raise SelectorResolutionError(
+                "Observed chat channel did not switch to the requested tab.",
+                requested_channel=action.channel,
+                observed_channel=observation.active_chat_channel,
+            )
+        if observation.chat_draft_empty is None:
+            raise SelectorResolutionError(
+                "Chat channel selection follow-up must observe draft state before typing.",
+                requested_channel=action.channel,
+                screen_type=observation.screen_type,
+            )
 
     def _require_entry(self, action: TapListEntryAction, observation: Observation) -> DetectedListEntry:
         """Returns the matching list entry for one dynamic-entry tap."""

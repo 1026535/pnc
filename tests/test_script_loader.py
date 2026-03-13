@@ -34,6 +34,9 @@ class ScriptLoaderTests(unittest.TestCase):
                         params:
                           preferred_resources: [food, wood]
                           max_parallel_marches: 2
+                      - task: send_alliance_chat_message
+                        params:
+                          message: bot shall invade
                     """
                 ).strip(),
                 encoding="utf-8",
@@ -44,6 +47,8 @@ class ScriptLoaderTests(unittest.TestCase):
             self.assertEqual(script.name, "daily_castle_maintenance")
             self.assertEqual(script.steps[0].task, TaskId.LOGIN)
             self.assertEqual(script.steps[1].params["priority"], ["castle", "wall"])
+            self.assertEqual(script.steps[3].task, TaskId.SEND_ALLIANCE_CHAT_MESSAGE)
+            self.assertEqual(script.steps[3].params["message"], "bot shall invade")
 
     def test_load_run_script_rejects_unknown_tasks(self) -> None:
         """Fails fast when the script references an unsupported task id."""
