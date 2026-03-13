@@ -59,7 +59,8 @@ class ActionExecutor:
             if getattr(action, "observe_after", False) and action_executed:
                 self._sleep_ms(self._observe_delay_ms_for(action))
                 current_observation = observe(f"post_action_{index + 1}", action.follow_up_request)
-                self.validate_follow_up(action, current_observation)
+                if not self.validate_follow_up(action, current_observation):
+                    return current_observation
                 observed_after_action = True
         if executed_any_action and not observed_after_action:
             self._sleep_ms(self.post_action_observe_delay_ms)
@@ -135,29 +136,24 @@ class ActionExecutor:
             return True
         raise SelectorResolutionError(f"Unsupported action type '{type(action).__name__}'.", action_type=type(action).__name__)
 
-    def validate_follow_up(self, action: ActionRequest, observation: Observation) -> None:
-        """Rejects follow-up observations that are insufficient for the requested action to continue safely."""
+    def validate_follow_up(self, action: ActionRequest, observation: Observation) -> bool:
+        """Returns whether the action sequence can safely continue from the observed follow-up state."""
 
         if not isinstance(action, SelectChatChannelAction):
-            return
+            return True
+        if observation.blocking_popup or observation.screen_type in {
+            ScreenType.PNC_POPUP,
+            ScreenType.PNC_LOADING,
+            ScreenType.UNKNOWN,
+        }:
+            return False
         if observation.screen_type != ScreenType.PNC_CHAT:
-            raise SelectorResolutionError(
-                "Chat channel selection follow-up must remain on the shared chat screen.",
-                expected_screen=ScreenType.PNC_CHAT,
-                screen_type=observation.screen_type,
-            )
+            return False
         if not observation.is_chat_channel_active(action.channel):
-            raise SelectorResolutionError(
-                "Observed chat channel did not switch to the requested tab.",
-                requested_channel=action.channel,
-                observed_channel=observation.active_chat_channel,
-            )
+            return False
         if observation.chat_draft_empty is None:
-            raise SelectorResolutionError(
-                "Chat channel selection follow-up must observe draft state before typing.",
-                requested_channel=action.channel,
-                screen_type=observation.screen_type,
-            )
+            return False
+        return True
 
     def _require_entry(self, action: TapListEntryAction, observation: Observation) -> DetectedListEntry:
         """Returns the matching list entry for one dynamic-entry tap."""

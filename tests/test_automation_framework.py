@@ -439,23 +439,73 @@ class AutomationFrameworkTests(unittest.TestCase):
             channel=ChatChannel.ALLIANCE,
         )
 
-        with self.assertRaises(SelectorResolutionError):
-            executor.execute_actions(
-                actions,
-                make_observation(
-                    ScreenType.PNC_CHAT,
-                    visible_ids=(
-                        UiElementId.PNC_CHAT_TAB_KINGDOM,
-                        UiElementId.PNC_CHAT_TAB_ALLIANCE,
-                        UiElementId.PNC_CHAT_INPUT_FIELD,
-                        UiElementId.PNC_CHAT_SEND_BUTTON,
-                    ),
-                    active_chat_channel=ChatChannel.WORLD,
-                    chat_draft_empty=True,
+        result = executor.execute_actions(
+            actions,
+            make_observation(
+                ScreenType.PNC_CHAT,
+                visible_ids=(
+                    UiElementId.PNC_CHAT_TAB_KINGDOM,
+                    UiElementId.PNC_CHAT_TAB_ALLIANCE,
+                    UiElementId.PNC_CHAT_INPUT_FIELD,
+                    UiElementId.PNC_CHAT_SEND_BUTTON,
                 ),
-                observe=fake_observer.observe,
-            )
+                active_chat_channel=ChatChannel.WORLD,
+                chat_draft_empty=True,
+            ),
+            observe=fake_observer.observe,
+        )
 
+        self.assertEqual(result.active_chat_channel, ChatChannel.WORLD)
+        self.assertEqual(fake_observer.requests, [ObservationRequest.source_screen_retry(ScreenType.PNC_CHAT)])
+        self.assertEqual(fake_session.texts, [])
+
+    def test_send_chat_message_stops_when_the_chat_tab_follow_up_is_still_loading(self) -> None:
+        """Stops before typing when the post-switch observation is still in a transient settling state."""
+
+        fake_session = FakeSession()
+        fake_observer = FakeObservationService(observations=[make_observation(ScreenType.PNC_LOADING)])
+        executor = ActionExecutor(
+            session=fake_session,
+            stable_click_delay_ms=0,
+            post_action_observe_delay_ms=0,
+            chat_stable_click_delay_ms=0,
+            chat_post_action_observe_delay_ms=0,
+            logger=build_logger(),
+            sleep=lambda _: None,
+        )
+        actions = ScreenFlowPlanner().send_chat_message(
+            make_observation(
+                ScreenType.PNC_CHAT,
+                visible_ids=(
+                    UiElementId.PNC_CHAT_TAB_KINGDOM,
+                    UiElementId.PNC_CHAT_TAB_ALLIANCE,
+                    UiElementId.PNC_CHAT_INPUT_FIELD,
+                    UiElementId.PNC_CHAT_SEND_BUTTON,
+                ),
+                active_chat_channel=ChatChannel.WORLD,
+                chat_draft_empty=True,
+            ),
+            message="hello",
+            channel=ChatChannel.ALLIANCE,
+        )
+
+        result = executor.execute_actions(
+            actions,
+            make_observation(
+                ScreenType.PNC_CHAT,
+                visible_ids=(
+                    UiElementId.PNC_CHAT_TAB_KINGDOM,
+                    UiElementId.PNC_CHAT_TAB_ALLIANCE,
+                    UiElementId.PNC_CHAT_INPUT_FIELD,
+                    UiElementId.PNC_CHAT_SEND_BUTTON,
+                ),
+                active_chat_channel=ChatChannel.WORLD,
+                chat_draft_empty=True,
+            ),
+            observe=fake_observer.observe,
+        )
+
+        self.assertEqual(result.screen_type, ScreenType.PNC_LOADING)
         self.assertEqual(fake_observer.requests, [ObservationRequest.source_screen_retry(ScreenType.PNC_CHAT)])
         self.assertEqual(fake_session.texts, [])
 
