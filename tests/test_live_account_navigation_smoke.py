@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 
 from pnc_automation.app import build_application_runner
+from pnc_automation.automation.scripts.loader import load_run_script
 from pnc_automation.pnc.screen_type import ScreenType
 from tests.live_smoke_support import build_live_session, build_observation_service
 
@@ -31,6 +32,15 @@ class LiveAccountNavigationSmokeTests(unittest.TestCase):
         cls.application = build_application_runner(cls.config_path)
         cls.script_runner = cls.application.script_runner
         cls.account = cls.script_runner.config.require_account(cls.account_id)
+        cls.prepared_script = cls.script_runner.task_registry.prepare_script(load_run_script(cls.script_path))
+        cls.target_castle = next(
+            (
+                step.castle
+                for step in cls.prepared_script.steps
+                if step.task.value == "select_castle" and step.castle is not None
+            ),
+            None,
+        )
         cls.session = _build_live_session(
             config_account=cls.account,
             script_runner=cls.script_runner,
@@ -51,9 +61,10 @@ class LiveAccountNavigationSmokeTests(unittest.TestCase):
         self.assertTrue(all(step.status.value == "success" for step in self.run_result.steps), self.run_result.steps)
 
     def test_live_smoke_final_state_matches_the_configured_castle(self) -> None:
-        """Verifies the post-run live observation reflects the configured castle selection."""
+        """Verifies the post-run live observation reflects the explicit script castle target."""
 
-        target_castle = self.account.selected_castle
+        target_castle = self.target_castle
+        self.assertIsNotNone(target_castle)
         if self.after_observation.matches_current_castle(target_castle):
             return
         matching_entry = self.after_observation.find_castle_entry(target_castle)
@@ -62,11 +73,12 @@ class LiveAccountNavigationSmokeTests(unittest.TestCase):
         self.assertEqual(self.after_observation.screen_type, ScreenType.PNC_CASTLE_SELECTION)
 
     def test_live_smoke_roster_cache_contains_the_configured_castle(self) -> None:
-        """Verifies the live run leaves the roster cache synchronized with the selected castle target."""
+        """Verifies the live run leaves the roster cache synchronized with the explicit castle target."""
 
+        self.assertIsNotNone(self.target_castle)
         roster = self.script_runner.castle_roster_store.get(self.account.pnc_account_id)
         self.assertIsNotNone(roster)
-        self.assertTrue(any(castle == self.account.selected_castle for castle in roster.castles), roster)
+        self.assertTrue(any(castle == self.target_castle for castle in roster.castles), roster)
 
 def _build_live_session(**kwargs: object):
     """Routes legacy test-local helper calls through the shared live-smoke support module."""

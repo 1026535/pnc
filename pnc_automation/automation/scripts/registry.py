@@ -5,13 +5,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from pnc_automation.automation.scripts.models import PreparedRunScript, PreparedScriptStep, RunScript
-from pnc_automation.automation.task import BaseAutomationTask, TaskId
+from pnc_automation.automation.task import BaseAutomationTask, CastleTargetPolicy, TaskId
 from pnc_automation.automation.tasks.building_upgrade_task import BuildingUpgradeTask
 from pnc_automation.automation.tasks.campaign_task import CampaignTask
 from pnc_automation.automation.tasks.ensure_game_running_task import EnsureGameRunningTask
 from pnc_automation.automation.tasks.gathering_task import GatheringTask
 from pnc_automation.automation.tasks.login_task import LoginTask
 from pnc_automation.automation.tasks.popup_recovery_task import PopupRecoveryTask
+from pnc_automation.automation.tasks.refresh_castle_roster_task import RefreshCastleRosterTask
 from pnc_automation.automation.tasks.research_task import ResearchTask
 from pnc_automation.automation.tasks.select_castle_task import SelectCastleTask
 from pnc_automation.automation.tasks.send_chat_message_task import (
@@ -64,6 +65,7 @@ class TaskRegistry:
                     step_index=index,
                     task=step.task,
                 ) from error
+            _validate_castle_target_policy(task, step_index=index, step=step)
             try:
                 parsed_params = task.parse_params(step.params)
             except ScriptValidationError as error:
@@ -75,9 +77,30 @@ class TaskRegistry:
                 PreparedScriptStep(
                     script_step=step,
                     parsed_params=parsed_params,
+                    castle_target_policy=task.castle_target_policy,
                 )
             )
         return PreparedRunScript(name=script.name, path=script.path, steps=tuple(prepared_steps))
+
+
+def _validate_castle_target_policy(task: BaseAutomationTask, *, step_index: int, step: object) -> None:
+    """Rejects script steps whose castle targeting does not match the task contract."""
+
+    task_id = getattr(step, "task", None)
+    target_castle = getattr(step, "castle", None)
+    if task.castle_target_policy == CastleTargetPolicy.DISALLOWED and target_castle is not None:
+        raise ScriptValidationError(
+            f"Task '{task.id}' does not accept a step-level castle target.",
+            step_index=step_index,
+            task=task_id,
+            castle=target_castle,
+        )
+    if task.castle_target_policy == CastleTargetPolicy.REQUIRED and target_castle is None:
+        raise ScriptValidationError(
+            f"Task '{task.id}' requires a step-level castle target.",
+            step_index=step_index,
+            task=task_id,
+        )
 
 
 def build_default_task_registry() -> TaskRegistry:
@@ -89,6 +112,7 @@ def build_default_task_registry() -> TaskRegistry:
             PopupRecoveryTask(),
             LoginTask(),
             SelectCastleTask(),
+            RefreshCastleRosterTask(),
             SendAllianceChatMessageTask(),
             SendWorldChatMessageTask(),
             BuildingUpgradeTask(),

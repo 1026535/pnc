@@ -12,6 +12,12 @@ def sanitize_artifact_segment(value: str) -> str:
     return cleaned.strip("_") or "artifact"
 
 
+def format_account_artifact_directory(*, account_id: str) -> str:
+    """Formats the per-account artifact directory from the canonical account id."""
+
+    return _to_snake_case_segment(account_id)
+
+
 def format_castle_artifact_directory(*, kingdom: str, castle_name: str) -> str:
     """Formats the per-castle artifact directory as `k###_castle_name`."""
 

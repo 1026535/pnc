@@ -7,7 +7,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from pnc_automation.automation.task import TaskId
+from pnc_automation.automation.task import CastleTargetPolicy, TaskId
+from pnc_automation.config.models import CastleIdentity
 
 
 @dataclass(frozen=True, slots=True)
@@ -15,6 +16,7 @@ class ScriptStep:
     """One ordered automation step from a run script."""
 
     task: TaskId
+    castle: CastleIdentity | None = None
     params: Mapping[str, Any] = field(default_factory=dict)
 
 
@@ -29,16 +31,23 @@ class RunScript:
 
 @dataclass(frozen=True, slots=True)
 class PreparedScriptStep:
-    """One task step after task-specific parameter validation has succeeded."""
+    """One task step after task and castle-target validation has succeeded."""
 
     script_step: ScriptStep
     parsed_params: Any
+    castle_target_policy: CastleTargetPolicy
 
     @property
     def task(self) -> TaskId:
         """Returns the canonical task identifier for the prepared step."""
 
         return self.script_step.task
+
+    @property
+    def castle(self) -> CastleIdentity | None:
+        """Returns the optional explicit castle target requested by the step."""
+
+        return self.script_step.castle
 
 
 @dataclass(frozen=True, slots=True)

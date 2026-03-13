@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 
 from PIL import Image
 
-from pnc_automation.config.models import SelectedCastleConfig
+from pnc_automation.config.models import CastleIdentity
 from pnc_automation.errors import SelectorResolutionError
 from pnc_automation.pnc.chat import ChatChannel
 from pnc_automation.pnc.observation import Bounds, DetectedListEntry, ListEntryKind, VisibleElement, VisibleElementSourceKind
@@ -1533,10 +1533,10 @@ def _looks_like_lord_info_name(line: OcrLine) -> bool:
     return len(normalized_text) >= 5
 
 
-def _lord_info_name_to_current_castle(name_text: str) -> SelectedCastleConfig:
+def _lord_info_name_to_current_castle(name_text: str) -> CastleIdentity:
     """Converts the displayed Lord Info name into the current-castle identity signal."""
 
-    return SelectedCastleConfig(
+    return CastleIdentity(
         kingdom="",
         castle_name=name_text.strip(),
     )
@@ -1635,7 +1635,7 @@ def _build_castle_entry(
     )
 
 
-def _entry_to_current_castle(entry: DetectedListEntry | None) -> SelectedCastleConfig | None:
+def _entry_to_current_castle(entry: DetectedListEntry | None) -> CastleIdentity | None:
     """Converts the selected castle-roster row into the active castle identity when available."""
 
     if entry is None or entry.title_text is None:
@@ -1646,7 +1646,7 @@ def _entry_to_current_castle(entry: DetectedListEntry | None) -> SelectedCastleC
         return None
     if castle_level is not None and not isinstance(castle_level, int):
         return None
-    return SelectedCastleConfig(
+    return CastleIdentity(
         kingdom=kingdom,
         castle_name=entry.title_text,
         castle_level=castle_level,

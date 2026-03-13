@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 from pnc_automation.config.castle_roster_store import CastleRosterStore
-from pnc_automation.config.models import CastleRosterOrdering, PncAccountCastleRosterConfig, SelectedCastleConfig
+from pnc_automation.config.models import CastleIdentity, CastleRosterOrdering, PncAccountCastleRosterConfig
 
 
 class CastleRosterStoreTests(unittest.TestCase):
@@ -23,8 +23,8 @@ class CastleRosterStoreTests(unittest.TestCase):
                     PncAccountCastleRosterConfig(
                         pnc_account_id="inline_user",
                         castles=(
-                            SelectedCastleConfig(kingdom="K226", castle_name="Alpha", castle_level=3),
-                            SelectedCastleConfig(kingdom="K227", castle_name="Bravo", castle_level=4),
+                            CastleIdentity(kingdom="K226", castle_name="Alpha", castle_level=3),
+                            CastleIdentity(kingdom="K227", castle_name="Bravo", castle_level=4),
                         ),
                         ordering=CastleRosterOrdering.UNKNOWN,
                     ),
@@ -34,8 +34,8 @@ class CastleRosterStoreTests(unittest.TestCase):
             roster = store.sync(
                 "inline_user",
                 (
-                    SelectedCastleConfig(kingdom="K227", castle_name="Bravo", castle_level=5),
-                    SelectedCastleConfig(kingdom="K230", castle_name="Main", castle_level=8),
+                    CastleIdentity(kingdom="K227", castle_name="Bravo", castle_level=5),
+                    CastleIdentity(kingdom="K230", castle_name="Main", castle_level=8),
                 ),
             )
 
@@ -43,9 +43,9 @@ class CastleRosterStoreTests(unittest.TestCase):
             self.assertEqual(
                 roster.castles,
                 (
-                    SelectedCastleConfig(kingdom="K226", castle_name="Alpha", castle_level=3),
-                    SelectedCastleConfig(kingdom="K227", castle_name="Bravo", castle_level=5),
-                    SelectedCastleConfig(kingdom="K230", castle_name="Main", castle_level=8),
+                    CastleIdentity(kingdom="K226", castle_name="Alpha", castle_level=3),
+                    CastleIdentity(kingdom="K227", castle_name="Bravo", castle_level=5),
+                    CastleIdentity(kingdom="K230", castle_name="Main", castle_level=8),
                 ),
             )
 
@@ -59,8 +59,8 @@ class CastleRosterStoreTests(unittest.TestCase):
                     PncAccountCastleRosterConfig(
                         pnc_account_id="inline_user",
                         castles=(
-                            SelectedCastleConfig(kingdom="K226", castle_name="Alpha", castle_level=3),
-                            SelectedCastleConfig(kingdom="K227", castle_name="Bravo", castle_level=4),
+                            CastleIdentity(kingdom="K226", castle_name="Alpha", castle_level=3),
+                            CastleIdentity(kingdom="K227", castle_name="Bravo", castle_level=4),
                         ),
                         ordering=CastleRosterOrdering.FULL_SCAN,
                     ),
@@ -70,7 +70,7 @@ class CastleRosterStoreTests(unittest.TestCase):
             roster = store.sync(
                 "inline_user",
                 (
-                    SelectedCastleConfig(kingdom="K230", castle_name="Main", castle_level=8),
+                    CastleIdentity(kingdom="K230", castle_name="Main", castle_level=8),
                 ),
             )
 
@@ -85,8 +85,8 @@ class CastleRosterStoreTests(unittest.TestCase):
             roster = store.sync(
                 "inline_user",
                 (
-                    SelectedCastleConfig(kingdom="K230", castle_name="Main", castle_level=8),
-                    SelectedCastleConfig(kingdom="K226", castle_name="Alpha", castle_level=3),
+                    CastleIdentity(kingdom="K230", castle_name="Main", castle_level=8),
+                    CastleIdentity(kingdom="K226", castle_name="Alpha", castle_level=3),
                 ),
                 ordering=CastleRosterOrdering.FULL_SCAN,
             )
@@ -95,8 +95,8 @@ class CastleRosterStoreTests(unittest.TestCase):
             self.assertEqual(
                 roster.castles,
                 (
-                    SelectedCastleConfig(kingdom="K230", castle_name="Main", castle_level=8),
-                    SelectedCastleConfig(kingdom="K226", castle_name="Alpha", castle_level=3),
+                    CastleIdentity(kingdom="K230", castle_name="Main", castle_level=8),
+                    CastleIdentity(kingdom="K226", castle_name="Alpha", castle_level=3),
                 ),
             )
 

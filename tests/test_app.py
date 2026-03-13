@@ -33,9 +33,6 @@ class ApplicationRunnerTests(unittest.TestCase):
                         pnc_account_id: inline_user
                         username: inline_user
                         password: inline_pass
-                        selected_castle:
-                          kingdom: K230
-                          castle_name: Main
                     """
                 ).strip(),
                 encoding="utf-8",

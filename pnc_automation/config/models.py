@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
-from pnc_automation.artifact_naming import format_castle_artifact_directory
+from pnc_automation.artifact_naming import format_account_artifact_directory
 from pnc_automation.errors import ConfigurationError
 
 
@@ -32,18 +32,12 @@ class BlueStacksInstanceConfig:
 
 
 @dataclass(frozen=True, slots=True)
-class SelectedCastleConfig:
-    """Identifies the single castle managed for one account target."""
+class CastleIdentity:
+    """Identifies one castle across authored targets, rosters, and observations."""
 
     kingdom: str
     castle_name: str
     castle_level: int | None = None
-
-    @property
-    def artifact_directory_name(self) -> str:
-        """Returns the canonical artifact directory name for this castle."""
-
-        return format_castle_artifact_directory(kingdom=self.kingdom, castle_name=self.castle_name)
 
 
 class CredentialSource(StrEnum):
@@ -78,7 +72,6 @@ class AccountConfig:
     id: str
     instance_id: str
     pnc_account_id: str
-    selected_castle: SelectedCastleConfig
     credentials: ResolvedCredentials | None = None
 
     @property
@@ -89,9 +82,9 @@ class AccountConfig:
 
     @property
     def artifact_directory_name(self) -> str:
-        """Returns the canonical artifact directory name for this account's selected castle."""
+        """Returns the canonical artifact directory name for this configured account target."""
 
-        return self.selected_castle.artifact_directory_name
+        return format_account_artifact_directory(account_id=self.id)
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,7 +92,7 @@ class PncAccountCastleRosterConfig:
     """Declares the discovered castle roster cache for one identified P&C username."""
 
     pnc_account_id: str
-    castles: tuple[SelectedCastleConfig, ...]
+    castles: tuple[CastleIdentity, ...]
     ordering: CastleRosterOrdering = CastleRosterOrdering.UNKNOWN
 
     @property

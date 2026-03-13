@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from pnc_automation.automation.task import BaseAutomationTask, TaskId, TaskResult
+from pnc_automation.automation.task import BaseAutomationTask, CastleTargetPolicy, TaskId, TaskResult
 from pnc_automation.automation.task_context import TaskContext
 from pnc_automation.errors import TaskVerificationError
 from pnc_automation.pnc.action_requests import ActionRequest, InputTextAction, TapAction, WaitAction
@@ -18,6 +18,7 @@ class LoginTask(BaseAutomationTask):
     """Logs in using the configured account credentials."""
 
     id = TaskId.LOGIN
+    castle_target_policy = CastleTargetPolicy.DISALLOWED
 
     def parse_params(self, params: Mapping[str, Any]) -> None:
         """Rejects unsupported parameters for login."""

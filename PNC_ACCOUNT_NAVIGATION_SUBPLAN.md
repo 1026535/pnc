@@ -39,11 +39,11 @@ Status:
 
 - implement castle-roster observation,
 - implement `SelectCastleTask`,
-- verify the configured castle can be selected reliably.
+- verify explicit runtime castle targets can be selected reliably.
 
 Exit condition:
 
-- one configured P&C account with many castles can be brought to one verified selected castle.
+- one configured P&C account with many castles can be brought to one verified selected castle target.
 
 Status:
 
@@ -60,7 +60,8 @@ This sub-plan should define:
 - how Puzzles & Conquest is started or foregrounded,
 - how Android home, loading, login, popup, account-switch, and already-in-game states are interpreted,
 - how credentials or account switching are applied when required,
-- how the configured `instance_id`, `pnc_account_id`, and `selected_castle` are verified,
+- how the configured `instance_id` and `pnc_account_id` are verified,
+- how explicit runtime castle targets are verified when a step requests one,
 - how castle-roster observation and castle selection are interpreted and executed,
 - how account-navigation-specific retry, recovery, and fail-fast rules are applied.
 
@@ -195,4 +196,4 @@ Recorded live smoke evidence for this sub-plan:
 - [PNC_AUTOMATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_AUTOMATION_SUBPLAN.md) owns generic runner and orchestration behavior and should consume these tasks.
 - [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SELECTOR_REFINEMENT_SUBPLAN.md) owns account-navigation-related selector maturity and click validation.
 - [PNC_SCREEN_FLOW_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SCREEN_FLOW_SUBPLAN.md) owns reusable navigation shared by bootstrap, castle targeting, and later tasks.
-- [PNC_TASK_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_TASK_SUBPLAN.md) starts after the configured castle has been verified and must not duplicate account-navigation task design.
+- [PNC_TASK_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_TASK_SUBPLAN.md) starts after account/session preparation has been verified and must not duplicate account-navigation task design.

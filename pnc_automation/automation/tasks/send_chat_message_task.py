@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from pnc_automation.automation.task import BaseAutomationTask, TaskId, TaskResult
+from pnc_automation.automation.task import BaseAutomationTask, CastleTargetPolicy, TaskId, TaskResult
 from pnc_automation.automation.task_context import TaskContext
 from pnc_automation.errors import ScriptValidationError
 from pnc_automation.pnc.action_requests import ActionRequest, WaitAction
@@ -133,6 +133,7 @@ class SendAllianceChatMessageTask(_BaseSendChatMessageTask):
     """Sends one message to alliance chat using the canonical reusable chat flow."""
 
     id = TaskId.SEND_ALLIANCE_CHAT_MESSAGE
+    castle_target_policy = CastleTargetPolicy.OPTIONAL
     channel = ChatChannel.ALLIANCE
 
 
@@ -140,4 +141,5 @@ class SendWorldChatMessageTask(_BaseSendChatMessageTask):
     """Sends one message to world chat using the canonical reusable chat flow."""
 
     id = TaskId.SEND_WORLD_CHAT_MESSAGE
+    castle_target_policy = CastleTargetPolicy.OPTIONAL
     channel = ChatChannel.WORLD

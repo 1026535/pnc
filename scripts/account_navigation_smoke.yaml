@@ -4,3 +4,6 @@ steps:
   - task: ensure_game_running
   - task: login
   - task: select_castle
+    castle:
+      kingdom: K287
+      castle_name: pine cobaye 1

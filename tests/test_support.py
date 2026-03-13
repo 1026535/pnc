@@ -10,7 +10,7 @@ from typing import Any
 
 from PIL import Image
 
-from pnc_automation.config.models import PncAccountCastleRosterConfig, SelectedCastleConfig
+from pnc_automation.config.models import CastleIdentity, PncAccountCastleRosterConfig
 from pnc_automation.pnc.chat import ChatChannel
 from pnc_automation.pnc.observation import (
     Bounds,
@@ -83,7 +83,7 @@ def make_observation(
     list_entries: tuple[DetectedListEntry, ...] = (),
     blocking_popup: bool = False,
     current_castle_name: str | None = None,
-    current_castle: SelectedCastleConfig | None = None,
+    current_castle: CastleIdentity | None = None,
     current_pnc_account_id: str | None = None,
     verified_pnc_account_id: str | None = None,
     castle_roster_snapshot: PncAccountCastleRosterConfig | None = None,
@@ -122,12 +122,12 @@ def make_observation(
     )
 
 
-def _make_current_castle(current_castle_name: str | None) -> SelectedCastleConfig | None:
+def _make_current_castle(current_castle_name: str | None) -> CastleIdentity | None:
     """Builds a minimal current-castle identity for legacy test fixtures that only provide the name."""
 
     if current_castle_name is None:
         return None
-    return SelectedCastleConfig(kingdom="", castle_name=current_castle_name)
+    return CastleIdentity(kingdom="", castle_name=current_castle_name)
 
 
 @dataclass

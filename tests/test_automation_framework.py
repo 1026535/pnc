@@ -14,7 +14,7 @@ from pnc_automation.automation.scripts.registry import TaskRegistry, build_defau
 from pnc_automation.automation.task import BaseAutomationTask, TaskId, TaskResult
 from pnc_automation.automation.task_context import TaskContext
 from pnc_automation.automation.tasks.ensure_game_running_task import EnsureGameRunningTask
-from pnc_automation.config.models import AccountConfig, CredentialSource, DefaultsConfig, ResolvedCredentials, SelectedCastleConfig
+from pnc_automation.config.models import AccountConfig, CastleIdentity, CredentialSource, DefaultsConfig, ResolvedCredentials
 from pnc_automation.errors import ScriptValidationError, SelectorResolutionError
 from pnc_automation.pnc.action_requests import ActionRequest, InputTextAction, SelectChatChannelAction, TapAction
 from pnc_automation.pnc.chat import ChatChannel
@@ -46,13 +46,13 @@ class AutomationFrameworkTests(unittest.TestCase):
             id="account_a",
             instance_id="bs-main",
             pnc_account_id="user@example.com",
-            selected_castle=SelectedCastleConfig(kingdom="K230", castle_name="Main", castle_level=8),
             credentials=ResolvedCredentials(
                 username="user@example.com",
                 password="secret",
                 source=CredentialSource.INLINE,
             ),
         )
+        self.target_castle = CastleIdentity(kingdom="K230", castle_name="Main", castle_level=8)
         self.defaults = DefaultsConfig(stable_click_delay_ms=0, post_action_observe_delay_ms=0)
 
     def _make_selector_registry(

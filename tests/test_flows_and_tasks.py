@@ -2,28 +2,35 @@
 
 from __future__ import annotations
 
+import tempfile
 import unittest
+from collections.abc import Callable
+from pathlib import Path
 
+from pnc_automation.automation.scripts.models import ScriptStep
+from pnc_automation.automation.task import TaskId
 from pnc_automation.automation.task_context import TaskContext
 from pnc_automation.automation.tasks.building_upgrade_task import BuildingUpgradeTask
 from pnc_automation.automation.tasks.gathering_task import GatheringTask
 from pnc_automation.automation.tasks.login_task import LoginTask
+from pnc_automation.automation.tasks.refresh_castle_roster_task import RefreshCastleRosterTask
 from pnc_automation.automation.tasks.select_castle_task import SelectCastleTask
 from pnc_automation.automation.tasks.send_chat_message_task import (
     ChatMessageTaskParams,
     SendAllianceChatMessageTask,
     SendWorldChatMessageTask,
 )
+from pnc_automation.config.castle_roster_store import CastleRosterStore
 from pnc_automation.config.models import (
     AccountConfig,
+    CastleIdentity,
     CastleRosterOrdering,
     CredentialSource,
     DefaultsConfig,
     PncAccountCastleRosterConfig,
     ResolvedCredentials,
-    SelectedCastleConfig,
 )
-from pnc_automation.errors import ScriptValidationError, SelectorResolutionError
+from pnc_automation.errors import ScriptValidationError, SelectorResolutionError, TaskVerificationError
 from pnc_automation.pnc.action_requests import (
     ActionTimingProfile,
     InputTextAction,
@@ -53,28 +60,38 @@ class FlowAndTaskTests(unittest.TestCase):
             id="account_a",
             instance_id="bs-main",
             pnc_account_id="user@example.com",
-            selected_castle=SelectedCastleConfig(kingdom="K230", castle_name="Main", castle_level=8),
             credentials=ResolvedCredentials(
                 username="user@example.com",
                 password="secret",
                 source=CredentialSource.INLINE,
             ),
         )
+        self.target_castle = CastleIdentity(kingdom="K230", castle_name="Main", castle_level=8)
         self.defaults = DefaultsConfig(stable_click_delay_ms=0, post_action_observe_delay_ms=0)
         self.flows = ScreenFlowPlanner()
         self.logger = build_logger()
 
-    def _make_context(self, *, params: object) -> TaskContext:
+    def _make_context(
+        self,
+        *,
+        params: object,
+        task_id: TaskId = TaskId.ENSURE_GAME_RUNNING,
+        target_castle: CastleIdentity | None = None,
+        castle_roster_provider: Callable[[], PncAccountCastleRosterConfig | None] | None = None,
+        castle_roster_store: CastleRosterStore | None = None,
+    ) -> TaskContext:
         """Builds one task context with the shared test account and flow planner."""
 
         return TaskContext(
             account=self.account,
-            castle_roster_provider=lambda: None,
+            castle_roster_provider=(lambda: None) if castle_roster_provider is None else castle_roster_provider,
             defaults=self.defaults,
-            step=type("Step", (), {"task": None, "params": {}})(),
+            step=ScriptStep(task=task_id),
             params=params,
             flows=self.flows,
             logger=self.logger,
+            target_castle=target_castle,
+            castle_roster_store=castle_roster_store,
         )
 
     def test_ensure_home_city_from_world_map_uses_world_home_nav(self) -> None:
@@ -355,15 +372,7 @@ class FlowAndTaskTests(unittest.TestCase):
         """Builds the expected credential-entry actions on the login screen."""
 
         task = LoginTask()
-        context = TaskContext(
-            account=self.account,
-            castle_roster_provider=lambda: None,
-            defaults=self.defaults,
-            step=type("Step", (), {"task": None, "params": {}})(),
-            params=None,
-            flows=self.flows,
-            logger=self.logger,
-        )
+        context = self._make_context(params=None, task_id=TaskId.LOGIN)
         observation = make_observation(
             ScreenType.PNC_LOGIN,
             visible_ids=(
@@ -384,15 +393,7 @@ class FlowAndTaskTests(unittest.TestCase):
         """Forces a clean relogin when account-switch OCR exposes a different remembered account."""
 
         task = LoginTask()
-        context = TaskContext(
-            account=self.account,
-            castle_roster_provider=lambda: None,
-            defaults=self.defaults,
-            step=type("Step", (), {"task": None, "params": {}})(),
-            params=None,
-            flows=self.flows,
-            logger=self.logger,
-        )
+        context = self._make_context(params=None, task_id=TaskId.LOGIN)
         observation = make_observation(
             ScreenType.PNC_ACCOUNT_SWITCH,
             visible_ids=(UiElementId.PNC_ACCOUNT_SWITCH_CHANGE_ACCOUNT_BUTTON,),
@@ -409,15 +410,7 @@ class FlowAndTaskTests(unittest.TestCase):
         """Uses one canonical observed wait when bootstrap is still loading."""
 
         task = LoginTask()
-        context = TaskContext(
-            account=self.account,
-            castle_roster_provider=lambda: None,
-            defaults=self.defaults,
-            step=type("Step", (), {"task": None, "params": {}})(),
-            params=None,
-            flows=self.flows,
-            logger=self.logger,
-        )
+        context = self._make_context(params=None, task_id=TaskId.LOGIN)
 
         actions = task.plan(context, make_observation(ScreenType.PNC_LOADING))
 
@@ -431,16 +424,12 @@ class FlowAndTaskTests(unittest.TestCase):
         task = LoginTask()
         roster = PncAccountCastleRosterConfig(
             pnc_account_id=self.account.pnc_account_id,
-            castles=(self.account.selected_castle,),
+            castles=(self.target_castle,),
         )
-        context = TaskContext(
-            account=self.account,
-            castle_roster_provider=lambda: roster,
-            defaults=self.defaults,
-            step=type("Step", (), {"task": None, "params": {}})(),
+        context = self._make_context(
             params=None,
-            flows=self.flows,
-            logger=self.logger,
+            task_id=TaskId.LOGIN,
+            castle_roster_provider=lambda: roster,
         )
         observation = make_observation(
             ScreenType.PNC_HOME_CITY,
@@ -463,16 +452,12 @@ class FlowAndTaskTests(unittest.TestCase):
         task = LoginTask()
         roster = PncAccountCastleRosterConfig(
             pnc_account_id=self.account.pnc_account_id,
-            castles=(self.account.selected_castle,),
+            castles=(self.target_castle,),
         )
-        context = TaskContext(
-            account=self.account,
-            castle_roster_provider=lambda: roster,
-            defaults=self.defaults,
-            step=type("Step", (), {"task": None, "params": {}})(),
+        context = self._make_context(
             params=None,
-            flows=self.flows,
-            logger=self.logger,
+            task_id=TaskId.LOGIN,
+            castle_roster_provider=lambda: roster,
         )
         observation = make_observation(
             ScreenType.PNC_MORE_MENU,
@@ -494,19 +479,11 @@ class FlowAndTaskTests(unittest.TestCase):
         roster = PncAccountCastleRosterConfig(
             pnc_account_id=self.account.pnc_account_id,
             castles=(
-                self.account.selected_castle,
-                SelectedCastleConfig(kingdom="K229", castle_name="Farm", castle_level=4),
+                self.target_castle,
+                CastleIdentity(kingdom="K229", castle_name="Farm", castle_level=4),
             ),
         )
-        context = TaskContext(
-            account=self.account,
-            castle_roster_provider=lambda: None,
-            defaults=self.defaults,
-            step=type("Step", (), {"task": None, "params": {}})(),
-            params=None,
-            flows=self.flows,
-            logger=self.logger,
-        )
+        context = self._make_context(params=None, task_id=TaskId.LOGIN)
         before = make_observation(ScreenType.PNC_HOME_CITY)
         after = make_observation(
             ScreenType.PNC_CASTLE_SELECTION,
@@ -526,15 +503,7 @@ class FlowAndTaskTests(unittest.TestCase):
         """Keeps wrong-account login and account-switch states on the task's replan path."""
 
         task = LoginTask()
-        context = TaskContext(
-            account=self.account,
-            castle_roster_provider=lambda: None,
-            defaults=self.defaults,
-            step=type("Step", (), {"task": None, "params": {}})(),
-            params=None,
-            flows=self.flows,
-            logger=self.logger,
-        )
+        context = self._make_context(params=None, task_id=TaskId.LOGIN)
 
         for screen_type in (ScreenType.PNC_LOGIN, ScreenType.PNC_ACCOUNT_SWITCH):
             with self.subTest(screen_type=screen_type):
@@ -621,14 +590,10 @@ class FlowAndTaskTests(unittest.TestCase):
         """Validates the origin castle from Lord Info before entering Manage Char."""
 
         task = SelectCastleTask()
-        context = TaskContext(
-            account=self.account,
-            castle_roster_provider=lambda: None,
-            defaults=self.defaults,
-            step=type("Step", (), {"task": None, "params": {}})(),
+        context = self._make_context(
             params=None,
-            flows=self.flows,
-            logger=self.logger,
+            task_id=TaskId.SELECT_CASTLE,
+            target_castle=self.target_castle,
         )
         observation = make_observation(
             ScreenType.PNC_HOME_CITY,
@@ -645,14 +610,10 @@ class FlowAndTaskTests(unittest.TestCase):
         """Leaves Lord Info and continues straight into Manage Char when the origin castle is not the target."""
 
         task = SelectCastleTask()
-        context = TaskContext(
-            account=self.account,
-            castle_roster_provider=lambda: None,
-            defaults=self.defaults,
-            step=type("Step", (), {"task": None, "params": {}})(),
+        context = self._make_context(
             params=None,
-            flows=self.flows,
-            logger=self.logger,
+            task_id=TaskId.SELECT_CASTLE,
+            target_castle=self.target_castle,
         )
         observation = make_observation(
             ScreenType.PNC_LORD_INFO,
@@ -669,6 +630,17 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertEqual(actions[2].selector_id, UiElementId.PNC_MORE_SETTINGS)
         self.assertIsInstance(actions[3], TapAction)
         self.assertEqual(actions[3].selector_id, UiElementId.PNC_MORE_MANAGE_CHAR)
+
+    def test_select_castle_fails_fast_without_an_explicit_target(self) -> None:
+        """Rejects direct select-castle execution when the step omitted its runtime castle target."""
+
+        task = SelectCastleTask()
+
+        with self.assertRaises(TaskVerificationError):
+            task.plan(
+                self._make_context(params=None, task_id=TaskId.SELECT_CASTLE),
+                make_observation(ScreenType.PNC_HOME_CITY),
+            )
 
     def test_return_to_safe_root_screen_closes_more_overlay_without_triggering_exit_popup(self) -> None:
         """Closes the live More overlay with its own toggle instead of using Android back."""
@@ -716,14 +688,10 @@ class FlowAndTaskTests(unittest.TestCase):
         """Treats the post-switch Lord Info confirmation as a terminal success condition."""
 
         task = SelectCastleTask()
-        context = TaskContext(
-            account=self.account,
-            castle_roster_provider=lambda: None,
-            defaults=self.defaults,
-            step=type("Step", (), {"task": None, "params": {}})(),
+        context = self._make_context(
             params=None,
-            flows=self.flows,
-            logger=self.logger,
+            task_id=TaskId.SELECT_CASTLE,
+            target_castle=self.target_castle,
         )
         matching_lord_info = make_observation(
             ScreenType.PNC_LORD_INFO,
@@ -740,14 +708,10 @@ class FlowAndTaskTests(unittest.TestCase):
         """Keeps unknown splash frames on the recoverable settle path after a castle switch."""
 
         task = SelectCastleTask()
-        context = TaskContext(
-            account=self.account,
-            castle_roster_provider=lambda: None,
-            defaults=self.defaults,
-            step=type("Step", (), {"task": None, "params": {}})(),
+        context = self._make_context(
             params=None,
-            flows=self.flows,
-            logger=self.logger,
+            task_id=TaskId.SELECT_CASTLE,
+            target_castle=self.target_castle,
         )
 
         actions = task.plan(context, make_observation(ScreenType.UNKNOWN))
@@ -761,14 +725,10 @@ class FlowAndTaskTests(unittest.TestCase):
         """Hands post-switch popups back to the runner instead of failing the step outright."""
 
         task = SelectCastleTask()
-        context = TaskContext(
-            account=self.account,
-            castle_roster_provider=lambda: None,
-            defaults=self.defaults,
-            step=type("Step", (), {"task": None, "params": {}})(),
+        context = self._make_context(
             params=None,
-            flows=self.flows,
-            logger=self.logger,
+            task_id=TaskId.SELECT_CASTLE,
+            target_castle=self.target_castle,
         )
 
         result = task.verify(
@@ -779,15 +739,81 @@ class FlowAndTaskTests(unittest.TestCase):
 
         self.assertEqual(result.status.value, "replan")
 
+    def test_refresh_castle_roster_finalizes_full_scan_ordering(self) -> None:
+        """Marks the roster cache as `full_scan` when the final scan window stops progressing."""
+
+        task = RefreshCastleRosterTask()
+        with tempfile.TemporaryDirectory() as temp_directory:
+            store = CastleRosterStore(path=Path(temp_directory) / "castles.yaml")
+            store.sync(
+                self.account.pnc_account_id,
+                (
+                    CastleIdentity(kingdom="K226", castle_name="Alpha", castle_level=3),
+                    CastleIdentity(kingdom="K227", castle_name="Bravo", castle_level=4),
+                    self.target_castle,
+                ),
+                ordering=CastleRosterOrdering.UNKNOWN,
+            )
+            context = self._make_context(
+                params=None,
+                task_id=TaskId.REFRESH_CASTLE_ROSTER,
+                castle_roster_provider=lambda: store.get(self.account.pnc_account_id),
+                castle_roster_store=store,
+            )
+            context.runtime_state["refresh_phase"] = "scan_forward"
+            context.runtime_state["seen_windows"] = {
+                (("K226", "Alpha"), ("K227", "Bravo")),
+                (("K227", "Bravo"), ("K230", "Main")),
+            }
+            before = make_observation(
+                ScreenType.PNC_CASTLE_SELECTION,
+                list_entries=(make_entry(ListEntryKind.CASTLE, title="Main", metadata={"kingdom": "K230"}),),
+            )
+            after = before
+
+            result = task.verify(context, before, after)
+
+            roster = store.get(self.account.pnc_account_id)
+            self.assertEqual(result.status.value, "replan")
+            self.assertEqual(context.runtime_state["refresh_phase"], "return_home")
+            self.assertIsNotNone(roster)
+            self.assertEqual(roster.ordering, CastleRosterOrdering.FULL_SCAN)
+
+    def test_refresh_castle_roster_fails_when_scan_repeats_a_previous_window(self) -> None:
+        """Fails fast instead of silently looping when full-scan page progression becomes inconsistent."""
+
+        task = RefreshCastleRosterTask()
+        context = self._make_context(params=None, task_id=TaskId.REFRESH_CASTLE_ROSTER)
+        context.runtime_state["refresh_phase"] = "scan_forward"
+        context.runtime_state["seen_windows"] = {
+            (("K226", "Alpha"), ("K227", "Bravo")),
+        }
+        before = make_observation(
+            ScreenType.PNC_CASTLE_SELECTION,
+            list_entries=(make_entry(ListEntryKind.CASTLE, title="Main", metadata={"kingdom": "K230"}),),
+        )
+        after = make_observation(
+            ScreenType.PNC_CASTLE_SELECTION,
+            list_entries=(
+                make_entry(ListEntryKind.CASTLE, title="Alpha", metadata={"kingdom": "K226"}),
+                make_entry(ListEntryKind.CASTLE, title="Bravo", metadata={"kingdom": "K227"}),
+            ),
+        )
+
+        result = task.verify(context, before, after)
+
+        self.assertEqual(result.status.value, "failed")
+        self.assertIn("repeated", result.message)
+
     def test_ensure_correct_castle_selected_scrolls_toward_target_using_cached_roster_order(self) -> None:
         """Plans a deterministic swipe when the target castle is outside the visible roster window."""
 
         roster = PncAccountCastleRosterConfig(
             pnc_account_id=self.account.pnc_account_id,
             castles=(
-                SelectedCastleConfig(kingdom="K226", castle_name="Alpha", castle_level=3),
-                SelectedCastleConfig(kingdom="K227", castle_name="Bravo", castle_level=4),
-                self.account.selected_castle,
+                CastleIdentity(kingdom="K226", castle_name="Alpha", castle_level=3),
+                CastleIdentity(kingdom="K227", castle_name="Bravo", castle_level=4),
+                self.target_castle,
             ),
             ordering=CastleRosterOrdering.FULL_SCAN,
         )
@@ -799,7 +825,7 @@ class FlowAndTaskTests(unittest.TestCase):
             ),
         )
 
-        actions = self.flows.ensure_correct_castle_selected(observation, self.account.selected_castle, roster)
+        actions = self.flows.ensure_correct_castle_selected(observation, self.target_castle, roster)
 
         self.assertEqual(len(actions), 1)
         self.assertIsInstance(actions[0], SwipeAction)
@@ -811,8 +837,8 @@ class FlowAndTaskTests(unittest.TestCase):
         roster = PncAccountCastleRosterConfig(
             pnc_account_id=self.account.pnc_account_id,
             castles=(
-                SelectedCastleConfig(kingdom="K226", castle_name="Alpha", castle_level=3),
-                self.account.selected_castle,
+                CastleIdentity(kingdom="K226", castle_name="Alpha", castle_level=3),
+                self.target_castle,
             ),
             ordering=CastleRosterOrdering.UNKNOWN,
         )
@@ -822,7 +848,7 @@ class FlowAndTaskTests(unittest.TestCase):
         )
 
         with self.assertRaises(SelectorResolutionError):
-            self.flows.ensure_correct_castle_selected(observation, self.account.selected_castle, roster)
+            self.flows.ensure_correct_castle_selected(observation, self.target_castle, roster)
 
     def test_ensure_correct_castle_selected_waits_after_tapping_visible_target(self) -> None:
         """Plans a post-tap stabilization wait so live castle switching can pass through loading safely."""
@@ -838,7 +864,7 @@ class FlowAndTaskTests(unittest.TestCase):
             ),
         )
 
-        actions = self.flows.ensure_correct_castle_selected(observation, self.account.selected_castle, None)
+        actions = self.flows.ensure_correct_castle_selected(observation, self.target_castle, None)
 
         self.assertEqual(len(actions), 2)
         self.assertIsInstance(actions[0], TapListEntryAction)
@@ -849,14 +875,9 @@ class FlowAndTaskTests(unittest.TestCase):
         """Selects the configured highest-priority building candidate from visible entries."""
 
         task = BuildingUpgradeTask()
-        context = TaskContext(
-            account=self.account,
-            castle_roster_provider=lambda: None,
-            defaults=self.defaults,
-            step=type("Step", (), {"task": None, "params": {}})(),
+        context = self._make_context(
             params=BuildingUpgradePolicy(),
-            flows=self.flows,
-            logger=self.logger,
+            task_id=TaskId.BUILDING_UPGRADE,
         )
         observation = make_observation(
             ScreenType.PNC_HOME_CITY,
@@ -881,15 +902,7 @@ class FlowAndTaskTests(unittest.TestCase):
         """Treats zero available march slots as a safe no-op."""
 
         task = GatheringTask()
-        context = TaskContext(
-            account=self.account,
-            castle_roster_provider=lambda: None,
-            defaults=self.defaults,
-            step=type("Step", (), {"task": None, "params": {}})(),
-            params=GatheringPolicy(),
-            flows=self.flows,
-            logger=self.logger,
-        )
+        context = self._make_context(params=GatheringPolicy(), task_id=TaskId.GATHERING)
         before = make_observation(ScreenType.PNC_WORLD_MAP, available_march_slots=0)
         after = before
 

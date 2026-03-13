@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from pnc_automation.config.models import PncAccountCastleRosterConfig, SelectedCastleConfig
+from pnc_automation.config.models import CastleIdentity, PncAccountCastleRosterConfig
 from pnc_automation.errors import SelectorResolutionError
 from pnc_automation.pnc.action_requests import (
     ActionRequest,
@@ -364,14 +364,14 @@ class ScreenFlowPlanner:
     def ensure_correct_castle_selected(
         self,
         observation: Observation,
-        selected_castle: SelectedCastleConfig,
+        target_castle: CastleIdentity,
         castle_roster: PncAccountCastleRosterConfig | None = None,
     ) -> list[ActionRequest]:
-        """Plans selection of the configured castle when it is not already active."""
+        """Plans selection of the requested castle when it is not already active."""
 
-        if observation.matches_current_castle(selected_castle):
+        if observation.matches_current_castle(target_castle):
             return []
-        selected_entry = observation.find_castle_entry(selected_castle)
+        selected_entry = observation.find_castle_entry(target_castle)
         if selected_entry is not None and selected_entry.selected:
             return []
         actions: list[ActionRequest] = []
@@ -387,11 +387,11 @@ class ScreenFlowPlanner:
                 (
                     TapListEntryAction(
                         entry_kind=ListEntryKind.CASTLE,
-                        title_text=selected_castle.castle_name,
+                        title_text=target_castle.castle_name,
                         metadata_key="kingdom",
-                        metadata_value=selected_castle.kingdom,
+                        metadata_value=target_castle.kingdom,
                         use_action_point=True,
-                        reason="select_configured_castle",
+                        reason="select_target_castle",
                     ),
                     WaitAction(
                         milliseconds=1800,
@@ -404,7 +404,7 @@ class ScreenFlowPlanner:
         actions.append(
             _plan_castle_roster_scroll(
                 observation=observation,
-                selected_castle=selected_castle,
+                target_castle=target_castle,
                 castle_roster=castle_roster,
             )
         )
@@ -414,10 +414,10 @@ class ScreenFlowPlanner:
 def _plan_castle_roster_scroll(
     *,
     observation: Observation,
-    selected_castle: SelectedCastleConfig,
+    target_castle: CastleIdentity,
     castle_roster: PncAccountCastleRosterConfig | None,
 ) -> ActionRequest:
-    """Plans one roster scroll toward the configured castle when it is currently off-screen."""
+    """Plans one roster scroll toward the requested castle when it is currently off-screen."""
 
     visible_entries = observation.entries(ListEntryKind.CASTLE)
     if not visible_entries:
@@ -428,22 +428,22 @@ def _plan_castle_roster_scroll(
     if castle_roster is None:
         raise SelectorResolutionError(
             "Castle-selection scrolling requires a cached roster ordering for off-screen targets.",
-            castle_name=selected_castle.castle_name,
-            kingdom=selected_castle.kingdom,
+            castle_name=target_castle.castle_name,
+            kingdom=target_castle.kingdom,
         )
     if not castle_roster.has_trusted_ordering:
         raise SelectorResolutionError(
-            "Castle-selection scrolling requires a full-scan roster ordering for off-screen targets.",
-            castle_name=selected_castle.castle_name,
-            kingdom=selected_castle.kingdom,
+            "Castle-selection scrolling requires a full-scan roster ordering for off-screen targets; run refresh_castle_roster first.",
+            castle_name=target_castle.castle_name,
+            kingdom=target_castle.kingdom,
         )
 
-    target_index = _find_castle_index(castle_roster.castles, selected_castle)
+    target_index = _find_castle_index(castle_roster.castles, target_castle)
     if target_index is None:
         raise SelectorResolutionError(
-            "Configured castle is missing from the cached roster ordering.",
-            castle_name=selected_castle.castle_name,
-            kingdom=selected_castle.kingdom,
+            "Target castle is missing from the cached roster ordering.",
+            castle_name=target_castle.castle_name,
+            kingdom=target_castle.kingdom,
         )
 
     visible_indexes = [
@@ -454,8 +454,8 @@ def _plan_castle_roster_scroll(
     if not visible_indexes:
         raise SelectorResolutionError(
             "Visible castle rows do not match the cached roster ordering.",
-            castle_name=selected_castle.castle_name,
-            kingdom=selected_castle.kingdom,
+            castle_name=target_castle.castle_name,
+            kingdom=target_castle.kingdom,
         )
     if target_index < min(visible_indexes):
         return SwipeAction(
@@ -474,15 +474,15 @@ def _plan_castle_roster_scroll(
             observe_after=True,
         )
     raise SelectorResolutionError(
-        "Configured castle should be visible but could not be resolved in the current roster view.",
-        castle_name=selected_castle.castle_name,
-        kingdom=selected_castle.kingdom,
+        "Target castle should be visible but could not be resolved in the current roster view.",
+        castle_name=target_castle.castle_name,
+        kingdom=target_castle.kingdom,
     )
 
 
 def _find_castle_index(
-    castles: tuple[SelectedCastleConfig, ...],
-    target: SelectedCastleConfig,
+    castles: tuple[CastleIdentity, ...],
+    target: CastleIdentity,
 ) -> int | None:
     """Returns the index of one castle identity inside the cached roster ordering."""
 

@@ -27,6 +27,9 @@ class ScriptLoaderTests(unittest.TestCase):
                     steps:
                       - task: login
                       - task: building_upgrade
+                        castle:
+                          kingdom: K230
+                          castle_name: Main
                         params:
                           priority: [castle, wall]
                           allow_speedups: false
@@ -46,6 +49,8 @@ class ScriptLoaderTests(unittest.TestCase):
 
             self.assertEqual(script.name, "daily_castle_maintenance")
             self.assertEqual(script.steps[0].task, TaskId.LOGIN)
+            self.assertEqual(script.steps[1].castle.kingdom, "K230")
+            self.assertEqual(script.steps[1].castle.castle_name, "Main")
             self.assertEqual(script.steps[1].params["priority"], ["castle", "wall"])
             self.assertEqual(script.steps[3].task, TaskId.SEND_ALLIANCE_CHAT_MESSAGE)
             self.assertEqual(script.steps[3].params["message"], "bot shall invade")
@@ -61,6 +66,30 @@ class ScriptLoaderTests(unittest.TestCase):
                     name: invalid
                     steps:
                       - task: unknown_task
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(ScriptValidationError):
+                load_run_script(script_path)
+
+    def test_load_run_script_rejects_non_canonical_castle_identifier(self) -> None:
+        """Fails fast when a step-level castle target is authored with an invalid kingdom id."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            script_path = Path(temp_directory) / "invalid.yaml"
+            script_path.write_text(
+                textwrap.dedent(
+                    """
+                    name: invalid
+                    steps:
+                      - task: building_upgrade
+                        castle:
+                          kingdom: k230
+                          castle_name: Main
+                        params:
+                          priority: [castle]
                     """
                 ).strip(),
                 encoding="utf-8",

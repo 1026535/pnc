@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import re
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -19,9 +18,15 @@ from pnc_automation.config.models import (
     DefaultsConfig,
     PncAccountCastleRosterConfig,
     ResolvedCredentials,
-    SelectedCastleConfig,
 )
 from pnc_automation.config.validation import validate_app_config
+from pnc_automation.config.yaml_helpers import (
+    load_castle_identity,
+    require_int,
+    require_list,
+    require_mapping,
+    require_string,
+)
 from pnc_automation.errors import ConfigurationError
 
 
@@ -39,7 +44,7 @@ def load_app_config(
     with config_path.open("r", encoding="utf-8") as handle:
         raw_data = yaml.safe_load(handle) or {}
 
-    raw = _require_mapping(raw_data, context="config root")
+    raw = require_mapping(raw_data, context="config root")
     environment = env if env is not None else os.environ
     workspace_root = _resolve_workspace_root(config_path)
 
@@ -66,23 +71,23 @@ def load_app_config(
 def _load_defaults(raw_defaults: Any) -> DefaultsConfig:
     """Loads the defaults section with sensible v1 fallbacks."""
 
-    raw = _require_mapping(raw_defaults or {}, context="defaults")
+    raw = require_mapping(raw_defaults or {}, context="defaults")
     return DefaultsConfig(
-        adb_path=_require_string(raw.get("adb_path", "adb"), context="defaults.adb_path"),
-        screenshot_format=_require_string(raw.get("screenshot_format", "png"), context="defaults.screenshot_format"),
-        stable_click_delay_ms=_require_int(
+        adb_path=require_string(raw.get("adb_path", "adb"), context="defaults.adb_path"),
+        screenshot_format=require_string(raw.get("screenshot_format", "png"), context="defaults.screenshot_format"),
+        stable_click_delay_ms=require_int(
             raw.get("stable_click_delay_ms", 300),
             context="defaults.stable_click_delay_ms",
         ),
-        post_action_observe_delay_ms=_require_int(
+        post_action_observe_delay_ms=require_int(
             raw.get("post_action_observe_delay_ms", 800),
             context="defaults.post_action_observe_delay_ms",
         ),
-        chat_stable_click_delay_ms=_require_int(
+        chat_stable_click_delay_ms=require_int(
             raw.get("chat_stable_click_delay_ms", 120),
             context="defaults.chat_stable_click_delay_ms",
         ),
-        chat_post_action_observe_delay_ms=_require_int(
+        chat_post_action_observe_delay_ms=require_int(
             raw.get("chat_post_action_observe_delay_ms", 250),
             context="defaults.chat_post_action_observe_delay_ms",
         ),
@@ -107,23 +112,23 @@ def _resolve_workspace_root(config_path: Path) -> Path:
 def _load_artifact_root(raw_artifacts: Any, workspace_root: Path) -> Path:
     """Loads and resolves the artifact root relative to the workspace root."""
 
-    raw = _require_mapping(raw_artifacts or {}, context="artifacts")
-    artifact_root = _require_string(raw.get("root", "artifacts"), context="artifacts.root")
+    raw = require_mapping(raw_artifacts or {}, context="artifacts")
+    artifact_root = require_string(raw.get("root", "artifacts"), context="artifacts.root")
     return (workspace_root / artifact_root).resolve()
 
 
 def _load_instances(raw_instances: Any) -> tuple[BlueStacksInstanceConfig, ...]:
     """Loads the configured BlueStacks bindings."""
 
-    items = _require_list(raw_instances or [], context="instances")
+    items = require_list(raw_instances or [], context="instances")
     instances: list[BlueStacksInstanceConfig] = []
     for index, item in enumerate(items):
-        raw = _require_mapping(item, context=f"instances[{index}]")
+        raw = require_mapping(item, context=f"instances[{index}]")
         instances.append(
             BlueStacksInstanceConfig(
-                id=_require_string(raw.get("id"), context=f"instances[{index}].id"),
-                device_id=_require_string(raw.get("device_id"), context=f"instances[{index}].device_id"),
-                app_package=_require_string(raw.get("app_package"), context=f"instances[{index}].app_package"),
+                id=require_string(raw.get("id"), context=f"instances[{index}].id"),
+                device_id=require_string(raw.get("device_id"), context=f"instances[{index}].device_id"),
+                app_package=require_string(raw.get("app_package"), context=f"instances[{index}].app_package"),
             )
         )
     return tuple(instances)
@@ -132,22 +137,32 @@ def _load_instances(raw_instances: Any) -> tuple[BlueStacksInstanceConfig, ...]:
 def _load_accounts(raw_accounts: Any, env: Mapping[str, str]) -> tuple[AccountConfig, ...]:
     """Loads account targets and resolves their configured credentials."""
 
-    items = _require_list(raw_accounts or [], context="accounts")
+    items = require_list(raw_accounts or [], context="accounts")
     accounts: list[AccountConfig] = []
     for index, item in enumerate(items):
-        raw = _require_mapping(item, context=f"accounts[{index}]")
-        selected_castle = _load_selected_castle(raw.get("selected_castle"), index=index)
+        raw = require_mapping(item, context=f"accounts[{index}]")
+        _reject_legacy_selected_castle(raw, index=index)
         credentials = _load_credentials(raw, env, index=index)
         accounts.append(
             AccountConfig(
-                id=_require_string(raw.get("id"), context=f"accounts[{index}].id"),
-                instance_id=_require_string(raw.get("instance_id"), context=f"accounts[{index}].instance_id"),
-                pnc_account_id=_require_string(raw.get("pnc_account_id"), context=f"accounts[{index}].pnc_account_id"),
-                selected_castle=selected_castle,
+                id=require_string(raw.get("id"), context=f"accounts[{index}].id"),
+                instance_id=require_string(raw.get("instance_id"), context=f"accounts[{index}].instance_id"),
+                pnc_account_id=require_string(raw.get("pnc_account_id"), context=f"accounts[{index}].pnc_account_id"),
                 credentials=credentials,
             )
         )
     return tuple(accounts)
+
+
+def _reject_legacy_selected_castle(raw_account: Mapping[str, Any], *, index: int) -> None:
+    """Rejects the removed account-level castle field instead of silently ignoring it."""
+
+    if "selected_castle" not in raw_account:
+        return
+    raise ConfigurationError(
+        "accounts.yaml no longer supports account-level 'selected_castle'; move castle targets into script steps.",
+        context=f"accounts[{index}].selected_castle",
+    )
 
 
 def _resolve_castle_roster_path(config_path: Path, castle_roster_path: str | Path | None) -> Path:
@@ -165,17 +180,26 @@ def _load_castle_rosters(path: Path) -> tuple[PncAccountCastleRosterConfig, ...]
         return ()
     with path.open("r", encoding="utf-8") as handle:
         raw_data = yaml.safe_load(handle) or {}
-    raw = _require_mapping(raw_data, context="castle roster root")
-    items = _require_list(raw.get("pnc_accounts") or [], context="pnc_accounts")
+    raw = require_mapping(raw_data, context="castle roster root")
+    items = require_list(raw.get("pnc_accounts") or [], context="pnc_accounts")
 
     rosters: list[PncAccountCastleRosterConfig] = []
     for index, item in enumerate(items):
-        roster = _require_mapping(item, context=f"pnc_accounts[{index}]")
-        raw_castles = _require_list(roster.get("castles") or [], context=f"pnc_accounts[{index}].castles")
-        castles = tuple(_load_castle_entry(raw_castle, context=f"pnc_accounts[{index}].castles[{castle_index}]") for castle_index, raw_castle in enumerate(raw_castles))
+        roster = require_mapping(item, context=f"pnc_accounts[{index}]")
+        raw_castles = require_list(roster.get("castles") or [], context=f"pnc_accounts[{index}].castles")
+        castles = tuple(
+            load_castle_identity(
+                raw_castle,
+                context=f"pnc_accounts[{index}].castles[{castle_index}]",
+            )
+            for castle_index, raw_castle in enumerate(raw_castles)
+        )
         rosters.append(
             PncAccountCastleRosterConfig(
-                pnc_account_id=_require_string(roster.get("pnc_account_id"), context=f"pnc_accounts[{index}].pnc_account_id"),
+                pnc_account_id=require_string(
+                    roster.get("pnc_account_id"),
+                    context=f"pnc_accounts[{index}].pnc_account_id",
+                ),
                 castles=castles,
                 ordering=_load_castle_roster_ordering(
                     roster.get("ordering"),
@@ -186,30 +210,12 @@ def _load_castle_rosters(path: Path) -> tuple[PncAccountCastleRosterConfig, ...]
     return tuple(rosters)
 
 
-def _load_selected_castle(raw_castle: Any, *, index: int) -> SelectedCastleConfig:
-    """Loads the single selected castle contract for one account target."""
-
-    return _load_castle_entry(raw_castle, context=f"accounts[{index}].selected_castle")
-
-
-def _load_castle_entry(raw_castle: Any, *, context: str) -> SelectedCastleConfig:
-    """Loads one castle identity entry shared by runtime targets and account rosters."""
-
-    raw = _require_mapping(raw_castle, context=context)
-    level_value = raw.get("castle_level")
-    return SelectedCastleConfig(
-        kingdom=_require_kingdom_identifier(raw.get("kingdom"), context=f"{context}.kingdom"),
-        castle_name=_require_string(raw.get("castle_name"), context=f"{context}.castle_name"),
-        castle_level=None if level_value is None else _require_int(level_value, context=f"{context}.castle_level"),
-    )
-
-
 def _load_castle_roster_ordering(value: Any, *, context: str) -> CastleRosterOrdering:
     """Loads the explicit roster-ordering metadata used by directional castle scrolling."""
 
     if value is None:
         return CastleRosterOrdering.UNKNOWN
-    raw_value = _require_string(value, context=context)
+    raw_value = require_string(value, context=context)
     try:
         return CastleRosterOrdering(raw_value)
     except ValueError as error:
@@ -252,8 +258,8 @@ def _load_inline_credentials(username: Any, password: Any, *, index: int) -> Res
             account_index=index,
         )
     return ResolvedCredentials(
-        username=_require_string(username, context=f"accounts[{index}].username"),
-        password=_require_string(password, context=f"accounts[{index}].password"),
+        username=require_string(username, context=f"accounts[{index}].username"),
+        password=require_string(password, context=f"accounts[{index}].password"),
         source=CredentialSource.INLINE,
     )
 
@@ -273,8 +279,8 @@ def _load_environment_credentials(
             account_index=index,
         )
 
-    username_key = _require_string(username_env, context=f"accounts[{index}].username_env")
-    password_key = _require_string(password_env, context=f"accounts[{index}].password_env")
+    username_key = require_string(username_env, context=f"accounts[{index}].username_env")
+    password_key = require_string(password_env, context=f"accounts[{index}].password_env")
     if username_key not in env:
         raise ConfigurationError(
             f"Missing required environment variable '{username_key}'.",
@@ -289,57 +295,9 @@ def _load_environment_credentials(
         )
 
     return ResolvedCredentials(
-        username=_require_string(env[username_key], context=username_key),
-        password=_require_string(env[password_key], context=password_key),
+        username=require_string(env[username_key], context=username_key),
+        password=require_string(env[password_key], context=password_key),
         source=CredentialSource.ENVIRONMENT,
         username_ref=username_key,
         password_ref=password_key,
     )
-
-
-def _require_mapping(value: Any, *, context: str) -> dict[str, Any]:
-    """Ensures a YAML node is a mapping with string keys."""
-
-    if not isinstance(value, dict):
-        raise ConfigurationError(f"Expected {context} to be a mapping.", context=context)
-    invalid_keys = [key for key in value if not isinstance(key, str)]
-    if invalid_keys:
-        raise ConfigurationError(f"Expected {context} keys to be strings.", context=context)
-    return dict(value)
-
-
-def _require_list(value: Any, *, context: str) -> list[Any]:
-    """Ensures a YAML node is a list."""
-
-    if not isinstance(value, list):
-        raise ConfigurationError(f"Expected {context} to be a list.", context=context)
-    return list(value)
-
-
-def _require_string(value: Any, *, context: str) -> str:
-    """Ensures a YAML scalar is a non-empty string."""
-
-    if not isinstance(value, str) or value.strip() == "":
-        raise ConfigurationError(f"Expected {context} to be a non-empty string.", context=context)
-    return value
-
-
-def _require_kingdom_identifier(value: Any, *, context: str) -> str:
-    """Ensures one kingdom identifier uses the canonical ``K###``-style format."""
-
-    kingdom = _require_string(value, context=context)
-    if re.fullmatch(r"K\d{2,4}", kingdom) is None:
-        raise ConfigurationError(
-            f"Expected {context} to use canonical kingdom format 'K###'.",
-            context=context,
-            kingdom=kingdom,
-        )
-    return kingdom
-
-
-def _require_int(value: Any, *, context: str) -> int:
-    """Ensures a YAML scalar is an integer."""
-
-    if not isinstance(value, int) or isinstance(value, bool):
-        raise ConfigurationError(f"Expected {context} to be an integer.", context=context)
-    return value
