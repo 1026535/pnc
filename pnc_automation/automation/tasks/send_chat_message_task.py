@@ -85,10 +85,10 @@ class _BaseSendChatMessageTask(BaseAutomationTask):
         """Verifies either recovery toward a chat-ready screen or one successful fixed-channel send."""
 
         del context
-        if self._send_succeeded(after):
-            return TaskResult.success(f"Sent the requested message to {self.channel.value} chat.")
         if before.screen_type not in _CHAT_SEND_READY_SCREENS:
             return self._verify_recovery_increment(after)
+        if self._send_succeeded(after):
+            return TaskResult.success(f"Sent the requested message to {self.channel.value} chat.")
         if after.blocking_popup or after.screen_type == ScreenType.PNC_POPUP:
             return TaskResult.replan("Chat send reached a blocking popup and needs centralized recovery.")
         if after.screen_type in {ScreenType.PNC_LOADING, ScreenType.UNKNOWN}:

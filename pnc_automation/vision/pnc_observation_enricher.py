@@ -191,6 +191,8 @@ _CHAT_HEADER_TEXT = "CHAT"
 _CHAT_KINGDOM_TEXT = "KINGDOM"
 _CHAT_ALLIANCE_TEXT = "ALLIANCE"
 _CHAT_EMPTY_INPUT_PLACEHOLDER_TEXT = "PLEASEENTERCONTENT"
+_CHAT_ACTIVE_TAB_MIN_WARMTH = 120
+_CHAT_ACTIVE_TAB_MIN_DELTA = 80
 _RESEARCH_TREE_SUPPORT_TOKENS = frozenset(
     {
         "ATK",
@@ -437,11 +439,18 @@ class PncObservationEnricher:
             return None
         kingdom_region = self._require_chat_region(UiElementId.PNC_CHAT_TAB_KINGDOM, image=image)
         alliance_region = self._require_chat_region(UiElementId.PNC_CHAT_TAB_ALLIANCE, image=image)
-        kingdom_warmth = _region_warmth(image, kingdom_region)
-        alliance_warmth = _region_warmth(image, alliance_region)
-        if max(kingdom_warmth, alliance_warmth) < 120 or abs(kingdom_warmth - alliance_warmth) < 80:
+        active_chat_channel = _resolve_active_chat_channel(
+            image=image,
+            kingdom_region=kingdom_region,
+            alliance_region=alliance_region,
+        )
+        if active_chat_channel is None:
             return None
-        chat_state = self._build_proven_chat_state_additions(image=image, request=request)
+        chat_state = self._build_proven_chat_state_additions(
+            image=image,
+            request=request,
+            active_chat_channel=active_chat_channel,
+        )
         return ObservationAdditions(
             screen_evidence=(ScreenEvidence(ScreenType.PNC_CHAT, "geometry_chat_overlay"),),
             active_chat_channel=chat_state.active_chat_channel,
@@ -475,24 +484,27 @@ class PncObservationEnricher:
         *,
         image: Image.Image,
         request: ObservationRequest,
+        active_chat_channel: ChatChannel | None = None,
     ) -> ObservationAdditions:
         """Returns active-channel and draft facts for one observation that has already proven chat."""
 
         if not request.include_chat_state:
             return ObservationAdditions()
         input_region = self._require_chat_region(UiElementId.PNC_CHAT_INPUT_FIELD, image=image)
-        kingdom_region = self._require_chat_region(UiElementId.PNC_CHAT_TAB_KINGDOM, image=image)
-        alliance_region = self._require_chat_region(UiElementId.PNC_CHAT_TAB_ALLIANCE, image=image)
+        if active_chat_channel is None:
+            kingdom_region = self._require_chat_region(UiElementId.PNC_CHAT_TAB_KINGDOM, image=image)
+            alliance_region = self._require_chat_region(UiElementId.PNC_CHAT_TAB_ALLIANCE, image=image)
+            active_chat_channel = _resolve_active_chat_channel(
+                image=image,
+                kingdom_region=kingdom_region,
+                alliance_region=alliance_region,
+            )
         chat_draft_state = self._read_chat_draft_state(
             image=image,
             input_region=input_region,
         )
         return ObservationAdditions(
-            active_chat_channel=(
-                ChatChannel.WORLD
-                if _region_warmth(image, kingdom_region) > _region_warmth(image, alliance_region)
-                else ChatChannel.ALLIANCE
-            ),
+            active_chat_channel=active_chat_channel,
             chat_draft_empty=chat_draft_state[0],
             chat_draft_text=chat_draft_state[1],
         )
@@ -1273,6 +1285,23 @@ def _build_chat_overlay_additions(
         },
         screen_evidence=(ScreenEvidence(ScreenType.PNC_CHAT, "ocr_chat_overlay"),),
     )
+
+
+def _resolve_active_chat_channel(
+    *,
+    image: Image.Image,
+    kingdom_region: object,
+    alliance_region: object,
+) -> ChatChannel | None:
+    """Returns the highlighted chat tab when the shared color signal is strong enough to trust."""
+
+    kingdom_warmth = _region_warmth(image, kingdom_region)
+    alliance_warmth = _region_warmth(image, alliance_region)
+    if max(kingdom_warmth, alliance_warmth) < _CHAT_ACTIVE_TAB_MIN_WARMTH:
+        return None
+    if abs(kingdom_warmth - alliance_warmth) < _CHAT_ACTIVE_TAB_MIN_DELTA:
+        return None
+    return ChatChannel.WORLD if kingdom_warmth > alliance_warmth else ChatChannel.ALLIANCE
 
 
 def _is_empty_chat_draft_text(normalized_text: str) -> bool:

@@ -136,7 +136,7 @@ def _materialize_chat_region(
 
 def _make_chat_ocr_fallback_fixture(
     *,
-    active_channel: ChatChannel,
+    active_channel: ChatChannel | None,
     draft_ocr_text: str | None,
     image_size: tuple[int, int] = (900, 1600),
 ) -> tuple[object, SelectorRegistry, _RecordingOcrService]:
@@ -150,16 +150,27 @@ def _make_chat_ocr_fallback_fixture(
     image.paste((210, 210, 210), (input_region.x, input_region.y, input_region.x + input_region.width, input_region.y + input_region.height))
     warm_color = (228, 178, 48)
     cool_color = (64, 68, 82)
-    active_region = kingdom_region if active_channel == ChatChannel.WORLD else alliance_region
-    inactive_region = alliance_region if active_channel == ChatChannel.WORLD else kingdom_region
-    image.paste(
-        warm_color,
-        (active_region.x, active_region.y, active_region.x + active_region.width, active_region.y + active_region.height),
-    )
-    image.paste(
-        cool_color,
-        (inactive_region.x, inactive_region.y, inactive_region.x + inactive_region.width, inactive_region.y + inactive_region.height),
-    )
+    if active_channel is None:
+        neutral_color = (118, 112, 106)
+        image.paste(
+            neutral_color,
+            (kingdom_region.x, kingdom_region.y, kingdom_region.x + kingdom_region.width, kingdom_region.y + kingdom_region.height),
+        )
+        image.paste(
+            neutral_color,
+            (alliance_region.x, alliance_region.y, alliance_region.x + alliance_region.width, alliance_region.y + alliance_region.height),
+        )
+    else:
+        active_region = kingdom_region if active_channel == ChatChannel.WORLD else alliance_region
+        inactive_region = alliance_region if active_channel == ChatChannel.WORLD else kingdom_region
+        image.paste(
+            warm_color,
+            (active_region.x, active_region.y, active_region.x + active_region.width, active_region.y + active_region.height),
+        )
+        image.paste(
+            cool_color,
+            (inactive_region.x, inactive_region.y, inactive_region.x + inactive_region.width, inactive_region.y + inactive_region.height),
+        )
     lines = [
         _ocr_line("Chat", x=181, y=20, width=113, height=49),
         _ocr_line("Kingdom", x=202, y=117, width=143, height=40),
@@ -189,7 +200,7 @@ def _make_chat_ocr_fallback_fixture(
 def _build_chat_observation_from_ocr_fallback(
     *,
     request: ObservationRequest,
-    active_channel: ChatChannel,
+    active_channel: ChatChannel | None,
     draft_ocr_text: str | None,
 ) -> tuple[object, _RecordingOcrService]:
     """Builds one OCR-proven chat observation from the shared geometry-miss fixture."""
@@ -588,6 +599,22 @@ class CaptureAndVisionTests(unittest.TestCase):
 
         self.assertEqual(observation.screen_type, ScreenType.PNC_CHAT)
         self.assertEqual(observation.active_chat_channel, ChatChannel.ALLIANCE)
+        self.assertTrue(observation.chat_draft_empty)
+        self.assertIsNone(observation.chat_draft_text)
+        self.assertEqual(ocr_service.read_result_calls, 1)
+        self.assertGreater(ocr_service.read_text_calls, 0)
+
+    def test_observation_builder_leaves_active_chat_channel_unknown_when_tab_colors_are_ambiguous(self) -> None:
+        """Keeps OCR-proven chat observations fail-safe when the highlighted tab cannot be trusted."""
+
+        observation, ocr_service = _build_chat_observation_from_ocr_fallback(
+            request=ObservationRequest.source_screen_retry(ScreenType.PNC_CHAT),
+            active_channel=None,
+            draft_ocr_text="Pleaseter content",
+        )
+
+        self.assertEqual(observation.screen_type, ScreenType.PNC_CHAT)
+        self.assertIsNone(observation.active_chat_channel)
         self.assertTrue(observation.chat_draft_empty)
         self.assertIsNone(observation.chat_draft_text)
         self.assertEqual(ocr_service.read_result_calls, 1)

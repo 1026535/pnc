@@ -317,6 +317,22 @@ class FlowAndTaskTests(unittest.TestCase):
 
         self.assertEqual(result.status.value, "replan")
 
+    def test_send_world_chat_message_task_does_not_report_success_during_recovery(self) -> None:
+        """Keeps replanning when recovery lands on an already-open chat instead of claiming the message was sent."""
+
+        task = SendWorldChatMessageTask()
+        result = task.verify(
+            self._make_context(params=ChatMessageTaskParams(message="hello world")),
+            make_observation(ScreenType.PNC_DAILY_TO_DO),
+            make_observation(
+                ScreenType.PNC_CHAT,
+                active_chat_channel=ChatChannel.WORLD,
+                chat_draft_empty=True,
+            ),
+        )
+
+        self.assertEqual(result.status.value, "replan")
+
     def test_send_world_chat_message_task_fails_when_the_final_chat_state_is_not_cleared(self) -> None:
         """Fails fast when the reusable send flow does not leave the shared chat draft empty."""
 
