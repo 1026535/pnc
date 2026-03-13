@@ -8,13 +8,17 @@ from pnc_automation.config.models import PncAccountCastleRosterConfig, SelectedC
 from pnc_automation.errors import SelectorResolutionError
 from pnc_automation.pnc.action_requests import (
     ActionRequest,
+    ActionTimingProfile,
+    InputTextAction,
     KeyEventAction,
     LaunchAppAction,
+    SelectChatChannelAction,
     SwipeAction,
     TapAction,
     TapListEntryAction,
     WaitAction,
 )
+from pnc_automation.pnc.chat import ChatChannel
 from pnc_automation.pnc.observation import (
     ListEntryKind,
     Observation,
@@ -23,6 +27,8 @@ from pnc_automation.pnc.observation import (
 )
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
+from pnc_automation.vision.observation_request import ObservationRequest
+from pnc_automation.vision.selectors import ClickOutcome
 
 
 @dataclass(slots=True)
@@ -108,6 +114,7 @@ class ScreenFlowPlanner:
             ScreenType.PNC_CAMPAIGN,
             ScreenType.PNC_CAMPAIGN_STAGE,
             ScreenType.PNC_BATTLE_PREP,
+            ScreenType.PNC_CHAT,
             ScreenType.PNC_CASTLE_SELECTION,
         }:
             if observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT):
@@ -267,6 +274,75 @@ class ScreenFlowPlanner:
         actions = self.ensure_home_city(observation)
         actions.append(TapAction(selector_id=UiElementId.PNC_HOME_WORLD_SWITCH, reason="open_world_map", observe_after=True))
         return actions
+
+    def open_chat(self, observation: Observation) -> list[ActionRequest]:
+        """Plans navigation from home- or world-adjacent screens to the shared chat overlay."""
+
+        if observation.screen_type == ScreenType.PNC_CHAT:
+            return []
+        if observation.screen_type in {ScreenType.PNC_HOME_CITY, ScreenType.PNC_WORLD_MAP}:
+            return [
+                TapAction(
+                    selector_id=UiElementId.PNC_CHAT_SHORTCUT,
+                    reason="open_chat",
+                    observe_after=True,
+                    follow_up_request=ObservationRequest.navigation_follow_up(
+                        (self._chat_navigation_outcome(),)
+                    ),
+                )
+            ]
+        actions = self.ensure_home_city(observation)
+        actions.append(
+            TapAction(
+                selector_id=UiElementId.PNC_CHAT_SHORTCUT,
+                reason="open_chat",
+                observe_after=True,
+                follow_up_request=ObservationRequest.navigation_follow_up((self._chat_navigation_outcome(),)),
+            )
+        )
+        return actions
+
+    def send_chat_message(
+        self,
+        observation: Observation,
+        *,
+        message: str,
+        channel: ChatChannel,
+    ) -> list[ActionRequest]:
+        """Plans chat opening, channel selection, draft entry, and send in one canonical helper."""
+
+        if message.strip() == "":
+            raise ValueError("Chat messages must contain at least one non-whitespace character.")
+        actions = self.open_chat(observation)
+        actions.extend(
+            (
+                SelectChatChannelAction(
+                    channel=channel,
+                    reason=f"select_chat_channel_{channel.value}",
+                    timing_profile=ActionTimingProfile.CHAT,
+                ),
+                InputTextAction(
+                    selector_id=UiElementId.PNC_CHAT_INPUT_FIELD,
+                    text=message,
+                    reason="type_chat_message",
+                    replace_existing=True,
+                    timing_profile=ActionTimingProfile.CHAT,
+                ),
+                TapAction(
+                    selector_id=UiElementId.PNC_CHAT_SEND_BUTTON,
+                    reason="send_chat_message",
+                    observe_after=True,
+                    follow_up_request=ObservationRequest.chat_send_follow_up(),
+                    timing_profile=ActionTimingProfile.CHAT,
+                ),
+            )
+        )
+        return actions
+
+    def _chat_navigation_outcome(self) -> ClickOutcome:
+        """Returns the reviewed destination used by the shared chat-opening flow."""
+
+        return ClickOutcome(target_screen=ScreenType.PNC_CHAT)
 
     def open_academy(self, observation: Observation) -> list[ActionRequest]:
         """Plans navigation from home city to the academy or research tree."""

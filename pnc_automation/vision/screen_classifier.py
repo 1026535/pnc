@@ -147,6 +147,25 @@ class ScreenClassifier:
                 required_all=frozenset({UiElementId.PNC_ALLIANCE_TILE_TERRITORY}),
             ),
             ClassificationRule(
+                screen_type=ScreenType.PNC_CHAT,
+                required_all=frozenset(
+                    {
+                        UiElementId.PNC_CHAT_HEADER,
+                        UiElementId.PNC_CHAT_SEND_BUTTON,
+                    }
+                ),
+                required_any=frozenset(
+                    {
+                        UiElementId.PNC_CHAT_TAB_KINGDOM,
+                        UiElementId.PNC_CHAT_TAB_ALLIANCE,
+                    }
+                ),
+            ),
+            ClassificationRule(
+                screen_type=ScreenType.PNC_DAILY_TO_DO,
+                required_all=frozenset({UiElementId.PNC_DAILY_TO_DO_HEADER}),
+            ),
+            ClassificationRule(
                 screen_type=ScreenType.PNC_CASH_MALL,
                 required_all=frozenset({UiElementId.PNC_CASH_MALL_TAB_DAILY_SALE}),
             ),

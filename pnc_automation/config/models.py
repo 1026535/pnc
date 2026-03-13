@@ -18,6 +18,8 @@ class DefaultsConfig:
     screenshot_format: str = "png"
     stable_click_delay_ms: int = 300
     post_action_observe_delay_ms: int = 800
+    chat_stable_click_delay_ms: int = 120
+    chat_post_action_observe_delay_ms: int = 250
 
 
 @dataclass(frozen=True, slots=True)

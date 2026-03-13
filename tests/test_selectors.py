@@ -50,6 +50,29 @@ class SelectorRegistryTests(unittest.TestCase):
         self.assertEqual(home_world_switch.click_outcomes[0].target_screen, ScreenType.PNC_WORLD_MAP)
         self.assertIsNotNone(home_world_switch.relative_bounds)
         self.assertAlmostEqual(home_world_switch.relative_bounds.action_y_ratio, 0.95)
+        chat_shortcut = registry.require(UiElementId.PNC_CHAT_SHORTCUT)
+        self.assertEqual(chat_shortcut.screens, (ScreenType.PNC_HOME_CITY, ScreenType.PNC_WORLD_MAP))
+        self.assertEqual(chat_shortcut.interaction_kind, SelectorInteractionKind.NAVIGATION)
+        self.assertEqual(chat_shortcut.click_outcomes[0].target_screen, ScreenType.PNC_CHAT)
+        self.assertIsNotNone(chat_shortcut.relative_bounds)
+        self.assertEqual(
+            registry.require(UiElementId.PNC_CHAT_HEADER).interaction_kind,
+            SelectorInteractionKind.LABEL,
+        )
+        chat_input_field = registry.require(UiElementId.PNC_CHAT_INPUT_FIELD)
+        self.assertEqual(chat_input_field.interaction_kind, SelectorInteractionKind.ACTION)
+        self.assertEqual(chat_input_field.screens, (ScreenType.PNC_CHAT,))
+        self.assertIsNotNone(chat_input_field.relative_bounds)
+        home_daily_to_do_shortcut = registry.require(UiElementId.PNC_HOME_DAILY_TO_DO_SHORTCUT)
+        self.assertEqual(home_daily_to_do_shortcut.click_outcomes[0].target_screen, ScreenType.PNC_DAILY_TO_DO)
+        self.assertEqual(
+            home_daily_to_do_shortcut.click_outcomes[0].verification_selectors,
+            (UiElementId.PNC_DAILY_TO_DO_HEADER,),
+        )
+        self.assertEqual(
+            registry.require(UiElementId.PNC_DAILY_TO_DO_HEADER).interaction_kind,
+            SelectorInteractionKind.LABEL,
+        )
         login_submit_button = registry.require(UiElementId.PNC_LOGIN_SUBMIT_BUTTON)
         self.assertEqual(login_submit_button.interaction_kind, SelectorInteractionKind.ACTION)
         self.assertIsNotNone(login_submit_button.relative_bounds)

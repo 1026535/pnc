@@ -19,12 +19,22 @@ from pnc_automation.config.models import (
     SelectedCastleConfig,
 )
 from pnc_automation.errors import SelectorResolutionError
-from pnc_automation.pnc.action_requests import InputTextAction, KeyEventAction, SwipeAction, TapAction, TapListEntryAction, WaitAction
+from pnc_automation.pnc.action_requests import (
+    ActionTimingProfile,
+    InputTextAction,
+    KeyEventAction,
+    SelectChatChannelAction,
+    SwipeAction,
+    TapAction,
+    TapListEntryAction,
+    WaitAction,
+)
 from pnc_automation.pnc.observation import ListEntryKind
 from pnc_automation.pnc.policy_models import BuildingUpgradePolicy, GatheringPolicy
-from pnc_automation.pnc.screen_flows import ScreenFlowPlanner
+from pnc_automation.pnc.screen_flows import ChatChannel, ScreenFlowPlanner
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
+from pnc_automation.vision.observation_request import ObservationRequest
 from tests.test_support import build_logger, make_entry, make_observation
 
 
@@ -84,6 +94,106 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertEqual(len(actions), 1)
         self.assertIsInstance(actions[0], KeyEventAction)
         self.assertEqual(actions[0].key_code, "KEYCODE_BACK")
+
+    def test_open_chat_from_world_map_uses_shared_shortcut(self) -> None:
+        """Uses the shared chat shortcut instead of forcing a return to home city first."""
+
+        observation = make_observation(
+            ScreenType.PNC_WORLD_MAP,
+            visible_ids=(UiElementId.PNC_CHAT_SHORTCUT,),
+        )
+
+        actions = self.flows.open_chat(observation)
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], TapAction)
+        self.assertEqual(actions[0].selector_id, UiElementId.PNC_CHAT_SHORTCUT)
+
+    def test_send_chat_message_from_home_city_opens_chat_selects_channel_and_sends(self) -> None:
+        """Builds the full reusable chat-send action sequence from the home-city root."""
+
+        observation = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            visible_ids=(UiElementId.PNC_CHAT_SHORTCUT,),
+        )
+
+        actions = self.flows.send_chat_message(
+            observation,
+            message="hello",
+            channel=ChatChannel.ALLIANCE,
+        )
+
+        self.assertEqual(len(actions), 4)
+        self.assertIsInstance(actions[0], TapAction)
+        self.assertEqual(actions[0].selector_id, UiElementId.PNC_CHAT_SHORTCUT)
+        self.assertTrue(actions[0].observe_after)
+        self.assertIsInstance(actions[1], SelectChatChannelAction)
+        self.assertEqual(actions[1].channel, ChatChannel.ALLIANCE)
+        self.assertEqual(actions[1].timing_profile, ActionTimingProfile.CHAT)
+        self.assertIsInstance(actions[2], InputTextAction)
+        self.assertEqual(actions[2].selector_id, UiElementId.PNC_CHAT_INPUT_FIELD)
+        self.assertEqual(actions[2].text, "hello")
+        self.assertTrue(actions[2].replace_existing)
+        self.assertEqual(actions[2].timing_profile, ActionTimingProfile.CHAT)
+        self.assertIsInstance(actions[3], TapAction)
+        self.assertEqual(actions[3].selector_id, UiElementId.PNC_CHAT_SEND_BUTTON)
+        self.assertTrue(actions[3].observe_after)
+        self.assertEqual(actions[3].follow_up_request, ObservationRequest.chat_send_follow_up())
+        self.assertEqual(actions[3].timing_profile, ActionTimingProfile.CHAT)
+
+    def test_send_chat_message_maps_world_channel_to_kingdom_tab(self) -> None:
+        """Maps the public world-channel enum to the in-game Kingdom chat tab."""
+
+        observation = make_observation(ScreenType.PNC_CHAT)
+
+        actions = self.flows.send_chat_message(
+            observation,
+            message="ping",
+            channel=ChatChannel.WORLD,
+        )
+
+        self.assertEqual(len(actions), 3)
+        self.assertIsInstance(actions[0], SelectChatChannelAction)
+        self.assertEqual(actions[0].channel, ChatChannel.WORLD)
+        self.assertFalse(actions[0].observe_after)
+
+    def test_send_chat_message_uses_narrow_chat_open_follow_up_request(self) -> None:
+        """Uses the shared chat-specific navigation follow-up instead of a broad default observation."""
+
+        observation = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            visible_ids=(UiElementId.PNC_CHAT_SHORTCUT,),
+        )
+
+        actions = self.flows.send_chat_message(
+            observation,
+            message="hello",
+            channel=ChatChannel.ALLIANCE,
+        )
+
+        self.assertEqual(
+            actions[0].follow_up_request,
+            ObservationRequest.navigation_follow_up((self.flows._chat_navigation_outcome(),)),
+        )
+
+    def test_send_chat_message_preserves_runtime_channel_skip_when_chat_is_already_active(self) -> None:
+        """Plans the shared runtime channel-selection action even when the current chat tab is already active."""
+
+        observation = make_observation(
+            ScreenType.PNC_CHAT,
+            active_chat_channel=ChatChannel.ALLIANCE,
+            chat_draft_empty=True,
+        )
+
+        actions = self.flows.send_chat_message(
+            observation,
+            message="hello",
+            channel=ChatChannel.ALLIANCE,
+        )
+
+        self.assertEqual(len(actions), 3)
+        self.assertIsInstance(actions[0], SelectChatChannelAction)
+        self.assertEqual(actions[0].channel, ChatChannel.ALLIANCE)
 
     def test_login_task_plans_username_and_password_entry(self) -> None:
         """Builds the expected credential-entry actions on the login screen."""

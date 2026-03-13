@@ -12,6 +12,7 @@ from pnc_automation.config.models import CastleRosterOrdering, PncAccountCastleR
 from pnc_automation.capture.screenshot_service import CapturedScreenshot, ScreenshotService
 from pnc_automation.config.castle_roster_store import CastleRosterStore
 from pnc_automation.emulator.session import BlueStacksSession
+from pnc_automation.pnc.chat import ChatChannel
 from pnc_automation.pnc.observation import (
     DetectedListEntry,
     ListEntryKind,
@@ -54,6 +55,9 @@ class ObservationAdditions:
     current_castle: SelectedCastleConfig | None = None
     current_pnc_account_id: str | None = None
     available_march_slots: int | None = None
+    active_chat_channel: ChatChannel | None = None
+    chat_draft_empty: bool | None = None
+    chat_draft_text: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -176,30 +180,28 @@ class ObservationBuilder:
             visible_elements=visible_elements,
             screen_type=screen_type,
         )
-        additions = ObservationAdditions()
-        if active_request.requires_ocr(screen_type):
-            base_screen_type = screen_type
-            additions = self.enricher.enrich(
-                screenshot.image,
-                screen_type,
-                visible_elements,
-                active_request,
+        base_screen_type = screen_type
+        additions = self.enricher.enrich(
+            screenshot.image,
+            screen_type,
+            visible_elements,
+            active_request,
+        )
+        visible_elements = _merge_visible_element_maps(visible_elements, additions.visible_elements)
+        screen_type = self.screen_classifier.classify(visible_elements, additions.screen_evidence)
+        if (
+            additions.visible_elements
+            or additions.screen_evidence
+            or additions.suppress_geometry_selector_ids
+            or screen_type != base_screen_type
+        ):
+            visible_elements, screen_type = self._complete_screen_scope(
+                screenshot=screenshot,
+                visible_elements=visible_elements,
+                screen_type=screen_type,
+                evidence=additions.screen_evidence,
+                suppress_geometry_selector_ids=additions.suppress_geometry_selector_ids,
             )
-            visible_elements = _merge_visible_element_maps(visible_elements, additions.visible_elements)
-            screen_type = self.screen_classifier.classify(visible_elements, additions.screen_evidence)
-            if (
-                additions.visible_elements
-                or additions.screen_evidence
-                or additions.suppress_geometry_selector_ids
-                or screen_type != base_screen_type
-            ):
-                visible_elements, screen_type = self._complete_screen_scope(
-                    screenshot=screenshot,
-                    visible_elements=visible_elements,
-                    screen_type=screen_type,
-                    evidence=additions.screen_evidence,
-                    suppress_geometry_selector_ids=additions.suppress_geometry_selector_ids,
-                )
         return Observation(
             screen_type=screen_type,
             visible_elements=visible_elements,
@@ -211,6 +213,9 @@ class ObservationBuilder:
             current_castle=additions.current_castle,
             current_pnc_account_id=additions.current_pnc_account_id,
             available_march_slots=additions.available_march_slots,
+            active_chat_channel=additions.active_chat_channel,
+            chat_draft_empty=additions.chat_draft_empty,
+            chat_draft_text=additions.chat_draft_text,
         )
 
     def _complete_screen_scope(

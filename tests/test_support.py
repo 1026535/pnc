@@ -11,6 +11,7 @@ from typing import Any
 from PIL import Image
 
 from pnc_automation.config.models import PncAccountCastleRosterConfig, SelectedCastleConfig
+from pnc_automation.pnc.chat import ChatChannel
 from pnc_automation.pnc.observation import (
     Bounds,
     DetectedListEntry,
@@ -87,6 +88,9 @@ def make_observation(
     verified_pnc_account_id: str | None = None,
     castle_roster_snapshot: PncAccountCastleRosterConfig | None = None,
     available_march_slots: int | None = None,
+    active_chat_channel: ChatChannel | None = None,
+    chat_draft_empty: bool | None = None,
+    chat_draft_text: str | None = None,
     artifact_path: Path | None = None,
 ) -> Observation:
     """Builds a typed observation with synthetic visible elements."""
@@ -110,6 +114,9 @@ def make_observation(
         verified_pnc_account_id=verified_pnc_account_id,
         castle_roster_snapshot=castle_roster_snapshot,
         available_march_slots=available_march_slots,
+        active_chat_channel=active_chat_channel,
+        chat_draft_empty=chat_draft_empty,
+        chat_draft_text=chat_draft_text,
         artifact_path=artifact_path,
         image_size=(200, 100),
     )

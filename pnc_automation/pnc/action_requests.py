@@ -3,9 +3,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 
+from pnc_automation.pnc.chat import ChatChannel
 from pnc_automation.pnc.observation import ListEntryKind
 from pnc_automation.pnc.ui_element_id import UiElementId
+from pnc_automation.vision.observation_request import ObservationRequest
+
+
+class ActionTimingProfile(StrEnum):
+    """Identifies the pacing profile applied by the low-level action executor."""
+
+    DEFAULT = "default"
+    CHAT = "chat"
 
 
 @dataclass(frozen=True, slots=True)
@@ -14,6 +24,8 @@ class ActionRequest:
 
     reason: str = ""
     observe_after: bool = False
+    follow_up_request: ObservationRequest | None = None
+    timing_profile: ActionTimingProfile = ActionTimingProfile.DEFAULT
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,6 +61,14 @@ class InputTextAction(ActionRequest):
 
     text: str = ""
     selector_id: UiElementId | None = None
+    replace_existing: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class SelectChatChannelAction(ActionRequest):
+    """Activates one chat tab, skipping the tap when that channel is already active."""
+
+    channel: ChatChannel = ChatChannel.WORLD
 
 
 @dataclass(frozen=True, slots=True)

@@ -116,8 +116,8 @@ class ObservedActionExecutor:
                 continue
             self.action_executor.execute_action(action, current_observation)
             if getattr(action, "observe_after", False):
-                self._sleep_for_observe()
-                current_observation = observe(f"post_action_{index + 1}")
+                self._sleep_for_observe(action)
+                current_observation = observe(f"post_action_{index + 1}", action.follow_up_request)
                 observed_after_action = True
         if actions and not observed_after_action:
             self._sleep_for_observe()
@@ -166,9 +166,9 @@ class ObservedActionExecutor:
     ) -> ObservedActionExecutionResult:
         """Executes one geometry-backed navigation tap through the shared primary-to-OCR flow."""
 
-        follow_up_request = ObservationRequest.navigation_follow_up(candidate.reviewed_outcomes)
+        follow_up_request = action.follow_up_request or ObservationRequest.navigation_follow_up(candidate.reviewed_outcomes)
         self.action_executor.execute_action(action, before)
-        self._sleep_for_observe()
+        self._sleep_for_observe(action)
         first_after = observe(label_prefix, request=follow_up_request)
         settled_after = settle_reviewed_navigation_observation(
             first_observation=first_after,
@@ -194,7 +194,7 @@ class ObservedActionExecutor:
                 fallback_used = True
                 fallback_source_kind = retry_element.source_kind
                 self.action_executor.execute_action(action, retry_source)
-                self._sleep_for_observe()
+                self._sleep_for_observe(action)
                 retry_after = observe(f"{label_prefix}_ocr_retry_after", request=follow_up_request)
                 final_after = settle_reviewed_navigation_observation(
                     first_observation=retry_after,
@@ -236,10 +236,13 @@ class ObservedActionExecutor:
             selector_interactions=(interaction,),
         )
 
-    def _sleep_for_observe(self) -> None:
+    def _sleep_for_observe(self, action: ActionRequest | None = None) -> None:
         """Applies the shared post-action observe delay used by follow-up captures."""
 
-        delay_ms = self.action_executor.post_action_observe_delay_ms
+        if action is None:
+            delay_ms = self.action_executor.post_action_observe_delay_ms
+        else:
+            delay_ms = self.action_executor._observe_delay_ms_for(action)
         if delay_ms <= 0:
             return
         self.sleep(delay_ms / 1000.0)

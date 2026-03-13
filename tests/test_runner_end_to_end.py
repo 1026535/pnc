@@ -255,6 +255,8 @@ class RunnerEndToEndTests(unittest.TestCase):
                     session=fake_session,
                     stable_click_delay_ms=0,
                     post_action_observe_delay_ms=0,
+                    chat_stable_click_delay_ms=0,
+                    chat_post_action_observe_delay_ms=0,
                     logger=build_logger(),
                     sleep=lambda _: None,
                 ),

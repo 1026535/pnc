@@ -16,7 +16,8 @@ from pnc_automation.automation.task_context import TaskContext
 from pnc_automation.automation.tasks.ensure_game_running_task import EnsureGameRunningTask
 from pnc_automation.config.models import AccountConfig, CredentialSource, DefaultsConfig, ResolvedCredentials, SelectedCastleConfig
 from pnc_automation.errors import ScriptValidationError, SelectorResolutionError
-from pnc_automation.pnc.action_requests import ActionRequest, TapAction
+from pnc_automation.pnc.action_requests import ActionRequest, InputTextAction, SelectChatChannelAction, TapAction
+from pnc_automation.pnc.chat import ChatChannel
 from pnc_automation.pnc.observation import Observation, VisibleElementSourceKind
 from pnc_automation.pnc.screen_flows import ScreenFlowPlanner
 from pnc_automation.pnc.screen_type import ScreenType
@@ -231,6 +232,8 @@ class AutomationFrameworkTests(unittest.TestCase):
             session=FakeSession(),
             stable_click_delay_ms=0,
             post_action_observe_delay_ms=0,
+            chat_stable_click_delay_ms=0,
+            chat_post_action_observe_delay_ms=0,
             logger=build_logger(),
             sleep=lambda _: None,
         )
@@ -254,6 +257,131 @@ class AutomationFrameworkTests(unittest.TestCase):
         )
 
         self.assertEqual(executor.session.taps, [(482, 1529)])
+
+    def test_input_text_actions_use_selector_action_points_for_focus(self) -> None:
+        """Focuses selector-backed text entry through the canonical action point instead of the bounds center."""
+
+        executor = ActionExecutor(
+            session=FakeSession(),
+            stable_click_delay_ms=0,
+            post_action_observe_delay_ms=0,
+            chat_stable_click_delay_ms=0,
+            chat_post_action_observe_delay_ms=0,
+            logger=build_logger(),
+            sleep=lambda _: None,
+        )
+        observation = make_observation(
+            ScreenType.PNC_CHAT,
+            visible_ids=(UiElementId.PNC_CHAT_INPUT_FIELD,),
+            chat_draft_empty=True,
+        )
+        observation = Observation(
+            screen_type=observation.screen_type,
+            visible_elements={
+                UiElementId.PNC_CHAT_INPUT_FIELD: make_visible(
+                    UiElementId.PNC_CHAT_INPUT_FIELD,
+                    x=20,
+                    y=40,
+                    width=90,
+                    height=22,
+                    action_point=(81, 55),
+                )
+            },
+            image_size=observation.image_size,
+            active_chat_channel=observation.active_chat_channel,
+            chat_draft_empty=observation.chat_draft_empty,
+            chat_draft_text=observation.chat_draft_text,
+        )
+
+        executor.execute_action(
+            InputTextAction(
+                selector_id=UiElementId.PNC_CHAT_INPUT_FIELD,
+                text="hello",
+                replace_existing=True,
+            ),
+            observation,
+        )
+
+        self.assertEqual(executor.session.taps, [(81, 55)])
+        self.assertEqual(executor.session.texts, ["hello"])
+
+    def test_observed_action_executor_uses_action_scoped_follow_up_requests_for_non_navigation_actions(self) -> None:
+        """Uses the action-provided follow-up request for observe-after actions that stay on the same screen."""
+
+        fake_observer = FakeObservationService(observations=[make_observation(ScreenType.PNC_CHAT)])
+        fake_session = FakeSession()
+        executor = _make_observed_action_executor(fake_session)
+
+        execution = executor.execute_actions(
+            (
+                TapAction(
+                    selector_id=UiElementId.PNC_CHAT_SEND_BUTTON,
+                    reason="send_chat_message",
+                    observe_after=True,
+                    follow_up_request=ObservationRequest.chat_send_follow_up(),
+                ),
+            ),
+            make_observation(ScreenType.PNC_CHAT, visible_ids=(UiElementId.PNC_CHAT_SEND_BUTTON,)),
+            observe=fake_observer.observe,
+        )
+
+        self.assertEqual(execution.observation.screen_type, ScreenType.PNC_CHAT)
+        self.assertEqual(fake_observer.requests, [ObservationRequest.chat_send_follow_up()])
+
+    def test_select_chat_channel_action_skips_the_tap_when_the_requested_tab_is_already_active(self) -> None:
+        """Avoids redundant chat-tab taps when the current observation already proves the active channel."""
+
+        executor = ActionExecutor(
+            session=FakeSession(),
+            stable_click_delay_ms=0,
+            post_action_observe_delay_ms=0,
+            chat_stable_click_delay_ms=0,
+            chat_post_action_observe_delay_ms=0,
+            logger=build_logger(),
+            sleep=lambda _: None,
+        )
+
+        executor.execute_action(
+            SelectChatChannelAction(channel=ChatChannel.ALLIANCE),
+            make_observation(
+                ScreenType.PNC_CHAT,
+                visible_ids=(UiElementId.PNC_CHAT_TAB_ALLIANCE,),
+                active_chat_channel=ChatChannel.ALLIANCE,
+            ),
+        )
+
+        self.assertEqual(executor.session.taps, [])
+
+    def test_input_text_action_clears_an_existing_chat_draft_before_typing(self) -> None:
+        """Uses the shared clear-and-replace policy instead of appending onto a stale chat draft."""
+
+        executor = ActionExecutor(
+            session=FakeSession(),
+            stable_click_delay_ms=0,
+            post_action_observe_delay_ms=0,
+            chat_stable_click_delay_ms=0,
+            chat_post_action_observe_delay_ms=0,
+            logger=build_logger(),
+            sleep=lambda _: None,
+        )
+
+        executor.execute_action(
+            InputTextAction(
+                selector_id=UiElementId.PNC_CHAT_INPUT_FIELD,
+                text="hello",
+                replace_existing=True,
+            ),
+            make_observation(
+                ScreenType.PNC_CHAT,
+                visible_ids=(UiElementId.PNC_CHAT_INPUT_FIELD,),
+                chat_draft_empty=False,
+                chat_draft_text="existing",
+            ),
+        )
+
+        self.assertEqual(executor.session.key_events[0], "KEYCODE_MOVE_END")
+        self.assertTrue(all(key_code == "KEYCODE_DEL" for key_code in executor.session.key_events[1:]))
+        self.assertGreaterEqual(len(executor.session.key_events), 25)
 
     def test_observed_action_executor_retries_geometry_navigation_taps_once_through_ocr(self) -> None:
         """Promotes one settled geometry miss to an OCR-backed retry using the narrow follow-up requests."""
@@ -648,6 +776,8 @@ def _make_observed_action_executor(
             session=session,
             stable_click_delay_ms=0,
             post_action_observe_delay_ms=0,
+            chat_stable_click_delay_ms=0,
+            chat_post_action_observe_delay_ms=0,
             logger=build_logger(),
             sleep=lambda _: None,
         ),
