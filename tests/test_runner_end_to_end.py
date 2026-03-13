@@ -11,7 +11,7 @@ from pnc_automation.automation.runner import AutomationRunner
 from pnc_automation.automation.scripts.models import RunScript, ScriptStep
 from pnc_automation.automation.scripts.registry import build_default_task_registry
 from pnc_automation.automation.task import TaskId
-from pnc_automation.config.models import AccountConfig, CredentialSource, DefaultsConfig, ResolvedCredentials, SelectedCastleConfig
+from pnc_automation.config.models import AccountConfig, CastleIdentity, CredentialSource, DefaultsConfig, ResolvedCredentials
 from pnc_automation.pnc.observation import ListEntryKind
 from pnc_automation.pnc.screen_flows import ScreenFlowPlanner
 from pnc_automation.pnc.screen_type import ScreenType
@@ -27,11 +27,11 @@ class RunnerEndToEndTests(unittest.TestCase):
         """Runs the scripted daily flow against fake observations and fake device actions."""
 
         defaults = DefaultsConfig(stable_click_delay_ms=0, post_action_observe_delay_ms=0)
+        target_castle = CastleIdentity(kingdom="K230", castle_name="Main", castle_level=8)
         account = AccountConfig(
             id="account_a",
             instance_id="bs-main",
             pnc_account_id="user@example.com",
-            selected_castle=SelectedCastleConfig(kingdom="K230", castle_name="Main", castle_level=8),
             credentials=ResolvedCredentials(
                 username="user@example.com",
                 password="secret",
@@ -44,7 +44,7 @@ class RunnerEndToEndTests(unittest.TestCase):
             steps=(
                 ScriptStep(task=TaskId.ENSURE_GAME_RUNNING),
                 ScriptStep(task=TaskId.LOGIN),
-                ScriptStep(task=TaskId.SELECT_CASTLE),
+                ScriptStep(task=TaskId.SELECT_CASTLE, castle=target_castle),
                 ScriptStep(task=TaskId.BUILDING_UPGRADE, params={"priority": ["castle", "academy"], "allow_speedups": False}),
                 ScriptStep(task=TaskId.RESEARCH, params={"priority": ["economy", "development"]}),
                 ScriptStep(task=TaskId.GATHERING, params={"preferred_resources": ["food", "wood"], "max_parallel_marches": 2}),

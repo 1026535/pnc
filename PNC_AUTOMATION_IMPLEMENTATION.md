@@ -34,7 +34,7 @@ For the first implementation:
 - one automation target maps to one BlueStacks instance,
 - that target uses one intended P&C login account,
 - that P&C account may contain many castles,
-- but automation manages exactly one configured castle from that account.
+- and automation may target one explicit castle per script step at runtime.
 
 ### 1.4 Business intent
 
@@ -355,14 +355,11 @@ instances:
     app_package: com.global.tmslg
 
 accounts:
-  - id: account_a_main_castle
+  - id: account_a
     instance_id: bs-main
+    pnc_account_id: your-email@example.com
     username_env: PNC_CASTLE_A_USER
     password_env: PNC_CASTLE_A_PASS
-    selected_castle:
-      kingdom: K230
-      castle_name: Lv.5 Hellhound
-      castle_level: 8
 ```
 
 ### 9.2 Secret handling
@@ -380,7 +377,7 @@ Startup validation must confirm:
 
 - each account references a known BlueStacks instance,
 - required credentials exist,
-- each configured automation target declares exactly one selected castle for v1,
+- each `(instance_id, pnc_account_id)` pair is unique,
 - artifact root is writable.
 
 Any invalid configuration must stop execution immediately.
@@ -397,6 +394,9 @@ name: daily_castle_maintenance
 steps:
   - task: login
   - task: select_castle
+    castle:
+      kingdom: K230
+      castle_name: Lv.5 Hellhound
   - task: building_upgrade
     params:
       priority: [castle, wall, academy, barracks]
@@ -428,7 +428,7 @@ Create authoritative types for:
 - `AppConfig`
 - `BlueStacksInstanceConfig`
 - `AccountConfig`
-- `SelectedCastleConfig`
+- `CastleIdentity`
 - `Observation`
 - `ScreenType`
 - `UiElementId`
@@ -791,7 +791,7 @@ Example typed facts:
 - current screen is `PNC_HOME_CITY`,
 - a castle-selection list is visible,
 - visible castles were parsed from the roster,
-- the configured castle is selected or not selected,
+- the requested castle is selected or not selected,
 - visible event-center entries were extracted as dynamic list items,
 - an upgrade badge is visible,
 - the academy is visible,

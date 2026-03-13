@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from pnc_automation.automation.task import BaseAutomationTask, TaskId, TaskResult, choose_priority_entry
+from pnc_automation.automation.task import BaseAutomationTask, CastleTargetPolicy, TaskId, TaskResult, choose_priority_entry
 from pnc_automation.automation.task_context import TaskContext
 from pnc_automation.errors import TaskVerificationError
 from pnc_automation.pnc.action_requests import ActionRequest, TapAction, TapListEntryAction
@@ -19,6 +19,7 @@ class GatheringTask(BaseAutomationTask):
     """Dispatches one march to a preferred resource node."""
 
     id = TaskId.GATHERING
+    castle_target_policy = CastleTargetPolicy.OPTIONAL
 
     def parse_params(self, params: Mapping[str, Any]) -> GatheringPolicy:
         """Builds the typed gathering policy."""

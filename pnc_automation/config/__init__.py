@@ -6,22 +6,22 @@ from pnc_automation.config.models import (
     AccountConfig,
     AppConfig,
     BlueStacksInstanceConfig,
+    CastleIdentity,
     CredentialSource,
     DefaultsConfig,
     PncAccountCastleRosterConfig,
     ResolvedCredentials,
-    SelectedCastleConfig,
 )
 
 __all__ = [
     "AccountConfig",
     "AppConfig",
     "BlueStacksInstanceConfig",
+    "CastleIdentity",
     "CastleRosterStore",
     "CredentialSource",
     "DefaultsConfig",
     "PncAccountCastleRosterConfig",
     "ResolvedCredentials",
-    "SelectedCastleConfig",
     "load_app_config",
 ]

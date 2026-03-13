@@ -22,12 +22,21 @@ class TaskId(StrEnum):
     POPUP_RECOVERY = "popup_recovery"
     LOGIN = "login"
     SELECT_CASTLE = "select_castle"
+    REFRESH_CASTLE_ROSTER = "refresh_castle_roster"
     SEND_ALLIANCE_CHAT_MESSAGE = "send_alliance_chat_message"
     SEND_WORLD_CHAT_MESSAGE = "send_world_chat_message"
     BUILDING_UPGRADE = "building_upgrade"
     RESEARCH = "research"
     GATHERING = "gathering"
     CAMPAIGN = "campaign"
+
+
+class CastleTargetPolicy(StrEnum):
+    """Declares whether a task can consume one explicit step-level castle target."""
+
+    DISALLOWED = "disallowed"
+    OPTIONAL = "optional"
+    REQUIRED = "required"
 
 
 class TaskStatus(StrEnum):
@@ -82,6 +91,7 @@ class AutomationTask(Protocol):
     """Defines the canonical extension model for all automation tasks."""
 
     id: TaskId
+    castle_target_policy: CastleTargetPolicy
 
     def parse_params(self, params: Mapping[str, Any]) -> Any:
         """Validates and converts raw script parameters."""
@@ -100,6 +110,7 @@ class BaseAutomationTask(ABC):
     """Provides shared defaults for concrete task implementations."""
 
     id: TaskId
+    castle_target_policy = CastleTargetPolicy.DISALLOWED
 
     @abstractmethod
     def parse_params(self, params: Mapping[str, Any]) -> Any:

@@ -211,7 +211,7 @@ If a feature needs a new reusable path:
 
 This sub-plan should consume generic task orchestration rules from [PNC_AUTOMATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_AUTOMATION_SUBPLAN.md). It must not redefine the global task contract, script-runner behavior, or run-level retry policy.
 
-This sub-plan also assumes that account navigation behavior, including login bootstrap and configured castle selection, has already been handled by [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md).
+This sub-plan also assumes that account navigation behavior, including login bootstrap and any explicit castle alignment requested by earlier steps, has already been handled by [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md).
 
 ## 14. Validation requirement
 

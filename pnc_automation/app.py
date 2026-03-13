@@ -7,13 +7,15 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from pnc_automation.adb.client import AdbClient
-from pnc_automation.automation.runner import RunResult
+from pnc_automation.automation.runner import RunResult, StepRunResult
 from pnc_automation.automation.script_runner import ScriptRunner
+from pnc_automation.automation.task import TaskId
 from pnc_automation.automation.scripts.registry import build_default_task_registry
 from pnc_automation.capture.artifact_store import ArtifactStore
 from pnc_automation.capture.screenshot_service import ScreenshotService
 from pnc_automation.config.castle_roster_store import CastleRosterStore
 from pnc_automation.config.loader import load_app_config
+from pnc_automation.config.models import CastleIdentity
 from pnc_automation.diagnostics.logging_setup import configure_logging
 from pnc_automation.vision.observation_builder import (
     ObservationBuilder,
@@ -36,6 +38,28 @@ class ApplicationRunner:
         """Executes one account/script combination."""
 
         return self.script_runner.run(account_id=account_id, script_path=script_path)
+
+    def prepare_account_session(
+        self,
+        *,
+        account_id: str,
+        castle: CastleIdentity | None = None,
+    ) -> RunResult:
+        """Runs the canonical login-and-optional-castle-alignment preparation path."""
+
+        return self.script_runner.prepare_account_session(account_id=account_id, castle=castle)
+
+    def run_task(
+        self,
+        *,
+        account_id: str,
+        task_id: TaskId,
+        params: dict[str, object] | None = None,
+        castle: CastleIdentity | None = None,
+    ) -> StepRunResult:
+        """Runs one direct task call against the current live session state."""
+
+        return self.script_runner.run_task(account_id=account_id, task_id=task_id, params=params, castle=castle)
 
 
 def build_application_runner(

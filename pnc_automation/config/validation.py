@@ -37,7 +37,7 @@ def _validate_unique_ids(label: str, values: Iterable[str]) -> None:
 
 
 def _validate_account(account: AccountConfig, instance_ids: set[str]) -> None:
-    """Validates one account binding and its selected castle contract."""
+    """Validates one account binding and its login identity contract."""
 
     if account.instance_id not in instance_ids:
         raise ConfigurationError(
@@ -48,11 +48,6 @@ def _validate_account(account: AccountConfig, instance_ids: set[str]) -> None:
     if account.pnc_account_id.strip() == "":
         raise ConfigurationError(
             f"Account '{account.id}' has an empty P&C account identifier.",
-            account_id=account.id,
-        )
-    if account.selected_castle.castle_name.strip() == "":
-        raise ConfigurationError(
-            f"Account '{account.id}' has an empty selected castle name.",
             account_id=account.id,
         )
     if account.login_enabled:
@@ -72,14 +67,14 @@ def _validate_account(account: AccountConfig, instance_ids: set[str]) -> None:
 
 
 def _validate_unique_runtime_targets(accounts: tuple[AccountConfig, ...]) -> None:
-    """Ensures one BlueStacks/P&C login pair maps to only one selected castle target."""
+    """Ensures one BlueStacks/P&C login pair maps to only one configured account target."""
 
     seen: dict[tuple[str, str], str] = {}
     for account in accounts:
         target_key = (account.instance_id, account.pnc_account_id)
         if target_key in seen:
             raise ConfigurationError(
-                "Each (instance_id, pnc_account_id) pair may define only one selected castle target.",
+                "Each (instance_id, pnc_account_id) pair may define only one configured account target.",
                 instance_id=account.instance_id,
                 pnc_account_id=account.pnc_account_id,
                 first_account_id=seen[target_key],

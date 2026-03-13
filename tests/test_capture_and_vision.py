@@ -13,7 +13,7 @@ from PIL import Image
 from pnc_automation.capture.artifact_store import ArtifactStore
 from pnc_automation.capture.screenshot_service import ScreenshotService
 from pnc_automation.config.castle_roster_store import CastleRosterStore
-from pnc_automation.config.models import PncAccountCastleRosterConfig, SelectedCastleConfig
+from pnc_automation.config.models import CastleIdentity, PncAccountCastleRosterConfig
 from pnc_automation.automation.action_executor import ActionExecutor
 from pnc_automation.pnc.chat import ChatChannel
 from pnc_automation.pnc.screen_flows import ScreenFlowPlanner
@@ -2108,8 +2108,8 @@ class CaptureAndVisionTests(unittest.TestCase):
                     PncAccountCastleRosterConfig(
                         pnc_account_id="inline_user",
                         castles=(
-                            SelectedCastleConfig(kingdom="K230", castle_name="Lv.5 Hellhound", castle_level=8),
-                            SelectedCastleConfig(kingdom="K226", castle_name="please b gentle", castle_level=10),
+                            CastleIdentity(kingdom="K230", castle_name="Lv.5 Hellhound", castle_level=8),
+                            CastleIdentity(kingdom="K226", castle_name="please b gentle", castle_level=10),
                         ),
                     ),
                 ),
@@ -2167,7 +2167,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                 rosters=(
                     PncAccountCastleRosterConfig(
                         pnc_account_id="inline_user",
-                        castles=(SelectedCastleConfig(kingdom="K999", castle_name="Other Castle", castle_level=1),),
+                        castles=(CastleIdentity(kingdom="K999", castle_name="Other Castle", castle_level=1),),
                     ),
                 ),
             )
@@ -2201,7 +2201,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                         make_observation(ScreenType.PNC_MORE_MENU, visible_ids=(UiElementId.PNC_MORE_MANAGE_CHAR,)),
                         make_observation(
                             ScreenType.PNC_CASTLE_SELECTION,
-                            current_castle=SelectedCastleConfig(kingdom="K313", castle_name="K313alpha"),
+                            current_castle=CastleIdentity(kingdom="K313", castle_name="K313alpha"),
                         ),
                         make_observation(ScreenType.PNC_HOME_CITY, visible_ids=(UiElementId.PNC_BOTTOM_NAV_MORE,)),
                     ]

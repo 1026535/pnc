@@ -1,0 +1,6 @@
+name: refresh_castle_roster
+
+steps:
+  - task: ensure_game_running
+  - task: login
+  - task: refresh_castle_roster

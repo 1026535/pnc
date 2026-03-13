@@ -8,7 +8,7 @@ from typing import Protocol
 
 from PIL import Image
 
-from pnc_automation.config.models import CastleRosterOrdering, PncAccountCastleRosterConfig, SelectedCastleConfig
+from pnc_automation.config.models import CastleIdentity, CastleRosterOrdering, PncAccountCastleRosterConfig
 from pnc_automation.capture.screenshot_service import CapturedScreenshot, ScreenshotService
 from pnc_automation.config.castle_roster_store import CastleRosterStore
 from pnc_automation.emulator.session import BlueStacksSession
@@ -19,6 +19,7 @@ from pnc_automation.pnc.observation import (
     Observation,
     VisibleElement,
     VisibleElementSourceKind,
+    castle_identity_from_entry,
     castle_entry_identity_matches,
 )
 from pnc_automation.pnc.screen_type import ScreenType
@@ -52,7 +53,7 @@ class ObservationAdditions:
     suppress_geometry_selector_ids: frozenset[UiElementId] = frozenset()
     list_entries: tuple[DetectedListEntry, ...] = ()
     screen_evidence: tuple[ScreenEvidence, ...] = ()
-    current_castle: SelectedCastleConfig | None = None
+    current_castle: CastleIdentity | None = None
     current_pnc_account_id: str | None = None
     available_march_slots: int | None = None
     active_chat_channel: ChatChannel | None = None
@@ -271,7 +272,7 @@ class ObservationService:
     pnc_account_id: str | None = None
     castle_roster_store: CastleRosterStore | None = None
     verified_pnc_account_id: str | None = None
-    validated_current_castle: SelectedCastleConfig | None = None
+    validated_current_castle: CastleIdentity | None = None
 
     def capture_observation(
         self,
@@ -310,7 +311,7 @@ class ObservationService:
             return
         if observation.verified_pnc_account_id != self.pnc_account_id:
             return
-        castles = tuple(_entry_to_selected_castle(entry) for entry in observation.entries(ListEntryKind.CASTLE))
+        castles = tuple(castle_identity_from_entry(entry) for entry in observation.entries(ListEntryKind.CASTLE))
         if not castles:
             return
         self.castle_roster_store.sync(
@@ -326,7 +327,7 @@ class ObservationService:
             return None
         return self.castle_roster_store.get(self.pnc_account_id)
 
-    def _resolve_current_castle(self, observation: Observation) -> SelectedCastleConfig | None:
+    def _resolve_current_castle(self, observation: Observation) -> CastleIdentity | None:
         """Carries one Lord Info castle-name validation back across home-adjacent screens."""
 
         if observation.current_castle is not None:
@@ -429,31 +430,6 @@ def _visible_element_priority(element: VisibleElement) -> int:
     if element.source_kind == VisibleElementSourceKind.OCR:
         return 2
     raise ValueError(f"Unsupported visible-element source kind '{element.source_kind}'.")
-
-
-def _entry_to_selected_castle(entry: DetectedListEntry) -> "SelectedCastleConfig":
-    """Converts one observed castle row into the shared typed castle identity model."""
-
-    from pnc_automation.config.models import SelectedCastleConfig
-    from pnc_automation.errors import SelectorResolutionError
-
-    if entry.title_text is None or entry.title_text.strip() == "":
-        raise SelectorResolutionError("Observed castle entry is missing its castle name.", entry_kind=entry.kind)
-    kingdom = entry.require_metadata("kingdom")
-    castle_level = entry.metadata.get("castle_level")
-    if not isinstance(kingdom, str) or kingdom.strip() == "":
-        raise SelectorResolutionError("Observed castle entry is missing a valid kingdom.", entry_kind=entry.kind)
-    if castle_level is not None and not isinstance(castle_level, int):
-        raise SelectorResolutionError(
-            "Observed castle entry contains a non-integer castle level.",
-            entry_kind=entry.kind,
-            castle_level=castle_level,
-        )
-    return SelectedCastleConfig(
-        kingdom=kingdom,
-        castle_name=entry.title_text,
-        castle_level=castle_level,
-    )
 
 
 def _trusted_observed_account_id(observation: Observation) -> str | None:

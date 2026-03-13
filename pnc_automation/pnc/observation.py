@@ -9,7 +9,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from pnc_automation.config.models import PncAccountCastleRosterConfig, SelectedCastleConfig
+from pnc_automation.config.models import CastleIdentity, PncAccountCastleRosterConfig
 from pnc_automation.errors import SelectorResolutionError
 from pnc_automation.pnc.chat import ChatChannel
 from pnc_automation.pnc.screen_type import ScreenType
@@ -101,7 +101,7 @@ class Observation:
     image_size: tuple[int, int] | None = None
     captured_at: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
     blocking_popup: bool = False
-    current_castle: SelectedCastleConfig | None = None
+    current_castle: CastleIdentity | None = None
     current_pnc_account_id: str | None = None
     verified_pnc_account_id: str | None = None
     castle_roster_snapshot: PncAccountCastleRosterConfig | None = None
@@ -145,7 +145,7 @@ class Observation:
 
         return tuple(entry for entry in self.list_entries if entry.kind == kind)
 
-    def matches_current_castle(self, castle: SelectedCastleConfig) -> bool:
+    def matches_current_castle(self, castle: CastleIdentity) -> bool:
         """Returns whether the observed active castle matches the requested identity."""
 
         current_castle = self.current_castle
@@ -153,7 +153,7 @@ class Observation:
             return False
         return castle_identities_match(current_castle, castle)
 
-    def find_castle_entry(self, castle: SelectedCastleConfig) -> DetectedListEntry | None:
+    def find_castle_entry(self, castle: CastleIdentity) -> DetectedListEntry | None:
         """Returns the observed castle-roster entry matching the requested identity when visible."""
 
         for entry in self.entries(ListEntryKind.CASTLE):
@@ -167,8 +167,32 @@ class Observation:
         return self.active_chat_channel == channel
 
 
-def castle_entry_matches(entry: DetectedListEntry, castle: SelectedCastleConfig) -> bool:
-    """Returns whether one detected castle row matches the configured castle identity."""
+def castle_identity_from_entry(entry: DetectedListEntry) -> CastleIdentity:
+    """Converts one observed castle row into the canonical shared castle identity model."""
+
+    if entry.kind != ListEntryKind.CASTLE:
+        raise SelectorResolutionError("Only castle list entries can produce a castle identity.", entry_kind=entry.kind)
+    if entry.title_text is None or entry.title_text.strip() == "":
+        raise SelectorResolutionError("Observed castle entry is missing its castle name.", entry_kind=entry.kind)
+    kingdom = entry.require_metadata("kingdom")
+    castle_level = entry.metadata.get("castle_level")
+    if not isinstance(kingdom, str) or kingdom.strip() == "":
+        raise SelectorResolutionError("Observed castle entry is missing a valid kingdom.", entry_kind=entry.kind)
+    if castle_level is not None and not isinstance(castle_level, int):
+        raise SelectorResolutionError(
+            "Observed castle entry contains a non-integer castle level.",
+            entry_kind=entry.kind,
+            castle_level=castle_level,
+        )
+    return CastleIdentity(
+        kingdom=kingdom,
+        castle_name=entry.title_text,
+        castle_level=castle_level,
+    )
+
+
+def castle_entry_matches(entry: DetectedListEntry, castle: CastleIdentity) -> bool:
+    """Returns whether one detected castle row matches the requested castle identity."""
 
     if not castle_entry_identity_matches(entry, castle):
         return False
@@ -178,7 +202,7 @@ def castle_entry_matches(entry: DetectedListEntry, castle: SelectedCastleConfig)
     return level == castle.castle_level
 
 
-def castle_entry_identity_matches(entry: DetectedListEntry, castle: SelectedCastleConfig) -> bool:
+def castle_entry_identity_matches(entry: DetectedListEntry, castle: CastleIdentity) -> bool:
     """Returns whether one detected castle row matches a castle by stable kingdom/name identity."""
 
     if entry.kind != ListEntryKind.CASTLE:
@@ -188,7 +212,7 @@ def castle_entry_identity_matches(entry: DetectedListEntry, castle: SelectedCast
     return entry.metadata.get("kingdom") == castle.kingdom
 
 
-def castle_identities_match(left: SelectedCastleConfig, right: SelectedCastleConfig) -> bool:
+def castle_identities_match(left: CastleIdentity, right: CastleIdentity) -> bool:
     """Returns whether two castle identities describe the same managed castle."""
 
     if left.castle_name != right.castle_name:
