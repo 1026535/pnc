@@ -7,12 +7,8 @@ import unittest
 from pathlib import Path
 
 from pnc_automation.app import build_application_runner
-from pnc_automation.capture.screenshot_service import ScreenshotService
-from pnc_automation.config.models import AccountConfig
-from pnc_automation.emulator.bluestacks_instance import BlueStacksInstance
-from pnc_automation.emulator.session import BlueStacksSession
 from pnc_automation.pnc.screen_type import ScreenType
-from pnc_automation.vision.observation_builder import ObservationService
+from tests.live_smoke_support import build_live_session, build_observation_service
 
 
 def _live_smoke_enabled() -> bool:
@@ -30,7 +26,7 @@ class LiveAccountNavigationSmokeTests(unittest.TestCase):
         """Builds the live runtime, captures a pre-run observation, executes the smoke script, and re-observes."""
 
         cls.config_path = Path(os.getenv("PNC_LIVE_SMOKE_CONFIG", "config/accounts.yaml"))
-        cls.account_id = os.getenv("PNC_LIVE_SMOKE_ACCOUNT", "BlueStacks App Player 1")
+        cls.account_id = os.getenv("PNC_LIVE_SMOKE_ACCOUNT", "testing")
         cls.script_path = Path(os.getenv("PNC_LIVE_SMOKE_SCRIPT", "scripts/account_navigation_smoke.yaml"))
         cls.application = build_application_runner(cls.config_path)
         cls.script_runner = cls.application.script_runner
@@ -72,40 +68,13 @@ class LiveAccountNavigationSmokeTests(unittest.TestCase):
         self.assertIsNotNone(roster)
         self.assertTrue(any(castle == self.account.selected_castle for castle in roster.castles), roster)
 
+def _build_live_session(**kwargs: object):
+    """Routes legacy test-local helper calls through the shared live-smoke support module."""
 
-def _build_live_session(*, config_account: AccountConfig, script_runner: object) -> BlueStacksSession:
-    """Creates and connects one live BlueStacks session using the application runtime's authoritative wiring."""
-
-    config = script_runner.config
-    instance = BlueStacksInstance.from_config(config.require_instance(config_account.instance_id))
-    session = BlueStacksSession(adb_client=script_runner.adb_client, instance=instance)
-    session.connect()
-    session.ensure_responsive()
-    return session
+    return build_live_session(**kwargs)
 
 
-def _build_observation_service(
-    *,
-    config_account: AccountConfig,
-    script_runner: object,
-    session: BlueStacksSession,
-) -> ObservationService:
-    """Builds one live observation service from the same runtime components used by the application."""
+def _build_observation_service(**kwargs: object):
+    """Routes legacy test-local helper calls through the shared live-smoke support module."""
 
-    return ObservationService(
-        screenshot_service=_require_screenshot_service(script_runner),
-        observation_builder=script_runner.observation_builder,
-        session=session,
-        artifact_directory=config_account.artifact_directory_name,
-        pnc_account_id=config_account.pnc_account_id,
-        castle_roster_store=script_runner.castle_roster_store,
-    )
-
-
-def _require_screenshot_service(script_runner: object) -> ScreenshotService:
-    """Returns the runtime screenshot service or fails fast when the script runner shape changes."""
-
-    screenshot_service = getattr(script_runner, "screenshot_service", None)
-    if not isinstance(screenshot_service, ScreenshotService):
-        raise AssertionError("Live smoke tests require ScriptRunner.screenshot_service.")
-    return screenshot_service
+    return build_observation_service(**kwargs)

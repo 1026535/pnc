@@ -56,6 +56,34 @@ class ScreenClassifierTests(unittest.TestCase):
 
         self.assertEqual(screen_type, ScreenType.PNC_POPUP)
 
+    def test_classify_daily_to_do_from_header_selector(self) -> None:
+        """Recognizes the Daily To-Do overlay from its canonical header anchor."""
+
+        classifier = ScreenClassifier()
+
+        screen_type = classifier.classify(
+            {
+                UiElementId.PNC_DAILY_TO_DO_HEADER: make_visible(UiElementId.PNC_DAILY_TO_DO_HEADER),
+            }
+        )
+
+        self.assertEqual(screen_type, ScreenType.PNC_DAILY_TO_DO)
+
+    def test_classify_chat_from_header_tabs_and_send(self) -> None:
+        """Recognizes chat from its header, one channel tab, and the footer send action."""
+
+        classifier = ScreenClassifier()
+
+        screen_type = classifier.classify(
+            {
+                UiElementId.PNC_CHAT_HEADER: make_visible(UiElementId.PNC_CHAT_HEADER),
+                UiElementId.PNC_CHAT_TAB_KINGDOM: make_visible(UiElementId.PNC_CHAT_TAB_KINGDOM),
+                UiElementId.PNC_CHAT_SEND_BUTTON: make_visible(UiElementId.PNC_CHAT_SEND_BUTTON),
+            }
+        )
+
+        self.assertEqual(screen_type, ScreenType.PNC_CHAT)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -23,6 +23,12 @@ _SCREEN_FAMILY_OBSERVED_SCREENS = {
     ScreenType.PNC_ALLIANCE_JOIN: frozenset(
         {ScreenType.UNKNOWN, ScreenType.PNC_CASTLE_SELECTION, ScreenType.PNC_HOME_CITY, ScreenType.PNC_MORE_MENU}
     ),
+    ScreenType.PNC_CHAT: frozenset(
+        {ScreenType.UNKNOWN, ScreenType.PNC_CHAT, ScreenType.PNC_HOME_CITY, ScreenType.PNC_WORLD_MAP}
+    ),
+    ScreenType.PNC_DAILY_TO_DO: frozenset(
+        {ScreenType.UNKNOWN, ScreenType.PNC_CASTLE_SELECTION, ScreenType.PNC_HOME_CITY, ScreenType.PNC_MORE_MENU}
+    ),
     ScreenType.PNC_ACADEMY: frozenset(
         {ScreenType.UNKNOWN, ScreenType.PNC_CASTLE_SELECTION, ScreenType.PNC_HOME_CITY, ScreenType.PNC_MORE_MENU}
     ),

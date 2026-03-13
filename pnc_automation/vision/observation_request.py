@@ -14,9 +14,11 @@ from pnc_automation.vision.selectors import ClickOutcome
 class ObservationRequest:
     """Describes which OCR-backed fact families are allowed for one observation."""
 
+    candidate_screen_types: frozenset[ScreenType] = frozenset()
     ocr_screen_types: frozenset[ScreenType] = frozenset()
     include_popup_guard: bool = False
     include_loading_guard: bool = False
+    include_chat_state: bool = False
 
     @classmethod
     def base(cls) -> "ObservationRequest":
@@ -32,6 +34,7 @@ class ObservationRequest:
             ocr_screen_types=runtime_screen_family_ocr_types(),
             include_popup_guard=True,
             include_loading_guard=True,
+            include_chat_state=True,
         )
 
     @classmethod
@@ -44,21 +47,37 @@ class ObservationRequest:
     def navigation_follow_up(cls, reviewed_outcomes: Sequence[ClickOutcome]) -> "ObservationRequest":
         """Returns the narrow OCR scope used after one reviewed navigation tap."""
 
+        target_screens = frozenset(
+            outcome.target_screen
+            for outcome in reviewed_outcomes
+            if outcome.target_screen not in {None, ScreenType.PNC_LOADING, ScreenType.PNC_POPUP}
+        )
         return cls(
-            ocr_screen_types=frozenset(
-                outcome.target_screen
-                for outcome in reviewed_outcomes
-                if outcome.target_screen not in {None, ScreenType.PNC_LOADING, ScreenType.PNC_POPUP}
-            ),
+            candidate_screen_types=target_screens,
+            ocr_screen_types=target_screens,
             include_popup_guard=True,
             include_loading_guard=True,
+            include_chat_state=ScreenType.PNC_CHAT in target_screens,
         )
 
     @classmethod
     def source_screen_retry(cls, screen_type: ScreenType) -> "ObservationRequest":
         """Returns the OCR scope used to re-resolve one selector on its source screen."""
 
-        return cls(ocr_screen_types=frozenset({screen_type}))
+        return cls(
+            candidate_screen_types=frozenset({screen_type}),
+            ocr_screen_types=frozenset({screen_type}),
+            include_chat_state=screen_type == ScreenType.PNC_CHAT,
+        )
+
+    @classmethod
+    def chat_send_follow_up(cls) -> "ObservationRequest":
+        """Returns the narrow non-navigation follow-up used after sending one chat message."""
+
+        return cls(
+            candidate_screen_types=frozenset({ScreenType.PNC_CHAT}),
+            include_chat_state=True,
+        )
 
     def requires_ocr(self, screen_type: ScreenType) -> bool:
         """Returns whether the request needs OCR for the current coarse screen state."""
@@ -75,3 +94,8 @@ class ObservationRequest:
         """Returns whether the request allows OCR builders for the requested screen family."""
 
         return screen_type in self.ocr_screen_types
+
+    def allows_candidate_screen(self, screen_type: ScreenType) -> bool:
+        """Returns whether the request allows cheap candidate-screen validators for one screen family."""
+
+        return screen_type in self.candidate_screen_types

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -76,6 +77,14 @@ def _load_defaults(raw_defaults: Any) -> DefaultsConfig:
         post_action_observe_delay_ms=_require_int(
             raw.get("post_action_observe_delay_ms", 800),
             context="defaults.post_action_observe_delay_ms",
+        ),
+        chat_stable_click_delay_ms=_require_int(
+            raw.get("chat_stable_click_delay_ms", 120),
+            context="defaults.chat_stable_click_delay_ms",
+        ),
+        chat_post_action_observe_delay_ms=_require_int(
+            raw.get("chat_post_action_observe_delay_ms", 250),
+            context="defaults.chat_post_action_observe_delay_ms",
         ),
     )
 
@@ -189,7 +198,7 @@ def _load_castle_entry(raw_castle: Any, *, context: str) -> SelectedCastleConfig
     raw = _require_mapping(raw_castle, context=context)
     level_value = raw.get("castle_level")
     return SelectedCastleConfig(
-        kingdom=_require_string(raw.get("kingdom"), context=f"{context}.kingdom"),
+        kingdom=_require_kingdom_identifier(raw.get("kingdom"), context=f"{context}.kingdom"),
         castle_name=_require_string(raw.get("castle_name"), context=f"{context}.castle_name"),
         castle_level=None if level_value is None else _require_int(level_value, context=f"{context}.castle_level"),
     )
@@ -313,6 +322,19 @@ def _require_string(value: Any, *, context: str) -> str:
     if not isinstance(value, str) or value.strip() == "":
         raise ConfigurationError(f"Expected {context} to be a non-empty string.", context=context)
     return value
+
+
+def _require_kingdom_identifier(value: Any, *, context: str) -> str:
+    """Ensures one kingdom identifier uses the canonical ``K###``-style format."""
+
+    kingdom = _require_string(value, context=context)
+    if re.fullmatch(r"K\d{2,4}", kingdom) is None:
+        raise ConfigurationError(
+            f"Expected {context} to use canonical kingdom format 'K###'.",
+            context=context,
+            kingdom=kingdom,
+        )
+    return kingdom
 
 
 def _require_int(value: Any, *, context: str) -> int:

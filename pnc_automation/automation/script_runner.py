@@ -70,6 +70,8 @@ class ScriptRunner:
             session=session,
             stable_click_delay_ms=self.config.defaults.stable_click_delay_ms,
             post_action_observe_delay_ms=self.config.defaults.post_action_observe_delay_ms,
+            chat_stable_click_delay_ms=self.config.defaults.chat_stable_click_delay_ms,
+            chat_post_action_observe_delay_ms=self.config.defaults.chat_post_action_observe_delay_ms,
             logger=logging.LoggerAdapter(self.logger.logger, extra={**self.logger.extra, **shared_extra}),
         )
         runner = AutomationRunner(

@@ -241,6 +241,136 @@ selectors:
   - PNC_HOME_CITY
   status: screenshot_seeded
   detection_kind: template
+- id: PNC_HOME_FAST_BUILD_TOGGLE
+  screens:
+  - PNC_HOME_CITY
+  status: planned
+  detection_kind: planned
+  interaction_kind: action
+  relative_bounds:
+    x_ratio: 0.0
+    y_ratio: 0.8225
+    width_ratio: 0.11
+    height_ratio: 0.07
+    action_x_ratio: 0.055
+    action_y_ratio: 0.8575
+- id: PNC_CHAT_SHORTCUT
+  screens:
+  - PNC_HOME_CITY
+  - PNC_WORLD_MAP
+  status: planned
+  detection_kind: planned
+  interaction_kind: navigation
+  click:
+    anchor: center
+    outcomes:
+    - safe_to_click: true
+      monetized: false
+      target_screen: PNC_CHAT
+  relative_bounds:
+    x_ratio: 0.0
+    y_ratio: 0.8525
+    width_ratio: 0.11
+    height_ratio: 0.07
+    action_x_ratio: 0.055
+    action_y_ratio: 0.8875
+- id: PNC_CHAT_HEADER
+  screens:
+  - PNC_CHAT
+  status: planned
+  detection_kind: planned
+  interaction_kind: label
+  relative_bounds:
+    x_ratio: 0.14
+    y_ratio: 0.0
+    width_ratio: 0.22
+    height_ratio: 0.065
+- id: PNC_CHAT_TAB_KINGDOM
+  screens:
+  - PNC_CHAT
+  status: planned
+  detection_kind: planned
+  interaction_kind: action
+  relative_bounds:
+    x_ratio: 0.11
+    y_ratio: 0.055
+    width_ratio: 0.3
+    height_ratio: 0.07
+    action_x_ratio: 0.305
+    action_y_ratio: 0.08625
+- id: PNC_CHAT_TAB_ALLIANCE
+  screens:
+  - PNC_CHAT
+  status: planned
+  detection_kind: planned
+  interaction_kind: action
+  relative_bounds:
+    x_ratio: 0.58
+    y_ratio: 0.055
+    width_ratio: 0.27
+    height_ratio: 0.07
+    action_x_ratio: 0.793333333333
+    action_y_ratio: 0.08625
+- id: PNC_CHAT_INPUT_FIELD
+  screens:
+  - PNC_CHAT
+  status: planned
+  detection_kind: planned
+  interaction_kind: action
+  relative_bounds:
+    x_ratio: 0.045
+    y_ratio: 0.935
+    width_ratio: 0.73
+    height_ratio: 0.05
+    action_x_ratio: 0.41
+    action_y_ratio: 0.96
+- id: PNC_CHAT_SEND_BUTTON
+  screens:
+  - PNC_CHAT
+  status: planned
+  detection_kind: planned
+  interaction_kind: action
+  relative_bounds:
+    x_ratio: 0.833333333333
+    y_ratio: 0.95
+    width_ratio: 0.122222222222
+    height_ratio: 0.03125
+    action_x_ratio: 0.894444444444
+    action_y_ratio: 0.965625
+- id: PNC_HOME_TUTORIAL_QUEST_SHORTCUT
+  screens:
+  - PNC_HOME_CITY
+  status: planned
+  detection_kind: planned
+  interaction_kind: action
+  relative_bounds:
+    x_ratio: 0.0
+    y_ratio: 0.7925
+    width_ratio: 0.43
+    height_ratio: 0.07
+    action_x_ratio: 0.215
+    action_y_ratio: 0.8275
+- id: PNC_HOME_DAILY_TO_DO_SHORTCUT
+  screens:
+  - PNC_HOME_CITY
+  status: planned
+  detection_kind: planned
+  interaction_kind: navigation
+  click:
+    anchor: center
+    outcomes:
+    - safe_to_click: true
+      monetized: false
+      target_screen: PNC_DAILY_TO_DO
+      verification_selectors:
+      - PNC_DAILY_TO_DO_HEADER
+  relative_bounds:
+    x_ratio: 0.0
+    y_ratio: 0.365
+    width_ratio: 0.11
+    height_ratio: 0.07
+    action_x_ratio: 0.055
+    action_y_ratio: 0.4
 - id: PNC_HOME_LORD_INFO_SHORTCUT
   screens:
   - PNC_HOME_CITY
@@ -654,6 +784,12 @@ selectors:
   - PNC_ALLIANCE_HOME
   status: screenshot_seeded
   detection_kind: template
+- id: PNC_DAILY_TO_DO_HEADER
+  screens:
+  - PNC_DAILY_TO_DO
+  status: planned
+  detection_kind: planned
+  interaction_kind: label
 - id: PNC_CASH_MALL_TAB_DAILY_SALE
   screens:
   - PNC_CASH_MALL

@@ -64,7 +64,10 @@ def build_application_runner(
             ocr_service=ocr_service,
         ),
         screen_classifier=ScreenClassifier(),
-        enricher=PncObservationEnricher(ocr_service=ocr_service),
+        enricher=PncObservationEnricher(
+            ocr_service=ocr_service,
+            selector_registry=selector_registry,
+        ),
     )
     script_runner = ScriptRunner(
         config=app_config,

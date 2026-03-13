@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from PIL import Image
 
 from pnc_automation.config.models import SelectedCastleConfig
+from pnc_automation.errors import SelectorResolutionError
+from pnc_automation.pnc.chat import ChatChannel
 from pnc_automation.pnc.observation import Bounds, DetectedListEntry, ListEntryKind, VisibleElement, VisibleElementSourceKind
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
@@ -17,6 +19,7 @@ from pnc_automation.vision.observation_request import ObservationRequest
 from pnc_automation.vision.pnc_ocr_capabilities import can_attempt_screen_family_ocr
 from pnc_automation.vision.ocr_service import OcrLine, OcrService
 from pnc_automation.vision.screen_classifier import ScreenEvidence
+from pnc_automation.vision.selectors import SelectorRegistry
 from pnc_automation.vision.text_anchors import (
     DetectedTextAnchor,
     TextAnchorDetector,
@@ -178,6 +181,16 @@ _ACADEMY_CATEGORY_TEXTS = frozenset(
         "FORMATIONS",
     }
 )
+_DAILY_TO_DO_SECTION_TEXTS = frozenset(
+    {
+        "CAMP",
+        "DAILYQUEST",
+    }
+)
+_CHAT_HEADER_TEXT = "CHAT"
+_CHAT_KINGDOM_TEXT = "KINGDOM"
+_CHAT_ALLIANCE_TEXT = "ALLIANCE"
+_CHAT_EMPTY_INPUT_TEXTS = frozenset({"", "PLEASEENTERCONTENT"})
 _RESEARCH_TREE_SUPPORT_TOKENS = frozenset(
     {
         "ATK",
@@ -232,6 +245,7 @@ class PncObservationEnricher:
     """Derives P&C screen facts that are more reliable via OCR than selectors."""
 
     ocr_service: OcrService
+    selector_registry: SelectorRegistry | None = None
     text_anchor_detector: TextAnchorDetector = field(default_factory=TextAnchorDetector)
 
     def enrich(
@@ -243,6 +257,13 @@ class PncObservationEnricher:
     ) -> ObservationAdditions:
         """Builds OCR-backed bootstrap, fallback-classification, and castle-roster observations."""
 
+        chat_geometry = self._build_chat_geometry_additions(
+            image=image,
+            screen_type=screen_type,
+            request=request,
+        )
+        if chat_geometry is not None:
+            return chat_geometry
         if not request.requires_ocr(screen_type):
             return ObservationAdditions()
         ocr_result = self.ocr_service.read_result(image)
@@ -333,6 +354,20 @@ class PncObservationEnricher:
             alliance_join = _build_alliance_join_additions(image=image, lines=lines)
             if alliance_join is not None:
                 return alliance_join
+        if request.allows_screen(ScreenType.PNC_CHAT) and can_attempt_screen_family_ocr(
+            request_screen=ScreenType.PNC_CHAT,
+            observed_screen=screen_type,
+        ):
+            chat = _build_chat_additions(image=image, lines=lines)
+            if chat is not None:
+                return chat
+        if request.allows_screen(ScreenType.PNC_DAILY_TO_DO) and can_attempt_screen_family_ocr(
+            request_screen=ScreenType.PNC_DAILY_TO_DO,
+            observed_screen=screen_type,
+        ):
+            daily_to_do = _build_daily_to_do_additions(image=image, lines=lines)
+            if daily_to_do is not None:
+                return daily_to_do
         if request.allows_screen(ScreenType.PNC_ACADEMY) and can_attempt_screen_family_ocr(
             request_screen=ScreenType.PNC_ACADEMY,
             observed_screen=screen_type,
@@ -377,6 +412,71 @@ class PncObservationEnricher:
             screen_evidence=(ScreenEvidence(ScreenType.PNC_CASTLE_SELECTION, "manage_char_roster"),),
             current_castle=_entry_to_current_castle(selected_entry),
         )
+
+    def _build_chat_geometry_additions(
+        self,
+        *,
+        image: Image.Image,
+        screen_type: ScreenType,
+        request: ObservationRequest,
+    ) -> ObservationAdditions | None:
+        """Returns geometry-first chat evidence when the shared tab and footer chrome is visible."""
+
+        if not request.allows_candidate_screen(ScreenType.PNC_CHAT) and not request.allows_screen(ScreenType.PNC_CHAT):
+            return None
+        if screen_type not in {ScreenType.UNKNOWN, ScreenType.PNC_CHAT, ScreenType.PNC_HOME_CITY, ScreenType.PNC_WORLD_MAP}:
+            return None
+        if self.selector_registry is None:
+            return None
+        input_region = self._require_chat_region(UiElementId.PNC_CHAT_INPUT_FIELD, image=image)
+        if _region_brightness(image, input_region) > 60:
+            return None
+        kingdom_region = self._require_chat_region(UiElementId.PNC_CHAT_TAB_KINGDOM, image=image)
+        alliance_region = self._require_chat_region(UiElementId.PNC_CHAT_TAB_ALLIANCE, image=image)
+        kingdom_warmth = _region_warmth(image, kingdom_region)
+        alliance_warmth = _region_warmth(image, alliance_region)
+        if max(kingdom_warmth, alliance_warmth) < 120 or abs(kingdom_warmth - alliance_warmth) < 80:
+            return None
+        active_chat_channel = ChatChannel.WORLD if kingdom_warmth > alliance_warmth else ChatChannel.ALLIANCE
+        chat_draft_empty, chat_draft_text = self._read_chat_draft_state(
+            image=image,
+            input_region=input_region,
+            include_chat_state=request.include_chat_state,
+        )
+        return ObservationAdditions(
+            screen_evidence=(ScreenEvidence(ScreenType.PNC_CHAT, "geometry_chat_overlay"),),
+            active_chat_channel=active_chat_channel,
+            chat_draft_empty=chat_draft_empty,
+            chat_draft_text=chat_draft_text,
+        )
+
+    def _read_chat_draft_state(
+        self,
+        *,
+        image: Image.Image,
+        input_region: object,
+        include_chat_state: bool,
+    ) -> tuple[bool | None, str | None]:
+        """Returns the current draft state from the narrow chat-input OCR region when requested."""
+
+        if not include_chat_state:
+            return None, None
+        raw_text = self.ocr_service.read_text(image, input_region).strip()
+        normalized_text = normalize_ocr_text(raw_text)
+        if normalized_text in _CHAT_EMPTY_INPUT_TEXTS:
+            return True, None
+        return False, raw_text
+
+    def _require_chat_region(self, selector_id: UiElementId, *, image: Image.Image) -> object:
+        """Materializes one shared chat selector region from the canonical registry."""
+
+        selector = self.selector_registry.require(selector_id)
+        if selector.relative_bounds is None:
+            raise SelectorResolutionError(
+                "Chat geometry enrichment requires relative bounds for the requested selector.",
+                selector_id=selector_id,
+            )
+        return selector.relative_bounds.materialize_region(image_size=image.size)
 
 
 def _build_popup_additions(
@@ -1043,6 +1143,89 @@ def _build_alliance_join_additions(
     )
 
 
+def _build_daily_to_do_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Returns the Daily To-Do overlay when OCR matches the live task checklist layout."""
+
+    header = _find_line_with_normalized_text(
+        lines=lines,
+        normalized_text="DAILYTODO",
+        max_y=int(image.height * 0.28),
+    )
+    if header is None:
+        return None
+    close_hint = _find_line_with_normalized_text(
+        lines=lines,
+        normalized_text="TAPTOCLOSE",
+        min_y=int(image.height * 0.78),
+    )
+    if close_hint is None:
+        return None
+    section_count = sum(1 for line in lines if normalize_ocr_text(line.text) in _DAILY_TO_DO_SECTION_TEXTS)
+    if section_count < 2:
+        return None
+    go_count = sum(
+        1
+        for line in lines
+        if normalize_ocr_text(line.text) == "GO"
+        and line.bounds.x >= int(image.width * 0.55)
+    )
+    if go_count < 2:
+        return None
+    return ObservationAdditions(
+        visible_elements={
+            UiElementId.PNC_DAILY_TO_DO_HEADER: _make_visible_from_line(
+                selector_id=UiElementId.PNC_DAILY_TO_DO_HEADER,
+                line=header,
+            )
+        },
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_DAILY_TO_DO, "ocr_daily_to_do_overlay"),),
+    )
+
+
+def _build_chat_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Returns the chat overlay when OCR exposes the header and shared channel tabs."""
+
+    header = _find_line_with_normalized_text(
+        lines=lines,
+        normalized_text=_CHAT_HEADER_TEXT,
+        min_x=int(image.width * 0.12),
+        max_y=int(image.height * 0.08),
+    )
+    kingdom = _find_line_with_normalized_text(
+        lines=lines,
+        normalized_text=_CHAT_KINGDOM_TEXT,
+        min_x=int(image.width * 0.12),
+        min_y=int(image.height * 0.05),
+        max_y=int(image.height * 0.14),
+    )
+    alliance = _find_line_with_normalized_text(
+        lines=lines,
+        normalized_text=_CHAT_ALLIANCE_TEXT,
+        min_x=int(image.width * 0.55),
+        min_y=int(image.height * 0.05),
+        max_y=int(image.height * 0.14),
+    )
+    if header is None or kingdom is None or alliance is None:
+        return None
+    return ObservationAdditions(
+        visible_elements={
+            UiElementId.PNC_CHAT_HEADER: _make_visible_from_line(
+                selector_id=UiElementId.PNC_CHAT_HEADER,
+                line=header,
+            ),
+        },
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_CHAT, "ocr_chat_overlay"),),
+    )
+
+
 def _build_research_tree_additions(
     *,
     image: Image.Image,
@@ -1628,3 +1811,39 @@ def _anchor_in_line_range(anchor: DetectedTextAnchor, row_lines: tuple[OcrLine, 
     top = row_lines[0].bounds.y
     bottom = row_lines[-1].bounds.y + row_lines[-1].bounds.height
     return anchor.bounds.y >= top and anchor.bounds.y <= bottom
+
+
+def _region_warmth(image: Image.Image, region: object) -> float:
+    """Returns a simple warm-color score for one region used by the chat-tab state parser."""
+
+    red, green, blue = _region_average_rgb(image, region)
+    return red + green - blue
+
+
+def _region_brightness(image: Image.Image, region: object) -> float:
+    """Returns the mean brightness of one region used by the chat footer parser."""
+
+    red, green, blue = _region_average_rgb(image, region)
+    return (red + green + blue) / 3.0
+
+
+def _region_average_rgb(image: Image.Image, region: object) -> tuple[float, float, float]:
+    """Returns the average RGB values for one region-like object."""
+
+    crop = image.crop((region.x, region.y, region.x + region.width, region.y + region.height)).convert("RGB")
+    red_total = 0
+    green_total = 0
+    blue_total = 0
+    pixel_count = crop.width * crop.height
+    pixels = crop.load()
+    for y in range(crop.height):
+        for x in range(crop.width):
+            red, green, blue = pixels[x, y]
+            red_total += red
+            green_total += green
+            blue_total += blue
+    return (
+        red_total / pixel_count,
+        green_total / pixel_count,
+        blue_total / pixel_count,
+    )

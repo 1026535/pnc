@@ -11,6 +11,7 @@ from typing import Any
 
 from pnc_automation.config.models import PncAccountCastleRosterConfig, SelectedCastleConfig
 from pnc_automation.errors import SelectorResolutionError
+from pnc_automation.pnc.chat import ChatChannel
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
 
@@ -105,6 +106,9 @@ class Observation:
     verified_pnc_account_id: str | None = None
     castle_roster_snapshot: PncAccountCastleRosterConfig | None = None
     available_march_slots: int | None = None
+    active_chat_channel: ChatChannel | None = None
+    chat_draft_empty: bool | None = None
+    chat_draft_text: str | None = None
 
     @property
     def current_castle_name(self) -> str | None:
@@ -156,6 +160,11 @@ class Observation:
             if castle_entry_matches(entry, castle):
                 return entry
         return None
+
+    def is_chat_channel_active(self, channel: ChatChannel) -> bool:
+        """Returns whether the observed chat overlay already has the requested channel selected."""
+
+        return self.active_chat_channel == channel
 
 
 def castle_entry_matches(entry: DetectedListEntry, castle: SelectedCastleConfig) -> bool:

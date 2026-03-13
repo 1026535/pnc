@@ -31,6 +31,8 @@ class ConfigLoaderTests(unittest.TestCase):
                       screenshot_format: png
                       stable_click_delay_ms: 111
                       post_action_observe_delay_ms: 222
+                      chat_stable_click_delay_ms: 33
+                      chat_post_action_observe_delay_ms: 44
                     instances:
                       - id: bs-main
                         device_id: 127.0.0.1:5555
@@ -53,6 +55,8 @@ class ConfigLoaderTests(unittest.TestCase):
             config = load_app_config(config_path, env={"TEST_USER": "user", "TEST_PASS": "pass"})
 
             self.assertEqual(config.defaults.stable_click_delay_ms, 111)
+            self.assertEqual(config.defaults.chat_stable_click_delay_ms, 33)
+            self.assertEqual(config.defaults.chat_post_action_observe_delay_ms, 44)
             self.assertTrue(config.artifact_root.is_dir())
             self.assertEqual(config.artifact_root, (root / "artifacts").resolve())
             self.assertEqual(config.require_account("account_a").credentials.username, "user")
@@ -458,6 +462,35 @@ class ConfigLoaderTests(unittest.TestCase):
                         password: inline_pass
                         selected_castle:
                           kingdom: K230
+                          castle_name: Main
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(ConfigurationError):
+                load_app_config(config_path)
+
+    def test_load_app_config_rejects_non_canonical_kingdom_identifier(self) -> None:
+        """Rejects selected-castle kingdoms that are not authored in canonical `K###` form."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            config_path = Path(temp_directory) / "accounts.yaml"
+            config_path.write_text(
+                textwrap.dedent(
+                    """
+                    instances:
+                      - id: bs-main
+                        device_id: 127.0.0.1:5555
+                        app_package: com.global.tmslg
+                    accounts:
+                      - id: account_a
+                        instance_id: bs-main
+                        pnc_account_id: inline_user
+                        username: inline_user
+                        password: inline_pass
+                        selected_castle:
+                          kingdom: k230
                           castle_name: Main
                     """
                 ).strip(),

@@ -14,6 +14,7 @@ from pnc_automation.capture.artifact_store import ArtifactStore
 from pnc_automation.capture.screenshot_service import ScreenshotService
 from pnc_automation.config.castle_roster_store import CastleRosterStore
 from pnc_automation.config.models import PncAccountCastleRosterConfig, SelectedCastleConfig
+from pnc_automation.pnc.chat import ChatChannel
 from pnc_automation.pnc.observation import ListEntryKind, VisibleElementSourceKind
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
@@ -418,6 +419,111 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertEqual(observation.require(UiElementId.PNC_ACCOUNT_SWITCH_CONTINUE_BUTTON).bounds.x, 159)
             self.assertEqual(observation.require(UiElementId.PNC_ACCOUNT_SWITCH_CHANGE_ACCOUNT_BUTTON).bounds.width, 340)
             self.assertEqual(observation.current_pnc_account_id, "user@example.com")
+
+    def test_observation_builder_classifies_chat_from_live_like_ocr(self) -> None:
+        """Recognizes chat from OCR and materializes the shared draft-input geometry."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                artifact_directory="k230_chat",
+                label="chat_live_like",
+            )
+            builder = ObservationBuilder(
+                selector_registry=build_default_selector_registry(),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Chat", x=181, y=20, width=113, height=49),
+                            _ocr_line("Kingdom", x=202, y=117, width=143, height=40),
+                            _ocr_line("Alliance", x=652, y=116, width=123, height=39),
+                        )
+                    ),
+                    selector_registry=build_default_selector_registry(),
+                ),
+            )
+
+            observation = builder.build(
+                screenshot,
+                request=ObservationRequest.source_screen_retry(ScreenType.PNC_CHAT),
+            )
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_CHAT)
+            self.assertTrue(observation.has(UiElementId.PNC_CHAT_HEADER))
+            self.assertTrue(observation.has(UiElementId.PNC_CHAT_TAB_KINGDOM))
+            self.assertTrue(observation.has(UiElementId.PNC_CHAT_TAB_ALLIANCE))
+            self.assertTrue(observation.has(UiElementId.PNC_CHAT_SEND_BUTTON))
+            self.assertTrue(observation.has(UiElementId.PNC_CHAT_INPUT_FIELD))
+            self.assertEqual(
+                observation.require(UiElementId.PNC_CHAT_HEADER).source_kind,
+                VisibleElementSourceKind.OCR,
+            )
+            self.assertEqual(
+                observation.require(UiElementId.PNC_CHAT_TAB_KINGDOM).source_kind,
+                VisibleElementSourceKind.GEOMETRY,
+            )
+            self.assertEqual(
+                observation.require(UiElementId.PNC_CHAT_TAB_ALLIANCE).source_kind,
+                VisibleElementSourceKind.GEOMETRY,
+            )
+            self.assertEqual(
+                observation.require(UiElementId.PNC_CHAT_SEND_BUTTON).source_kind,
+                VisibleElementSourceKind.GEOMETRY,
+            )
+            self.assertEqual(
+                observation.require(UiElementId.PNC_CHAT_INPUT_FIELD).source_kind,
+                VisibleElementSourceKind.GEOMETRY,
+            )
+
+    def test_observation_builder_uses_geometry_first_chat_follow_up_without_full_frame_ocr(self) -> None:
+        """Recognizes chat from the shared tab/footer geometry during narrow chat follow-up observations."""
+
+        registry = build_default_selector_registry()
+        ocr_service = _RecordingOcrService(lines=())
+        builder = ObservationBuilder(
+            selector_registry=registry,
+            selector_engine=PillowSelectorEngine(
+                template_matcher=PillowTemplateMatcher(),
+                ocr_service=ocr_service,
+            ),
+            screen_classifier=ScreenClassifier(),
+            enricher=PncObservationEnricher(
+                ocr_service=ocr_service,
+                selector_registry=registry,
+            ),
+        )
+        screenshot = type(
+            "Captured",
+            (),
+            {
+                "image": Image.open(
+                    Path(__file__).resolve().parents[1]
+                    / "artifacts"
+                    / "2026-03-13"
+                    / "k287_pine_cobaye_1"
+                    / "20260313T134419Z_live_send_chat_helper_post_action_1.png"
+                ),
+                "artifact": type("Artifact", (), {"path": Path("chat.png"), "captured_at": None})(),
+            },
+        )()
+
+        observation = builder.build(
+            screenshot,
+            request=ObservationRequest.chat_send_follow_up(),
+        )
+
+        self.assertEqual(observation.screen_type, ScreenType.PNC_CHAT)
+        self.assertEqual(observation.active_chat_channel, ChatChannel.ALLIANCE)
+        self.assertTrue(observation.chat_draft_empty)
+        self.assertEqual(ocr_service.read_result_calls, 0)
+        self.assertGreater(ocr_service.read_text_calls, 0)
 
     def test_observation_builder_classifies_loading_reconnect_from_live_like_ocr(self) -> None:
         """Recognizes reconnect prompts as loading-state bootstrap screens."""
@@ -1099,6 +1205,43 @@ class CaptureAndVisionTests(unittest.TestCase):
             observation = builder.build(screenshot)
 
             self.assertEqual(observation.screen_type, ScreenType.PNC_ALLIANCE_JOIN)
+
+    def test_observation_builder_classifies_daily_to_do_from_live_like_ocr(self) -> None:
+        """Recognizes the Daily To-Do overlay and exposes its canonical header anchor."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (400, 800), (15, 28, 68)))),
+                artifact_directory="k157_daily_to_do",
+                label="daily_to_do_live_like",
+            )
+            builder = ObservationBuilder(
+                selector_registry=build_default_selector_registry(),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Daily To-Do", x=110, y=93, width=160, height=28),
+                            _ocr_line("Camp", x=17, y=150, width=55, height=21),
+                            _ocr_line("Daily Quest", x=21, y=386, width=95, height=22),
+                            _ocr_line("Go", x=251, y=179, width=37, height=20),
+                            _ocr_line("Go", x=251, y=244, width=37, height=20),
+                            _ocr_line("Tap to close", x=131, y=716, width=112, height=22),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_DAILY_TO_DO)
+            self.assertTrue(observation.has(UiElementId.PNC_DAILY_TO_DO_HEADER))
 
     def test_observation_builder_classifies_research_tree_from_live_like_ocr(self) -> None:
         """Recognizes the live research grid so flows can back out to home safely."""
