@@ -14,6 +14,10 @@ from pnc_automation.automation.tasks.login_task import LoginTask
 from pnc_automation.automation.tasks.popup_recovery_task import PopupRecoveryTask
 from pnc_automation.automation.tasks.research_task import ResearchTask
 from pnc_automation.automation.tasks.select_castle_task import SelectCastleTask
+from pnc_automation.automation.tasks.send_chat_message_task import (
+    SendAllianceChatMessageTask,
+    SendWorldChatMessageTask,
+)
 from pnc_automation.errors import ScriptValidationError
 
 
@@ -85,6 +89,8 @@ def build_default_task_registry() -> TaskRegistry:
             PopupRecoveryTask(),
             LoginTask(),
             SelectCastleTask(),
+            SendAllianceChatMessageTask(),
+            SendWorldChatMessageTask(),
             BuildingUpgradeTask(),
             ResearchTask(),
             GatheringTask(),

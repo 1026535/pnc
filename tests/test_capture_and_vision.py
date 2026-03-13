@@ -14,7 +14,9 @@ from pnc_automation.capture.artifact_store import ArtifactStore
 from pnc_automation.capture.screenshot_service import ScreenshotService
 from pnc_automation.config.castle_roster_store import CastleRosterStore
 from pnc_automation.config.models import PncAccountCastleRosterConfig, SelectedCastleConfig
+from pnc_automation.automation.action_executor import ActionExecutor
 from pnc_automation.pnc.chat import ChatChannel
+from pnc_automation.pnc.screen_flows import ScreenFlowPlanner
 from pnc_automation.pnc.observation import ListEntryKind, VisibleElementSourceKind
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
@@ -46,7 +48,7 @@ from pnc_automation.vision.selectors import (
     build_default_selector_registry,
 )
 from pnc_automation.vision.template_matcher import PillowTemplateMatcher
-from tests.test_support import build_png_bytes, make_observation
+from tests.test_support import FakeObservationService, FakeSession, build_logger, build_png_bytes, make_observation
 
 
 class _FakeScreenshotSession:
@@ -116,6 +118,99 @@ class _RecordingOcrService(_FakeOcrService):
 
         self.read_text_calls += 1
         return _FakeOcrService.read_text(self, image, region)
+
+
+def _materialize_chat_region(
+    registry: SelectorRegistry,
+    selector_id: UiElementId,
+    *,
+    image_size: tuple[int, int],
+) -> Region:
+    """Returns one materialized chat region from the canonical selector registry."""
+
+    selector = registry.require(selector_id)
+    if selector.relative_bounds is None:
+        raise AssertionError(f"Expected relative bounds for selector '{selector_id.value}'.")
+    return selector.relative_bounds.materialize_region(image_size=image_size)
+
+
+def _make_chat_ocr_fallback_fixture(
+    *,
+    active_channel: ChatChannel,
+    draft_ocr_text: str | None,
+    image_size: tuple[int, int] = (900, 1600),
+) -> tuple[object, SelectorRegistry, _RecordingOcrService]:
+    """Builds a synthetic chat screenshot where geometry misses but OCR still proves chat."""
+
+    registry = build_default_selector_registry()
+    image = Image.new("RGB", image_size, (15, 28, 68))
+    input_region = _materialize_chat_region(registry, UiElementId.PNC_CHAT_INPUT_FIELD, image_size=image_size)
+    kingdom_region = _materialize_chat_region(registry, UiElementId.PNC_CHAT_TAB_KINGDOM, image_size=image_size)
+    alliance_region = _materialize_chat_region(registry, UiElementId.PNC_CHAT_TAB_ALLIANCE, image_size=image_size)
+    image.paste((210, 210, 210), (input_region.x, input_region.y, input_region.x + input_region.width, input_region.y + input_region.height))
+    warm_color = (228, 178, 48)
+    cool_color = (64, 68, 82)
+    active_region = kingdom_region if active_channel == ChatChannel.WORLD else alliance_region
+    inactive_region = alliance_region if active_channel == ChatChannel.WORLD else kingdom_region
+    image.paste(
+        warm_color,
+        (active_region.x, active_region.y, active_region.x + active_region.width, active_region.y + active_region.height),
+    )
+    image.paste(
+        cool_color,
+        (inactive_region.x, inactive_region.y, inactive_region.x + inactive_region.width, inactive_region.y + inactive_region.height),
+    )
+    lines = [
+        _ocr_line("Chat", x=181, y=20, width=113, height=49),
+        _ocr_line("Kingdom", x=202, y=117, width=143, height=40),
+        _ocr_line("Alliance", x=652, y=116, width=123, height=39),
+    ]
+    if draft_ocr_text:
+        lines.append(
+            _ocr_line(
+                draft_ocr_text,
+                x=input_region.x + 18,
+                y=input_region.y + max(8, input_region.height // 5),
+                width=max(40, input_region.width - 36),
+                height=max(20, input_region.height // 2),
+            )
+        )
+    screenshot = type(
+        "Captured",
+        (),
+        {
+            "image": image,
+            "artifact": type("Artifact", (), {"path": Path("synthetic_chat_ocr_fallback.png"), "captured_at": None})(),
+        },
+    )()
+    return screenshot, registry, _RecordingOcrService(lines=tuple(lines))
+
+
+def _build_chat_observation_from_ocr_fallback(
+    *,
+    request: ObservationRequest,
+    active_channel: ChatChannel,
+    draft_ocr_text: str | None,
+) -> tuple[object, _RecordingOcrService]:
+    """Builds one OCR-proven chat observation from the shared geometry-miss fixture."""
+
+    screenshot, registry, ocr_service = _make_chat_ocr_fallback_fixture(
+        active_channel=active_channel,
+        draft_ocr_text=draft_ocr_text,
+    )
+    builder = ObservationBuilder(
+        selector_registry=registry,
+        selector_engine=PillowSelectorEngine(
+            template_matcher=PillowTemplateMatcher(),
+            ocr_service=UnavailableOcrService(),
+        ),
+        screen_classifier=ScreenClassifier(),
+        enricher=PncObservationEnricher(
+            ocr_service=ocr_service,
+            selector_registry=registry,
+        ),
+    )
+    return builder.build(screenshot, request=request), ocr_service
 
 
 @dataclass(slots=True)
@@ -481,6 +576,99 @@ class CaptureAndVisionTests(unittest.TestCase):
                 observation.require(UiElementId.PNC_CHAT_INPUT_FIELD).source_kind,
                 VisibleElementSourceKind.GEOMETRY,
             )
+
+    def test_observation_builder_extracts_chat_state_after_ocr_chat_fallback(self) -> None:
+        """Carries active-channel and draft state through the OCR fallback path once chat is proven."""
+
+        observation, ocr_service = _build_chat_observation_from_ocr_fallback(
+            request=ObservationRequest.source_screen_retry(ScreenType.PNC_CHAT),
+            active_channel=ChatChannel.ALLIANCE,
+            draft_ocr_text="Pleaseter content",
+        )
+
+        self.assertEqual(observation.screen_type, ScreenType.PNC_CHAT)
+        self.assertEqual(observation.active_chat_channel, ChatChannel.ALLIANCE)
+        self.assertTrue(observation.chat_draft_empty)
+        self.assertIsNone(observation.chat_draft_text)
+        self.assertEqual(ocr_service.read_result_calls, 1)
+        self.assertGreater(ocr_service.read_text_calls, 0)
+
+    def test_observation_builder_escalates_chat_send_follow_up_to_ocr_after_a_geometry_miss(self) -> None:
+        """Falls back to OCR for post-send chat confirmation when the chat geometry heuristic misses."""
+
+        observation, ocr_service = _build_chat_observation_from_ocr_fallback(
+            request=ObservationRequest.chat_send_follow_up(),
+            active_channel=ChatChannel.ALLIANCE,
+            draft_ocr_text="",
+        )
+
+        self.assertEqual(observation.screen_type, ScreenType.PNC_CHAT)
+        self.assertEqual(observation.active_chat_channel, ChatChannel.ALLIANCE)
+        self.assertTrue(observation.chat_draft_empty)
+        self.assertEqual(ocr_service.read_result_calls, 1)
+        self.assertGreater(ocr_service.read_text_calls, 0)
+
+    def test_send_chat_message_can_type_from_an_ocr_proven_chat_observation(self) -> None:
+        """Allows chat sending to continue from an OCR fallback observation because chat state is populated."""
+
+        observation, _ = _build_chat_observation_from_ocr_fallback(
+            request=ObservationRequest.source_screen_retry(ScreenType.PNC_CHAT),
+            active_channel=ChatChannel.ALLIANCE,
+            draft_ocr_text="Pleaseter content",
+        )
+        fake_session = FakeSession()
+        fake_observer = FakeObservationService(
+            observations=[
+                make_observation(
+                    ScreenType.PNC_CHAT,
+                    visible_ids=(
+                        UiElementId.PNC_CHAT_TAB_KINGDOM,
+                        UiElementId.PNC_CHAT_TAB_ALLIANCE,
+                        UiElementId.PNC_CHAT_INPUT_FIELD,
+                        UiElementId.PNC_CHAT_SEND_BUTTON,
+                    ),
+                    active_chat_channel=ChatChannel.ALLIANCE,
+                    chat_draft_empty=True,
+                )
+            ]
+        )
+        executor = ActionExecutor(
+            session=fake_session,
+            stable_click_delay_ms=0,
+            post_action_observe_delay_ms=0,
+            chat_stable_click_delay_ms=0,
+            chat_post_action_observe_delay_ms=0,
+            logger=build_logger(),
+            sleep=lambda _: None,
+        )
+
+        executor.execute_actions(
+            ScreenFlowPlanner().send_chat_message(
+                observation,
+                message="hello",
+                channel=ChatChannel.ALLIANCE,
+            ),
+            observation,
+            observe=fake_observer.observe,
+        )
+
+        self.assertEqual(fake_session.texts, ["hello"])
+        self.assertEqual(fake_session.key_events, [])
+        self.assertEqual(fake_observer.requests, [ObservationRequest.chat_send_follow_up()])
+
+    def test_observation_builder_treats_common_empty_chat_placeholder_ocr_variants_as_empty(self) -> None:
+        """Accepts the observed placeholder OCR variants instead of clearing a field that is already empty."""
+
+        for placeholder_text in ("Pleaseter content", "Please enter conteni"):
+            with self.subTest(placeholder_text=placeholder_text):
+                observation, _ = _build_chat_observation_from_ocr_fallback(
+                    request=ObservationRequest.source_screen_retry(ScreenType.PNC_CHAT),
+                    active_channel=ChatChannel.WORLD,
+                    draft_ocr_text=placeholder_text,
+                )
+
+                self.assertTrue(observation.chat_draft_empty)
+                self.assertIsNone(observation.chat_draft_text)
 
     def test_observation_builder_uses_geometry_first_chat_follow_up_without_full_frame_ocr(self) -> None:
         """Recognizes chat from the shared tab/footer geometry during narrow chat follow-up observations."""

@@ -190,7 +190,7 @@ _DAILY_TO_DO_SECTION_TEXTS = frozenset(
 _CHAT_HEADER_TEXT = "CHAT"
 _CHAT_KINGDOM_TEXT = "KINGDOM"
 _CHAT_ALLIANCE_TEXT = "ALLIANCE"
-_CHAT_EMPTY_INPUT_TEXTS = frozenset({"", "PLEASEENTERCONTENT"})
+_CHAT_EMPTY_INPUT_PLACEHOLDER_TEXT = "PLEASEENTERCONTENT"
 _RESEARCH_TREE_SUPPORT_TOKENS = frozenset(
     {
         "ATK",
@@ -358,7 +358,11 @@ class PncObservationEnricher:
             request_screen=ScreenType.PNC_CHAT,
             observed_screen=screen_type,
         ):
-            chat = _build_chat_additions(image=image, lines=lines)
+            chat = self._build_chat_additions(
+                image=image,
+                lines=lines,
+                request=request,
+            )
             if chat is not None:
                 return chat
         if request.allows_screen(ScreenType.PNC_DAILY_TO_DO) and can_attempt_screen_family_ocr(
@@ -437,17 +441,60 @@ class PncObservationEnricher:
         alliance_warmth = _region_warmth(image, alliance_region)
         if max(kingdom_warmth, alliance_warmth) < 120 or abs(kingdom_warmth - alliance_warmth) < 80:
             return None
-        active_chat_channel = ChatChannel.WORLD if kingdom_warmth > alliance_warmth else ChatChannel.ALLIANCE
-        chat_draft_empty, chat_draft_text = self._read_chat_draft_state(
-            image=image,
-            input_region=input_region,
-            include_chat_state=request.include_chat_state,
-        )
+        chat_state = self._build_proven_chat_state_additions(image=image, request=request)
         return ObservationAdditions(
             screen_evidence=(ScreenEvidence(ScreenType.PNC_CHAT, "geometry_chat_overlay"),),
-            active_chat_channel=active_chat_channel,
-            chat_draft_empty=chat_draft_empty,
-            chat_draft_text=chat_draft_text,
+            active_chat_channel=chat_state.active_chat_channel,
+            chat_draft_empty=chat_state.chat_draft_empty,
+            chat_draft_text=chat_state.chat_draft_text,
+        )
+
+    def _build_chat_additions(
+        self,
+        *,
+        image: Image.Image,
+        lines: tuple[OcrLine, ...],
+        request: ObservationRequest,
+    ) -> ObservationAdditions | None:
+        """Returns OCR-proven chat evidence plus shared chat state when the request requires it."""
+
+        chat = _build_chat_overlay_additions(image=image, lines=lines)
+        if chat is None:
+            return None
+        chat_state = self._build_proven_chat_state_additions(image=image, request=request)
+        return ObservationAdditions(
+            visible_elements=chat.visible_elements,
+            screen_evidence=chat.screen_evidence,
+            active_chat_channel=chat_state.active_chat_channel,
+            chat_draft_empty=chat_state.chat_draft_empty,
+            chat_draft_text=chat_state.chat_draft_text,
+        )
+
+    def _build_proven_chat_state_additions(
+        self,
+        *,
+        image: Image.Image,
+        request: ObservationRequest,
+    ) -> ObservationAdditions:
+        """Returns active-channel and draft facts for one observation that has already proven chat."""
+
+        if not request.include_chat_state:
+            return ObservationAdditions()
+        input_region = self._require_chat_region(UiElementId.PNC_CHAT_INPUT_FIELD, image=image)
+        kingdom_region = self._require_chat_region(UiElementId.PNC_CHAT_TAB_KINGDOM, image=image)
+        alliance_region = self._require_chat_region(UiElementId.PNC_CHAT_TAB_ALLIANCE, image=image)
+        chat_draft_state = self._read_chat_draft_state(
+            image=image,
+            input_region=input_region,
+        )
+        return ObservationAdditions(
+            active_chat_channel=(
+                ChatChannel.WORLD
+                if _region_warmth(image, kingdom_region) > _region_warmth(image, alliance_region)
+                else ChatChannel.ALLIANCE
+            ),
+            chat_draft_empty=chat_draft_state[0],
+            chat_draft_text=chat_draft_state[1],
         )
 
     def _read_chat_draft_state(
@@ -455,21 +502,23 @@ class PncObservationEnricher:
         *,
         image: Image.Image,
         input_region: object,
-        include_chat_state: bool,
     ) -> tuple[bool | None, str | None]:
-        """Returns the current draft state from the narrow chat-input OCR region when requested."""
+        """Returns the current reusable chat draft state from the shared input region OCR."""
 
-        if not include_chat_state:
-            return None, None
         raw_text = self.ocr_service.read_text(image, input_region).strip()
         normalized_text = normalize_ocr_text(raw_text)
-        if normalized_text in _CHAT_EMPTY_INPUT_TEXTS:
+        if _is_empty_chat_draft_text(normalized_text):
             return True, None
         return False, raw_text
 
     def _require_chat_region(self, selector_id: UiElementId, *, image: Image.Image) -> object:
         """Materializes one shared chat selector region from the canonical registry."""
 
+        if self.selector_registry is None:
+            raise SelectorResolutionError(
+                "Chat-state extraction requires the shared selector registry.",
+                selector_id=selector_id,
+            )
         selector = self.selector_registry.require(selector_id)
         if selector.relative_bounds is None:
             raise SelectorResolutionError(
@@ -1186,7 +1235,7 @@ def _build_daily_to_do_additions(
     )
 
 
-def _build_chat_additions(
+def _build_chat_overlay_additions(
     *,
     image: Image.Image,
     lines: tuple[OcrLine, ...],
@@ -1224,6 +1273,48 @@ def _build_chat_additions(
         },
         screen_evidence=(ScreenEvidence(ScreenType.PNC_CHAT, "ocr_chat_overlay"),),
     )
+
+
+def _is_empty_chat_draft_text(normalized_text: str) -> bool:
+    """Returns whether one normalized chat-input OCR read matches the empty placeholder."""
+
+    if normalized_text == "":
+        return True
+    if len(normalized_text) < 12 or len(normalized_text) > 24:
+        return False
+    return _bounded_edit_distance(
+        left=normalized_text,
+        right=_CHAT_EMPTY_INPUT_PLACEHOLDER_TEXT,
+        max_distance=3,
+    ) <= 3
+
+
+def _bounded_edit_distance(*, left: str, right: str, max_distance: int) -> int:
+    """Returns a bounded edit distance, stopping early once the requested limit is exceeded."""
+
+    if max_distance < 0:
+        raise ValueError("max_distance cannot be negative.")
+    if left == right:
+        return 0
+    if abs(len(left) - len(right)) > max_distance:
+        return max_distance + 1
+    previous_row = list(range(len(right) + 1))
+    for left_index, left_character in enumerate(left, start=1):
+        current_row = [left_index]
+        row_minimum = current_row[0]
+        for right_index, right_character in enumerate(right, start=1):
+            substitution_cost = 0 if left_character == right_character else 1
+            current_cost = min(
+                previous_row[right_index] + 1,
+                current_row[right_index - 1] + 1,
+                previous_row[right_index - 1] + substitution_cost,
+            )
+            current_row.append(current_cost)
+            row_minimum = min(row_minimum, current_cost)
+        if row_minimum > max_distance:
+            return max_distance + 1
+        previous_row = current_row
+    return previous_row[-1]
 
 
 def _build_research_tree_additions(

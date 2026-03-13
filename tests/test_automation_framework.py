@@ -143,6 +143,14 @@ class AutomationFrameworkTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             TaskRegistry(tasks=(EnsureGameRunningTask(), EnsureGameRunningTask()))
 
+    def test_default_task_registry_includes_fixed_channel_chat_tasks(self) -> None:
+        """Exposes the new fixed-channel chat tasks through the standard script registry."""
+
+        registry = build_default_task_registry()
+
+        self.assertEqual(registry.require(TaskId.SEND_ALLIANCE_CHAT_MESSAGE).id, TaskId.SEND_ALLIANCE_CHAT_MESSAGE)
+        self.assertEqual(registry.require(TaskId.SEND_WORLD_CHAT_MESSAGE).id, TaskId.SEND_WORLD_CHAT_MESSAGE)
+
     def test_runner_executes_observe_click_reobserve_verify_loop_for_trivial_task(self) -> None:
         """Exercises the minimal generic runner loop with one synthetic tap task."""
 
@@ -341,7 +349,7 @@ class AutomationFrameworkTests(unittest.TestCase):
             sleep=lambda _: None,
         )
 
-        executor.execute_action(
+        action_executed = executor.execute_action(
             SelectChatChannelAction(channel=ChatChannel.ALLIANCE),
             make_observation(
                 ScreenType.PNC_CHAT,
@@ -350,7 +358,186 @@ class AutomationFrameworkTests(unittest.TestCase):
             ),
         )
 
+        self.assertFalse(action_executed)
         self.assertEqual(executor.session.taps, [])
+
+    def test_action_executor_skips_chat_channel_follow_up_when_the_requested_tab_is_already_active(self) -> None:
+        """Skips both the tap and the observe-after follow-up when chat is already on the requested channel."""
+
+        fake_observer = FakeObservationService(observations=[])
+        executor = ActionExecutor(
+            session=FakeSession(),
+            stable_click_delay_ms=0,
+            post_action_observe_delay_ms=0,
+            chat_stable_click_delay_ms=0,
+            chat_post_action_observe_delay_ms=0,
+            logger=build_logger(),
+            sleep=lambda _: None,
+        )
+
+        result = executor.execute_actions(
+            (
+                SelectChatChannelAction(
+                    channel=ChatChannel.ALLIANCE,
+                    observe_after=True,
+                    follow_up_request=ObservationRequest.source_screen_retry(ScreenType.PNC_CHAT),
+                ),
+            ),
+            make_observation(
+                ScreenType.PNC_CHAT,
+                visible_ids=(UiElementId.PNC_CHAT_TAB_ALLIANCE,),
+                active_chat_channel=ChatChannel.ALLIANCE,
+                chat_draft_empty=True,
+            ),
+            observe=fake_observer.observe,
+        )
+
+        self.assertEqual(result.active_chat_channel, ChatChannel.ALLIANCE)
+        self.assertEqual(fake_observer.requests, [])
+
+    def test_send_chat_message_stops_when_the_chat_tab_follow_up_stays_on_the_wrong_channel(self) -> None:
+        """Refuses to type or send when the observed post-tap chat state still shows the previous channel."""
+
+        fake_session = FakeSession()
+        fake_observer = FakeObservationService(
+            observations=[
+                make_observation(
+                    ScreenType.PNC_CHAT,
+                    visible_ids=(
+                        UiElementId.PNC_CHAT_TAB_KINGDOM,
+                        UiElementId.PNC_CHAT_TAB_ALLIANCE,
+                        UiElementId.PNC_CHAT_INPUT_FIELD,
+                        UiElementId.PNC_CHAT_SEND_BUTTON,
+                    ),
+                    active_chat_channel=ChatChannel.WORLD,
+                    chat_draft_empty=True,
+                )
+            ]
+        )
+        executor = ActionExecutor(
+            session=fake_session,
+            stable_click_delay_ms=0,
+            post_action_observe_delay_ms=0,
+            chat_stable_click_delay_ms=0,
+            chat_post_action_observe_delay_ms=0,
+            logger=build_logger(),
+            sleep=lambda _: None,
+        )
+        actions = ScreenFlowPlanner().send_chat_message(
+            make_observation(
+                ScreenType.PNC_CHAT,
+                visible_ids=(
+                    UiElementId.PNC_CHAT_TAB_KINGDOM,
+                    UiElementId.PNC_CHAT_TAB_ALLIANCE,
+                    UiElementId.PNC_CHAT_INPUT_FIELD,
+                    UiElementId.PNC_CHAT_SEND_BUTTON,
+                ),
+                active_chat_channel=ChatChannel.WORLD,
+                chat_draft_empty=True,
+            ),
+            message="hello",
+            channel=ChatChannel.ALLIANCE,
+        )
+
+        with self.assertRaises(SelectorResolutionError):
+            executor.execute_actions(
+                actions,
+                make_observation(
+                    ScreenType.PNC_CHAT,
+                    visible_ids=(
+                        UiElementId.PNC_CHAT_TAB_KINGDOM,
+                        UiElementId.PNC_CHAT_TAB_ALLIANCE,
+                        UiElementId.PNC_CHAT_INPUT_FIELD,
+                        UiElementId.PNC_CHAT_SEND_BUTTON,
+                    ),
+                    active_chat_channel=ChatChannel.WORLD,
+                    chat_draft_empty=True,
+                ),
+                observe=fake_observer.observe,
+            )
+
+        self.assertEqual(fake_observer.requests, [ObservationRequest.source_screen_retry(ScreenType.PNC_CHAT)])
+        self.assertEqual(fake_session.texts, [])
+
+    def test_send_chat_message_uses_the_post_switch_channel_draft_state_before_typing(self) -> None:
+        """Refreshes chat state after a tab change so clearing uses the newly active channel draft."""
+
+        fake_session = FakeSession()
+        fake_observer = FakeObservationService(
+            observations=[
+                make_observation(
+                    ScreenType.PNC_CHAT,
+                    visible_ids=(
+                        UiElementId.PNC_CHAT_TAB_KINGDOM,
+                        UiElementId.PNC_CHAT_TAB_ALLIANCE,
+                        UiElementId.PNC_CHAT_INPUT_FIELD,
+                        UiElementId.PNC_CHAT_SEND_BUTTON,
+                    ),
+                    active_chat_channel=ChatChannel.ALLIANCE,
+                    chat_draft_empty=False,
+                    chat_draft_text="ally draft text here",
+                ),
+                make_observation(
+                    ScreenType.PNC_CHAT,
+                    visible_ids=(
+                        UiElementId.PNC_CHAT_TAB_KINGDOM,
+                        UiElementId.PNC_CHAT_TAB_ALLIANCE,
+                        UiElementId.PNC_CHAT_INPUT_FIELD,
+                        UiElementId.PNC_CHAT_SEND_BUTTON,
+                    ),
+                    active_chat_channel=ChatChannel.ALLIANCE,
+                    chat_draft_empty=True,
+                ),
+            ]
+        )
+        executor = ActionExecutor(
+            session=fake_session,
+            stable_click_delay_ms=0,
+            post_action_observe_delay_ms=0,
+            chat_stable_click_delay_ms=0,
+            chat_post_action_observe_delay_ms=0,
+            logger=build_logger(),
+            sleep=lambda _: None,
+        )
+        actions = ScreenFlowPlanner().send_chat_message(
+            make_observation(
+                ScreenType.PNC_CHAT,
+                visible_ids=(
+                    UiElementId.PNC_CHAT_TAB_KINGDOM,
+                    UiElementId.PNC_CHAT_TAB_ALLIANCE,
+                    UiElementId.PNC_CHAT_INPUT_FIELD,
+                    UiElementId.PNC_CHAT_SEND_BUTTON,
+                ),
+                active_chat_channel=ChatChannel.WORLD,
+                chat_draft_empty=False,
+                chat_draft_text="world draft text that should not be reused after switching tabs",
+            ),
+            message="hello",
+            channel=ChatChannel.ALLIANCE,
+        )
+
+        executor.execute_actions(
+            actions,
+            make_observation(
+                ScreenType.PNC_CHAT,
+                visible_ids=(
+                    UiElementId.PNC_CHAT_TAB_KINGDOM,
+                    UiElementId.PNC_CHAT_TAB_ALLIANCE,
+                    UiElementId.PNC_CHAT_INPUT_FIELD,
+                    UiElementId.PNC_CHAT_SEND_BUTTON,
+                ),
+                active_chat_channel=ChatChannel.WORLD,
+                chat_draft_empty=False,
+                chat_draft_text="world draft text that should not be reused after switching tabs",
+            ),
+            observe=fake_observer.observe,
+        )
+
+        self.assertEqual(fake_observer.requests[0], ObservationRequest.source_screen_retry(ScreenType.PNC_CHAT))
+        self.assertEqual(fake_observer.requests[1], ObservationRequest.chat_send_follow_up())
+        self.assertEqual(fake_session.key_events[0], "KEYCODE_MOVE_END")
+        self.assertEqual(fake_session.key_events.count("KEYCODE_DEL"), 28)
+        self.assertEqual(fake_session.texts, ["hello"])
 
     def test_input_text_action_clears_an_existing_chat_draft_before_typing(self) -> None:
         """Uses the shared clear-and-replace policy instead of appending onto a stale chat draft."""

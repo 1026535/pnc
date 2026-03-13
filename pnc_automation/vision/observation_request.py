@@ -76,6 +76,7 @@ class ObservationRequest:
 
         return cls(
             candidate_screen_types=frozenset({ScreenType.PNC_CHAT}),
+            ocr_screen_types=frozenset({ScreenType.PNC_CHAT}),
             include_chat_state=True,
         )
 
