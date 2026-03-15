@@ -55,11 +55,10 @@ class ApplicationRunner:
         account_id: str,
         task_id: TaskId,
         params: dict[str, object] | None = None,
-        castle: CastleIdentity | None = None,
     ) -> StepRunResult:
         """Runs one direct task call against the current live session state."""
 
-        return self.script_runner.run_task(account_id=account_id, task_id=task_id, params=params, castle=castle)
+        return self.script_runner.run_task(account_id=account_id, task_id=task_id, params=params)
 
 
 def build_application_runner(

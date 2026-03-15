@@ -6,6 +6,7 @@ import argparse
 from dataclasses import asdict
 import json
 from pathlib import Path
+import sys
 from typing import Sequence
 
 from pnc_automation.app import build_application_runner
@@ -16,9 +17,9 @@ from pnc_automation.config.yaml_helpers import build_castle_identity
 def main(argv: Sequence[str] | None = None) -> int:
     """Parses CLI arguments, runs automation, and prints a summary."""
 
-    arguments = list(argv) if argv is not None else None
-    if arguments is not None and arguments and arguments[0] not in {"run", "login"}:
-        return _run_legacy_command(arguments)
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    if arguments and arguments[0] not in {"run", "login"}:
+        arguments.insert(0, "run")
 
     parser = argparse.ArgumentParser(description="Run Puzzles & Conquest automation.")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -41,18 +42,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             castle=_parse_optional_castle(parser, parsed),
         )
     print(_serialize_run_result(result))
-    return 0
-
-
-def _run_legacy_command(argv: Sequence[str]) -> int:
-    """Preserves the original script-running CLI shape for direct flag-only invocations."""
-
-    parser = argparse.ArgumentParser(description="Run Puzzles & Conquest automation.")
-    _add_common_arguments(parser)
-    parser.add_argument("--script", required=True, help="Path to the run script YAML file.")
-    parsed = parser.parse_args(list(argv))
-    application = build_application_runner(Path(parsed.config), verbose=parsed.verbose)
-    print(_serialize_run_result(application.run(account_id=parsed.account, script_path=parsed.script)))
     return 0
 
 

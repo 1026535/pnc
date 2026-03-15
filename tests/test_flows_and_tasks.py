@@ -8,7 +8,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from pnc_automation.automation.scripts.models import ScriptStep
-from pnc_automation.automation.task import TaskId
+from pnc_automation.automation.task import TaskId, TaskResult
 from pnc_automation.automation.task_context import TaskContext
 from pnc_automation.automation.tasks.building_upgrade_task import BuildingUpgradeTask
 from pnc_automation.automation.tasks.gathering_task import GatheringTask
@@ -41,7 +41,7 @@ from pnc_automation.pnc.action_requests import (
     TapListEntryAction,
     WaitAction,
 )
-from pnc_automation.pnc.observation import ListEntryKind
+from pnc_automation.pnc.observation import ListEntryKind, Observation
 from pnc_automation.pnc.policy_models import BuildingUpgradePolicy, GatheringPolicy
 from pnc_automation.pnc.screen_flows import ChatChannel, ScreenFlowPlanner
 from pnc_automation.pnc.screen_type import ScreenType
@@ -93,6 +93,48 @@ class FlowAndTaskTests(unittest.TestCase):
             target_castle=target_castle,
             castle_roster_store=castle_roster_store,
         )
+
+    def _make_castle_selection_observation(self, castles: tuple[CastleIdentity, ...]) -> Observation:
+        """Builds one Manage Char observation from an ordered tuple of castle identities."""
+
+        return make_observation(
+            ScreenType.PNC_CASTLE_SELECTION,
+            list_entries=tuple(
+                make_entry(
+                    ListEntryKind.CASTLE,
+                    title=castle.castle_name,
+                    metadata={
+                        "kingdom": castle.kingdom,
+                        "castle_level": castle.castle_level,
+                    },
+                )
+                for castle in castles
+            ),
+        )
+
+    def _run_refresh_scan(
+        self,
+        *,
+        store: CastleRosterStore,
+        windows: tuple[tuple[CastleIdentity, ...], ...],
+    ) -> tuple[TaskResult, CastleRosterStore, TaskContext]:
+        """Runs one synthetic refresh scan across the provided ordered Manage Char windows."""
+
+        task = RefreshCastleRosterTask()
+        context = self._make_context(
+            params=None,
+            task_id=TaskId.REFRESH_CASTLE_ROSTER,
+            castle_roster_provider=lambda: store.get(self.account.pnc_account_id),
+            castle_roster_store=store,
+        )
+        current_window = self._make_castle_selection_observation(windows[0])
+        task.verify(context, current_window, current_window)
+        for next_window in windows[1:]:
+            next_observation = self._make_castle_selection_observation(next_window)
+            task.verify(context, current_window, next_observation)
+            current_window = next_observation
+        result = task.verify(context, current_window, current_window)
+        return result, store, context
 
     def test_ensure_home_city_from_world_map_uses_world_home_nav(self) -> None:
         """Ensures the reusable flow maps world map back to city with one canonical selector."""
@@ -688,10 +730,15 @@ class FlowAndTaskTests(unittest.TestCase):
         """Treats the post-switch Lord Info confirmation as a terminal success condition."""
 
         task = SelectCastleTask()
+        roster = PncAccountCastleRosterConfig(
+            pnc_account_id=self.account.pnc_account_id,
+            castles=(self.target_castle,),
+        )
         context = self._make_context(
             params=None,
             task_id=TaskId.SELECT_CASTLE,
             target_castle=self.target_castle,
+            castle_roster_provider=lambda: roster,
         )
         matching_lord_info = make_observation(
             ScreenType.PNC_LORD_INFO,
@@ -703,6 +750,35 @@ class FlowAndTaskTests(unittest.TestCase):
 
         self.assertEqual(actions, [])
         self.assertTrue(result.succeeded)
+
+    def test_select_castle_replans_when_lord_info_name_is_ambiguous_across_kingdoms(self) -> None:
+        """Does not accept Lord Info name-only evidence when the cached roster contains duplicate castle names."""
+
+        task = SelectCastleTask()
+        roster = PncAccountCastleRosterConfig(
+            pnc_account_id=self.account.pnc_account_id,
+            castles=(
+                self.target_castle,
+                CastleIdentity(kingdom="K999", castle_name="Main", castle_level=9),
+            ),
+        )
+        context = self._make_context(
+            params=None,
+            task_id=TaskId.SELECT_CASTLE,
+            target_castle=self.target_castle,
+            castle_roster_provider=lambda: roster,
+        )
+        ambiguous_lord_info = make_observation(
+            ScreenType.PNC_LORD_INFO,
+            current_castle_name="Main",
+        )
+
+        actions = task.plan(context, ambiguous_lord_info)
+        result = task.verify(context, make_observation(ScreenType.PNC_HOME_CITY), ambiguous_lord_info)
+
+        self.assertTrue(actions)
+        self.assertEqual(result.status.value, "replan")
+        self.assertIn("ambiguous", result.message)
 
     def test_select_castle_waits_on_unknown_transition_after_switch(self) -> None:
         """Keeps unknown splash frames on the recoverable settle path after a castle switch."""
@@ -739,44 +815,87 @@ class FlowAndTaskTests(unittest.TestCase):
 
         self.assertEqual(result.status.value, "replan")
 
-    def test_refresh_castle_roster_finalizes_full_scan_ordering(self) -> None:
-        """Marks the roster cache as `full_scan` when the final scan window stops progressing."""
+    def test_refresh_castle_roster_replaces_stale_cache_membership_with_observed_full_scan(self) -> None:
+        """Drops obsolete cached castles instead of upgrading stale membership to `full_scan`."""
 
-        task = RefreshCastleRosterTask()
+        alpha = CastleIdentity(kingdom="K226", castle_name="Alpha", castle_level=3)
+        bravo = CastleIdentity(kingdom="K227", castle_name="Bravo", castle_level=4)
+        stale = CastleIdentity(kingdom="K228", castle_name="Stale", castle_level=2)
         with tempfile.TemporaryDirectory() as temp_directory:
             store = CastleRosterStore(path=Path(temp_directory) / "castles.yaml")
             store.sync(
                 self.account.pnc_account_id,
-                (
-                    CastleIdentity(kingdom="K226", castle_name="Alpha", castle_level=3),
-                    CastleIdentity(kingdom="K227", castle_name="Bravo", castle_level=4),
-                    self.target_castle,
-                ),
+                (self.target_castle, stale, alpha, bravo),
                 ordering=CastleRosterOrdering.UNKNOWN,
             )
-            context = self._make_context(
-                params=None,
-                task_id=TaskId.REFRESH_CASTLE_ROSTER,
-                castle_roster_provider=lambda: store.get(self.account.pnc_account_id),
-                castle_roster_store=store,
-            )
-            context.runtime_state["refresh_phase"] = "scan_forward"
-            context.runtime_state["seen_windows"] = {
-                (("K226", "Alpha"), ("K227", "Bravo")),
-                (("K227", "Bravo"), ("K230", "Main")),
-            }
-            before = make_observation(
-                ScreenType.PNC_CASTLE_SELECTION,
-                list_entries=(make_entry(ListEntryKind.CASTLE, title="Main", metadata={"kingdom": "K230"}),),
-            )
-            after = before
 
-            result = task.verify(context, before, after)
+            result, store, context = self._run_refresh_scan(
+                store=store,
+                windows=(
+                    (alpha, bravo),
+                    (bravo, self.target_castle),
+                ),
+            )
 
             roster = store.get(self.account.pnc_account_id)
             self.assertEqual(result.status.value, "replan")
             self.assertEqual(context.runtime_state["refresh_phase"], "return_home")
             self.assertIsNotNone(roster)
+            self.assertEqual(roster.castles, (alpha, bravo, self.target_castle))
+            self.assertEqual(roster.ordering, CastleRosterOrdering.FULL_SCAN)
+
+    def test_refresh_castle_roster_replaces_wrong_partial_order_with_scanned_order(self) -> None:
+        """Persists the ordered windows observed during the refresh instead of reusing stale cache order."""
+
+        alpha = CastleIdentity(kingdom="K226", castle_name="Alpha", castle_level=3)
+        bravo = CastleIdentity(kingdom="K227", castle_name="Bravo", castle_level=4)
+        with tempfile.TemporaryDirectory() as temp_directory:
+            store = CastleRosterStore(path=Path(temp_directory) / "castles.yaml")
+            store.sync(
+                self.account.pnc_account_id,
+                (self.target_castle, alpha, bravo),
+                ordering=CastleRosterOrdering.UNKNOWN,
+            )
+
+            self._run_refresh_scan(
+                store=store,
+                windows=(
+                    (alpha, bravo),
+                    (bravo, self.target_castle),
+                ),
+            )
+
+            roster = store.get(self.account.pnc_account_id)
+            self.assertIsNotNone(roster)
+            self.assertEqual(roster.castles, (alpha, bravo, self.target_castle))
+
+    def test_refresh_castle_roster_persists_exact_scanned_windows_and_backfills_missing_levels(self) -> None:
+        """Builds the final full scan from the observed windows while using the pre-refresh cache only for missing levels."""
+
+        alpha = CastleIdentity(kingdom="K226", castle_name="Alpha", castle_level=3)
+        bravo = CastleIdentity(kingdom="K227", castle_name="Bravo", castle_level=4)
+        observed_alpha = CastleIdentity(kingdom="K226", castle_name="Alpha")
+        observed_bravo = CastleIdentity(kingdom="K227", castle_name="Bravo")
+        observed_main = CastleIdentity(kingdom="K230", castle_name="Main")
+        with tempfile.TemporaryDirectory() as temp_directory:
+            store = CastleRosterStore(path=Path(temp_directory) / "castles.yaml")
+            store.sync(
+                self.account.pnc_account_id,
+                (alpha, bravo, self.target_castle),
+                ordering=CastleRosterOrdering.UNKNOWN,
+            )
+
+            self._run_refresh_scan(
+                store=store,
+                windows=(
+                    (observed_alpha, observed_bravo),
+                    (observed_bravo, observed_main),
+                ),
+            )
+
+            roster = store.get(self.account.pnc_account_id)
+            self.assertIsNotNone(roster)
+            self.assertEqual(roster.castles, (alpha, bravo, self.target_castle))
             self.assertEqual(roster.ordering, CastleRosterOrdering.FULL_SCAN)
 
     def test_refresh_castle_roster_fails_when_scan_repeats_a_previous_window(self) -> None:
@@ -784,21 +903,15 @@ class FlowAndTaskTests(unittest.TestCase):
 
         task = RefreshCastleRosterTask()
         context = self._make_context(params=None, task_id=TaskId.REFRESH_CASTLE_ROSTER)
-        context.runtime_state["refresh_phase"] = "scan_forward"
-        context.runtime_state["seen_windows"] = {
-            (("K226", "Alpha"), ("K227", "Bravo")),
-        }
-        before = make_observation(
-            ScreenType.PNC_CASTLE_SELECTION,
-            list_entries=(make_entry(ListEntryKind.CASTLE, title="Main", metadata={"kingdom": "K230"}),),
+        top_window = self._make_castle_selection_observation(
+            (
+                CastleIdentity(kingdom="K226", castle_name="Alpha"),
+                CastleIdentity(kingdom="K227", castle_name="Bravo"),
+            )
         )
-        after = make_observation(
-            ScreenType.PNC_CASTLE_SELECTION,
-            list_entries=(
-                make_entry(ListEntryKind.CASTLE, title="Alpha", metadata={"kingdom": "K226"}),
-                make_entry(ListEntryKind.CASTLE, title="Bravo", metadata={"kingdom": "K227"}),
-            ),
-        )
+        before = self._make_castle_selection_observation((CastleIdentity(kingdom="K230", castle_name="Main"),))
+        task.verify(context, top_window, top_window)
+        after = top_window
 
         result = task.verify(context, before, after)
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import tempfile
 from collections.abc import Iterable
 
-from pnc_automation.config.models import AccountConfig, AppConfig, PncAccountCastleRosterConfig
+from pnc_automation.config.models import AccountConfig, AppConfig, PncAccountCastleRosterConfig, castle_identity_key
 from pnc_automation.errors import ConfigurationError
 
 
@@ -15,6 +15,7 @@ def validate_app_config(config: AppConfig) -> AppConfig:
     _validate_unique_ids("instance", (instance.id for instance in config.instances))
     _validate_unique_ids("account", (account.id for account in config.accounts))
     _validate_unique_runtime_targets(config.accounts)
+    _validate_unique_account_artifact_directories(config.accounts)
 
     instance_ids = {instance.id for instance in config.instances}
     for account in config.accounts:
@@ -83,6 +84,22 @@ def _validate_unique_runtime_targets(accounts: tuple[AccountConfig, ...]) -> Non
         seen[target_key] = account.id
 
 
+def _validate_unique_account_artifact_directories(accounts: tuple[AccountConfig, ...]) -> None:
+    """Ensures normalized per-account artifact directories cannot collide at runtime."""
+
+    seen: dict[str, str] = {}
+    for account in accounts:
+        artifact_directory = account.artifact_directory_name
+        if artifact_directory in seen:
+            raise ConfigurationError(
+                "Accounts must not collide after artifact-directory normalization.",
+                artifact_directory=artifact_directory,
+                first_account_id=seen[artifact_directory],
+                duplicate_account_id=account.id,
+            )
+        seen[artifact_directory] = account.id
+
+
 def _validate_shared_pnc_credentials(accounts: tuple[AccountConfig, ...]) -> None:
     """Ensures one identified P&C login resolves to one canonical credential set."""
 
@@ -116,7 +133,7 @@ def _validate_roster_entries(roster: PncAccountCastleRosterConfig) -> None:
 
     seen: set[tuple[str, str]] = set()
     for castle in roster.castles:
-        castle_key = (castle.kingdom, castle.castle_name)
+        castle_key = castle_identity_key(castle)
         if castle_key in seen:
             raise ConfigurationError(
                 f"P&C account roster '{roster.pnc_account_id}' contains a duplicate castle entry.",

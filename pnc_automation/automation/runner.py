@@ -11,7 +11,7 @@ from typing import Any
 from pnc_automation.automation.observed_action_executor import ObservedActionExecutor
 from pnc_automation.automation.scripts.models import PreparedRunScript, PreparedScriptStep, ScriptStep
 from pnc_automation.automation.scripts.registry import TaskRegistry
-from pnc_automation.automation.task import TaskId, TaskResult, TaskStatus
+from pnc_automation.automation.task import CastleTargetPolicy, TaskId, TaskResult, TaskStatus
 from pnc_automation.automation.task_context import TaskContext
 from pnc_automation.config.castle_roster_store import CastleRosterStore
 from pnc_automation.config.models import AccountConfig, CastleIdentity, DefaultsConfig, PncAccountCastleRosterConfig
@@ -156,7 +156,7 @@ class AutomationRunner:
     ) -> Observation:
         """Runs the canonical synthetic pre-step castle alignment when one target was requested."""
 
-        if step.castle is None or step.task == TaskId.SELECT_CASTLE:
+        if step.castle is None or step.castle_target_policy != CastleTargetPolicy.OPTIONAL:
             return before
         synthetic_step = ScriptStep(task=TaskId.SELECT_CASTLE, castle=step.castle)
         select_castle_task = self.task_registry.require(TaskId.SELECT_CASTLE)

@@ -176,6 +176,39 @@ class ConfigLoaderTests(unittest.TestCase):
 
             self.assertEqual(config.require_account("ColdDukeOfTheNorth").artifact_directory_name, "cold_duke_of_the_north")
 
+    def test_load_app_config_rejects_colliding_account_artifact_directories(self) -> None:
+        """Rejects distinct account ids that normalize into the same artifact directory name."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            config_path = Path(temp_directory) / "accounts.yaml"
+            config_path.write_text(
+                textwrap.dedent(
+                    """
+                    instances:
+                      - id: bs-main
+                        device_id: 127.0.0.1:5555
+                        app_package: com.global.tmslg
+                    accounts:
+                      - id: ColdDuke
+                        instance_id: bs-main
+                        pnc_account_id: cold_1
+                        username: cold_1
+                        password: inline_pass
+                      - id: cold_duke
+                        instance_id: bs-main
+                        pnc_account_id: cold_2
+                        username: cold_2
+                        password: inline_pass
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(ConfigurationError) as context:
+                load_app_config(config_path)
+
+            self.assertIn("artifact-directory normalization", str(context.exception))
+
     def test_load_app_config_loads_castle_rosters_from_sibling_file(self) -> None:
         """Loads the sibling castles.yaml file as an optional discovered roster cache."""
 

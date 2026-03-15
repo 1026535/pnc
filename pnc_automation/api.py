@@ -127,14 +127,17 @@ class AutomationApi:
     def run_task(
         self,
         *,
-        account_id: str,
+        account_id: str | None = None,
         task_id: TaskId,
         params: dict[str, Any] | None = None,
-        castle: CastleIdentity | None = None,
     ) -> StepRunResult:
-        """Runs one direct task call against the selected account."""
+        """Runs one direct task call against the selected account using current-castle semantics."""
 
-        return self.application.run_task(account_id=account_id, task_id=task_id, params=params, castle=castle)
+        return self.application.run_task(
+            account_id=self._resolve_account_id(account_id),
+            task_id=task_id,
+            params=params,
+        )
 
     def building_upgrade(
         self,

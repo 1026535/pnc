@@ -78,16 +78,15 @@ class ScriptRunner:
         account_id: str,
         task_id: TaskId,
         params: dict[str, Any] | None = None,
-        castle: CastleIdentity | None = None,
     ) -> StepRunResult:
-        """Runs one task step against the selected account using the canonical runner path."""
+        """Runs one task step against the selected account using current-castle semantics."""
 
         result = self.run_script(
             account_id=account_id,
             script=RunScript(
                 name=f"direct_{task_id.value}",
                 path=Path(f"<generated:{task_id.value}>"),
-                steps=(ScriptStep(task=task_id, castle=castle, params={} if params is None else params),),
+                steps=(ScriptStep(task=task_id, params={} if params is None else params),),
             ),
         )
         return result.steps[0]

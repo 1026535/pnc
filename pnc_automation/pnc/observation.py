@@ -9,7 +9,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from pnc_automation.config.models import CastleIdentity, PncAccountCastleRosterConfig
+from pnc_automation.config.models import CastleIdentity, PncAccountCastleRosterConfig, castle_identity_key
 from pnc_automation.errors import SelectorResolutionError
 from pnc_automation.pnc.chat import ChatChannel
 from pnc_automation.pnc.screen_type import ScreenType
@@ -64,6 +64,42 @@ class ListEntryKind(StrEnum):
     STORE_ENTRY = "store_entry"
 
 
+class CurrentCastleEvidenceKind(StrEnum):
+    """Describes how strongly the current-castle observation identifies the active castle."""
+
+    EXACT = "exact"
+    NAME_ONLY = "name_only"
+
+
+class CurrentCastleMatchStatus(StrEnum):
+    """Describes whether current-castle evidence can satisfy an explicit castle target."""
+
+    MATCH = "match"
+    MISMATCH = "mismatch"
+    INSUFFICIENT_EVIDENCE = "insufficient_evidence"
+    AMBIGUOUS_NAME = "ambiguous_name"
+
+
+@dataclass(frozen=True, slots=True)
+class CurrentCastleMatch:
+    """Summarizes whether current-castle evidence can prove an explicit castle target."""
+
+    status: CurrentCastleMatchStatus
+    evidence_kind: CurrentCastleEvidenceKind | None = None
+
+    @property
+    def matches(self) -> bool:
+        """Returns whether the available current-castle evidence proves the target."""
+
+        return self.status == CurrentCastleMatchStatus.MATCH
+
+    @property
+    def ambiguous(self) -> bool:
+        """Returns whether a name-only match became ambiguous against the cached roster."""
+
+        return self.status == CurrentCastleMatchStatus.AMBIGUOUS_NAME
+
+
 @dataclass(frozen=True, slots=True)
 class DetectedListEntry:
     """Represents one repeated row or tile extracted from a dynamic screen."""
@@ -102,6 +138,7 @@ class Observation:
     captured_at: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
     blocking_popup: bool = False
     current_castle: CastleIdentity | None = None
+    current_castle_evidence: CurrentCastleEvidenceKind | None = None
     current_pnc_account_id: str | None = None
     verified_pnc_account_id: str | None = None
     castle_roster_snapshot: PncAccountCastleRosterConfig | None = None
@@ -117,6 +154,16 @@ class Observation:
         if self.current_castle is None:
             return None
         return self.current_castle.castle_name
+
+    @property
+    def resolved_current_castle_evidence(self) -> CurrentCastleEvidenceKind | None:
+        """Returns the canonical current-castle evidence kind, inferring legacy fixtures when needed."""
+
+        if self.current_castle is None:
+            return None
+        if self.current_castle_evidence is not None:
+            return self.current_castle_evidence
+        return CurrentCastleEvidenceKind.NAME_ONLY if self.current_castle.kingdom == "" else CurrentCastleEvidenceKind.EXACT
 
     def has(self, selector_id: UiElementId) -> bool:
         """Returns whether one selector is visible in the observation."""
@@ -145,13 +192,31 @@ class Observation:
 
         return tuple(entry for entry in self.list_entries if entry.kind == kind)
 
-    def matches_current_castle(self, castle: CastleIdentity) -> bool:
+    def current_castle_match(
+        self,
+        castle: CastleIdentity,
+        *,
+        roster: PncAccountCastleRosterConfig | None = None,
+    ) -> CurrentCastleMatch:
+        """Returns whether current-castle evidence is strong enough to prove the requested castle."""
+
+        active_roster = self.castle_roster_snapshot if roster is None else roster
+        return resolve_current_castle_match(
+            current_castle=self.current_castle,
+            evidence_kind=self.resolved_current_castle_evidence,
+            target=castle,
+            roster=active_roster,
+        )
+
+    def matches_current_castle(
+        self,
+        castle: CastleIdentity,
+        *,
+        roster: PncAccountCastleRosterConfig | None = None,
+    ) -> bool:
         """Returns whether the observed active castle matches the requested identity."""
 
-        current_castle = self.current_castle
-        if current_castle is None:
-            return False
-        return castle_identities_match(current_castle, castle)
+        return self.current_castle_match(castle, roster=roster).matches
 
     def find_castle_entry(self, castle: CastleIdentity) -> DetectedListEntry | None:
         """Returns the observed castle-roster entry matching the requested identity when visible."""
@@ -219,6 +284,52 @@ def castle_identities_match(left: CastleIdentity, right: CastleIdentity) -> bool
         return False
     if left.kingdom != "" and right.kingdom != "" and left.kingdom != right.kingdom:
         return False
+    if left.castle_level is None or right.castle_level is None:
+        return True
+    return left.castle_level == right.castle_level
+
+
+def resolve_current_castle_match(
+    *,
+    current_castle: CastleIdentity | None,
+    evidence_kind: CurrentCastleEvidenceKind | None,
+    target: CastleIdentity,
+    roster: PncAccountCastleRosterConfig | None,
+) -> CurrentCastleMatch:
+    """Returns whether the current-castle evidence can deterministically satisfy the explicit target."""
+
+    if current_castle is None or evidence_kind is None:
+        return CurrentCastleMatch(status=CurrentCastleMatchStatus.INSUFFICIENT_EVIDENCE)
+    if evidence_kind == CurrentCastleEvidenceKind.EXACT:
+        if _castle_identities_match_exact(current_castle, target):
+            return CurrentCastleMatch(status=CurrentCastleMatchStatus.MATCH, evidence_kind=evidence_kind)
+        return CurrentCastleMatch(status=CurrentCastleMatchStatus.MISMATCH, evidence_kind=evidence_kind)
+    if current_castle.castle_name != target.castle_name:
+        return CurrentCastleMatch(status=CurrentCastleMatchStatus.MISMATCH, evidence_kind=evidence_kind)
+    if roster is None:
+        return CurrentCastleMatch(status=CurrentCastleMatchStatus.INSUFFICIENT_EVIDENCE, evidence_kind=evidence_kind)
+    matching_castles = tuple(castle for castle in roster.castles if castle.castle_name == current_castle.castle_name)
+    if not matching_castles:
+        return CurrentCastleMatch(status=CurrentCastleMatchStatus.INSUFFICIENT_EVIDENCE, evidence_kind=evidence_kind)
+    if len(matching_castles) > 1:
+        return CurrentCastleMatch(status=CurrentCastleMatchStatus.AMBIGUOUS_NAME, evidence_kind=evidence_kind)
+    matched_castle = matching_castles[0]
+    if not _castle_levels_match(current_castle, matched_castle):
+        return CurrentCastleMatch(status=CurrentCastleMatchStatus.MISMATCH, evidence_kind=evidence_kind)
+    if _castle_identities_match_exact(matched_castle, target):
+        return CurrentCastleMatch(status=CurrentCastleMatchStatus.MATCH, evidence_kind=evidence_kind)
+    return CurrentCastleMatch(status=CurrentCastleMatchStatus.MISMATCH, evidence_kind=evidence_kind)
+
+
+def _castle_identities_match_exact(left: CastleIdentity, right: CastleIdentity) -> bool:
+    """Returns whether two castle identities match without wildcard kingdom behavior."""
+
+    return castle_identity_key(left) == castle_identity_key(right) and _castle_levels_match(left, right)
+
+
+def _castle_levels_match(left: CastleIdentity, right: CastleIdentity) -> bool:
+    """Returns whether two castle identities remain compatible after optional level enrichment."""
+
     if left.castle_level is None or right.castle_level is None:
         return True
     return left.castle_level == right.castle_level

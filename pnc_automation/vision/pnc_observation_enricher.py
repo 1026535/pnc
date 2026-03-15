@@ -11,7 +11,14 @@ from PIL import Image
 from pnc_automation.config.models import CastleIdentity
 from pnc_automation.errors import SelectorResolutionError
 from pnc_automation.pnc.chat import ChatChannel
-from pnc_automation.pnc.observation import Bounds, DetectedListEntry, ListEntryKind, VisibleElement, VisibleElementSourceKind
+from pnc_automation.pnc.observation import (
+    Bounds,
+    CurrentCastleEvidenceKind,
+    DetectedListEntry,
+    ListEntryKind,
+    VisibleElement,
+    VisibleElementSourceKind,
+)
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
 from pnc_automation.vision.observation_builder import ObservationAdditions
@@ -417,6 +424,7 @@ class PncObservationEnricher:
             list_entries=entries,
             screen_evidence=(ScreenEvidence(ScreenType.PNC_CASTLE_SELECTION, "manage_char_roster"),),
             current_castle=_entry_to_current_castle(selected_entry),
+            current_castle_evidence=None if selected_entry is None else CurrentCastleEvidenceKind.EXACT,
         )
 
     def _build_chat_geometry_additions(
@@ -1016,6 +1024,7 @@ def _build_lord_info_additions(
         },
         screen_evidence=(ScreenEvidence(ScreenType.PNC_LORD_INFO, "ocr_lord_info"),),
         current_castle=_lord_info_name_to_current_castle(name_line.text),
+        current_castle_evidence=CurrentCastleEvidenceKind.NAME_ONLY,
     )
 
 

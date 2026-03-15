@@ -40,6 +40,12 @@ class CastleIdentity:
     castle_level: int | None = None
 
 
+def castle_identity_key(castle: CastleIdentity) -> tuple[str, str]:
+    """Returns the stable kingdom/name identity key shared across roster and observation code."""
+
+    return (castle.kingdom, castle.castle_name)
+
+
 class CredentialSource(StrEnum):
     """Identifies where login credentials were loaded from."""
 
