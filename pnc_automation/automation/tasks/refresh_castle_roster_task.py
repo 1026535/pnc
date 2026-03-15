@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
 from pnc_automation.automation.task import BaseAutomationTask, CastleTargetPolicy, TaskId, TaskResult
 from pnc_automation.automation.task_context import TaskContext
+from pnc_automation.config.models import CastleIdentity, castle_identity_key
 from pnc_automation.errors import TaskVerificationError
 from pnc_automation.pnc.action_requests import ActionRequest, SwipeAction, WaitAction
 from pnc_automation.pnc.observation import ListEntryKind, Observation, castle_identity_from_entry
@@ -20,6 +22,32 @@ class _RefreshPhase(StrEnum):
     SEEK_TOP = "seek_top"
     SCAN_FORWARD = "scan_forward"
     RETURN_HOME = "return_home"
+
+
+@dataclass(slots=True)
+class _RefreshScanState:
+    """Owns the scan-local ordered roster observed during one refresh execution."""
+
+    level_hints: dict[tuple[str, str], int | None]
+    seen_windows: set[tuple[tuple[str, str], ...]] = field(default_factory=set)
+    ordered_castles: list[CastleIdentity] = field(default_factory=list)
+    ordered_indexes: dict[tuple[str, str], int] = field(default_factory=dict)
+
+    def record_window(self, castles: tuple[CastleIdentity, ...]) -> None:
+        """Merges one observed roster window into the scan-local ordered roster."""
+
+        for castle in castles:
+            castle_key = castle_identity_key(castle)
+            existing_index = self.ordered_indexes.get(castle_key)
+            if existing_index is None:
+                self.ordered_indexes[castle_key] = len(self.ordered_castles)
+                self.ordered_castles.append(_merge_scan_castle(None, castle, level_hint=self.level_hints.get(castle_key)))
+                continue
+            self.ordered_castles[existing_index] = _merge_scan_castle(
+                self.ordered_castles[existing_index],
+                castle,
+                level_hint=self.level_hints.get(castle_key),
+            )
 
 
 class RefreshCastleRosterTask(BaseAutomationTask):
@@ -51,6 +79,7 @@ class RefreshCastleRosterTask(BaseAutomationTask):
     def plan(self, context: TaskContext, observation: Observation) -> list[ActionRequest]:
         """Plans one deterministic roster-refresh increment."""
 
+        _require_scan_state(context)
         phase = _resolve_phase(context)
         if observation.screen_type == ScreenType.UNKNOWN:
             return [WaitAction(milliseconds=1000, reason="wait_for_roster_refresh_settle", observe_after=True)]
@@ -90,6 +119,7 @@ class RefreshCastleRosterTask(BaseAutomationTask):
     def verify(self, context: TaskContext, before: Observation, after: Observation) -> TaskResult:
         """Verifies navigation, top seeking, ordered scanning, and return to home city."""
 
+        _require_scan_state(context)
         if after.blocking_popup or after.screen_type == ScreenType.PNC_POPUP:
             return TaskResult.replan("Roster refresh reached a blocking popup and needs centralized recovery.")
         if after.screen_type == ScreenType.UNKNOWN:
@@ -151,7 +181,7 @@ def _verify_seek_top(context: TaskContext, *, before: Observation, after: Observ
     before_signature = _castle_window_signature(before)
     after_signature = _castle_window_signature(after)
     if before_signature == after_signature:
-        _record_seen_window(context, after_signature)
+        _record_seen_window(context, after, after_signature)
         context.runtime_state["refresh_phase"] = _RefreshPhase.SCAN_FORWARD.value
         return TaskResult.replan("Roster refresh reached the first roster page and can now scan forward.")
     return TaskResult.replan("Roster refresh moved closer to the first roster page.")
@@ -168,7 +198,7 @@ def _verify_scan_forward(context: TaskContext, *, before: Observation, after: Ob
         return _finalize_full_scan(context)
     if _window_already_seen(context, after_signature):
         return TaskResult.failure("Roster refresh repeated a previously scanned roster window.", retryable=False)
-    _record_seen_window(context, after_signature)
+    _record_seen_window(context, after, after_signature)
     return TaskResult.replan("Roster refresh captured another ordered roster window.")
 
 
@@ -176,14 +206,14 @@ def _finalize_full_scan(context: TaskContext) -> TaskResult:
     """Persists the observed ordered roster as a full scan and starts the return-home phase."""
 
     store = context.require_castle_roster_store()
-    roster = context.castle_roster
-    if roster is None or not roster.castles:
+    scan_state = _require_scan_state(context)
+    if not scan_state.ordered_castles:
         raise TaskVerificationError(
             "Roster refresh cannot finalize because no scanned roster state is available to persist.",
             account_id=context.account.id,
             pnc_account_id=context.account.pnc_account_id,
         )
-    store.replace_full_scan(context.account.pnc_account_id, roster.castles)
+    store.replace_full_scan(context.account.pnc_account_id, tuple(scan_state.ordered_castles))
     context.runtime_state["refresh_phase"] = _RefreshPhase.RETURN_HOME.value
     return TaskResult.replan("Roster refresh persisted full-scan ordering and is returning to home city.")
 
@@ -199,32 +229,31 @@ def _verify_return_home(after: Observation) -> TaskResult:
 def _castle_window_signature(observation: Observation) -> tuple[tuple[str, str], ...]:
     """Returns the stable visible roster window identity for one Manage Char observation."""
 
+    return tuple(castle_identity_key(castle) for castle in _castle_window_castles(observation))
+
+
+def _castle_window_castles(observation: Observation) -> tuple[CastleIdentity, ...]:
+    """Returns the ordered visible roster window for one Manage Char observation."""
+
     visible_castles = observation.entries(ListEntryKind.CASTLE)
     if not visible_castles:
         raise TaskVerificationError(
             "Castle roster refresh requires at least one visible castle entry on Manage Char.",
             screen_type=observation.screen_type,
         )
-    return tuple(
-        (castle.kingdom, castle.castle_name)
-        for castle in (castle_identity_from_entry(entry) for entry in visible_castles)
-    )
+    return tuple(castle_identity_from_entry(entry) for entry in visible_castles)
 
 
 def _record_seen_window(
     context: TaskContext,
+    observation: Observation,
     window_signature: tuple[tuple[str, str], ...],
 ) -> None:
     """Records one successfully scanned roster window in the step-local refresh state."""
 
-    seen_windows = context.runtime_state.setdefault("seen_windows", set())
-    if not isinstance(seen_windows, set):
-        raise TaskVerificationError(
-            "Castle roster refresh step state is corrupt: expected a set of seen windows.",
-            account_id=context.account.id,
-            task_id=context.step.task,
-        )
-    seen_windows.add(window_signature)
+    scan_state = _require_scan_state(context)
+    scan_state.seen_windows.add(window_signature)
+    scan_state.record_window(_castle_window_castles(observation))
 
 
 def _window_already_seen(
@@ -233,11 +262,42 @@ def _window_already_seen(
 ) -> bool:
     """Returns whether the current roster window has already been scanned earlier in the run."""
 
-    seen_windows = context.runtime_state.get("seen_windows", set())
-    if not isinstance(seen_windows, set):
-        raise TaskVerificationError(
-            "Castle roster refresh step state is corrupt: expected a set of seen windows.",
-            account_id=context.account.id,
-            task_id=context.step.task,
-        )
-    return window_signature in seen_windows
+    return window_signature in _require_scan_state(context).seen_windows
+
+
+def _require_scan_state(context: TaskContext) -> _RefreshScanState:
+    """Returns the refresh scan state, capturing the pre-refresh roster only once."""
+
+    scan_state = context.runtime_state.get("refresh_scan_state")
+    if scan_state is None:
+        roster = context.castle_roster
+        level_hints = {} if roster is None else {castle_identity_key(castle): castle.castle_level for castle in roster.castles}
+        scan_state = _RefreshScanState(level_hints=level_hints)
+        context.runtime_state["refresh_scan_state"] = scan_state
+    if isinstance(scan_state, _RefreshScanState):
+        return scan_state
+    raise TaskVerificationError(
+        "Castle roster refresh step state is corrupt: expected refresh scan state.",
+        account_id=context.account.id,
+        task_id=context.step.task,
+    )
+
+
+def _merge_scan_castle(
+    existing: CastleIdentity | None,
+    discovered: CastleIdentity,
+    *,
+    level_hint: int | None,
+) -> CastleIdentity:
+    """Builds the canonical scan-local castle state using observed data first and cached levels only as hints."""
+
+    castle_level = discovered.castle_level
+    if castle_level is None and existing is not None:
+        castle_level = existing.castle_level
+    if castle_level is None:
+        castle_level = level_hint
+    return CastleIdentity(
+        kingdom=discovered.kingdom,
+        castle_name=discovered.castle_name,
+        castle_level=castle_level,
+    )

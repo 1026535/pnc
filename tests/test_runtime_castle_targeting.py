@@ -19,7 +19,14 @@ from pnc_automation.automation.task_context import TaskContext
 from pnc_automation.automation.tasks.popup_recovery_task import PopupRecoveryTask
 from pnc_automation.automation.tasks.select_castle_task import SelectCastleTask
 from pnc_automation.cli import main as cli_main
-from pnc_automation.config.models import AccountConfig, CastleIdentity, CredentialSource, DefaultsConfig, ResolvedCredentials
+from pnc_automation.config.models import (
+    AccountConfig,
+    CastleIdentity,
+    CredentialSource,
+    DefaultsConfig,
+    PncAccountCastleRosterConfig,
+    ResolvedCredentials,
+)
 from pnc_automation.errors import ScriptValidationError
 from pnc_automation.pnc.action_requests import ActionRequest
 from pnc_automation.pnc.observation import ListEntryKind, Observation
@@ -156,7 +163,14 @@ class RuntimeCastleTargetingTests(unittest.TestCase):
             )
         )
 
-        result = runner.run(self.account, prepared)
+        result = runner.run(
+            self.account,
+            prepared,
+            castle_roster_provider=lambda: PncAccountCastleRosterConfig(
+                pnc_account_id=self.account.pnc_account_id,
+                castles=(self.target_castle,),
+            ),
+        )
 
         self.assertEqual(result.steps[0].requested_castle, self.target_castle)
         self.assertTrue(any(label.startswith("select_castle_") for label in fake_observer.labels))
@@ -232,8 +246,16 @@ class RuntimeCastleTargetingTests(unittest.TestCase):
         result = api.research(account_id="account_a", priority=["economy"])
 
         self.assertEqual(result.task_id, TaskId.RESEARCH)
-        self.assertEqual(fake_runner.task_calls, [(TaskId.RESEARCH, "account_a", {"priority": ["economy"]}, None)])
+        self.assertEqual(fake_runner.task_calls, [(TaskId.RESEARCH, "account_a", {"priority": ["economy"]})])
         self.assertEqual(fake_runner.prepare_calls, [])
+
+    def test_python_generic_run_task_no_longer_accepts_castle_targeting(self) -> None:
+        """Keeps explicit castle alignment out of the public direct-call task API."""
+
+        api = AutomationApi(application=_FakeApplicationRunner())
+
+        with self.assertRaises(TypeError):
+            api.run_task(account_id="account_a", task_id=TaskId.RESEARCH, castle=self.target_castle)
 
     def test_python_direct_task_calls_resolve_account_from_active_context(self) -> None:
         """Allows direct task wrappers to use the currently active `use_account(...)` scope."""
@@ -246,8 +268,19 @@ class RuntimeCastleTargetingTests(unittest.TestCase):
 
         self.assertEqual(
             fake_runner.task_calls,
-            [(TaskId.BUILDING_UPGRADE, "account_a", {"priority": ["castle"], "allow_speedups": False}, None)],
+            [(TaskId.BUILDING_UPGRADE, "account_a", {"priority": ["castle"], "allow_speedups": False})],
         )
+
+    def test_python_generic_run_task_resolves_account_from_active_context(self) -> None:
+        """Allows the generic direct-call task API to reuse the active prepared session scope."""
+
+        fake_runner = _FakeApplicationRunner()
+        api = AutomationApi(application=fake_runner)
+
+        with api.use_account("account_a"):
+            api.run_task(task_id=TaskId.RESEARCH, params={"priority": ["economy"]})
+
+        self.assertEqual(fake_runner.task_calls, [(TaskId.RESEARCH, "account_a", {"priority": ["economy"]})])
 
     def test_cli_login_without_castle_reuses_session_preparation_service(self) -> None:
         """Calls the shared preparation path without mutating the current castle when no target is given."""
@@ -285,13 +318,32 @@ class RuntimeCastleTargetingTests(unittest.TestCase):
         self.assertEqual(fake_runner.prepare_calls, [("account_a", self.target_castle)])
         self.assertEqual(fake_runner.task_calls, [])
 
+    def test_cli_legacy_run_flags_still_route_through_the_shared_run_path(self) -> None:
+        """Keeps the flag-only legacy invocation shape while executing the canonical run command path."""
+
+        fake_runner = _FakeApplicationRunner()
+        with patch("pnc_automation.cli.build_application_runner", return_value=fake_runner), patch("builtins.print"):
+            exit_code = cli_main(
+                ["--account", "account_a", "--config", "config/accounts.yaml", "--script", "scripts/daily.yaml"]
+            )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(fake_runner.run_calls, [("account_a", "scripts/daily.yaml")])
+
 
 @dataclass(slots=True)
 class _FakeApplicationRunner:
     """Records Python API and CLI calls without constructing the full runtime."""
 
+    run_calls: list[tuple[str, str]] = field(default_factory=list)
     prepare_calls: list[tuple[str, CastleIdentity | None]] = field(default_factory=list)
-    task_calls: list[tuple[TaskId, str, dict[str, object] | None, CastleIdentity | None]] = field(default_factory=list)
+    task_calls: list[tuple[TaskId, str, dict[str, object] | None]] = field(default_factory=list)
+
+    def run(self, *, account_id: str, script_path: str) -> RunResult:
+        """Records one CLI/script run request and returns a synthetic success result."""
+
+        self.run_calls.append((account_id, script_path))
+        return _make_run_result(script_name=script_path)
 
     def prepare_account_session(
         self,
@@ -310,17 +362,15 @@ class _FakeApplicationRunner:
         account_id: str,
         task_id: TaskId,
         params: dict[str, object] | None = None,
-        castle: CastleIdentity | None = None,
     ) -> StepRunResult:
         """Records one direct task call and returns a synthetic success result."""
 
-        self.task_calls.append((task_id, account_id, params, castle))
+        self.task_calls.append((task_id, account_id, params))
         return StepRunResult(
             task_id=task_id,
             status=TaskResult.success("ok").status,
             attempts=1,
             message="ok",
-            requested_castle=castle,
         )
 
 

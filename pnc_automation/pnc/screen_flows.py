@@ -369,7 +369,7 @@ class ScreenFlowPlanner:
     ) -> list[ActionRequest]:
         """Plans selection of the requested castle when it is not already active."""
 
-        if observation.matches_current_castle(target_castle):
+        if observation.matches_current_castle(target_castle, roster=castle_roster):
             return []
         selected_entry = observation.find_castle_entry(target_castle)
         if selected_entry is not None and selected_entry.selected:

@@ -14,6 +14,7 @@ from pnc_automation.config.models import CastleIdentity, PncAccountCastleRosterC
 from pnc_automation.pnc.chat import ChatChannel
 from pnc_automation.pnc.observation import (
     Bounds,
+    CurrentCastleEvidenceKind,
     DetectedListEntry,
     ListEntryKind,
     Observation,
@@ -84,6 +85,7 @@ def make_observation(
     blocking_popup: bool = False,
     current_castle_name: str | None = None,
     current_castle: CastleIdentity | None = None,
+    current_castle_evidence: CurrentCastleEvidenceKind | None = None,
     current_pnc_account_id: str | None = None,
     verified_pnc_account_id: str | None = None,
     castle_roster_snapshot: PncAccountCastleRosterConfig | None = None,
@@ -110,6 +112,11 @@ def make_observation(
         list_entries=list_entries,
         blocking_popup=blocking_popup,
         current_castle=current_castle or _make_current_castle(current_castle_name),
+        current_castle_evidence=_resolve_current_castle_evidence(
+            current_castle=current_castle,
+            current_castle_name=current_castle_name,
+            current_castle_evidence=current_castle_evidence,
+        ),
         current_pnc_account_id=current_pnc_account_id,
         verified_pnc_account_id=verified_pnc_account_id,
         castle_roster_snapshot=castle_roster_snapshot,
@@ -128,6 +135,23 @@ def _make_current_castle(current_castle_name: str | None) -> CastleIdentity | No
     if current_castle_name is None:
         return None
     return CastleIdentity(kingdom="", castle_name=current_castle_name)
+
+
+def _resolve_current_castle_evidence(
+    *,
+    current_castle: CastleIdentity | None,
+    current_castle_name: str | None,
+    current_castle_evidence: CurrentCastleEvidenceKind | None,
+) -> CurrentCastleEvidenceKind | None:
+    """Returns the matching evidence kind for synthetic current-castle fixtures."""
+
+    if current_castle_evidence is not None:
+        return current_castle_evidence
+    if current_castle is not None:
+        return CurrentCastleEvidenceKind.NAME_ONLY if current_castle.kingdom == "" else CurrentCastleEvidenceKind.EXACT
+    if current_castle_name is not None:
+        return CurrentCastleEvidenceKind.NAME_ONLY
+    return None
 
 
 @dataclass

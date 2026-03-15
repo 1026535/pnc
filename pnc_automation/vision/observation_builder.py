@@ -14,6 +14,7 @@ from pnc_automation.config.castle_roster_store import CastleRosterStore
 from pnc_automation.emulator.session import BlueStacksSession
 from pnc_automation.pnc.chat import ChatChannel
 from pnc_automation.pnc.observation import (
+    CurrentCastleEvidenceKind,
     DetectedListEntry,
     ListEntryKind,
     Observation,
@@ -54,6 +55,7 @@ class ObservationAdditions:
     list_entries: tuple[DetectedListEntry, ...] = ()
     screen_evidence: tuple[ScreenEvidence, ...] = ()
     current_castle: CastleIdentity | None = None
+    current_castle_evidence: CurrentCastleEvidenceKind | None = None
     current_pnc_account_id: str | None = None
     available_march_slots: int | None = None
     active_chat_channel: ChatChannel | None = None
@@ -212,6 +214,7 @@ class ObservationBuilder:
             captured_at=screenshot.artifact.captured_at,
             blocking_popup=screen_type == ScreenType.PNC_POPUP or UiElementId.PNC_POPUP_CLOSE_BUTTON in visible_elements,
             current_castle=additions.current_castle,
+            current_castle_evidence=additions.current_castle_evidence,
             current_pnc_account_id=additions.current_pnc_account_id,
             available_march_slots=additions.available_march_slots,
             active_chat_channel=additions.active_chat_channel,
@@ -273,6 +276,7 @@ class ObservationService:
     castle_roster_store: CastleRosterStore | None = None
     verified_pnc_account_id: str | None = None
     validated_current_castle: CastleIdentity | None = None
+    validated_current_castle_evidence: CurrentCastleEvidenceKind | None = None
 
     def capture_observation(
         self,
@@ -284,11 +288,12 @@ class ObservationService:
         screenshot = self.screenshot_service.capture(self.session, artifact_directory=self.artifact_directory, label=label)
         roster_snapshot = self._get_castle_roster_snapshot()
         observation = self.observation_builder.build(screenshot, request=request)
-        current_castle = self._resolve_current_castle(observation)
+        current_castle, current_castle_evidence = self._resolve_current_castle(observation)
         verified_pnc_account_id = self._resolve_verified_pnc_account_id(observation, roster_snapshot)
         observation = replace(
             observation,
             current_castle=current_castle,
+            current_castle_evidence=current_castle_evidence,
             verified_pnc_account_id=verified_pnc_account_id,
             castle_roster_snapshot=roster_snapshot,
         )
@@ -327,23 +332,28 @@ class ObservationService:
             return None
         return self.castle_roster_store.get(self.pnc_account_id)
 
-    def _resolve_current_castle(self, observation: Observation) -> CastleIdentity | None:
-        """Carries one Lord Info castle-name validation back across home-adjacent screens."""
+    def _resolve_current_castle(
+        self,
+        observation: Observation,
+    ) -> tuple[CastleIdentity | None, CurrentCastleEvidenceKind | None]:
+        """Carries current-castle evidence back across home-adjacent screens with its strength intact."""
 
         if observation.current_castle is not None:
-            return observation.current_castle
+            return observation.current_castle, observation.resolved_current_castle_evidence
         if observation.screen_type in {ScreenType.PNC_HOME_CITY, ScreenType.PNC_MORE_MENU}:
-            return self.validated_current_castle
-        return None
+            return self.validated_current_castle, self.validated_current_castle_evidence
+        return None, None
 
     def _update_validated_current_castle(self, observation: Observation) -> None:
         """Keeps Lord Info validation only while the session remains on home-adjacent screens."""
 
         if observation.screen_type == ScreenType.PNC_LORD_INFO and observation.current_castle is not None:
             self.validated_current_castle = observation.current_castle
+            self.validated_current_castle_evidence = observation.resolved_current_castle_evidence
             return
         if observation.screen_type not in {ScreenType.PNC_HOME_CITY, ScreenType.PNC_MORE_MENU}:
             self.validated_current_castle = None
+            self.validated_current_castle_evidence = None
 
     def _resolve_verified_pnc_account_id(
         self,

@@ -8,7 +8,7 @@ from typing import Any
 from pnc_automation.automation.task import BaseAutomationTask, CastleTargetPolicy, TaskId, TaskResult
 from pnc_automation.automation.task_context import TaskContext
 from pnc_automation.pnc.action_requests import ActionRequest, WaitAction
-from pnc_automation.pnc.observation import Observation
+from pnc_automation.pnc.observation import CurrentCastleMatch, CurrentCastleMatchStatus, Observation
 from pnc_automation.pnc.screen_type import ScreenType
 
 
@@ -43,13 +43,14 @@ class SelectCastleTask(BaseAutomationTask):
         """Delegates castle navigation to the canonical screen flow."""
 
         target_castle = context.require_target_castle()
+        current_match = observation.current_castle_match(target_castle, roster=context.castle_roster)
         if observation.screen_type == ScreenType.PNC_LOADING:
             return [WaitAction(milliseconds=1500, reason="wait_for_castle_switch_loading", observe_after=True)]
         if observation.screen_type == ScreenType.UNKNOWN:
             return [WaitAction(milliseconds=1000, reason="wait_for_castle_switch_settle", observe_after=True)]
         if observation.screen_type in {ScreenType.PNC_VIP, ScreenType.PNC_IMPROVE_MIGHT}:
             return context.flows.return_to_safe_root_screen(observation)
-        if observation.matches_current_castle(target_castle):
+        if current_match.matches:
             if observation.screen_type in {ScreenType.PNC_MORE_MENU, ScreenType.PNC_CASTLE_SELECTION}:
                 return context.flows.return_to_safe_root_screen(observation)
             return []
@@ -67,15 +68,20 @@ class SelectCastleTask(BaseAutomationTask):
         """Succeeds once the explicit target castle is revalidated from home city."""
 
         target_castle = context.require_target_castle()
-        if after.screen_type == ScreenType.PNC_HOME_CITY and after.matches_current_castle(target_castle):
+        current_match = after.current_castle_match(target_castle, roster=context.castle_roster)
+        if after.screen_type == ScreenType.PNC_HOME_CITY and current_match.matches:
             return TaskResult.success(f"Target castle '{target_castle.castle_name}' is selected.")
-        if after.screen_type == ScreenType.PNC_LORD_INFO and after.matches_current_castle(target_castle):
+        if after.screen_type == ScreenType.PNC_LORD_INFO and current_match.matches:
             return TaskResult.success(f"Target castle '{target_castle.castle_name}' is selected.")
         if after.screen_type == ScreenType.PNC_MORE_MENU:
-            if after.current_castle is not None and after.matches_current_castle(target_castle):
+            if after.current_castle is not None and current_match.matches:
                 return TaskResult.replan("Castle validation is back at the More menu and still needs to return to home city.")
+            if current_match.ambiguous:
+                return TaskResult.replan(_ambiguous_current_castle_message(screen_type=after.screen_type))
             return TaskResult.replan("Castle navigation is at the More menu and still needs the next validation or Manage Char action.")
         if after.screen_type == ScreenType.PNC_LORD_INFO:
+            if current_match.ambiguous:
+                return TaskResult.replan(_ambiguous_current_castle_message(screen_type=after.screen_type))
             return TaskResult.replan("Castle validation is reading the displayed Lord Info name.")
         if after.screen_type == ScreenType.PNC_CASTLE_SELECTION:
             matching_entry = after.find_castle_entry(target_castle)
@@ -97,9 +103,30 @@ class SelectCastleTask(BaseAutomationTask):
         if after.screen_type == ScreenType.PNC_HOME_CITY:
             if after.current_castle is None:
                 return TaskResult.replan("Home city is visible but the active castle still needs explicit Lord Info validation.")
+            if current_match.ambiguous:
+                return TaskResult.replan(_ambiguous_current_castle_message(screen_type=after.screen_type))
+            if current_match.status == CurrentCastleMatchStatus.INSUFFICIENT_EVIDENCE:
+                return TaskResult.replan(_insufficient_current_castle_message(match=current_match))
             return TaskResult.replan(
                 f"Home city is visible but active castle '{after.current_castle.castle_name}' does not match target castle '{target_castle.castle_name}'."
             )
         return TaskResult.failure(
             f"Target castle '{target_castle.castle_name}' is not selected yet.",
         )
+
+
+def _ambiguous_current_castle_message(*, screen_type: ScreenType) -> str:
+    """Returns the shared replan message for ambiguous name-only current-castle evidence."""
+
+    return (
+        f"Current castle evidence on '{screen_type.value}' is name-only and ambiguous in the cached roster; "
+        "Manage Char verification is still required."
+    )
+
+
+def _insufficient_current_castle_message(*, match: CurrentCastleMatch) -> str:
+    """Returns the shared replan message for current-castle evidence that cannot yet prove the target."""
+
+    if match.status == CurrentCastleMatchStatus.INSUFFICIENT_EVIDENCE:
+        return "Home city is visible but the active castle still needs exact Manage Char verification."
+    return "Home city is visible but the active castle still needs explicit Lord Info validation."

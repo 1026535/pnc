@@ -11,7 +11,14 @@ from pnc_automation.automation.runner import AutomationRunner
 from pnc_automation.automation.scripts.models import RunScript, ScriptStep
 from pnc_automation.automation.scripts.registry import build_default_task_registry
 from pnc_automation.automation.task import TaskId
-from pnc_automation.config.models import AccountConfig, CastleIdentity, CredentialSource, DefaultsConfig, ResolvedCredentials
+from pnc_automation.config.models import (
+    AccountConfig,
+    CastleIdentity,
+    CredentialSource,
+    DefaultsConfig,
+    PncAccountCastleRosterConfig,
+    ResolvedCredentials,
+)
 from pnc_automation.pnc.observation import ListEntryKind
 from pnc_automation.pnc.screen_flows import ScreenFlowPlanner
 from pnc_automation.pnc.screen_type import ScreenType
@@ -268,7 +275,14 @@ class RunnerEndToEndTests(unittest.TestCase):
             logger=build_logger(),
         )
 
-        result = runner.run(account, registry.prepare_script(script))
+        result = runner.run(
+            account,
+            registry.prepare_script(script),
+            castle_roster_provider=lambda: PncAccountCastleRosterConfig(
+                pnc_account_id=account.pnc_account_id,
+                castles=(target_castle,),
+            ),
+        )
 
         self.assertEqual(len(result.steps), 7)
         self.assertEqual(result.steps[-1].status.value, "success")

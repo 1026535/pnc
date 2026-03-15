@@ -7,7 +7,7 @@ from pathlib import Path
 
 import yaml
 
-from pnc_automation.config.models import CastleIdentity, CastleRosterOrdering, PncAccountCastleRosterConfig
+from pnc_automation.config.models import CastleIdentity, CastleRosterOrdering, PncAccountCastleRosterConfig, castle_identity_key
 from pnc_automation.errors import ConfigurationError
 
 
@@ -189,7 +189,7 @@ def _castle_map(castles: tuple[CastleIdentity, ...]) -> dict[tuple[str, str], Ca
 def _castle_key(castle: CastleIdentity) -> tuple[str, str]:
     """Returns the stable storage key for one castle identity."""
 
-    return (castle.kingdom, castle.castle_name)
+    return castle_identity_key(castle)
 
 
 def _is_in_order_subsequence(
