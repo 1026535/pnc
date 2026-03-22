@@ -12,6 +12,7 @@ from pnc_automation.automation.script_runner import ScriptRunner
 from pnc_automation.automation.task import TaskId
 from pnc_automation.automation.scripts.registry import build_default_task_registry
 from pnc_automation.capture.artifact_store import ArtifactStore
+from pnc_automation.capture.mail_archive_store import MailArchiveStore
 from pnc_automation.capture.screenshot_service import ScreenshotService
 from pnc_automation.config.castle_roster_store import CastleRosterStore
 from pnc_automation.config.loader import load_app_config
@@ -101,6 +102,7 @@ def build_application_runner(
             path=app_config.castle_roster_path,
             rosters=app_config.castle_rosters,
         ),
+        mail_archive_store=MailArchiveStore(root=app_config.artifact_root / "mail"),
         adb_client=AdbClient(adb_path=app_config.defaults.adb_path),
         logger=logger,
     )

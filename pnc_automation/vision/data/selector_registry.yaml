@@ -64,8 +64,18 @@ selectors:
 - id: PNC_BOTTOM_NAV_MAIL
   screens:
   - PNC_HOME_CITY
-  status: screenshot_seeded
+  status: click_mapped
   detection_kind: planned
+  interaction_kind: navigation
+  click:
+    anchor: center
+    outcomes:
+    - safe_to_click: true
+      monetized: false
+      target_screen: PNC_MAIL_HUB
+      verification_selectors:
+      - PNC_MAIL_ROW_PLAYER_MAIL
+      - PNC_MAIL_ROW_ALLIANCE_MAIL
   relative_bounds:
     x_ratio: 0.575555555556
     y_ratio: 0.906875
@@ -74,8 +84,21 @@ selectors:
 - id: PNC_BOTTOM_NAV_ALLIANCE
   screens:
   - PNC_HOME_CITY
-  status: screenshot_seeded
+  status: click_mapped
   detection_kind: planned
+  interaction_kind: navigation
+  click:
+    anchor: center
+    outcomes:
+    - safe_to_click: true
+      monetized: false
+      target_screen: PNC_ALLIANCE_HOME
+      verification_selectors:
+      - PNC_ALLIANCE_TILE_TERRITORY
+    - safe_to_click: true
+      monetized: false
+      target_screen: PNC_ALLIANCE_JOIN
+      verification_selectors: []
   relative_bounds:
     x_ratio: 0.624444444444
     y_ratio: 0.905
@@ -450,6 +473,54 @@ selectors:
   status: screenshot_seeded
   detection_kind: planned
   interaction_kind: label
+- id: PNC_PLAYER_TERRITORY_HEADER
+  screens:
+  - PNC_PLAYER_TERRITORY
+  status: planned
+  detection_kind: planned
+  interaction_kind: label
+- id: PNC_PLAYER_TERRITORY_PLAYER_INFO_BUTTON
+  screens:
+  - PNC_PLAYER_TERRITORY
+  status: click_mapped
+  detection_kind: planned
+  interaction_kind: navigation
+  click:
+    anchor: center
+    outcomes:
+    - safe_to_click: true
+      monetized: false
+      target_screen: PNC_PLAYER_PROFILE
+      verification_selectors:
+      - PNC_PLAYER_PROFILE_HEADER
+      - PNC_PLAYER_PROFILE_NAME_LABEL
+- id: PNC_PLAYER_PROFILE_HEADER
+  screens:
+  - PNC_PLAYER_PROFILE
+  status: planned
+  detection_kind: planned
+  interaction_kind: label
+- id: PNC_PLAYER_PROFILE_NAME_LABEL
+  screens:
+  - PNC_PLAYER_PROFILE
+  status: planned
+  detection_kind: planned
+  interaction_kind: label
+- id: PNC_PLAYER_PROFILE_MAIL_BUTTON
+  screens:
+  - PNC_PLAYER_PROFILE
+  status: click_mapped
+  detection_kind: planned
+  interaction_kind: navigation
+  click:
+    anchor: center
+    outcomes:
+    - safe_to_click: true
+      monetized: false
+      target_screen: PNC_MAIL_COMPOSE_POPUP
+      verification_selectors:
+      - PNC_MAIL_COMPOSE_HEADER
+      - PNC_MAIL_COMPOSE_SEND_BUTTON
 - id: PNC_VIP_HEADER
   screens:
   - PNC_VIP
@@ -674,56 +745,203 @@ selectors:
   - PNC_HERO_DETAIL_ENHANCE
   status: screenshot_seeded
   detection_kind: template
+- id: PNC_MAIL_HEADER
+  screens:
+  - PNC_MAIL_HUB
+  - PNC_MAILBOX_LIST
+  - PNC_MAIL_THREAD
+  status: planned
+  detection_kind: planned
+  interaction_kind: label
 - id: PNC_MAIL_ROW_SYSTEM_MESSAGE
   screens:
-  - PNC_MAIL_LIST
+  - PNC_MAIL_HUB
   status: screenshot_seeded
   detection_kind: template
 - id: PNC_MAIL_ROW_PLAYER_MAIL
   screens:
-  - PNC_MAIL_LIST
-  status: screenshot_seeded
+  - PNC_MAIL_HUB
+  status: click_mapped
   detection_kind: template
+  interaction_kind: navigation
+  click:
+    anchor: center
+    outcomes:
+    - safe_to_click: true
+      monetized: false
+      target_screen: PNC_MAILBOX_LIST
+      verification_selectors:
+      - PNC_MAIL_HEADER
 - id: PNC_MAIL_ROW_ALLIANCE_MAIL
   screens:
-  - PNC_MAIL_LIST
-  status: screenshot_seeded
+  - PNC_MAIL_HUB
+  status: click_mapped
   detection_kind: template
+  interaction_kind: navigation
+  click:
+    anchor: center
+    outcomes:
+    - safe_to_click: true
+      monetized: false
+      target_screen: PNC_MAILBOX_LIST
+      verification_selectors:
+      - PNC_MAIL_HEADER
 - id: PNC_MAIL_ROW_BATTLELOG
   screens:
-  - PNC_MAIL_LIST
+  - PNC_MAIL_HUB
   status: screenshot_seeded
   detection_kind: template
 - id: PNC_MAIL_ROW_HUNT_REPORT
   screens:
-  - PNC_MAIL_LIST
+  - PNC_MAIL_HUB
   status: screenshot_seeded
   detection_kind: template
 - id: PNC_MAIL_ROW_HELL_FORTRESS
   screens:
-  - PNC_MAIL_LIST
+  - PNC_MAIL_HUB
   status: screenshot_seeded
   detection_kind: template
 - id: PNC_MAIL_ROW_GATHERING_REPORT
   screens:
-  - PNC_MAIL_LIST
+  - PNC_MAIL_HUB
   status: screenshot_seeded
   detection_kind: template
 - id: PNC_MAIL_ROW_TRANSPORT_REPORT
   screens:
-  - PNC_MAIL_LIST
+  - PNC_MAIL_HUB
   status: screenshot_seeded
   detection_kind: template
-- id: PNC_SYSTEM_MESSAGE_MARK_AS_READ_BUTTON
+- id: PNC_MAIL_COMPOSE_BUTTON
   screens:
-  - PNC_SYSTEM_MESSAGE
-  status: screenshot_seeded
-  detection_kind: template
-- id: PNC_SYSTEM_MESSAGE_MANAGE_BUTTON
+  - PNC_MAILBOX_LIST
+  status: planned
+  detection_kind: planned
+  interaction_kind: action
+  relative_bounds:
+    x_ratio: 0.86
+    y_ratio: 0.12
+    width_ratio: 0.1
+    height_ratio: 0.06
+    action_x_ratio: 0.91
+    action_y_ratio: 0.15
+- id: PNC_MAILBOX_EMPTY_LABEL
   screens:
-  - PNC_SYSTEM_MESSAGE
-  status: screenshot_seeded
-  detection_kind: template
+  - PNC_MAILBOX_LIST
+  status: planned
+  detection_kind: planned
+  interaction_kind: label
+- id: PNC_MAIL_THREAD_ROW
+  screens:
+  - PNC_MAILBOX_LIST
+  status: planned
+  detection_kind: collection
+- id: PNC_MAIL_THREAD_SENDER_REGION
+  screens:
+  - PNC_MAILBOX_LIST
+  status: planned
+  detection_kind: planned
+  interaction_kind: label
+- id: PNC_MAIL_THREAD_PREVIEW_REGION
+  screens:
+  - PNC_MAILBOX_LIST
+  status: planned
+  detection_kind: planned
+  interaction_kind: label
+- id: PNC_MAIL_THREAD_DATE_REGION
+  screens:
+  - PNC_MAILBOX_LIST
+  status: planned
+  detection_kind: planned
+  interaction_kind: label
+- id: PNC_MAIL_THREAD_DELETE_BUTTON
+  screens:
+  - PNC_MAIL_THREAD
+  status: planned
+  detection_kind: planned
+  interaction_kind: action
+- id: PNC_MAILBOX_MARK_ALL_AS_READ_BUTTON
+  screens:
+  - PNC_MAILBOX_LIST
+  status: planned
+  detection_kind: planned
+  interaction_kind: action
+- id: PNC_MAILBOX_MANAGE_BUTTON
+  screens:
+  - PNC_MAILBOX_LIST
+  status: planned
+  detection_kind: planned
+  interaction_kind: action
+- id: PNC_MAIL_COMPOSE_HEADER
+  screens:
+  - PNC_MAIL_COMPOSE_POPUP
+  status: planned
+  detection_kind: planned
+  interaction_kind: label
+- id: PNC_MAIL_COMPOSE_CLOSE_BUTTON
+  screens:
+  - PNC_MAIL_COMPOSE_POPUP
+  status: planned
+  detection_kind: planned
+  interaction_kind: action
+  relative_bounds:
+    x_ratio: 0.84
+    y_ratio: 0.22
+    width_ratio: 0.1
+    height_ratio: 0.06
+    action_x_ratio: 0.89
+    action_y_ratio: 0.25
+- id: PNC_MAIL_COMPOSE_TARGET_FIELD
+  screens:
+  - PNC_MAIL_COMPOSE_POPUP
+  status: planned
+  detection_kind: ocr_region
+  interaction_kind: action
+  relative_bounds:
+    x_ratio: 0.144444444444
+    y_ratio: 0.2925
+    width_ratio: 0.704444444444
+    height_ratio: 0.04375
+    action_x_ratio: 0.496666666667
+    action_y_ratio: 0.314375
+- id: PNC_MAIL_COMPOSE_SUBJECT_FIELD
+  screens:
+  - PNC_MAIL_COMPOSE_POPUP
+  status: planned
+  detection_kind: ocr_region
+  interaction_kind: action
+  relative_bounds:
+    x_ratio: 0.144444444444
+    y_ratio: 0.3475
+    width_ratio: 0.704444444444
+    height_ratio: 0.045
+    action_x_ratio: 0.496666666667
+    action_y_ratio: 0.37
+- id: PNC_MAIL_COMPOSE_BODY_FIELD
+  screens:
+  - PNC_MAIL_COMPOSE_POPUP
+  status: planned
+  detection_kind: ocr_region
+  interaction_kind: action
+  relative_bounds:
+    x_ratio: 0.077777777778
+    y_ratio: 0.40375
+    width_ratio: 0.8
+    height_ratio: 0.2575
+    action_x_ratio: 0.477777777778
+    action_y_ratio: 0.5325
+- id: PNC_MAIL_COMPOSE_SEND_BUTTON
+  screens:
+  - PNC_MAIL_COMPOSE_POPUP
+  status: planned
+  detection_kind: planned
+  interaction_kind: action
+  relative_bounds:
+    x_ratio: 0.315555555556
+    y_ratio: 0.67875
+    width_ratio: 0.368888888889
+    height_ratio: 0.055
+    action_x_ratio: 0.5
+    action_y_ratio: 0.70625
 - id: PNC_ALLIANCE_TILE_TERRITORY
   screens:
   - PNC_ALLIANCE_HOME
@@ -752,8 +970,17 @@ selectors:
 - id: PNC_ALLIANCE_TILE_RANK
   screens:
   - PNC_ALLIANCE_HOME
-  status: screenshot_seeded
+  status: click_mapped
   detection_kind: template
+  interaction_kind: navigation
+  click:
+    anchor: center
+    outcomes:
+    - safe_to_click: true
+      monetized: false
+      target_screen: PNC_MIGHT_RANK
+      verification_selectors:
+      - PNC_MIGHT_RANK_ROW
 - id: PNC_ALLIANCE_TILE_EVENT
   screens:
   - PNC_ALLIANCE_HOME
@@ -762,8 +989,17 @@ selectors:
 - id: PNC_ALLIANCE_TILE_MEMBER
   screens:
   - PNC_ALLIANCE_HOME
-  status: screenshot_seeded
+  status: click_mapped
   detection_kind: template
+  interaction_kind: navigation
+  click:
+    anchor: center
+    outcomes:
+    - safe_to_click: true
+      monetized: false
+      target_screen: PNC_ALLIANCE_MEMBER_LIST
+      verification_selectors:
+      - PNC_ALLIANCE_MEMBER_ROW
 - id: PNC_ALLIANCE_BOTTOM_TAB_SHOP
   screens:
   - PNC_ALLIANCE_HOME
@@ -772,8 +1008,18 @@ selectors:
 - id: PNC_ALLIANCE_BOTTOM_TAB_MAIL
   screens:
   - PNC_ALLIANCE_HOME
-  status: screenshot_seeded
+  status: click_mapped
   detection_kind: template
+  interaction_kind: navigation
+  click:
+    anchor: center
+    outcomes:
+    - safe_to_click: true
+      monetized: false
+      target_screen: PNC_MAIL_COMPOSE_POPUP
+      verification_selectors:
+      - PNC_MAIL_COMPOSE_HEADER
+      - PNC_MAIL_COMPOSE_SEND_BUTTON
 - id: PNC_ALLIANCE_BOTTOM_TAB_HELP
   screens:
   - PNC_ALLIANCE_HOME
@@ -784,6 +1030,67 @@ selectors:
   - PNC_ALLIANCE_HOME
   status: screenshot_seeded
   detection_kind: template
+- id: PNC_ALLIANCE_MEMBER_ROW
+  screens:
+  - PNC_ALLIANCE_MEMBER_LIST
+  status: planned
+  detection_kind: collection
+- id: PNC_ALLIANCE_MEMBER_MANAGE_BUTTON
+  screens:
+  - PNC_ALLIANCE_MEMBER_LIST
+  status: planned
+  detection_kind: planned
+  interaction_kind: action
+- id: PNC_ALLIANCE_MEMBER_MANAGE_PERSONAL_INFO_BUTTON
+  screens:
+  - PNC_ALLIANCE_MEMBER_MANAGE_POPUP
+  status: planned
+  detection_kind: planned
+  interaction_kind: navigation
+  click:
+    anchor: center
+    outcomes:
+    - safe_to_click: true
+      monetized: false
+      target_screen: PNC_PLAYER_PROFILE
+      verification_selectors:
+      - PNC_PLAYER_PROFILE_HEADER
+      - PNC_PLAYER_PROFILE_NAME_LABEL
+- id: PNC_CHAT_PLAYER_ACTION_PROFILE_BUTTON
+  screens:
+  - PNC_CHAT_PLAYER_ACTION_POPUP
+  status: planned
+  detection_kind: planned
+  interaction_kind: navigation
+  click:
+    anchor: center
+    outcomes:
+    - safe_to_click: true
+      monetized: false
+      target_screen: PNC_PLAYER_PROFILE
+      verification_selectors:
+      - PNC_PLAYER_PROFILE_HEADER
+      - PNC_PLAYER_PROFILE_NAME_LABEL
+- id: PNC_MIGHT_RANK_ROW
+  screens:
+  - PNC_MIGHT_RANK
+  status: planned
+  detection_kind: collection
+- id: PNC_MIGHT_RANK_PROFILE_BUTTON
+  screens:
+  - PNC_MIGHT_RANK
+  status: planned
+  detection_kind: planned
+  interaction_kind: navigation
+  click:
+    anchor: center
+    outcomes:
+    - safe_to_click: true
+      monetized: false
+      target_screen: PNC_PLAYER_PROFILE
+      verification_selectors:
+      - PNC_PLAYER_PROFILE_HEADER
+      - PNC_PLAYER_PROFILE_NAME_LABEL
 - id: PNC_DAILY_TO_DO_HEADER
   screens:
   - PNC_DAILY_TO_DO

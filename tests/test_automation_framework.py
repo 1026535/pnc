@@ -233,6 +233,48 @@ class AutomationFrameworkTests(unittest.TestCase):
         )
         self.assertEqual(fake_session.taps, [(5, 5)])
 
+    def test_ensure_game_running_waits_through_unknown_launch_splash_without_relaunching(self) -> None:
+        """Keeps one app launch in flight while the splash is still classified as unknown."""
+
+        registry = build_default_task_registry()
+        script = registry.prepare_script(
+            RunScript(
+                name="ensure_game_running_splash",
+                path=Path("ensure_game_running_splash.yaml"),
+                steps=(ScriptStep(task=TaskId.ENSURE_GAME_RUNNING),),
+            )
+        )
+        fake_observer = FakeObservationService(
+            observations=[
+                make_observation(ScreenType.ANDROID_HOME, visible_ids=(UiElementId.ANDROID_HOME_PNC_ICON,)),
+                make_observation(ScreenType.UNKNOWN),
+                make_observation(ScreenType.UNKNOWN),
+                make_observation(
+                    ScreenType.PNC_LOGIN,
+                    visible_ids=(
+                        UiElementId.PNC_LOGIN_USERNAME_FIELD,
+                        UiElementId.PNC_LOGIN_PASSWORD_FIELD,
+                        UiElementId.PNC_LOGIN_SUBMIT_BUTTON,
+                    ),
+                ),
+            ]
+        )
+        fake_session = FakeSession()
+        runner = AutomationRunner(
+            defaults=self.defaults,
+            observation_service=fake_observer,
+            action_executor=_make_observed_action_executor(fake_session),
+            task_registry=registry,
+            flow_planner=ScreenFlowPlanner(),
+            logger=build_logger(),
+        )
+
+        result = runner.run(self.account, script)
+
+        self.assertEqual(result.steps[0].status.value, "success")
+        self.assertEqual(fake_session.launches, 1)
+        self.assertEqual(fake_session.key_events, [])
+
     def test_tap_actions_prefer_visible_element_action_points(self) -> None:
         """Uses selector-specific action points when OCR-derived bounds are not the real touch target."""
 
@@ -510,10 +552,19 @@ class AutomationFrameworkTests(unittest.TestCase):
         self.assertEqual(fake_session.texts, [])
 
     def test_send_chat_message_uses_the_post_switch_channel_draft_state_before_typing(self) -> None:
-        """Refreshes chat state after a tab change so clearing uses the newly active channel draft."""
+        """Refreshes chat state after a tab change and only types on the next chat-ready increment."""
 
         fake_session = FakeSession()
-        fake_observer = FakeObservationService(
+        executor = ActionExecutor(
+            session=fake_session,
+            stable_click_delay_ms=0,
+            post_action_observe_delay_ms=0,
+            chat_stable_click_delay_ms=0,
+            chat_post_action_observe_delay_ms=0,
+            logger=build_logger(),
+            sleep=lambda _: None,
+        )
+        first_observer = FakeObservationService(
             observations=[
                 make_observation(
                     ScreenType.PNC_CHAT,
@@ -526,30 +577,10 @@ class AutomationFrameworkTests(unittest.TestCase):
                     active_chat_channel=ChatChannel.ALLIANCE,
                     chat_draft_empty=False,
                     chat_draft_text="ally draft text here",
-                ),
-                make_observation(
-                    ScreenType.PNC_CHAT,
-                    visible_ids=(
-                        UiElementId.PNC_CHAT_TAB_KINGDOM,
-                        UiElementId.PNC_CHAT_TAB_ALLIANCE,
-                        UiElementId.PNC_CHAT_INPUT_FIELD,
-                        UiElementId.PNC_CHAT_SEND_BUTTON,
-                    ),
-                    active_chat_channel=ChatChannel.ALLIANCE,
-                    chat_draft_empty=True,
-                ),
+                )
             ]
         )
-        executor = ActionExecutor(
-            session=fake_session,
-            stable_click_delay_ms=0,
-            post_action_observe_delay_ms=0,
-            chat_stable_click_delay_ms=0,
-            chat_post_action_observe_delay_ms=0,
-            logger=build_logger(),
-            sleep=lambda _: None,
-        )
-        actions = ScreenFlowPlanner().send_chat_message(
+        first_actions = ScreenFlowPlanner().send_chat_message(
             make_observation(
                 ScreenType.PNC_CHAT,
                 visible_ids=(
@@ -566,8 +597,8 @@ class AutomationFrameworkTests(unittest.TestCase):
             channel=ChatChannel.ALLIANCE,
         )
 
-        executor.execute_actions(
-            actions,
+        first_result = executor.execute_actions(
+            first_actions,
             make_observation(
                 ScreenType.PNC_CHAT,
                 visible_ids=(
@@ -580,11 +611,37 @@ class AutomationFrameworkTests(unittest.TestCase):
                 chat_draft_empty=False,
                 chat_draft_text="world draft text that should not be reused after switching tabs",
             ),
-            observe=fake_observer.observe,
+            observe=first_observer.observe,
+        )
+        second_observer = FakeObservationService(
+            observations=[
+                make_observation(
+                    ScreenType.PNC_CHAT,
+                    visible_ids=(
+                        UiElementId.PNC_CHAT_TAB_KINGDOM,
+                        UiElementId.PNC_CHAT_TAB_ALLIANCE,
+                        UiElementId.PNC_CHAT_INPUT_FIELD,
+                        UiElementId.PNC_CHAT_SEND_BUTTON,
+                    ),
+                    active_chat_channel=ChatChannel.ALLIANCE,
+                    chat_draft_empty=True,
+                )
+            ]
+        )
+        second_actions = ScreenFlowPlanner().send_chat_message(
+            first_result,
+            message="hello",
+            channel=ChatChannel.ALLIANCE,
         )
 
-        self.assertEqual(fake_observer.requests[0], ObservationRequest.source_screen_retry(ScreenType.PNC_CHAT))
-        self.assertEqual(fake_observer.requests[1], ObservationRequest.chat_send_follow_up())
+        executor.execute_actions(
+            second_actions,
+            first_result,
+            observe=second_observer.observe,
+        )
+
+        self.assertEqual(first_observer.requests, [ObservationRequest.source_screen_retry(ScreenType.PNC_CHAT)])
+        self.assertEqual(second_observer.requests, [ObservationRequest.chat_send_follow_up()])
         self.assertEqual(fake_session.key_events[0], "KEYCODE_MOVE_END")
         self.assertEqual(fake_session.key_events.count("KEYCODE_DEL"), 28)
         self.assertEqual(fake_session.texts, ["hello"])
@@ -891,6 +948,86 @@ class AutomationFrameworkTests(unittest.TestCase):
         self.assertEqual(fake_session.taps, [(5, 5)])
         self.assertEqual(len(execution.selector_interactions), 1)
         self.assertEqual(execution.selector_interactions[0].initial_source_kind, VisibleElementSourceKind.OCR)
+        self.assertFalse(execution.selector_interactions[0].fallback_attempted)
+
+    def test_observed_action_executor_escalates_unknown_navigation_destination_to_full_runtime_observation(self) -> None:
+        """Promotes settled unknown navigation results to one broad runtime observation before returning."""
+
+        registry = self._make_selector_registry()
+        before = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            visible_ids=(UiElementId.PNC_BOTTOM_NAV_MORE,),
+            source_kinds={UiElementId.PNC_BOTTOM_NAV_MORE: VisibleElementSourceKind.OCR},
+        )
+        execution, fake_observer, fake_session = self._execute_observed_tap(
+            registry=registry,
+            before=before,
+            queued_observations=(
+                make_observation(ScreenType.UNKNOWN),
+                make_observation(ScreenType.PNC_MORE_MENU, visible_ids=(UiElementId.PNC_MORE_SETTINGS,)),
+            ),
+            policy=ObservedActionExecutionPolicy(max_settle_observations=0),
+        )
+
+        self.assertEqual(fake_session.taps, [(5, 5)])
+        self.assertEqual(execution.observation.screen_type, ScreenType.PNC_MORE_MENU)
+        self.assertEqual(
+            fake_observer.requests,
+            [
+                ObservationRequest.navigation_follow_up(registry.selectors[0].click_outcomes),
+                ObservationRequest.full_runtime_default(),
+            ],
+        )
+        self.assertFalse(execution.selector_interactions[0].fallback_attempted)
+
+    def test_observed_action_executor_preserves_same_screen_status_banner_without_settle_retry(self) -> None:
+        """Keeps a same-screen status-banner frame as the final result so tasks can surface the live rejection reason."""
+
+        registry = self._make_selector_registry()
+        before = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            visible_ids=(UiElementId.PNC_BOTTOM_NAV_MORE,),
+            source_kinds={UiElementId.PNC_BOTTOM_NAV_MORE: VisibleElementSourceKind.OCR},
+        )
+        execution, fake_observer, fake_session = self._execute_observed_tap(
+            registry=registry,
+            before=before,
+            queued_observations=(
+                make_observation(
+                    ScreenType.PNC_HOME_CITY,
+                    visible_ids=(UiElementId.PNC_BOTTOM_NAV_MORE, UiElementId.PNC_STATUS_BANNER),
+                    source_kinds={UiElementId.PNC_BOTTOM_NAV_MORE: VisibleElementSourceKind.OCR},
+                ),
+            ),
+        )
+
+        self.assertEqual(fake_session.taps, [(5, 5)])
+        self.assertEqual(execution.observation.screen_type, ScreenType.PNC_HOME_CITY)
+        self.assertTrue(execution.observation.has(UiElementId.PNC_STATUS_BANNER))
+        self.assertEqual(fake_observer.labels, ["post_action_1"])
+        self.assertEqual(fake_observer.requests, [ObservationRequest.navigation_follow_up(registry.selectors[0].click_outcomes)])
+        self.assertFalse(execution.selector_interactions[0].fallback_attempted)
+
+    def test_observed_action_executor_preserves_unknown_status_banner_without_runtime_retry(self) -> None:
+        """Keeps transient status-banner observations even when the coarse follow-up screen is still unknown."""
+
+        registry = self._make_selector_registry()
+        before = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            visible_ids=(UiElementId.PNC_BOTTOM_NAV_MORE,),
+            source_kinds={UiElementId.PNC_BOTTOM_NAV_MORE: VisibleElementSourceKind.OCR},
+        )
+        execution, fake_observer, fake_session = self._execute_observed_tap(
+            registry=registry,
+            before=before,
+            queued_observations=(make_observation(ScreenType.UNKNOWN, visible_ids=(UiElementId.PNC_STATUS_BANNER,)),),
+        )
+
+        self.assertEqual(fake_session.taps, [(5, 5)])
+        self.assertEqual(execution.observation.screen_type, ScreenType.UNKNOWN)
+        self.assertTrue(execution.observation.has(UiElementId.PNC_STATUS_BANNER))
+        self.assertEqual(fake_observer.labels, ["post_action_1"])
+        self.assertEqual(fake_observer.requests, [ObservationRequest.navigation_follow_up(registry.selectors[0].click_outcomes)])
         self.assertFalse(execution.selector_interactions[0].fallback_attempted)
 
     def test_observed_action_executor_skips_ocr_retry_for_non_navigation_selectors(self) -> None:

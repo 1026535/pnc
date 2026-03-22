@@ -7,6 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from pnc_automation.capture.mail_archive_store import MailArchiveStore
 from pnc_automation.config.castle_roster_store import CastleRosterStore
 from pnc_automation.config.models import AccountConfig, CastleIdentity, DefaultsConfig, PncAccountCastleRosterConfig
 from pnc_automation.errors import TaskVerificationError
@@ -26,6 +27,7 @@ class TaskContext:
     logger: logging.LoggerAdapter
     target_castle: CastleIdentity | None = None
     castle_roster_store: CastleRosterStore | None = None
+    mail_archive_store: MailArchiveStore | None = None
     runtime_state: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -52,6 +54,17 @@ class TaskContext:
             return self.castle_roster_store
         raise TaskVerificationError(
             "This task requires a writable castle roster store.",
+            account_id=self.account.id,
+            task_id=getattr(self.step, "task", None),
+        )
+
+    def require_mail_archive_store(self) -> MailArchiveStore:
+        """Returns the writable mail-archive store or fails fast when it is unavailable."""
+
+        if self.mail_archive_store is not None:
+            return self.mail_archive_store
+        raise TaskVerificationError(
+            "This task requires a writable mail archive store.",
             account_id=self.account.id,
             task_id=getattr(self.step, "task", None),
         )

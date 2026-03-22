@@ -12,12 +12,14 @@ from PIL import Image
 
 from pnc_automation.config.models import CastleIdentity, PncAccountCastleRosterConfig
 from pnc_automation.pnc.chat import ChatChannel
+from pnc_automation.pnc.mail import MailboxType
 from pnc_automation.pnc.observation import (
     Bounds,
     CurrentCastleEvidenceKind,
     DetectedListEntry,
     ListEntryKind,
     Observation,
+    ObservedTextFieldState,
     VisibleElement,
     VisibleElementSourceKind,
 )
@@ -91,6 +93,10 @@ def make_observation(
     castle_roster_snapshot: PncAccountCastleRosterConfig | None = None,
     available_march_slots: int | None = None,
     active_chat_channel: ChatChannel | None = None,
+    profile_player_name: str | None = None,
+    mailbox_type: MailboxType | None = None,
+    mailbox_empty: bool | None = None,
+    text_field_states: dict[UiElementId, ObservedTextFieldState] | None = None,
     chat_draft_empty: bool | None = None,
     chat_draft_text: str | None = None,
     artifact_path: Path | None = None,
@@ -122,6 +128,10 @@ def make_observation(
         castle_roster_snapshot=castle_roster_snapshot,
         available_march_slots=available_march_slots,
         active_chat_channel=active_chat_channel,
+        profile_player_name=profile_player_name,
+        mailbox_type=mailbox_type,
+        mailbox_empty=mailbox_empty,
+        text_field_states={} if text_field_states is None else text_field_states,
         chat_draft_empty=chat_draft_empty,
         chat_draft_text=chat_draft_text,
         artifact_path=artifact_path,

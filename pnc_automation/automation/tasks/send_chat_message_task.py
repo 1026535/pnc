@@ -65,6 +65,11 @@ class _BaseSendChatMessageTask(BaseAutomationTask):
     def plan(self, context: TaskContext, observation: Observation) -> list[ActionRequest]:
         """Returns either one recovery increment or the canonical fixed-channel chat-send flow."""
 
+        if observation.screen_type == ScreenType.UNKNOWN:
+            return context.flows.recover_unknown_game_screen(
+                observation,
+                reason=f"recover_unknown_{self.channel.value}_chat_screen",
+            )
         if observation.screen_type == ScreenType.PNC_LOADING:
             return [
                 WaitAction(
@@ -87,6 +92,10 @@ class _BaseSendChatMessageTask(BaseAutomationTask):
         del context
         if before.screen_type not in _CHAT_SEND_READY_SCREENS:
             return self._verify_recovery_increment(after)
+        if before.screen_type != ScreenType.PNC_CHAT:
+            return self._verify_recovery_increment(after)
+        if before.active_chat_channel != self.channel:
+            return self._verify_channel_selection_increment(after)
         if self._send_succeeded(after):
             return TaskResult.success(f"Sent the requested message to {self.channel.value} chat.")
         if after.blocking_popup or after.screen_type == ScreenType.PNC_POPUP:
@@ -127,6 +136,24 @@ class _BaseSendChatMessageTask(BaseAutomationTask):
         if after.screen_type in _CHAT_SEND_READY_SCREENS:
             return TaskResult.replan(f"Reached {after.screen_type.value} and can now execute the chat send flow.")
         return TaskResult.replan("Chat send is still returning to a chat-ready screen.")
+
+    def _verify_channel_selection_increment(self, after: Observation) -> TaskResult:
+        """Returns the result for one incremental chat-channel selection step."""
+
+        if after.blocking_popup or after.screen_type == ScreenType.PNC_POPUP:
+            return TaskResult.replan("Chat send reached a blocking popup and needs centralized recovery.")
+        if after.screen_type in {ScreenType.PNC_LOADING, ScreenType.UNKNOWN}:
+            return TaskResult.replan("Chat send is still settling before message entry.")
+        if after.screen_type != ScreenType.PNC_CHAT:
+            return TaskResult.replan("Chat send is still returning to the shared chat screen.")
+        if after.active_chat_channel != self.channel:
+            return TaskResult.failure(
+                f"Chat send did not finish on the expected {self.channel.value} channel.",
+                retryable=True,
+            )
+        if after.chat_draft_empty is None:
+            return TaskResult.replan("Chat send reached the expected channel and is refreshing draft state before typing.")
+        return TaskResult.replan(f"Reached {self.channel.value} chat and can now send the requested message.")
 
 
 class SendAllianceChatMessageTask(_BaseSendChatMessageTask):

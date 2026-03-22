@@ -12,6 +12,7 @@ from typing import Any
 from pnc_automation.config.models import CastleIdentity, PncAccountCastleRosterConfig, castle_identity_key
 from pnc_automation.errors import SelectorResolutionError
 from pnc_automation.pnc.chat import ChatChannel
+from pnc_automation.pnc.mail import MailboxType
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
 
@@ -62,6 +63,11 @@ class ListEntryKind(StrEnum):
     EVENT_ENTRY = "event_entry"
     GIFT_ENTRY = "gift_entry"
     STORE_ENTRY = "store_entry"
+    MAIL_THREAD = "mail_thread"
+    MAIL_MESSAGE = "mail_message"
+    CHAT_MESSAGE = "chat_message"
+    ALLIANCE_MEMBER = "alliance_member"
+    RANKED_PLAYER = "ranked_player"
 
 
 class CurrentCastleEvidenceKind(StrEnum):
@@ -78,6 +84,15 @@ class CurrentCastleMatchStatus(StrEnum):
     MISMATCH = "mismatch"
     INSUFFICIENT_EVIDENCE = "insufficient_evidence"
     AMBIGUOUS_NAME = "ambiguous_name"
+
+
+@dataclass(frozen=True, slots=True)
+class ObservedTextFieldState:
+    """Represents one observed reusable selector-backed text field."""
+
+    selector_id: UiElementId
+    text: str | None
+    empty: bool | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -144,6 +159,10 @@ class Observation:
     castle_roster_snapshot: PncAccountCastleRosterConfig | None = None
     available_march_slots: int | None = None
     active_chat_channel: ChatChannel | None = None
+    profile_player_name: str | None = None
+    mailbox_type: MailboxType | None = None
+    mailbox_empty: bool | None = None
+    text_field_states: Mapping[UiElementId, ObservedTextFieldState] = field(default_factory=dict)
     chat_draft_empty: bool | None = None
     chat_draft_text: str | None = None
 
@@ -191,6 +210,23 @@ class Observation:
         """Returns all observed entries of the requested dynamic collection kind."""
 
         return tuple(entry for entry in self.list_entries if entry.kind == kind)
+
+    def text_field_state(self, selector_id: UiElementId) -> ObservedTextFieldState | None:
+        """Returns the observed reusable text-field state for one selector when available."""
+
+        return self.text_field_states.get(selector_id)
+
+    def require_text_field_state(self, selector_id: UiElementId) -> ObservedTextFieldState:
+        """Returns one required observed text-field state or fails fast."""
+
+        state = self.text_field_state(selector_id)
+        if state is not None:
+            return state
+        raise SelectorResolutionError(
+            "The requested text-field state was not observed for the current screen.",
+            selector_id=selector_id,
+            screen_type=self.screen_type,
+        )
 
     def current_castle_match(
         self,
