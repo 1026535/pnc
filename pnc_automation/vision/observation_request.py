@@ -22,6 +22,7 @@ class ObservationRequest:
     include_loading_guard: bool = False
     include_chat_state: bool = False
     text_field_selectors: frozenset[UiElementId] = frozenset()
+    expected_mailbox: MailboxType | None = None
 
     @classmethod
     def base(cls) -> "ObservationRequest":
@@ -142,10 +143,10 @@ class ObservationRequest:
     def mailbox_observation(cls, mailbox: MailboxType) -> "ObservationRequest":
         """Returns the OCR scope used for one specific mailbox list observation."""
 
-        del mailbox
         return cls(
             candidate_screen_types=frozenset({ScreenType.PNC_MAILBOX_LIST}),
             ocr_screen_types=frozenset({ScreenType.PNC_MAILBOX_LIST}),
+            expected_mailbox=mailbox,
         )
 
     @classmethod

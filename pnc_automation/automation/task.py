@@ -107,6 +107,9 @@ class AutomationTask(Protocol):
     def verify(self, context: "TaskContext", before: Observation, after: Observation) -> TaskResult:
         """Verifies the last task increment and decides whether to continue."""
 
+    def max_replans_per_step(self, context: "TaskContext") -> int | None:
+        """Returns an optional task-local replan cap override for unusually long but bounded workflows."""
+
 
 class BaseAutomationTask(ABC):
     """Provides shared defaults for concrete task implementations."""
@@ -129,6 +132,12 @@ class BaseAutomationTask(ABC):
     @abstractmethod
     def verify(self, context: "TaskContext", before: Observation, after: Observation) -> TaskResult:
         """Verifies the last task increment and decides whether to continue."""
+
+    def max_replans_per_step(self, context: "TaskContext") -> int | None:
+        """Returns an optional task-local replan cap override when the default runner budget is too small."""
+
+        del context
+        return None
 
     def _require_no_params(self, params: Mapping[str, Any]) -> None:
         """Fails fast when a parameterless task receives script parameters."""

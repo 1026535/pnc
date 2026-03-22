@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from collections.abc import Mapping
 from typing import Any
 
 from pnc_automation.automation.task import BaseAutomationTask, CastleTargetPolicy, TaskId, TaskResult
 from pnc_automation.automation.task_context import TaskContext
 from pnc_automation.errors import SelectorResolutionError
-from pnc_automation.pnc.action_requests import ActionRequest, InputTextAction, SwipeAction, WaitAction
+from pnc_automation.pnc.action_requests import ActionRequest, InputTextAction, TapPointAction, WaitAction
 from pnc_automation.pnc.mail import (
     MailRecipientKind,
+    MailboxType,
     PlayerProfileRouteKind,
     SendMailParams,
     compose_target_label_for_alliance,
@@ -29,6 +31,14 @@ class SendMailTask(BaseAutomationTask):
 
     id = TaskId.SEND_MAIL
     castle_target_policy = CastleTargetPolicy.OPTIONAL
+
+    def max_replans_per_step(self, context: TaskContext) -> int | None:
+        """Grants extra bounded replan budget only to list-backed profile-route send flows."""
+
+        route = context.params.profile_route
+        if route is not None and route.kind in {PlayerProfileRouteKind.ALLIANCE_MEMBER, PlayerProfileRouteKind.MIGHT_RANK}:
+            return 20
+        return None
 
     def parse_params(self, params: Mapping[str, Any]) -> SendMailParams:
         """Builds the validated canonical send-mail payload."""
@@ -53,30 +63,32 @@ class SendMailTask(BaseAutomationTask):
         if observation.screen_type == ScreenType.PNC_LOADING:
             return [WaitAction(milliseconds=1000, reason="wait_for_mail_workflow_settle", observe_after=True)]
         if phase == "compose":
-            profile_route_search = _plan_profile_route_search(context, observation)
-            if profile_route_search:
-                return profile_route_search
             compose_target_repair = _plan_compose_target_repair(context, observation)
             if compose_target_repair:
                 return compose_target_repair
-            return context.flows.open_mail_compose(observation, context.params)
+            return context.flows.open_mail_compose(observation, context.params, runtime_state=context.runtime_state)
         if phase == "send":
             if observation.screen_type != ScreenType.PNC_MAIL_COMPOSE_POPUP:
-                return context.flows.open_mail_compose(observation, context.params)
+                return context.flows.open_mail_compose(observation, context.params, runtime_state=context.runtime_state)
             return context.flows.send_mail(observation, context.params)
-        if phase == "verify_mail":
-            return _plan_send_verification(context, observation)
+        if phase == "verify_mailbox":
+            return _plan_mailbox_verification(context, observation)
+        if phase == "verify_thread":
+            return _plan_thread_verification(context, observation)
         raise SelectorResolutionError("Unsupported send_mail phase.", phase=phase)
 
     def verify(self, context: TaskContext, before: Observation, after: Observation) -> TaskResult:
         """Verifies the current send-mail phase and advances the shared task state."""
 
         phase = _resolve_send_phase(context)
-        if before.screen_type == ScreenType.PNC_PLAYER_PROFILE and before.profile_player_name is not None:
-            context.runtime_state.setdefault("expected_profile_target", before.profile_player_name.strip())
+        _refresh_expected_profile_target(context, before)
+        _refresh_expected_profile_target(context, after)
         alliance_compose_block = _verify_alliance_compose_entry(context, before=before, after=after)
         if alliance_compose_block is not None:
             return alliance_compose_block
+        direct_player_compose_block = _verify_direct_player_compose_entry(context, before=before, after=after)
+        if direct_player_compose_block is not None:
+            return direct_player_compose_block
         if after.blocking_popup or after.screen_type == ScreenType.PNC_POPUP:
             return TaskResult.replan("Mail workflow reached a blocking popup and needs centralized recovery.")
         if after.screen_type in {ScreenType.PNC_LOADING, ScreenType.UNKNOWN}:
@@ -86,18 +98,10 @@ class SendMailTask(BaseAutomationTask):
                 return TaskResult.failure(
                     "Alliance profile-route acquisition opened Mail instead of Alliance from the home-city source screen.",
                 )
-            if (
-                context.params.player_name is not None
-                and before.screen_type == ScreenType.PNC_MAIL_HUB
-                and after.screen_type == ScreenType.PNC_MAIL_HUB
-            ):
-                return TaskResult.failure(
-                    "Player Mail did not open from the Mail hub; this client leaves empty direct-mail mailboxes inert. Use a profile_route.",
-                )
             if after.screen_type != ScreenType.PNC_MAIL_COMPOSE_POPUP:
                 return TaskResult.replan("Mail workflow is still navigating toward the compose popup.")
             if _compose_target_matches(context, after):
-                context.runtime_state["send_mail_phase"] = "send"
+                _set_send_phase(context, "send")
                 return TaskResult.replan("Mail compose popup is ready for subject and body entry.")
             if _compose_target_requires_manual_entry(context):
                 return TaskResult.replan("Mail compose popup is open and still needs the requested player target typed.")
@@ -111,10 +115,12 @@ class SendMailTask(BaseAutomationTask):
                     "Mail send did not close the compose popup cleanly.",
                     retryable=True,
                 )
-            context.runtime_state["send_mail_phase"] = "verify_mail"
+            _set_send_phase(context, "verify_mailbox")
             return TaskResult.replan("Mail compose closed; reopening the mailbox to verify the sent mail.")
-        if phase == "verify_mail":
-            return _verify_send_verification(context, before=before, after=after)
+        if phase == "verify_mailbox":
+            return _verify_mailbox_verification(context, before=before, after=after)
+        if phase == "verify_thread":
+            return _verify_thread_verification(context, before=before, after=after)
         raise SelectorResolutionError("Unsupported send_mail phase.", phase=phase)
 
 
@@ -122,9 +128,17 @@ def _resolve_send_phase(context: TaskContext) -> str:
     """Returns the current send-mail phase, initializing the task-local phase when needed."""
 
     raw_phase = context.runtime_state.setdefault("send_mail_phase", "compose")
-    if raw_phase in {"compose", "send", "verify_mail"}:
+    if raw_phase in {"compose", "send", "verify_mailbox", "verify_thread"}:
         return raw_phase
     raise SelectorResolutionError("Unsupported send_mail runtime phase.", phase=raw_phase)
+
+
+def _set_send_phase(context: TaskContext, phase: str) -> None:
+    """Stores the active send-mail phase after validating the canonical phase names."""
+
+    if phase not in {"compose", "send", "verify_mailbox", "verify_thread"}:
+        raise SelectorResolutionError("Unsupported send_mail runtime phase.", phase=phase)
+    context.runtime_state["send_mail_phase"] = phase
 
 
 def _hit_invalid_alliance_route_source(context: TaskContext, *, before: Observation, after: Observation) -> bool:
@@ -173,43 +187,40 @@ def _alliance_mail_block_message(banner_text: str | None) -> str:
     return "Alliance Mail is unavailable from Alliance home due to an in-game status banner."
 
 
-def _plan_profile_route_search(context: TaskContext, observation: Observation) -> list[ActionRequest]:
-    """Returns bounded list-search swipes for list-backed profile routes when the target is not visible yet."""
+def _verify_direct_player_compose_entry(
+    context: TaskContext,
+    *,
+    before: Observation,
+    after: Observation,
+) -> TaskResult | None:
+    """Returns one compose-entry result when direct player-mail compose stays on its source screen."""
 
-    params = context.params
-    route = params.profile_route
-    if params.recipient_kind != MailRecipientKind.PLAYER or route is None or route.player_name is None:
-        _clear_profile_route_search_state(context)
-        return []
-    entry_kind = _searchable_route_entry_kind(route.kind)
-    if entry_kind is None:
-        _clear_profile_route_search_state(context)
-        return []
-    expected_screen = _searchable_route_screen(route.kind)
-    if observation.screen_type != expected_screen:
-        if observation.screen_type != ScreenType.PNC_PLAYER_PROFILE:
-            _clear_profile_route_search_state(context)
-        return []
-    if _has_named_entry(observation, kind=entry_kind, title_text=route.player_name):
-        _clear_profile_route_search_state(context)
-        return []
-    search_state = _require_profile_route_search_state(context, route_kind=route.kind, player_name=route.player_name)
-    phase = search_state["phase"]
-    batches_completed = search_state["batches_completed"]
-    if phase == "reset_to_top" and batches_completed >= 5:
-        search_state["phase"] = "scan_forward"
-        search_state["batches_completed"] = 0
-        phase = "scan_forward"
-        batches_completed = 0
-    if phase == "scan_forward" and batches_completed >= 8:
-        raise SelectorResolutionError(
-            "The requested target row could not be found after searching the selected profile-route list.",
-            route_kind=route.kind.value,
-            player_name=route.player_name,
-            screen_type=observation.screen_type,
+    if context.params.recipient_kind != MailRecipientKind.PLAYER or context.params.player_name is None:
+        context.runtime_state.pop("direct_player_compose_open_attempts", None)
+        return None
+    source_screen = before.screen_type
+    if source_screen not in {ScreenType.PNC_MAIL_HUB, ScreenType.PNC_MAILBOX_LIST}:
+        context.runtime_state.pop("direct_player_compose_open_attempts", None)
+        return None
+    if source_screen == ScreenType.PNC_MAILBOX_LIST and before.mailbox_type != MailboxType.PLAYER:
+        context.runtime_state.pop("direct_player_compose_open_attempts", None)
+        return None
+    if after.screen_type == ScreenType.PNC_MAIL_COMPOSE_POPUP:
+        context.runtime_state.pop("direct_player_compose_open_attempts", None)
+        return None
+    if after.screen_type != source_screen:
+        context.runtime_state.pop("direct_player_compose_open_attempts", None)
+        return None
+    attempts = int(context.runtime_state.get("direct_player_compose_open_attempts", 0)) + 1
+    context.runtime_state["direct_player_compose_open_attempts"] = attempts
+    if attempts >= 2:
+        location_label = "the Mail hub" if source_screen == ScreenType.PNC_MAIL_HUB else "the Player mailbox"
+        return TaskResult.failure(
+            f"Player mail compose did not open from {location_label} after two compose-entry attempts.",
+            retryable=True,
         )
-    search_state["batches_completed"] = batches_completed + 1
-    return _plan_profile_route_search_swipes(observation, route_kind=route.kind, phase=phase)
+    location_label = "Mail hub" if source_screen == ScreenType.PNC_MAIL_HUB else "Player mailbox"
+    return TaskResult.replan(f"Player mail compose stayed on {location_label} after one tap; retrying once.")
 
 
 def _plan_compose_target_repair(context: TaskContext, observation: Observation) -> list[ActionRequest]:
@@ -234,17 +245,75 @@ def _plan_compose_target_repair(context: TaskContext, observation: Observation) 
     ]
 
 
-def _plan_send_verification(context: TaskContext, observation: Observation) -> list[ActionRequest]:
-    """Returns the next mailbox-opening increment for sent-mail verification."""
+@dataclass(frozen=True, slots=True)
+class _SentMailMailboxMatch:
+    """Describes one visible mailbox row plus whether mailbox-only evidence is already sufficient."""
+
+    entry: DetectedListEntry
+    mailbox_only_confident: bool
+
+
+def _plan_mailbox_verification(context: TaskContext, observation: Observation) -> list[ActionRequest]:
+    """Returns the next mailbox-level verification increment after a send."""
 
     mailbox = mailbox_for_recipient_kind(context.params.recipient_kind)
     if observation.screen_type == ScreenType.PNC_MAILBOX_LIST and observation.mailbox_type == mailbox:
-        return []
+        match = _find_matching_sent_thread(context, observation)
+        if match is None or match.mailbox_only_confident:
+            return []
+        _set_send_phase(context, "verify_thread")
+        return [_open_mail_thread_action(match.entry, reason="verify_sent_mail_thread")]
+    _set_send_phase(context, "verify_mailbox")
     return context.flows.open_mailbox(observation, mailbox)
 
 
-def _verify_send_verification(context: TaskContext, *, before: Observation, after: Observation) -> TaskResult:
-    """Verifies mailbox reopening and, when available, thread-level sent-mail confirmation."""
+def _plan_thread_verification(context: TaskContext, observation: Observation) -> list[ActionRequest]:
+    """Returns the next thread-confirmation increment when mailbox evidence alone is insufficient."""
+
+    mailbox = mailbox_for_recipient_kind(context.params.recipient_kind)
+    if observation.screen_type == ScreenType.PNC_MAIL_THREAD:
+        return []
+    if observation.screen_type == ScreenType.PNC_MAILBOX_LIST and observation.mailbox_type == mailbox:
+        match = _find_matching_sent_thread(context, observation)
+        if match is None:
+            return []
+        return [_open_mail_thread_action(match.entry, reason="verify_sent_mail_thread")]
+    _set_send_phase(context, "verify_mailbox")
+    return context.flows.open_mailbox(observation, mailbox)
+
+
+def _verify_mailbox_verification(context: TaskContext, *, before: Observation, after: Observation) -> TaskResult:
+    """Verifies mailbox reopening and promotes ambiguous matches to explicit thread confirmation."""
+
+    mailbox = mailbox_for_recipient_kind(context.params.recipient_kind)
+    if after.screen_type == ScreenType.PNC_MAIL_THREAD:
+        _set_send_phase(context, "verify_thread")
+        if _thread_matches_sent_mail(context, after):
+            return TaskResult.success("Sent mail was confirmed in the reopened mailbox thread.")
+        return TaskResult.failure(
+            "Opened mail thread did not contain the expected sent subject or body.",
+            retryable=True,
+        )
+    if after.screen_type == ScreenType.PNC_MAILBOX_LIST and after.mailbox_type == mailbox:
+        matching_entry = _find_matching_sent_thread(context, after)
+        if matching_entry is not None and matching_entry.mailbox_only_confident:
+            return TaskResult.success("Sent mail was located in the reopened mailbox.")
+        if matching_entry is not None:
+            _set_send_phase(context, "verify_thread")
+            return TaskResult.replan("Sent-mail verification found a plausible mailbox row and is opening the thread.")
+        if after.mailbox_empty:
+            return TaskResult.failure("Sent-mail verification reopened an empty mailbox after sending.", retryable=True)
+        if before.screen_type == ScreenType.PNC_MAILBOX_LIST and before.mailbox_type == mailbox:
+            return TaskResult.failure(
+                "Sent mail could not be located in the requested mailbox.",
+                retryable=True,
+            )
+        return TaskResult.replan("Sent-mail verification reached the requested mailbox and is inspecting visible rows.")
+    return TaskResult.replan("Sent-mail verification is still returning to the requested mailbox.")
+
+
+def _verify_thread_verification(context: TaskContext, *, before: Observation, after: Observation) -> TaskResult:
+    """Verifies that an opened candidate thread actually contains the mail that was just sent."""
 
     mailbox = mailbox_for_recipient_kind(context.params.recipient_kind)
     if after.screen_type == ScreenType.PNC_MAIL_THREAD:
@@ -256,17 +325,19 @@ def _verify_send_verification(context: TaskContext, *, before: Observation, afte
         )
     if after.screen_type == ScreenType.PNC_MAILBOX_LIST and after.mailbox_type == mailbox:
         matching_entry = _find_matching_sent_thread(context, after)
-        if matching_entry is not None:
-            return TaskResult.success("Sent mail was located in the reopened mailbox.")
-        if after.mailbox_empty:
-            return TaskResult.failure("Sent-mail verification reopened an empty mailbox after sending.", retryable=True)
-        if before.screen_type == ScreenType.PNC_MAILBOX_LIST and before.mailbox_type == mailbox:
-            return TaskResult.failure(
-                "Sent mail could not be located in the requested mailbox.",
-                retryable=True,
-            )
-        return TaskResult.replan("Sent-mail verification reached the requested mailbox and is inspecting visible rows.")
-    return TaskResult.replan("Sent-mail verification is still returning to the requested mailbox.")
+        if matching_entry is None:
+            _set_send_phase(context, "verify_mailbox")
+            if after.mailbox_empty:
+                return TaskResult.failure("Sent-mail verification reopened an empty mailbox after sending.", retryable=True)
+            if before.screen_type == ScreenType.PNC_MAILBOX_LIST and before.mailbox_type == mailbox:
+                return TaskResult.failure(
+                    "Sent mail could not be located in the requested mailbox.",
+                    retryable=True,
+                )
+            return TaskResult.replan("Sent-mail verification is returning to the mailbox to locate a candidate thread.")
+        return TaskResult.replan("Sent-mail verification is opening the matching thread for confirmation.")
+    _set_send_phase(context, "verify_mailbox")
+    return TaskResult.replan("Sent-mail verification is returning to the requested mailbox.")
 
 
 def _compose_target_matches(context: TaskContext, observation: Observation) -> bool:
@@ -295,33 +366,50 @@ def _expected_target_name(context: TaskContext) -> str | None:
         return compose_target_label_for_alliance()
     if params.player_name is not None:
         return params.player_name
-    if params.profile_route is not None and params.profile_route.player_name is not None:
-        return params.profile_route.player_name
     expected_profile_target = context.runtime_state.get("expected_profile_target")
     if isinstance(expected_profile_target, str) and expected_profile_target.strip() != "":
         return expected_profile_target.strip()
+    if params.profile_route is not None and params.profile_route.player_name is not None:
+        return params.profile_route.player_name
     return None
 
 
-def _find_matching_sent_thread(context: TaskContext, observation: Observation) -> DetectedListEntry | None:
-    """Returns the visible mailbox row that best matches the sent mail request."""
+def _refresh_expected_profile_target(context: TaskContext, observation: Observation) -> None:
+    """Refreshes the authoritative profile-route recipient name from the currently observed remote profile."""
+
+    if observation.screen_type != ScreenType.PNC_PLAYER_PROFILE or observation.profile_player_name is None:
+        return
+    observed_name = observation.profile_player_name.strip()
+    if observed_name != "":
+        context.runtime_state["expected_profile_target"] = observed_name
+
+
+def _find_matching_sent_thread(context: TaskContext, observation: Observation) -> _SentMailMailboxMatch | None:
+    """Returns the best visible mailbox row that matches the sent mail and whether mailbox-only proof is sufficient."""
 
     expected_target = _expected_target_name(context)
+    normalized_target = None if expected_target is None else normalize_mail_text(expected_target)
     subject_text = normalize_mail_text(context.params.subject)
     body_text = normalize_mail_text(context.params.body)
     body_first_line = normalize_mail_text(context.params.body.splitlines()[0]) if context.params.body.splitlines() else body_text
+    ambiguous_match: _SentMailMailboxMatch | None = None
     for entry in observation.entries(ListEntryKind.MAIL_THREAD):
         title_text = normalize_mail_text(entry.title_text or "")
         preview_text = normalize_mail_text(entry.subtitle_text or "")
-        if context.params.recipient_kind == MailRecipientKind.PLAYER and expected_target is not None and title_text == normalize_mail_text(expected_target):
-            return entry
         if subject_text != "" and (subject_text in title_text or subject_text in preview_text):
-            return entry
+            return _SentMailMailboxMatch(entry=entry, mailbox_only_confident=True)
         if body_first_line != "" and body_first_line in preview_text:
-            return entry
+            return _SentMailMailboxMatch(entry=entry, mailbox_only_confident=True)
         if body_text != "" and body_text in preview_text:
-            return entry
-    return None
+            return _SentMailMailboxMatch(entry=entry, mailbox_only_confident=True)
+        if (
+            ambiguous_match is None
+            and context.params.recipient_kind == MailRecipientKind.PLAYER
+            and normalized_target is not None
+            and title_text == normalized_target
+        ):
+            ambiguous_match = _SentMailMailboxMatch(entry=entry, mailbox_only_confident=False)
+    return ambiguous_match
 
 
 def _thread_matches_sent_mail(context: TaskContext, observation: Observation) -> bool:
@@ -340,117 +428,17 @@ def _thread_matches_sent_mail(context: TaskContext, observation: Observation) ->
     )
 
 
-def _searchable_route_entry_kind(route_kind: PlayerProfileRouteKind) -> ListEntryKind | None:
-    """Returns the list-entry kind used by routes whose targets can be located through bounded scrolling."""
+def _open_mail_thread_action(entry: DetectedListEntry, *, reason: str) -> TapPointAction:
+    """Builds the canonical thread-opening tap used by sent-mail verification."""
 
-    if route_kind == PlayerProfileRouteKind.ALLIANCE_MEMBER:
-        return ListEntryKind.ALLIANCE_MEMBER
-    if route_kind == PlayerProfileRouteKind.MIGHT_RANK:
-        return ListEntryKind.RANKED_PLAYER
-    return None
-
-
-def _searchable_route_screen(route_kind: PlayerProfileRouteKind) -> ScreenType:
-    """Returns the route screen searched for one list-backed profile route."""
-
-    if route_kind == PlayerProfileRouteKind.ALLIANCE_MEMBER:
-        return ScreenType.PNC_ALLIANCE_MEMBER_LIST
-    if route_kind == PlayerProfileRouteKind.MIGHT_RANK:
-        return ScreenType.PNC_MIGHT_RANK
-    raise SelectorResolutionError("Unsupported searchable profile-route kind.", route_kind=route_kind.value)
-
-
-def _has_named_entry(observation: Observation, *, kind: ListEntryKind, title_text: str) -> bool:
-    """Returns whether the requested named entry is currently visible in the observed list."""
-
-    return any(entry.title_text == title_text for entry in observation.entries(kind))
-
-
-def _require_profile_route_search_state(
-    context: TaskContext,
-    *,
-    route_kind: PlayerProfileRouteKind,
-    player_name: str,
-) -> dict[str, object]:
-    """Returns the active route-search state, resetting it when the route target changed."""
-
-    state = context.runtime_state.get("profile_route_search")
-    if (
-        isinstance(state, dict)
-        and state.get("route_kind") == route_kind.value
-        and state.get("player_name") == player_name
-        and state.get("phase") in {"reset_to_top", "scan_forward"}
-        and isinstance(state.get("batches_completed"), int)
-    ):
-        return state
-    new_state: dict[str, object] = {
-        "route_kind": route_kind.value,
-        "player_name": player_name,
-        "phase": "reset_to_top",
-        "batches_completed": 0,
-    }
-    context.runtime_state["profile_route_search"] = new_state
-    return new_state
-
-
-def _clear_profile_route_search_state(context: TaskContext) -> None:
-    """Clears any in-progress profile-route list-search state when it no longer applies."""
-
-    context.runtime_state.pop("profile_route_search", None)
-
-
-def _plan_profile_route_search_swipes(
-    observation: Observation,
-    *,
-    route_kind: PlayerProfileRouteKind,
-    phase: str,
-) -> list[ActionRequest]:
-    """Builds the calibrated swipe batch used to recover or scan one list-backed profile route."""
-
-    reason = f"search_{route_kind.value}_{phase}"
-    if phase == "reset_to_top":
-        return [
-            _make_profile_route_search_swipe(
-                observation,
-                reason=reason,
-                direction="down",
-                start_y_ratio=0.40625,
-                end_y_ratio=0.78125,
-            )
-            for _ in range(2)
-        ]
-    if phase == "scan_forward":
-        return [
-            _make_profile_route_search_swipe(
-                observation,
-                reason=reason,
-                direction="up",
-                start_y_ratio=0.78125,
-                end_y_ratio=0.28125,
-            )
-        ]
-    raise SelectorResolutionError("Unsupported profile-route search phase.", phase=phase, screen_type=observation.screen_type)
-
-
-def _make_profile_route_search_swipe(
-    observation: Observation,
-    *,
-    reason: str,
-    direction: str,
-    start_y_ratio: float,
-    end_y_ratio: float,
-) -> SwipeAction:
-    """Returns one list-local swipe action tuned for the alliance member and rank route screens."""
-
-    return SwipeAction(
-        direction=direction,
-        distance_ratio=0.72,
+    target = entry.action_point if entry.action_point is not None else entry.bounds.center()
+    return TapPointAction(
+        x=target[0],
+        y=target[1],
         reason=reason,
         observe_after=True,
-        follow_up_request=ObservationRequest.source_screen_retry(observation.screen_type),
-        start_x_ratio=0.5,
-        start_y_ratio=start_y_ratio,
-        end_x_ratio=0.5,
-        end_y_ratio=end_y_ratio,
-        duration_ms=500,
+        follow_up_request=ObservationRequest.mail_navigation_follow_up(
+            ScreenType.PNC_MAIL_THREAD,
+            ScreenType.PNC_MAILBOX_LIST,
+        ),
     )

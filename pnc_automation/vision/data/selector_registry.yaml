@@ -521,6 +521,13 @@ selectors:
       verification_selectors:
       - PNC_MAIL_COMPOSE_HEADER
       - PNC_MAIL_COMPOSE_SEND_BUTTON
+  relative_bounds:
+    x_ratio: 0.6
+    y_ratio: 0.87
+    width_ratio: 0.18
+    height_ratio: 0.115
+    action_x_ratio: 0.69
+    action_y_ratio: 0.92
 - id: PNC_VIP_HEADER
   screens:
   - PNC_VIP
@@ -835,24 +842,6 @@ selectors:
   - PNC_MAILBOX_LIST
   status: planned
   detection_kind: collection
-- id: PNC_MAIL_THREAD_SENDER_REGION
-  screens:
-  - PNC_MAILBOX_LIST
-  status: planned
-  detection_kind: planned
-  interaction_kind: label
-- id: PNC_MAIL_THREAD_PREVIEW_REGION
-  screens:
-  - PNC_MAILBOX_LIST
-  status: planned
-  detection_kind: planned
-  interaction_kind: label
-- id: PNC_MAIL_THREAD_DATE_REGION
-  screens:
-  - PNC_MAILBOX_LIST
-  status: planned
-  detection_kind: planned
-  interaction_kind: label
 - id: PNC_MAIL_THREAD_DELETE_BUTTON
   screens:
   - PNC_MAIL_THREAD
@@ -1035,12 +1024,6 @@ selectors:
   - PNC_ALLIANCE_MEMBER_LIST
   status: planned
   detection_kind: collection
-- id: PNC_ALLIANCE_MEMBER_MANAGE_BUTTON
-  screens:
-  - PNC_ALLIANCE_MEMBER_LIST
-  status: planned
-  detection_kind: planned
-  interaction_kind: action
 - id: PNC_ALLIANCE_MEMBER_MANAGE_PERSONAL_INFO_BUTTON
   screens:
   - PNC_ALLIANCE_MEMBER_MANAGE_POPUP
@@ -1076,21 +1059,6 @@ selectors:
   - PNC_MIGHT_RANK
   status: planned
   detection_kind: collection
-- id: PNC_MIGHT_RANK_PROFILE_BUTTON
-  screens:
-  - PNC_MIGHT_RANK
-  status: planned
-  detection_kind: planned
-  interaction_kind: navigation
-  click:
-    anchor: center
-    outcomes:
-    - safe_to_click: true
-      monetized: false
-      target_screen: PNC_PLAYER_PROFILE
-      verification_selectors:
-      - PNC_PLAYER_PROFILE_HEADER
-      - PNC_PLAYER_PROFILE_NAME_LABEL
 - id: PNC_DAILY_TO_DO_HEADER
   screens:
   - PNC_DAILY_TO_DO
