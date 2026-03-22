@@ -308,6 +308,34 @@ class AutomationFrameworkTests(unittest.TestCase):
 
         self.assertEqual(executor.session.taps, [(482, 1529)])
 
+    def test_runner_uses_task_local_replan_budget_instead_of_runner_wide_override(self) -> None:
+        """Allows one task to own an extended bounded replan budget without broadening the global runner cap."""
+
+        registry = TaskRegistry(tasks=(_LocalBudgetReplanTask(),))
+        script = registry.prepare_script(
+            RunScript(
+                name="local_budget",
+                path=Path("local_budget.yaml"),
+                steps=(ScriptStep(task=TaskId.ENSURE_GAME_RUNNING),),
+            )
+        )
+        fake_observer = FakeObservationService(
+            observations=[make_observation(ScreenType.PNC_HOME_CITY, visible_ids=(UiElementId.PNC_HOME_BUILD_BUTTON,))]
+        )
+        runner = AutomationRunner(
+            defaults=self.defaults,
+            observation_service=fake_observer,
+            action_executor=_make_observed_action_executor(FakeSession()),
+            task_registry=registry,
+            flow_planner=ScreenFlowPlanner(),
+            logger=build_logger(),
+        )
+
+        result = runner.run(self.account, script)
+
+        self.assertEqual(runner.policy.max_replans_per_step, 5)
+        self.assertEqual(result.steps[0].status.value, "success")
+
     def test_input_text_actions_use_selector_action_points_for_focus(self) -> None:
         """Focuses selector-backed text entry through the canonical action point instead of the bounds center."""
 
@@ -1134,6 +1162,48 @@ class _TrivialTapTask(BaseAutomationTask):
         if after.screen_type == ScreenType.PNC_BUILDING_DETAILS:
             return TaskResult.success("Synthetic tap reached the destination screen.")
         return TaskResult.failure("Synthetic tap did not reach the destination screen.", retryable=True)
+
+
+class _LocalBudgetReplanTask(BaseAutomationTask):
+    """Synthetic task used to prove task-local replan budgets without changing the runner default."""
+
+    id = TaskId.ENSURE_GAME_RUNNING
+
+    def parse_params(self, params: dict[str, object]) -> None:
+        """Rejects unsupported parameters for the synthetic task."""
+
+        self._require_no_params(params)
+        return None
+
+    def is_applicable(self, context: TaskContext, observation: Observation) -> bool:
+        """Runs only when the shared synthetic selector is visible."""
+
+        del context
+        return observation.has(UiElementId.PNC_HOME_BUILD_BUTTON)
+
+    def max_replans_per_step(self, context: TaskContext) -> int | None:
+        """Allows exactly six replans for this one synthetic task."""
+
+        del context
+        return 6
+
+    def plan(self, context: TaskContext, observation: Observation) -> list[ActionRequest]:
+        """Does not emit actions because this test only exercises runner-side replan budgeting."""
+
+        del context, observation
+        return []
+
+    def verify(self, context: TaskContext, before: Observation, after: Observation) -> TaskResult:
+        """Replans six times and then succeeds without requiring new observations."""
+
+        del before, after
+        attempts = context.runtime_state.get("replan_attempts", 0)
+        if not isinstance(attempts, int):
+            raise AssertionError("Expected integer replan_attempts test state.")
+        context.runtime_state["replan_attempts"] = attempts + 1
+        if attempts >= 6:
+            return TaskResult.success("Synthetic local-budget task exhausted its bounded replans cleanly.")
+        return TaskResult.replan("Synthetic local-budget task is still exercising its private replan budget.")
 
 
 def _make_observed_action_executor(

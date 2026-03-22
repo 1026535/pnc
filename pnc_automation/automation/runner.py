@@ -48,7 +48,7 @@ class RunResult:
 class StepExecutionPolicy:
     """Centralizes retry and replan limits for one automation runner."""
 
-    max_replans_per_step: int = 15
+    max_replans_per_step: int = 5
     max_retries_per_step: int = 1
 
     def __post_init__(self) -> None:
@@ -254,7 +254,10 @@ class AutomationRunner:
                 return _LoopExecutionResult(result=result, attempts=attempts, final_observation=after)
             if result.status == TaskStatus.REPLAN:
                 replans += 1
-                if replans > self.policy.max_replans_per_step:
+                max_replans = task.max_replans_per_step(context)
+                if max_replans is None:
+                    max_replans = self.policy.max_replans_per_step
+                if replans > max_replans:
                     raise TaskVerificationError(
                         f"Task '{step.task}' exceeded the maximum allowed replans.",
                         task_id=step.task,

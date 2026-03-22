@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from pnc_automation.config.models import CastleIdentity, PncAccountCastleRosterConfig
 from pnc_automation.errors import SelectorResolutionError
@@ -26,7 +27,6 @@ from pnc_automation.pnc.mail import (
     PlayerProfileRoute,
     PlayerProfileRouteKind,
     SendMailParams,
-    compose_target_label_for_alliance,
     mailbox_category_selector_id,
 )
 from pnc_automation.pnc.observation import (
@@ -40,6 +40,10 @@ from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
 from pnc_automation.vision.observation_request import ObservationRequest
 from pnc_automation.vision.selectors import ClickOutcome
+
+_PLAYER_PROFILE_ROUTE_SEARCH_STATE_KEY = "player_profile_route_search"
+_PLAYER_PROFILE_ROUTE_RESET_STEPS = 5
+_PLAYER_PROFILE_ROUTE_SCAN_STEPS = 8
 
 
 @dataclass(slots=True)
@@ -468,12 +472,20 @@ class ScreenFlowPlanner:
             )
         ]
 
-    def open_player_profile(self, observation: Observation, route: PlayerProfileRoute) -> list[ActionRequest]:
-        """Plans exactly one remote-profile increment from the currently observed supported origin."""
+    def open_player_profile(
+        self,
+        observation: Observation,
+        route: PlayerProfileRoute,
+        *,
+        runtime_state: dict[str, Any] | None = None,
+    ) -> list[ActionRequest]:
+        """Plans exactly one remote-profile increment, including bounded shared list-search when configured."""
 
         if observation.screen_type == ScreenType.PNC_PLAYER_PROFILE:
+            _clear_player_profile_route_search_state(runtime_state)
             return []
         if route.kind == PlayerProfileRouteKind.PLAYER_TERRITORY:
+            _clear_player_profile_route_search_state(runtime_state)
             if observation.screen_type != ScreenType.PNC_PLAYER_TERRITORY:
                 raise SelectorResolutionError(
                     "The player_territory profile route requires the Player Territory screen to already be open.",
@@ -489,6 +501,7 @@ class ScreenFlowPlanner:
                 )
             ]
         if route.kind == PlayerProfileRouteKind.CHAT_MESSAGE:
+            _clear_player_profile_route_search_state(runtime_state)
             if observation.screen_type == ScreenType.PNC_CHAT_PLAYER_ACTION_POPUP:
                 return [
                     TapAction(
@@ -513,6 +526,7 @@ class ScreenFlowPlanner:
             ]
         if route.kind == PlayerProfileRouteKind.ALLIANCE_MEMBER:
             if observation.screen_type == ScreenType.PNC_ALLIANCE_MEMBER_MANAGE_POPUP:
+                _clear_player_profile_route_search_state(runtime_state)
                 return [
                     TapAction(
                         selector_id=UiElementId.PNC_ALLIANCE_MEMBER_MANAGE_PERSONAL_INFO_BUTTON,
@@ -522,8 +536,16 @@ class ScreenFlowPlanner:
                     )
                 ]
             if observation.screen_type != ScreenType.PNC_ALLIANCE_MEMBER_LIST:
+                _clear_player_profile_route_search_state(runtime_state)
                 return self.open_alliance_member_list(observation)
-            entry = _require_named_entry(observation, kind=ListEntryKind.ALLIANCE_MEMBER, title_text=route.player_name)
+            entry = _find_named_entry(observation, kind=ListEntryKind.ALLIANCE_MEMBER, title_text=route.player_name)
+            if entry is None:
+                return _plan_player_profile_route_search(
+                    observation,
+                    route=route,
+                    runtime_state=runtime_state,
+                )
+            _clear_player_profile_route_search_state(runtime_state)
             target = entry.action_point if entry.action_point is not None else entry.bounds.center()
             return [
                 TapPointAction(
@@ -536,8 +558,16 @@ class ScreenFlowPlanner:
             ]
         if route.kind == PlayerProfileRouteKind.MIGHT_RANK:
             if observation.screen_type != ScreenType.PNC_MIGHT_RANK:
+                _clear_player_profile_route_search_state(runtime_state)
                 return self.open_might_rank(observation)
-            entry = _require_named_entry(observation, kind=ListEntryKind.RANKED_PLAYER, title_text=route.player_name)
+            entry = _find_named_entry(observation, kind=ListEntryKind.RANKED_PLAYER, title_text=route.player_name)
+            if entry is None:
+                return _plan_player_profile_route_search(
+                    observation,
+                    route=route,
+                    runtime_state=runtime_state,
+                )
+            _clear_player_profile_route_search_state(runtime_state)
             target = entry.action_point if entry.action_point is not None else entry.bounds.center()
             return [
                 TapPointAction(
@@ -553,7 +583,13 @@ class ScreenFlowPlanner:
             route_kind=route.kind.value,
         )
 
-    def open_mail_compose(self, observation: Observation, params: SendMailParams) -> list[ActionRequest]:
+    def open_mail_compose(
+        self,
+        observation: Observation,
+        params: SendMailParams,
+        *,
+        runtime_state: dict[str, Any] | None = None,
+    ) -> list[ActionRequest]:
         """Plans exactly one compose-entry increment from the currently observed origin."""
 
         if observation.screen_type == ScreenType.PNC_MAIL_COMPOSE_POPUP:
@@ -583,7 +619,11 @@ class ScreenFlowPlanner:
         if params.profile_route is None:
             raise SelectorResolutionError("Player mail compose requires either player_name or profile_route.")
         if observation.screen_type != ScreenType.PNC_PLAYER_PROFILE:
-            return self.open_player_profile(observation, params.profile_route)
+            return self.open_player_profile(
+                observation,
+                params.profile_route,
+                runtime_state=runtime_state,
+            )
         return [
             TapAction(
                 selector_id=UiElementId.PNC_PLAYER_PROFILE_MAIL_BUTTON,
@@ -813,6 +853,25 @@ def _require_named_entry(
 ) -> DetectedListEntry:
     """Returns one required named dynamic entry or fails fast when it is not visible."""
 
+    entry = _find_named_entry(observation, kind=kind, title_text=title_text)
+    if entry is not None:
+        return entry
+    raise SelectorResolutionError(
+        "The requested target row is not currently visible for the selected route.",
+        entry_kind=kind,
+        title_text=title_text,
+        screen_type=observation.screen_type,
+    )
+
+
+def _find_named_entry(
+    observation: Observation,
+    *,
+    kind: ListEntryKind,
+    title_text: str | None,
+) -> DetectedListEntry | None:
+    """Returns one visible named dynamic entry when it is currently present."""
+
     if title_text is None:
         raise SelectorResolutionError(
             "This route requires a visible named target entry.",
@@ -822,10 +881,123 @@ def _require_named_entry(
     for entry in observation.entries(kind):
         if entry.title_text == title_text:
             return entry
+    return None
+
+
+def _plan_player_profile_route_search(
+    observation: Observation,
+    *,
+    route: PlayerProfileRoute,
+    runtime_state: dict[str, Any] | None,
+) -> list[ActionRequest]:
+    """Returns the next one-swipe search increment for list-backed profile routes or fails fast without state."""
+
+    if runtime_state is None or route.player_name is None:
+        _raise_missing_route_target(observation, route)
+    state = _require_player_profile_route_search_state(
+        runtime_state,
+        route_kind=route.kind,
+        player_name=route.player_name,
+    )
+    phase = state["phase"]
+    steps_completed = state["steps_completed"]
+    if phase == "reset_to_top" and steps_completed >= _PLAYER_PROFILE_ROUTE_RESET_STEPS:
+        state["phase"] = "scan_forward"
+        state["steps_completed"] = 0
+        phase = "scan_forward"
+        steps_completed = 0
+    if phase == "scan_forward" and steps_completed >= _PLAYER_PROFILE_ROUTE_SCAN_STEPS:
+        _clear_player_profile_route_search_state(runtime_state)
+        raise SelectorResolutionError(
+            "The requested target row could not be found after searching the selected profile-route list.",
+            route_kind=route.kind.value,
+            player_name=route.player_name,
+            screen_type=observation.screen_type,
+        )
+    state["steps_completed"] = steps_completed + 1
+    return [_make_player_profile_route_search_swipe(observation, route_kind=route.kind, phase=phase)]
+
+
+def _require_player_profile_route_search_state(
+    runtime_state: dict[str, Any],
+    *,
+    route_kind: PlayerProfileRouteKind,
+    player_name: str,
+) -> dict[str, object]:
+    """Returns the active list-search state for one route target, resetting it when the target changed."""
+
+    state = runtime_state.get(_PLAYER_PROFILE_ROUTE_SEARCH_STATE_KEY)
+    if (
+        isinstance(state, dict)
+        and state.get("route_kind") == route_kind.value
+        and state.get("player_name") == player_name
+        and state.get("phase") in {"reset_to_top", "scan_forward"}
+        and isinstance(state.get("steps_completed"), int)
+    ):
+        return state
+    new_state: dict[str, object] = {
+        "route_kind": route_kind.value,
+        "player_name": player_name,
+        "phase": "reset_to_top",
+        "steps_completed": 0,
+    }
+    runtime_state[_PLAYER_PROFILE_ROUTE_SEARCH_STATE_KEY] = new_state
+    return new_state
+
+
+def _clear_player_profile_route_search_state(runtime_state: dict[str, Any] | None) -> None:
+    """Clears any active list-search state once the shared route flow no longer needs it."""
+
+    if runtime_state is None:
+        return
+    runtime_state.pop(_PLAYER_PROFILE_ROUTE_SEARCH_STATE_KEY, None)
+
+
+def _make_player_profile_route_search_swipe(
+    observation: Observation,
+    *,
+    route_kind: PlayerProfileRouteKind,
+    phase: str,
+) -> SwipeAction:
+    """Builds the calibrated one-swipe search increment for alliance-member and rank route lists."""
+
+    reason = f"search_{route_kind.value}_{phase}"
+    if phase == "reset_to_top":
+        return SwipeAction(
+            direction="down",
+            distance_ratio=0.72,
+            reason=reason,
+            observe_after=True,
+            follow_up_request=ObservationRequest.source_screen_retry(observation.screen_type),
+            start_x_ratio=0.5,
+            start_y_ratio=0.40625,
+            end_x_ratio=0.5,
+            end_y_ratio=0.78125,
+            duration_ms=500,
+        )
+    if phase == "scan_forward":
+        return SwipeAction(
+            direction="up",
+            distance_ratio=0.72,
+            reason=reason,
+            observe_after=True,
+            follow_up_request=ObservationRequest.source_screen_retry(observation.screen_type),
+            start_x_ratio=0.5,
+            start_y_ratio=0.78125,
+            end_x_ratio=0.5,
+            end_y_ratio=0.28125,
+            duration_ms=500,
+        )
+    raise SelectorResolutionError("Unsupported profile-route search phase.", phase=phase, screen_type=observation.screen_type)
+
+
+def _raise_missing_route_target(observation: Observation, route: PlayerProfileRoute) -> None:
+    """Raises the canonical fail-fast error when a caller did not opt into shared route searching."""
+
     raise SelectorResolutionError(
         "The requested target row is not currently visible for the selected route.",
-        entry_kind=kind,
-        title_text=title_text,
+        route_kind=route.kind.value,
+        title_text=route.player_name,
         screen_type=observation.screen_type,
     )
 

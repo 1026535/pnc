@@ -340,6 +340,27 @@ class MailWorkflowTests(unittest.TestCase):
         self.assertIsInstance(actions[0], TapPointAction)
         self.assertEqual(actions[0].follow_up_request, ObservationRequest.mail_navigation_follow_up(ScreenType.PNC_ALLIANCE_MEMBER_MANAGE_POPUP))
 
+    def test_open_player_profile_from_alliance_member_requires_exact_case_before_tapping(self) -> None:
+        """Keeps alliance-member route matching case-sensitive and continues the shared search when casing differs."""
+
+        observation = make_observation(
+            ScreenType.PNC_ALLIANCE_MEMBER_LIST,
+            list_entries=(make_entry(ListEntryKind.ALLIANCE_MEMBER, title="LadiesLoveCake", action_point=(170, 70)),),
+        )
+
+        actions = self.flows.open_player_profile(
+            observation,
+            route=PlayerProfileRoute(
+                kind=PlayerProfileRouteKind.ALLIANCE_MEMBER,
+                player_name="ladieslovecake",
+            ),
+            runtime_state={},
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], SwipeAction)
+        self.assertEqual(actions[0].reason, "search_alliance_member_reset_to_top")
+
     def test_open_player_profile_from_home_with_chat_route_first_opens_chat(self) -> None:
         """Lets the shared route flow acquire chat from home instead of requiring caller-side setup."""
 
@@ -510,6 +531,27 @@ class MailWorkflowTests(unittest.TestCase):
         self.assertIsInstance(actions[0], TapPointAction)
         self.assertEqual(actions[0].follow_up_request, ObservationRequest.player_profile_follow_up())
 
+    def test_open_player_profile_from_might_rank_requires_exact_case_before_tapping(self) -> None:
+        """Keeps Might Rank route matching case-sensitive and continues the shared search when casing differs."""
+
+        observation = make_observation(
+            ScreenType.PNC_MIGHT_RANK,
+            list_entries=(make_entry(ListEntryKind.RANKED_PLAYER, title="LadiesLoveCake", action_point=(190, 80)),),
+        )
+
+        actions = self.flows.open_player_profile(
+            observation,
+            route=PlayerProfileRoute(
+                kind=PlayerProfileRouteKind.MIGHT_RANK,
+                player_name="ladieslovecake",
+            ),
+            runtime_state={},
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], SwipeAction)
+        self.assertEqual(actions[0].reason, "search_might_rank_reset_to_top")
+
     def test_open_player_profile_from_home_with_might_rank_route_first_opens_alliance_home(self) -> None:
         """Lets the shared route flow acquire alliance home before opening the Might Rank route screen."""
 
@@ -636,36 +678,78 @@ class MailWorkflowTests(unittest.TestCase):
         self.assertEqual(result.status.value, "replan")
         self.assertIn("needs the requested player target typed", result.message)
 
-    def test_send_mail_verify_mail_plan_keeps_visible_matching_row_in_mailbox(self) -> None:
-        """Stops verification once a matching mailbox row is visible instead of trying to open an inert thread view."""
+    def test_send_mail_verify_prefers_observed_profile_header_name_over_route_lookup_name(self) -> None:
+        """Uses the opened profile header as the authoritative target once a profile-route send reaches compose."""
 
         task = SendMailTask()
         context = _make_task_context(
             self,
             params=SendMailParams(
-                recipient_kind=MailRecipientKind.ALLIANCE,
+                recipient_kind=MailRecipientKind.PLAYER,
                 player_name=None,
-                profile_route=None,
-                subject="Test",
-                body="test",
+                profile_route=PlayerProfileRoute(
+                    kind=PlayerProfileRouteKind.ALLIANCE_MEMBER,
+                    player_name="Cutie",
+                ),
+                subject="Hello",
+                body="World",
             ),
             task_id=TaskId.SEND_MAIL,
         )
-        context.runtime_state["send_mail_phase"] = "verify_mail"
+
+        result = task.verify(
+            context,
+            before=make_observation(
+                ScreenType.PNC_PLAYER_PROFILE,
+                profile_player_name="Cutie Voj",
+            ),
+            after=make_observation(
+                ScreenType.PNC_MAIL_COMPOSE_POPUP,
+                text_field_states={
+                    UiElementId.PNC_MAIL_COMPOSE_TARGET_FIELD: ObservedTextFieldState(
+                        selector_id=UiElementId.PNC_MAIL_COMPOSE_TARGET_FIELD,
+                        text="Cutie Voj",
+                        empty=False,
+                    )
+                },
+            ),
+        )
+
+        self.assertEqual(result.status.value, "replan")
+        self.assertEqual(context.runtime_state["expected_profile_target"], "Cutie Voj")
+
+    def test_send_mail_verify_mail_plan_opens_ambiguous_same_recipient_row_for_thread_confirmation(self) -> None:
+        """Promotes a same-recipient mailbox row to thread confirmation instead of accepting it as proof."""
+
+        task = SendMailTask()
+        context = _make_task_context(
+            self,
+            params=SendMailParams(
+                recipient_kind=MailRecipientKind.PLAYER,
+                player_name="Enemy Bob",
+                profile_route=None,
+                subject="Fresh hello",
+                body="New message",
+            ),
+            task_id=TaskId.SEND_MAIL,
+        )
+        context.runtime_state["send_mail_phase"] = "verify_mailbox"
 
         actions = task.plan(
             context,
             make_observation(
                 ScreenType.PNC_MAILBOX_LIST,
-                mailbox_type=MailboxType.ALLIANCE,
-                list_entries=(make_entry(ListEntryKind.MAIL_THREAD, title="Test"),),
+                mailbox_type=MailboxType.PLAYER,
+                list_entries=(make_entry(ListEntryKind.MAIL_THREAD, title="Enemy Bob", subtitle="Older preview"),),
             ),
         )
 
-        self.assertEqual(actions, [])
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], TapPointAction)
+        self.assertEqual(context.runtime_state["send_mail_phase"], "verify_thread")
 
     def test_send_mail_verify_succeeds_when_matching_sent_row_is_visible(self) -> None:
-        """Accepts the visible sent row in the reopened mailbox as sufficient send confirmation."""
+        """Accepts mailbox-only verification only when the visible row already contains strong subject/body evidence."""
 
         task = SendMailTask()
         context = _make_task_context(
@@ -679,7 +763,7 @@ class MailWorkflowTests(unittest.TestCase):
             ),
             task_id=TaskId.SEND_MAIL,
         )
-        context.runtime_state["send_mail_phase"] = "verify_mail"
+        context.runtime_state["send_mail_phase"] = "verify_mailbox"
 
         result = task.verify(
             context,
@@ -687,15 +771,91 @@ class MailWorkflowTests(unittest.TestCase):
             after=make_observation(
                 ScreenType.PNC_MAILBOX_LIST,
                 mailbox_type=MailboxType.ALLIANCE,
-                list_entries=(make_entry(ListEntryKind.MAIL_THREAD, title="Test"),),
+                list_entries=(make_entry(ListEntryKind.MAIL_THREAD, title="Alliance", subtitle="Test test"),),
             ),
         )
 
         self.assertEqual(result.status.value, "success")
         self.assertIn("located in the reopened mailbox", result.message)
 
-    def test_send_mail_verify_fails_when_empty_player_mail_hub_row_is_inert(self) -> None:
-        """Fails fast with a clear reason when the live client leaves the empty Player Mail row non-interactive."""
+    def test_send_mail_verify_succeeds_when_ambiguous_row_opens_matching_thread(self) -> None:
+        """Allows ambiguous mailbox rows to succeed once the opened thread confirms the just-sent content."""
+
+        task = SendMailTask()
+        context = _make_task_context(
+            self,
+            params=SendMailParams(
+                recipient_kind=MailRecipientKind.PLAYER,
+                player_name="Enemy Bob",
+                profile_route=None,
+                subject="Fresh hello",
+                body="New message",
+            ),
+            task_id=TaskId.SEND_MAIL,
+        )
+        context.runtime_state["send_mail_phase"] = "verify_mailbox"
+        mailbox = make_observation(
+            ScreenType.PNC_MAILBOX_LIST,
+            mailbox_type=MailboxType.PLAYER,
+            list_entries=(make_entry(ListEntryKind.MAIL_THREAD, title="Enemy Bob", subtitle="Older preview"),),
+        )
+
+        actions = task.plan(context, mailbox)
+        result = task.verify(
+            context,
+            before=mailbox,
+            after=make_observation(
+                ScreenType.PNC_MAIL_THREAD,
+                list_entries=(
+                    make_entry(ListEntryKind.MAIL_MESSAGE, title="Fresh hello"),
+                    make_entry(ListEntryKind.MAIL_MESSAGE, title="New message"),
+                ),
+            ),
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertEqual(result.status.value, "success")
+        self.assertIn("confirmed in the reopened mailbox thread", result.message)
+
+    def test_send_mail_verify_fails_when_ambiguous_row_opens_wrong_thread(self) -> None:
+        """Fails when a same-recipient mailbox row leads to a thread whose content does not match the send."""
+
+        task = SendMailTask()
+        context = _make_task_context(
+            self,
+            params=SendMailParams(
+                recipient_kind=MailRecipientKind.PLAYER,
+                player_name="Enemy Bob",
+                profile_route=None,
+                subject="Fresh hello",
+                body="New message",
+            ),
+            task_id=TaskId.SEND_MAIL,
+        )
+        context.runtime_state["send_mail_phase"] = "verify_mailbox"
+        mailbox = make_observation(
+            ScreenType.PNC_MAILBOX_LIST,
+            mailbox_type=MailboxType.PLAYER,
+            list_entries=(make_entry(ListEntryKind.MAIL_THREAD, title="Enemy Bob", subtitle="Older preview"),),
+        )
+
+        actions = task.plan(context, mailbox)
+        result = task.verify(
+            context,
+            before=mailbox,
+            after=make_observation(
+                ScreenType.PNC_MAIL_THREAD,
+                list_entries=(make_entry(ListEntryKind.MAIL_MESSAGE, title="Completely unrelated history"),),
+            ),
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertEqual(result.status.value, "failed")
+        self.assertTrue(result.retryable)
+        self.assertIn("did not contain the expected sent subject or body", result.message)
+
+    def test_send_mail_verify_replans_when_direct_player_compose_stays_on_mail_hub_once(self) -> None:
+        """Retries once when the direct player compose tap stays on the hub before the popup opens."""
 
         task = SendMailTask()
         context = _make_task_context(
@@ -716,9 +876,35 @@ class MailWorkflowTests(unittest.TestCase):
             after=make_observation(ScreenType.PNC_MAIL_HUB),
         )
 
+        self.assertEqual(result.status.value, "replan")
+        self.assertIn("Mail hub", result.message)
+
+    def test_send_mail_verify_fails_when_direct_player_compose_stays_on_mail_hub_twice(self) -> None:
+        """Fails cleanly after two unchanged hub-compose attempts so the task does not spin indefinitely."""
+
+        task = SendMailTask()
+        context = _make_task_context(
+            self,
+            params=SendMailParams(
+                recipient_kind=MailRecipientKind.PLAYER,
+                player_name="Enemy Bob",
+                profile_route=None,
+                subject="Hello",
+                body="World",
+            ),
+            task_id=TaskId.SEND_MAIL,
+        )
+        context.runtime_state["direct_player_compose_open_attempts"] = 1
+
+        result = task.verify(
+            context,
+            before=make_observation(ScreenType.PNC_MAIL_HUB),
+            after=make_observation(ScreenType.PNC_MAIL_HUB),
+        )
+
         self.assertEqual(result.status.value, "failed")
-        self.assertIn("empty direct-mail mailboxes inert", result.message)
-        self.assertFalse(result.retryable)
+        self.assertTrue(result.retryable)
+        self.assertIn("did not open from the Mail hub", result.message)
 
     def test_send_mail_verify_fails_when_alliance_profile_route_source_opens_mail_from_home(self) -> None:
         """Fails fast when the supposed alliance source selector routes into Mail instead of alliance navigation."""
@@ -882,19 +1068,23 @@ class MailWorkflowTests(unittest.TestCase):
         fifth_actions = task.plan(context, observation)
         sixth_actions = task.plan(context, observation)
 
-        self.assertEqual(len(first_actions), 2)
-        self.assertTrue(all(isinstance(action, SwipeAction) for action in first_actions))
-        self.assertTrue(all(action.direction == "down" for action in first_actions))
-        self.assertTrue(all(action.reason == "search_alliance_member_reset_to_top" for action in first_actions))
-        self.assertTrue(all(action.follow_up_request == ObservationRequest.source_screen_retry(ScreenType.PNC_ALLIANCE_MEMBER_LIST) for action in first_actions))
-        self.assertTrue(all(action.start_x_ratio == 0.5 and action.end_x_ratio == 0.5 for action in first_actions))
-        self.assertTrue(all(action.start_y_ratio == 0.40625 and action.end_y_ratio == 0.78125 for action in first_actions))
-        self.assertTrue(all(action.direction == "down" for action in second_actions))
-        self.assertTrue(all(action.direction == "down" for action in third_actions))
-        self.assertEqual(len(fourth_actions), 2)
-        self.assertTrue(all(action.direction == "down" for action in fourth_actions))
-        self.assertEqual(len(fifth_actions), 2)
-        self.assertTrue(all(action.direction == "down" for action in fifth_actions))
+        self.assertEqual(len(first_actions), 1)
+        self.assertIsInstance(first_actions[0], SwipeAction)
+        self.assertEqual(first_actions[0].direction, "down")
+        self.assertEqual(first_actions[0].reason, "search_alliance_member_reset_to_top")
+        self.assertEqual(first_actions[0].follow_up_request, ObservationRequest.source_screen_retry(ScreenType.PNC_ALLIANCE_MEMBER_LIST))
+        self.assertEqual(first_actions[0].start_x_ratio, 0.5)
+        self.assertEqual(first_actions[0].end_x_ratio, 0.5)
+        self.assertEqual(first_actions[0].start_y_ratio, 0.40625)
+        self.assertEqual(first_actions[0].end_y_ratio, 0.78125)
+        self.assertEqual(len(second_actions), 1)
+        self.assertEqual(second_actions[0].direction, "down")
+        self.assertEqual(len(third_actions), 1)
+        self.assertEqual(third_actions[0].direction, "down")
+        self.assertEqual(len(fourth_actions), 1)
+        self.assertEqual(fourth_actions[0].direction, "down")
+        self.assertEqual(len(fifth_actions), 1)
+        self.assertEqual(fifth_actions[0].direction, "down")
         self.assertEqual(len(sixth_actions), 1)
         self.assertEqual(sixth_actions[0].direction, "up")
         self.assertEqual(sixth_actions[0].reason, "search_alliance_member_scan_forward")
@@ -1001,8 +1191,8 @@ class MailWorkflowTests(unittest.TestCase):
         self.assertEqual(executor.session.texts, [])
         self.assertEqual(fake_observer.requests, [ObservationRequest.mail_compose_follow_up()])
 
-    def test_mail_compose_follow_up_keeps_alliance_home_and_player_profile_visible_on_compose_miss(self) -> None:
-        """Lets compose-entry follow-ups preserve the source screen when alliance or profile mail stays blocked."""
+    def test_mail_compose_follow_up_keeps_compose_origin_screens_visible_on_compose_miss(self) -> None:
+        """Lets compose-entry follow-ups preserve every supported source screen when the popup does not open."""
 
         request = ObservationRequest.mail_compose_follow_up()
 
@@ -1058,6 +1248,11 @@ class MailWorkflowTests(unittest.TestCase):
     def test_observation_builder_parses_live_remote_profile_layout_without_header_text(self) -> None:
         """Recognizes the live gear-tab remote profile layout even when no Player Profile title is visible."""
 
+        registry = build_default_selector_registry()
+        expected_mail_button = registry.require(UiElementId.PNC_PLAYER_PROFILE_MAIL_BUTTON).relative_bounds.materialize(  # type: ignore[union-attr]
+            selector_id=UiElementId.PNC_PLAYER_PROFILE_MAIL_BUTTON,
+            image_size=(900, 1600),
+        )
         observation = _build_observation(
             request=ObservationRequest.player_profile_follow_up(),
             lines=(
@@ -1079,9 +1274,53 @@ class MailWorkflowTests(unittest.TestCase):
         self.assertTrue(observation.has(UiElementId.PNC_PLAYER_PROFILE_MAIL_BUTTON))
         self.assertEqual(
             observation.require(UiElementId.PNC_PLAYER_PROFILE_MAIL_BUTTON).action_point,
-            (730, 1292),
+            expected_mail_button.action_point,
+        )
+        self.assertEqual(
+            observation.require(UiElementId.PNC_PLAYER_PROFILE_MAIL_BUTTON).source_kind,
+            VisibleElementSourceKind.GEOMETRY,
         )
         self.assertIsNone(observation.current_castle)
+
+    def test_observation_builder_keeps_profile_mail_button_when_live_layout_ocr_misses_mail_label(self) -> None:
+        """Materializes the profile mail button from stable layout geometry when OCR misses the Mail footer label."""
+
+        registry = build_default_selector_registry()
+        expected_mail_button = registry.require(UiElementId.PNC_PLAYER_PROFILE_MAIL_BUTTON).relative_bounds.materialize(  # type: ignore[union-attr]
+            selector_id=UiElementId.PNC_PLAYER_PROFILE_MAIL_BUTTON,
+            image_size=(900, 1600),
+        )
+        observation = _build_observation(
+            request=ObservationRequest.player_profile_follow_up(),
+            lines=(
+                _ocr_line("LadiesLoveCake", x=187, y=26, width=355, height=40),
+                _ocr_line("Gear", x=40, y=105, width=88, height=30),
+                _ocr_line("Gem", x=200, y=105, width=78, height=30),
+                _ocr_line("Saurgem", x=344, y=105, width=146, height=30),
+                _ocr_line("Warsigil", x=542, y=105, width=136, height=30),
+                _ocr_line("Saurgil", x=700, y=105, width=118, height=30),
+                _ocr_line("English", x=212, y=1208, width=102, height=28),
+                _ocr_line("[AAS] LadiesLoveCake", x=360, y=1208, width=246, height=28),
+                _ocr_line("Hero List", x=392, y=1398, width=118, height=28),
+                _ocr_line("More Info", x=707, y=1398, width=126, height=28),
+                _ocr_line("Lord Info", x=54, y=1544, width=126, height=30),
+                _ocr_line("Alliance Info", x=178, y=1544, width=192, height=30),
+                _ocr_line("Settings", x=426, y=1544, width=112, height=30),
+                _ocr_line("Achievements", x=718, y=1544, width=170, height=30),
+            ),
+        )
+
+        self.assertEqual(observation.screen_type, ScreenType.PNC_PLAYER_PROFILE)
+        self.assertEqual(observation.profile_player_name, "LadiesLoveCake")
+        self.assertTrue(observation.has(UiElementId.PNC_PLAYER_PROFILE_MAIL_BUTTON))
+        self.assertEqual(
+            observation.require(UiElementId.PNC_PLAYER_PROFILE_MAIL_BUTTON).source_kind,
+            VisibleElementSourceKind.GEOMETRY,
+        )
+        self.assertEqual(
+            observation.require(UiElementId.PNC_PLAYER_PROFILE_MAIL_BUTTON).action_point,
+            expected_mail_button.action_point,
+        )
 
     def test_observation_builder_parses_mail_compose_popup_field_states(self) -> None:
         """Builds the compose popup plus canonical shared text-field state from OCR-backed field regions."""
@@ -1241,6 +1480,20 @@ class MailWorkflowTests(unittest.TestCase):
         self.assertEqual(entries[0].subtitle_text, "(All Allies)Test (All Allies)test")
         self.assertEqual(entries[0].metadata["date_text"], "2026/03/22 14:46:46")
 
+    def test_mailbox_observation_uses_requested_mailbox_type(self) -> None:
+        """Rejects mismatched mailbox OCR so narrow mailbox follow-ups actually verify the requested mailbox."""
+
+        observation = _build_observation(
+            request=ObservationRequest.mailbox_observation(MailboxType.PLAYER),
+            lines=(
+                _ocr_line("Alliance Mail", x=183, y=17, width=292, height=52),
+                _ocr_line("[AAS] pine cobaye 1", x=193, y=151, width=271, height=35),
+                _ocr_line("(All Allies)Test", x=194, y=184, width=175, height=32),
+            ),
+        )
+
+        self.assertEqual(observation.screen_type, ScreenType.UNKNOWN)
+
     def test_observation_builder_keeps_mail_hub_out_of_compose_popup(self) -> None:
         """Does not promote the shared Mail hub into compose-popup state when only the generic Mail header is visible."""
 
@@ -1258,6 +1511,9 @@ class MailWorkflowTests(unittest.TestCase):
         self.assertEqual(observation.screen_type, ScreenType.PNC_MAIL_HUB)
         self.assertFalse(observation.has(UiElementId.PNC_MAIL_COMPOSE_SUBJECT_FIELD))
         self.assertFalse(observation.has(UiElementId.PNC_MAIL_COMPOSE_SEND_BUTTON))
+        player_mail = observation.require(UiElementId.PNC_MAIL_ROW_PLAYER_MAIL)
+        self.assertIsNotNone(player_mail.action_point)
+        self.assertGreaterEqual(player_mail.action_point[0], 800)
 
     def test_observation_builder_parses_live_like_alliance_home_instead_of_mail_hub(self) -> None:
         """Classifies alliance home from its tiles and bottom tabs instead of misreading Alliance Mail as the mail hub."""
@@ -1405,6 +1661,60 @@ class MailWorkflowTests(unittest.TestCase):
             self.assertTrue(any(path.name == "thread.txt" for path in archived_files))
             self.assertTrue(any(path.name == "thread.png" for path in archived_files))
             self.assertTrue(any("Main" in path.parts for path in archived_files))
+
+    def test_collect_mail_task_scrolls_to_collect_more_than_the_first_visible_window(self) -> None:
+        """Continues mailbox traversal across windows until the requested per-mailbox limit is reached."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            task = CollectMailTask()
+            context = _make_task_context(
+                self,
+                params=CollectMailParams(mailboxes=(MailboxType.PLAYER,), archive_mode=MailArchiveMode.TEXT, limit_per_mailbox=2),
+                task_id=TaskId.COLLECT_MAIL,
+                mail_archive_store=MailArchiveStore(root=Path(temp_directory) / "mail"),
+                target_castle=CastleIdentity(kingdom="K230", castle_name="Main"),
+            )
+            first_mailbox = make_observation(
+                ScreenType.PNC_MAILBOX_LIST,
+                mailbox_type=MailboxType.PLAYER,
+                list_entries=(make_entry(ListEntryKind.MAIL_THREAD, title="Enemy Bob", subtitle="One", action_point=(120, 90)),),
+            )
+            second_mailbox = make_observation(
+                ScreenType.PNC_MAILBOX_LIST,
+                mailbox_type=MailboxType.PLAYER,
+                list_entries=(make_entry(ListEntryKind.MAIL_THREAD, title="Enemy Alice", subtitle="Two", action_point=(140, 110)),),
+            )
+            first_thread = make_observation(
+                ScreenType.PNC_MAIL_THREAD,
+                mailbox_type=MailboxType.PLAYER,
+                list_entries=(make_entry(ListEntryKind.MAIL_MESSAGE, title="First collected thread"),),
+            )
+            second_thread = make_observation(
+                ScreenType.PNC_MAIL_THREAD,
+                mailbox_type=MailboxType.PLAYER,
+                list_entries=(make_entry(ListEntryKind.MAIL_MESSAGE, title="Second collected thread"),),
+            )
+
+            first_actions = task.plan(context, first_mailbox)
+            first_result = task.verify(context, first_mailbox, first_thread)
+            scroll_actions = task.plan(context, first_mailbox)
+            scroll_result = task.verify(context, first_mailbox, second_mailbox)
+            second_actions = task.plan(context, second_mailbox)
+            second_result = task.verify(context, second_mailbox, second_thread)
+            done_actions = task.plan(context, second_mailbox)
+            done_result = task.verify(context, second_mailbox, second_mailbox)
+
+            self.assertEqual(len(first_actions), 1)
+            self.assertIsInstance(first_actions[0], TapPointAction)
+            self.assertEqual(first_result.status.value, "replan")
+            self.assertEqual(len(scroll_actions), 1)
+            self.assertIsInstance(scroll_actions[0], SwipeAction)
+            self.assertEqual(scroll_result.status.value, "replan")
+            self.assertEqual(len(second_actions), 1)
+            self.assertIsInstance(second_actions[0], TapPointAction)
+            self.assertEqual(second_result.status.value, "replan")
+            self.assertEqual(done_actions, [])
+            self.assertEqual(done_result.status.value, "success")
 
     def test_collect_mail_task_uses_lord_info_flow_to_resolve_active_castle_before_archiving(self) -> None:
         """Uses the shared self-profile flow to resolve the active castle instead of archiving under an account-level fallback."""

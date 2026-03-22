@@ -478,7 +478,7 @@ class PncObservationEnricher:
             request_screen=ScreenType.PNC_MAILBOX_LIST,
             observed_screen=screen_type,
         ):
-            mailbox = _build_mailbox_additions(image=image, lines=lines)
+            mailbox = _build_mailbox_additions(image=image, lines=lines, request=request)
             if mailbox is not None:
                 return mailbox
         if request.allows_screen(ScreenType.PNC_ALLIANCE_HOME) and can_attempt_screen_family_ocr(
@@ -835,7 +835,6 @@ def _build_player_profile_additions(
     """Returns the remote player-profile screen and visible profile name when OCR matches the layout."""
 
     header = _find_header_line(lines=lines, header_texts=_PLAYER_PROFILE_HEADER_TEXTS, max_y=int(image.height * 0.18))
-    mail_line = _find_first_line_in_texts(lines=lines, texts=_MAIL_BUTTON_TEXTS, min_y=int(image.height * 0.45))
     if header is None and not _has_remote_profile_layout_support(lines):
         return None
     name_line = (
@@ -876,12 +875,6 @@ def _build_player_profile_additions(
             line=name_line,
         ),
     }
-    if mail_line is not None:
-        visible_elements[UiElementId.PNC_PLAYER_PROFILE_MAIL_BUTTON] = _make_visible_from_bottom_nav_line(
-            image=image,
-            selector_id=UiElementId.PNC_PLAYER_PROFILE_MAIL_BUTTON,
-            line=mail_line,
-        )
     return ObservationAdditions(
         visible_elements=visible_elements,
         screen_evidence=(ScreenEvidence(ScreenType.PNC_PLAYER_PROFILE, "ocr_player_profile"),),
@@ -905,7 +898,11 @@ def _build_mail_hub_additions(
         selector_id = _mail_hub_selector_id(normalized_text)
         if selector_id is None or selector_id in visible_elements:
             continue
-        visible_elements[selector_id] = _make_visible_from_line(selector_id=selector_id, line=line)
+        visible_elements[selector_id] = _make_visible_from_mail_hub_row(
+            image=image,
+            selector_id=selector_id,
+            line=line,
+        )
     if UiElementId.PNC_MAIL_ROW_PLAYER_MAIL not in visible_elements and UiElementId.PNC_MAIL_ROW_ALLIANCE_MAIL not in visible_elements:
         return None
     header = _find_first_line_in_texts(lines=lines, texts=frozenset({"MAIL"}), max_y=120)
@@ -998,6 +995,7 @@ def _build_mailbox_additions(
     *,
     image: Image.Image,
     lines: tuple[OcrLine, ...],
+    request: ObservationRequest,
 ) -> ObservationAdditions | None:
     """Returns one mailbox list plus visible thread rows and empty-state facts."""
 
@@ -1006,6 +1004,8 @@ def _build_mailbox_additions(
         return None
     mailbox_type = _MAILBOX_HEADER_TO_TYPE.get(normalize_ocr_text(header.text))
     if mailbox_type is None:
+        return None
+    if request.expected_mailbox is not None and mailbox_type != request.expected_mailbox:
         return None
     empty_line = _find_line_with_normalized_text(
         lines=lines,
@@ -3058,6 +3058,28 @@ def _make_visible_from_line(*, selector_id: UiElementId, line: OcrLine) -> Visib
         width=line.bounds.width,
         height=line.bounds.height,
         extracted_text=line.text,
+    )
+
+
+def _make_visible_from_mail_hub_row(*, image: Image.Image, selector_id: UiElementId, line: OcrLine) -> VisibleElement:
+    """Builds one mail-hub row selector with a full-row tap target at the right-side affordance."""
+
+    row_height = max(line.bounds.height * 3, int(image.height * 0.085))
+    row_top = max(0, line.bounds.y - ((row_height - line.bounds.height) // 2))
+    row_left = max(0, line.bounds.x - int(image.width * 0.23))
+    row_width = min(image.width - row_left, int(image.width * 0.95))
+    action_point = (
+        min(image.width - 1, int(round(image.width * 0.91))),
+        min(image.height - 1, row_top + (row_height // 2)),
+    )
+    return _make_visible(
+        selector_id=selector_id,
+        x=row_left,
+        y=row_top,
+        width=row_width,
+        height=row_height,
+        extracted_text=line.text,
+        action_point=action_point,
     )
 
 
