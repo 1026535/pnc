@@ -178,20 +178,36 @@ class ObservedActionExecutor:
         self.action_executor.execute_action(action, before)
         self._sleep_for_observe(action)
         first_after = observe(label_prefix, request=follow_up_request)
-        settled_after = settle_reviewed_navigation_observation(
-            first_observation=first_after,
-            label_prefix=label_prefix,
-            request=follow_up_request,
-            reviewed_outcomes=candidate.reviewed_outcomes,
-            max_settle_observations=self.policy.max_settle_observations,
-            observe=observe,
-            sleep=self._sleep_for_observe,
+        settled_after = (
+            first_after
+            if self._should_preserve_first_follow_up(first_after)
+            else settle_reviewed_navigation_observation(
+                first_observation=first_after,
+                label_prefix=label_prefix,
+                request=follow_up_request,
+                reviewed_outcomes=candidate.reviewed_outcomes,
+                max_settle_observations=self.policy.max_settle_observations,
+                observe=observe,
+                sleep=self._sleep_for_observe,
+            )
         )
         final_after = settled_after
+        if (
+            final_after.screen_type == ScreenType.UNKNOWN
+            and not final_after.has(UiElementId.PNC_STATUS_BANNER)
+            and follow_up_request != ObservationRequest.full_runtime_default()
+        ):
+            final_after = observe(
+                f"{label_prefix}_runtime_retry",
+                request=ObservationRequest.full_runtime_default(),
+            )
         fallback_attempted = False
         fallback_used = False
         fallback_source_kind: VisibleElementSourceKind | None = None
-        if is_settled_primary_navigation_miss(candidate.selector, before, settled_after, candidate.source_element):
+        if (
+            not final_after.has(UiElementId.PNC_STATUS_BANNER)
+            and is_settled_primary_navigation_miss(candidate.selector, before, settled_after, candidate.source_element)
+        ):
             fallback_attempted = True
             retry_source = observe(
                 f"{label_prefix}_ocr_retry_source",
@@ -243,6 +259,11 @@ class ObservedActionExecutor:
             observation=final_after,
             selector_interactions=(interaction,),
         )
+
+    def _should_preserve_first_follow_up(self, observation: Observation) -> bool:
+        """Returns whether the initial follow-up should be preserved because it carries a transient rejection banner."""
+
+        return observation.has(UiElementId.PNC_STATUS_BANNER)
 
     def _sleep_for_observe(self, action: ActionRequest | None = None) -> None:
         """Applies the shared post-action observe delay used by follow-up captures."""

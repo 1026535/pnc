@@ -13,11 +13,13 @@ from pnc_automation.capture.screenshot_service import CapturedScreenshot, Screen
 from pnc_automation.config.castle_roster_store import CastleRosterStore
 from pnc_automation.emulator.session import BlueStacksSession
 from pnc_automation.pnc.chat import ChatChannel
+from pnc_automation.pnc.mail import MailboxType
 from pnc_automation.pnc.observation import (
     CurrentCastleEvidenceKind,
     DetectedListEntry,
     ListEntryKind,
     Observation,
+    ObservedTextFieldState,
     VisibleElement,
     VisibleElementSourceKind,
     castle_identity_from_entry,
@@ -59,6 +61,10 @@ class ObservationAdditions:
     current_pnc_account_id: str | None = None
     available_march_slots: int | None = None
     active_chat_channel: ChatChannel | None = None
+    profile_player_name: str | None = None
+    mailbox_type: MailboxType | None = None
+    mailbox_empty: bool | None = None
+    text_field_states: Mapping[UiElementId, ObservedTextFieldState] = field(default_factory=dict)
     chat_draft_empty: bool | None = None
     chat_draft_text: str | None = None
 
@@ -218,6 +224,10 @@ class ObservationBuilder:
             current_pnc_account_id=additions.current_pnc_account_id,
             available_march_slots=additions.available_march_slots,
             active_chat_channel=additions.active_chat_channel,
+            profile_player_name=additions.profile_player_name,
+            mailbox_type=additions.mailbox_type,
+            mailbox_empty=additions.mailbox_empty,
+            text_field_states=additions.text_field_states,
             chat_draft_empty=additions.chat_draft_empty,
             chat_draft_text=additions.chat_draft_text,
         )

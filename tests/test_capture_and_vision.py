@@ -1205,6 +1205,48 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertTrue(observation.has(UiElementId.PNC_BOTTOM_NAV_MORE))
             self.assertTrue(observation.has(UiElementId.PNC_HOME_LORD_INFO_SHORTCUT))
 
+    def test_observation_builder_classifies_world_map_from_coordinates_and_bottom_nav_ocr(self) -> None:
+        """Recognizes the live root-map layout so root navigation does not fall back to KEYCODE_BACK."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                artifact_directory="k230_world_map",
+                label="world_map_live_like",
+            )
+            builder = ObservationBuilder(
+                selector_registry=build_default_selector_registry(),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("X:253", x=73, y=67, width=71, height=24),
+                            _ocr_line("Y:447", x=177, y=67, width=69, height=24),
+                            _ocr_line("Home", x=63, y=1563, width=76, height=28),
+                            _ocr_line("Hero", x=213, y=1567, width=62, height=25),
+                            _ocr_line("Quest", x=331, y=1571, width=69, height=20),
+                            _ocr_line("Mail", x=533, y=1568, width=55, height=24),
+                            _ocr_line("Alliance", x=666, y=1567, width=100, height=26),
+                            _ocr_line("More", x=795, y=1568, width=70, height=25),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_WORLD_MAP)
+            self.assertTrue(observation.has(UiElementId.PNC_WORLD_COORDINATE_BAR))
+            self.assertTrue(observation.has(UiElementId.PNC_WORLD_HOME_NAV))
+            self.assertTrue(observation.has(UiElementId.PNC_BOTTOM_NAV_ALLIANCE))
+            self.assertTrue(observation.has(UiElementId.PNC_CHAT_SHORTCUT))
+
     def test_observation_builder_classifies_blocking_popup_over_home_city_from_ocr(self) -> None:
         """Promotes centered modal cancel buttons into the canonical blocking-popup selector."""
 

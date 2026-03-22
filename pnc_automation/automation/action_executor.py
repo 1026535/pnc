@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pnc_automation.emulator.session import BlueStacksSession
 from pnc_automation.errors import SelectorResolutionError
 from pnc_automation.pnc.chat import chat_channel_selector_id
+from pnc_automation.pnc.mail import multiline_text_field_selector_ids
 from pnc_automation.pnc.action_requests import (
     ActionRequest,
     ActionTimingProfile,
@@ -107,7 +108,7 @@ class ActionExecutor:
                 self.session.tap_point(x, y)
                 self._sleep_ms(self._stable_delay_ms_for(action))
                 self._clear_existing_text(action, observation)
-            self.session.input_text(action.text)
+            self._input_text(action, observation)
             self._sleep_ms(self._stable_delay_ms_for(action))
             return True
         if isinstance(action, KeyEventAction):
@@ -125,11 +126,10 @@ class ActionExecutor:
             if observation.image_size is None:
                 raise SelectorResolutionError("Swipe actions require the current screenshot dimensions.")
             width, height = observation.image_size
-            start_x, start_y, end_x, end_y = _resolve_swipe_points(
+            start_x, start_y, end_x, end_y = _resolve_swipe_points_for_action(
                 width=width,
                 height=height,
-                direction=action.direction,
-                distance_ratio=action.distance_ratio,
+                action=action,
             )
             self.session.swipe(start_x, start_y, end_x, end_y, duration_ms=action.duration_ms)
             self._sleep_ms(self._stable_delay_ms_for(action))
@@ -139,21 +139,24 @@ class ActionExecutor:
     def validate_follow_up(self, action: ActionRequest, observation: Observation) -> bool:
         """Returns whether the action sequence can safely continue from the observed follow-up state."""
 
-        if not isinstance(action, SelectChatChannelAction):
+        if isinstance(action, SelectChatChannelAction):
+            if observation.blocking_popup or observation.screen_type in {
+                ScreenType.PNC_POPUP,
+                ScreenType.PNC_LOADING,
+                ScreenType.UNKNOWN,
+            }:
+                return False
+            if observation.screen_type != ScreenType.PNC_CHAT:
+                return False
+            if not observation.is_chat_channel_active(action.channel):
+                return False
+            if observation.chat_draft_empty is None:
+                return False
             return True
-        if observation.blocking_popup or observation.screen_type in {
-            ScreenType.PNC_POPUP,
-            ScreenType.PNC_LOADING,
-            ScreenType.UNKNOWN,
-        }:
-            return False
-        if observation.screen_type != ScreenType.PNC_CHAT:
-            return False
-        if not observation.is_chat_channel_active(action.channel):
-            return False
-        if observation.chat_draft_empty is None:
-            return False
-        return True
+        follow_up_request = getattr(action, "follow_up_request", None)
+        if follow_up_request is None:
+            return True
+        return self._matches_follow_up_request(observation, follow_up_request)
 
     def _require_entry(self, action: TapListEntryAction, observation: Observation) -> DetectedListEntry:
         """Returns the matching list entry for one dynamic-entry tap."""
@@ -202,23 +205,66 @@ class ActionExecutor:
             return
         if action.selector_id is None:
             raise SelectorResolutionError("InputTextAction.replace_existing requires a selector-backed field.")
-        if action.selector_id != UiElementId.PNC_CHAT_INPUT_FIELD:
+        field_state = observation.text_field_state(action.selector_id)
+        if field_state is None:
+            if action.selector_id == UiElementId.PNC_CHAT_INPUT_FIELD and observation.chat_draft_empty is not None:
+                if observation.chat_draft_empty:
+                    return
+                delete_budget = _delete_budget(observation.chat_draft_text)
+                self.session.press_key("KEYCODE_MOVE_END")
+                for _ in range(delete_budget):
+                    self.session.press_key("KEYCODE_DEL")
+                self._sleep_ms(self._stable_delay_ms_for(action))
+                return
             raise SelectorResolutionError(
-                "InputTextAction.replace_existing is only implemented for the shared chat input field.",
-                selector_id=action.selector_id,
-            )
-        if observation.chat_draft_empty is None:
-            raise SelectorResolutionError(
-                "Chat draft state must be observed before typing into the shared chat input field.",
+                "Observed text-field state is required before replacing existing text.",
                 selector_id=action.selector_id,
                 screen_type=observation.screen_type,
             )
-        if observation.chat_draft_empty:
+        if field_state.empty:
             return
         self.session.press_key("KEYCODE_MOVE_END")
-        for _ in range(_chat_delete_budget(observation.chat_draft_text)):
+        for _ in range(_delete_budget(field_state.text)):
             self.session.press_key("KEYCODE_DEL")
         self._sleep_ms(self._stable_delay_ms_for(action))
+
+    def _input_text(self, action: InputTextAction, observation: Observation) -> None:
+        """Inputs text through the shared single-line or multiline field policy."""
+
+        if "\n" not in action.text and "\r" not in action.text:
+            self.session.input_text(action.text)
+            return
+        if action.selector_id is None:
+            raise SelectorResolutionError("Multiline text entry requires a selector-backed field.", text=action.text)
+        if action.selector_id not in multiline_text_field_selector_ids():
+            raise SelectorResolutionError(
+                "The requested selector does not support multiline text entry.",
+                selector_id=action.selector_id,
+                screen_type=observation.screen_type,
+            )
+        normalized_lines = action.text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+        for index, line in enumerate(normalized_lines):
+            self.session.input_text(line)
+            if index == len(normalized_lines) - 1:
+                continue
+            self.session.press_key("KEYCODE_ENTER")
+
+    def _matches_follow_up_request(
+        self,
+        observation: Observation,
+        request: ObservationRequest,
+    ) -> bool:
+        """Returns whether one observed follow-up landed on a usable screen for the remaining action sequence."""
+
+        if observation.blocking_popup or observation.screen_type in {
+            ScreenType.PNC_POPUP,
+            ScreenType.PNC_LOADING,
+            ScreenType.UNKNOWN,
+        }:
+            return False
+        if not request.candidate_screen_types:
+            return True
+        return observation.screen_type in request.candidate_screen_types
 
 
 def _resolve_swipe_points(*, width: int, height: int, direction: str, distance_ratio: float) -> tuple[int, int, int, int]:
@@ -241,8 +287,51 @@ def _resolve_swipe_points(*, width: int, height: int, direction: str, distance_r
     raise SelectorResolutionError("Unsupported swipe direction.", direction=direction)
 
 
-def _chat_delete_budget(draft_text: str | None) -> int:
-    """Returns a conservative delete count for the observed reusable chat draft."""
+def _resolve_swipe_points_for_action(*, width: int, height: int, action: SwipeAction) -> tuple[int, int, int, int]:
+    """Returns explicit swipe coordinates when provided, otherwise uses directional screen-relative swipes."""
+
+    explicit_ratios = (
+        action.start_x_ratio,
+        action.start_y_ratio,
+        action.end_x_ratio,
+        action.end_y_ratio,
+    )
+    if all(ratio is None for ratio in explicit_ratios):
+        return _resolve_swipe_points(
+            width=width,
+            height=height,
+            direction=action.direction,
+            distance_ratio=action.distance_ratio,
+        )
+    if any(ratio is None for ratio in explicit_ratios):
+        raise SelectorResolutionError("Explicit swipe ratios require all start/end ratios to be provided together.")
+    start_x_ratio, start_y_ratio, end_x_ratio, end_y_ratio = explicit_ratios
+    assert start_x_ratio is not None and start_y_ratio is not None and end_x_ratio is not None and end_y_ratio is not None
+    _validate_swipe_ratio(start_x_ratio, field_name="start_x_ratio")
+    _validate_swipe_ratio(start_y_ratio, field_name="start_y_ratio")
+    _validate_swipe_ratio(end_x_ratio, field_name="end_x_ratio")
+    _validate_swipe_ratio(end_y_ratio, field_name="end_y_ratio")
+    return (
+        int(width * start_x_ratio),
+        int(height * start_y_ratio),
+        int(width * end_x_ratio),
+        int(height * end_y_ratio),
+    )
+
+
+def _validate_swipe_ratio(ratio: float, *, field_name: str) -> None:
+    """Rejects explicit swipe ratios that fall outside normalized screen bounds."""
+
+    if not 0 <= ratio <= 1:
+        raise SelectorResolutionError(
+            "Explicit swipe ratios must be within [0, 1].",
+            field_name=field_name,
+            ratio=ratio,
+        )
+
+
+def _delete_budget(draft_text: str | None) -> int:
+    """Returns a conservative delete count for one observed reusable text field."""
 
     if draft_text is None or draft_text.strip() == "":
         return 36

@@ -25,6 +25,8 @@ class TaskId(StrEnum):
     REFRESH_CASTLE_ROSTER = "refresh_castle_roster"
     SEND_ALLIANCE_CHAT_MESSAGE = "send_alliance_chat_message"
     SEND_WORLD_CHAT_MESSAGE = "send_world_chat_message"
+    SEND_MAIL = "send_mail"
+    COLLECT_MAIL = "collect_mail"
     BUILDING_UPGRADE = "building_upgrade"
     RESEARCH = "research"
     GATHERING = "gathering"

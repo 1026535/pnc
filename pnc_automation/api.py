@@ -97,6 +97,65 @@ class AutomationSession:
 
         return self.api.send_world_chat_message(account_id=self.account_id, message=message)
 
+    def send_mail(
+        self,
+        *,
+        recipient_kind: str,
+        subject: str,
+        body: str,
+        player_name: str | None = None,
+        profile_route: dict[str, object] | None = None,
+    ) -> StepRunResult:
+        """Runs one direct mail-send step against the prepared session."""
+
+        return self.api.send_mail(
+            account_id=self.account_id,
+            recipient_kind=recipient_kind,
+            subject=subject,
+            body=body,
+            player_name=player_name,
+            profile_route=profile_route,
+        )
+
+    def send_alliance_mail(self, *, subject: str, body: str) -> StepRunResult:
+        """Runs one direct alliance-mail step against the prepared session."""
+
+        return self.api.send_alliance_mail(account_id=self.account_id, subject=subject, body=body)
+
+    def send_personal_mail(
+        self,
+        *,
+        subject: str,
+        body: str,
+        profile_route: dict[str, object],
+    ) -> StepRunResult:
+        """Runs one direct profile-route personal-mail step against the prepared session."""
+
+        return self.api.send_personal_mail(
+            account_id=self.account_id,
+            subject=subject,
+            body=body,
+            profile_route=profile_route,
+        )
+
+    def collect_mail(
+        self,
+        *,
+        mailboxes: list[str],
+        archive_mode: str = "both",
+        limit_per_mailbox: int = 25,
+        only_new: bool = True,
+    ) -> StepRunResult:
+        """Runs one direct mail-collection step against the prepared session."""
+
+        return self.api.collect_mail(
+            account_id=self.account_id,
+            mailboxes=mailboxes,
+            archive_mode=archive_mode,
+            limit_per_mailbox=limit_per_mailbox,
+            only_new=only_new,
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class AutomationApi:
@@ -231,6 +290,89 @@ class AutomationApi:
             params={"message": message},
         )
 
+    def send_mail(
+        self,
+        *,
+        account_id: str | None = None,
+        recipient_kind: str,
+        subject: str,
+        body: str,
+        player_name: str | None = None,
+        profile_route: dict[str, object] | None = None,
+    ) -> StepRunResult:
+        """Runs one canonical send_mail task using current-castle semantics."""
+
+        params: dict[str, Any] = {
+            "recipient_kind": recipient_kind,
+            "subject": subject,
+            "body": body,
+        }
+        if player_name is not None:
+            params["player_name"] = player_name
+        if profile_route is not None:
+            params["profile_route"] = profile_route
+        return self.run_task(
+            account_id=self._resolve_account_id(account_id),
+            task_id=TaskId.SEND_MAIL,
+            params=params,
+        )
+
+    def send_alliance_mail(
+        self,
+        *,
+        account_id: str | None = None,
+        subject: str,
+        body: str,
+    ) -> StepRunResult:
+        """Runs one direct alliance-mail convenience wrapper over the canonical send_mail task."""
+
+        return self.send_mail(
+            account_id=self._resolve_account_id(account_id),
+            recipient_kind="alliance",
+            subject=subject,
+            body=body,
+        )
+
+    def send_personal_mail(
+        self,
+        *,
+        account_id: str | None = None,
+        subject: str,
+        body: str,
+        profile_route: dict[str, object],
+    ) -> StepRunResult:
+        """Runs one direct profile-route personal-mail convenience wrapper over send_mail."""
+
+        return self.send_mail(
+            account_id=self._resolve_account_id(account_id),
+            recipient_kind="player",
+            subject=subject,
+            body=body,
+            profile_route=profile_route,
+        )
+
+    def collect_mail(
+        self,
+        *,
+        account_id: str | None = None,
+        mailboxes: list[str],
+        archive_mode: str = "both",
+        limit_per_mailbox: int = 25,
+        only_new: bool = True,
+    ) -> StepRunResult:
+        """Runs one direct collect_mail task using current-castle semantics."""
+
+        return self.run_task(
+            account_id=self._resolve_account_id(account_id),
+            task_id=TaskId.COLLECT_MAIL,
+            params={
+                "mailboxes": list(mailboxes),
+                "archive_mode": archive_mode,
+                "limit_per_mailbox": limit_per_mailbox,
+                "only_new": only_new,
+            },
+        )
+
     def _resolve_account_id(self, account_id: str | None) -> str:
         """Returns an explicit account id or the currently active context-scoped account."""
 
@@ -319,6 +461,69 @@ def send_world_chat_message(*, account_id: str | None = None, message: str) -> S
     """Runs one direct world-chat send through the default application facade."""
 
     return _default_api().send_world_chat_message(account_id=account_id, message=message)
+
+
+def send_mail(
+    *,
+    account_id: str | None = None,
+    recipient_kind: str,
+    subject: str,
+    body: str,
+    player_name: str | None = None,
+    profile_route: dict[str, object] | None = None,
+) -> StepRunResult:
+    """Runs one direct send_mail step through the default application facade."""
+
+    return _default_api().send_mail(
+        account_id=account_id,
+        recipient_kind=recipient_kind,
+        subject=subject,
+        body=body,
+        player_name=player_name,
+        profile_route=profile_route,
+    )
+
+
+def send_alliance_mail(*, account_id: str | None = None, subject: str, body: str) -> StepRunResult:
+    """Runs one direct alliance-mail send through the default application facade."""
+
+    return _default_api().send_alliance_mail(account_id=account_id, subject=subject, body=body)
+
+
+def send_personal_mail(
+    *,
+    account_id: str | None = None,
+    subject: str,
+    body: str,
+    profile_route: dict[str, object],
+) -> StepRunResult:
+    """Runs one direct profile-route personal-mail send through the default application facade."""
+
+    return _default_api().send_personal_mail(
+        account_id=account_id,
+        subject=subject,
+        body=body,
+        profile_route=profile_route,
+    )
+
+
+def collect_mail(
+    *,
+    account_id: str | None = None,
+    mailboxes: list[str],
+    archive_mode: str = "both",
+    limit_per_mailbox: int = 25,
+    only_new: bool = True,
+) -> StepRunResult:
+    """Runs one direct collect_mail step through the default application facade."""
+
+    return _default_api().collect_mail(
+        account_id=account_id,
+        mailboxes=mailboxes,
+        archive_mode=archive_mode,
+        limit_per_mailbox=limit_per_mailbox,
+        only_new=only_new,
+    )
 
 
 def _default_api() -> AutomationApi:

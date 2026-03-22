@@ -77,24 +77,39 @@ class LiveChatWorkflowSmokeTests(unittest.TestCase):
 
     @classmethod
     def _run_live_send(cls, channel: ChatChannel) -> _LiveChatSendResult:
-        """Recovers to home city, sends one live message, and returns the final observation and timing."""
+        """Recovers to home city, executes incremental chat-send planning, and returns the final observation and timing."""
 
         before = cls._ensure_home_city(label_prefix=f"live_chat_{channel.value}_prepare")
         message = f"chat smoke {channel.value} {int(time.time())}"
         start = time.perf_counter()
-        execution = cls.action_executor.execute_actions(
-            cls.flows.send_chat_message(before, message=message, channel=channel),
-            before,
-            observe=lambda label, request=None: cls.observation_service.observe(
-                f"live_chat_{channel.value}_{label}",
-                request=request,
-            ),
-        )
+        observation = before
+        send_confirmed = False
+        for step_index in range(8):
+            actions = cls.flows.send_chat_message(observation, message=message, channel=channel)
+            execution = cls.action_executor.execute_actions(
+                actions,
+                observation,
+                observe=lambda label, request=None: cls.observation_service.observe(
+                    f"live_chat_{channel.value}_{step_index + 1}_{label}",
+                    request=request,
+                ),
+            )
+            observation = execution.observation
+            send_confirmed = any(getattr(action, "reason", "") == "send_chat_message" for action in actions)
+            if (
+                send_confirmed
+                and observation.screen_type == ScreenType.PNC_CHAT
+                and observation.active_chat_channel == channel
+                and observation.chat_draft_empty
+            ):
+                break
+        else:
+            raise AssertionError(f"Could not complete the incremental live chat send for '{channel.value}'.")
         duration_seconds = time.perf_counter() - start
         return _LiveChatSendResult(
             channel=channel,
             before=before,
-            after=execution.observation,
+            after=observation,
             duration_seconds=duration_seconds,
         )
 

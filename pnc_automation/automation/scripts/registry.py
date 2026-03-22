@@ -8,6 +8,7 @@ from pnc_automation.automation.scripts.models import PreparedRunScript, Prepared
 from pnc_automation.automation.task import BaseAutomationTask, CastleTargetPolicy, TaskId
 from pnc_automation.automation.tasks.building_upgrade_task import BuildingUpgradeTask
 from pnc_automation.automation.tasks.campaign_task import CampaignTask
+from pnc_automation.automation.tasks.collect_mail_task import CollectMailTask
 from pnc_automation.automation.tasks.ensure_game_running_task import EnsureGameRunningTask
 from pnc_automation.automation.tasks.gathering_task import GatheringTask
 from pnc_automation.automation.tasks.login_task import LoginTask
@@ -15,6 +16,7 @@ from pnc_automation.automation.tasks.popup_recovery_task import PopupRecoveryTas
 from pnc_automation.automation.tasks.refresh_castle_roster_task import RefreshCastleRosterTask
 from pnc_automation.automation.tasks.research_task import ResearchTask
 from pnc_automation.automation.tasks.select_castle_task import SelectCastleTask
+from pnc_automation.automation.tasks.send_mail_task import SendMailTask
 from pnc_automation.automation.tasks.send_chat_message_task import (
     SendAllianceChatMessageTask,
     SendWorldChatMessageTask,
@@ -115,6 +117,8 @@ def build_default_task_registry() -> TaskRegistry:
             RefreshCastleRosterTask(),
             SendAllianceChatMessageTask(),
             SendWorldChatMessageTask(),
+            SendMailTask(),
+            CollectMailTask(),
             BuildingUpgradeTask(),
             ResearchTask(),
             GatheringTask(),

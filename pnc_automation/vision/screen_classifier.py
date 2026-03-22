@@ -58,6 +58,24 @@ class ScreenClassifier:
                 ),
             ),
             ClassificationRule(
+                screen_type=ScreenType.PNC_PLAYER_TERRITORY,
+                required_all=frozenset(
+                    {
+                        UiElementId.PNC_PLAYER_TERRITORY_HEADER,
+                        UiElementId.PNC_PLAYER_TERRITORY_PLAYER_INFO_BUTTON,
+                    }
+                ),
+            ),
+            ClassificationRule(
+                screen_type=ScreenType.PNC_PLAYER_PROFILE,
+                required_all=frozenset(
+                    {
+                        UiElementId.PNC_PLAYER_PROFILE_HEADER,
+                        UiElementId.PNC_PLAYER_PROFILE_NAME_LABEL,
+                    }
+                ),
+            ),
+            ClassificationRule(
                 screen_type=ScreenType.PNC_VIP,
                 required_all=frozenset({UiElementId.PNC_VIP_HEADER}),
             ),
@@ -67,9 +85,10 @@ class ScreenClassifier:
             ),
             ClassificationRule(
                 screen_type=ScreenType.PNC_WORLD_MAP,
-                required_all=frozenset(
+                required_all=frozenset({UiElementId.PNC_WORLD_HOME_NAV}),
+                required_any=frozenset(
                     {
-                        UiElementId.PNC_WORLD_HOME_NAV,
+                        UiElementId.PNC_WORLD_COORDINATE_BAR,
                         UiElementId.PNC_WORLD_SEARCH_BUTTON,
                     }
                 ),
@@ -135,16 +154,50 @@ class ScreenClassifier:
                 ),
             ),
             ClassificationRule(
-                screen_type=ScreenType.PNC_MAIL_LIST,
-                required_all=frozenset({UiElementId.PNC_MAIL_ROW_SYSTEM_MESSAGE}),
+                screen_type=ScreenType.PNC_MAIL_COMPOSE_POPUP,
+                required_all=frozenset(
+                    {
+                        UiElementId.PNC_MAIL_COMPOSE_HEADER,
+                        UiElementId.PNC_MAIL_COMPOSE_SEND_BUTTON,
+                    }
+                ),
             ),
             ClassificationRule(
-                screen_type=ScreenType.PNC_SYSTEM_MESSAGE,
-                required_all=frozenset({UiElementId.PNC_SYSTEM_MESSAGE_MARK_AS_READ_BUTTON}),
+                screen_type=ScreenType.PNC_MAIL_THREAD,
+                required_all=frozenset(
+                    {
+                        UiElementId.PNC_MAIL_HEADER,
+                        UiElementId.PNC_MAIL_THREAD_DELETE_BUTTON,
+                    }
+                ),
+            ),
+            ClassificationRule(
+                screen_type=ScreenType.PNC_MAILBOX_LIST,
+                required_all=frozenset({UiElementId.PNC_MAIL_HEADER}),
+                required_any=frozenset(
+                    {
+                        UiElementId.PNC_MAILBOX_MARK_ALL_AS_READ_BUTTON,
+                        UiElementId.PNC_MAILBOX_MANAGE_BUTTON,
+                        UiElementId.PNC_MAILBOX_EMPTY_LABEL,
+                        UiElementId.PNC_MAIL_THREAD_ROW,
+                    }
+                ),
+            ),
+            ClassificationRule(
+                screen_type=ScreenType.PNC_MAIL_HUB,
+                required_all=frozenset({UiElementId.PNC_MAIL_ROW_PLAYER_MAIL}),
             ),
             ClassificationRule(
                 screen_type=ScreenType.PNC_ALLIANCE_HOME,
                 required_all=frozenset({UiElementId.PNC_ALLIANCE_TILE_TERRITORY}),
+            ),
+            ClassificationRule(
+                screen_type=ScreenType.PNC_ALLIANCE_MEMBER_LIST,
+                required_all=frozenset({UiElementId.PNC_ALLIANCE_MEMBER_ROW}),
+            ),
+            ClassificationRule(
+                screen_type=ScreenType.PNC_ALLIANCE_MEMBER_MANAGE_POPUP,
+                required_all=frozenset({UiElementId.PNC_ALLIANCE_MEMBER_MANAGE_PERSONAL_INFO_BUTTON}),
             ),
             ClassificationRule(
                 screen_type=ScreenType.PNC_CHAT,
@@ -160,6 +213,14 @@ class ScreenClassifier:
                         UiElementId.PNC_CHAT_TAB_ALLIANCE,
                     }
                 ),
+            ),
+            ClassificationRule(
+                screen_type=ScreenType.PNC_CHAT_PLAYER_ACTION_POPUP,
+                required_all=frozenset({UiElementId.PNC_CHAT_PLAYER_ACTION_PROFILE_BUTTON}),
+            ),
+            ClassificationRule(
+                screen_type=ScreenType.PNC_MIGHT_RANK,
+                required_all=frozenset({UiElementId.PNC_MIGHT_RANK_ROW}),
             ),
             ClassificationRule(
                 screen_type=ScreenType.PNC_DAILY_TO_DO,

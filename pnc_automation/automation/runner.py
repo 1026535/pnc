@@ -13,6 +13,7 @@ from pnc_automation.automation.scripts.models import PreparedRunScript, Prepared
 from pnc_automation.automation.scripts.registry import TaskRegistry
 from pnc_automation.automation.task import CastleTargetPolicy, TaskId, TaskResult, TaskStatus
 from pnc_automation.automation.task_context import TaskContext
+from pnc_automation.capture.mail_archive_store import MailArchiveStore
 from pnc_automation.config.castle_roster_store import CastleRosterStore
 from pnc_automation.config.models import AccountConfig, CastleIdentity, DefaultsConfig, PncAccountCastleRosterConfig
 from pnc_automation.errors import TaskVerificationError
@@ -47,7 +48,7 @@ class RunResult:
 class StepExecutionPolicy:
     """Centralizes retry and replan limits for one automation runner."""
 
-    max_replans_per_step: int = 5
+    max_replans_per_step: int = 15
     max_retries_per_step: int = 1
 
     def __post_init__(self) -> None:
@@ -87,6 +88,7 @@ class AutomationRunner:
         *,
         castle_roster_provider: Callable[[], PncAccountCastleRosterConfig | None] | None = None,
         castle_roster_store: CastleRosterStore | None = None,
+        mail_archive_store: MailArchiveStore | None = None,
     ) -> RunResult:
         """Runs the provided script for one account target."""
 
@@ -97,6 +99,7 @@ class AutomationRunner:
                 step,
                 castle_roster_provider=castle_roster_provider,
                 castle_roster_store=castle_roster_store,
+                mail_archive_store=mail_archive_store,
             )
             for step in script.steps
         ]
@@ -116,6 +119,7 @@ class AutomationRunner:
         *,
         castle_roster_provider: Callable[[], PncAccountCastleRosterConfig | None] | None,
         castle_roster_store: CastleRosterStore | None,
+        mail_archive_store: MailArchiveStore | None,
     ) -> StepRunResult:
         """Executes one script step until it succeeds or fails."""
 
@@ -126,11 +130,13 @@ class AutomationRunner:
             before=before,
             castle_roster_provider=castle_roster_provider,
             castle_roster_store=castle_roster_store,
+            mail_archive_store=mail_archive_store,
         )
         execution = self._execute_step_loop(
             account=account,
             castle_roster_provider=castle_roster_provider,
             castle_roster_store=castle_roster_store,
+            mail_archive_store=mail_archive_store,
             step=step.script_step,
             parsed_params=step.parsed_params,
             target_castle=step.castle,
@@ -153,6 +159,7 @@ class AutomationRunner:
         before: Observation,
         castle_roster_provider: Callable[[], PncAccountCastleRosterConfig | None] | None,
         castle_roster_store: CastleRosterStore | None,
+        mail_archive_store: MailArchiveStore | None,
     ) -> Observation:
         """Runs the canonical synthetic pre-step castle alignment when one target was requested."""
 
@@ -164,6 +171,7 @@ class AutomationRunner:
             account=account,
             castle_roster_provider=castle_roster_provider,
             castle_roster_store=castle_roster_store,
+            mail_archive_store=mail_archive_store,
             step=synthetic_step,
             parsed_params=select_castle_task.parse_params({}),
             target_castle=step.castle,
@@ -178,6 +186,7 @@ class AutomationRunner:
         account: AccountConfig,
         castle_roster_provider: Callable[[], PncAccountCastleRosterConfig | None] | None,
         castle_roster_store: CastleRosterStore | None,
+        mail_archive_store: MailArchiveStore | None,
         step: ScriptStep,
         parsed_params: Any,
         target_castle: CastleIdentity | None,
@@ -191,6 +200,7 @@ class AutomationRunner:
             account=account,
             castle_roster_provider=castle_roster_provider,
             castle_roster_store=castle_roster_store,
+            mail_archive_store=mail_archive_store,
             step=step,
             parsed_params=parsed_params,
             target_castle=target_castle,
@@ -205,6 +215,7 @@ class AutomationRunner:
                     current_before,
                     account=account,
                     castle_roster_store=castle_roster_store,
+                    mail_archive_store=mail_archive_store,
                 )
             if not task.is_applicable(context, current_before):
                 raise TaskVerificationError(
@@ -267,6 +278,7 @@ class AutomationRunner:
         account: AccountConfig,
         castle_roster_provider: Callable[[], PncAccountCastleRosterConfig | None] | None,
         castle_roster_store: CastleRosterStore | None,
+        mail_archive_store: MailArchiveStore | None,
         step: ScriptStep,
         parsed_params: Any,
         target_castle: CastleIdentity | None,
@@ -286,6 +298,7 @@ class AutomationRunner:
             logger=logging.LoggerAdapter(self.logger.logger, extra=logger_extra),
             target_castle=target_castle,
             castle_roster_store=castle_roster_store,
+            mail_archive_store=mail_archive_store,
         )
 
     def _ensure_no_blocking_popup(
@@ -294,6 +307,7 @@ class AutomationRunner:
         *,
         account: AccountConfig,
         castle_roster_store: CastleRosterStore | None,
+        mail_archive_store: MailArchiveStore | None,
     ) -> Observation:
         """Executes centralized popup recovery ahead of non-popup tasks."""
 
@@ -305,6 +319,7 @@ class AutomationRunner:
             account=account,
             castle_roster_provider=None,
             castle_roster_store=castle_roster_store,
+            mail_archive_store=mail_archive_store,
             step=popup_step,
             parsed_params=popup_task.parse_params({}),
             target_castle=None,

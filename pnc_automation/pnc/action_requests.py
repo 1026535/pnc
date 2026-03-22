@@ -99,3 +99,7 @@ class SwipeAction(ActionRequest):
     direction: str = "up"
     distance_ratio: float = 0.5
     duration_ms: int = 300
+    start_x_ratio: float | None = None
+    start_y_ratio: float | None = None
+    end_x_ratio: float | None = None
+    end_y_ratio: float | None = None

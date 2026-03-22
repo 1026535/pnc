@@ -84,6 +84,20 @@ class ScreenClassifierTests(unittest.TestCase):
 
         self.assertEqual(screen_type, ScreenType.PNC_CHAT)
 
+    def test_classify_world_map_from_world_home_nav_and_coordinate_bar(self) -> None:
+        """Recognizes world map from the return-home nav plus the coordinate bar when search is absent."""
+
+        classifier = ScreenClassifier()
+
+        screen_type = classifier.classify(
+            {
+                UiElementId.PNC_WORLD_HOME_NAV: make_visible(UiElementId.PNC_WORLD_HOME_NAV),
+                UiElementId.PNC_WORLD_COORDINATE_BAR: make_visible(UiElementId.PNC_WORLD_COORDINATE_BAR),
+            }
+        )
+
+        self.assertEqual(screen_type, ScreenType.PNC_WORLD_MAP)
+
 
 if __name__ == "__main__":
     unittest.main()

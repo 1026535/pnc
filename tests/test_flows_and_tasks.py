@@ -8,9 +8,10 @@ from collections.abc import Callable
 from pathlib import Path
 
 from pnc_automation.automation.scripts.models import ScriptStep
-from pnc_automation.automation.task import TaskId, TaskResult
+from pnc_automation.automation.task import TaskId, TaskResult, TaskStatus
 from pnc_automation.automation.task_context import TaskContext
 from pnc_automation.automation.tasks.building_upgrade_task import BuildingUpgradeTask
+from pnc_automation.automation.tasks.ensure_game_running_task import EnsureGameRunningTask
 from pnc_automation.automation.tasks.gathering_task import GatheringTask
 from pnc_automation.automation.tasks.login_task import LoginTask
 from pnc_automation.automation.tasks.refresh_castle_roster_task import RefreshCastleRosterTask
@@ -149,6 +150,7 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertEqual(len(actions), 1)
         self.assertIsInstance(actions[0], TapAction)
         self.assertEqual(actions[0].selector_id, UiElementId.PNC_WORLD_HOME_NAV)
+        self.assertEqual(actions[0].follow_up_request, ObservationRequest.home_city_follow_up(ScreenType.PNC_WORLD_MAP))
 
     def test_ensure_home_city_from_alliance_join_uses_back_navigation(self) -> None:
         """Treats the join-alliance landing as a back-navigable root-adjacent screen."""
@@ -160,6 +162,7 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertEqual(len(actions), 1)
         self.assertIsInstance(actions[0], KeyEventAction)
         self.assertEqual(actions[0].key_code, "KEYCODE_BACK")
+        self.assertEqual(actions[0].follow_up_request, ObservationRequest.home_city_follow_up(ScreenType.PNC_ALLIANCE_JOIN))
 
     def test_ensure_home_city_from_castle_selection_uses_back_navigation(self) -> None:
         """Treats the Manage Char roster as a back-navigable root-adjacent screen."""
@@ -197,8 +200,50 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertIsInstance(actions[0], TapAction)
         self.assertEqual(actions[0].selector_id, UiElementId.PNC_CHAT_SHORTCUT)
 
+    def test_recover_unknown_game_screen_uses_back_without_relaunching(self) -> None:
+        """Uses one in-game back increment for unknown endpoint states instead of restarting the app."""
+
+        actions = self.flows.recover_unknown_game_screen(
+            make_observation(ScreenType.UNKNOWN),
+            reason="recover_unknown_endpoint",
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], KeyEventAction)
+        self.assertEqual(actions[0].key_code, "KEYCODE_BACK")
+        self.assertEqual(actions[0].reason, "recover_unknown_endpoint")
+
+    def test_ensure_game_running_waits_on_unknown_once_launch_is_in_progress(self) -> None:
+        """Keeps waiting on the launch splash instead of bouncing back through Android home."""
+
+        task = EnsureGameRunningTask()
+        context = self._make_context(params=None)
+        context.runtime_state["ensure_game_running_launch_started"] = True
+        observation = make_observation(ScreenType.UNKNOWN)
+
+        actions = task.plan(context, observation)
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], WaitAction)
+        self.assertEqual(actions[0].reason, "wait_for_pnc_launch")
+
+    def test_ensure_game_running_replans_when_launch_lands_on_unknown_splash(self) -> None:
+        """Treats an unknown post-launch splash as in-progress foregrounding instead of immediate failure."""
+
+        task = EnsureGameRunningTask()
+        context = self._make_context(params=None)
+
+        result = task.verify(
+            context,
+            make_observation(ScreenType.ANDROID_HOME),
+            make_observation(ScreenType.UNKNOWN),
+        )
+
+        self.assertEqual(result.status, TaskStatus.REPLAN)
+        self.assertTrue(context.runtime_state["ensure_game_running_launch_started"])
+
     def test_send_chat_message_from_home_city_opens_chat_selects_channel_and_sends(self) -> None:
-        """Builds the full reusable chat-send action sequence from the home-city root."""
+        """Uses one chat-opening increment from home so the chat origin is observed before sending."""
 
         observation = make_observation(
             ScreenType.PNC_HOME_CITY,
@@ -211,25 +256,10 @@ class FlowAndTaskTests(unittest.TestCase):
             channel=ChatChannel.ALLIANCE,
         )
 
-        self.assertEqual(len(actions), 4)
+        self.assertEqual(len(actions), 1)
         self.assertIsInstance(actions[0], TapAction)
         self.assertEqual(actions[0].selector_id, UiElementId.PNC_CHAT_SHORTCUT)
         self.assertTrue(actions[0].observe_after)
-        self.assertIsInstance(actions[1], SelectChatChannelAction)
-        self.assertEqual(actions[1].channel, ChatChannel.ALLIANCE)
-        self.assertTrue(actions[1].observe_after)
-        self.assertEqual(actions[1].follow_up_request, ObservationRequest.source_screen_retry(ScreenType.PNC_CHAT))
-        self.assertEqual(actions[1].timing_profile, ActionTimingProfile.CHAT)
-        self.assertIsInstance(actions[2], InputTextAction)
-        self.assertEqual(actions[2].selector_id, UiElementId.PNC_CHAT_INPUT_FIELD)
-        self.assertEqual(actions[2].text, "hello")
-        self.assertTrue(actions[2].replace_existing)
-        self.assertEqual(actions[2].timing_profile, ActionTimingProfile.CHAT)
-        self.assertIsInstance(actions[3], TapAction)
-        self.assertEqual(actions[3].selector_id, UiElementId.PNC_CHAT_SEND_BUTTON)
-        self.assertTrue(actions[3].observe_after)
-        self.assertEqual(actions[3].follow_up_request, ObservationRequest.chat_send_follow_up())
-        self.assertEqual(actions[3].timing_profile, ActionTimingProfile.CHAT)
 
     def test_send_chat_message_maps_world_channel_to_kingdom_tab(self) -> None:
         """Maps the public world-channel enum to the in-game Kingdom chat tab."""
@@ -242,7 +272,7 @@ class FlowAndTaskTests(unittest.TestCase):
             channel=ChatChannel.WORLD,
         )
 
-        self.assertEqual(len(actions), 3)
+        self.assertEqual(len(actions), 1)
         self.assertIsInstance(actions[0], SelectChatChannelAction)
         self.assertEqual(actions[0].channel, ChatChannel.WORLD)
         self.assertTrue(actions[0].observe_after)
@@ -268,7 +298,7 @@ class FlowAndTaskTests(unittest.TestCase):
         )
 
     def test_send_chat_message_preserves_runtime_channel_skip_when_chat_is_already_active(self) -> None:
-        """Plans the shared runtime channel-selection action even when the current chat tab is already active."""
+        """Skips channel selection once chat is already on the requested tab and goes straight to send actions."""
 
         observation = make_observation(
             ScreenType.PNC_CHAT,
@@ -282,11 +312,16 @@ class FlowAndTaskTests(unittest.TestCase):
             channel=ChatChannel.ALLIANCE,
         )
 
-        self.assertEqual(len(actions), 3)
-        self.assertIsInstance(actions[0], SelectChatChannelAction)
-        self.assertEqual(actions[0].channel, ChatChannel.ALLIANCE)
-        self.assertTrue(actions[0].observe_after)
-        self.assertEqual(actions[0].follow_up_request, ObservationRequest.source_screen_retry(ScreenType.PNC_CHAT))
+        self.assertEqual(len(actions), 2)
+        self.assertIsInstance(actions[0], InputTextAction)
+        self.assertEqual(actions[0].selector_id, UiElementId.PNC_CHAT_INPUT_FIELD)
+        self.assertEqual(actions[0].text, "hello")
+        self.assertTrue(actions[0].replace_existing)
+        self.assertEqual(actions[0].timing_profile, ActionTimingProfile.CHAT)
+        self.assertIsInstance(actions[1], TapAction)
+        self.assertEqual(actions[1].selector_id, UiElementId.PNC_CHAT_SEND_BUTTON)
+        self.assertEqual(actions[1].follow_up_request, ObservationRequest.chat_send_follow_up())
+        self.assertEqual(actions[1].timing_profile, ActionTimingProfile.CHAT)
 
     def test_send_alliance_chat_message_task_parses_one_required_message(self) -> None:
         """Accepts only the single script-facing message parameter for alliance chat sends."""
@@ -348,13 +383,34 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertIsInstance(actions[0], WaitAction)
         self.assertTrue(actions[0].observe_after)
 
+    def test_send_alliance_chat_message_task_uses_shared_unknown_recovery_increment(self) -> None:
+        """Recovers unknown in-game states with the shared back action before chat navigation resumes."""
+
+        task = SendAllianceChatMessageTask()
+        context = self._make_context(params=ChatMessageTaskParams(message="hello alliance"))
+
+        actions = task.plan(context, make_observation(ScreenType.UNKNOWN))
+
+        self.assertEqual(
+            actions,
+            self.flows.recover_unknown_game_screen(
+                make_observation(ScreenType.UNKNOWN),
+                reason="recover_unknown_alliance_chat_screen",
+            ),
+        )
+
     def test_send_alliance_chat_message_task_verifies_a_successful_send(self) -> None:
         """Succeeds only when the final observation proves the expected alliance chat state."""
 
         task = SendAllianceChatMessageTask()
         result = task.verify(
             self._make_context(params=ChatMessageTaskParams(message="hello alliance")),
-            make_observation(ScreenType.PNC_HOME_CITY),
+            make_observation(
+                ScreenType.PNC_CHAT,
+                active_chat_channel=ChatChannel.ALLIANCE,
+                chat_draft_empty=False,
+                chat_draft_text="hello alliance",
+            ),
             make_observation(
                 ScreenType.PNC_CHAT,
                 active_chat_channel=ChatChannel.ALLIANCE,
@@ -375,6 +431,27 @@ class FlowAndTaskTests(unittest.TestCase):
         )
 
         self.assertEqual(result.status.value, "replan")
+
+    def test_send_world_chat_message_task_replans_after_reaching_the_requested_channel(self) -> None:
+        """Keeps replanning after channel selection because reaching the right chat tab is not the same as sending."""
+
+        task = SendWorldChatMessageTask()
+        result = task.verify(
+            self._make_context(params=ChatMessageTaskParams(message="hello world")),
+            make_observation(
+                ScreenType.PNC_CHAT,
+                active_chat_channel=ChatChannel.ALLIANCE,
+                chat_draft_empty=True,
+            ),
+            make_observation(
+                ScreenType.PNC_CHAT,
+                active_chat_channel=ChatChannel.WORLD,
+                chat_draft_empty=True,
+            ),
+        )
+
+        self.assertEqual(result.status.value, "replan")
+        self.assertIn("can now send", result.message)
 
     def test_send_world_chat_message_task_does_not_report_success_during_recovery(self) -> None:
         """Keeps replanning when recovery lands on an already-open chat instead of claiming the message was sent."""
@@ -398,7 +475,12 @@ class FlowAndTaskTests(unittest.TestCase):
         task = SendWorldChatMessageTask()
         result = task.verify(
             self._make_context(params=ChatMessageTaskParams(message="hello world")),
-            make_observation(ScreenType.PNC_HOME_CITY),
+            make_observation(
+                ScreenType.PNC_CHAT,
+                active_chat_channel=ChatChannel.WORLD,
+                chat_draft_empty=False,
+                chat_draft_text="hello world",
+            ),
             make_observation(
                 ScreenType.PNC_CHAT,
                 active_chat_channel=ChatChannel.WORLD,

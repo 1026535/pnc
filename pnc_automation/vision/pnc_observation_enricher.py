@@ -11,11 +11,13 @@ from PIL import Image
 from pnc_automation.config.models import CastleIdentity
 from pnc_automation.errors import SelectorResolutionError
 from pnc_automation.pnc.chat import ChatChannel
+from pnc_automation.pnc.mail import MailboxType, compose_text_field_selector_ids
 from pnc_automation.pnc.observation import (
     Bounds,
     CurrentCastleEvidenceKind,
     DetectedListEntry,
     ListEntryKind,
+    ObservedTextFieldState,
     VisibleElement,
     VisibleElementSourceKind,
 )
@@ -26,7 +28,7 @@ from pnc_automation.vision.observation_request import ObservationRequest
 from pnc_automation.vision.pnc_ocr_capabilities import can_attempt_screen_family_ocr
 from pnc_automation.vision.ocr_service import OcrLine, OcrService
 from pnc_automation.vision.screen_classifier import ScreenEvidence
-from pnc_automation.vision.selectors import SelectorRegistry
+from pnc_automation.vision.selectors import Region, SelectorRegistry
 from pnc_automation.vision.text_anchors import (
     DetectedTextAnchor,
     TextAnchorDetector,
@@ -127,6 +129,7 @@ _HOME_CITY_EVIDENCE_SELECTOR_IDS = frozenset(
         UiElementId.PNC_HOME_TOP_RESOURCE_DIAMOND,
     }
 )
+_WORLD_MAP_COORDINATE_TOKEN_PATTERN = re.compile(r"[XY]\d{1,4}")
 _POPUP_PRIMARY_ACTION_ANCHOR_IDS = frozenset(
     {
         TextAnchorId.LABEL_CONFIRM,
@@ -200,6 +203,66 @@ _CHAT_ALLIANCE_TEXT = "ALLIANCE"
 _CHAT_EMPTY_INPUT_PLACEHOLDER_TEXT = "PLEASEENTERCONTENT"
 _CHAT_ACTIVE_TAB_MIN_WARMTH = 120
 _CHAT_ACTIVE_TAB_MIN_DELTA = 80
+_MAIL_HUB_CATEGORY_TEXTS = frozenset(
+    {
+        "SYSTEMMESSAGE",
+        "PLAYERMAIL",
+        "ALLIANCEMAIL",
+        "BATTLELOG",
+        "HUNTREPORT",
+        "GATHERINGREPORT",
+    }
+)
+_MAILBOX_HEADER_TO_TYPE = {
+    "PLAYERMAIL": MailboxType.PLAYER,
+    "ALLIANCEMAIL": MailboxType.ALLIANCE,
+}
+_MAILBOX_EMPTY_TEXT = "NOREPORTYET"
+_MAIL_COMPOSE_HEADER_TEXTS = frozenset({"EDITMAIL", "COMPOSEMAIL"})
+_MAIL_COMPOSE_TARGET_PLACEHOLDERS = frozenset({"ENTERPLAYERNAME", "TO"})
+_MAIL_COMPOSE_SUBJECT_PLACEHOLDERS = frozenset({"ENTERTITLE", "SUBJECT", "TITLE"})
+_MAIL_COMPOSE_BODY_PLACEHOLDERS = frozenset({"ENTERCONTENT", "CONTENT", "MESSAGE", "CANENTERUPTO1000CHARACTERS"})
+_PLAYER_TERRITORY_HEADER_TEXTS = frozenset({"PLAYERTERRITORY", "TERRITORY"})
+_PLAYER_PROFILE_HEADER_TEXTS = frozenset({"PLAYERPROFILE", "PLAYERINFO", "PERSONALINFO"})
+_PLAYER_PROFILE_LAYOUT_SUPPORT_TEXTS = frozenset(
+    {
+        "GEAR",
+        "GEM",
+        "SAURGEM",
+        "WARSIGIL",
+        "SAURGIL",
+        "LORDINFO",
+        "ALLIANCEINFO",
+        "SETTINGS",
+        "ACHIEVEMENTS",
+    }
+)
+_ALLIANCE_HOME_HEADER_TEXTS = frozenset({"ALLIANCE"})
+_ALLIANCE_HOME_TILE_SELECTOR_BY_TEXT = {
+    "ALLIANCETERRITORY": UiElementId.PNC_ALLIANCE_TILE_TERRITORY,
+    "ALLIANCEWAR": UiElementId.PNC_ALLIANCE_TILE_WAR,
+    "ALLIANCETECH": UiElementId.PNC_ALLIANCE_TILE_TECH,
+    "ALLIANCETREASURY": UiElementId.PNC_ALLIANCE_TILE_TREASURY,
+    "RANK": UiElementId.PNC_ALLIANCE_TILE_RANK,
+    "ALLIANCEEVENT": UiElementId.PNC_ALLIANCE_TILE_EVENT,
+    "ALLIANCEMEMBER": UiElementId.PNC_ALLIANCE_TILE_MEMBER,
+}
+_ALLIANCE_HOME_BOTTOM_TAB_SELECTOR_BY_TEXT = {
+    "ALLIANCESHOP": UiElementId.PNC_ALLIANCE_BOTTOM_TAB_SHOP,
+    "ALLIANCEMAIL": UiElementId.PNC_ALLIANCE_BOTTOM_TAB_MAIL,
+    "ALLIANCEHELP": UiElementId.PNC_ALLIANCE_BOTTOM_TAB_HELP,
+    "OPERATIONS": UiElementId.PNC_ALLIANCE_BOTTOM_TAB_OPERATIONS,
+}
+_ALLIANCE_MEMBER_HEADER_TEXTS = frozenset({"MEMBER", "ALLIANCEMEMBER", "ALLIANCEMEMBERS"})
+_ALLIANCE_MEMBER_MANAGE_HEADER_TEXTS = frozenset({"MANAGE", "MEMBERMANAGE"})
+_ALLIANCE_MEMBER_ROW_ACTION_TEXTS = frozenset({"MANAGE", "APPOINT", "DEPOSE", "PENDING"})
+_MIGHT_RANK_HEADER_TEXTS = frozenset({"MIGHTRANK", "RANK"})
+_CHAT_PLAYER_ACTION_PROFILE_TEXTS = frozenset({"PROFILE", "PLAYERPROFILE"})
+_PERSONAL_INFO_TEXTS = frozenset({"PERSONALINFO", "PLAYERINFO"})
+_DELETE_TEXTS = frozenset({"DELETE", "REMOVE"})
+_SEND_TEXTS = frozenset({"SEND"})
+_PLAYER_INFO_BUTTON_TEXTS = frozenset({"PLAYERINFO", "INFO"})
+_MAIL_BUTTON_TEXTS = frozenset({"MAIL"})
 _RESEARCH_TREE_SUPPORT_TOKENS = frozenset(
     {
         "ATK",
@@ -271,13 +334,18 @@ class PncObservationEnricher:
             screen_type=screen_type,
             request=request,
         )
-        if chat_geometry is not None:
+        if chat_geometry is not None and not request.include_popup_guard and not request.include_loading_guard:
             return chat_geometry
         if not request.requires_ocr(screen_type):
             return ObservationAdditions()
         ocr_result = self.ocr_service.read_result(image)
         lines = tuple(sorted(ocr_result.lines, key=lambda line: (line.bounds.y, line.bounds.x)))
         anchors = self.text_anchor_detector.detect(ocr_result)
+        alliance_status_banner = _build_alliance_home_status_banner_additions(
+            image=image,
+            lines=lines,
+            request=request,
+        )
         if request.include_popup_guard:
             popup = _build_popup_additions(image=image, lines=lines, anchors=anchors)
             if popup is not None:
@@ -307,6 +375,20 @@ class PncObservationEnricher:
             lord_info = _build_lord_info_additions(image=image, lines=lines)
             if lord_info is not None:
                 return lord_info
+        if request.allows_screen(ScreenType.PNC_PLAYER_TERRITORY) and can_attempt_screen_family_ocr(
+            request_screen=ScreenType.PNC_PLAYER_TERRITORY,
+            observed_screen=screen_type,
+        ):
+            player_territory = _build_player_territory_additions(image=image, lines=lines)
+            if player_territory is not None:
+                return player_territory
+        if request.allows_screen(ScreenType.PNC_PLAYER_PROFILE) and can_attempt_screen_family_ocr(
+            request_screen=ScreenType.PNC_PLAYER_PROFILE,
+            observed_screen=screen_type,
+        ):
+            player_profile = _build_player_profile_additions(image=image, lines=lines)
+            if player_profile is not None:
+                return player_profile
         if request.allows_screen(ScreenType.PNC_VIP) and can_attempt_screen_family_ocr(
             request_screen=ScreenType.PNC_VIP,
             observed_screen=screen_type,
@@ -338,6 +420,17 @@ class PncObservationEnricher:
             building_detail = _build_building_detail_additions(image=image, lines=lines, anchors=anchors)
             if building_detail is not None:
                 return building_detail
+        if request.allows_screen(ScreenType.PNC_WORLD_MAP) and can_attempt_screen_family_ocr(
+            request_screen=ScreenType.PNC_WORLD_MAP,
+            observed_screen=screen_type,
+        ):
+            world_map = _build_world_map_additions(
+                image=image,
+                lines=lines,
+                anchors=anchors,
+            )
+            if world_map is not None:
+                return world_map
         if request.allows_screen(ScreenType.PNC_HOME_CITY) and can_attempt_screen_family_ocr(
             request_screen=ScreenType.PNC_HOME_CITY,
             observed_screen=screen_type,
@@ -363,6 +456,45 @@ class PncObservationEnricher:
             alliance_join = _build_alliance_join_additions(image=image, lines=lines)
             if alliance_join is not None:
                 return alliance_join
+        if request.allows_screen(ScreenType.PNC_MAIL_COMPOSE_POPUP) and can_attempt_screen_family_ocr(
+            request_screen=ScreenType.PNC_MAIL_COMPOSE_POPUP,
+            observed_screen=screen_type,
+        ):
+            mail_compose = self._build_mail_compose_additions(
+                image=image,
+                lines=lines,
+                request=request,
+            )
+            if mail_compose is not None:
+                return mail_compose
+        if request.allows_screen(ScreenType.PNC_MAIL_THREAD) and can_attempt_screen_family_ocr(
+            request_screen=ScreenType.PNC_MAIL_THREAD,
+            observed_screen=screen_type,
+        ):
+            mail_thread = _build_mail_thread_additions(image=image, lines=lines)
+            if mail_thread is not None:
+                return mail_thread
+        if request.allows_screen(ScreenType.PNC_MAILBOX_LIST) and can_attempt_screen_family_ocr(
+            request_screen=ScreenType.PNC_MAILBOX_LIST,
+            observed_screen=screen_type,
+        ):
+            mailbox = _build_mailbox_additions(image=image, lines=lines)
+            if mailbox is not None:
+                return mailbox
+        if request.allows_screen(ScreenType.PNC_ALLIANCE_HOME) and can_attempt_screen_family_ocr(
+            request_screen=ScreenType.PNC_ALLIANCE_HOME,
+            observed_screen=screen_type,
+        ):
+            alliance_home = _build_alliance_home_additions(image=image, lines=lines)
+            if alliance_home is not None:
+                return alliance_home
+        if request.allows_screen(ScreenType.PNC_MAIL_HUB) and can_attempt_screen_family_ocr(
+            request_screen=ScreenType.PNC_MAIL_HUB,
+            observed_screen=screen_type,
+        ):
+            mail_hub = _build_mail_hub_additions(image=image, lines=lines)
+            if mail_hub is not None:
+                return mail_hub
         if request.allows_screen(ScreenType.PNC_CHAT) and can_attempt_screen_family_ocr(
             request_screen=ScreenType.PNC_CHAT,
             observed_screen=screen_type,
@@ -374,6 +506,27 @@ class PncObservationEnricher:
             )
             if chat is not None:
                 return chat
+        if request.allows_screen(ScreenType.PNC_CHAT_PLAYER_ACTION_POPUP) and can_attempt_screen_family_ocr(
+            request_screen=ScreenType.PNC_CHAT_PLAYER_ACTION_POPUP,
+            observed_screen=screen_type,
+        ):
+            chat_player_actions = _build_chat_player_action_popup_additions(image=image, lines=lines)
+            if chat_player_actions is not None:
+                return chat_player_actions
+        if request.allows_screen(ScreenType.PNC_ALLIANCE_MEMBER_LIST) and can_attempt_screen_family_ocr(
+            request_screen=ScreenType.PNC_ALLIANCE_MEMBER_LIST,
+            observed_screen=screen_type,
+        ):
+            alliance_members = _build_alliance_member_list_additions(image=image, lines=lines)
+            if alliance_members is not None:
+                return alliance_members
+        if request.allows_screen(ScreenType.PNC_ALLIANCE_MEMBER_MANAGE_POPUP) and can_attempt_screen_family_ocr(
+            request_screen=ScreenType.PNC_ALLIANCE_MEMBER_MANAGE_POPUP,
+            observed_screen=screen_type,
+        ):
+            alliance_member_manage = _build_alliance_member_manage_popup_additions(image=image, lines=lines)
+            if alliance_member_manage is not None:
+                return alliance_member_manage
         if request.allows_screen(ScreenType.PNC_DAILY_TO_DO) and can_attempt_screen_family_ocr(
             request_screen=ScreenType.PNC_DAILY_TO_DO,
             observed_screen=screen_type,
@@ -381,6 +534,13 @@ class PncObservationEnricher:
             daily_to_do = _build_daily_to_do_additions(image=image, lines=lines)
             if daily_to_do is not None:
                 return daily_to_do
+        if request.allows_screen(ScreenType.PNC_MIGHT_RANK) and can_attempt_screen_family_ocr(
+            request_screen=ScreenType.PNC_MIGHT_RANK,
+            observed_screen=screen_type,
+        ):
+            might_rank = _build_might_rank_additions(image=image, lines=lines)
+            if might_rank is not None:
+                return might_rank
         if request.allows_screen(ScreenType.PNC_ACADEMY) and can_attempt_screen_family_ocr(
             request_screen=ScreenType.PNC_ACADEMY,
             observed_screen=screen_type,
@@ -399,10 +559,10 @@ class PncObservationEnricher:
             request_screen=ScreenType.PNC_CASTLE_SELECTION,
             observed_screen=screen_type,
         ):
-            return ObservationAdditions()
+            return ObservationAdditions() if alliance_status_banner is None else alliance_status_banner
         entries = _extract_castle_entries(image=image, lines=lines, anchors=anchors)
         if not _looks_like_castle_selection(anchors, entries):
-            return ObservationAdditions()
+            return ObservationAdditions() if alliance_status_banner is None else alliance_status_banner
 
         visible_elements_by_id: dict[UiElementId, VisibleElement] = {}
         if entries:
@@ -462,6 +622,7 @@ class PncObservationEnricher:
         return ObservationAdditions(
             screen_evidence=(ScreenEvidence(ScreenType.PNC_CHAT, "geometry_chat_overlay"),),
             active_chat_channel=chat_state.active_chat_channel,
+            text_field_states=chat_state.text_field_states,
             chat_draft_empty=chat_state.chat_draft_empty,
             chat_draft_text=chat_state.chat_draft_text,
         )
@@ -481,8 +642,10 @@ class PncObservationEnricher:
         chat_state = self._build_proven_chat_state_additions(image=image, request=request)
         return ObservationAdditions(
             visible_elements=chat.visible_elements,
+            list_entries=_extract_chat_message_entries(image=image, lines=lines),
             screen_evidence=chat.screen_evidence,
             active_chat_channel=chat_state.active_chat_channel,
+            text_field_states=chat_state.text_field_states,
             chat_draft_empty=chat_state.chat_draft_empty,
             chat_draft_text=chat_state.chat_draft_text,
         )
@@ -507,45 +670,941 @@ class PncObservationEnricher:
                 kingdom_region=kingdom_region,
                 alliance_region=alliance_region,
             )
-        chat_draft_state = self._read_chat_draft_state(
+        chat_draft_state = self._read_text_field_state(
             image=image,
-            input_region=input_region,
+            selector_id=UiElementId.PNC_CHAT_INPUT_FIELD,
+            region=input_region,
+            empty_placeholders=frozenset({_CHAT_EMPTY_INPUT_PLACEHOLDER_TEXT}),
         )
         return ObservationAdditions(
             active_chat_channel=active_chat_channel,
-            chat_draft_empty=chat_draft_state[0],
-            chat_draft_text=chat_draft_state[1],
+            text_field_states={UiElementId.PNC_CHAT_INPUT_FIELD: chat_draft_state},
+            chat_draft_empty=chat_draft_state.empty,
+            chat_draft_text=chat_draft_state.text,
         )
 
-    def _read_chat_draft_state(
+    def _build_mail_compose_additions(
         self,
         *,
         image: Image.Image,
-        input_region: object,
-    ) -> tuple[bool | None, str | None]:
-        """Returns the current reusable chat draft state from the shared input region OCR."""
+        lines: tuple[OcrLine, ...],
+        request: ObservationRequest,
+    ) -> ObservationAdditions | None:
+        """Returns OCR-backed compose-popup evidence plus shared text-field state."""
 
-        raw_text = self.ocr_service.read_text(image, input_region).strip()
+        del request
+        if self.selector_registry is None:
+            return None
+        header_line = _find_header_line(lines=lines, header_texts=_MAIL_COMPOSE_HEADER_TEXTS, max_y=int(image.height * 0.35))
+        send_line = _find_first_line_in_texts(lines=lines, texts=_SEND_TEXTS, min_y=int(image.height * 0.6))
+        if header_line is None:
+            return None
+        visible_elements: dict[UiElementId, VisibleElement] = {}
+        text_field_states: dict[UiElementId, ObservedTextFieldState] = {}
+        for selector_id in compose_text_field_selector_ids():
+            text_field_states[selector_id] = self._build_observed_text_field_state(
+                image=image,
+                selector_id=selector_id,
+            )
+            visible_elements[selector_id] = self._materialize_selector_visible(selector_id=selector_id, image=image)
+        for selector_id in (
+            UiElementId.PNC_MAIL_COMPOSE_CLOSE_BUTTON,
+            UiElementId.PNC_MAIL_COMPOSE_SEND_BUTTON,
+        ):
+            try:
+                visible_elements[selector_id] = self._materialize_selector_visible(selector_id=selector_id, image=image)
+            except SelectorResolutionError:
+                continue
+        if header_line is not None:
+            visible_elements[UiElementId.PNC_MAIL_COMPOSE_HEADER] = _make_visible_from_line(
+                selector_id=UiElementId.PNC_MAIL_COMPOSE_HEADER,
+                line=header_line,
+            )
+        if send_line is not None:
+            visible_elements[UiElementId.PNC_MAIL_COMPOSE_SEND_BUTTON] = _make_visible_from_line(
+                selector_id=UiElementId.PNC_MAIL_COMPOSE_SEND_BUTTON,
+                line=send_line,
+            )
+        return ObservationAdditions(
+            visible_elements=visible_elements,
+            screen_evidence=(ScreenEvidence(ScreenType.PNC_MAIL_COMPOSE_POPUP, "ocr_mail_compose_popup"),),
+            text_field_states=text_field_states,
+        )
+
+    def _build_observed_text_field_state(
+        self,
+        *,
+        image: Image.Image,
+        selector_id: UiElementId,
+    ) -> ObservedTextFieldState:
+        """Builds the shared text-field state for one selector-backed OCR region."""
+
+        region = self._require_selector_region(selector_id, image=image)
+        return self._read_text_field_state(
+            image=image,
+            selector_id=selector_id,
+            region=region,
+            empty_placeholders=_empty_text_placeholders(selector_id),
+        )
+
+    def _read_text_field_state(
+        self,
+        *,
+        image: Image.Image,
+        selector_id: UiElementId,
+        region: object,
+        empty_placeholders: frozenset[str],
+    ) -> ObservedTextFieldState:
+        """Reads one selector-backed text region into the shared observed field-state model."""
+
+        raw_text = self.ocr_service.read_text(image, region).strip()
         normalized_text = normalize_ocr_text(raw_text)
-        if _is_empty_chat_draft_text(normalized_text):
-            return True, None
-        return False, raw_text
+        if normalized_text == "" or normalized_text in empty_placeholders or _is_empty_chat_draft_text(normalized_text):
+            return ObservedTextFieldState(selector_id=selector_id, text=None, empty=True)
+        return ObservedTextFieldState(selector_id=selector_id, text=raw_text, empty=False)
 
-    def _require_chat_region(self, selector_id: UiElementId, *, image: Image.Image) -> object:
-        """Materializes one shared chat selector region from the canonical registry."""
+    def _materialize_selector_visible(self, *, selector_id: UiElementId, image: Image.Image) -> VisibleElement:
+        """Materializes one geometry-backed visible selector from the shared registry."""
 
         if self.selector_registry is None:
             raise SelectorResolutionError(
-                "Chat-state extraction requires the shared selector registry.",
+                "Selector materialization requires the shared selector registry.",
                 selector_id=selector_id,
             )
         selector = self.selector_registry.require(selector_id)
         if selector.relative_bounds is None:
             raise SelectorResolutionError(
-                "Chat geometry enrichment requires relative bounds for the requested selector.",
+                "Selector materialization requires normalized relative bounds.",
+                selector_id=selector_id,
+            )
+        return selector.relative_bounds.materialize(selector_id=selector_id, image_size=image.size)
+
+    def _require_chat_region(self, selector_id: UiElementId, *, image: Image.Image) -> object:
+        """Materializes one shared chat selector region from the canonical registry."""
+
+        return self._require_selector_region(selector_id, image=image)
+
+    def _require_selector_region(self, selector_id: UiElementId, *, image: Image.Image) -> object:
+        """Materializes one shared selector OCR region from the canonical registry."""
+
+        if self.selector_registry is None:
+            raise SelectorResolutionError(
+                "Shared OCR region extraction requires the selector registry.",
+                selector_id=selector_id,
+            )
+        selector = self.selector_registry.require(selector_id)
+        if selector.relative_bounds is None:
+            raise SelectorResolutionError(
+                "Shared OCR region extraction requires normalized selector bounds.",
                 selector_id=selector_id,
             )
         return selector.relative_bounds.materialize_region(image_size=image.size)
+
+
+def _build_player_territory_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Returns the Player Territory screen when OCR exposes its header and Player Info action."""
+
+    header = _find_header_line(lines=lines, header_texts=_PLAYER_TERRITORY_HEADER_TEXTS, max_y=int(image.height * 0.18))
+    player_info = _find_first_line_in_texts(lines=lines, texts=_PLAYER_INFO_BUTTON_TEXTS, min_y=int(image.height * 0.18))
+    if header is None or player_info is None:
+        return None
+    return ObservationAdditions(
+        visible_elements={
+            UiElementId.PNC_PLAYER_TERRITORY_HEADER: _make_visible_from_line(
+                selector_id=UiElementId.PNC_PLAYER_TERRITORY_HEADER,
+                line=header,
+            ),
+            UiElementId.PNC_PLAYER_TERRITORY_PLAYER_INFO_BUTTON: _make_visible_from_line(
+                selector_id=UiElementId.PNC_PLAYER_TERRITORY_PLAYER_INFO_BUTTON,
+                line=player_info,
+            ),
+        },
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_PLAYER_TERRITORY, "ocr_player_territory"),),
+    )
+
+
+def _build_player_profile_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Returns the remote player-profile screen and visible profile name when OCR matches the layout."""
+
+    header = _find_header_line(lines=lines, header_texts=_PLAYER_PROFILE_HEADER_TEXTS, max_y=int(image.height * 0.18))
+    mail_line = _find_first_line_in_texts(lines=lines, texts=_MAIL_BUTTON_TEXTS, min_y=int(image.height * 0.45))
+    if header is None and not _has_remote_profile_layout_support(lines):
+        return None
+    name_line = (
+        _find_profile_name_line(
+            image=image,
+            lines=lines,
+            excluded_texts=_PLAYER_PROFILE_HEADER_TEXTS | _MAIL_BUTTON_TEXTS | _PERSONAL_INFO_TEXTS,
+        )
+        if header is not None
+        else _find_profile_name_line(
+            image=image,
+            lines=lines,
+            excluded_texts=_PLAYER_PROFILE_LAYOUT_SUPPORT_TEXTS | _MAIL_BUTTON_TEXTS,
+            min_y_ratio=0.0,
+            max_y_ratio=0.18,
+        )
+    )
+    if name_line is None:
+        return None
+    visible_elements = {
+        UiElementId.PNC_PLAYER_PROFILE_HEADER: (
+            _make_visible_from_line(
+                selector_id=UiElementId.PNC_PLAYER_PROFILE_HEADER,
+                line=header,
+            )
+            if header is not None
+            else _make_visible(
+                selector_id=UiElementId.PNC_PLAYER_PROFILE_HEADER,
+                x=0,
+                y=0,
+                width=image.width,
+                height=max(1, int(image.height * 0.14)),
+                extracted_text=name_line.text.strip(),
+            )
+        ),
+        UiElementId.PNC_PLAYER_PROFILE_NAME_LABEL: _make_visible_from_line(
+            selector_id=UiElementId.PNC_PLAYER_PROFILE_NAME_LABEL,
+            line=name_line,
+        ),
+    }
+    if mail_line is not None:
+        visible_elements[UiElementId.PNC_PLAYER_PROFILE_MAIL_BUTTON] = _make_visible_from_bottom_nav_line(
+            image=image,
+            selector_id=UiElementId.PNC_PLAYER_PROFILE_MAIL_BUTTON,
+            line=mail_line,
+        )
+    return ObservationAdditions(
+        visible_elements=visible_elements,
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_PLAYER_PROFILE, "ocr_player_profile"),),
+        profile_player_name=name_line.text.strip(),
+    )
+
+
+def _build_mail_hub_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Returns the shared mail hub when OCR exposes mailbox category rows."""
+
+    category_max_y = int(image.height * 0.93)
+    visible_elements: dict[UiElementId, VisibleElement] = {}
+    for line in lines:
+        if line.bounds.y > category_max_y:
+            continue
+        normalized_text = normalize_ocr_text(line.text)
+        selector_id = _mail_hub_selector_id(normalized_text)
+        if selector_id is None or selector_id in visible_elements:
+            continue
+        visible_elements[selector_id] = _make_visible_from_line(selector_id=selector_id, line=line)
+    if UiElementId.PNC_MAIL_ROW_PLAYER_MAIL not in visible_elements and UiElementId.PNC_MAIL_ROW_ALLIANCE_MAIL not in visible_elements:
+        return None
+    header = _find_first_line_in_texts(lines=lines, texts=frozenset({"MAIL"}), max_y=120)
+    if len(visible_elements) == 1 and header is None:
+        return None
+    if header is not None:
+        visible_elements[UiElementId.PNC_MAIL_HEADER] = _make_visible_from_line(
+            selector_id=UiElementId.PNC_MAIL_HEADER,
+            line=header,
+        )
+    return ObservationAdditions(
+        visible_elements=visible_elements,
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_MAIL_HUB, "ocr_mail_hub"),),
+    )
+
+
+def _build_alliance_home_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Returns alliance-home selectors when OCR exposes alliance tiles plus the lower tab bar."""
+
+    header = _find_header_line(lines=lines, header_texts=_ALLIANCE_HOME_HEADER_TEXTS, max_y=int(image.height * 0.12))
+    if header is None:
+        return None
+    visible_elements: dict[UiElementId, VisibleElement] = {}
+    tile_min_y = int(image.height * 0.45)
+    tile_max_y = int(image.height * 0.86)
+    bottom_tab_min_y = int(image.height * 0.88)
+    for line in lines:
+        normalized_text = normalize_ocr_text(line.text)
+        selector_id = _ALLIANCE_HOME_TILE_SELECTOR_BY_TEXT.get(normalized_text)
+        if selector_id is not None and tile_min_y <= line.bounds.y <= tile_max_y and selector_id not in visible_elements:
+            visible_elements[selector_id] = _make_visible_from_line(selector_id=selector_id, line=line)
+            continue
+        if line.bounds.y >= bottom_tab_min_y:
+            for bottom_tab_text, selector_id in _ALLIANCE_HOME_BOTTOM_TAB_SELECTOR_BY_TEXT.items():
+                if selector_id in visible_elements or not _matches_alliance_home_bottom_tab_text(
+                    normalized_text=normalized_text,
+                    expected_text=bottom_tab_text,
+                ):
+                    continue
+                visible_elements[selector_id] = _make_visible_from_bottom_nav_line_segment(
+                    image=image,
+                    selector_id=selector_id,
+                    line=line,
+                    normalized_text_segment=bottom_tab_text,
+                )
+    if not any(selector_id in _ALLIANCE_HOME_TILE_SELECTOR_BY_TEXT.values() for selector_id in visible_elements):
+        return None
+    if not any(selector_id in _ALLIANCE_HOME_BOTTOM_TAB_SELECTOR_BY_TEXT.values() for selector_id in visible_elements):
+        return None
+    status_banner = _find_alliance_home_status_banner_line(image=image, lines=lines)
+    if status_banner is not None:
+        visible_elements[UiElementId.PNC_STATUS_BANNER] = _make_visible_from_line(
+            selector_id=UiElementId.PNC_STATUS_BANNER,
+            line=status_banner,
+        )
+    return ObservationAdditions(
+        visible_elements=visible_elements,
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_ALLIANCE_HOME, "ocr_alliance_home"),),
+    )
+
+
+def _build_alliance_home_status_banner_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+    request: ObservationRequest,
+) -> ObservationAdditions | None:
+    """Returns the transient alliance-home status banner even when the rest of the screen is not classifiable."""
+
+    if not request.allows_screen(ScreenType.PNC_ALLIANCE_HOME):
+        return None
+    status_banner = _find_alliance_home_status_banner_line(image=image, lines=lines)
+    if status_banner is None:
+        return None
+    return ObservationAdditions(
+        visible_elements={
+            UiElementId.PNC_STATUS_BANNER: _make_visible_from_line(
+                selector_id=UiElementId.PNC_STATUS_BANNER,
+                line=status_banner,
+            )
+        }
+    )
+
+
+def _build_mailbox_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Returns one mailbox list plus visible thread rows and empty-state facts."""
+
+    header = _find_mailbox_header_line(image=image, lines=lines)
+    if header is None:
+        return None
+    mailbox_type = _MAILBOX_HEADER_TO_TYPE.get(normalize_ocr_text(header.text))
+    if mailbox_type is None:
+        return None
+    empty_line = _find_line_with_normalized_text(
+        lines=lines,
+        normalized_text=_MAILBOX_EMPTY_TEXT,
+        min_y=int(image.height * 0.18),
+    )
+    thread_entries = () if empty_line is not None else _extract_mail_thread_entries(image=image, lines=lines)
+    visible_elements: dict[UiElementId, VisibleElement] = {
+        UiElementId.PNC_MAIL_HEADER: _make_visible_from_line(selector_id=UiElementId.PNC_MAIL_HEADER, line=header),
+    }
+    manage_line = _find_first_line_in_texts(lines=lines, texts=frozenset({"MANAGE"}), max_y=int(image.height * 0.18))
+    if manage_line is not None:
+        visible_elements[UiElementId.PNC_MAILBOX_MANAGE_BUTTON] = _make_visible_from_line(
+            selector_id=UiElementId.PNC_MAILBOX_MANAGE_BUTTON,
+            line=manage_line,
+        )
+    read_line = _find_line_matching(
+        lines=lines,
+        predicate=lambda line: "READ" in normalize_ocr_text(line.text),
+        max_y=int(image.height * 0.18),
+    )
+    if read_line is not None:
+        visible_elements[UiElementId.PNC_MAILBOX_MARK_ALL_AS_READ_BUTTON] = _make_visible_from_line(
+            selector_id=UiElementId.PNC_MAILBOX_MARK_ALL_AS_READ_BUTTON,
+            line=read_line,
+        )
+    if empty_line is not None:
+        visible_elements[UiElementId.PNC_MAILBOX_EMPTY_LABEL] = _make_visible_from_line(
+            selector_id=UiElementId.PNC_MAILBOX_EMPTY_LABEL,
+            line=empty_line,
+        )
+    elif thread_entries:
+        visible_elements[UiElementId.PNC_MAIL_THREAD_ROW] = _make_visible_from_entry(
+            selector_id=UiElementId.PNC_MAIL_THREAD_ROW,
+            entry=thread_entries[0],
+        )
+    return ObservationAdditions(
+        visible_elements=visible_elements,
+        list_entries=thread_entries,
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_MAILBOX_LIST, "ocr_mailbox_list"),),
+        mailbox_type=mailbox_type,
+        mailbox_empty=empty_line is not None,
+    )
+
+
+def _build_mail_thread_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Returns one opened mail thread plus visible message lines."""
+
+    header = _find_mailbox_header_line(image=image, lines=lines)
+    if header is None:
+        return None
+    mailbox_type = _MAILBOX_HEADER_TO_TYPE.get(normalize_ocr_text(header.text))
+    if mailbox_type is None:
+        return None
+    message_entries = _extract_mail_message_entries(image=image, lines=lines)
+    delete_line = _find_first_line_in_texts(lines=lines, texts=_DELETE_TEXTS, min_y=int(image.height * 0.78))
+    visible_elements = {
+        UiElementId.PNC_MAIL_HEADER: _make_visible_from_line(selector_id=UiElementId.PNC_MAIL_HEADER, line=header),
+    }
+    if delete_line is not None:
+        visible_elements[UiElementId.PNC_MAIL_THREAD_DELETE_BUTTON] = _make_visible_from_line(
+            selector_id=UiElementId.PNC_MAIL_THREAD_DELETE_BUTTON,
+            line=delete_line,
+        )
+    if not message_entries and delete_line is None:
+        return None
+    return ObservationAdditions(
+        visible_elements=visible_elements,
+        list_entries=message_entries,
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_MAIL_THREAD, "ocr_mail_thread"),),
+        mailbox_type=mailbox_type,
+    )
+
+
+def _build_chat_player_action_popup_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Returns the chat player-action popup when OCR exposes the Profile action."""
+
+    del image
+    profile_line = _find_first_line_in_texts(lines=lines, texts=_CHAT_PLAYER_ACTION_PROFILE_TEXTS)
+    if profile_line is None:
+        return None
+    return ObservationAdditions(
+        visible_elements={
+            UiElementId.PNC_CHAT_PLAYER_ACTION_PROFILE_BUTTON: _make_visible_from_line(
+                selector_id=UiElementId.PNC_CHAT_PLAYER_ACTION_PROFILE_BUTTON,
+                line=profile_line,
+            )
+        },
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_CHAT_PLAYER_ACTION_POPUP, "ocr_chat_player_actions"),),
+    )
+
+
+def _build_alliance_member_list_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Returns the alliance-member list and visible member rows."""
+
+    header = _find_header_line(lines=lines, header_texts=_ALLIANCE_MEMBER_HEADER_TEXTS, max_y=int(image.height * 0.18))
+    if header is None:
+        return None
+    entries = _extract_grouped_named_rows(
+        image=image,
+        lines=lines,
+        kind=ListEntryKind.ALLIANCE_MEMBER,
+        min_y=int(image.height * 0.18),
+        excluded_texts=_ALLIANCE_MEMBER_HEADER_TEXTS | _PERSONAL_INFO_TEXTS | _MAIL_BUTTON_TEXTS,
+        ignored_title_texts=_ALLIANCE_MEMBER_ROW_ACTION_TEXTS,
+        action_texts=_ALLIANCE_MEMBER_ROW_ACTION_TEXTS,
+        action_x_ratio=0.88,
+    )
+    if not entries:
+        return None
+    return ObservationAdditions(
+        visible_elements={
+            UiElementId.PNC_ALLIANCE_MEMBER_ROW: _make_visible_from_entry(
+                selector_id=UiElementId.PNC_ALLIANCE_MEMBER_ROW,
+                entry=entries[0],
+            )
+        },
+        list_entries=entries,
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_ALLIANCE_MEMBER_LIST, "ocr_alliance_member_list"),),
+    )
+
+
+def _build_alliance_member_manage_popup_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Returns the alliance-member manage popup when OCR exposes Personal Info."""
+
+    header = _find_header_line(lines=lines, header_texts=_ALLIANCE_MEMBER_MANAGE_HEADER_TEXTS, max_y=int(image.height * 0.4))
+    personal_info = _find_first_line_in_texts(lines=lines, texts=_PERSONAL_INFO_TEXTS)
+    if header is None or personal_info is None:
+        return None
+    return ObservationAdditions(
+        visible_elements={
+            UiElementId.PNC_ALLIANCE_MEMBER_MANAGE_PERSONAL_INFO_BUTTON: _make_visible_from_line(
+                selector_id=UiElementId.PNC_ALLIANCE_MEMBER_MANAGE_PERSONAL_INFO_BUTTON,
+                line=personal_info,
+            )
+        },
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_ALLIANCE_MEMBER_MANAGE_POPUP, "ocr_alliance_member_manage"),),
+    )
+
+
+def _build_might_rank_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Returns the Might Rank screen and visible ranked-player rows."""
+
+    header = _find_header_line(lines=lines, header_texts=_MIGHT_RANK_HEADER_TEXTS, max_y=int(image.height * 0.18))
+    if header is None:
+        return None
+    entries = _extract_grouped_named_rows(
+        image=image,
+        lines=lines,
+        kind=ListEntryKind.RANKED_PLAYER,
+        min_y=int(image.height * 0.18),
+        excluded_texts=_MIGHT_RANK_HEADER_TEXTS | _PERSONAL_INFO_TEXTS | _MAIL_BUTTON_TEXTS,
+        action_x_ratio=0.9,
+        normalize_title=_normalize_ranked_player_title,
+    )
+    if not entries:
+        return None
+    return ObservationAdditions(
+        visible_elements={
+            UiElementId.PNC_MIGHT_RANK_ROW: _make_visible_from_entry(
+                selector_id=UiElementId.PNC_MIGHT_RANK_ROW,
+                entry=entries[0],
+            )
+        },
+        list_entries=entries,
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_MIGHT_RANK, "ocr_might_rank"),),
+    )
+
+
+def _empty_text_placeholders(selector_id: UiElementId) -> frozenset[str]:
+    """Returns the known placeholder texts that imply one empty selector-backed field."""
+
+    if selector_id == UiElementId.PNC_MAIL_COMPOSE_TARGET_FIELD:
+        return _MAIL_COMPOSE_TARGET_PLACEHOLDERS
+    if selector_id == UiElementId.PNC_MAIL_COMPOSE_SUBJECT_FIELD:
+        return _MAIL_COMPOSE_SUBJECT_PLACEHOLDERS
+    if selector_id == UiElementId.PNC_MAIL_COMPOSE_BODY_FIELD:
+        return _MAIL_COMPOSE_BODY_PLACEHOLDERS
+    return frozenset()
+
+
+def _mail_hub_selector_id(normalized_text: str) -> UiElementId | None:
+    """Returns the mail-hub selector that matches one normalized category label."""
+
+    if normalized_text == "SYSTEMMESSAGE":
+        return UiElementId.PNC_MAIL_ROW_SYSTEM_MESSAGE
+    if normalized_text == "PLAYERMAIL":
+        return UiElementId.PNC_MAIL_ROW_PLAYER_MAIL
+    if normalized_text == "ALLIANCEMAIL":
+        return UiElementId.PNC_MAIL_ROW_ALLIANCE_MAIL
+    if normalized_text == "BATTLELOG":
+        return UiElementId.PNC_MAIL_ROW_BATTLELOG
+    if normalized_text == "HUNTREPORT":
+        return UiElementId.PNC_MAIL_ROW_HUNT_REPORT
+    if normalized_text == "HELLFORTRESS":
+        return UiElementId.PNC_MAIL_ROW_HELL_FORTRESS
+    if normalized_text == "GATHERINGREPORT":
+        return UiElementId.PNC_MAIL_ROW_GATHERING_REPORT
+    if normalized_text == "TRANSPORTREPORT":
+        return UiElementId.PNC_MAIL_ROW_TRANSPORT_REPORT
+    return None
+
+
+def _matches_alliance_home_bottom_tab_text(*, normalized_text: str, expected_text: str) -> bool:
+    """Returns whether one OCR line matches the requested alliance-home bottom-tab label."""
+
+    if expected_text in normalized_text:
+        return True
+    if abs(len(normalized_text) - len(expected_text)) > 2:
+        return False
+    return _bounded_edit_distance(left=normalized_text, right=expected_text, max_distance=2) <= 2
+
+
+def _find_alliance_home_status_banner_line(*, image: Image.Image, lines: tuple[OcrLine, ...]) -> OcrLine | None:
+    """Returns the transient alliance-home status banner when the mail tab is gameplay-gated."""
+
+    return _find_line_matching(
+        lines=lines,
+        predicate=lambda line: "PLEASECLEAR" in normalize_ocr_text(line.text) and "FIRST" in normalize_ocr_text(line.text),
+        min_y=int(image.height * 0.2),
+        max_y=int(image.height * 0.38),
+    )
+
+
+def _find_mailbox_header_line(*, image: Image.Image, lines: tuple[OcrLine, ...]) -> OcrLine | None:
+    """Returns the mailbox header line when OCR exposes a supported mailbox title."""
+
+    return _find_header_line(
+        lines=lines,
+        header_texts=frozenset(_MAILBOX_HEADER_TO_TYPE),
+        max_y=int(image.height * 0.18),
+    )
+
+
+def _find_header_line(
+    *,
+    lines: tuple[OcrLine, ...],
+    header_texts: frozenset[str],
+    max_y: int,
+) -> OcrLine | None:
+    """Returns the first OCR line that matches one supported screen header."""
+
+    return _find_line_matching(
+        lines=lines,
+        predicate=lambda line: normalize_ocr_text(line.text) in header_texts,
+        max_y=max_y,
+    )
+
+
+def _find_first_line_in_texts(
+    *,
+    lines: tuple[OcrLine, ...],
+    texts: frozenset[str],
+    min_y: int = 0,
+    max_y: int | None = None,
+) -> OcrLine | None:
+    """Returns the first OCR line whose normalized text matches one supported label set."""
+
+    return _find_line_matching(
+        lines=lines,
+        predicate=lambda line: normalize_ocr_text(line.text) in texts,
+        min_y=min_y,
+        max_y=max_y,
+    )
+
+
+def _extract_mail_thread_entries(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> tuple[DetectedListEntry, ...]:
+    """Extracts visible mailbox thread rows from OCR lines."""
+
+    candidate_lines = [
+        line
+        for line in lines
+        if line.bounds.y >= int(image.height * 0.08)
+        and line.bounds.y <= int(image.height * 0.9)
+        and normalize_ocr_text(line.text) not in _MAIL_HUB_CATEGORY_TEXTS
+        and normalize_ocr_text(line.text) not in _MAIL_COMPOSE_HEADER_TEXTS
+        and normalize_ocr_text(line.text) not in _DELETE_TEXTS
+    ]
+    grouped_rows = _group_lines_by_vertical_gap(candidate_lines, gap=max(28, image.height // 32))
+    entries: list[DetectedListEntry] = []
+    for row_lines in grouped_rows:
+        if not row_lines:
+            continue
+        date_line = next((line for line in row_lines if _looks_like_mail_date_text(line.text)), None)
+        content_lines = [line for line in row_lines if not _looks_like_mail_date_text(line.text)]
+        if not content_lines:
+            continue
+        sender_line = content_lines[0]
+        sender_name = sender_line.text.strip()
+        if sender_name == "":
+            continue
+        preview_lines = content_lines[1:]
+        preview_text = " ".join(line.text.strip() for line in preview_lines if line.text.strip() != "") or None
+        date_text = None if date_line is None else date_line.text.strip()
+        bounds = _entry_bounds_from_lines(image=image, row_lines=row_lines)
+        entries.append(
+            DetectedListEntry(
+                kind=ListEntryKind.MAIL_THREAD,
+                bounds=bounds,
+                title_text=sender_name,
+                subtitle_text=preview_text,
+                action_point=(bounds.x + bounds.width // 2, bounds.y + bounds.height // 2),
+                metadata={
+                    "sender_name": sender_name,
+                    "preview_text": preview_text,
+                    "date_text": date_text,
+                },
+            )
+        )
+    return tuple(entries)
+
+
+def _extract_mail_message_entries(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> tuple[DetectedListEntry, ...]:
+    """Extracts visible mail-thread message lines from OCR text."""
+
+    entries: list[DetectedListEntry] = []
+    for line in lines:
+        normalized_text = normalize_ocr_text(line.text)
+        if line.bounds.y < int(image.height * 0.18):
+            continue
+        if normalized_text in _DELETE_TEXTS or normalized_text in _MAILBOX_HEADER_TO_TYPE:
+            continue
+        if normalized_text == "":
+            continue
+        entries.append(
+            DetectedListEntry(
+                kind=ListEntryKind.MAIL_MESSAGE,
+                bounds=Bounds(x=0, y=line.bounds.y, width=image.width, height=max(line.bounds.height + 8, 18)),
+                title_text=line.text.strip(),
+                action_point=(image.width // 2, line.bounds.y + max(line.bounds.height // 2, 1)),
+                metadata={"timestamp_text": line.text.strip() if _looks_like_mail_date_text(line.text) else None},
+            )
+        )
+    return tuple(entries)
+
+
+def _extract_chat_message_entries(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> tuple[DetectedListEntry, ...]:
+    """Extracts visible chat sender rows that can open the shared player-action popup."""
+
+    candidate_lines = [line for line in lines if _is_chat_message_candidate_line(image=image, line=line)]
+    grouped_rows = _group_lines_by_vertical_gap(candidate_lines, gap=max(24, image.height // 36))
+    entries: list[DetectedListEntry] = []
+    for row_lines in grouped_rows:
+        if not row_lines:
+            continue
+        sender_line = row_lines[0]
+        sender_name = sender_line.text.strip()
+        if sender_name == "":
+            continue
+        message_lines = tuple(line.text.strip() for line in row_lines[1:] if line.text.strip() != "")
+        bounds = _entry_bounds_from_lines(image=image, row_lines=row_lines)
+        entries.append(
+            DetectedListEntry(
+                kind=ListEntryKind.CHAT_MESSAGE,
+                bounds=bounds,
+                title_text=sender_name,
+                subtitle_text=" ".join(message_lines) or None,
+                action_point=bounds.center(),
+                metadata={"message_preview": " ".join(message_lines) or None},
+            )
+        )
+    return tuple(entries)
+
+
+def _extract_simple_named_rows(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+    kind: ListEntryKind,
+    min_y: int,
+    excluded_texts: frozenset[str],
+    action_x_ratio: float,
+    normalize_title: Callable[[str], str | None] | None = None,
+) -> tuple[DetectedListEntry, ...]:
+    """Extracts simple single-line named rows used by profile-entry route screens."""
+
+    entries: list[DetectedListEntry] = []
+    for line in lines:
+        normalized_text = normalize_ocr_text(line.text)
+        if line.bounds.y < min_y or normalized_text in excluded_texts or normalized_text == "":
+            continue
+        title_text = line.text.strip()
+        if normalize_title is not None:
+            normalized_title = normalize_title(title_text)
+            if normalized_title is None:
+                continue
+            title_text = normalized_title
+        if len(normalize_ocr_text(title_text)) < 3:
+            continue
+        bounds = Bounds(x=0, y=max(0, line.bounds.y - 6), width=image.width, height=max(20, line.bounds.height + 12))
+        entries.append(
+            DetectedListEntry(
+                kind=kind,
+                bounds=bounds,
+                title_text=title_text,
+                action_point=(int(image.width * action_x_ratio), bounds.y + bounds.height // 2),
+            )
+        )
+    return tuple(entries)
+
+
+def _extract_grouped_named_rows(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+    kind: ListEntryKind,
+    min_y: int,
+    excluded_texts: frozenset[str],
+    action_x_ratio: float,
+    ignored_title_texts: frozenset[str] = frozenset(),
+    action_texts: frozenset[str] = frozenset(),
+    normalize_title: Callable[[str], str | None] | None = None,
+) -> tuple[DetectedListEntry, ...]:
+    """Extracts one named entry per grouped row for OCR-heavy list screens."""
+
+    candidate_lines = [
+        line
+        for line in lines
+        if line.bounds.y >= min_y and normalize_ocr_text(line.text) not in excluded_texts and normalize_ocr_text(line.text) != ""
+    ]
+    grouped_rows = _group_lines_by_vertical_gap(candidate_lines, gap=max(34, image.height // 28))
+    entries: list[DetectedListEntry] = []
+    for row_lines in grouped_rows:
+        if not row_lines:
+            continue
+        title_line = _find_grouped_row_title_line(
+            image=image,
+            row_lines=row_lines,
+            ignored_title_texts=ignored_title_texts,
+        )
+        if title_line is None:
+            continue
+        title_text = title_line.text.strip()
+        if normalize_title is not None:
+            normalized_title = normalize_title(title_text)
+            if normalized_title is None:
+                continue
+            title_text = normalized_title
+        if len(normalize_ocr_text(title_text)) < 3:
+            continue
+        bounds = _entry_bounds_from_lines(image=image, row_lines=row_lines)
+        action_line = _find_line_matching(
+            lines=tuple(row_lines),
+            predicate=lambda line: normalize_ocr_text(line.text) in action_texts,
+        )
+        action_point = (
+            (
+                action_line.bounds.x + action_line.bounds.width // 2,
+                action_line.bounds.y + action_line.bounds.height // 2,
+            )
+            if action_line is not None
+            else (int(image.width * action_x_ratio), bounds.y + bounds.height // 2)
+        )
+        entries.append(
+            DetectedListEntry(
+                kind=kind,
+                bounds=bounds,
+                title_text=title_text,
+                action_point=action_point,
+            )
+        )
+    return tuple(entries)
+
+
+def _normalize_ranked_player_title(title_text: str) -> str | None:
+    """Normalizes a ranked-player OCR line into just the visible player name when possible."""
+
+    cleaned = re.sub(r"^\s*\d+\s*[.)-]?\s*", "", title_text).strip()
+    return None if cleaned == "" else cleaned
+
+
+def _find_grouped_row_title_line(
+    *,
+    image: Image.Image,
+    row_lines: list[OcrLine],
+    ignored_title_texts: frozenset[str],
+) -> OcrLine | None:
+    """Returns the best title-bearing OCR line for one grouped named-row cluster."""
+
+    title_candidates = [
+        line
+        for line in sorted(row_lines, key=lambda item: (item.bounds.x, item.bounds.y))
+        if line.bounds.x <= int(image.width * 0.62)
+        and _is_viable_grouped_row_title(line, ignored_title_texts=ignored_title_texts)
+    ]
+    if not title_candidates:
+        return None
+    return title_candidates[0]
+
+
+def _is_viable_grouped_row_title(line: OcrLine, *, ignored_title_texts: frozenset[str]) -> bool:
+    """Returns whether one OCR line looks like the left-side name label of a grouped row."""
+
+    normalized_text = normalize_ocr_text(line.text)
+    if normalized_text in ignored_title_texts or normalized_text == "":
+        return False
+    if len(normalized_text) < 3:
+        return False
+    if _looks_like_grouped_row_stat_text(normalized_text):
+        return False
+    return True
+
+
+def _looks_like_grouped_row_stat_text(normalized_text: str) -> bool:
+    """Returns whether one OCR token is more likely a stat/id line than a player-name line."""
+
+    letters = sum(character.isalpha() for character in normalized_text)
+    digits = sum(character.isdigit() for character in normalized_text)
+    if letters == 0 and digits > 0:
+        return True
+    if digits > max(2, letters * 2):
+        return True
+    return False
+
+
+def _entry_bounds_from_lines(*, image: Image.Image, row_lines: list[OcrLine]) -> Bounds:
+    """Builds one row-sized bounds rectangle from the OCR lines assigned to that row."""
+
+    top = max(0, row_lines[0].bounds.y - 6)
+    bottom = min(image.height, row_lines[-1].bounds.y + row_lines[-1].bounds.height + 6)
+    return Bounds(x=0, y=top, width=image.width, height=max(1, bottom - top))
+
+
+def _group_lines_by_vertical_gap(lines: list[OcrLine], *, gap: int) -> list[list[OcrLine]]:
+    """Groups sorted OCR lines into row-like clusters using one shared vertical-gap threshold."""
+
+    grouped: list[list[OcrLine]] = []
+    current_group: list[OcrLine] = []
+    previous_bottom: int | None = None
+    for line in sorted(lines, key=lambda item: (item.bounds.y, item.bounds.x)):
+        if previous_bottom is None or line.bounds.y - previous_bottom <= gap:
+            current_group.append(line)
+        else:
+            grouped.append(current_group)
+            current_group = [line]
+        previous_bottom = line.bounds.y + line.bounds.height
+    if current_group:
+        grouped.append(current_group)
+    return grouped
+
+
+def _looks_like_mail_date_text(text: str) -> bool:
+    """Returns whether one OCR line looks like a compact mailbox date or thread timestamp."""
+
+    normalized_text = normalize_ocr_text(text)
+    if normalized_text == "":
+        return False
+    if re.search(r"\d{4}[/-]\d{1,2}[/-]\d{1,2}", text) is not None:
+        return True
+    if re.search(r"\d{1,2}:\d{2}(:\d{2})?", text) is not None:
+        return True
+    return bool(re.search(r"\d", normalized_text) and any(token in normalized_text for token in ("AM", "PM", "AGO", "DAY", "HOUR", "MIN", "SEC")))
+
+
+def _is_chat_message_candidate_line(*, image: Image.Image, line: OcrLine) -> bool:
+    """Returns whether one OCR line can belong to the visible chat-message list."""
+
+    normalized_text = normalize_ocr_text(line.text)
+    if normalized_text == "":
+        return False
+    if line.bounds.y < int(image.height * 0.16) or line.bounds.y > int(image.height * 0.8):
+        return False
+    if normalized_text in {_CHAT_HEADER_TEXT, _CHAT_KINGDOM_TEXT, _CHAT_ALLIANCE_TEXT, *_SEND_TEXTS}:
+        return False
+    if _is_empty_chat_draft_text(normalized_text):
+        return False
+    return True
 
 
 def _build_popup_additions(
@@ -1008,7 +2067,11 @@ def _build_lord_info_additions(
     tab_count = sum(1 for line in lines if normalize_ocr_text(line.text) in _LORD_INFO_TAB_TEXTS)
     if tab_count < 2:
         return None
-    name_line = _find_lord_info_name_line(image=image, lines=lines)
+    name_line = _find_profile_name_line(
+        image=image,
+        lines=lines,
+        excluded_texts=_LORD_INFO_EXCLUDED_NAME_TEXTS,
+    )
     if name_line is None:
         return None
     return ObservationAdditions(
@@ -1103,18 +2166,7 @@ def _build_home_city_additions(
 ) -> ObservationAdditions | None:
     """Returns home-city classification when bottom navigation OCR has supporting evidence."""
 
-    visible_nav_elements: dict[UiElementId, VisibleElement] = {}
-    for anchor in anchors:
-        if anchor.bounds.y < int(image.height * 0.86):
-            continue
-        selector_id = _HOME_NAV_SELECTOR_BY_TEXT_ANCHOR.get(anchor.id)
-        if selector_id is None or selector_id in visible_nav_elements:
-            continue
-        visible_nav_elements[selector_id] = _make_visible_from_bottom_nav_anchor(
-            image=image,
-            selector_id=selector_id,
-            anchor=anchor,
-        )
+    visible_nav_elements, _ = _extract_bottom_nav_additions(image=image, anchors=anchors)
     if len(visible_nav_elements) < 2:
         return None
     if UiElementId.PNC_BOTTOM_NAV_MORE not in visible_nav_elements and UiElementId.PNC_BOTTOM_NAV_ALLIANCE not in visible_nav_elements:
@@ -1126,6 +2178,122 @@ def _build_home_city_additions(
         visible_elements=visible_nav_elements | visible_home_action_elements,
         screen_evidence=(ScreenEvidence(ScreenType.PNC_HOME_CITY, "bottom_nav_and_home_actions"),),
     )
+
+
+def _build_world_map_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+    anchors: tuple[DetectedTextAnchor, ...],
+) -> ObservationAdditions | None:
+    """Returns world-map classification when coordinates and bottom navigation are both OCR-proven."""
+
+    visible_nav_elements, nav_anchors = _extract_bottom_nav_additions(image=image, anchors=anchors)
+    if len(visible_nav_elements) < 3:
+        return None
+    home_anchor = nav_anchors.get(TextAnchorId.LABEL_HOME)
+    if home_anchor is None:
+        return None
+    coordinate_bar = _build_world_coordinate_bar_visible(image=image, lines=lines)
+    if coordinate_bar is None:
+        return None
+    visible_elements = dict(visible_nav_elements)
+    visible_elements[UiElementId.PNC_WORLD_HOME_NAV] = _make_visible_from_bottom_nav_anchor(
+        image=image,
+        selector_id=UiElementId.PNC_WORLD_HOME_NAV,
+        anchor=home_anchor,
+    )
+    visible_elements[UiElementId.PNC_WORLD_COORDINATE_BAR] = coordinate_bar
+    return ObservationAdditions(
+        visible_elements=visible_elements,
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_WORLD_MAP, "ocr_world_coordinates_and_bottom_nav"),),
+    )
+
+
+def _extract_bottom_nav_additions(
+    *,
+    image: Image.Image,
+    anchors: tuple[DetectedTextAnchor, ...],
+) -> tuple[dict[UiElementId, VisibleElement], dict[TextAnchorId, DetectedTextAnchor]]:
+    """Returns canonical bottom-nav selectors and their source anchors from the footer band."""
+
+    visible_nav_elements: dict[UiElementId, VisibleElement] = {}
+    nav_anchors: dict[TextAnchorId, DetectedTextAnchor] = {}
+    for anchor in anchors:
+        if anchor.bounds.y < int(image.height * 0.86):
+            continue
+        selector_id = _HOME_NAV_SELECTOR_BY_TEXT_ANCHOR.get(anchor.id)
+        if selector_id is None or selector_id in visible_nav_elements:
+            continue
+        visible_nav_elements[selector_id] = _make_visible_from_bottom_nav_anchor(
+            image=image,
+            selector_id=selector_id,
+            anchor=anchor,
+        )
+        nav_anchors[anchor.id] = anchor
+    return visible_nav_elements, nav_anchors
+
+
+def _build_world_coordinate_bar_visible(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> VisibleElement | None:
+    """Returns the coordinate-bar selector when OCR exposes both X and Y values in the top HUD band."""
+
+    coordinate_lines = tuple(_extract_world_coordinate_lines(image=image, lines=lines))
+    if len(coordinate_lines) < 2:
+        return None
+    left = min(line.bounds.x for line in coordinate_lines)
+    top = min(line.bounds.y for line in coordinate_lines)
+    right = max(line.bounds.x + line.bounds.width for line in coordinate_lines)
+    bottom = max(line.bounds.y + line.bounds.height for line in coordinate_lines)
+    return _make_visible(
+        selector_id=UiElementId.PNC_WORLD_COORDINATE_BAR,
+        x=left,
+        y=top,
+        width=right - left,
+        height=bottom - top,
+        extracted_text=" ".join(line.text for line in coordinate_lines),
+    )
+
+
+def _extract_world_coordinate_lines(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> tuple[OcrLine, ...]:
+    """Returns the distinct OCR lines that carry the world-map X/Y coordinate tokens."""
+
+    max_y = int(image.height * 0.18)
+    x_line: OcrLine | None = None
+    y_line: OcrLine | None = None
+    for line in lines:
+        if line.bounds.y > max_y or line.bounds.x > int(image.width * 0.6):
+            continue
+        normalized_text = normalize_ocr_text(line.text)
+        if x_line is None and _contains_world_coordinate_token(normalized_text, axis="X"):
+            x_line = line
+        if y_line is None and _contains_world_coordinate_token(normalized_text, axis="Y"):
+            y_line = line
+        if x_line is not None and y_line is not None:
+            break
+    coordinate_lines = []
+    if x_line is not None:
+        coordinate_lines.append(x_line)
+    if y_line is not None and y_line is not x_line:
+        coordinate_lines.append(y_line)
+    return tuple(coordinate_lines)
+
+
+def _contains_world_coordinate_token(normalized_text: str, *, axis: str) -> bool:
+    """Returns whether one normalized OCR line contains the requested world coordinate token."""
+
+    if normalized_text == "":
+        return False
+    if not _WORLD_MAP_COORDINATE_TOKEN_PATTERN.search(normalized_text):
+        return False
+    return re.search(rf"{axis}\d{{1,4}}", normalized_text) is not None
 
 
 def _build_bag_additions(
@@ -1519,12 +2687,29 @@ def _find_line_matching(
 def _find_lord_info_name_line(*, image: Image.Image, lines: tuple[OcrLine, ...]) -> OcrLine | None:
     """Returns the displayed lord name from the Lord Info profile band."""
 
-    min_y = int(image.height * 0.6)
-    max_y = int(image.height * 0.72)
+    return _find_profile_name_line(
+        image=image,
+        lines=lines,
+        excluded_texts=_LORD_INFO_EXCLUDED_NAME_TEXTS,
+    )
+
+
+def _find_profile_name_line(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+    excluded_texts: frozenset[str],
+    min_y_ratio: float = 0.22,
+    max_y_ratio: float = 0.72,
+) -> OcrLine | None:
+    """Returns the displayed profile name from the shared upper-screen profile band."""
+
+    min_y = int(image.height * min_y_ratio)
+    max_y = int(image.height * max_y_ratio)
     candidates = [
         line
         for line in lines
-        if _looks_like_lord_info_name(line) and min_y <= line.bounds.y <= max_y
+        if _looks_like_profile_name(line, excluded_texts=excluded_texts) and min_y <= line.bounds.y <= max_y
     ]
     if not candidates:
         return None
@@ -1534,12 +2719,25 @@ def _find_lord_info_name_line(*, image: Image.Image, lines: tuple[OcrLine, ...])
 def _looks_like_lord_info_name(line: OcrLine) -> bool:
     """Returns whether one OCR line looks like the dynamic lord name in the profile view."""
 
+    return _looks_like_profile_name(line, excluded_texts=_LORD_INFO_EXCLUDED_NAME_TEXTS)
+
+
+def _looks_like_profile_name(line: OcrLine, *, excluded_texts: frozenset[str]) -> bool:
+    """Returns whether one OCR line looks like a profile-name label instead of static UI chrome."""
+
     normalized_text = normalize_ocr_text(line.text)
-    if normalized_text == "" or normalized_text in _LORD_INFO_EXCLUDED_NAME_TEXTS:
+    if normalized_text == "" or normalized_text in excluded_texts:
         return False
     if any(token in line.text for token in ("/", ":", "$")):
         return False
     return len(normalized_text) >= 5
+
+
+def _has_remote_profile_layout_support(lines: tuple[OcrLine, ...]) -> bool:
+    """Returns whether OCR exposes the gear-tab remote-profile layout used by live player profiles."""
+
+    support_count = sum(1 for line in lines if normalize_ocr_text(line.text) in _PLAYER_PROFILE_LAYOUT_SUPPORT_TEXTS)
+    return support_count >= 4
 
 
 def _lord_info_name_to_current_castle(name_text: str) -> CastleIdentity:
@@ -1886,6 +3084,62 @@ def _make_visible_from_bottom_nav_anchor(
         extracted_text=anchor.text,
         action_point=action_point,
     )
+
+
+def _make_visible_from_bottom_nav_line(
+    *,
+    image: Image.Image,
+    selector_id: UiElementId,
+    line: OcrLine,
+) -> VisibleElement:
+    """Builds one bottom-nav-like selector from an OCR line with a raised tap point over the icon area."""
+
+    label_center_x = line.bounds.x + (line.bounds.width // 2)
+    target_width = max(line.bounds.width * 3, int(image.width * 0.12))
+    target_height = max(line.bounds.height * 4, int(image.height * 0.09))
+    target_left = min(max(0, label_center_x - (target_width // 2)), max(0, image.width - target_width))
+    target_top = max(0, line.bounds.y - int(target_height * 0.82))
+    action_point = (label_center_x, target_top + (target_height // 2))
+    return _make_visible(
+        selector_id=selector_id,
+        x=target_left,
+        y=target_top,
+        width=target_width,
+        height=target_height,
+        extracted_text=line.text,
+        action_point=action_point,
+    )
+
+
+def _make_visible_from_bottom_nav_line_segment(
+    *,
+    image: Image.Image,
+    selector_id: UiElementId,
+    line: OcrLine,
+    normalized_text_segment: str,
+) -> VisibleElement:
+    """Builds one bottom-tab selector from a proportional substring of an OCR line."""
+
+    normalized_text = normalize_ocr_text(line.text)
+    start = normalized_text.find(normalized_text_segment)
+    if start < 0:
+        return _make_visible_from_bottom_nav_line(image=image, selector_id=selector_id, line=line)
+    total_length = max(len(normalized_text), 1)
+    segment_start_ratio = start / total_length
+    segment_end_ratio = (start + len(normalized_text_segment)) / total_length
+    segment_left = line.bounds.x + int(round(line.bounds.width * segment_start_ratio))
+    segment_right = line.bounds.x + int(round(line.bounds.width * segment_end_ratio))
+    segment_line = OcrLine(
+        text=normalized_text_segment,
+        bounds=Region(
+            x=segment_left,
+            y=line.bounds.y,
+            width=max(1, segment_right - segment_left),
+            height=line.bounds.height,
+        ),
+        confidence=line.confidence,
+    )
+    return _make_visible_from_bottom_nav_line(image=image, selector_id=selector_id, line=segment_line)
 
 
 def _make_visible_from_more_overlay_line(
