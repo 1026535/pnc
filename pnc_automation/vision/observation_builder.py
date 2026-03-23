@@ -20,6 +20,7 @@ from pnc_automation.pnc.observation import (
     ListEntryKind,
     Observation,
     ObservedTextFieldState,
+    SpatialSurfaceObservation,
     VisibleElement,
     VisibleElementSourceKind,
     castle_identity_from_entry,
@@ -55,6 +56,7 @@ class ObservationAdditions:
     visible_elements: Mapping[UiElementId, VisibleElement] = field(default_factory=dict)
     suppress_geometry_selector_ids: frozenset[UiElementId] = frozenset()
     list_entries: tuple[DetectedListEntry, ...] = ()
+    spatial_surface: SpatialSurfaceObservation | None = None
     screen_evidence: tuple[ScreenEvidence, ...] = ()
     current_castle: CastleIdentity | None = None
     current_castle_evidence: CurrentCastleEvidenceKind | None = None
@@ -215,6 +217,7 @@ class ObservationBuilder:
             screen_type=screen_type,
             visible_elements=visible_elements,
             list_entries=additions.list_entries,
+            spatial_surface=additions.spatial_surface,
             artifact_path=screenshot.artifact.path,
             image_size=screenshot.image.size,
             captured_at=screenshot.artifact.captured_at,

@@ -13,6 +13,7 @@ from pnc_automation.pnc.action_requests import ActionRequest
 from pnc_automation.pnc.observation import DetectedListEntry, Observation
 
 TPriority = TypeVar("TPriority")
+TCandidate = TypeVar("TCandidate")
 
 
 class TaskId(StrEnum):
@@ -149,22 +150,33 @@ class BaseAutomationTask(ABC):
             )
 
 
+def choose_priority_candidate(
+    candidates: Sequence[TCandidate],
+    priorities: Sequence[TPriority],
+    *,
+    key_selector: Callable[[TCandidate], TPriority],
+) -> TCandidate | None:
+    """Returns the highest-priority candidate using one canonical ranking helper."""
+
+    if not candidates:
+        return None
+    priority_rank = {priority: index for index, priority in enumerate(priorities)}
+    ranked_candidates = sorted(
+        candidates,
+        key=lambda candidate: priority_rank.get(key_selector(candidate), len(priority_rank)),
+    )
+    best_candidate = ranked_candidates[0]
+    if key_selector(best_candidate) not in priority_rank:
+        return None
+    return best_candidate
+
+
 def choose_priority_entry(
     entries: Sequence[DetectedListEntry],
     priorities: Sequence[TPriority],
     *,
     key_selector: Callable[[DetectedListEntry], TPriority],
 ) -> DetectedListEntry | None:
-    """Returns the highest-priority entry using one canonical ranking helper."""
+    """Returns the highest-priority dynamic entry using the shared candidate ranking helper."""
 
-    if not entries:
-        return None
-    priority_rank = {priority: index for index, priority in enumerate(priorities)}
-    ranked_entries = sorted(
-        entries,
-        key=lambda entry: priority_rank.get(key_selector(entry), len(priority_rank)),
-    )
-    best_entry = ranked_entries[0]
-    if key_selector(best_entry) not in priority_rank:
-        return None
-    return best_entry
+    return choose_priority_candidate(entries, priorities, key_selector=key_selector)

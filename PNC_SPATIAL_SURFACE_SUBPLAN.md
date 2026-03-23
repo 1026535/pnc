@@ -15,7 +15,7 @@ It is intentionally separate from:
 This file owns the missing architectural layer for:
 
 - the world map,
-- the home-city scrollable building scene,
+- the shared spatial-object contracts that home-city work can reuse later,
 - any future scrollable or pannable in-world surface that mixes fixed overlay UI with dynamic spatial content.
 
 ## 2. Why this is needed
@@ -63,7 +63,8 @@ This sub-plan does not:
 - replace the canonical selector registry,
 - collapse scrollable map objects into fixed selector ids,
 - redesign all current tasks,
-- require a fully complete world parser before bounded feature work can start.
+- require a fully complete world parser before bounded feature work can start,
+- define the full home-city building navigation strategy or per-building workflows.
 
 ## 4. Core architectural decision
 
@@ -151,7 +152,7 @@ The target runtime should be able to:
 6. open object-specific interfaces such as Lord Info or gather confirmations,
 7. return safely to home city via the fixed Home button.
 
-The same architectural pattern should later support the home-city building scene, but Home City should not assume global `X/Y` coordinates unless the game actually exposes them.
+The same typed spatial-object contracts may later support the home-city building scene, but Home City should not assume global `X/Y` coordinates unless the game actually exposes them, and it should not be forced into the world-map viewport model.
 
 ## 7. Canonical model
 
@@ -317,7 +318,7 @@ The coordinate display highlighted in the provided screenshots is the canonical 
 
 ### 9.2 Home-city viewport model
 
-Home City should be modeled as a spatial surface too, but likely as a camera-relative scene rather than an absolute coordinate plane.
+Home City may reuse the shared spatial-object contracts, but it should be modeled as a camera-relative scene rather than an absolute coordinate plane.
 
 Required home-city viewport facts should therefore be different:
 
@@ -331,6 +332,8 @@ This means the shared spatial architecture should support both:
 
 - coordinate-addressable surfaces such as `WORLD_MAP`,
 - camera-relative surfaces such as `HOME_CITY_SURFACE`.
+
+However, only the first one requires viewport-to-world coordinate correspondence.
 
 ### 9.3 World-object metadata
 
@@ -417,14 +420,14 @@ This parser must produce object instances, not selector ids.
 
 ### 10.4 Home-city spatial parser
 
-The same architecture should later be applied to the home-city scene for:
+The same object model can later be reused for the home-city scene for:
 
 - tappable buildings,
 - empty slots,
 - city decorations that should be ignored,
 - city-specific camera movement and focus logic without assuming absolute coordinates.
 
-World map is the first required slice, but the design should not be world-map-only.
+World map is the first required slice. Home-city building navigation should be treated as a separate follow-on planning problem, not as a forced extension of the world-coordinate slice.
 
 ### 10.5 Home-city building workflow boundary
 
@@ -496,11 +499,11 @@ Target model:
 4. reobserve the scene,
 5. repeat until the target object is visible or the fail-fast limit is reached.
 
-This is still a spatial-surface problem, but it is not a coordinate-bar problem.
+This is still a spatial-surface problem, but it is not a coordinate-bar problem and it does not require any viewport-to-world coordinate conversion.
 
 ### 11.4 Motion controller
 
-The runtime should gain one canonical `SpatialSurfaceNavigator` contract with per-surface strategies such as `WorldMapNavigator` and later `HomeCityNavigator`.
+The runtime should gain one canonical `SpatialSurfaceNavigator` contract with per-surface strategies such as `WorldMapNavigator` and, if still justified after dedicated design work, a home-city navigator.
 
 Responsibilities:
 
@@ -538,12 +541,13 @@ This plan does not replace [PNC_SCREEN_FLOW_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_
 - `open_world_object_lord_info(query)`
 - `return_home_city_from_world_map()`
 - `open_home_city_empty_slot(query)`
-- `open_home_city_build_catalog(query)`
 
 Promotion rule:
 
 - flow ownership stays in the screen-flow plan,
 - this document owns the spatial model those flows consume.
+
+The full home-city build-catalog and building-detail workflow should move to a dedicated follow-on plan once building-specific constraints are documented.
 
 ## 13. Task integration
 
@@ -578,15 +582,12 @@ Building upgrade and construction work should eventually consume:
 - dynamic collection entries for the build-selection screen opened from an empty slot,
 - building-detail selectors only after the building scene has been navigated correctly through camera-relative scene navigation.
 
-The intended home-city building flow should be:
+The intended home-city building flow should be documented in a separate home-city building plan because some buildings are unique and some workflows are slot-specific. This document only defines the boundary that future work should respect:
 
-1. find the target empty slot as a spatial object,
-2. tap the slot to open the build-selection screen,
-3. parse visible building choices as dynamic `BUILDING` entries,
-4. reject unavailable entries such as `Requirements not met` unless a future feature explicitly handles dependency inspection,
-5. select the desired buildable entry,
-6. verify the build starts on the targeted slot in the city scene,
-7. later, treat the resulting building as a `HOME_BUILDING` spatial object whose detail screen reuses the existing upgrade workflow.
+1. city navigation should be camera-relative and visibility-driven,
+2. empty slots and existing buildings may share the same base spatial-object model,
+3. build-catalog entries should remain dynamic collection entries rather than spatial objects,
+4. building-specific uniqueness and per-building workflows should be designed explicitly instead of generalized prematurely.
 
 ## 14. Selector-refinement integration
 
@@ -598,7 +599,7 @@ Required refinement increments:
 - add world-map coordinate-bar OCR coverage,
 - collect positive and negative fixtures for world-map classification,
 - add parser fixtures for player castle, ally castle, other-alliance castle, alliance buildings, Dragonia, altar, monsters, hell fortresses, and resource nodes,
-- validate that home-city buildings are treated as spatial objects rather than as fixed selectors.
+- validate that home-city buildings are treated as scene content rather than as fixed selectors when that slice is implemented.
 
 Refinement rule:
 
@@ -674,17 +675,16 @@ Exit condition:
 
 - one bounded spatial feature works end to end with recorded live evidence.
 
-### Phase F: Extend the same architecture to home-city buildings
+### Phase F: Split home-city building work into a separate follow-on plan
 
-- define `HOME_CITY_SURFACE`,
-- detect buildings and empty slots as spatial objects,
-- reuse the same canonical surface/object contracts,
-- add a camera-relative home-city navigator rather than assuming `X/Y`,
-- avoid inventing a second special-case building system.
+- keep the shared spatial-object contracts reusable by home-city work,
+- explicitly do not require viewport-to-world coordinate conversion for home city,
+- define home-city navigation around camera scrolling and object visibility only,
+- design unique-building and slot-specific workflows in a dedicated plan rather than forcing them into the world-map slice.
 
 Exit condition:
 
-- home-city building interaction uses the same spatial-surface architecture as the world map while keeping a different viewport-addressing mode.
+- the world-map slice is complete without overclaiming home-city building completeness, and the follow-on home-city planning boundary is explicit.
 
 ## 17. Validation gate
 
@@ -695,7 +695,7 @@ No spatial-surface slice should be considered complete without all of the follow
 - screenshot coverage for positive and negative object classification,
 - live smoke validation for `home city -> world map -> home city`,
 - live smoke validation for at least one coordinate-driven navigation increment,
-- live smoke validation for at least one camera-relative home-city scene increment once the home-city slice starts,
+- live smoke validation for at least one camera-relative home-city scene increment once the separate home-city slice starts,
 - artifacts captured on every mismatch.
 
 ## 18. Definition of done
@@ -707,14 +707,14 @@ This sub-plan is done only when:
 - scrollable world objects are represented as spatial objects rather than selectors,
 - world movement is coordinate-driven through the canonical spatial navigator where coordinates exist,
 - at least one bounded feature uses the spatial model end to end,
-- the same architecture is ready to be reused for home-city buildings with camera-relative navigation,
+- the shared spatial-object contracts are reusable by a future home-city plan without forcing a world-coordinate model onto city navigation,
 - no parallel selector-like special-case system was introduced.
 
 ## 19. Relationship to other plans
 
 - [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SELECTOR_REFINEMENT_SUBPLAN.md) should request and validate the fixed overlay selectors and parser fixtures required here.
 - [PNC_SCREEN_FLOW_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SCREEN_FLOW_SUBPLAN.md) should own the reusable flows that consume this spatial model.
-- [PNC_TASK_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_TASK_SUBPLAN.md) should consume this spatial model for gathering, Lord Info from world map, and later building work.
+- [PNC_TASK_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_TASK_SUBPLAN.md) should consume this spatial model for gathering and Lord Info from world map, while home-city building work should be specified by a dedicated follow-on plan.
 - [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md) should continue using only the reusable flows and selectors it actually needs.
 
 ## 20. Recommended immediate next increment

@@ -1,0 +1,189 @@
+"""World-map survey index tests."""
+
+from __future__ import annotations
+
+import unittest
+from pathlib import Path
+
+from pnc_automation.errors import SelectorResolutionError
+from pnc_automation.pnc.observation import SpatialObjectKind, SpatialSurfaceType
+from pnc_automation.pnc.screen_type import ScreenType
+from pnc_automation.pnc.world_map_index import (
+    WorldMapObjectAddressingKind,
+    WorldMapSurveyIndex,
+)
+from tests.test_support import make_observation, make_spatial_object, make_spatial_surface
+
+
+class WorldMapSurveyIndexTests(unittest.TestCase):
+    """Validates canonical indexing of repeated typed world-map observations."""
+
+    def test_ingest_observation_indexes_projected_world_objects(self) -> None:
+        """Stores typed visible objects under one projected-world key when the surface exposes world coordinates."""
+
+        index = WorldMapSurveyIndex()
+        observation = make_observation(
+            screen_type=ScreenType.PNC_WORLD_MAP,
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.WORLD_MAP,
+                x=197,
+                y=407,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.CASTLE,
+                        name_text="K2875067781632",
+                        kingdom="K287",
+                        viewport_offset=(4, 252),
+                        viewport_offset_ratio=(4 / 900, 252 / 1184),
+                        world_coordinate=(201, 659),
+                    ),
+                    make_spatial_object(
+                        SpatialObjectKind.RESOURCE_NODE,
+                        name_text="Food Farm",
+                        viewport_offset=(-120, -80),
+                        viewport_offset_ratio=(-120 / 900, -80 / 1184),
+                        world_coordinate=(77, 327),
+                    ),
+                ),
+            ),
+            artifact_path=Path("artifacts/world_probe.png"),
+        )
+
+        sightings = index.ingest_observation(observation)
+
+        self.assertEqual(len(sightings), 2)
+        castle = index.castle_sightings()[0]
+        self.assertEqual(castle.key.addressing_kind, WorldMapObjectAddressingKind.PROJECTED_WORLD)
+        self.assertEqual(castle.key.coordinate, (201, 659))
+        self.assertEqual(castle.object_.kingdom, "K287")
+        self.assertEqual(castle.artifact_path, Path("artifacts/world_probe.png"))
+
+    def test_ingest_surface_updates_existing_projected_sighting_with_latest_artifact(self) -> None:
+        """Keeps one canonical sighting per projected world object while refreshing the latest runtime provenance."""
+
+        index = WorldMapSurveyIndex()
+        first_surface = make_spatial_surface(
+            SpatialSurfaceType.WORLD_MAP,
+            x=197,
+            y=407,
+            objects=(
+                make_spatial_object(
+                    SpatialObjectKind.CASTLE,
+                    name_text="K2875067781632",
+                    kingdom="K287",
+                    viewport_offset=(4, 252),
+                    viewport_offset_ratio=(4 / 900, 252 / 1184),
+                    world_coordinate=(201, 659),
+                    action_point=(454, 1004),
+                ),
+            ),
+        )
+        second_surface = make_spatial_surface(
+            SpatialSurfaceType.WORLD_MAP,
+            x=205,
+            y=412,
+            objects=(
+                make_spatial_object(
+                    SpatialObjectKind.CASTLE,
+                    name_text="K2875067781632",
+                    kingdom="K287",
+                    viewport_offset=(-6, 210),
+                    viewport_offset_ratio=(-6 / 900, 210 / 1184),
+                    world_coordinate=(201, 659),
+                    action_point=(444, 962),
+                ),
+            ),
+        )
+
+        first = index.ingest_surface(first_surface, artifact_path=Path("artifacts/first.png"))[0]
+        second = index.ingest_surface(second_surface, artifact_path=Path("artifacts/second.png"))[0]
+
+        self.assertEqual(len(index.sightings), 1)
+        self.assertEqual(first.key, second.key)
+        self.assertEqual(second.artifact_path, Path("artifacts/second.png"))
+        self.assertEqual(second.viewport_coordinate, (205, 412))
+        self.assertEqual(second.object_.action_point, (444, 962))
+
+    def test_annotate_castle_player_name_supports_exact_lookup(self) -> None:
+        """Attaches resolved player names to castle sightings without changing their underlying map key."""
+
+        index = WorldMapSurveyIndex()
+        sighting = index.ingest_surface(
+            make_spatial_surface(
+                SpatialSurfaceType.WORLD_MAP,
+                x=197,
+                y=407,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.CASTLE,
+                        name_text="K2875067781632",
+                        kingdom="K287",
+                        viewport_offset=(4, 252),
+                        viewport_offset_ratio=(4 / 900, 252 / 1184),
+                        world_coordinate=(201, 659),
+                    ),
+                ),
+            ),
+            artifact_path=Path("artifacts/world_probe.png"),
+        )[0]
+
+        annotated = index.annotate_castle_player_name(
+            sighting.key,
+            player_name="LadiesLoveCake",
+            profile_artifact_path=Path("artifacts/profile.png"),
+        )
+
+        self.assertEqual(annotated.resolved_player_name, "LadiesLoveCake")
+        self.assertEqual(index.find_castle_by_player_name("LadiesLoveCake"), annotated)
+        self.assertIsNone(index.find_castle_by_player_name("ladieslovecake"))
+
+    def test_find_castle_by_player_name_matches_direct_visible_castle_labels(self) -> None:
+        """Uses the visible world-map castle label directly when the player name is already on-screen."""
+
+        index = WorldMapSurveyIndex()
+        sighting = index.ingest_surface(
+            make_spatial_surface(
+                SpatialSurfaceType.WORLD_MAP,
+                x=253,
+                y=447,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.CASTLE,
+                        name_text="LadiesLoveCake",
+                        viewport_offset=(96, 110),
+                        viewport_offset_ratio=(96 / 900, 110 / 1184),
+                        world_coordinate=(349, 557),
+                    ),
+                ),
+            )
+        )[0]
+
+        self.assertEqual(index.find_castle_by_player_name("LadiesLoveCake"), sighting)
+
+    def test_annotate_castle_player_name_rejects_non_castle_keys(self) -> None:
+        """Fails fast when a caller tries to attach player ownership to a non-castle map object."""
+
+        index = WorldMapSurveyIndex()
+        resource = index.ingest_surface(
+            make_spatial_surface(
+                SpatialSurfaceType.WORLD_MAP,
+                x=197,
+                y=407,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.RESOURCE_NODE,
+                        name_text="Food Farm",
+                        viewport_offset=(-120, -80),
+                        viewport_offset_ratio=(-120 / 900, -80 / 1184),
+                        world_coordinate=(77, 327),
+                    ),
+                ),
+            )
+        )[0]
+
+        with self.assertRaises(SelectorResolutionError):
+            index.annotate_castle_player_name(resource.key, player_name="LadiesLoveCake")
+
+
+if __name__ == "__main__":
+    unittest.main()

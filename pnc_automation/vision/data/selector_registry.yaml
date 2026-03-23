@@ -1237,17 +1237,18 @@ selectors:
   screens:
   - PNC_WORLD_MAP
   status: screenshot_seeded
-  detection_kind: template
-- id: PNC_WORLD_MY_TERRITORY_LABEL
-  screens:
-  - PNC_WORLD_MAP
-  status: screenshot_seeded
-  detection_kind: template
+  detection_kind: planned
+  interaction_kind: label
+  relative_bounds:
+    x_ratio: 0.055555555556
+    y_ratio: 0.03
+    width_ratio: 0.24
+    height_ratio: 0.05
 - id: PNC_WORLD_HOME_NAV
   screens:
   - PNC_WORLD_MAP
   status: click_mapped
-  detection_kind: template
+  detection_kind: planned
   interaction_kind: navigation
   click:
     anchor: center
@@ -1260,21 +1261,39 @@ selectors:
       - PNC_HOME_CHARACTER_PANEL
       notes:
       - World map return path verified by reusable screen flow tests.
+  relative_bounds:
+    x_ratio: 0.0
+    y_ratio: 0.905
+    width_ratio: 0.19
+    height_ratio: 0.095
+    action_x_ratio: 0.065555555556
+    action_y_ratio: 0.95
 - id: PNC_WORLD_SEARCH_BUTTON
   screens:
   - PNC_WORLD_MAP
   status: screenshot_seeded
-  detection_kind: template
+  detection_kind: planned
+  interaction_kind: action
+  relative_bounds:
+    x_ratio: 0.82
+    y_ratio: 0.025
+    width_ratio: 0.14
+    height_ratio: 0.085
+    action_x_ratio: 0.89
+    action_y_ratio: 0.0675
 - id: PNC_WORLD_EXPAND_BUTTON
   screens:
   - PNC_WORLD_MAP
   status: screenshot_seeded
-  detection_kind: template
-- id: PNC_WORLD_TARGET_CASTLE
-  screens:
-  - PNC_WORLD_MAP
-  status: screenshot_seeded
-  detection_kind: template
+  detection_kind: planned
+  interaction_kind: action
+  relative_bounds:
+    x_ratio: 0.84
+    y_ratio: 0.72
+    width_ratio: 0.13
+    height_ratio: 0.11
+    action_x_ratio: 0.905
+    action_y_ratio: 0.775
 - id: ANDROID_HOME_PNC_ICON
   screens:
   - ANDROID_HOME
@@ -1355,11 +1374,6 @@ selectors:
   - PNC_HOME_CITY
   status: planned
   detection_kind: planned
-- id: PNC_HOME_ACADEMY_BUILDING
-  screens:
-  - PNC_HOME_CITY
-  status: planned
-  detection_kind: planned
 - id: PNC_BUILDING_UPGRADE_BUTTON
   screens:
   - PNC_BUILDING_DETAILS
@@ -1400,3 +1414,33 @@ selectors:
   - PNC_POPUP
   status: planned
   detection_kind: planned
+surfaces:
+- id: PNC_WORLD_MAP_SURFACE
+  surface_type: world_map
+  screen: PNC_WORLD_MAP
+  viewport:
+    addressing_kind: coordinate_bar
+    coordinate_selector: PNC_WORLD_COORDINATE_BAR
+    home_selector: PNC_WORLD_HOME_NAV
+    optional_zoom_indicator_selector: PNC_WORLD_EXPAND_BUTTON
+  object_kinds:
+  - castle
+  - alliance_building
+  - monster
+  - hell_fortress
+  - resource_node
+  - altar
+  - dragonia
+  relationship_rules:
+    self_castle_label: My Territory
+    ally_name_color_family: light_blue
+    other_alliance_color_family: yellow
+    self_color_family: deep_blue
+- id: PNC_HOME_CITY_SURFACE
+  surface_type: home_city_surface
+  screen: PNC_HOME_CITY
+  viewport:
+    addressing_kind: camera_relative
+  object_kinds:
+  - home_building
+  - home_empty_slot

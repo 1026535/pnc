@@ -141,6 +141,253 @@ class DetectedListEntry:
         return self.metadata[key]
 
 
+class SpatialSurfaceType(StrEnum):
+    """Typed spatial surfaces that expose camera-relative or coordinate-relative scene objects."""
+
+    WORLD_MAP = "world_map"
+    HOME_CITY_SURFACE = "home_city_surface"
+
+
+class SpatialViewportAddressingKind(StrEnum):
+    """Describes how the current spatial viewport can be addressed and navigated."""
+
+    COORDINATE_BAR = "coordinate_bar"
+    CAMERA_RELATIVE = "camera_relative"
+
+
+class SpatialObjectKind(StrEnum):
+    """Typed scene-object categories observed on spatial surfaces."""
+
+    CASTLE = "castle"
+    ALLIANCE_BUILDING = "alliance_building"
+    MONSTER = "monster"
+    HELL_FORTRESS = "hell_fortress"
+    RESOURCE_NODE = "resource_node"
+    ALTAR = "altar"
+    DRAGONIA = "dragonia"
+    HOME_BUILDING = "home_building"
+    HOME_EMPTY_SLOT = "home_empty_slot"
+
+
+class SpatialObjectRelationship(StrEnum):
+    """Describes the semantic ownership or alignment of one spatial object."""
+
+    SELF = "self"
+    ALLY = "ally"
+    OTHER = "other"
+    NEUTRAL = "neutral"
+    UNKNOWN = "unknown"
+
+
+@dataclass(frozen=True, slots=True)
+class SpatialViewport:
+    """Stores the active camera or coordinate context for one spatial surface observation."""
+
+    addressing_kind: SpatialViewportAddressingKind
+    x: int | None = None
+    y: int | None = None
+    zoom_bucket: str | None = None
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        """Rejects invalid coordinate-addressing combinations before tasks consume them."""
+
+        if self.addressing_kind == SpatialViewportAddressingKind.COORDINATE_BAR:
+            if not isinstance(self.x, int) or not isinstance(self.y, int):
+                raise SelectorResolutionError(
+                    "Coordinate-addressable spatial viewports must expose integer X and Y values.",
+                    addressing_kind=self.addressing_kind,
+                    x=self.x,
+                    y=self.y,
+                )
+            return
+        if self.x is not None or self.y is not None:
+            raise SelectorResolutionError(
+                "Camera-relative spatial viewports must not expose absolute X/Y coordinates.",
+                addressing_kind=self.addressing_kind,
+                x=self.x,
+                y=self.y,
+            )
+
+    @property
+    def coordinate(self) -> tuple[int, int] | None:
+        """Returns the absolute coordinate pair when the viewport is coordinate-addressable."""
+
+        if self.x is None or self.y is None:
+            return None
+        return self.x, self.y
+
+
+@dataclass(frozen=True, slots=True)
+class SpatialObjectQuery:
+    """Defines one semantic query used to resolve a visible spatial object."""
+
+    surface_type: SpatialSurfaceType | None = None
+    kind: SpatialObjectKind | None = None
+    relationship: SpatialObjectRelationship | None = None
+    name_text: str | None = None
+    alliance_tag: str | None = None
+    kingdom: str | None = None
+    level: int | None = None
+    metadata_key: str | None = None
+    metadata_value: Any = None
+
+    def __post_init__(self) -> None:
+        """Rejects empty or internally inconsistent spatial-object queries."""
+
+        if self.metadata_key is None and self.metadata_value is not None:
+            raise SelectorResolutionError(
+                "Spatial-object queries cannot constrain metadata_value without metadata_key.",
+                metadata_value=self.metadata_value,
+            )
+        if all(
+            value is None
+            for value in (
+                self.surface_type,
+                self.kind,
+                self.relationship,
+                self.name_text,
+                self.alliance_tag,
+                self.kingdom,
+                self.level,
+                self.metadata_key,
+            )
+        ):
+            raise SelectorResolutionError("Spatial-object queries must constrain at least one identifying field.")
+
+
+@dataclass(frozen=True, slots=True)
+class DetectedSpatialObject:
+    """Represents one visible scene object extracted from a spatial surface."""
+
+    kind: SpatialObjectKind
+    bounds: Bounds
+    relationship: SpatialObjectRelationship = SpatialObjectRelationship.UNKNOWN
+    name_text: str | None = None
+    alliance_tag: str | None = None
+    level: int | None = None
+    kingdom: str | None = None
+    action_point: tuple[int, int] | None = None
+    viewport_offset: tuple[int, int] | None = None
+    viewport_offset_ratio: tuple[float, float] | None = None
+    world_coordinate: tuple[int, int] | None = None
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        """Rejects invalid typed metadata so spatial parsing fails fast during tests and runtime."""
+
+        if self.name_text is not None and self.name_text.strip() == "":
+            raise SelectorResolutionError("Spatial objects must not carry blank name_text values.", object_kind=self.kind)
+        if self.alliance_tag is not None and self.alliance_tag.strip() == "":
+            raise SelectorResolutionError(
+                "Spatial objects must not carry blank alliance tags.",
+                object_kind=self.kind,
+            )
+        if self.kingdom is not None and self.kingdom.strip() == "":
+            raise SelectorResolutionError(
+                "Spatial objects must not carry blank kingdom values.",
+                object_kind=self.kind,
+            )
+        if self.level is not None and (not isinstance(self.level, int) or self.level <= 0):
+            raise SelectorResolutionError(
+                "Spatial objects must use positive integer levels when a level is present.",
+                object_kind=self.kind,
+                level=self.level,
+            )
+        if self.viewport_offset is not None and not _is_integer_pair(self.viewport_offset):
+            raise SelectorResolutionError(
+                "Spatial objects must use integer viewport offsets when present.",
+                object_kind=self.kind,
+                viewport_offset=self.viewport_offset,
+            )
+        if self.viewport_offset_ratio is not None and not _is_numeric_pair(self.viewport_offset_ratio):
+            raise SelectorResolutionError(
+                "Spatial objects must use numeric viewport offset ratios when present.",
+                object_kind=self.kind,
+                viewport_offset_ratio=self.viewport_offset_ratio,
+            )
+        if self.world_coordinate is not None and not _is_integer_pair(self.world_coordinate):
+            raise SelectorResolutionError(
+                "Spatial objects must use integer world coordinates when present.",
+                object_kind=self.kind,
+                world_coordinate=self.world_coordinate,
+            )
+
+    def require_metadata(self, key: str) -> Any:
+        """Returns a required spatial-object metadata field or fails fast."""
+
+        if key not in self.metadata:
+            raise SelectorResolutionError(
+                f"Missing required metadata '{key}' for spatial object '{self.name_text}'.",
+                key=key,
+                object_kind=self.kind,
+            )
+        return self.metadata[key]
+
+    def matches(self, query: SpatialObjectQuery) -> bool:
+        """Returns whether the visible object satisfies the requested semantic query."""
+
+        if query.kind is not None and self.kind != query.kind:
+            return False
+        if query.relationship is not None and self.relationship != query.relationship:
+            return False
+        if query.name_text is not None and self.name_text != query.name_text:
+            return False
+        if query.alliance_tag is not None and self.alliance_tag != query.alliance_tag:
+            return False
+        if query.kingdom is not None and self.kingdom != query.kingdom:
+            return False
+        if query.level is not None and self.level != query.level:
+            return False
+        if query.metadata_key is not None and self.metadata.get(query.metadata_key) != query.metadata_value:
+            return False
+        return True
+
+
+@dataclass(frozen=True, slots=True)
+class SpatialSurfaceObservation:
+    """Stores the current spatial-surface viewport plus all visible scene objects."""
+
+    surface_type: SpatialSurfaceType
+    viewport: SpatialViewport
+    objects: tuple[DetectedSpatialObject, ...] = ()
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+
+    def objects_of_kind(self, kind: SpatialObjectKind) -> tuple[DetectedSpatialObject, ...]:
+        """Returns every visible spatial object of the requested kind."""
+
+        return tuple(object_ for object_ in self.objects if object_.kind == kind)
+
+    def find_object(self, query: SpatialObjectQuery) -> DetectedSpatialObject | None:
+        """Returns the single visible spatial object matching the semantic query when available."""
+
+        if query.surface_type is not None and query.surface_type != self.surface_type:
+            return None
+        for object_ in self.objects:
+            if object_.matches(query):
+                return object_
+        return None
+
+    def require_object(self, query: SpatialObjectQuery) -> DetectedSpatialObject:
+        """Returns one required visible spatial object or fails fast."""
+
+        object_ = self.find_object(query)
+        if object_ is not None:
+            return object_
+        raise SelectorResolutionError(
+            "The requested spatial object is not visible on the active surface.",
+            surface_type=self.surface_type,
+            object_kind=query.kind,
+            relationship=query.relationship,
+            name_text=query.name_text,
+            alliance_tag=query.alliance_tag,
+            kingdom=query.kingdom,
+            level=query.level,
+            metadata_key=query.metadata_key,
+            metadata_value=query.metadata_value,
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class Observation:
     """Authoritative interpreted state for one screenshot."""
@@ -148,6 +395,7 @@ class Observation:
     screen_type: ScreenType
     visible_elements: Mapping[UiElementId, VisibleElement]
     list_entries: tuple[DetectedListEntry, ...] = ()
+    spatial_surface: SpatialSurfaceObservation | None = None
     artifact_path: Path | None = None
     image_size: tuple[int, int] | None = None
     captured_at: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
@@ -210,6 +458,49 @@ class Observation:
         """Returns all observed entries of the requested dynamic collection kind."""
 
         return tuple(entry for entry in self.list_entries if entry.kind == kind)
+
+    def require_spatial_surface(self, surface_type: SpatialSurfaceType | None = None) -> SpatialSurfaceObservation:
+        """Returns the active spatial surface or fails fast when it is missing or mismatched."""
+
+        if self.spatial_surface is None:
+            raise SelectorResolutionError(
+                "The current observation does not expose a spatial-surface model.",
+                screen_type=self.screen_type,
+            )
+        if surface_type is not None and self.spatial_surface.surface_type != surface_type:
+            raise SelectorResolutionError(
+                "The current observation exposes a different spatial surface than requested.",
+                requested_surface_type=surface_type,
+                surface_type=self.spatial_surface.surface_type,
+                screen_type=self.screen_type,
+            )
+        return self.spatial_surface
+
+    def spatial_objects(self, kind: SpatialObjectKind | None = None) -> tuple[DetectedSpatialObject, ...]:
+        """Returns every visible spatial object, optionally filtered to one kind."""
+
+        if self.spatial_surface is None:
+            return ()
+        if kind is None:
+            return self.spatial_surface.objects
+        return self.spatial_surface.objects_of_kind(kind)
+
+    def find_spatial_object(self, query: SpatialObjectQuery) -> DetectedSpatialObject | None:
+        """Returns one visible spatial object satisfying the semantic query when present."""
+
+        if self.spatial_surface is None:
+            return None
+        return self.spatial_surface.find_object(query)
+
+    def require_spatial_object(self, query: SpatialObjectQuery) -> DetectedSpatialObject:
+        """Returns one required visible spatial object or fails fast."""
+
+        if self.spatial_surface is None:
+            raise SelectorResolutionError(
+                "The current observation does not expose a spatial-surface model.",
+                screen_type=self.screen_type,
+            )
+        return self.spatial_surface.require_object(query)
 
     def text_field_state(self, selector_id: UiElementId) -> ObservedTextFieldState | None:
         """Returns the observed reusable text-field state for one selector when available."""
@@ -369,3 +660,25 @@ def _castle_levels_match(left: CastleIdentity, right: CastleIdentity) -> bool:
     if left.castle_level is None or right.castle_level is None:
         return True
     return left.castle_level == right.castle_level
+
+
+def _is_integer_pair(value: object) -> bool:
+    """Returns whether one object is a 2-tuple of integers."""
+
+    return (
+        isinstance(value, tuple)
+        and len(value) == 2
+        and isinstance(value[0], int)
+        and isinstance(value[1], int)
+    )
+
+
+def _is_numeric_pair(value: object) -> bool:
+    """Returns whether one object is a 2-tuple of numeric values."""
+
+    return (
+        isinstance(value, tuple)
+        and len(value) == 2
+        and isinstance(value[0], int | float)
+        and isinstance(value[1], int | float)
+    )

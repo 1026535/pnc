@@ -22,9 +22,10 @@ from pnc_automation.pnc.action_requests import (
     TapAction,
     TapListEntryAction,
     TapPointAction,
+    TapSpatialObjectAction,
     WaitAction,
 )
-from pnc_automation.pnc.observation import DetectedListEntry, Observation
+from pnc_automation.pnc.observation import DetectedListEntry, DetectedSpatialObject, Observation
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
 from pnc_automation.vision.observation_request import ObservationRequest
@@ -85,6 +86,16 @@ class ActionExecutor:
         if isinstance(action, TapListEntryAction):
             entry = self._require_entry(action, observation)
             target = entry.action_point if action.use_action_point and entry.action_point is not None else entry.bounds.center()
+            self.session.tap_point(*target)
+            self._sleep_ms(self._stable_delay_ms_for(action))
+            return True
+        if isinstance(action, TapSpatialObjectAction):
+            object_ = self._require_spatial_object(action, observation)
+            target = (
+                object_.action_point
+                if action.use_action_point and object_.action_point is not None
+                else object_.bounds.center()
+            )
             self.session.tap_point(*target)
             self._sleep_ms(self._stable_delay_ms_for(action))
             return True
@@ -176,6 +187,13 @@ class ActionExecutor:
             metadata_key=action.metadata_key,
             metadata_value=action.metadata_value,
         )
+
+    def _require_spatial_object(self, action: TapSpatialObjectAction, observation: Observation) -> DetectedSpatialObject:
+        """Returns the matching visible spatial object for one spatial-object tap."""
+
+        if action.query is None:
+            raise SelectorResolutionError("TapSpatialObjectAction requires a semantic spatial-object query.")
+        return observation.require_spatial_object(action.query)
 
     def _sleep_ms(self, milliseconds: int) -> None:
         """Sleeps using millisecond units for action pacing."""

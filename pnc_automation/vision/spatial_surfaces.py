@@ -1,0 +1,559 @@
+"""Shared spatial-surface parsing helpers for world-map and home-city observations."""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+
+from PIL import Image
+
+from pnc_automation.errors import SelectorResolutionError
+from pnc_automation.pnc.observation import (
+    Bounds,
+    DetectedSpatialObject,
+    SpatialObjectKind,
+    SpatialObjectRelationship,
+    SpatialSurfaceObservation,
+    SpatialSurfaceType,
+    SpatialViewport,
+    SpatialViewportAddressingKind,
+)
+from pnc_automation.pnc.screen_type import ScreenType
+from pnc_automation.vision.ocr_service import OcrLine
+from pnc_automation.vision.selectors import SelectorRegistry, SurfaceDefinition
+from pnc_automation.vision.text_anchors import normalize_ocr_text
+
+_WORLD_X_COORDINATE_PATTERN = re.compile(r"X\s*[:：]\s*(?P<value>\d{1,4})", re.IGNORECASE)
+_WORLD_Y_COORDINATE_PATTERN = re.compile(r"Y\s*[:：]\s*(?P<value>\d{1,4})", re.IGNORECASE)
+_WORLD_UI_CHROME_TEXTS = frozenset({"HOME", "HERO", "QUEST", "MAIL", "ALLIANCE", "MORE", "SEARCH"})
+_WORLD_NEUTRAL_OBJECT_TOKENS = frozenset({"DRAGONIA", "ALTAR", "HELLFORTRESS"})
+_WORLD_ALLIANCE_BUILDING_TOKENS = frozenset({"FORTRESS", "TOWER", "HIVE", "MINE", "CAMP"})
+_WORLD_RESOURCE_TYPE_BY_TOKEN = {
+    "FOOD": "food",
+    "FARM": "food",
+    "WOOD": "wood",
+    "LUMBER": "wood",
+    "STONE": "stone",
+    "QUARRY": "stone",
+    "IRON": "iron",
+}
+_ALLIANCE_TAG_PATTERN = re.compile(r"^\[(?P<tag>[A-Z0-9]{2,5})\]\s*(?P<name>.+)$")
+_WORLD_CASTLE_LABEL_PATTERN = re.compile(r"^K(?P<kingdom>\d{3})(?P<identifier>[A-Z0-9]{5,})$")
+_MONSTER_LEVEL_PATTERN = re.compile(r"^(?:LV\.?|LEVEL)\s*(?P<level>\d{1,3})\s*(?P<name>.+)$", re.IGNORECASE)
+_HOME_BUILDING_CATEGORY_BY_TEXT = {
+    "CASTLE": "castle",
+    "WALL": "wall",
+    "ACADEMY": "academy",
+    "INSTITUTE": "academy",
+    "BARRACKS": "barracks",
+}
+_HOME_EMPTY_SLOT_TEXTS = frozenset({"BUILD", "EMPTY"})
+
+
+@dataclass(frozen=True, slots=True)
+class ParsedWorldViewport:
+    """Carries the parsed world-map viewport plus the OCR region used to prove it."""
+
+    viewport: SpatialViewport
+    coordinate_bounds: Bounds
+    coordinate_text: str
+
+
+def parse_world_viewport(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ParsedWorldViewport | None:
+    """Returns the strict world-map coordinate viewport when OCR proves both X and Y values."""
+
+    candidate_lines = tuple(
+        line
+        for line in lines
+        if line.bounds.y <= int(image.height * 0.18) and line.bounds.x <= int(image.width * 0.7)
+    )
+    if not candidate_lines:
+        return None
+    x = _extract_coordinate_value(candidate_lines, pattern=_WORLD_X_COORDINATE_PATTERN)
+    y = _extract_coordinate_value(candidate_lines, pattern=_WORLD_Y_COORDINATE_PATTERN)
+    if x is None or y is None:
+        return None
+    coordinate_lines = tuple(
+        line
+        for line in candidate_lines
+        if "X" in normalize_ocr_text(line.text) or "Y" in normalize_ocr_text(line.text)
+    )
+    bounds_source = coordinate_lines or candidate_lines
+    left = min(line.bounds.x for line in bounds_source)
+    top = min(line.bounds.y for line in bounds_source)
+    right = max(line.bounds.x + line.bounds.width for line in bounds_source)
+    bottom = max(line.bounds.y + line.bounds.height for line in bounds_source)
+    return ParsedWorldViewport(
+        viewport=SpatialViewport(
+            addressing_kind=SpatialViewportAddressingKind.COORDINATE_BAR,
+            x=x,
+            y=y,
+        ),
+        coordinate_bounds=Bounds(x=left, y=top, width=max(1, right - left), height=max(1, bottom - top)),
+        coordinate_text=f"X:{x} Y:{y}",
+    )
+
+
+def build_world_map_surface_observation(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+    selector_registry: SelectorRegistry | None,
+) -> ParsedWorldViewport | None:
+    """Returns the strict world-map viewport proof when OCR exposes the coordinate bar."""
+
+    del selector_registry
+    return parse_world_viewport(image=image, lines=lines)
+
+
+def build_world_map_spatial_surface(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+    selector_registry: SelectorRegistry | None,
+    object_scan_bounds: Bounds | None = None,
+) -> SpatialSurfaceObservation | None:
+    """Builds the canonical world-map spatial surface from the full viewport or one requested subsection."""
+
+    parsed_viewport = parse_world_viewport(image=image, lines=lines)
+    if parsed_viewport is None:
+        return None
+    surface_definition = None if selector_registry is None else selector_registry.surface_for_screen(ScreenType.PNC_WORLD_MAP)
+    viewport_bounds = _resolve_world_map_scan_bounds(image=image, requested_bounds=None)
+    scan_bounds = _resolve_world_map_scan_bounds(image=image, requested_bounds=object_scan_bounds)
+    objects = _parse_world_map_objects(
+        image=image,
+        lines=lines,
+        surface_definition=surface_definition,
+        scan_bounds=scan_bounds,
+        viewport_bounds=viewport_bounds,
+        viewport_coordinate=parsed_viewport.viewport.coordinate,
+    )
+    return SpatialSurfaceObservation(
+        surface_type=SpatialSurfaceType.WORLD_MAP,
+        viewport=parsed_viewport.viewport,
+        objects=objects,
+        metadata={
+            "coordinate_text": parsed_viewport.coordinate_text,
+            "scan_bounds": scan_bounds,
+            "scan_scope": "section" if object_scan_bounds is not None else "full_viewport",
+            **({} if surface_definition is None else {"surface_id": surface_definition.id}),
+        },
+    )
+
+
+def build_home_city_spatial_surface(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+    selector_registry: SelectorRegistry | None,
+) -> SpatialSurfaceObservation:
+    """Builds the canonical home-city spatial surface using camera-relative building parsing."""
+
+    surface_definition = None if selector_registry is None else selector_registry.surface_for_screen(ScreenType.PNC_HOME_CITY)
+    objects = _parse_home_city_objects(
+        image=image,
+        lines=lines,
+        surface_definition=surface_definition,
+    )
+    anchor_buildings = tuple(sorted(object_.name_text for object_ in objects if object_.name_text is not None))
+    return SpatialSurfaceObservation(
+        surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+        viewport=SpatialViewport(
+            addressing_kind=SpatialViewportAddressingKind.CAMERA_RELATIVE,
+            metadata={"anchor_buildings": anchor_buildings},
+        ),
+        objects=objects,
+        metadata={} if surface_definition is None else {"surface_id": surface_definition.id},
+    )
+
+
+def _parse_world_map_objects(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+    surface_definition: SurfaceDefinition | None,
+    scan_bounds: Bounds,
+    viewport_bounds: Bounds,
+    viewport_coordinate: tuple[int, int] | None,
+) -> tuple[DetectedSpatialObject, ...]:
+    """Extracts typed world-map objects from OCR-visible labels inside the map viewport."""
+
+    supported_kinds = None if surface_definition is None else frozenset(surface_definition.object_kinds)
+    relationship_rules = None if surface_definition is None else surface_definition.relationship_rules
+    parsed_objects: list[DetectedSpatialObject] = []
+    seen_keys: set[tuple[object, ...]] = set()
+    for line in lines:
+        if not _bounds_center_within_region(bounds=line.bounds, region=scan_bounds):
+            continue
+        normalized_text = normalize_ocr_text(line.text)
+        if normalized_text == "" or normalized_text in _WORLD_UI_CHROME_TEXTS or _looks_like_coordinate_overlay(normalized_text):
+            continue
+        object_ = _classify_world_map_object(
+            image=image,
+            line=line,
+            relationship_rules=relationship_rules,
+            viewport_bounds=viewport_bounds,
+            viewport_coordinate=viewport_coordinate,
+        )
+        if object_ is None:
+            continue
+        if supported_kinds is not None and object_.kind not in supported_kinds:
+            continue
+        key = (object_.kind, object_.relationship, object_.name_text, object_.level, line.bounds.x, line.bounds.y)
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        parsed_objects.append(object_)
+    return tuple(parsed_objects)
+
+
+def _classify_world_map_object(
+    *,
+    image: Image.Image,
+    line: OcrLine,
+    relationship_rules: object | None,
+    viewport_bounds: Bounds,
+    viewport_coordinate: tuple[int, int] | None,
+) -> DetectedSpatialObject | None:
+    """Classifies one OCR line into a typed world-map spatial object when the evidence is strong enough."""
+
+    raw_text = line.text.strip()
+    normalized_text = normalize_ocr_text(raw_text)
+    if normalized_text == "":
+        return None
+    alliance_tag, stripped_name = _extract_alliance_tag(raw_text)
+    kind = _classify_world_map_object_kind(normalized_text, raw_text=raw_text, alliance_tag=alliance_tag)
+    if kind is None:
+        return None
+    color_family = _classify_color_family(image=image, bounds=line.bounds)
+    relationship = _classify_world_map_relationship(
+        kind=kind,
+        normalized_text=normalized_text,
+        alliance_tag=alliance_tag,
+        color_family=color_family,
+        relationship_rules=relationship_rules,
+    )
+    level, resolved_name = _extract_level_and_name(raw_text, fallback_name=stripped_name)
+    kingdom = _extract_world_object_kingdom(normalized_text)
+    metadata: dict[str, object] = {}
+    if color_family is not None:
+        metadata["color_family"] = color_family
+    if kind == SpatialObjectKind.CASTLE and _looks_like_world_castle_label(normalized_text):
+        metadata["castle_label"] = raw_text
+        metadata["castle_identifier"] = normalized_text[4:]
+    if kind == SpatialObjectKind.RESOURCE_NODE:
+        resource_type = _resolve_resource_type(normalized_text)
+        if resource_type is not None:
+            metadata["resource_type"] = resource_type
+    bounds = Bounds(
+        x=line.bounds.x,
+        y=line.bounds.y,
+        width=line.bounds.width,
+        height=line.bounds.height,
+    )
+    viewport_offset = _bounds_center_offset(bounds=bounds, origin=viewport_bounds.center())
+    viewport_offset_ratio = _bounds_center_offset_ratio(bounds=bounds, viewport_bounds=viewport_bounds)
+    world_coordinate = None
+    if viewport_coordinate is not None:
+        world_coordinate = (
+            viewport_coordinate[0] + viewport_offset[0],
+            viewport_coordinate[1] + viewport_offset[1],
+        )
+    return DetectedSpatialObject(
+        kind=kind,
+        bounds=bounds,
+        relationship=relationship,
+        name_text=resolved_name,
+        alliance_tag=alliance_tag,
+        level=level,
+        kingdom=kingdom,
+        action_point=bounds.center(),
+        viewport_offset=viewport_offset,
+        viewport_offset_ratio=viewport_offset_ratio,
+        world_coordinate=world_coordinate,
+        metadata=metadata,
+    )
+
+
+def _classify_world_map_object_kind(
+    normalized_text: str,
+    *,
+    raw_text: str,
+    alliance_tag: str | None,
+) -> SpatialObjectKind | None:
+    """Returns the typed world-map object kind implied by one OCR label."""
+
+    if normalized_text == "MYTERRITORY" or "TERRITORY" in normalized_text:
+        return SpatialObjectKind.CASTLE
+    if _looks_like_world_castle_label(normalized_text):
+        return SpatialObjectKind.CASTLE
+    if "DRAGONIA" in normalized_text:
+        return SpatialObjectKind.DRAGONIA
+    if "ALTAR" in normalized_text:
+        return SpatialObjectKind.ALTAR
+    if "HELLFORTRESS" in normalized_text:
+        return SpatialObjectKind.HELL_FORTRESS
+    if _resolve_resource_type(normalized_text) is not None:
+        return SpatialObjectKind.RESOURCE_NODE
+    if _MONSTER_LEVEL_PATTERN.match(raw_text.strip()) is not None:
+        return SpatialObjectKind.MONSTER
+    if alliance_tag is not None:
+        if any(token in normalized_text for token in _WORLD_ALLIANCE_BUILDING_TOKENS):
+            return SpatialObjectKind.ALLIANCE_BUILDING
+        return SpatialObjectKind.CASTLE
+    if any(token in normalized_text for token in _WORLD_NEUTRAL_OBJECT_TOKENS):
+        return SpatialObjectKind.ALTAR if "ALTAR" in normalized_text else SpatialObjectKind.DRAGONIA
+    return None
+
+
+def _classify_world_map_relationship(
+    *,
+    kind: SpatialObjectKind,
+    normalized_text: str,
+    alliance_tag: str | None,
+    color_family: str | None,
+    relationship_rules: object | None,
+) -> SpatialObjectRelationship:
+    """Returns the semantic ownership relationship for one typed world-map object."""
+
+    del alliance_tag
+    if kind in {
+        SpatialObjectKind.MONSTER,
+        SpatialObjectKind.HELL_FORTRESS,
+        SpatialObjectKind.RESOURCE_NODE,
+        SpatialObjectKind.ALTAR,
+        SpatialObjectKind.DRAGONIA,
+    }:
+        return SpatialObjectRelationship.NEUTRAL
+    self_castle_label = normalize_ocr_text(getattr(relationship_rules, "self_castle_label", "My Territory"))
+    if normalized_text == self_castle_label:
+        return SpatialObjectRelationship.SELF
+    if color_family == getattr(relationship_rules, "self_color_family", "deep_blue"):
+        return SpatialObjectRelationship.SELF
+    if color_family == getattr(relationship_rules, "ally_name_color_family", "light_blue"):
+        return SpatialObjectRelationship.ALLY
+    if color_family == getattr(relationship_rules, "other_alliance_color_family", "yellow"):
+        return SpatialObjectRelationship.OTHER
+    return SpatialObjectRelationship.UNKNOWN
+
+
+def _parse_home_city_objects(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+    surface_definition: SurfaceDefinition | None,
+) -> tuple[DetectedSpatialObject, ...]:
+    """Extracts typed home-city buildings and empty slots from OCR-visible scene labels."""
+
+    supported_kinds = None if surface_definition is None else frozenset(surface_definition.object_kinds)
+    parsed_objects: list[DetectedSpatialObject] = []
+    min_y = int(image.height * 0.12)
+    max_y = int(image.height * 0.82)
+    for line in lines:
+        if line.bounds.y < min_y or line.bounds.y > max_y:
+            continue
+        normalized_text = normalize_ocr_text(line.text)
+        if normalized_text == "":
+            continue
+        object_ = _classify_home_city_object(image=image, line=line, normalized_text=normalized_text)
+        if object_ is None:
+            continue
+        if supported_kinds is not None and object_.kind not in supported_kinds:
+            continue
+        parsed_objects.append(object_)
+    return tuple(parsed_objects)
+
+
+def _classify_home_city_object(
+    *,
+    image: Image.Image,
+    line: OcrLine,
+    normalized_text: str,
+) -> DetectedSpatialObject | None:
+    """Returns one typed home-city spatial object when the OCR line describes scene content."""
+
+    if normalized_text in _HOME_BUILDING_CATEGORY_BY_TEXT:
+        metadata = {"category": _HOME_BUILDING_CATEGORY_BY_TEXT[normalized_text], "building_name": line.text.strip()}
+        return DetectedSpatialObject(
+            kind=SpatialObjectKind.HOME_BUILDING,
+            bounds=Bounds(x=line.bounds.x, y=line.bounds.y, width=line.bounds.width, height=line.bounds.height),
+            relationship=SpatialObjectRelationship.SELF,
+            name_text=line.text.strip(),
+            action_point=Bounds(x=line.bounds.x, y=line.bounds.y, width=line.bounds.width, height=line.bounds.height).center(),
+            metadata=metadata,
+        )
+    if normalized_text in _HOME_EMPTY_SLOT_TEXTS and not _looks_like_home_action_label(image=image, line=line):
+        return DetectedSpatialObject(
+            kind=SpatialObjectKind.HOME_EMPTY_SLOT,
+            bounds=Bounds(x=line.bounds.x, y=line.bounds.y, width=line.bounds.width, height=line.bounds.height),
+            relationship=SpatialObjectRelationship.SELF,
+            name_text=line.text.strip(),
+            action_point=Bounds(x=line.bounds.x, y=line.bounds.y, width=line.bounds.width, height=line.bounds.height).center(),
+        )
+    return None
+
+
+def _extract_alliance_tag(raw_text: str) -> tuple[str | None, str | None]:
+    """Returns the alliance tag and stripped name when the label uses the supported `[TAG] Name` form."""
+
+    match = _ALLIANCE_TAG_PATTERN.match(raw_text.strip())
+    if match is None:
+        return None, raw_text.strip()
+    return match.group("tag"), match.group("name").strip()
+
+
+def _extract_level_and_name(raw_text: str, *, fallback_name: str | None) -> tuple[int | None, str | None]:
+    """Extracts a leading world-object level token while preserving the remaining display name."""
+
+    match = _MONSTER_LEVEL_PATTERN.match(raw_text.strip())
+    if match is None:
+        return None, fallback_name
+    return int(match.group("level")), match.group("name").strip()
+
+
+def _extract_coordinate_value(lines: tuple[OcrLine, ...], *, pattern: re.Pattern[str]) -> int | None:
+    """Returns one OCR-proven coordinate value regardless of whether X and Y land on separate lines."""
+
+    ordered_lines = tuple(sorted(lines, key=lambda item: (item.bounds.y, item.bounds.x)))
+    for line in ordered_lines:
+        match = pattern.search(line.text.strip())
+        if match is not None:
+            return int(match.group("value"))
+    combined_text = " ".join(line.text.strip() for line in ordered_lines)
+    match = pattern.search(combined_text)
+    if match is None:
+        return None
+    return int(match.group("value"))
+
+
+def _looks_like_world_castle_label(normalized_text: str) -> bool:
+    """Returns whether one OCR label matches the live kingdom/castle label form shown on the world map."""
+
+    match = _WORLD_CASTLE_LABEL_PATTERN.match(normalized_text)
+    if match is None:
+        return False
+    return sum(character.isdigit() for character in normalized_text) >= 8
+
+
+def _extract_world_object_kingdom(normalized_text: str) -> str | None:
+    """Returns the canonical kingdom token from one world-map castle label when OCR proves it."""
+
+    if not _looks_like_world_castle_label(normalized_text):
+        return None
+    return f"K{normalized_text[1:4]}"
+
+
+def _resolve_resource_type(normalized_text: str) -> str | None:
+    """Returns the canonical resource type string implied by one world-node label."""
+
+    for token, resource_type in _WORLD_RESOURCE_TYPE_BY_TOKEN.items():
+        if token in normalized_text:
+            return resource_type
+    return None
+
+
+def _looks_like_coordinate_overlay(normalized_text: str) -> bool:
+    """Returns whether one OCR label looks like the fixed world-coordinate overlay instead of a scene object."""
+
+    return normalized_text.startswith("X") or normalized_text.startswith("Y")
+
+
+def _looks_like_home_action_label(*, image: Image.Image, line: OcrLine) -> bool:
+    """Returns whether one `Build` OCR line sits in the fixed home-action area instead of the scene."""
+
+    return (
+        line.bounds.x <= int(image.width * 0.18)
+        and line.bounds.y >= int(image.height * 0.15)
+        and line.bounds.y <= int(image.height * 0.85)
+    )
+
+
+def _classify_color_family(*, image: Image.Image, bounds: object) -> str | None:
+    """Returns the coarse label color family used by world-map relationship classification."""
+
+    crop = image.crop((bounds.x, bounds.y, bounds.x + bounds.width, bounds.y + bounds.height)).convert("RGB")
+    red_total = 0
+    green_total = 0
+    blue_total = 0
+    pixels = crop.load()
+    pixel_count = max(1, crop.width * crop.height)
+    for y in range(crop.height):
+        for x in range(crop.width):
+            red, green, blue = pixels[x, y]
+            red_total += red
+            green_total += green
+            blue_total += blue
+    red = red_total / pixel_count
+    green = green_total / pixel_count
+    blue = blue_total / pixel_count
+    if blue >= 110 and blue >= red + 30 and blue >= green + 5:
+        if green >= 90 and green >= red:
+            return "light_blue"
+        return "deep_blue"
+    if red >= 120 and green >= 120 and blue <= 140:
+        return "yellow"
+    return None
+
+
+def _resolve_world_map_scan_bounds(*, image: Image.Image, requested_bounds: Bounds | None) -> Bounds:
+    """Returns the visible world-map scan area, optionally narrowed to one requested subsection."""
+
+    full_viewport_bounds = Bounds(
+        x=0,
+        y=int(image.height * 0.1),
+        width=image.width,
+        height=max(1, int(image.height * 0.84) - int(image.height * 0.1)),
+    )
+    if requested_bounds is None:
+        return full_viewport_bounds
+    left = max(full_viewport_bounds.x, requested_bounds.x)
+    top = max(full_viewport_bounds.y, requested_bounds.y)
+    right = min(full_viewport_bounds.x + full_viewport_bounds.width, requested_bounds.x + requested_bounds.width)
+    bottom = min(full_viewport_bounds.y + full_viewport_bounds.height, requested_bounds.y + requested_bounds.height)
+    if right <= left or bottom <= top:
+        raise SelectorResolutionError(
+            "Requested world-map scan bounds do not intersect the visible world viewport.",
+            requested_bounds=requested_bounds,
+            viewport_bounds=full_viewport_bounds,
+        )
+    return Bounds(
+        x=left,
+        y=top,
+        width=right - left,
+        height=bottom - top,
+    )
+
+
+def _bounds_center_within_region(*, bounds: object, region: Bounds) -> bool:
+    """Returns whether one OCR label is centered inside the requested scan region."""
+
+    center_x = bounds.x + (bounds.width // 2)
+    center_y = bounds.y + (bounds.height // 2)
+    return (
+        center_x >= region.x
+        and center_x <= region.x + region.width
+        and center_y >= region.y
+        and center_y <= region.y + region.height
+    )
+
+
+def _bounds_center_offset(*, bounds: Bounds, origin: tuple[int, int]) -> tuple[int, int]:
+    """Returns one bounds-center offset from the provided viewport-center origin."""
+
+    center_x, center_y = bounds.center()
+    return center_x - origin[0], center_y - origin[1]
+
+
+def _bounds_center_offset_ratio(*, bounds: Bounds, viewport_bounds: Bounds) -> tuple[float, float]:
+    """Returns one normalized bounds-center offset relative to the visible world viewport dimensions."""
+
+    offset_x, offset_y = _bounds_center_offset(bounds=bounds, origin=viewport_bounds.center())
+    return (
+        offset_x / max(viewport_bounds.width, 1),
+        offset_y / max(viewport_bounds.height, 1),
+    )

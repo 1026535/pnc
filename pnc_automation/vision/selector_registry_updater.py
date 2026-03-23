@@ -148,7 +148,10 @@ def apply_selector_updates(
                 notes=merged_notes,
             )
 
-    updated_document = SelectorCatalogDocument(selectors=tuple(selectors_by_id[selector_id] for selector_id in selector_order))
+    updated_document = SelectorCatalogDocument(
+        selectors=tuple(selectors_by_id[selector_id] for selector_id in selector_order),
+        surfaces=document.surfaces,
+    )
     return updated_document, SelectorRegistryUpdateResult(
         added_selector_ids=tuple(added_selector_ids),
         updated_selector_ids=tuple(updated_selector_ids),

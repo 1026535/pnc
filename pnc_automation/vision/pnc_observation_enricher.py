@@ -29,6 +29,11 @@ from pnc_automation.vision.pnc_ocr_capabilities import can_attempt_screen_family
 from pnc_automation.vision.ocr_service import OcrLine, OcrService
 from pnc_automation.vision.screen_classifier import ScreenEvidence
 from pnc_automation.vision.selectors import Region, SelectorRegistry
+from pnc_automation.vision.spatial_surfaces import (
+    build_home_city_spatial_surface,
+    build_world_map_spatial_surface,
+    parse_world_viewport,
+)
 from pnc_automation.vision.text_anchors import (
     DetectedTextAnchor,
     TextAnchorDetector,
@@ -129,7 +134,6 @@ _HOME_CITY_EVIDENCE_SELECTOR_IDS = frozenset(
         UiElementId.PNC_HOME_TOP_RESOURCE_DIAMOND,
     }
 )
-_WORLD_MAP_COORDINATE_TOKEN_PATTERN = re.compile(r"[XY]\d{1,4}")
 _POPUP_PRIMARY_ACTION_ANCHOR_IDS = frozenset(
     {
         TextAnchorId.LABEL_CONFIRM,
@@ -428,6 +432,7 @@ class PncObservationEnricher:
                 image=image,
                 lines=lines,
                 anchors=anchors,
+                selector_registry=self.selector_registry,
             )
             if world_map is not None:
                 return world_map
@@ -437,8 +442,10 @@ class PncObservationEnricher:
         ):
             home_city = _build_home_city_additions(
                 image=image,
+                lines=lines,
                 anchors=anchors,
                 visible_elements=visible_elements,
+                selector_registry=self.selector_registry,
             )
             if home_city is not None:
                 return home_city
@@ -2161,8 +2168,10 @@ def _build_improve_might_additions(
 def _build_home_city_additions(
     *,
     image: Image.Image,
+    lines: tuple[OcrLine, ...],
     anchors: tuple[DetectedTextAnchor, ...],
     visible_elements: Mapping[UiElementId, VisibleElement],
+    selector_registry: SelectorRegistry | None,
 ) -> ObservationAdditions | None:
     """Returns home-city classification when bottom navigation OCR has supporting evidence."""
 
@@ -2176,6 +2185,11 @@ def _build_home_city_additions(
         return None
     return ObservationAdditions(
         visible_elements=visible_nav_elements | visible_home_action_elements,
+        spatial_surface=build_home_city_spatial_surface(
+            image=image,
+            lines=lines,
+            selector_registry=selector_registry,
+        ),
         screen_evidence=(ScreenEvidence(ScreenType.PNC_HOME_CITY, "bottom_nav_and_home_actions"),),
     )
 
@@ -2185,6 +2199,7 @@ def _build_world_map_additions(
     image: Image.Image,
     lines: tuple[OcrLine, ...],
     anchors: tuple[DetectedTextAnchor, ...],
+    selector_registry: SelectorRegistry | None,
 ) -> ObservationAdditions | None:
     """Returns world-map classification when coordinates and bottom navigation are both OCR-proven."""
 
@@ -2194,8 +2209,8 @@ def _build_world_map_additions(
     home_anchor = nav_anchors.get(TextAnchorId.LABEL_HOME)
     if home_anchor is None:
         return None
-    coordinate_bar = _build_world_coordinate_bar_visible(image=image, lines=lines)
-    if coordinate_bar is None:
+    parsed_viewport = parse_world_viewport(image=image, lines=lines)
+    if parsed_viewport is None:
         return None
     visible_elements = dict(visible_nav_elements)
     visible_elements[UiElementId.PNC_WORLD_HOME_NAV] = _make_visible_from_bottom_nav_anchor(
@@ -2203,9 +2218,21 @@ def _build_world_map_additions(
         selector_id=UiElementId.PNC_WORLD_HOME_NAV,
         anchor=home_anchor,
     )
-    visible_elements[UiElementId.PNC_WORLD_COORDINATE_BAR] = coordinate_bar
+    visible_elements[UiElementId.PNC_WORLD_COORDINATE_BAR] = _make_visible(
+        selector_id=UiElementId.PNC_WORLD_COORDINATE_BAR,
+        x=parsed_viewport.coordinate_bounds.x,
+        y=parsed_viewport.coordinate_bounds.y,
+        width=parsed_viewport.coordinate_bounds.width,
+        height=parsed_viewport.coordinate_bounds.height,
+        extracted_text=parsed_viewport.coordinate_text,
+    )
     return ObservationAdditions(
         visible_elements=visible_elements,
+        spatial_surface=build_world_map_spatial_surface(
+            image=image,
+            lines=lines,
+            selector_registry=selector_registry,
+        ),
         screen_evidence=(ScreenEvidence(ScreenType.PNC_WORLD_MAP, "ocr_world_coordinates_and_bottom_nav"),),
     )
 
@@ -2232,68 +2259,6 @@ def _extract_bottom_nav_additions(
         )
         nav_anchors[anchor.id] = anchor
     return visible_nav_elements, nav_anchors
-
-
-def _build_world_coordinate_bar_visible(
-    *,
-    image: Image.Image,
-    lines: tuple[OcrLine, ...],
-) -> VisibleElement | None:
-    """Returns the coordinate-bar selector when OCR exposes both X and Y values in the top HUD band."""
-
-    coordinate_lines = tuple(_extract_world_coordinate_lines(image=image, lines=lines))
-    if len(coordinate_lines) < 2:
-        return None
-    left = min(line.bounds.x for line in coordinate_lines)
-    top = min(line.bounds.y for line in coordinate_lines)
-    right = max(line.bounds.x + line.bounds.width for line in coordinate_lines)
-    bottom = max(line.bounds.y + line.bounds.height for line in coordinate_lines)
-    return _make_visible(
-        selector_id=UiElementId.PNC_WORLD_COORDINATE_BAR,
-        x=left,
-        y=top,
-        width=right - left,
-        height=bottom - top,
-        extracted_text=" ".join(line.text for line in coordinate_lines),
-    )
-
-
-def _extract_world_coordinate_lines(
-    *,
-    image: Image.Image,
-    lines: tuple[OcrLine, ...],
-) -> tuple[OcrLine, ...]:
-    """Returns the distinct OCR lines that carry the world-map X/Y coordinate tokens."""
-
-    max_y = int(image.height * 0.18)
-    x_line: OcrLine | None = None
-    y_line: OcrLine | None = None
-    for line in lines:
-        if line.bounds.y > max_y or line.bounds.x > int(image.width * 0.6):
-            continue
-        normalized_text = normalize_ocr_text(line.text)
-        if x_line is None and _contains_world_coordinate_token(normalized_text, axis="X"):
-            x_line = line
-        if y_line is None and _contains_world_coordinate_token(normalized_text, axis="Y"):
-            y_line = line
-        if x_line is not None and y_line is not None:
-            break
-    coordinate_lines = []
-    if x_line is not None:
-        coordinate_lines.append(x_line)
-    if y_line is not None and y_line is not x_line:
-        coordinate_lines.append(y_line)
-    return tuple(coordinate_lines)
-
-
-def _contains_world_coordinate_token(normalized_text: str, *, axis: str) -> bool:
-    """Returns whether one normalized OCR line contains the requested world coordinate token."""
-
-    if normalized_text == "":
-        return False
-    if not _WORLD_MAP_COORDINATE_TOKEN_PATTERN.search(normalized_text):
-        return False
-    return re.search(rf"{axis}\d{{1,4}}", normalized_text) is not None
 
 
 def _build_bag_additions(

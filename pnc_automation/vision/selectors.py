@@ -7,7 +7,14 @@ from enum import StrEnum
 from pathlib import Path
 
 from pnc_automation.errors import SelectorResolutionError
-from pnc_automation.pnc.observation import Bounds, VisibleElement, VisibleElementSourceKind
+from pnc_automation.pnc.observation import (
+    Bounds,
+    SpatialObjectKind,
+    SpatialSurfaceType,
+    SpatialViewportAddressingKind,
+    VisibleElement,
+    VisibleElementSourceKind,
+)
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
 from pnc_automation.vision.selector_catalog import load_selector_catalog_document
@@ -141,10 +148,44 @@ class SelectorDefinition:
 
 
 @dataclass(frozen=True, slots=True)
+class SurfaceViewportDefinition:
+    """Defines the selector-backed viewport controls for one spatial surface."""
+
+    addressing_kind: SpatialViewportAddressingKind
+    coordinate_selector: UiElementId | None = None
+    home_selector: UiElementId | None = None
+    optional_zoom_indicator_selector: UiElementId | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class SurfaceRelationshipRulesDefinition:
+    """Defines the canonical relationship heuristics used by one spatial surface parser."""
+
+    self_castle_label: str | None = None
+    ally_name_color_family: str | None = None
+    other_alliance_color_family: str | None = None
+    self_color_family: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class SurfaceDefinition:
+    """Defines one runtime spatial surface loaded from the canonical catalog."""
+
+    id: str
+    surface_type: SpatialSurfaceType
+    screen: ScreenType
+    viewport: SurfaceViewportDefinition
+    object_kinds: tuple[SpatialObjectKind, ...]
+    relationship_rules: SurfaceRelationshipRulesDefinition | None = None
+    notes: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class SelectorRegistry:
     """Owns canonical selector lookup and validation."""
 
     selectors: tuple[SelectorDefinition, ...]
+    surfaces: tuple[SurfaceDefinition, ...] = ()
 
     def __post_init__(self) -> None:
         """Ensures selector identifiers remain unique."""
@@ -153,11 +194,20 @@ class SelectorRegistry:
         duplicates = {selector_id for selector_id in selector_ids if selector_ids.count(selector_id) > 1}
         if duplicates:
             raise SelectorResolutionError("Duplicate selector ids are not allowed.", duplicates=sorted(duplicates))
+        surface_ids = [surface.id for surface in self.surfaces]
+        surface_duplicates = {surface_id for surface_id in surface_ids if surface_ids.count(surface_id) > 1}
+        if surface_duplicates:
+            raise SelectorResolutionError("Duplicate spatial surface ids are not allowed.", duplicates=sorted(surface_duplicates))
 
     def all(self) -> tuple[SelectorDefinition, ...]:
         """Returns all selector definitions."""
 
         return self.selectors
+
+    def all_surfaces(self) -> tuple[SurfaceDefinition, ...]:
+        """Returns all spatial-surface definitions."""
+
+        return self.surfaces
 
     def require(self, selector_id: UiElementId) -> SelectorDefinition:
         """Returns one selector definition or fails fast."""
@@ -171,6 +221,22 @@ class SelectorRegistry:
         """Returns selectors that can appear on the requested screen."""
 
         return tuple(selector for selector in self.selectors if screen_type in selector.screens)
+
+    def surface_for_screen(self, screen_type: ScreenType) -> SurfaceDefinition | None:
+        """Returns the spatial surface bound to the requested screen when one exists."""
+
+        for surface in self.surfaces:
+            if surface.screen == screen_type:
+                return surface
+        return None
+
+    def require_surface(self, surface_type: SpatialSurfaceType) -> SurfaceDefinition:
+        """Returns one spatial surface definition or fails fast."""
+
+        for surface in self.surfaces:
+            if surface.surface_type == surface_type:
+                return surface
+        raise SelectorResolutionError("Unknown spatial surface type.", surface_type=surface_type)
 
     def materialize_for_screen(
         self,
@@ -203,7 +269,8 @@ def build_default_selector_registry(
     root = template_root or (Path(__file__).resolve().parents[2] / "templates" / "pnc")
     catalog = load_selector_catalog_document(catalog_path)
     return SelectorRegistry(
-        selectors=tuple(_create_selector_from_catalog_entry(selector=selector, root=root) for selector in catalog.selectors)
+        selectors=tuple(_create_selector_from_catalog_entry(selector=selector, root=root) for selector in catalog.selectors),
+        surfaces=tuple(_create_surface_from_catalog_entry(surface=surface) for surface in catalog.surfaces),
     )
 
 
@@ -230,6 +297,20 @@ def _create_selector_from_catalog_entry(*, selector: object, root: Path) -> Sele
         materialize_relative_bounds=getattr(selector, "materialize_relative_bounds", True),
         click_outcomes=tuple(_create_click_outcome(outcome) for outcome in selector.click.outcomes) if selector.click is not None else (),
         notes=selector.notes,
+    )
+
+
+def _create_surface_from_catalog_entry(*, surface: object) -> SurfaceDefinition:
+    """Builds one runtime spatial surface from one raw catalog entry."""
+
+    return SurfaceDefinition(
+        id=getattr(surface, "id"),
+        surface_type=_require_surface_type(getattr(surface, "surface_type")),
+        screen=_require_screen_type(getattr(surface, "screen")),
+        viewport=_create_surface_viewport(getattr(surface, "viewport")),
+        object_kinds=tuple(_require_spatial_object_kind(object_kind) for object_kind in getattr(surface, "object_kinds")),
+        relationship_rules=_create_surface_relationship_rules(getattr(surface, "relationship_rules", None)),
+        notes=tuple(getattr(surface, "notes", ())),
     )
 
 
@@ -418,7 +499,72 @@ def _require_interaction_kind(interaction_kind_name: str) -> SelectorInteraction
         raise SelectorResolutionError(
             "Unknown selector interaction kind in selector catalog.",
             interaction_kind=interaction_kind_name,
+    ) from error
+
+
+def _require_surface_type(surface_type: str) -> SpatialSurfaceType:
+    """Converts one raw spatial-surface type into the typed enum value."""
+
+    try:
+        return SpatialSurfaceType(surface_type)
+    except ValueError as error:
+        raise SelectorResolutionError("Unknown spatial surface type in selector catalog.", surface_type=surface_type) from error
+
+
+def _require_spatial_object_kind(object_kind: str) -> SpatialObjectKind:
+    """Converts one raw spatial object kind into the typed enum value."""
+
+    try:
+        return SpatialObjectKind(object_kind)
+    except ValueError as error:
+        raise SelectorResolutionError(
+            "Unknown spatial object kind in selector catalog.",
+            object_kind=object_kind,
         ) from error
+
+
+def _require_spatial_viewport_addressing_kind(addressing_kind: str) -> SpatialViewportAddressingKind:
+    """Converts one raw spatial viewport addressing kind into the typed enum value."""
+
+    try:
+        return SpatialViewportAddressingKind(addressing_kind)
+    except ValueError as error:
+        raise SelectorResolutionError(
+            "Unknown spatial viewport addressing kind in selector catalog.",
+            addressing_kind=addressing_kind,
+        ) from error
+
+
+def _create_surface_viewport(viewport: object) -> SurfaceViewportDefinition:
+    """Builds one typed spatial viewport definition from the raw catalog metadata."""
+
+    return SurfaceViewportDefinition(
+        addressing_kind=_require_spatial_viewport_addressing_kind(getattr(viewport, "addressing_kind")),
+        coordinate_selector=None
+        if getattr(viewport, "coordinate_selector", None) is None
+        else _require_selector_id(getattr(viewport, "coordinate_selector")),
+        home_selector=None
+        if getattr(viewport, "home_selector", None) is None
+        else _require_selector_id(getattr(viewport, "home_selector")),
+        optional_zoom_indicator_selector=None
+        if getattr(viewport, "optional_zoom_indicator_selector", None) is None
+        else _require_selector_id(getattr(viewport, "optional_zoom_indicator_selector")),
+    )
+
+
+def _create_surface_relationship_rules(
+    relationship_rules: object | None,
+) -> SurfaceRelationshipRulesDefinition | None:
+    """Builds optional relationship heuristics for one spatial surface."""
+
+    if relationship_rules is None:
+        return None
+    return SurfaceRelationshipRulesDefinition(
+        self_castle_label=getattr(relationship_rules, "self_castle_label", None),
+        ally_name_color_family=getattr(relationship_rules, "ally_name_color_family", None),
+        other_alliance_color_family=getattr(relationship_rules, "other_alliance_color_family", None),
+        self_color_family=getattr(relationship_rules, "self_color_family", None),
+    )
 
 
 def _require_ratio(value: float, *, field_name: str, inclusive_zero: bool) -> None:

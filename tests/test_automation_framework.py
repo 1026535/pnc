@@ -16,9 +16,21 @@ from pnc_automation.automation.task_context import TaskContext
 from pnc_automation.automation.tasks.ensure_game_running_task import EnsureGameRunningTask
 from pnc_automation.config.models import AccountConfig, CastleIdentity, CredentialSource, DefaultsConfig, ResolvedCredentials
 from pnc_automation.errors import ScriptValidationError, SelectorResolutionError
-from pnc_automation.pnc.action_requests import ActionRequest, InputTextAction, SelectChatChannelAction, TapAction
+from pnc_automation.pnc.action_requests import (
+    ActionRequest,
+    InputTextAction,
+    SelectChatChannelAction,
+    TapAction,
+    TapSpatialObjectAction,
+)
 from pnc_automation.pnc.chat import ChatChannel
-from pnc_automation.pnc.observation import Observation, VisibleElementSourceKind
+from pnc_automation.pnc.observation import (
+    Observation,
+    SpatialObjectKind,
+    SpatialObjectQuery,
+    SpatialSurfaceType,
+    VisibleElementSourceKind,
+)
 from pnc_automation.pnc.screen_flows import ScreenFlowPlanner
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
@@ -33,7 +45,15 @@ from pnc_automation.vision.selectors import (
     SelectorStatus,
     build_default_selector_registry,
 )
-from tests.test_support import FakeObservationService, FakeSession, build_logger, make_observation, make_visible
+from tests.test_support import (
+    FakeObservationService,
+    FakeSession,
+    build_logger,
+    make_observation,
+    make_spatial_object,
+    make_spatial_surface,
+    make_visible,
+)
 
 
 class AutomationFrameworkTests(unittest.TestCase):
@@ -307,6 +327,48 @@ class AutomationFrameworkTests(unittest.TestCase):
         )
 
         self.assertEqual(executor.session.taps, [(482, 1529)])
+
+    def test_tap_spatial_object_actions_use_current_viewport_action_points(self) -> None:
+        """Uses the live spatial-object action point from the current viewport instead of any fixed building coordinate."""
+
+        executor = ActionExecutor(
+            session=FakeSession(),
+            stable_click_delay_ms=0,
+            post_action_observe_delay_ms=0,
+            chat_stable_click_delay_ms=0,
+            chat_post_action_observe_delay_ms=0,
+            logger=build_logger(),
+            sleep=lambda _: None,
+        )
+        observation = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.HOME_CITY_SURFACE,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Castle",
+                        metadata={"category": "castle"},
+                        action_point=(167, 241),
+                    ),
+                ),
+            ),
+        )
+
+        executor.execute_action(
+            TapSpatialObjectAction(
+                query=SpatialObjectQuery(
+                    surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+                    kind=SpatialObjectKind.HOME_BUILDING,
+                    name_text="Castle",
+                    metadata_key="category",
+                    metadata_value="castle",
+                )
+            ),
+            observation,
+        )
+
+        self.assertEqual(executor.session.taps, [(167, 241)])
 
     def test_runner_uses_task_local_replan_budget_instead_of_runner_wide_override(self) -> None:
         """Allows one task to own an extended bounded replan budget without broadening the global runner cap."""

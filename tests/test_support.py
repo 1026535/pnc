@@ -17,9 +17,16 @@ from pnc_automation.pnc.observation import (
     Bounds,
     CurrentCastleEvidenceKind,
     DetectedListEntry,
+    DetectedSpatialObject,
     ListEntryKind,
     Observation,
     ObservedTextFieldState,
+    SpatialObjectKind,
+    SpatialObjectRelationship,
+    SpatialSurfaceObservation,
+    SpatialSurfaceType,
+    SpatialViewport,
+    SpatialViewportAddressingKind,
     VisibleElement,
     VisibleElementSourceKind,
 )
@@ -80,12 +87,70 @@ def make_entry(
     )
 
 
+def make_spatial_object(
+    kind: SpatialObjectKind,
+    *,
+    name_text: str | None = None,
+    relationship: SpatialObjectRelationship = SpatialObjectRelationship.UNKNOWN,
+    kingdom: str | None = None,
+    metadata: dict[str, Any] | None = None,
+    action_point: tuple[int, int] = (50, 50),
+    viewport_offset: tuple[int, int] | None = None,
+    viewport_offset_ratio: tuple[float, float] | None = None,
+    world_coordinate: tuple[int, int] | None = None,
+) -> DetectedSpatialObject:
+    """Builds a spatial object with deterministic bounds for tests."""
+
+    return DetectedSpatialObject(
+        kind=kind,
+        bounds=Bounds(x=40, y=40, width=20, height=20),
+        relationship=relationship,
+        name_text=name_text,
+        kingdom=kingdom,
+        action_point=action_point,
+        viewport_offset=viewport_offset,
+        viewport_offset_ratio=viewport_offset_ratio,
+        world_coordinate=world_coordinate,
+        metadata=metadata or {},
+    )
+
+
+def make_spatial_surface(
+    surface_type: SpatialSurfaceType,
+    *,
+    objects: tuple[DetectedSpatialObject, ...] = (),
+    x: int | None = None,
+    y: int | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> SpatialSurfaceObservation:
+    """Builds a spatial surface with deterministic viewport defaults for tests."""
+
+    if surface_type == SpatialSurfaceType.WORLD_MAP:
+        return SpatialSurfaceObservation(
+            surface_type=surface_type,
+            viewport=SpatialViewport(
+                addressing_kind=SpatialViewportAddressingKind.COORDINATE_BAR,
+                x=0 if x is None else x,
+                y=0 if y is None else y,
+            ),
+            objects=objects,
+            metadata={} if metadata is None else metadata,
+        )
+    return SpatialSurfaceObservation(
+        surface_type=surface_type,
+        viewport=SpatialViewport(addressing_kind=SpatialViewportAddressingKind.CAMERA_RELATIVE),
+        objects=objects,
+        metadata={} if metadata is None else metadata,
+    )
+
+
 def make_observation(
     screen_type: ScreenType,
     *,
     visible_ids: tuple[UiElementId, ...] = (),
     source_kinds: dict[UiElementId, VisibleElementSourceKind] | None = None,
     list_entries: tuple[DetectedListEntry, ...] = (),
+    spatial_surface: SpatialSurfaceObservation | None = None,
     blocking_popup: bool = False,
     current_castle_name: str | None = None,
     current_castle: CastleIdentity | None = None,
@@ -118,6 +183,7 @@ def make_observation(
         screen_type=screen_type,
         visible_elements=visible_elements,
         list_entries=list_entries,
+        spatial_surface=spatial_surface,
         blocking_popup=blocking_popup,
         current_castle=current_castle or _make_current_castle(current_castle_name),
         current_castle_evidence=_resolve_current_castle_evidence(
