@@ -40,15 +40,29 @@ from pnc_automation.pnc.action_requests import (
     SwipeAction,
     TapAction,
     TapListEntryAction,
+    TapSpatialObjectAction,
     WaitAction,
 )
-from pnc_automation.pnc.observation import ListEntryKind, Observation
+from pnc_automation.pnc.observation import (
+    ListEntryKind,
+    Observation,
+    SpatialObjectKind,
+    SpatialObjectQuery,
+    SpatialSurfaceType,
+)
+from pnc_automation.pnc.spatial_navigation import WorldCoordinate
 from pnc_automation.pnc.policy_models import BuildingUpgradePolicy, GatheringPolicy
 from pnc_automation.pnc.screen_flows import ChatChannel, ScreenFlowPlanner
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
 from pnc_automation.vision.observation_request import ObservationRequest
-from tests.test_support import build_logger, make_entry, make_observation
+from tests.test_support import (
+    build_logger,
+    make_entry,
+    make_observation,
+    make_spatial_object,
+    make_spatial_surface,
+)
 
 
 class FlowAndTaskTests(unittest.TestCase):
@@ -199,6 +213,55 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertEqual(len(actions), 1)
         self.assertIsInstance(actions[0], TapAction)
         self.assertEqual(actions[0].selector_id, UiElementId.PNC_CHAT_SHORTCUT)
+
+    def test_open_academy_uses_home_city_spatial_building_when_fixed_button_is_missing(self) -> None:
+        """Falls back to the home-city spatial surface instead of a legacy academy selector."""
+
+        observation = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.HOME_CITY_SURFACE,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Academy",
+                        metadata={"category": "academy"},
+                    ),
+                ),
+            ),
+        )
+
+        actions = self.flows.open_academy(observation)
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], TapSpatialObjectAction)
+        self.assertEqual(actions[0].query.kind, SpatialObjectKind.HOME_BUILDING)
+        self.assertEqual(actions[0].query.metadata_key, "category")
+        self.assertEqual(actions[0].query.metadata_value, "academy")
+
+    def test_focus_world_coordinate_plans_one_coordinate_driven_swipe(self) -> None:
+        """Uses the shared world-map navigator instead of task-local swipe heuristics."""
+
+        observation = make_observation(
+            ScreenType.PNC_WORLD_MAP,
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.WORLD_MAP,
+                x=100,
+                y=120,
+            ),
+        )
+
+        actions = self.flows.focus_world_coordinate(
+            observation,
+            WorldCoordinate(x=150, y=120),
+            runtime_state={},
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], SwipeAction)
+        self.assertEqual(actions[0].direction, "left")
+        self.assertTrue(actions[0].observe_after)
+        self.assertEqual(actions[0].follow_up_request, ObservationRequest.source_screen_retry(ScreenType.PNC_WORLD_MAP))
 
     def test_recover_unknown_game_screen_uses_back_without_relaunching(self) -> None:
         """Uses one in-game back increment for unknown endpoint states instead of restarting the app."""
@@ -1081,17 +1144,65 @@ class FlowAndTaskTests(unittest.TestCase):
                 UiElementId.PNC_HOME_CHARACTER_PANEL,
                 UiElementId.PNC_HOME_BUILD_BUTTON,
             ),
-            list_entries=(
-                make_entry(ListEntryKind.BUILDING, title="Academy", metadata={"category": "academy"}),
-                make_entry(ListEntryKind.BUILDING, title="Castle", metadata={"category": "castle"}),
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.HOME_CITY_SURFACE,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Academy",
+                        metadata={"category": "academy"},
+                    ),
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Castle",
+                        metadata={"category": "castle"},
+                        action_point=(70, 60),
+                    ),
+                ),
             ),
         )
 
         actions = task.plan(context, observation)
 
         self.assertEqual(len(actions), 2)
-        self.assertIsInstance(actions[0], TapListEntryAction)
-        self.assertEqual(actions[0].title_text, "Castle")
+        self.assertIsInstance(actions[0], TapSpatialObjectAction)
+        self.assertEqual(actions[0].query.name_text, "Castle")
+
+    def test_gathering_task_chooses_highest_priority_visible_resource_node(self) -> None:
+        """Chooses visible world-map resource nodes from the spatial surface instead of list entries."""
+
+        task = GatheringTask()
+        context = self._make_context(params=GatheringPolicy(), task_id=TaskId.GATHERING)
+        observation = make_observation(
+            ScreenType.PNC_WORLD_MAP,
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.WORLD_MAP,
+                x=253,
+                y=447,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.RESOURCE_NODE,
+                        name_text="Wood Lot",
+                        metadata={"resource_type": "wood"},
+                    ),
+                    make_spatial_object(
+                        SpatialObjectKind.RESOURCE_NODE,
+                        name_text="Food Farm",
+                        metadata={"resource_type": "food"},
+                        action_point=(68, 52),
+                    ),
+                ),
+            ),
+            available_march_slots=2,
+        )
+
+        actions = task.plan(context, observation)
+
+        self.assertEqual(len(actions), 3)
+        self.assertIsInstance(actions[0], TapSpatialObjectAction)
+        self.assertEqual(actions[0].query.kind, SpatialObjectKind.RESOURCE_NODE)
+        self.assertEqual(actions[0].query.metadata_key, "resource_type")
+        self.assertEqual(actions[0].query.metadata_value, "food")
 
     def test_gathering_task_skips_when_no_march_slots_remain(self) -> None:
         """Treats zero available march slots as a safe no-op."""

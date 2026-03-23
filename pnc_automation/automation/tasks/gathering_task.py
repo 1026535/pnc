@@ -5,11 +5,22 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from pnc_automation.automation.task import BaseAutomationTask, CastleTargetPolicy, TaskId, TaskResult, choose_priority_entry
+from pnc_automation.automation.task import (
+    BaseAutomationTask,
+    CastleTargetPolicy,
+    TaskId,
+    TaskResult,
+    choose_priority_candidate,
+)
 from pnc_automation.automation.task_context import TaskContext
-from pnc_automation.errors import TaskVerificationError
-from pnc_automation.pnc.action_requests import ActionRequest, TapAction, TapListEntryAction
-from pnc_automation.pnc.observation import ListEntryKind, Observation
+from pnc_automation.pnc.action_requests import ActionRequest, TapAction
+from pnc_automation.pnc.observation import (
+    DetectedSpatialObject,
+    Observation,
+    SpatialObjectKind,
+    SpatialObjectQuery,
+    SpatialSurfaceType,
+)
 from pnc_automation.pnc.policy_models import GatheringPolicy, ResourceType
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
@@ -43,18 +54,22 @@ class GatheringTask(BaseAutomationTask):
         if observation.available_march_slots is not None and observation.available_march_slots <= 0:
             return []
         if observation.screen_type != ScreenType.PNC_WORLD_MAP:
-            return context.flows.open_world_map(observation)
-
-        candidates = observation.entries(ListEntryKind.GATHER_NODE)
-        target = choose_priority_entry(
+            return context.flows.ensure_world_map_ready(observation)
+        context.flows.ensure_world_map_ready(observation)
+        candidates = _visible_resource_nodes(observation)
+        target = choose_priority_candidate(
             candidates,
             context.params.preferred_resources,
-            key_selector=lambda entry: ResourceType(str(entry.require_metadata("resource_type"))),
+            key_selector=_require_resource_type,
         )
         if target is None:
             return []
         return [
-            _tap_entry(target, kind=ListEntryKind.GATHER_NODE, reason="open_gather_node"),
+            *context.flows.open_visible_world_object(
+                observation,
+                _query_for_resource_node(target),
+                reason="open_gather_node",
+            ),
             TapAction(selector_id=UiElementId.PNC_GATHER_BUTTON, reason="open_gather_march", observe_after=True),
             TapAction(
                 selector_id=UiElementId.PNC_MARCH_CONFIRM_BUTTON,
@@ -72,7 +87,7 @@ class GatheringTask(BaseAutomationTask):
             if after.screen_type == ScreenType.PNC_WORLD_MAP:
                 return TaskResult.replan("Reached world map for gathering planning.")
             return TaskResult.failure("Gathering task could not reach the world map.", retryable=True)
-        if not before.entries(ListEntryKind.GATHER_NODE):
+        if not _visible_resource_nodes(before):
             return TaskResult.skipped("No gatherable resource nodes were visible.")
         if (
             before.available_march_slots is not None
@@ -85,15 +100,44 @@ class GatheringTask(BaseAutomationTask):
         return TaskResult.failure("Gathering did not produce a verified state change.", retryable=True)
 
 
-def _tap_entry(entry: object, *, kind: ListEntryKind, reason: str) -> TapListEntryAction:
-    """Builds a list-entry tap action using the most stable available key."""
+def _visible_resource_nodes(observation: Observation) -> tuple[DetectedSpatialObject, ...]:
+    """Returns visible world-map resource nodes that expose one supported resource type."""
 
-    if entry.title_text is None:
-        raise TaskVerificationError("Dynamic entry is missing a title and cannot be reselected safely.", entry_kind=kind)
-    return TapListEntryAction(
-        entry_kind=kind,
-        title_text=entry.title_text,
-        use_action_point=True,
-        reason=reason,
-        observe_after=True,
+    return tuple(
+        object_
+        for object_ in observation.spatial_objects(SpatialObjectKind.RESOURCE_NODE)
+        if _resource_type_from_object(object_) is not None
+    )
+
+
+def _resource_type_from_object(object_: DetectedSpatialObject) -> ResourceType | None:
+    """Returns the typed resource kind for one visible resource node when supported."""
+
+    resource_type = getattr(object_, "metadata", {}).get("resource_type")
+    if not isinstance(resource_type, str):
+        return None
+    try:
+        return ResourceType(resource_type)
+    except ValueError:
+        return None
+
+
+def _require_resource_type(object_: DetectedSpatialObject) -> ResourceType:
+    """Returns the typed resource kind for one visible resource node or fails fast."""
+
+    resource_type = _resource_type_from_object(object_)
+    if resource_type is not None:
+        return resource_type
+    raise ValueError("Unsupported resource-node type.")
+
+
+def _query_for_resource_node(object_: DetectedSpatialObject) -> SpatialObjectQuery:
+    """Builds the canonical semantic query used to retarget one visible world-map resource node."""
+
+    return SpatialObjectQuery(
+        surface_type=SpatialSurfaceType.WORLD_MAP,
+        kind=SpatialObjectKind.RESOURCE_NODE,
+        name_text=getattr(object_, "name_text", None),
+        metadata_key="resource_type",
+        metadata_value=getattr(object_, "metadata", {}).get("resource_type"),
     )

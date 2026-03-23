@@ -24,6 +24,8 @@ _CATALOG_HEADER_LINES = (
     "# - `navigation`: clicking is expected to navigate and must have reviewed click outcomes",
     "# - `action`: clicking performs an in-screen or stateful action, not a reviewed navigation contract",
     "# - `label`: non-interactive screen evidence; it must not declare click metadata",
+    "# `surfaces` extend the same canonical file with scrollable-scene definitions used for world-map",
+    "# and home-city spatial parsing; fixed overlay UI remains in `selectors`.",
 )
 
 
@@ -154,10 +156,115 @@ class SelectorCatalogEntry:
 
 
 @dataclass(frozen=True, slots=True)
+class SelectorCatalogSurfaceViewport:
+    """Stores the catalog-backed viewport addressing metadata for one spatial surface."""
+
+    addressing_kind: str
+    coordinate_selector: str | None = None
+    home_selector: str | None = None
+    optional_zoom_indicator_selector: str | None = None
+
+    def __post_init__(self) -> None:
+        """Rejects unsupported viewport-addressing combinations in the static catalog."""
+
+        if self.addressing_kind not in {"coordinate_bar", "camera_relative"}:
+            raise SelectorResolutionError(
+                "Spatial-surface viewport addressing_kind must use a supported value.",
+                addressing_kind=self.addressing_kind,
+            )
+        if self.addressing_kind == "coordinate_bar" and self.coordinate_selector is None:
+            raise SelectorResolutionError(
+                "Coordinate-addressable spatial surfaces must declare coordinate_selector.",
+                addressing_kind=self.addressing_kind,
+            )
+        if self.addressing_kind == "camera_relative" and self.coordinate_selector is not None:
+            raise SelectorResolutionError(
+                "Camera-relative spatial surfaces must not declare coordinate_selector.",
+                addressing_kind=self.addressing_kind,
+                coordinate_selector=self.coordinate_selector,
+            )
+
+    def to_document(self) -> dict[str, object]:
+        """Returns the YAML-ready representation of one spatial viewport definition."""
+
+        document: dict[str, object] = {"addressing_kind": self.addressing_kind}
+        if self.coordinate_selector is not None:
+            document["coordinate_selector"] = self.coordinate_selector
+        if self.home_selector is not None:
+            document["home_selector"] = self.home_selector
+        if self.optional_zoom_indicator_selector is not None:
+            document["optional_zoom_indicator_selector"] = self.optional_zoom_indicator_selector
+        return document
+
+
+@dataclass(frozen=True, slots=True)
+class SelectorCatalogSurfaceRelationshipRules:
+    """Stores the catalog-backed relationship heuristics for one spatial surface."""
+
+    self_castle_label: str | None = None
+    ally_name_color_family: str | None = None
+    other_alliance_color_family: str | None = None
+    self_color_family: str | None = None
+
+    def to_document(self) -> dict[str, object]:
+        """Returns the YAML-ready representation of the spatial relationship rules."""
+
+        document: dict[str, object] = {}
+        if self.self_castle_label is not None:
+            document["self_castle_label"] = self.self_castle_label
+        if self.ally_name_color_family is not None:
+            document["ally_name_color_family"] = self.ally_name_color_family
+        if self.other_alliance_color_family is not None:
+            document["other_alliance_color_family"] = self.other_alliance_color_family
+        if self.self_color_family is not None:
+            document["self_color_family"] = self.self_color_family
+        return document
+
+
+@dataclass(frozen=True, slots=True)
+class SelectorCatalogSurfaceEntry:
+    """Represents one raw spatial-surface entry stored in the static catalog document."""
+
+    id: str
+    surface_type: str
+    screen: str
+    viewport: SelectorCatalogSurfaceViewport
+    object_kinds: tuple[str, ...]
+    relationship_rules: SelectorCatalogSurfaceRelationshipRules | None = None
+    notes: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        """Rejects empty spatial-object catalogs before runtime loading."""
+
+        if not self.object_kinds:
+            raise SelectorResolutionError(
+                "Spatial-surface catalog entries must declare at least one object kind.",
+                surface_id=self.id,
+            )
+
+    def to_document(self) -> dict[str, object]:
+        """Returns the YAML-ready representation of one spatial-surface catalog entry."""
+
+        document: dict[str, object] = {
+            "id": self.id,
+            "surface_type": self.surface_type,
+            "screen": self.screen,
+            "viewport": self.viewport.to_document(),
+            "object_kinds": list(self.object_kinds),
+        }
+        if self.relationship_rules is not None:
+            document["relationship_rules"] = self.relationship_rules.to_document()
+        if self.notes:
+            document["notes"] = list(self.notes)
+        return document
+
+
+@dataclass(frozen=True, slots=True)
 class SelectorCatalogDocument:
     """Represents the canonical static selector catalog file."""
 
     selectors: tuple[SelectorCatalogEntry, ...]
+    surfaces: tuple[SelectorCatalogSurfaceEntry, ...] = ()
 
     def __post_init__(self) -> None:
         """Ensures the static catalog remains canonical and unambiguous."""
@@ -166,13 +273,32 @@ class SelectorCatalogDocument:
         duplicates = {selector_id for selector_id in selector_ids if selector_ids.count(selector_id) > 1}
         if duplicates:
             raise SelectorResolutionError("Duplicate selector ids are not allowed in the selector catalog.", duplicates=sorted(duplicates))
+        surface_ids = [surface.id for surface in self.surfaces]
+        surface_duplicates = {surface_id for surface_id in surface_ids if surface_ids.count(surface_id) > 1}
+        if surface_duplicates:
+            raise SelectorResolutionError(
+                "Duplicate spatial-surface ids are not allowed in the selector catalog.",
+                duplicates=sorted(surface_duplicates),
+            )
+        surface_types = [surface.surface_type for surface in self.surfaces]
+        surface_type_duplicates = {
+            surface_type for surface_type in surface_types if surface_types.count(surface_type) > 1
+        }
+        if surface_type_duplicates:
+            raise SelectorResolutionError(
+                "Duplicate spatial-surface types are not allowed in the selector catalog.",
+                duplicates=sorted(surface_type_duplicates),
+            )
         validate_selector_catalog_references(self)
         validate_selector_catalog_interactions(self)
 
     def to_document(self) -> dict[str, object]:
         """Returns the YAML-ready representation of the full selector catalog."""
 
-        return {"selectors": [selector.to_document() for selector in self.selectors]}
+        document: dict[str, object] = {"selectors": [selector.to_document() for selector in self.selectors]}
+        if self.surfaces:
+            document["surfaces"] = [surface.to_document() for surface in self.surfaces]
+        return document
 
 
 def default_selector_catalog_path() -> Path:
@@ -188,7 +314,10 @@ def load_selector_catalog_document(path: Path | None = None) -> SelectorCatalogD
     with catalog_path.open("r", encoding="utf-8") as handle:
         loaded = yaml.safe_load(handle)
     document = require_selector_schema_mapping(loaded, context="selector catalog root", document_label="selector catalog")
-    return SelectorCatalogDocument(selectors=tuple(_load_selector_entries(document.get("selectors"))))
+    return SelectorCatalogDocument(
+        selectors=tuple(_load_selector_entries(document.get("selectors"))),
+        surfaces=tuple(_load_surface_entries(document.get("surfaces", ()))),
+    )
 
 
 def write_selector_catalog_document(path: Path, document: SelectorCatalogDocument) -> None:
@@ -285,6 +414,62 @@ def _load_selector_entries(value: object) -> tuple[SelectorCatalogEntry, ...]:
     return tuple(loaded_entries)
 
 
+def _load_surface_entries(value: object) -> tuple[SelectorCatalogSurfaceEntry, ...]:
+    """Builds the raw spatial-surface entries from one loaded YAML sequence."""
+
+    entries = require_selector_schema_sequence(value, context="surfaces", document_label="selector catalog")
+    loaded_entries: list[SelectorCatalogSurfaceEntry] = []
+    for entry in entries:
+        mapping = require_selector_schema_mapping(entry, context="surface entry", document_label="selector catalog")
+        surface_id = require_selector_schema_string(mapping.get("id"), context="surface entry id", document_label="selector catalog")
+        surface_type = require_selector_schema_string(
+            mapping.get("surface_type"),
+            context=f"surface '{surface_id}' surface_type",
+            document_label="selector catalog",
+        )
+        screen = require_selector_schema_string(
+            mapping.get("screen"),
+            context=f"surface '{surface_id}' screen",
+            document_label="selector catalog",
+        )
+        viewport = load_selector_schema_surface_viewport(
+            mapping.get("viewport"),
+            surface_id=surface_id,
+            document_label="selector catalog",
+        )
+        object_kinds = tuple(
+            load_selector_schema_string_sequence(
+                mapping.get("object_kinds"),
+                context=f"surface '{surface_id}' object_kinds",
+                document_label="selector catalog",
+            )
+        )
+        relationship_rules = load_selector_schema_surface_relationship_rules(
+            mapping.get("relationship_rules"),
+            surface_id=surface_id,
+            document_label="selector catalog",
+        )
+        notes = tuple(
+            load_selector_schema_string_sequence(
+                mapping.get("notes", ()),
+                context=f"surface '{surface_id}' notes",
+                document_label="selector catalog",
+            )
+        )
+        loaded_entries.append(
+            SelectorCatalogSurfaceEntry(
+                id=surface_id,
+                surface_type=surface_type,
+                screen=screen,
+                viewport=viewport,
+                object_kinds=object_kinds,
+                relationship_rules=relationship_rules,
+                notes=notes,
+            )
+        )
+    return tuple(loaded_entries)
+
+
 def validate_selector_catalog_references(document: SelectorCatalogDocument) -> None:
     """Rejects click metadata that references selectors missing from the same catalog document."""
 
@@ -301,6 +486,21 @@ def validate_selector_catalog_references(document: SelectorCatalogDocument) -> N
                         selector_id=selector.id,
                         verification_selector=verification_selector,
                     )
+    for surface in document.surfaces:
+        viewport_selector_ids = (
+            surface.viewport.coordinate_selector,
+            surface.viewport.home_selector,
+            surface.viewport.optional_zoom_indicator_selector,
+        )
+        for selector_id in viewport_selector_ids:
+            if selector_id is None:
+                continue
+            if selector_id not in selector_ids:
+                raise SelectorResolutionError(
+                    "Spatial-surface viewport selectors must reference selectors declared in the same catalog document.",
+                    surface_id=surface.id,
+                    selector_id=selector_id,
+                )
 
 
 def validate_selector_catalog_interactions(document: SelectorCatalogDocument) -> None:
@@ -533,6 +733,96 @@ def load_selector_schema_relative_bounds(
         else require_selector_schema_number(
             mapping.get("action_y_ratio"),
             context=f"{selector_label} '{selector_id}' relative_bounds action_y_ratio",
+            document_label=document_label,
+        ),
+    )
+
+
+def load_selector_schema_surface_viewport(
+    value: object,
+    *,
+    surface_id: str,
+    document_label: str,
+) -> SelectorCatalogSurfaceViewport:
+    """Loads one spatial-surface viewport definition from the catalog schema."""
+
+    mapping = require_selector_schema_mapping(
+        value,
+        context=f"surface '{surface_id}' viewport",
+        document_label=document_label,
+    )
+    return SelectorCatalogSurfaceViewport(
+        addressing_kind=require_selector_schema_string(
+            mapping.get("addressing_kind"),
+            context=f"surface '{surface_id}' viewport addressing_kind",
+            document_label=document_label,
+        ),
+        coordinate_selector=None
+        if "coordinate_selector" not in mapping
+        else require_selector_schema_string(
+            mapping.get("coordinate_selector"),
+            context=f"surface '{surface_id}' viewport coordinate_selector",
+            document_label=document_label,
+        ),
+        home_selector=None
+        if "home_selector" not in mapping
+        else require_selector_schema_string(
+            mapping.get("home_selector"),
+            context=f"surface '{surface_id}' viewport home_selector",
+            document_label=document_label,
+        ),
+        optional_zoom_indicator_selector=None
+        if "optional_zoom_indicator_selector" not in mapping
+        else require_selector_schema_string(
+            mapping.get("optional_zoom_indicator_selector"),
+            context=f"surface '{surface_id}' viewport optional_zoom_indicator_selector",
+            document_label=document_label,
+        ),
+    )
+
+
+def load_selector_schema_surface_relationship_rules(
+    value: object,
+    *,
+    surface_id: str,
+    document_label: str,
+) -> SelectorCatalogSurfaceRelationshipRules | None:
+    """Loads optional spatial-surface relationship rules from one YAML mapping."""
+
+    if value is None:
+        return None
+    mapping = require_selector_schema_mapping(
+        value,
+        context=f"surface '{surface_id}' relationship_rules",
+        document_label=document_label,
+    )
+    return SelectorCatalogSurfaceRelationshipRules(
+        self_castle_label=None
+        if "self_castle_label" not in mapping
+        else require_selector_schema_string(
+            mapping.get("self_castle_label"),
+            context=f"surface '{surface_id}' relationship_rules self_castle_label",
+            document_label=document_label,
+        ),
+        ally_name_color_family=None
+        if "ally_name_color_family" not in mapping
+        else require_selector_schema_string(
+            mapping.get("ally_name_color_family"),
+            context=f"surface '{surface_id}' relationship_rules ally_name_color_family",
+            document_label=document_label,
+        ),
+        other_alliance_color_family=None
+        if "other_alliance_color_family" not in mapping
+        else require_selector_schema_string(
+            mapping.get("other_alliance_color_family"),
+            context=f"surface '{surface_id}' relationship_rules other_alliance_color_family",
+            document_label=document_label,
+        ),
+        self_color_family=None
+        if "self_color_family" not in mapping
+        else require_selector_schema_string(
+            mapping.get("self_color_family"),
+            context=f"surface '{surface_id}' relationship_rules self_color_family",
             document_label=document_label,
         ),
     )

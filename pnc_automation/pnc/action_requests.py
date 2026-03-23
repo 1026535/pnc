@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from pnc_automation.pnc.chat import ChatChannel
-from pnc_automation.pnc.observation import ListEntryKind
+from pnc_automation.pnc.observation import ListEntryKind, SpatialObjectQuery
 from pnc_automation.pnc.ui_element_id import UiElementId
 from pnc_automation.vision.observation_request import ObservationRequest
 
@@ -53,6 +53,14 @@ class TapListEntryAction(ActionRequest):
     metadata_value: str | int | bool | None = None
     selected: bool | None = None
     use_action_point: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class TapSpatialObjectAction(ActionRequest):
+    """Taps one visible spatial object resolved from the current observation."""
+
+    query: SpatialObjectQuery | None = None
+    use_action_point: bool = True
 
 
 @dataclass(frozen=True, slots=True)

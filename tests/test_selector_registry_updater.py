@@ -13,6 +13,8 @@ from pnc_automation.vision.selector_catalog import (
     SelectorCatalogDocument,
     SelectorCatalogEntry,
     SelectorCatalogRelativeBounds,
+    SelectorCatalogSurfaceEntry,
+    SelectorCatalogSurfaceViewport,
     write_selector_catalog_document,
 )
 from pnc_automation.vision.selector_registry_updater import (
@@ -600,11 +602,56 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                     ui_element_id_path=ui_element_id_path,
                 )
 
-    def _write_catalog(self, root: Path, *, selectors: tuple[SelectorCatalogEntry, ...]) -> Path:
+    def test_apply_selector_updates_preserves_existing_spatial_surfaces(self) -> None:
+        """Keeps the catalog `surfaces` section intact when applying selector-only updater changes."""
+
+        document, _ = apply_selector_updates(
+            SelectorCatalogDocument(
+                selectors=(
+                    SelectorCatalogEntry(
+                        id="PNC_WORLD_COORDINATE_BAR",
+                        screens=("PNC_WORLD_MAP",),
+                        status="screenshot_seeded",
+                        detection_kind="planned",
+                    ),
+                ),
+                surfaces=(
+                    SelectorCatalogSurfaceEntry(
+                        id="PNC_WORLD_MAP_SURFACE",
+                        surface_type="world_map",
+                        screen="PNC_WORLD_MAP",
+                        viewport=SelectorCatalogSurfaceViewport(
+                            addressing_kind="coordinate_bar",
+                            coordinate_selector="PNC_WORLD_COORDINATE_BAR",
+                        ),
+                        object_kinds=("resource_node",),
+                    ),
+                ),
+            ),
+            (
+                SelectorRegistryUpdate(
+                    id="PNC_WORLD_COORDINATE_BAR",
+                    screens=("PNC_WORLD_MAP",),
+                    status="click_mapped",
+                    detection_kind="planned",
+                ),
+            ),
+        )
+
+        self.assertEqual(len(document.surfaces), 1)
+        self.assertEqual(document.surfaces[0].id, "PNC_WORLD_MAP_SURFACE")
+
+    def _write_catalog(
+        self,
+        root: Path,
+        *,
+        selectors: tuple[SelectorCatalogEntry, ...],
+        surfaces: tuple[SelectorCatalogSurfaceEntry, ...] = (),
+    ) -> Path:
         """Writes one temporary selector catalog and returns its path."""
 
         catalog_path = root / "selector_registry.yaml"
-        write_selector_catalog_document(catalog_path, SelectorCatalogDocument(selectors=selectors))
+        write_selector_catalog_document(catalog_path, SelectorCatalogDocument(selectors=selectors, surfaces=surfaces))
         return catalog_path
 
     def _write_ui_element_ids(self, root: Path, *, selector_ids: tuple[str, ...]) -> Path:

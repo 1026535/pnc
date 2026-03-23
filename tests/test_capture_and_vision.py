@@ -15,9 +15,18 @@ from pnc_automation.capture.screenshot_service import ScreenshotService
 from pnc_automation.config.castle_roster_store import CastleRosterStore
 from pnc_automation.config.models import CastleIdentity, PncAccountCastleRosterConfig
 from pnc_automation.automation.action_executor import ActionExecutor
+from pnc_automation.errors import SelectorResolutionError
 from pnc_automation.pnc.chat import ChatChannel
 from pnc_automation.pnc.screen_flows import ScreenFlowPlanner
-from pnc_automation.pnc.observation import ListEntryKind, VisibleElementSourceKind
+from pnc_automation.pnc.observation import (
+    Bounds,
+    ListEntryKind,
+    SpatialObjectKind,
+    SpatialObjectQuery,
+    SpatialObjectRelationship,
+    SpatialSurfaceType,
+    VisibleElementSourceKind,
+)
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
 from pnc_automation.vision.observation_builder import (
@@ -37,6 +46,7 @@ from pnc_automation.vision.selector_catalog import (
     write_selector_catalog_document,
 )
 from pnc_automation.vision.screen_classifier import ScreenClassifier
+from pnc_automation.vision.spatial_surfaces import build_world_map_spatial_surface
 from pnc_automation.vision.selectors import (
     ClickDefinition,
     DetectionKind,
@@ -1164,6 +1174,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertTrue(observation.has(UiElementId.PNC_HOME_LORD_INFO_SHORTCUT))
             self.assertTrue(observation.has(UiElementId.PNC_HOME_VIP_SHORTCUT))
             self.assertTrue(observation.has(UiElementId.PNC_HOME_IMPROVE_MIGHT_SHORTCUT))
+            self.assertIsNotNone(observation.spatial_surface)
+            self.assertEqual(observation.spatial_surface.surface_type, SpatialSurfaceType.HOME_CITY_SURFACE)
 
     def test_observation_builder_classifies_live_like_home_city_when_build_anchor_is_left_aligned(self) -> None:
         """Recognizes home city when the live Build button sits on the left rail instead of the lower action band."""
@@ -1204,6 +1216,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertTrue(observation.has(UiElementId.PNC_BOTTOM_NAV_ALLIANCE))
             self.assertTrue(observation.has(UiElementId.PNC_BOTTOM_NAV_MORE))
             self.assertTrue(observation.has(UiElementId.PNC_HOME_LORD_INFO_SHORTCUT))
+            self.assertIsNotNone(observation.spatial_surface)
+            self.assertEqual(observation.spatial_surface.surface_type, SpatialSurfaceType.HOME_CITY_SURFACE)
 
     def test_observation_builder_classifies_world_map_from_coordinates_and_bottom_nav_ocr(self) -> None:
         """Recognizes the live root-map layout so root navigation does not fall back to KEYCODE_BACK."""
@@ -1246,6 +1260,482 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertTrue(observation.has(UiElementId.PNC_WORLD_HOME_NAV))
             self.assertTrue(observation.has(UiElementId.PNC_BOTTOM_NAV_ALLIANCE))
             self.assertTrue(observation.has(UiElementId.PNC_CHAT_SHORTCUT))
+            self.assertIsNotNone(observation.spatial_surface)
+            self.assertEqual(observation.spatial_surface.surface_type, SpatialSurfaceType.WORLD_MAP)
+            self.assertEqual(observation.spatial_surface.viewport.coordinate, (253, 447))
+
+    def test_observation_builder_classifies_world_map_from_coordinates_and_bottom_nav_ocr_at_alternate_resolution(self) -> None:
+        """Recognizes the world map from OCR at the smaller supported live resolution too."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (540, 960), (15, 28, 68)))),
+                artifact_directory="k230_world_map_small",
+                label="world_map_live_like_small",
+            )
+            builder = ObservationBuilder(
+                selector_registry=build_default_selector_registry(),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("X:253", x=44, y=41, width=42, height=18),
+                            _ocr_line("Y:447", x=102, y=41, width=42, height=18),
+                            _ocr_line("Home", x=38, y=937, width=46, height=17),
+                            _ocr_line("Hero", x=126, y=938, width=38, height=17),
+                            _ocr_line("Quest", x=200, y=939, width=45, height=15),
+                            _ocr_line("Mail", x=321, y=939, width=35, height=16),
+                            _ocr_line("Alliance", x=402, y=938, width=74, height=17),
+                            _ocr_line("More", x=479, y=938, width=41, height=17),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_WORLD_MAP)
+            self.assertTrue(observation.has(UiElementId.PNC_WORLD_COORDINATE_BAR))
+            self.assertTrue(observation.has(UiElementId.PNC_WORLD_HOME_NAV))
+            self.assertTrue(observation.has(UiElementId.PNC_BOTTOM_NAV_ALLIANCE))
+            self.assertIsNotNone(observation.spatial_surface)
+            self.assertEqual(observation.spatial_surface.surface_type, SpatialSurfaceType.WORLD_MAP)
+            self.assertEqual(observation.spatial_surface.viewport.coordinate, (253, 447))
+
+    def test_observation_builder_builds_world_map_spatial_surface_with_typed_objects(self) -> None:
+        """Parses typed world-map scene objects with relationships instead of forcing them into selectors."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            image = Image.new("RGB", (900, 1600), (15, 28, 68))
+            image.paste((40, 90, 190), box=(200, 500, 410, 535))
+            image.paste((90, 190, 220), box=(455, 640, 735, 675))
+            image.paste((230, 210, 70), box=(305, 720, 605, 755))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(image)),
+                artifact_directory="k230_world_map_objects",
+                label="world_map_objects",
+            )
+            builder = ObservationBuilder(
+                selector_registry=build_default_selector_registry(),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("X:253", x=73, y=67, width=71, height=24),
+                            _ocr_line("Y:447", x=177, y=67, width=69, height=24),
+                            _ocr_line("Home", x=63, y=1563, width=76, height=28),
+                            _ocr_line("Hero", x=213, y=1567, width=62, height=25),
+                            _ocr_line("Quest", x=331, y=1571, width=69, height=20),
+                            _ocr_line("Mail", x=533, y=1568, width=55, height=24),
+                            _ocr_line("Alliance", x=666, y=1567, width=100, height=26),
+                            _ocr_line("More", x=795, y=1568, width=70, height=25),
+                            _ocr_line("My Territory", x=210, y=505, width=180, height=24),
+                            _ocr_line("[RST] Alliance Tower", x=465, y=645, width=240, height=24),
+                            _ocr_line("[BAD] Enemy Castle", x=315, y=725, width=220, height=24),
+                            _ocr_line("Lv.29 Enchanted Reptilian", x=420, y=860, width=270, height=24),
+                            _ocr_line("Food Farm", x=160, y=920, width=140, height=24),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_WORLD_MAP)
+            self.assertIsNotNone(observation.spatial_surface)
+            self.assertEqual(observation.spatial_surface.viewport.coordinate, (253, 447))
+            self_castle = observation.require_spatial_object(
+                _spatial_query(
+                    surface_type=SpatialSurfaceType.WORLD_MAP,
+                    kind=SpatialObjectKind.CASTLE,
+                    name_text="My Territory",
+                )
+            )
+            self.assertEqual(self_castle.relationship, SpatialObjectRelationship.SELF)
+            self.assertEqual(self_castle.viewport_offset, (-150, -235))
+            self.assertAlmostEqual(self_castle.viewport_offset_ratio[0], -150 / 900)
+            self.assertAlmostEqual(self_castle.viewport_offset_ratio[1], -235 / 1184)
+            self.assertEqual(self_castle.world_coordinate, (103, 212))
+            self.assertEqual(
+                observation.require_spatial_object(
+                    _spatial_query(
+                        surface_type=SpatialSurfaceType.WORLD_MAP,
+                        kind=SpatialObjectKind.ALLIANCE_BUILDING,
+                        alliance_tag="RST",
+                    )
+                ).relationship,
+                SpatialObjectRelationship.ALLY,
+            )
+            self.assertEqual(
+                observation.require_spatial_object(
+                    _spatial_query(
+                        surface_type=SpatialSurfaceType.WORLD_MAP,
+                        kind=SpatialObjectKind.CASTLE,
+                        alliance_tag="BAD",
+                    )
+                ).relationship,
+                SpatialObjectRelationship.OTHER,
+            )
+            self.assertEqual(
+                observation.require_spatial_object(
+                    _spatial_query(
+                        surface_type=SpatialSurfaceType.WORLD_MAP,
+                        kind=SpatialObjectKind.MONSTER,
+                    )
+                ).level,
+                29,
+            )
+            self.assertEqual(
+                observation.require_spatial_object(
+                    _spatial_query(
+                        surface_type=SpatialSurfaceType.WORLD_MAP,
+                        kind=SpatialObjectKind.RESOURCE_NODE,
+                    )
+                ).metadata["resource_type"],
+                "food",
+            )
+
+    def test_world_map_spatial_surface_can_scan_a_requested_viewport_section(self) -> None:
+        """Builds dynamic world interactables from only the requested world-view subsection when needed."""
+
+        image = Image.new("RGB", (900, 1600), (15, 28, 68))
+        image.paste((40, 90, 190), box=(200, 500, 410, 535))
+        image.paste((90, 190, 220), box=(455, 640, 735, 675))
+        image.paste((230, 210, 70), box=(305, 720, 605, 755))
+        surface = build_world_map_spatial_surface(
+            image=image,
+            lines=(
+                _ocr_line("X:253", x=73, y=67, width=71, height=24),
+                _ocr_line("Y:447", x=177, y=67, width=69, height=24),
+                _ocr_line("My Territory", x=210, y=505, width=180, height=24),
+                _ocr_line("[RST] Alliance Tower", x=465, y=645, width=240, height=24),
+                _ocr_line("Food Farm", x=160, y=920, width=140, height=24),
+            ),
+            selector_registry=build_default_selector_registry(),
+            object_scan_bounds=Bounds(x=0, y=460, width=430, height=180),
+        )
+
+        self.assertIsNotNone(surface)
+        assert surface is not None
+        self.assertEqual(surface.metadata["scan_scope"], "section")
+        self.assertEqual(surface.metadata["scan_bounds"], Bounds(x=0, y=460, width=430, height=180))
+        self.assertEqual(len(surface.objects), 1)
+        self.assertEqual(surface.objects[0].name_text, "My Territory")
+        self.assertEqual(surface.objects[0].kind, SpatialObjectKind.CASTLE)
+        self.assertEqual(surface.objects[0].viewport_offset, (-150, -235))
+        self.assertAlmostEqual(surface.objects[0].viewport_offset_ratio[0], -150 / 900)
+        self.assertAlmostEqual(surface.objects[0].viewport_offset_ratio[1], -235 / 1184)
+        self.assertEqual(surface.objects[0].world_coordinate, (103, 212))
+
+    def test_world_map_spatial_surface_accepts_coordinate_lines_when_ocr_orders_y_before_x(self) -> None:
+        """Keeps valid world-map frames parseable when OCR emits the Y line before the X line."""
+
+        surface = build_world_map_spatial_surface(
+            image=Image.new("RGB", (900, 1600), (15, 28, 68)),
+            lines=(
+                _ocr_line("Y:447", x=177, y=65, width=69, height=24),
+                _ocr_line("X:253", x=73, y=67, width=71, height=24),
+                _ocr_line("My Territory", x=210, y=505, width=180, height=24),
+            ),
+            selector_registry=build_default_selector_registry(),
+        )
+
+        self.assertIsNotNone(surface)
+        assert surface is not None
+        self.assertEqual(surface.viewport.coordinate, (253, 447))
+        self.assertEqual(len(surface.objects), 1)
+
+    def test_world_map_spatial_surface_accepts_noisy_coordinate_bar_text(self) -> None:
+        """Parses the viewport coordinates even when OCR injects extra characters around the X/Y tokens."""
+
+        surface = build_world_map_spatial_surface(
+            image=Image.new("RGB", (900, 1600), (15, 28, 68)),
+            lines=(
+                _ocr_line("NcX:246ed) Y:450", x=361, y=148, width=207, height=29),
+                _ocr_line("My Territory", x=210, y=505, width=180, height=24),
+            ),
+            selector_registry=build_default_selector_registry(),
+        )
+
+        self.assertIsNotNone(surface)
+        assert surface is not None
+        self.assertEqual(surface.viewport.coordinate, (246, 450))
+
+    def test_world_map_spatial_surface_classifies_live_kingdom_labeled_castles(self) -> None:
+        """Parses the live kingdom/id world-map castle label into one typed castle sighting."""
+
+        surface = build_world_map_spatial_surface(
+            image=Image.new("RGB", (900, 1600), (15, 28, 68)),
+            lines=(
+                _ocr_line("X:197", x=373, y=147, width=87, height=31),
+                _ocr_line("Y:407", x=483, y=145, width=84, height=31),
+                _ocr_line("K2875067781632", x=376, y=996, width=157, height=17),
+            ),
+            selector_registry=build_default_selector_registry(),
+        )
+
+        self.assertIsNotNone(surface)
+        assert surface is not None
+        castle = surface.require_object(
+            _spatial_query(
+                surface_type=SpatialSurfaceType.WORLD_MAP,
+                kind=SpatialObjectKind.CASTLE,
+                kingdom="K287",
+            )
+        )
+        self.assertEqual(castle.name_text, "K2875067781632")
+        self.assertEqual(castle.kingdom, "K287")
+        self.assertEqual(castle.metadata["castle_identifier"], "5067781632")
+        self.assertEqual(castle.world_coordinate, (201, 659))
+
+    def test_world_map_spatial_surface_classifies_altar_dragonia_and_hell_fortress(self) -> None:
+        """Parses the remaining planned neutral world-object classes as typed spatial objects."""
+
+        surface = build_world_map_spatial_surface(
+            image=Image.new("RGB", (900, 1600), (15, 28, 68)),
+            lines=(
+                _ocr_line("X:320", x=73, y=67, width=71, height=24),
+                _ocr_line("Y:480", x=177, y=67, width=69, height=24),
+                _ocr_line("Eastern Altar", x=180, y=540, width=190, height=24),
+                _ocr_line("Dragonia", x=420, y=760, width=120, height=24),
+                _ocr_line("Hell Fortress", x=530, y=920, width=160, height=24),
+            ),
+            selector_registry=build_default_selector_registry(),
+        )
+
+        self.assertIsNotNone(surface)
+        assert surface is not None
+        altar = surface.require_object(
+            _spatial_query(
+                surface_type=SpatialSurfaceType.WORLD_MAP,
+                kind=SpatialObjectKind.ALTAR,
+                name_text="Eastern Altar",
+            )
+        )
+        dragonia = surface.require_object(
+            _spatial_query(
+                surface_type=SpatialSurfaceType.WORLD_MAP,
+                kind=SpatialObjectKind.DRAGONIA,
+                name_text="Dragonia",
+            )
+        )
+        hell_fortress = surface.require_object(
+            _spatial_query(
+                surface_type=SpatialSurfaceType.WORLD_MAP,
+                kind=SpatialObjectKind.HELL_FORTRESS,
+                name_text="Hell Fortress",
+            )
+        )
+        self.assertEqual(altar.relationship, SpatialObjectRelationship.NEUTRAL)
+        self.assertEqual(dragonia.relationship, SpatialObjectRelationship.NEUTRAL)
+        self.assertEqual(hell_fortress.relationship, SpatialObjectRelationship.NEUTRAL)
+        self.assertEqual(altar.world_coordinate, (145, 280))
+        self.assertEqual(dragonia.world_coordinate, (350, 500))
+        self.assertEqual(hell_fortress.world_coordinate, (480, 660))
+
+    def test_world_map_spatial_surface_rejects_sections_outside_the_visible_viewport(self) -> None:
+        """Fails fast when a caller requests a world-map scan region that cannot see any map content."""
+
+        with self.assertRaises(SelectorResolutionError):
+            build_world_map_spatial_surface(
+                image=Image.new("RGB", (900, 1600), (15, 28, 68)),
+                lines=(
+                    _ocr_line("X:253", x=73, y=67, width=71, height=24),
+                    _ocr_line("Y:447", x=177, y=67, width=69, height=24),
+                ),
+                selector_registry=build_default_selector_registry(),
+                object_scan_bounds=Bounds(x=0, y=1450, width=120, height=60),
+            )
+
+    def test_observation_builder_keeps_partial_world_coordinates_unknown(self) -> None:
+        """Rejects partial world-coordinate OCR instead of classifying world map from weak evidence."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                artifact_directory="k230_world_partial",
+                label="world_map_partial_coordinate",
+            )
+            builder = ObservationBuilder(
+                selector_registry=build_default_selector_registry(),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("X:253", x=73, y=67, width=71, height=24),
+                            _ocr_line("Home", x=63, y=1563, width=76, height=28),
+                            _ocr_line("Hero", x=213, y=1567, width=62, height=25),
+                            _ocr_line("Quest", x=331, y=1571, width=69, height=20),
+                            _ocr_line("Mail", x=533, y=1568, width=55, height=24),
+                            _ocr_line("Alliance", x=666, y=1567, width=100, height=26),
+                            _ocr_line("More", x=795, y=1568, width=70, height=25),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.UNKNOWN)
+            self.assertIsNone(observation.spatial_surface)
+
+    def test_observation_builder_builds_home_city_spatial_surface_objects(self) -> None:
+        """Parses home-city buildings and empty slots as spatial objects rather than list rows."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                artifact_directory="k230_home_objects",
+                label="home_city_objects",
+            )
+            builder = ObservationBuilder(
+                selector_registry=build_default_selector_registry(),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Build", x=27, y=354, width=65, height=28),
+                            _ocr_line("Alliance", x=48, y=1500, width=124, height=32),
+                            _ocr_line("More", x=740, y=1500, width=74, height=32),
+                            _ocr_line("Castle", x=310, y=610, width=120, height=28),
+                            _ocr_line("Academy", x=520, y=690, width=150, height=28),
+                            _ocr_line("Build", x=450, y=840, width=90, height=28),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_HOME_CITY)
+            self.assertIsNotNone(observation.spatial_surface)
+            self.assertEqual(
+                observation.require_spatial_object(
+                    _spatial_query(
+                        surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+                        kind=SpatialObjectKind.HOME_BUILDING,
+                        name_text="Castle",
+                    )
+                ).metadata["category"],
+                "castle",
+            )
+            self.assertEqual(
+                observation.require_spatial_object(
+                    _spatial_query(
+                        surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+                        kind=SpatialObjectKind.HOME_BUILDING,
+                        name_text="Academy",
+                    )
+                ).metadata["category"],
+                "academy",
+            )
+            self.assertIsNotNone(
+                observation.find_spatial_object(
+                    _spatial_query(
+                        surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+                        kind=SpatialObjectKind.HOME_EMPTY_SLOT,
+                    )
+                )
+            )
+
+    def test_home_city_spatial_objects_rebuild_from_each_viewport_observation(self) -> None:
+        """Rebuilds home-city building targets from current OCR geometry instead of any fixed building coordinate."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            builder = ObservationBuilder(
+                selector_registry=build_default_selector_registry(),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Build", x=27, y=354, width=65, height=28),
+                            _ocr_line("Alliance", x=48, y=1500, width=124, height=32),
+                            _ocr_line("More", x=740, y=1500, width=74, height=32),
+                            _ocr_line("Castle", x=310, y=610, width=120, height=28),
+                        )
+                    )
+                ),
+            )
+            shifted_builder = ObservationBuilder(
+                selector_registry=build_default_selector_registry(),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Build", x=27, y=354, width=65, height=28),
+                            _ocr_line("Alliance", x=48, y=1500, width=124, height=32),
+                            _ocr_line("More", x=740, y=1500, width=74, height=32),
+                            _ocr_line("Castle", x=528, y=744, width=120, height=28),
+                        )
+                    )
+                ),
+            )
+            initial_screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                artifact_directory="k230_home_viewport_initial",
+                label="home_city_initial",
+            )
+            shifted_screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                artifact_directory="k230_home_viewport_shifted",
+                label="home_city_shifted",
+            )
+
+            initial_observation = builder.build(initial_screenshot)
+            shifted_observation = shifted_builder.build(shifted_screenshot)
+            initial_castle = initial_observation.require_spatial_object(
+                _spatial_query(
+                    surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+                    kind=SpatialObjectKind.HOME_BUILDING,
+                    name_text="Castle",
+                )
+            )
+            shifted_castle = shifted_observation.require_spatial_object(
+                _spatial_query(
+                    surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+                    kind=SpatialObjectKind.HOME_BUILDING,
+                    name_text="Castle",
+                )
+            )
+
+            self.assertNotEqual(initial_castle.bounds, shifted_castle.bounds)
+            self.assertNotEqual(initial_castle.action_point, shifted_castle.action_point)
+            self.assertEqual(initial_castle.metadata["category"], "castle")
+            self.assertEqual(shifted_castle.metadata["category"], "castle")
 
     def test_observation_builder_classifies_blocking_popup_over_home_city_from_ocr(self) -> None:
         """Promotes centered modal cancel buttons into the canonical blocking-popup selector."""
@@ -2269,6 +2759,33 @@ def _ocr_line(text: str, *, x: int, y: int, width: int, height: int) -> OcrLine:
     """Builds one deterministic OCR line for tests."""
 
     return OcrLine(text=text, bounds=Region(x=x, y=y, width=width, height=height), confidence=0.99)
+
+
+def _spatial_query(
+    *,
+    surface_type: SpatialSurfaceType,
+    kind: SpatialObjectKind,
+    relationship: SpatialObjectRelationship | None = None,
+    name_text: str | None = None,
+    alliance_tag: str | None = None,
+    kingdom: str | None = None,
+    level: int | None = None,
+    metadata_key: str | None = None,
+    metadata_value: object | None = None,
+) -> SpatialObjectQuery:
+    """Builds one typed spatial-object query for observation assertions."""
+
+    return SpatialObjectQuery(
+        surface_type=surface_type,
+        kind=kind,
+        relationship=relationship,
+        name_text=name_text,
+        alliance_tag=alliance_tag,
+        kingdom=kingdom,
+        level=level,
+        metadata_key=metadata_key,
+        metadata_value=metadata_value,
+    )
 
 
 def _encode_png(image: Image.Image) -> bytes:

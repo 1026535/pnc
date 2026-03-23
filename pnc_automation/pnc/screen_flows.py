@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from pnc_automation.config.models import CastleIdentity, PncAccountCastleRosterConfig
@@ -30,13 +30,18 @@ from pnc_automation.pnc.mail import (
     mailbox_category_selector_id,
 )
 from pnc_automation.pnc.observation import (
+    DetectedSpatialObject,
     DetectedListEntry,
     ListEntryKind,
     Observation,
+    SpatialObjectKind,
+    SpatialObjectQuery,
+    SpatialSurfaceType,
     castle_entry_identity_matches,
     castle_identities_match,
 )
 from pnc_automation.pnc.screen_type import ScreenType
+from pnc_automation.pnc.spatial_navigation import HomeCityNavigator, WorldCoordinate, WorldMapNavigator
 from pnc_automation.pnc.ui_element_id import UiElementId
 from pnc_automation.vision.observation_request import ObservationRequest
 from pnc_automation.vision.selectors import ClickOutcome
@@ -49,6 +54,9 @@ _PLAYER_PROFILE_ROUTE_SCAN_STEPS = 8
 @dataclass(slots=True)
 class ScreenFlowPlanner:
     """Centralizes reusable navigation plans shared across tasks."""
+
+    world_map_navigator: WorldMapNavigator = field(default_factory=WorldMapNavigator)
+    home_city_navigator: HomeCityNavigator = field(default_factory=HomeCityNavigator)
 
     def recover_unknown_game_screen(self, observation: Observation, *, reason: str) -> list[ActionRequest]:
         """Returns one conservative in-game recovery increment for an unclassified live screen."""
@@ -335,6 +343,63 @@ class ScreenFlowPlanner:
         actions = self.ensure_home_city(observation)
         actions.append(TapAction(selector_id=UiElementId.PNC_HOME_WORLD_SWITCH, reason="open_world_map", observe_after=True))
         return actions
+
+    def ensure_world_map_ready(self, observation: Observation) -> list[ActionRequest]:
+        """Plans entry to world map and fails fast if the resulting world surface lacks a readable viewport."""
+
+        if observation.screen_type != ScreenType.PNC_WORLD_MAP:
+            return self.open_world_map(observation)
+        self.world_map_navigator.require_surface(observation)
+        return []
+
+    def focus_world_coordinate(
+        self,
+        observation: Observation,
+        target: WorldCoordinate,
+        *,
+        runtime_state: dict[str, Any] | None = None,
+    ) -> list[ActionRequest]:
+        """Plans one canonical coordinate-driven world-map navigation increment."""
+
+        if observation.screen_type != ScreenType.PNC_WORLD_MAP:
+            return self.open_world_map(observation)
+        return self.world_map_navigator.plan_focus_coordinate(
+            observation,
+            target,
+            runtime_state=runtime_state,
+        )
+
+    def find_visible_world_object(self, observation: Observation, query: SpatialObjectQuery) -> DetectedSpatialObject | None:
+        """Returns one visible world-map spatial object matching the semantic query when present."""
+
+        self.world_map_navigator.require_surface(observation)
+        return observation.find_spatial_object(query)
+
+    def open_visible_world_object(
+        self,
+        observation: Observation,
+        query: SpatialObjectQuery,
+        *,
+        reason: str,
+        observe_after: bool = True,
+    ) -> list[ActionRequest]:
+        """Plans one tap against a visible world-map spatial object."""
+
+        if observation.screen_type != ScreenType.PNC_WORLD_MAP:
+            return self.open_world_map(observation)
+        return self.world_map_navigator.tap_visible_object(
+            observation,
+            query,
+            reason=reason,
+            observe_after=observe_after,
+        )
+
+    def return_home_city_from_world_map(self, observation: Observation) -> list[ActionRequest]:
+        """Plans the canonical return path from world map back to home city."""
+
+        if observation.screen_type != ScreenType.PNC_WORLD_MAP:
+            return self.ensure_home_city(observation)
+        return self.ensure_home_city(observation)
 
     def open_chat(self, observation: Observation) -> list[ActionRequest]:
         """Plans navigation from home- or world-adjacent screens to the shared chat overlay."""
@@ -717,14 +782,88 @@ class ScreenFlowPlanner:
 
         if observation.screen_type in {ScreenType.PNC_ACADEMY, ScreenType.PNC_RESEARCH_TREE}:
             return []
-        actions = self.ensure_home_city(observation)
-        selector = (
-            UiElementId.PNC_HOME_RESEARCH_BUTTON
-            if observation.has(UiElementId.PNC_HOME_RESEARCH_BUTTON)
-            else UiElementId.PNC_HOME_ACADEMY_BUILDING
+        if observation.screen_type != ScreenType.PNC_HOME_CITY:
+            return self.ensure_home_city(observation)
+        if observation.has(UiElementId.PNC_HOME_RESEARCH_BUTTON):
+            return [TapAction(selector_id=UiElementId.PNC_HOME_RESEARCH_BUTTON, reason="open_academy", observe_after=True)]
+        academy_query = SpatialObjectQuery(
+            surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+            kind=SpatialObjectKind.HOME_BUILDING,
+            metadata_key="category",
+            metadata_value="academy",
         )
-        actions.append(TapAction(selector_id=selector, reason="open_academy", observe_after=True))
-        return actions
+        if observation.find_spatial_object(academy_query) is not None:
+            return self.home_city_navigator.tap_visible_object(
+                observation,
+                academy_query,
+                reason="open_academy",
+            )
+        return self.home_city_navigator.plan_focus_object(observation, academy_query)
+
+    def focus_home_city_object(
+        self,
+        observation: Observation,
+        query: SpatialObjectQuery,
+        *,
+        runtime_state: dict[str, Any] | None = None,
+    ) -> list[ActionRequest]:
+        """Plans one camera-relative home-city navigation increment toward the requested scene object."""
+
+        if observation.screen_type != ScreenType.PNC_HOME_CITY:
+            return self.ensure_home_city(observation)
+        return self.home_city_navigator.plan_focus_object(
+            observation,
+            query,
+            runtime_state=runtime_state,
+        )
+
+    def open_home_city_object(
+        self,
+        observation: Observation,
+        query: SpatialObjectQuery,
+        *,
+        reason: str,
+        runtime_state: dict[str, Any] | None = None,
+        observe_after: bool = True,
+    ) -> list[ActionRequest]:
+        """Plans one home-city camera step or a tap when the requested object is already visible."""
+
+        if observation.screen_type != ScreenType.PNC_HOME_CITY:
+            return self.ensure_home_city(observation)
+        if observation.find_spatial_object(query) is not None:
+            return self.home_city_navigator.tap_visible_object(
+                observation,
+                query,
+                reason=reason,
+                runtime_state=runtime_state,
+                observe_after=observe_after,
+            )
+        return self.home_city_navigator.plan_focus_object(
+            observation,
+            query,
+            runtime_state=runtime_state,
+        )
+
+    def open_home_city_empty_slot(
+        self,
+        observation: Observation,
+        query: SpatialObjectQuery,
+        *,
+        runtime_state: dict[str, Any] | None = None,
+    ) -> list[ActionRequest]:
+        """Plans one bounded empty-slot tap or home-city camera step for the requested build slot."""
+
+        if query.kind != SpatialObjectKind.HOME_EMPTY_SLOT:
+            raise SelectorResolutionError(
+                "open_home_city_empty_slot requires a HOME_EMPTY_SLOT spatial-object query.",
+                object_kind=query.kind,
+            )
+        return self.open_home_city_object(
+            observation,
+            query,
+            reason="open_home_city_empty_slot",
+            runtime_state=runtime_state,
+        )
 
     def ensure_correct_castle_selected(
         self,

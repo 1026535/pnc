@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 
 from pnc_automation.errors import SelectorResolutionError
+from pnc_automation.pnc.observation import SpatialObjectKind, SpatialSurfaceType, SpatialViewportAddressingKind
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
 from pnc_automation.vision.selector_catalog import (
@@ -14,6 +15,8 @@ from pnc_automation.vision.selector_catalog import (
     SelectorCatalogClickOutcome,
     SelectorCatalogDocument,
     SelectorCatalogEntry,
+    SelectorCatalogSurfaceEntry,
+    SelectorCatalogSurfaceViewport,
 )
 from pnc_automation.vision.selector_interaction_kind import SelectorInteractionKind
 from pnc_automation.vision.selectors import build_default_selector_registry
@@ -82,6 +85,20 @@ class SelectorRegistryTests(unittest.TestCase):
             registry.require(UiElementId.PNC_LORD_INFO_HEADER).interaction_kind,
             SelectorInteractionKind.LABEL,
         )
+        world_surface = registry.require_surface(SpatialSurfaceType.WORLD_MAP)
+        self.assertEqual(world_surface.screen, ScreenType.PNC_WORLD_MAP)
+        self.assertEqual(world_surface.viewport.addressing_kind, SpatialViewportAddressingKind.COORDINATE_BAR)
+        self.assertEqual(world_surface.viewport.coordinate_selector, UiElementId.PNC_WORLD_COORDINATE_BAR)
+        self.assertIn(SpatialObjectKind.RESOURCE_NODE, world_surface.object_kinds)
+        home_surface = registry.require_surface(SpatialSurfaceType.HOME_CITY_SURFACE)
+        self.assertEqual(home_surface.screen, ScreenType.PNC_HOME_CITY)
+        self.assertEqual(home_surface.viewport.addressing_kind, SpatialViewportAddressingKind.CAMERA_RELATIVE)
+        self.assertEqual(
+            home_surface.object_kinds,
+            (SpatialObjectKind.HOME_BUILDING, SpatialObjectKind.HOME_EMPTY_SLOT),
+        )
+        self.assertIsNotNone(registry.require(UiElementId.PNC_WORLD_COORDINATE_BAR).relative_bounds)
+        self.assertIsNotNone(registry.require(UiElementId.PNC_WORLD_SEARCH_BUTTON).relative_bounds)
 
     def test_selector_catalog_rejects_navigation_without_reviewed_destination(self) -> None:
         """Fails fast when a navigation selector omits the reviewed destination contract."""
@@ -227,6 +244,34 @@ class SelectorRegistryTests(unittest.TestCase):
 
             with self.assertRaises(SelectorResolutionError):
                 build_default_selector_registry(catalog_path=catalog_path, template_root=Path(temp_directory))
+
+    def test_selector_catalog_rejects_surface_viewport_selectors_missing_from_catalog(self) -> None:
+        """Fails fast when one spatial surface references overlay selectors missing from the same catalog."""
+
+        with self.assertRaises(SelectorResolutionError):
+            SelectorCatalogDocument(
+                selectors=(
+                    SelectorCatalogEntry(
+                        id="PNC_WORLD_COORDINATE_BAR",
+                        screens=("PNC_WORLD_MAP",),
+                        status="screenshot_seeded",
+                        detection_kind="planned",
+                    ),
+                ),
+                surfaces=(
+                    SelectorCatalogSurfaceEntry(
+                        id="PNC_WORLD_MAP_SURFACE",
+                        surface_type="world_map",
+                        screen="PNC_WORLD_MAP",
+                        viewport=SelectorCatalogSurfaceViewport(
+                            addressing_kind="coordinate_bar",
+                            coordinate_selector="PNC_WORLD_COORDINATE_BAR",
+                            home_selector="PNC_WORLD_HOME_NAV",
+                        ),
+                        object_kinds=("resource_node",),
+                    ),
+                ),
+            )
 
 
 if __name__ == "__main__":

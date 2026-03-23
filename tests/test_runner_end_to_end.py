@@ -19,12 +19,20 @@ from pnc_automation.config.models import (
     PncAccountCastleRosterConfig,
     ResolvedCredentials,
 )
-from pnc_automation.pnc.observation import ListEntryKind
+from pnc_automation.pnc.observation import ListEntryKind, SpatialObjectKind, SpatialSurfaceType
 from pnc_automation.pnc.screen_flows import ScreenFlowPlanner
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
 from pnc_automation.vision.selectors import build_default_selector_registry
-from tests.test_support import FakeObservationService, FakeSession, build_logger, make_entry, make_observation
+from tests.test_support import (
+    FakeObservationService,
+    FakeSession,
+    build_logger,
+    make_entry,
+    make_observation,
+    make_spatial_object,
+    make_spatial_surface,
+)
 
 
 class RunnerEndToEndTests(unittest.TestCase):
@@ -152,9 +160,20 @@ class RunnerEndToEndTests(unittest.TestCase):
                     UiElementId.PNC_HOME_RESEARCH_BUTTON,
                     UiElementId.PNC_HOME_CAMPAIGN_ENTRY,
                 ),
-                list_entries=(
-                    make_entry(ListEntryKind.BUILDING, title="Castle", metadata={"category": "castle"}),
-                    make_entry(ListEntryKind.BUILDING, title="Academy", metadata={"category": "academy"}),
+                spatial_surface=make_spatial_surface(
+                    SpatialSurfaceType.HOME_CITY_SURFACE,
+                    objects=(
+                        make_spatial_object(
+                            SpatialObjectKind.HOME_BUILDING,
+                            name_text="Castle",
+                            metadata={"category": "castle"},
+                        ),
+                        make_spatial_object(
+                            SpatialObjectKind.HOME_BUILDING,
+                            name_text="Academy",
+                            metadata={"category": "academy"},
+                        ),
+                    ),
                 ),
                 current_castle_name="Main",
             ),
@@ -207,9 +226,22 @@ class RunnerEndToEndTests(unittest.TestCase):
             make_observation(
                 ScreenType.PNC_WORLD_MAP,
                 visible_ids=(UiElementId.PNC_WORLD_HOME_NAV, UiElementId.PNC_WORLD_SEARCH_BUTTON),
-                list_entries=(
-                    make_entry(ListEntryKind.GATHER_NODE, title="Food Node", metadata={"resource_type": "food"}),
-                    make_entry(ListEntryKind.GATHER_NODE, title="Wood Node", metadata={"resource_type": "wood"}),
+                spatial_surface=make_spatial_surface(
+                    SpatialSurfaceType.WORLD_MAP,
+                    x=253,
+                    y=447,
+                    objects=(
+                        make_spatial_object(
+                            SpatialObjectKind.RESOURCE_NODE,
+                            name_text="Food Node",
+                            metadata={"resource_type": "food"},
+                        ),
+                        make_spatial_object(
+                            SpatialObjectKind.RESOURCE_NODE,
+                            name_text="Wood Node",
+                            metadata={"resource_type": "wood"},
+                        ),
+                    ),
                 ),
                 available_march_slots=2,
             ),
