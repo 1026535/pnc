@@ -15,7 +15,6 @@ from pnc_automation.app import build_application_runner
 from pnc_automation.artifact_naming import sanitize_artifact_segment
 from pnc_automation.automation.action_executor import ActionExecutor
 from pnc_automation.automation.observed_action_executor import ObservedActionExecutor
-from pnc_automation.emulator.session import BlueStacksSession
 from pnc_automation.errors import SelectorResolutionError
 from pnc_automation.pnc.screen_flows import ScreenFlowPlanner
 from pnc_automation.pnc.ui_element_id import UiElementId
@@ -23,7 +22,6 @@ from pnc_automation.vision.navigation_selector_validator import (
     NavigationSelectorValidator,
     write_navigation_selector_validation_report,
 )
-from pnc_automation.vision.observation_builder import ObservationService
 from pnc_automation.vision.selector_catalog import default_selector_catalog_path
 
 
@@ -59,21 +57,16 @@ def main() -> int:
     )
     script_runner = application.script_runner
     account = script_runner.config.require_account(arguments.account)
-    session = _build_live_session(config_account=account, script_runner=script_runner)
-    observation_service = _build_observation_service(
-        config_account=account,
-        script_runner=script_runner,
-        session=session,
-    )
+    runtime = script_runner.build_connected_runtime(account=account)
     raw_action_executor = ActionExecutor(
-        session=session,
+        session=runtime.session,
         stable_click_delay_ms=script_runner.config.defaults.stable_click_delay_ms,
         post_action_observe_delay_ms=script_runner.config.defaults.post_action_observe_delay_ms,
         logger=logging.LoggerAdapter(script_runner.logger.logger, extra={}),
     )
     validator = NavigationSelectorValidator(
         selector_registry=script_runner.observation_builder.selector_registry,
-        observation_service=observation_service,
+        observation_service=runtime.observation_service,
         action_executor=ObservedActionExecutor(
             selector_registry=script_runner.observation_builder.selector_registry,
             action_executor=raw_action_executor,
@@ -102,36 +95,6 @@ def main() -> int:
             f"{result.status.value}:{result.selector_id.value}:{result.source_screen.name}:{result.reason}",
         )
     return 0 if report.failed_count == 0 else 1
-
-
-def _build_live_session(*, config_account: object, script_runner: object) -> BlueStacksSession:
-    """Creates and connects one live BlueStacks session using the authoritative application wiring."""
-
-    build_connected_session = getattr(script_runner, "build_connected_session", None)
-    if not callable(build_connected_session):
-        raise AssertionError("Navigation validation requires ScriptRunner.build_connected_session().")
-    session = build_connected_session(account=config_account)
-    if not isinstance(session, BlueStacksSession):
-        raise AssertionError("Navigation validation requires ScriptRunner.build_connected_session() to return a BlueStacksSession.")
-    return session
-
-
-def _build_observation_service(
-    *,
-    config_account: object,
-    script_runner: object,
-    session: BlueStacksSession,
-) -> ObservationService:
-    """Builds one live observation service from the same runtime components used by automation runs."""
-
-    return ObservationService(
-        screenshot_service=script_runner.screenshot_service,
-        observation_builder=script_runner.observation_builder,
-        session=session,
-        artifact_directory=config_account.artifact_directory_name,
-        pnc_account_id=config_account.pnc_account_id,
-        castle_roster_store=script_runner.castle_roster_store,
-    )
 
 
 def _require_ui_element_id(raw_value: str) -> UiElementId:

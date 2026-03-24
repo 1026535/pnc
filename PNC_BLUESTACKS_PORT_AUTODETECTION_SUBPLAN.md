@@ -24,6 +24,7 @@ Status:
 - authored instance config now uses stable `display_name` values plus `defaults.bluestacks_config_path`,
 - runtime resolves the live `device_id` from BlueStacks host metadata before building a session,
 - automated coverage now validates config migration, resolver failure modes, successful port resolution, and ScriptRunner session wiring,
+- 2026-03-24 review follow-up closed the stale/shared-port runtime correctness gap, consolidated live runtime construction behind one public `ScriptRunner` boundary, and added top-level application wiring coverage for the resolver path,
 - 2026-03-24 live connection checks resolved `serious_stuff -> 127.0.0.1:5555` and `testing -> 127.0.0.1:5566` through the canonical runtime path.
 
 ## 1.2 Triggering live evidence

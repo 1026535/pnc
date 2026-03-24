@@ -111,6 +111,54 @@ class ScriptRunnerTests(unittest.TestCase):
             self.assertEqual(adb_client.state_calls, ["127.0.0.1:5566"])
             self.assertEqual(adb_client.shell_calls, [("127.0.0.1:5566", ("getprop", "ro.product.model"))])
 
+    def test_build_connected_runtime_exposes_the_canonical_session_and_observation_service(self) -> None:
+        """Builds one reusable connected runtime bundle for tooling through the same canonical wiring."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            authored_instance = BlueStacksInstanceConfig(
+                id="bs-main",
+                display_name="serious_stuff",
+                app_package="com.global.tmslg",
+            )
+            account = AccountConfig(
+                id="account_a",
+                instance_id="bs-main",
+                pnc_account_id="inline_user",
+            )
+            resolver = _FakeInstanceResolver(
+                resolved_instance=BlueStacksInstance(
+                    id="bs-main",
+                    display_name="serious_stuff",
+                    device_id="127.0.0.1:5566",
+                    app_package="com.global.tmslg",
+                )
+            )
+            adb_client = _FakeAdbClient()
+            screenshot_service = object()
+            observation_builder = object()
+            script_runner = ScriptRunner(
+                config=_make_app_config(root=root, instance=authored_instance, account=account),
+                task_registry=object(),
+                screenshot_service=screenshot_service,
+                observation_builder=observation_builder,
+                castle_roster_store=None,
+                mail_archive_store=None,
+                chat_archive_store=None,
+                adb_client=adb_client,
+                instance_resolver=resolver,
+                logger=build_logger(),
+            )
+
+            runtime = script_runner.build_connected_runtime(account=account)
+
+            self.assertEqual(runtime.session.instance.device_id, "127.0.0.1:5566")
+            self.assertIs(runtime.observation_service.screenshot_service, screenshot_service)
+            self.assertIs(runtime.observation_service.observation_builder, observation_builder)
+            self.assertIs(runtime.observation_service.session, runtime.session)
+            self.assertEqual(runtime.observation_service.artifact_directory, account.artifact_directory_name)
+            self.assertEqual(runtime.observation_service.mode, ObservationMode.DEBUG)
+
 
 def _make_app_config(*, root: Path, instance: BlueStacksInstanceConfig, account: AccountConfig) -> AppConfig:
     """Builds one minimal validated-looking app config for script-runner session tests."""

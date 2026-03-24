@@ -9,7 +9,7 @@ from pathlib import Path
 from pnc_automation.app import build_application_runner
 from pnc_automation.scripts.loader import load_run_script
 from pnc_automation.pnc.screen_type import ScreenType
-from tests.live_smoke_support import build_live_session, build_observation_service
+from tests.live_smoke_support import build_live_runtime
 
 
 def _live_smoke_enabled() -> bool:
@@ -44,15 +44,12 @@ class LiveAccountNavigationSmokeTests(unittest.TestCase):
             ),
             None,
         )
-        cls.session = _build_live_session(
+        runtime = build_live_runtime(
             config_account=cls.account,
             script_runner=cls.script_runner,
         )
-        cls.observation_service = _build_observation_service(
-            config_account=cls.account,
-            script_runner=cls.script_runner,
-            session=cls.session,
-        )
+        cls.session = runtime.session
+        cls.observation_service = runtime.observation_service
         cls.before_observation = cls.observation_service.observe("live_smoke_account_navigation_before")
         cls.run_result = cls.application.run(account_id=cls.account_id, script_path=str(cls.script_path))
         cls.after_observation = cls.observation_service.observe("live_smoke_account_navigation_after")
@@ -82,15 +79,4 @@ class LiveAccountNavigationSmokeTests(unittest.TestCase):
         roster = self.script_runner.castle_roster_store.get(self.account.pnc_account_id)
         self.assertIsNotNone(roster)
         self.assertTrue(any(castle == self.target_castle for castle in roster.castles), roster)
-
-def _build_live_session(**kwargs: object):
-    """Routes legacy test-local helper calls through the shared live-smoke support module."""
-
-    return build_live_session(**kwargs)
-
-
-def _build_observation_service(**kwargs: object):
-    """Routes legacy test-local helper calls through the shared live-smoke support module."""
-
-    return build_observation_service(**kwargs)
 
