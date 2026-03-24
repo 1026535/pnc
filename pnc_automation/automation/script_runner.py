@@ -28,6 +28,14 @@ from pnc_automation.pnc.screen_flows import ScreenFlowPlanner
 from pnc_automation.vision.observation_builder import ObservationBuilder, ObservationService
 
 
+@dataclass(frozen=True, slots=True)
+class ConnectedAccountRuntime:
+    """Bundles the connected live-session services shared by automation runs, tools, and smoke tests."""
+
+    session: BlueStacksSession
+    observation_service: ObservationService
+
+
 @dataclass(slots=True)
 class ScriptRunner:
     """Creates the per-run runtime and executes one automation script."""
@@ -102,6 +110,21 @@ class ScriptRunner:
         )
         return result.steps[0]
 
+    def build_connected_runtime(self, *, account: AccountConfig) -> ConnectedAccountRuntime:
+        """Builds the canonical connected session plus observation service for one configured account."""
+
+        session = self.build_connected_session(account=account)
+        return ConnectedAccountRuntime(
+            session=session,
+            observation_service=self._build_observation_service(account=account, session=session),
+        )
+
+    def build_connected_automation_runner(self, *, account: AccountConfig) -> AutomationRunner:
+        """Builds one connected automation runner through the same canonical runtime wiring used by `run_script()`."""
+
+        runner, _ = self._build_runner(account)
+        return runner
+
     def _build_runner(
         self,
         account: AccountConfig,
@@ -115,18 +138,10 @@ class ScriptRunner:
                 return self.castle_roster_store.get(account.pnc_account_id)
             return self.config.find_castle_roster(account.pnc_account_id)
 
-        session = self.build_connected_session(account=account)
+        connected_runtime = self.build_connected_runtime(account=account)
+        session = connected_runtime.session
         instance = session.instance
 
-        observation_service = ObservationService(
-            screenshot_service=self.screenshot_service,
-            observation_builder=self.observation_builder,
-            session=session,
-            artifact_directory=account.artifact_directory_name,
-            mode=self.config.runtime.observation_mode,
-            pnc_account_id=account.pnc_account_id,
-            castle_roster_store=self.castle_roster_store,
-        )
         flow_planner = ScreenFlowPlanner()
         shared_extra = self._build_shared_extra(account=account, instance=instance)
         action_executor = ActionExecutor(
@@ -140,7 +155,7 @@ class ScriptRunner:
         return (
             AutomationRunner(
                 defaults=self.config.defaults,
-                observation_service=observation_service,
+                observation_service=connected_runtime.observation_service,
                 action_executor=ObservedActionExecutor(
                     selector_registry=self.observation_builder.selector_registry,
                     action_executor=action_executor,
@@ -172,6 +187,24 @@ class ScriptRunner:
         session.connect()
         session.ensure_responsive()
         return session
+
+    def _build_observation_service(
+        self,
+        *,
+        account: AccountConfig,
+        session: BlueStacksSession,
+    ) -> ObservationService:
+        """Builds the canonical observation service for one already-connected account session."""
+
+        return ObservationService(
+            screenshot_service=self.screenshot_service,
+            observation_builder=self.observation_builder,
+            session=session,
+            artifact_directory=account.artifact_directory_name,
+            mode=self.config.runtime.observation_mode,
+            pnc_account_id=account.pnc_account_id,
+            castle_roster_store=self.castle_roster_store,
+        )
 
     def _resolve_instance(self, *, account: AccountConfig) -> BlueStacksInstance:
         """Resolves the configured BlueStacks display name for one account into a live runtime target."""

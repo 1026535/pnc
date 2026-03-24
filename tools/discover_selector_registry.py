@@ -24,7 +24,7 @@ from pnc_automation.pnc.observation import Observation
 from pnc_automation.pnc.screen_flows import ScreenFlowPlanner
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
-from pnc_automation.vision.observation_builder import CapturedObservation, ObservationBuilder, ObservationService
+from pnc_automation.vision.observation_builder import CapturedObservation, ObservationBuilder
 from pnc_automation.vision.observation_request import ObservationRequest
 from pnc_automation.vision.selector_catalog import default_selector_catalog_path, load_selector_catalog_document
 from pnc_automation.vision.selector_discovery import (
@@ -189,16 +189,9 @@ def _run_live_discovery(
 
     script_runner = runtime.application.script_runner
     account = script_runner.config.require_account(account_id)
-    session = script_runner.build_connected_session(account=account)
-
-    observation_service = ObservationService(
-        screenshot_service=script_runner.screenshot_service,
-        observation_builder=script_runner.observation_builder,
-        session=session,
-        artifact_directory=account.artifact_directory_name,
-        pnc_account_id=account.pnc_account_id,
-        castle_roster_store=script_runner.castle_roster_store,
-    )
+    connected_runtime = script_runner.build_connected_runtime(account=account)
+    session = connected_runtime.session
+    observation_service = connected_runtime.observation_service
     low_level_action_executor = ActionExecutor(
         session=session,
         stable_click_delay_ms=script_runner.config.defaults.stable_click_delay_ms,

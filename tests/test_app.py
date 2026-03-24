@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from pnc_automation.app import build_application_runner
+from pnc_automation.emulator.bluestacks_instance_resolver import BlueStacksInstanceResolver
 
 
 class ApplicationRunnerTests(unittest.TestCase):
@@ -85,6 +86,42 @@ class ApplicationRunnerTests(unittest.TestCase):
 
         self.assertEqual(application.script_runner.mail_archive_store.root, (root / "archives" / "mail").resolve())
         self.assertEqual(application.script_runner.chat_archive_store.root, (root / "archives" / "chat").resolve())
+
+    def test_build_application_runner_wires_bluestacks_resolver_with_resolved_config_path(self) -> None:
+        """Builds the resolver from the loaded config defaults instead of hardcoding the host metadata path."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            config_directory = root / "config"
+            config_directory.mkdir()
+            config_path = config_directory / "accounts.yaml"
+            config_path.write_text(
+                textwrap.dedent(
+                    """
+                    defaults:
+                      bluestacks_config_path: runtime/bluestacks.conf
+                    instances:
+                      - id: bs-main
+                        display_name: serious_stuff
+                        app_package: com.global.tmslg
+                    accounts:
+                      - id: account_a
+                        instance_id: bs-main
+                        pnc_account_id: inline_user
+                        username: inline_user
+                        password: inline_pass
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+
+            application = build_application_runner(config_path)
+
+        self.assertIsInstance(application.script_runner.instance_resolver, BlueStacksInstanceResolver)
+        self.assertEqual(
+            application.script_runner.instance_resolver.config_path,
+            (root / "runtime" / "bluestacks.conf").resolve(),
+        )
 
 
 if __name__ == "__main__":

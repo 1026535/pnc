@@ -5,64 +5,23 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from pnc_automation.automation.runner import AutomationRunner
+from pnc_automation.automation.script_runner import ConnectedAccountRuntime, ScriptRunner
 from pnc_automation.pnc.action_requests import ActionRequest
 from pnc_automation.pnc.observation import Observation
 from pnc_automation.pnc.screen_type import ScreenType
-from pnc_automation.capture.screenshot_service import ScreenshotService
 from pnc_automation.config.models import AccountConfig
-from pnc_automation.emulator.session import BlueStacksSession
-from pnc_automation.vision.observation_builder import ObservationService
 
 
-def build_live_session(*, config_account: AccountConfig, script_runner: object) -> BlueStacksSession:
-    """Creates and connects one live BlueStacks session using the authoritative runtime wiring."""
+def build_live_runtime(*, config_account: AccountConfig, script_runner: ScriptRunner) -> ConnectedAccountRuntime:
+    """Builds the canonical connected live runtime used by smoke tests."""
 
-    build_connected_session = getattr(script_runner, "build_connected_session", None)
-    if not callable(build_connected_session):
-        raise AssertionError("Live smoke tests require ScriptRunner.build_connected_session().")
-    session = build_connected_session(account=config_account)
-    if not isinstance(session, BlueStacksSession):
-        raise AssertionError("Live smoke tests require ScriptRunner.build_connected_session() to return a BlueStacksSession.")
-    return session
+    return script_runner.build_connected_runtime(account=config_account)
 
 
-def build_observation_service(
-    *,
-    config_account: AccountConfig,
-    script_runner: object,
-    session: BlueStacksSession,
-) -> ObservationService:
-    """Builds one live observation service from the same runtime components used by the application."""
-
-    return ObservationService(
-        screenshot_service=require_screenshot_service(script_runner),
-        observation_builder=script_runner.observation_builder,
-        session=session,
-        artifact_directory=config_account.artifact_directory_name,
-        pnc_account_id=config_account.pnc_account_id,
-        castle_roster_store=script_runner.castle_roster_store,
-    )
-
-
-def require_screenshot_service(script_runner: object) -> ScreenshotService:
-    """Returns the configured screenshot service or fails fast when the runner shape changes."""
-
-    screenshot_service = getattr(script_runner, "screenshot_service", None)
-    if not isinstance(screenshot_service, ScreenshotService):
-        raise AssertionError("Live smoke tests require ScriptRunner.screenshot_service.")
-    return screenshot_service
-
-
-def build_live_automation_runner(*, config_account: AccountConfig, script_runner: object) -> AutomationRunner:
+def build_live_automation_runner(*, config_account: AccountConfig, script_runner: ScriptRunner) -> AutomationRunner:
     """Builds one connected automation runner from the authoritative script-runner wiring."""
 
-    build_runner = getattr(script_runner, "_build_runner", None)
-    if not callable(build_runner):
-        raise AssertionError("Live smoke tests require ScriptRunner._build_runner().")
-    runner, _ = build_runner(config_account)
-    if not isinstance(runner, AutomationRunner):
-        raise AssertionError("Live smoke tests require ScriptRunner._build_runner() to return an AutomationRunner.")
-    return runner
+    return script_runner.build_connected_automation_runner(account=config_account)
 
 
 def execute_live_flow_until(

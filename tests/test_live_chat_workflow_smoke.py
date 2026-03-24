@@ -15,7 +15,7 @@ from pnc_automation.pnc.chat import ChatChannel
 from pnc_automation.pnc.observation import Observation
 from pnc_automation.pnc.screen_flows import ScreenFlowPlanner
 from pnc_automation.pnc.screen_type import ScreenType
-from tests.live_smoke_support import build_live_session, build_observation_service
+from tests.live_smoke_support import build_live_runtime
 from tests.test_support import build_logger
 
 
@@ -49,15 +49,12 @@ class LiveChatWorkflowSmokeTests(unittest.TestCase):
         cls.application = build_application_runner(cls.config_path)
         cls.script_runner = cls.application.script_runner
         cls.account = cls.script_runner.config.require_account(cls.account_id)
-        cls.session = build_live_session(
+        runtime = build_live_runtime(
             config_account=cls.account,
             script_runner=cls.script_runner,
         )
-        cls.observation_service = build_observation_service(
-            config_account=cls.account,
-            script_runner=cls.script_runner,
-            session=cls.session,
-        )
+        cls.session = runtime.session
+        cls.observation_service = runtime.observation_service
         cls.flows = ScreenFlowPlanner()
         defaults = cls.script_runner.config.defaults
         cls.action_executor = ObservedActionExecutor(
