@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from pnc_automation.automation.task import TaskId, TaskStatus
@@ -99,6 +99,38 @@ class ChatMonitorTests(unittest.TestCase):
             self.assertFalse(second.changed)
             self.assertIsNone(second.screenshot_path)
             self.assertEqual(first.transcript_path.read_text(encoding="utf-8").count("Enemy Bob"), 1)
+
+    def test_chat_archive_store_carries_previous_day_overlap_state_into_new_day(self) -> None:
+        """Reuses the prior local-day state for overlap decisions when the new day has not written state yet."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            store = ChatArchiveStore(root=Path(temp_directory) / "chat")
+            snapshot = store.build_snapshot((ObservedChatEntry(ChatEntryKind.PLAYER, "Enemy Bob", "Hello there", 0),))
+            local_before_midnight = datetime.now().astimezone().replace(hour=23, minute=59, second=0, microsecond=0)
+            local_after_midnight = local_before_midnight + timedelta(minutes=2)
+
+            first = store.persist_heartbeat(
+                account_id=self.account.id,
+                castle=self.target_castle,
+                channel=ChatChannel.WORLD,
+                captured_at=local_before_midnight,
+                snapshot=snapshot,
+                screenshot_payload=b"first_payload",
+            )
+            second = store.persist_heartbeat(
+                account_id=self.account.id,
+                castle=self.target_castle,
+                channel=ChatChannel.WORLD,
+                captured_at=local_after_midnight,
+                snapshot=snapshot,
+                screenshot_payload=b"second_payload",
+            )
+
+            self.assertTrue(first.changed)
+            self.assertFalse(second.changed)
+            self.assertIsNone(second.screenshot_path)
+            self.assertTrue(second.state_path.is_file())
+            self.assertFalse(second.transcript_path.exists())
 
     def test_chat_archive_store_appends_only_the_non_overlapping_tail(self) -> None:
         """Appends only newly visible player rows once the previous window suffix overlaps the current prefix."""

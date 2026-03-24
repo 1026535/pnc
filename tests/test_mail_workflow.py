@@ -21,7 +21,7 @@ from pnc_automation.capture.screenshot_service import ScreenshotService
 from pnc_automation.config.models import AccountConfig, CastleIdentity, CredentialSource, DefaultsConfig, ResolvedCredentials
 from pnc_automation.errors import ScriptValidationError, SelectorResolutionError
 from pnc_automation.pnc.action_requests import InputTextAction, KeyEventAction, LaunchAppAction, SwipeAction, TapAction, TapPointAction
-from pnc_automation.pnc.chat import ChatEntryKind, visible_player_chat_entries
+from pnc_automation.pnc.chat import ChatEntryKind, visible_player_chat_entries, visible_unsupported_chat_entries
 from pnc_automation.pnc.mail import (
     CollectMailParams,
     MailArchiveMode,
@@ -1423,6 +1423,62 @@ class MailWorkflowTests(unittest.TestCase):
         self.assertEqual(len(chat_entries), 2)
         self.assertEqual(chat_entries[1].metadata["chat_entry_kind"], ChatEntryKind.ANNOUNCEMENT.value)
         self.assertEqual([entry.sender_name for entry in player_entries], ["Enemy Bob"])
+
+    def test_observation_builder_marks_sender_only_single_line_chat_rows_as_unsupported(self) -> None:
+        """Leaves sender-only OCR rows unsupported so chat archiving can fail fast instead of dropping them silently."""
+
+        observation = _build_observation(
+            request=ObservationRequest.chat_transcript_observation(),
+            lines=(
+                _ocr_line("Chat", x=250, y=40, width=120, height=24),
+                _ocr_line("Kingdom", x=180, y=96, width=120, height=24),
+                _ocr_line("Alliance", x=520, y=96, width=120, height=24),
+                _ocr_line("Enemy Bob", x=120, y=360, width=180, height=24),
+            ),
+        )
+
+        chat_entries = observation.entries(ListEntryKind.CHAT_MESSAGE)
+
+        self.assertEqual(len(chat_entries), 1)
+        self.assertEqual(chat_entries[0].metadata["chat_entry_kind"], ChatEntryKind.UNSUPPORTED.value)
+        self.assertEqual(len(visible_unsupported_chat_entries(chat_entries)), 1)
+
+    def test_observation_builder_marks_malformed_single_line_chat_rows_as_unsupported(self) -> None:
+        """Leaves merged OCR rows unsupported when they do not match the trusted `Sender: message` player format."""
+
+        observation = _build_observation(
+            request=ObservationRequest.chat_transcript_observation(),
+            lines=(
+                _ocr_line("Chat", x=250, y=40, width=120, height=24),
+                _ocr_line("Kingdom", x=180, y=96, width=120, height=24),
+                _ocr_line("Alliance", x=520, y=96, width=120, height=24),
+                _ocr_line("Enemy Bob - Hello there", x=120, y=360, width=320, height=24),
+            ),
+        )
+
+        chat_entries = observation.entries(ListEntryKind.CHAT_MESSAGE)
+
+        self.assertEqual(len(chat_entries), 1)
+        self.assertEqual(chat_entries[0].metadata["chat_entry_kind"], ChatEntryKind.UNSUPPORTED.value)
+        self.assertEqual(len(visible_unsupported_chat_entries(chat_entries)), 1)
+
+    def test_observation_builder_keeps_centered_wide_announcement_rows_as_announcements(self) -> None:
+        """Keeps token-free centered banner rows classified as announcements when the layout matches announcement chrome."""
+
+        observation = _build_observation(
+            request=ObservationRequest.chat_transcript_observation(),
+            lines=(
+                _ocr_line("Chat", x=250, y=40, width=120, height=24),
+                _ocr_line("Kingdom", x=180, y=96, width=120, height=24),
+                _ocr_line("Alliance", x=520, y=96, width=120, height=24),
+                _ocr_line("Battle begins soon", x=260, y=360, width=560, height=24),
+            ),
+        )
+
+        chat_entries = observation.entries(ListEntryKind.CHAT_MESSAGE)
+
+        self.assertEqual(len(chat_entries), 1)
+        self.assertEqual(chat_entries[0].metadata["chat_entry_kind"], ChatEntryKind.ANNOUNCEMENT.value)
 
     def test_observation_builder_does_not_create_false_player_rows_from_announcement_only_chat(self) -> None:
         """Treats announcement-only Kingdom Chat windows as non-player content so transcript deltas stay quiet."""

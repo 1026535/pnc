@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import tempfile
 from collections.abc import Iterable
+from pathlib import Path
 
 from pnc_automation.config.models import (
     AccountCastleTargetsConfig,
@@ -219,9 +220,25 @@ def _validate_archive_root(config: AppConfig) -> None:
 def _validate_distinct_output_roots(config: AppConfig) -> None:
     """Rejects configurations that collapse durable archives into runtime artifacts."""
 
-    if config.artifact_root == config.archive_root:
+    if _paths_overlap(config.artifact_root, config.archive_root):
         raise ConfigurationError(
-            "artifact_root and archive_root must resolve to different directories.",
+            "artifact_root and archive_root must resolve to separate non-overlapping directories.",
             artifact_root=str(config.artifact_root),
             archive_root=str(config.archive_root),
         )
+
+
+def _paths_overlap(first: Path, second: Path) -> bool:
+    """Returns whether two resolved paths are equal or nested inside one another."""
+
+    return _path_contains(first, second) or _path_contains(second, first)
+
+
+def _path_contains(parent: Path, child: Path) -> bool:
+    """Returns whether one resolved path is the same as or an ancestor of another."""
+
+    try:
+        child.relative_to(parent)
+    except ValueError:
+        return False
+    return True

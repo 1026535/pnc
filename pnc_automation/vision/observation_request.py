@@ -112,7 +112,6 @@ class ObservationRequest:
             include_chat_state=True,
             include_chat_entries=True,
             text_field_selectors=frozenset({UiElementId.PNC_CHAT_INPUT_FIELD}),
-            persist_artifact=False,
         )
 
     @classmethod

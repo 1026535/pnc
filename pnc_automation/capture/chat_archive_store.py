@@ -6,7 +6,7 @@ import hashlib
 import json
 import shutil
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -118,7 +118,13 @@ class ChatArchiveStore:
         directory.mkdir(parents=True, exist_ok=True)
         transcript_path = directory / "transcript.log"
         state_path = directory / "state.json"
-        previous_state = self._load_state(state_path)
+        previous_state = self._load_overlap_baseline_state(
+            state_path=state_path,
+            account_id=account_id,
+            castle=castle,
+            channel=channel,
+            captured_at=captured_at,
+        )
         appended_entries, gap_detected = _compute_snapshot_delta(
             previous=previous_state.snapshot if previous_state is not None else None,
             current=snapshot,
@@ -164,6 +170,23 @@ class ChatArchiveStore:
         """Builds the canonical daily archive directory for one account/castle/channel heartbeat stream."""
 
         local_day = captured_at.astimezone().strftime("%Y-%m-%d")
+        return self._build_directory_for_local_day(
+            account_id=account_id,
+            castle=castle,
+            channel=channel,
+            local_day=local_day,
+        )
+
+    def _build_directory_for_local_day(
+        self,
+        *,
+        account_id: str,
+        castle: CastleIdentity,
+        channel: ChatChannel,
+        local_day: str,
+    ) -> Path:
+        """Builds the canonical archive directory for one already-resolved local day."""
+
         return (
             self.root
             / local_day
@@ -171,6 +194,32 @@ class ChatArchiveStore:
             / format_castle_artifact_directory(kingdom=castle.kingdom, castle_name=castle.castle_name)
             / chat_channel_archive_directory(channel)
         )
+
+    def _load_overlap_baseline_state(
+        self,
+        *,
+        state_path: Path,
+        account_id: str,
+        castle: CastleIdentity,
+        channel: ChatChannel,
+        captured_at: datetime,
+    ) -> ChatArchiveState | None:
+        """Loads the current-day overlap state or carries over the prior local day when the new day is empty."""
+
+        current_state = self._load_state(state_path)
+        if current_state is not None:
+            return current_state
+        previous_day = (captured_at.astimezone() - timedelta(days=1)).strftime("%Y-%m-%d")
+        previous_state_path = (
+            self._build_directory_for_local_day(
+                account_id=account_id,
+                castle=castle,
+                channel=channel,
+                local_day=previous_day,
+            )
+            / "state.json"
+        )
+        return self._load_state(previous_state_path)
 
     def _load_state(self, state_path: Path) -> ChatArchiveState | None:
         """Loads the prior persisted state for one day/channel when it exists."""

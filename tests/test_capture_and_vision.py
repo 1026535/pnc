@@ -2893,6 +2893,41 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertIsNotNone(capture.screenshot.artifact_path)
             self.assertTrue(any((root / "artifacts").rglob("*.png")))
 
+    def test_chat_transcript_observation_uses_the_shared_artifact_mode_policy(self) -> None:
+        """Keeps transcript captures ephemeral in light mode while preserving them in debug mode through the shared policy."""
+
+        for mode, expect_artifact in (
+            (ObservationMode.LIGHT, False),
+            (ObservationMode.DEBUG, True),
+        ):
+            with self.subTest(mode=mode):
+                with tempfile.TemporaryDirectory() as temp_directory:
+                    root = Path(temp_directory)
+                    screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+                    payload = _encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))
+                    service = ObservationService(
+                        screenshot_service=screenshot_service,
+                        observation_builder=_SequencedObservationBuilder(
+                            observations=[make_observation(ScreenType.PNC_CHAT, active_chat_channel=ChatChannel.WORLD)]
+                        ),
+                        session=_FakeScreenshotSession(payload),
+                        artifact_directory="chat_transcript_mode_test",
+                        mode=mode,
+                    )
+
+                    capture = service.capture_observation(
+                        "chat_transcript_scan",
+                        request=ObservationRequest.chat_transcript_observation(),
+                    )
+
+                    self.assertEqual(capture.observation.screen_type, ScreenType.PNC_CHAT)
+                    if expect_artifact:
+                        self.assertIsNotNone(capture.screenshot.artifact_path)
+                        self.assertTrue(any((root / "artifacts").rglob("*.png")))
+                    else:
+                        self.assertIsNone(capture.screenshot.artifact_path)
+                        self.assertFalse(any((root / "artifacts").rglob("*.png")))
+
 
 def _ocr_line(text: str, *, x: int, y: int, width: int, height: int) -> OcrLine:
     """Builds one deterministic OCR line for tests."""
