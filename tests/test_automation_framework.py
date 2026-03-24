@@ -8,14 +8,14 @@ from pathlib import Path
 
 from pnc_automation.automation.action_executor import ActionExecutor
 from pnc_automation.automation.observed_action_executor import ObservedActionExecutor, ObservedActionExecutionPolicy
-from pnc_automation.automation.runner import AutomationRunner
+from pnc_automation.automation.runner import AutomationRunner, StepExecutionPolicy
 from pnc_automation.scripts.models import RunScript, ScriptStep
 from pnc_automation.scripts.registry import TaskRegistry, build_default_task_registry
 from pnc_automation.automation.task import BaseAutomationTask, TaskId, TaskResult
 from pnc_automation.automation.task_context import TaskContext
 from pnc_automation.automation.tasks.ensure_game_running_task import EnsureGameRunningTask
 from pnc_automation.config.models import AccountConfig, CastleIdentity, CredentialSource, DefaultsConfig, ResolvedCredentials
-from pnc_automation.errors import ScriptValidationError, SelectorResolutionError
+from pnc_automation.errors import ScriptValidationError, SelectorResolutionError, TaskVerificationError
 from pnc_automation.pnc.action_requests import (
     ActionRequest,
     InputTextAction,
@@ -449,6 +449,44 @@ class AutomationFrameworkTests(unittest.TestCase):
 
         self.assertEqual(runner.policy.max_replans_per_step, 5)
         self.assertEqual(result.steps[0].status.value, "success")
+
+    def test_runner_persists_failure_artifact_when_replan_limit_is_exhausted(self) -> None:
+        """Captures one persisted failure artifact when a task exceeds its allowed replans in light-style observation flows."""
+
+        registry = TaskRegistry(tasks=(_AlwaysReplanTask(),))
+        script = registry.prepare_script(
+            RunScript(
+                name="replan_limit",
+                path=Path("replan_limit.yaml"),
+                steps=(ScriptStep(task=TaskId.ENSURE_GAME_RUNNING),),
+            )
+        )
+        fake_observer = FakeObservationService(
+            observations=[
+                make_observation(ScreenType.PNC_HOME_CITY, visible_ids=(UiElementId.PNC_HOME_BUILD_BUTTON,)),
+                make_observation(ScreenType.PNC_HOME_CITY, artifact_path=Path("artifacts/replan_limit.png")),
+            ]
+        )
+        runner = AutomationRunner(
+            defaults=self.defaults,
+            observation_service=fake_observer,
+            action_executor=_make_observed_action_executor(FakeSession()),
+            task_registry=registry,
+            flow_planner=ScreenFlowPlanner(),
+            logger=build_logger(),
+            policy=StepExecutionPolicy(max_replans_per_step=0),
+        )
+
+        with self.assertRaises(TaskVerificationError) as error_context:
+            runner.run(self.account, script)
+
+        self.assertEqual(
+            fake_observer.labels,
+            ["ensure_game_running_before", "ensure_game_running_failure_replan_limit"],
+        )
+        self.assertEqual(error_context.exception.details["artifact_path"], str(Path("artifacts/replan_limit.png")))
+        self.assertEqual(error_context.exception.details["screen_type"], ScreenType.PNC_HOME_CITY)
+        self.assertEqual(error_context.exception.details["replans"], 1)
 
     def test_input_text_actions_use_selector_action_points_for_focus(self) -> None:
         """Focuses selector-backed text entry through the canonical action point instead of the bounds center."""
@@ -1318,6 +1356,36 @@ class _LocalBudgetReplanTask(BaseAutomationTask):
         if attempts >= 6:
             return TaskResult.success("Synthetic local-budget task exhausted its bounded replans cleanly.")
         return TaskResult.replan("Synthetic local-budget task is still exercising its private replan budget.")
+
+
+class _AlwaysReplanTask(BaseAutomationTask):
+    """Synthetic task used to prove replan-limit failures route through shared runner diagnostics."""
+
+    id = TaskId.ENSURE_GAME_RUNNING
+
+    def parse_params(self, params: dict[str, object]) -> None:
+        """Rejects unsupported parameters for the synthetic task."""
+
+        self._require_no_params(params)
+        return None
+
+    def is_applicable(self, context: TaskContext, observation: Observation) -> bool:
+        """Runs only when the shared synthetic selector is visible."""
+
+        del context
+        return observation.has(UiElementId.PNC_HOME_BUILD_BUTTON)
+
+    def plan(self, context: TaskContext, observation: Observation) -> list[ActionRequest]:
+        """Does not emit actions because this test exercises runner-side replan failure handling only."""
+
+        del context, observation
+        return []
+
+    def verify(self, context: TaskContext, before: Observation, after: Observation) -> TaskResult:
+        """Always requests another replan so the runner eventually hits its configured limit."""
+
+        del context, before, after
+        return TaskResult.replan("Synthetic replan-only task is still waiting for progress.")
 
 
 def _make_observed_action_executor(

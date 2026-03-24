@@ -271,9 +271,12 @@ class AutomationRunner:
                 if max_replans is None:
                     max_replans = self.policy.max_replans_per_step
                 if replans > max_replans:
-                    raise TaskVerificationError(
+                    self._raise_task_verification_error(
                         f"Task '{step.task}' exceeded the maximum allowed replans.",
                         task_id=step.task,
+                        observation=after,
+                        screen_type=after.screen_type,
+                        label=f"{step.task.value}_failure_replan_limit",
                         replans=replans,
                     )
                 current_before = after

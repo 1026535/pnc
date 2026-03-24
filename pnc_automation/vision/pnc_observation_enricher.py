@@ -1551,14 +1551,13 @@ def _looks_like_announcement_chat_row(
         return False
     if any(token in combined_text for token in _CHAT_ANNOUNCEMENT_TOKENS):
         return True
+    if len(row_lines) != 1:
+        return False
     first_line = row_lines[0]
-    if len(row_lines) == 1:
-        return True
-    if first_line.bounds.x > int(image.width * 0.24):
-        return True
-    if first_line.bounds.width > int(image.width * 0.6):
-        return True
-    return False
+    return (
+        first_line.bounds.x >= int(image.width * 0.24)
+        and first_line.bounds.width >= int(image.width * 0.6)
+    )
 
 
 def _extract_simple_named_rows(

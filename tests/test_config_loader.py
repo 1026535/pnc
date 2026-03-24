@@ -156,6 +156,66 @@ class ConfigLoaderTests(unittest.TestCase):
             with self.assertRaises(ConfigurationError):
                 load_app_config(config_path)
 
+    def test_load_app_config_rejects_archive_root_nested_under_artifact_root(self) -> None:
+        """Rejects configs that nest durable archives inside the runtime artifact tree."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            config_path = Path(temp_directory) / "accounts.yaml"
+            config_path.write_text(
+                textwrap.dedent(
+                    """
+                    artifacts:
+                      root: shared_output
+                    archives:
+                      root: shared_output/archives
+                    instances:
+                      - id: bs-main
+                        device_id: 127.0.0.1:5555
+                        app_package: com.global.tmslg
+                    accounts:
+                      - id: account_a
+                        instance_id: bs-main
+                        pnc_account_id: inline_user
+                        username: inline_user
+                        password: inline_pass
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(ConfigurationError):
+                load_app_config(config_path)
+
+    def test_load_app_config_rejects_artifact_root_nested_under_archive_root(self) -> None:
+        """Rejects configs that place runtime artifacts inside the durable archive tree."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            config_path = Path(temp_directory) / "accounts.yaml"
+            config_path.write_text(
+                textwrap.dedent(
+                    """
+                    artifacts:
+                      root: shared_output/runtime
+                    archives:
+                      root: shared_output
+                    instances:
+                      - id: bs-main
+                        device_id: 127.0.0.1:5555
+                        app_package: com.global.tmslg
+                    accounts:
+                      - id: account_a
+                        instance_id: bs-main
+                        pnc_account_id: inline_user
+                        username: inline_user
+                        password: inline_pass
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(ConfigurationError):
+                load_app_config(config_path)
+
     def test_load_app_config_fails_when_secret_is_missing(self) -> None:
         """Rejects login-enabled accounts that reference missing environment variables."""
 
