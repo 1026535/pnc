@@ -345,13 +345,14 @@ artifacts:
 
 defaults:
   adb_path: adb
+  bluestacks_config_path: C:\ProgramData\BlueStacks_nxt\bluestacks.conf
   screenshot_format: png
   stable_click_delay_ms: 300
   post_action_observe_delay_ms: 800
 
 instances:
   - id: bs-main
-    device_id: 127.0.0.1:5556
+    display_name: serious_stuff
     app_package: com.global.tmslg
 
 accounts:

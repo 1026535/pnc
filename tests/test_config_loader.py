@@ -29,6 +29,7 @@ class ConfigLoaderTests(unittest.TestCase):
                       root: artifacts
                     defaults:
                       adb_path: adb
+                      bluestacks_config_path: fixtures/bluestacks.conf
                       screenshot_format: png
                       stable_click_delay_ms: 111
                       post_action_observe_delay_ms: 222
@@ -36,7 +37,7 @@ class ConfigLoaderTests(unittest.TestCase):
                       chat_post_action_observe_delay_ms: 44
                     instances:
                       - id: bs-main
-                        device_id: 127.0.0.1:5555
+                        display_name: serious_stuff
                         app_package: com.global.tmslg
                     accounts:
                       - id: account_a
@@ -60,7 +61,8 @@ class ConfigLoaderTests(unittest.TestCase):
             self.assertEqual(config.archive_root, (root / "archives").resolve())
             self.assertEqual(config.runtime.observation_mode, ObservationMode.DEBUG)
             self.assertEqual(config.require_account("account_a").credentials.username, "user")
-            self.assertEqual(config.require_instance("bs-main").device_id, "127.0.0.1:5555")
+            self.assertEqual(config.require_instance("bs-main").display_name, "serious_stuff")
+            self.assertEqual(config.defaults.bluestacks_config_path, (root / "fixtures" / "bluestacks.conf").resolve())
 
     def test_load_app_config_resolves_repo_style_config_artifacts_outside_config_directory(self) -> None:
         """Resolves ``config/accounts.yaml`` artifact roots at the workspace root, not inside ``config``."""
@@ -75,9 +77,11 @@ class ConfigLoaderTests(unittest.TestCase):
                     """
                     artifacts:
                       root: artifacts
+                    defaults:
+                      bluestacks_config_path: fixtures/bluestacks.conf
                     instances:
                       - id: bs-main
-                        device_id: 127.0.0.1:5555
+                        display_name: serious_stuff
                         app_package: com.global.tmslg
                     accounts:
                       - id: account_a
@@ -96,6 +100,11 @@ class ConfigLoaderTests(unittest.TestCase):
             self.assertNotEqual(config.artifact_root, (config_dir / "artifacts").resolve())
             self.assertEqual(config.archive_root, (root / "archives").resolve())
             self.assertNotEqual(config.archive_root, (config_dir / "archives").resolve())
+            self.assertEqual(config.defaults.bluestacks_config_path, (root / "fixtures" / "bluestacks.conf").resolve())
+            self.assertNotEqual(
+                config.defaults.bluestacks_config_path,
+                (config_dir / "fixtures" / "bluestacks.conf").resolve(),
+            )
 
     def test_load_app_config_accepts_runtime_observation_mode(self) -> None:
         """Loads the shared runtime observation mode from config when explicitly authored."""
@@ -109,7 +118,7 @@ class ConfigLoaderTests(unittest.TestCase):
                       observation_mode: light
                     instances:
                       - id: bs-main
-                        device_id: 127.0.0.1:5555
+                        display_name: serious_stuff
                         app_package: com.global.tmslg
                     accounts:
                       - id: account_a
@@ -140,7 +149,7 @@ class ConfigLoaderTests(unittest.TestCase):
                       root: shared_output
                     instances:
                       - id: bs-main
-                        device_id: 127.0.0.1:5555
+                        display_name: serious_stuff
                         app_package: com.global.tmslg
                     accounts:
                       - id: account_a
@@ -170,7 +179,7 @@ class ConfigLoaderTests(unittest.TestCase):
                       root: shared_output/archives
                     instances:
                       - id: bs-main
-                        device_id: 127.0.0.1:5555
+                        display_name: serious_stuff
                         app_package: com.global.tmslg
                     accounts:
                       - id: account_a
@@ -200,7 +209,7 @@ class ConfigLoaderTests(unittest.TestCase):
                       root: shared_output
                     instances:
                       - id: bs-main
-                        device_id: 127.0.0.1:5555
+                        display_name: serious_stuff
                         app_package: com.global.tmslg
                     accounts:
                       - id: account_a
@@ -226,7 +235,7 @@ class ConfigLoaderTests(unittest.TestCase):
                     """
                     instances:
                       - id: bs-main
-                        device_id: 127.0.0.1:5555
+                        display_name: serious_stuff
                         app_package: com.global.tmslg
                     accounts:
                       - id: account_a
@@ -252,7 +261,7 @@ class ConfigLoaderTests(unittest.TestCase):
                     """
                     instances:
                       - id: bs-main
-                        device_id: 127.0.0.1:5555
+                        display_name: serious_stuff
                         app_package: com.global.tmslg
                     accounts:
                       - id: account_a
@@ -284,7 +293,7 @@ class ConfigLoaderTests(unittest.TestCase):
                     """
                     instances:
                       - id: bs-main
-                        device_id: 127.0.0.1:5555
+                        display_name: serious_stuff
                         app_package: com.global.tmslg
                     accounts:
                       - id: ColdDukeOfTheNorth
@@ -311,7 +320,7 @@ class ConfigLoaderTests(unittest.TestCase):
                     """
                     instances:
                       - id: bs-main
-                        device_id: 127.0.0.1:5555
+                        display_name: serious_stuff
                         app_package: com.global.tmslg
                     accounts:
                       - id: ColdDuke
@@ -346,7 +355,7 @@ class ConfigLoaderTests(unittest.TestCase):
                     """
                     instances:
                       - id: bs-main
-                        device_id: 127.0.0.1:5555
+                        display_name: serious_stuff
                         app_package: com.global.tmslg
                     accounts:
                       - id: account_a
@@ -394,7 +403,7 @@ class ConfigLoaderTests(unittest.TestCase):
                     """
                     instances:
                       - id: bs-main
-                        device_id: 127.0.0.1:5555
+                        display_name: serious_stuff
                         app_package: com.global.tmslg
                     accounts:
                       - id: account_a
@@ -444,7 +453,7 @@ class ConfigLoaderTests(unittest.TestCase):
                     """
                     instances:
                       - id: bs-main
-                        device_id: 127.0.0.1:5555
+                        display_name: serious_stuff
                         app_package: com.global.tmslg
                     accounts:
                       - id: account_a
@@ -483,7 +492,7 @@ class ConfigLoaderTests(unittest.TestCase):
                     """
                     instances:
                       - id: bs-main
-                        device_id: 127.0.0.1:5555
+                        display_name: serious_stuff
                         app_package: com.global.tmslg
                     accounts:
                       - id: account_a
@@ -502,6 +511,32 @@ class ConfigLoaderTests(unittest.TestCase):
             with self.assertRaises(ConfigurationError):
                 load_app_config(config_path)
 
+    def test_load_app_config_rejects_legacy_instance_device_id(self) -> None:
+        """Rejects the removed authored instance device id instead of accepting stale ports."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            config_path = Path(temp_directory) / "accounts.yaml"
+            config_path.write_text(
+                textwrap.dedent(
+                    """
+                    instances:
+                      - id: bs-main
+                        device_id: 127.0.0.1:5555
+                        app_package: com.global.tmslg
+                    accounts:
+                      - id: account_a
+                        instance_id: bs-main
+                        pnc_account_id: inline_user
+                        username: inline_user
+                        password: inline_pass
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(ConfigurationError):
+                load_app_config(config_path)
+
     def test_load_app_config_rejects_mixed_inline_and_environment_credentials(self) -> None:
         """Rejects accounts that try to use both credential modes at once."""
 
@@ -512,7 +547,7 @@ class ConfigLoaderTests(unittest.TestCase):
                     """
                     instances:
                       - id: bs-main
-                        device_id: 127.0.0.1:5555
+                        display_name: serious_stuff
                         app_package: com.global.tmslg
                     accounts:
                       - id: account_a
@@ -538,7 +573,7 @@ class ConfigLoaderTests(unittest.TestCase):
                     """
                     instances:
                       - id: bs-main
-                        device_id: 127.0.0.1:5555
+                        display_name: serious_stuff
                         app_package: com.global.tmslg
                     accounts:
                       - id: account_a
@@ -547,6 +582,35 @@ class ConfigLoaderTests(unittest.TestCase):
                         username: inline_user
                         password: inline_pass
                       - id: account_b
+                        instance_id: bs-main
+                        pnc_account_id: inline_user
+                        username: inline_user
+                        password: inline_pass
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(ConfigurationError):
+                load_app_config(config_path)
+
+    def test_load_app_config_rejects_duplicate_bluestacks_display_names(self) -> None:
+        """Rejects authored configs that map one BlueStacks display name to multiple instance ids."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            config_path = Path(temp_directory) / "accounts.yaml"
+            config_path.write_text(
+                textwrap.dedent(
+                    """
+                    instances:
+                      - id: bs-main
+                        display_name: serious_stuff
+                        app_package: com.global.tmslg
+                      - id: bs-main-2
+                        display_name: serious_stuff
+                        app_package: com.global.tmslg
+                    accounts:
+                      - id: account_a
                         instance_id: bs-main
                         pnc_account_id: inline_user
                         username: inline_user
@@ -571,7 +635,7 @@ class ConfigLoaderTests(unittest.TestCase):
                     """
                     instances:
                       - id: bs-main
-                        device_id: 127.0.0.1:5555
+                        display_name: serious_stuff
                         app_package: com.global.tmslg
                     accounts:
                       - id: account_a
@@ -613,7 +677,7 @@ class ConfigLoaderTests(unittest.TestCase):
                     """
                     instances:
                       - id: bs-main
-                        device_id: 127.0.0.1:5555
+                        display_name: serious_stuff
                         app_package: com.global.tmslg
                     accounts:
                       - id: account_a
@@ -652,7 +716,7 @@ class ConfigLoaderTests(unittest.TestCase):
                     """
                     instances:
                       - id: bs-main
-                        device_id: 127.0.0.1:5555
+                        display_name: serious_stuff
                         app_package: com.global.tmslg
                     accounts:
                       - id: account_a
@@ -680,7 +744,7 @@ class ConfigLoaderTests(unittest.TestCase):
                     """
                     instances:
                       - id: bs-main
-                        device_id: 127.0.0.1:5555
+                        display_name: serious_stuff
                         app_package: com.global.tmslg
                     accounts:
                       - id: account_a

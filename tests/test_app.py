@@ -25,7 +25,7 @@ class ApplicationRunnerTests(unittest.TestCase):
                     """
                     instances:
                       - id: bs-main
-                        device_id: 127.0.0.1:5555
+                        display_name: serious_stuff
                         app_package: com.global.tmslg
                     accounts:
                       - id: account_a
@@ -68,7 +68,7 @@ class ApplicationRunnerTests(unittest.TestCase):
                       root: archives
                     instances:
                       - id: bs-main
-                        device_id: 127.0.0.1:5555
+                        display_name: serious_stuff
                         app_package: com.global.tmslg
                     accounts:
                       - id: account_a

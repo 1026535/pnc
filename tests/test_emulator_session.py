@@ -51,7 +51,12 @@ class BlueStacksSessionTests(unittest.TestCase):
         )
         session = BlueStacksSession(
             adb_client=adb_client,
-            instance=BlueStacksInstance(id="bs-main", device_id="127.0.0.1:5555", app_package="com.global.tmslg"),
+            instance=BlueStacksInstance(
+                id="bs-main",
+                display_name="serious_stuff",
+                device_id="127.0.0.1:5555",
+                app_package="com.global.tmslg",
+            ),
         )
 
         session.ensure_responsive()
@@ -68,7 +73,12 @@ class BlueStacksSessionTests(unittest.TestCase):
         )
         session = BlueStacksSession(
             adb_client=adb_client,
-            instance=BlueStacksInstance(id="bs-main", device_id="127.0.0.1:5555", app_package="com.global.tmslg"),
+            instance=BlueStacksInstance(
+                id="bs-main",
+                display_name="serious_stuff",
+                device_id="127.0.0.1:5555",
+                app_package="com.global.tmslg",
+            ),
         )
 
         with self.assertRaises(DeviceConnectionError):

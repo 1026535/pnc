@@ -16,7 +16,17 @@ This file owns one architectural correction:
 - runtime must resolve that instance's current ADB port automatically,
 - session startup must fail fast when the live BlueStacks metadata is missing, ambiguous, or inconsistent.
 
-## 1.1 Triggering live evidence
+## 1.1 Implementation status
+
+Status:
+
+- completed in repo on 2026-03-24,
+- authored instance config now uses stable `display_name` values plus `defaults.bluestacks_config_path`,
+- runtime resolves the live `device_id` from BlueStacks host metadata before building a session,
+- automated coverage now validates config migration, resolver failure modes, successful port resolution, and ScriptRunner session wiring,
+- 2026-03-24 live connection checks resolved `serious_stuff -> 127.0.0.1:5555` and `testing -> 127.0.0.1:5566` through the canonical runtime path.
+
+## 1.2 Triggering live evidence
 
 On 2026-03-24, live validation of the Kingdom Chat monitor against `serious_stuff` exposed that the current config boundary is wrong:
 

@@ -10,7 +10,6 @@ from pnc_automation.pnc.observation import Observation
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.capture.screenshot_service import ScreenshotService
 from pnc_automation.config.models import AccountConfig
-from pnc_automation.emulator.bluestacks_instance import BlueStacksInstance
 from pnc_automation.emulator.session import BlueStacksSession
 from pnc_automation.vision.observation_builder import ObservationService
 
@@ -18,11 +17,12 @@ from pnc_automation.vision.observation_builder import ObservationService
 def build_live_session(*, config_account: AccountConfig, script_runner: object) -> BlueStacksSession:
     """Creates and connects one live BlueStacks session using the authoritative runtime wiring."""
 
-    config = script_runner.config
-    instance = BlueStacksInstance.from_config(config.require_instance(config_account.instance_id))
-    session = BlueStacksSession(adb_client=script_runner.adb_client, instance=instance)
-    session.connect()
-    session.ensure_responsive()
+    build_connected_session = getattr(script_runner, "build_connected_session", None)
+    if not callable(build_connected_session):
+        raise AssertionError("Live smoke tests require ScriptRunner.build_connected_session().")
+    session = build_connected_session(account=config_account)
+    if not isinstance(session, BlueStacksSession):
+        raise AssertionError("Live smoke tests require ScriptRunner.build_connected_session() to return a BlueStacksSession.")
     return session
 
 
