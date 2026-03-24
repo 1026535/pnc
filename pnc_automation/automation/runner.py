@@ -1,4 +1,4 @@
-"""Canonical observe-plan-act-verify automation runner."""
+﻿"""Canonical observe-plan-act-verify automation runner."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ from datetime import UTC, datetime
 from typing import Any
 
 from pnc_automation.automation.observed_action_executor import ObservedActionExecutor
-from pnc_automation.automation.scripts.models import PreparedRunScript, PreparedScriptStep, ScriptStep
-from pnc_automation.automation.scripts.registry import TaskRegistry
+from pnc_automation.scripts.models import PreparedRunScript, PreparedScriptStep, ScriptStep
+from pnc_automation.scripts.registry import TaskRegistry
 from pnc_automation.automation.task import CastleTargetPolicy, TaskId, TaskResult, TaskStatus
 from pnc_automation.automation.task_context import TaskContext
 from pnc_automation.capture.mail_archive_store import MailArchiveStore
@@ -330,3 +330,4 @@ class AutomationRunner:
             allow_popup_recovery=False,
         )
         return execution.final_observation
+

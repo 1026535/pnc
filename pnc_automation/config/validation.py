@@ -5,7 +5,13 @@ from __future__ import annotations
 import tempfile
 from collections.abc import Iterable
 
-from pnc_automation.config.models import AccountConfig, AppConfig, PncAccountCastleRosterConfig, castle_identity_key
+from pnc_automation.config.models import (
+    AccountCastleTargetsConfig,
+    AccountConfig,
+    AppConfig,
+    PncAccountCastleRosterConfig,
+    castle_identity_key,
+)
 from pnc_automation.errors import ConfigurationError
 
 
@@ -23,6 +29,7 @@ def validate_app_config(config: AppConfig) -> AppConfig:
 
     _validate_shared_pnc_credentials(config.accounts)
     _validate_castle_rosters(config)
+    _validate_castle_targets(config)
     _validate_artifact_root(config)
     return config
 
@@ -126,6 +133,41 @@ def _validate_castle_rosters(config: AppConfig) -> None:
     _validate_unique_ids("pnc account roster", (roster.pnc_account_id for roster in config.castle_rosters))
     for roster in config.castle_rosters:
         _validate_roster_entries(roster)
+
+
+def _validate_castle_targets(config: AppConfig) -> None:
+    """Validates the optional authored castle-target file for internal consistency."""
+
+    if not config.castle_targets:
+        return
+    _validate_unique_ids("account castle target", (targets.account_id for targets in config.castle_targets))
+    account_ids = {account.id for account in config.accounts}
+    for targets in config.castle_targets:
+        _validate_account_castle_targets(targets, account_ids)
+
+
+def _validate_account_castle_targets(targets: AccountCastleTargetsConfig, account_ids: set[str]) -> None:
+    """Ensures authored castle targets reference a real account and use unique aliases."""
+
+    if targets.account_id not in account_ids:
+        raise ConfigurationError(
+            f"Castle-target config references unknown account '{targets.account_id}'.",
+            account_id=targets.account_id,
+        )
+    if not targets.targets:
+        raise ConfigurationError(
+            f"Castle-target config for account '{targets.account_id}' must define at least one alias.",
+            account_id=targets.account_id,
+        )
+    seen: set[str] = set()
+    for target in targets.targets:
+        if target.target_id in seen:
+            raise ConfigurationError(
+                f"Account '{targets.account_id}' contains a duplicate castle target alias.",
+                account_id=targets.account_id,
+                castle_ref=target.target_id,
+            )
+        seen.add(target.target_id)
 
 
 def _validate_roster_entries(roster: PncAccountCastleRosterConfig) -> None:

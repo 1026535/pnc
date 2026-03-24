@@ -1,0 +1,11 @@
+accounts:
+  - account_id: testing
+    castle_targets:
+      main:
+        kingdom: K287
+        castle_name: pine cobaye 1
+  - account_id: serious_stuff
+    castle_targets:
+      main:
+        kingdom: K230
+        castle_name: Lv. 6 hellhound

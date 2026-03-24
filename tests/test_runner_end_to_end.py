@@ -1,4 +1,4 @@
-"""End-to-end runner test using fake observations and a fake session."""
+﻿"""End-to-end runner test using fake observations and a fake session."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ from pathlib import Path
 from pnc_automation.automation.action_executor import ActionExecutor
 from pnc_automation.automation.observed_action_executor import ObservedActionExecutor
 from pnc_automation.automation.runner import AutomationRunner
-from pnc_automation.automation.scripts.models import RunScript, ScriptStep
-from pnc_automation.automation.scripts.registry import build_default_task_registry
+from pnc_automation.scripts.models import RunScript, ScriptStep
+from pnc_automation.scripts.registry import build_default_task_registry
 from pnc_automation.automation.task import TaskId
 from pnc_automation.config.models import (
     AccountConfig,
@@ -326,3 +326,4 @@ class RunnerEndToEndTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

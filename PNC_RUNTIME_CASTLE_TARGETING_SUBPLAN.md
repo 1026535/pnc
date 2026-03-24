@@ -1,4 +1,4 @@
-# Puzzles & Conquest Runtime Castle Targeting Sub-Plan
+﻿# Puzzles & Conquest Runtime Castle Targeting Sub-Plan
 
 ## 1. Purpose
 
@@ -608,9 +608,9 @@ Required changes:
 
 Update:
 
-- `pnc_automation/automation/scripts/models.py`
-- `pnc_automation/automation/scripts/loader.py`
-- `pnc_automation/automation/scripts/registry.py`
+- `pnc_automation/scripts/models.py`
+- `pnc_automation/scripts/loader.py`
+- `pnc_automation/scripts/registry.py`
 
 Required changes:
 
@@ -888,3 +888,4 @@ The smallest coherent implementation slice is:
 7. then add `refresh_castle_roster` as the next follow-up slice.
 
 That sequence fixes the ownership problem first, keeps the runtime usable immediately, and adds full ordered roster refresh as the next bounded increment instead of blocking the whole refactor on it.
+

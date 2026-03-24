@@ -11,9 +11,11 @@ import yaml
 
 from pnc_automation.config.models import (
     AccountConfig,
+    AccountCastleTargetsConfig,
     AppConfig,
     BlueStacksInstanceConfig,
     CastleRosterOrdering,
+    CastleTargetDefinition,
     CredentialSource,
     DefaultsConfig,
     PncAccountCastleRosterConfig,
@@ -34,6 +36,7 @@ def load_app_config(
     path: str | Path,
     env: Mapping[str, str] | None = None,
     castle_roster_path: str | Path | None = None,
+    castle_targets_path: str | Path | None = None,
 ) -> AppConfig:
     """Loads and validates the canonical application configuration file."""
 
@@ -53,17 +56,21 @@ def load_app_config(
     instances = _load_instances(raw.get("instances"))
     accounts = _load_accounts(raw.get("accounts"), environment)
     resolved_castle_roster_path = _resolve_castle_roster_path(config_path, castle_roster_path)
+    resolved_castle_targets_path = _resolve_castle_targets_path(config_path, castle_targets_path)
     rosters = _load_castle_rosters(resolved_castle_roster_path)
+    castle_targets = _load_account_castle_targets(resolved_castle_targets_path)
 
     return validate_app_config(
         AppConfig(
             config_path=config_path,
             castle_roster_path=resolved_castle_roster_path,
+            castle_targets_path=resolved_castle_targets_path,
             artifact_root=artifact_root,
             defaults=defaults,
             instances=instances,
             accounts=accounts,
             castle_rosters=rosters,
+            castle_targets=castle_targets,
         )
     )
 
@@ -160,7 +167,7 @@ def _reject_legacy_selected_castle(raw_account: Mapping[str, Any], *, index: int
     if "selected_castle" not in raw_account:
         return
     raise ConfigurationError(
-        "accounts.yaml no longer supports account-level 'selected_castle'; move castle targets into script steps.",
+        "accounts.yaml no longer supports account-level 'selected_castle'; move authored castle aliases into castle_targets.yaml and reference them from scripts with 'castle_ref'.",
         context=f"accounts[{index}].selected_castle",
     )
 
@@ -171,6 +178,14 @@ def _resolve_castle_roster_path(config_path: Path, castle_roster_path: str | Pat
     if castle_roster_path is None:
         return (config_path.parent / "castles.yaml").resolve()
     return Path(castle_roster_path).resolve()
+
+
+def _resolve_castle_targets_path(config_path: Path, castle_targets_path: str | Path | None) -> Path:
+    """Resolves the optional sibling castle-target configuration path."""
+
+    if castle_targets_path is None:
+        return (config_path.parent / "castle_targets.yaml").resolve()
+    return Path(castle_targets_path).resolve()
 
 
 def _load_castle_rosters(path: Path) -> tuple[PncAccountCastleRosterConfig, ...]:
@@ -208,6 +223,43 @@ def _load_castle_rosters(path: Path) -> tuple[PncAccountCastleRosterConfig, ...]
             )
         )
     return tuple(rosters)
+
+
+def _load_account_castle_targets(path: Path) -> tuple[AccountCastleTargetsConfig, ...]:
+    """Loads the optional authored castle-target file keyed by configured account id."""
+
+    if not path.is_file():
+        return ()
+    with path.open("r", encoding="utf-8") as handle:
+        raw_data = yaml.safe_load(handle) or {}
+    raw = require_mapping(raw_data, context="castle target root")
+    items = require_list(raw.get("accounts") or [], context="accounts")
+
+    account_targets: list[AccountCastleTargetsConfig] = []
+    for index, item in enumerate(items):
+        account = require_mapping(item, context=f"accounts[{index}]")
+        raw_targets_value = account.get("castle_targets")
+        raw_targets = require_mapping(
+            {} if raw_targets_value is None else raw_targets_value,
+            context=f"accounts[{index}].castle_targets",
+        )
+        targets = tuple(
+            CastleTargetDefinition(
+                target_id=require_string(target_id, context=f"accounts[{index}].castle_targets key"),
+                castle=load_castle_identity(
+                    raw_castle,
+                    context=f"accounts[{index}].castle_targets.{target_id}",
+                ),
+            )
+            for target_id, raw_castle in raw_targets.items()
+        )
+        account_targets.append(
+            AccountCastleTargetsConfig(
+                account_id=require_string(account.get("account_id"), context=f"accounts[{index}].account_id"),
+                targets=targets,
+            )
+        )
+    return tuple(account_targets)
 
 
 def _load_castle_roster_ordering(value: Any, *, context: str) -> CastleRosterOrdering:

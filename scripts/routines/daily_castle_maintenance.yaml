@@ -4,9 +4,7 @@ steps:
   - task: ensure_game_running
   - task: login
   - task: select_castle
-    castle:
-      kingdom: K230
-      castle_name: Lv. 6 hellhound
+    castle_ref: main
   - task: building_upgrade
     params:
       priority: [castle, wall, academy, barracks]

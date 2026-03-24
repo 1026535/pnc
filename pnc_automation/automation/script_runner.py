@@ -1,4 +1,4 @@
-"""Application-facing script runner that wires session-specific services."""
+﻿"""Application-facing script runner that wires session-specific services."""
 
 from __future__ import annotations
 
@@ -12,9 +12,9 @@ from pnc_automation.adb.client import AdbClient
 from pnc_automation.automation.action_executor import ActionExecutor
 from pnc_automation.automation.observed_action_executor import ObservedActionExecutor
 from pnc_automation.automation.runner import AutomationRunner, RunResult, StepRunResult
-from pnc_automation.automation.scripts.loader import load_run_script
-from pnc_automation.automation.scripts.models import RunScript, ScriptStep
-from pnc_automation.automation.scripts.registry import TaskRegistry
+from pnc_automation.scripts.loader import load_run_script
+from pnc_automation.scripts.models import RunScript, ScriptStep
+from pnc_automation.scripts.registry import TaskRegistry
 from pnc_automation.automation.task import TaskId
 from pnc_automation.capture.mail_archive_store import MailArchiveStore
 from pnc_automation.capture.screenshot_service import ScreenshotService
@@ -48,7 +48,10 @@ class ScriptRunner:
         """Executes one already-loaded run script for the selected account."""
 
         account = self.config.require_account(account_id)
-        prepared_script = self.task_registry.prepare_script(script)
+        prepared_script = self.task_registry.prepare_script(
+            script,
+            castle_targets=self.config.find_castle_targets(account.id),
+        )
         runner, castle_roster_provider = self._build_runner(account)
         return runner.run(
             account,
@@ -163,3 +166,4 @@ def _prepare_account_session_steps(castle: CastleIdentity | None) -> tuple[Scrip
     if castle is not None:
         steps.append(ScriptStep(task=TaskId.SELECT_CASTLE, castle=castle))
     return tuple(steps)
+

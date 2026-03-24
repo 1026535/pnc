@@ -1,4 +1,4 @@
-"""Top-level application wiring for the automation platform."""
+﻿"""Top-level application wiring for the automation platform."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from pnc_automation.adb.client import AdbClient
 from pnc_automation.automation.runner import RunResult, StepRunResult
 from pnc_automation.automation.script_runner import ScriptRunner
 from pnc_automation.automation.task import TaskId
-from pnc_automation.automation.scripts.registry import build_default_task_registry
+from pnc_automation.scripts.registry import build_default_task_registry
 from pnc_automation.capture.artifact_store import ArtifactStore
 from pnc_automation.capture.mail_archive_store import MailArchiveStore
 from pnc_automation.capture.screenshot_service import ScreenshotService
@@ -107,3 +107,4 @@ def build_application_runner(
         logger=logger,
     )
     return ApplicationRunner(script_runner=script_runner)
+
