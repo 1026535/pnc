@@ -394,9 +394,7 @@ name: daily_castle_maintenance
 steps:
   - task: login
   - task: select_castle
-    castle:
-      kingdom: K230
-      castle_name: Lv.5 Hellhound
+    castle_ref: main
   - task: building_upgrade
     params:
       priority: [castle, wall, academy, barracks]
@@ -416,10 +414,12 @@ steps:
 The command-line shape should be:
 
 ```powershell
-python -m pnc_automation.cli --account account_a_main_castle --script scripts/daily_castle_maintenance.yaml
+python -m pnc_automation.cli --account account_a_main_castle --script scripts/routines/daily_castle_maintenance.yaml
 ```
 
 This split keeps credentials and account identity stable, while allowing task plans to change independently.
+
+Authored castle aliases should live in `config/castle_targets.yaml`, not in `accounts.yaml` or inline in every script.
 
 ## 10. Runtime domain model
 

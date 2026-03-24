@@ -1,4 +1,4 @@
-"""Castle-targeting runtime tests for registry, runner, Python API, and CLI surfaces."""
+﻿"""Castle-targeting runtime tests for registry, runner, Python API, and CLI surfaces."""
 
 from __future__ import annotations
 
@@ -12,8 +12,8 @@ from pnc_automation.api import AutomationApi
 from pnc_automation.automation.action_executor import ActionExecutor
 from pnc_automation.automation.observed_action_executor import ObservedActionExecutor
 from pnc_automation.automation.runner import AutomationRunner, RunResult, StepRunResult
-from pnc_automation.automation.scripts.models import RunScript, ScriptStep
-from pnc_automation.automation.scripts.registry import TaskRegistry, build_default_task_registry
+from pnc_automation.scripts.models import RunScript, ScriptStep
+from pnc_automation.scripts.registry import TaskRegistry, build_default_task_registry
 from pnc_automation.automation.task import BaseAutomationTask, CastleTargetPolicy, TaskId, TaskResult
 from pnc_automation.automation.task_context import TaskContext
 from pnc_automation.automation.tasks.popup_recovery_task import PopupRecoveryTask
@@ -21,7 +21,9 @@ from pnc_automation.automation.tasks.select_castle_task import SelectCastleTask
 from pnc_automation.cli import main as cli_main
 from pnc_automation.config.models import (
     AccountConfig,
+    AccountCastleTargetsConfig,
     CastleIdentity,
+    CastleTargetDefinition,
     CredentialSource,
     DefaultsConfig,
     PncAccountCastleRosterConfig,
@@ -95,6 +97,40 @@ class RuntimeCastleTargetingTests(unittest.TestCase):
         )
 
         self.assertEqual(prepared.steps[0].castle, self.target_castle)
+
+    def test_prepare_script_resolves_castle_ref_from_account_targets(self) -> None:
+        """Resolves authored castle aliases once the selected account's target catalog is available."""
+
+        registry = build_default_task_registry()
+        prepared = registry.prepare_script(
+            RunScript(
+                name="valid",
+                path=Path("valid.yaml"),
+                steps=(ScriptStep(task=TaskId.BUILDING_UPGRADE, castle_ref="main", params={}),),
+            ),
+            castle_targets=AccountCastleTargetsConfig(
+                account_id=self.account.id,
+                targets=(CastleTargetDefinition(target_id="main", castle=self.target_castle),),
+            ),
+        )
+
+        self.assertEqual(prepared.steps[0].castle, self.target_castle)
+        self.assertEqual(prepared.steps[0].castle_ref, "main")
+
+    def test_prepare_script_rejects_unknown_castle_ref(self) -> None:
+        """Fails fast when a script references a castle alias absent from the selected account."""
+
+        registry = build_default_task_registry()
+
+        with self.assertRaises(ScriptValidationError):
+            registry.prepare_script(
+                RunScript(
+                    name="invalid",
+                    path=Path("invalid.yaml"),
+                    steps=(ScriptStep(task=TaskId.BUILDING_UPGRADE, castle_ref="main", params={}),),
+                ),
+                castle_targets=AccountCastleTargetsConfig(account_id=self.account.id, targets=()),
+            )
 
     def test_runner_auto_selects_explicit_castle_before_optional_task(self) -> None:
         """Runs the canonical select-castle pre-step before an optional castle-targeted task."""
@@ -423,3 +459,4 @@ def _make_run_result(*, script_name: str) -> RunResult:
         started_at=now,
         finished_at=now,
     )
+

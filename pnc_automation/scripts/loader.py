@@ -6,10 +6,10 @@ from pathlib import Path
 
 import yaml
 
-from pnc_automation.automation.scripts.models import RunScript, ScriptStep
 from pnc_automation.automation.task import TaskId
-from pnc_automation.config.yaml_helpers import load_castle_identity, require_list, require_mapping, require_string
+from pnc_automation.config.yaml_helpers import require_list, require_mapping, require_string
 from pnc_automation.errors import ScriptValidationError
+from pnc_automation.scripts.models import RunScript, ScriptStep
 
 
 def load_run_script(path: str | Path) -> RunScript:
@@ -45,13 +45,19 @@ def load_run_script(path: str | Path) -> RunScript:
             context=f"steps[{index}].params",
             error_builder=ScriptValidationError,
         )
-        castle = None
         if "castle" in step:
-            castle = load_castle_identity(
-                step.get("castle"),
-                context=f"steps[{index}].castle",
+            raise ScriptValidationError(
+                "Run scripts no longer support inline 'castle'; use 'castle_ref' and configure the alias in castle_targets.yaml.",
+                step_index=index,
+                task=task_id,
+            )
+        castle_ref = None
+        if "castle_ref" in step:
+            castle_ref = require_string(
+                step.get("castle_ref"),
+                context=f"steps[{index}].castle_ref",
                 error_builder=ScriptValidationError,
             )
-        steps.append(ScriptStep(task=task_id, castle=castle, params=dict(params)))
+        steps.append(ScriptStep(task=task_id, castle_ref=castle_ref, params=dict(params)))
 
     return RunScript(name=name, path=script_path, steps=tuple(steps))

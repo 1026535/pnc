@@ -257,6 +257,97 @@ class ConfigLoaderTests(unittest.TestCase):
             self.assertEqual(config.castle_rosters[0].ordering, CastleRosterOrdering.FULL_SCAN)
             self.assertEqual(config.castle_roster_path, castles_path.resolve())
 
+    def test_load_app_config_loads_castle_targets_from_sibling_file(self) -> None:
+        """Loads the sibling castle_targets.yaml file as authored per-account castle aliases."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            config_path = root / "accounts.yaml"
+            castle_targets_path = root / "castle_targets.yaml"
+            config_path.write_text(
+                textwrap.dedent(
+                    """
+                    instances:
+                      - id: bs-main
+                        device_id: 127.0.0.1:5555
+                        app_package: com.global.tmslg
+                    accounts:
+                      - id: account_a
+                        instance_id: bs-main
+                        pnc_account_id: inline_user
+                        username: inline_user
+                        password: inline_pass
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+            castle_targets_path.write_text(
+                textwrap.dedent(
+                    """
+                    accounts:
+                      - account_id: account_a
+                        castle_targets:
+                          main:
+                            kingdom: K230
+                            castle_name: Main
+                          farm:
+                            kingdom: K230
+                            castle_name: Farm
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+
+            config = load_app_config(config_path)
+
+            account_targets = config.find_castle_targets("account_a")
+            self.assertIsNotNone(account_targets)
+            assert account_targets is not None
+            self.assertEqual(account_targets.require("main").castle_name, "Main")
+            self.assertEqual(account_targets.require("farm").castle_name, "Farm")
+            self.assertEqual(config.castle_targets_path, castle_targets_path.resolve())
+
+    def test_load_app_config_rejects_castle_targets_for_unknown_account(self) -> None:
+        """Rejects authored castle targets that reference an unknown configured account."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            config_path = root / "accounts.yaml"
+            castle_targets_path = root / "castle_targets.yaml"
+            config_path.write_text(
+                textwrap.dedent(
+                    """
+                    instances:
+                      - id: bs-main
+                        device_id: 127.0.0.1:5555
+                        app_package: com.global.tmslg
+                    accounts:
+                      - id: account_a
+                        instance_id: bs-main
+                        pnc_account_id: inline_user
+                        username: inline_user
+                        password: inline_pass
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+            castle_targets_path.write_text(
+                textwrap.dedent(
+                    """
+                    accounts:
+                      - account_id: missing_account
+                        castle_targets:
+                          main:
+                            kingdom: K230
+                            castle_name: Main
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(ConfigurationError):
+                load_app_config(config_path)
+
     def test_load_app_config_rejects_legacy_selected_castle(self) -> None:
         """Rejects the removed account-level selected-castle schema instead of silently accepting it."""
 

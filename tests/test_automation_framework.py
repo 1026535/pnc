@@ -1,4 +1,4 @@
-"""Automation-framework tests for Phase 3 behavior."""
+﻿"""Automation-framework tests for Phase 3 behavior."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ from pathlib import Path
 from pnc_automation.automation.action_executor import ActionExecutor
 from pnc_automation.automation.observed_action_executor import ObservedActionExecutor, ObservedActionExecutionPolicy
 from pnc_automation.automation.runner import AutomationRunner
-from pnc_automation.automation.scripts.models import RunScript, ScriptStep
-from pnc_automation.automation.scripts.registry import TaskRegistry, build_default_task_registry
+from pnc_automation.scripts.models import RunScript, ScriptStep
+from pnc_automation.scripts.registry import TaskRegistry, build_default_task_registry
 from pnc_automation.automation.task import BaseAutomationTask, TaskId, TaskResult
 from pnc_automation.automation.task_context import TaskContext
 from pnc_automation.automation.tasks.ensure_game_running_task import EnsureGameRunningTask
@@ -1346,3 +1346,4 @@ def _make_observed_action_executor(
 
 if __name__ == "__main__":
     unittest.main()
+

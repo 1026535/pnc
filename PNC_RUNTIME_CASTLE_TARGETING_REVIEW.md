@@ -1,4 +1,4 @@
-# Review: runtime castle targeting implementation
+﻿# Review: runtime castle targeting implementation
 
 Commit reviewed: `b7e00c90e94861a2c4e9fdf101fffad0c75eb43b` (`Complete runtime castle targeting plan`)
 
@@ -131,7 +131,7 @@ Clean fix:
 
 ## Simplification notes
 
-- [PreparedScriptStep.castle_target_policy](/c:/Users/lebel/pnc/pnc_automation/automation/scripts/models.py#L33) is currently stored but never consumed by the runner. Either remove it as dead data or use it in [_align_step_castle_target()](/c:/Users/lebel/pnc/pnc_automation/automation/runner.py#L148) so the "synthetic select only for optional tasks" rule is encoded once instead of implied.
+- [PreparedScriptStep.castle_target_policy](/c:/Users/lebel/pnc/pnc_automation/scripts/models.py#L33) is currently stored but never consumed by the runner. Either remove it as dead data or use it in [_align_step_castle_target()](/c:/Users/lebel/pnc/pnc_automation/automation/runner.py#L148) so the "synthetic select only for optional tasks" rule is encoded once instead of implied.
 - [main()](/c:/Users/lebel/pnc/pnc_automation/cli.py#L16) and [_run_legacy_command()](/c:/Users/lebel/pnc/pnc_automation/cli.py#L47) duplicate CLI wiring and JSON-print behavior. Folding those through one shared execution path would make future command additions safer.
 
 ## Validation performed
@@ -142,3 +142,4 @@ Clean fix:
   - stale full-scan contamination with a small `CastleRosterStore` harness,
   - ambiguous name-only castle matching with a direct `castle_identities_match()` harness,
   - artifact-directory collisions with a direct `format_account_artifact_directory()` harness.
+

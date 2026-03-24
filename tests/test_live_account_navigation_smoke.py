@@ -1,4 +1,4 @@
-"""Opt-in live smoke tests for account bootstrap and castle targeting."""
+﻿"""Opt-in live smoke tests for account bootstrap and castle targeting."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 from pnc_automation.app import build_application_runner
-from pnc_automation.automation.scripts.loader import load_run_script
+from pnc_automation.scripts.loader import load_run_script
 from pnc_automation.pnc.screen_type import ScreenType
 from tests.live_smoke_support import build_live_session, build_observation_service
 
@@ -28,11 +28,14 @@ class LiveAccountNavigationSmokeTests(unittest.TestCase):
 
         cls.config_path = Path(os.getenv("PNC_LIVE_SMOKE_CONFIG", "config/accounts.yaml"))
         cls.account_id = os.getenv("PNC_LIVE_SMOKE_ACCOUNT", "testing")
-        cls.script_path = Path(os.getenv("PNC_LIVE_SMOKE_SCRIPT", "scripts/account_navigation_smoke.yaml"))
+        cls.script_path = Path(os.getenv("PNC_LIVE_SMOKE_SCRIPT", "scripts/smoke/account_navigation_smoke.yaml"))
         cls.application = build_application_runner(cls.config_path)
         cls.script_runner = cls.application.script_runner
         cls.account = cls.script_runner.config.require_account(cls.account_id)
-        cls.prepared_script = cls.script_runner.task_registry.prepare_script(load_run_script(cls.script_path))
+        cls.prepared_script = cls.script_runner.task_registry.prepare_script(
+            load_run_script(cls.script_path),
+            castle_targets=cls.script_runner.config.find_castle_targets(cls.account_id),
+        )
         cls.target_castle = next(
             (
                 step.castle
@@ -90,3 +93,4 @@ def _build_observation_service(**kwargs: object):
     """Routes legacy test-local helper calls through the shared live-smoke support module."""
 
     return build_observation_service(**kwargs)
+

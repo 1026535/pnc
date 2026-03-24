@@ -1,4 +1,4 @@
-"""Mail workflow tests covering params, flows, OCR enrichment, and archive persistence."""
+﻿"""Mail workflow tests covering params, flows, OCR enrichment, and archive persistence."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from pathlib import Path
 from PIL import Image
 
 from pnc_automation.automation.action_executor import ActionExecutor
-from pnc_automation.automation.scripts.models import ScriptStep
+from pnc_automation.scripts.models import ScriptStep
 from pnc_automation.automation.task import TaskId
 from pnc_automation.automation.task_context import TaskContext
 from pnc_automation.automation.tasks.collect_mail_task import CollectMailTask
@@ -1920,3 +1920,4 @@ def _encode_png(image: Image.Image) -> bytes:
 
 if __name__ == "__main__":
     unittest.main()
+

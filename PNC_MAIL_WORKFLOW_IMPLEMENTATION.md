@@ -1,4 +1,4 @@
-# PNC Mail Workflow Implementation Document
+﻿# PNC Mail Workflow Implementation Document
 
 ## 1. Purpose
 
@@ -905,7 +905,7 @@ Add to [pnc_automation/automation/task.py](/c:/Users/lebel/pnc/pnc_automation/au
 
 ## 12.2 Registry
 
-Register the two new tasks in [pnc_automation/automation/scripts/registry.py](/c:/Users/lebel/pnc/pnc_automation/automation/scripts/registry.py).
+Register the two new tasks in [pnc_automation/scripts/registry.py](/c:/Users/lebel/pnc/pnc_automation/scripts/registry.py).
 
 ## 12.3 Python API
 
@@ -985,7 +985,7 @@ Likely implementation surface:
 - [pnc_automation/automation/action_executor.py](/c:/Users/lebel/pnc/pnc_automation/automation/action_executor.py)
 - [pnc_automation/automation/tasks/send_mail_task.py](/c:/Users/lebel/pnc/pnc_automation/automation/tasks/send_mail_task.py)
 - [pnc_automation/automation/tasks/collect_mail_task.py](/c:/Users/lebel/pnc/pnc_automation/automation/tasks/collect_mail_task.py)
-- [pnc_automation/automation/scripts/registry.py](/c:/Users/lebel/pnc/pnc_automation/automation/scripts/registry.py)
+- [pnc_automation/scripts/registry.py](/c:/Users/lebel/pnc/pnc_automation/scripts/registry.py)
 - [pnc_automation/api.py](/c:/Users/lebel/pnc/pnc_automation/api.py)
 - [pnc_automation/vision/observation_request.py](/c:/Users/lebel/pnc/pnc_automation/vision/observation_request.py)
 - [pnc_automation/vision/screen_classifier.py](/c:/Users/lebel/pnc/pnc_automation/vision/screen_classifier.py)
@@ -1156,3 +1156,4 @@ The clean solution is:
 - and one set of reusable flows added to the existing `ScreenFlowPlanner`.
 
 That preserves the current repository architecture, fixes the known ownership issues before they become bugs, and provides a lean extension path for future mail-related work such as additional profile-entry routes, thread scrolling, direct thread replies, and Discord forwarding.
+

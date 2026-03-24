@@ -1,4 +1,4 @@
-"""Flow-planner and task unit tests."""
+﻿"""Flow-planner and task unit tests."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import unittest
 from collections.abc import Callable
 from pathlib import Path
 
-from pnc_automation.automation.scripts.models import ScriptStep
+from pnc_automation.scripts.models import ScriptStep
 from pnc_automation.automation.task import TaskId, TaskResult, TaskStatus
 from pnc_automation.automation.task_context import TaskContext
 from pnc_automation.automation.tasks.building_upgrade_task import BuildingUpgradeTask
@@ -1388,3 +1388,4 @@ class FlowAndTaskTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

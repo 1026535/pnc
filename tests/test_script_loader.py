@@ -1,4 +1,4 @@
-"""Run-script loader tests."""
+﻿"""Run-script loader tests."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import textwrap
 import unittest
 from pathlib import Path
 
-from pnc_automation.automation.scripts.loader import load_run_script
+from pnc_automation.scripts.loader import load_run_script
 from pnc_automation.automation.task import TaskId
 from pnc_automation.errors import ScriptValidationError
 
@@ -16,7 +16,7 @@ class ScriptLoaderTests(unittest.TestCase):
     """Validates YAML script parsing and task-id handling."""
 
     def test_load_run_script_parses_steps(self) -> None:
-        """Loads a valid automation script into typed steps."""
+        """Loads a valid automation script into typed steps and castle references."""
 
         with tempfile.TemporaryDirectory() as temp_directory:
             script_path = Path(temp_directory) / "daily.yaml"
@@ -27,9 +27,7 @@ class ScriptLoaderTests(unittest.TestCase):
                     steps:
                       - task: login
                       - task: building_upgrade
-                        castle:
-                          kingdom: K230
-                          castle_name: Main
+                        castle_ref: main
                         params:
                           priority: [castle, wall]
                           allow_speedups: false
@@ -49,8 +47,8 @@ class ScriptLoaderTests(unittest.TestCase):
 
             self.assertEqual(script.name, "daily_castle_maintenance")
             self.assertEqual(script.steps[0].task, TaskId.LOGIN)
-            self.assertEqual(script.steps[1].castle.kingdom, "K230")
-            self.assertEqual(script.steps[1].castle.castle_name, "Main")
+            self.assertEqual(script.steps[1].castle_ref, "main")
+            self.assertIsNone(script.steps[1].castle)
             self.assertEqual(script.steps[1].params["priority"], ["castle", "wall"])
             self.assertEqual(script.steps[3].task, TaskId.SEND_ALLIANCE_CHAT_MESSAGE)
             self.assertEqual(script.steps[3].params["message"], "bot shall invade")
@@ -74,8 +72,8 @@ class ScriptLoaderTests(unittest.TestCase):
             with self.assertRaises(ScriptValidationError):
                 load_run_script(script_path)
 
-    def test_load_run_script_rejects_non_canonical_castle_identifier(self) -> None:
-        """Fails fast when a step-level castle target is authored with an invalid kingdom id."""
+    def test_load_run_script_rejects_inline_castle_targets(self) -> None:
+        """Fails fast when a run script still uses the removed inline castle schema."""
 
         with tempfile.TemporaryDirectory() as temp_directory:
             script_path = Path(temp_directory) / "invalid.yaml"
@@ -86,7 +84,7 @@ class ScriptLoaderTests(unittest.TestCase):
                     steps:
                       - task: building_upgrade
                         castle:
-                          kingdom: k230
+                          kingdom: K230
                           castle_name: Main
                         params:
                           priority: [castle]
@@ -101,3 +99,4 @@ class ScriptLoaderTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
