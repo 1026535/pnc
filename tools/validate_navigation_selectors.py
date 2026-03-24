@@ -15,7 +15,6 @@ from pnc_automation.app import build_application_runner
 from pnc_automation.artifact_naming import sanitize_artifact_segment
 from pnc_automation.automation.action_executor import ActionExecutor
 from pnc_automation.automation.observed_action_executor import ObservedActionExecutor
-from pnc_automation.emulator.bluestacks_instance import BlueStacksInstance
 from pnc_automation.emulator.session import BlueStacksSession
 from pnc_automation.errors import SelectorResolutionError
 from pnc_automation.pnc.screen_flows import ScreenFlowPlanner
@@ -108,11 +107,12 @@ def main() -> int:
 def _build_live_session(*, config_account: object, script_runner: object) -> BlueStacksSession:
     """Creates and connects one live BlueStacks session using the authoritative application wiring."""
 
-    config = script_runner.config
-    instance = BlueStacksInstance.from_config(config.require_instance(config_account.instance_id))
-    session = BlueStacksSession(adb_client=script_runner.adb_client, instance=instance)
-    session.connect()
-    session.ensure_responsive()
+    build_connected_session = getattr(script_runner, "build_connected_session", None)
+    if not callable(build_connected_session):
+        raise AssertionError("Navigation validation requires ScriptRunner.build_connected_session().")
+    session = build_connected_session(account=config_account)
+    if not isinstance(session, BlueStacksSession):
+        raise AssertionError("Navigation validation requires ScriptRunner.build_connected_session() to return a BlueStacksSession.")
     return session
 
 

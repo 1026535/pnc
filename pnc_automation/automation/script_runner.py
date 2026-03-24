@@ -22,6 +22,7 @@ from pnc_automation.capture.screenshot_service import ScreenshotService
 from pnc_automation.config.castle_roster_store import CastleRosterStore
 from pnc_automation.config.models import AccountConfig, AppConfig, CastleIdentity, PncAccountCastleRosterConfig
 from pnc_automation.emulator.bluestacks_instance import BlueStacksInstance
+from pnc_automation.emulator.bluestacks_instance_resolver import BlueStacksInstanceResolver
 from pnc_automation.emulator.session import BlueStacksSession
 from pnc_automation.pnc.screen_flows import ScreenFlowPlanner
 from pnc_automation.vision.observation_builder import ObservationBuilder, ObservationService
@@ -39,6 +40,7 @@ class ScriptRunner:
     mail_archive_store: MailArchiveStore | None
     chat_archive_store: ChatArchiveStore | None
     adb_client: AdbClient
+    instance_resolver: BlueStacksInstanceResolver
     logger: logging.LoggerAdapter
 
     def run(self, *, account_id: str, script_path: str) -> RunResult:
@@ -106,9 +108,6 @@ class ScriptRunner:
     ) -> tuple[AutomationRunner, Callable[[], PncAccountCastleRosterConfig | None]]:
         """Builds one connected runtime runner and roster provider for a specific account."""
 
-        instance_config = self.config.require_instance(account.instance_id)
-        instance = BlueStacksInstance.from_config(instance_config)
-
         def castle_roster_provider() -> PncAccountCastleRosterConfig | None:
             """Returns the freshest roster snapshot for the active account throughout the run."""
 
@@ -116,9 +115,8 @@ class ScriptRunner:
                 return self.castle_roster_store.get(account.pnc_account_id)
             return self.config.find_castle_roster(account.pnc_account_id)
 
-        session = BlueStacksSession(adb_client=self.adb_client, instance=instance)
-        session.connect()
-        session.ensure_responsive()
+        session = self.build_connected_session(account=account)
+        instance = session.instance
 
         observation_service = ObservationService(
             screenshot_service=self.screenshot_service,
@@ -130,11 +128,7 @@ class ScriptRunner:
             castle_roster_store=self.castle_roster_store,
         )
         flow_planner = ScreenFlowPlanner()
-        shared_extra = {
-            "account_id": account.id,
-            "instance_id": instance.id,
-            "pnc_account_id": account.pnc_account_id,
-        }
+        shared_extra = self._build_shared_extra(account=account, instance=instance)
         action_executor = ActionExecutor(
             session=session,
             stable_click_delay_ms=self.config.defaults.stable_click_delay_ms,
@@ -158,6 +152,41 @@ class ScriptRunner:
             ),
             castle_roster_provider,
         )
+
+    def build_connected_session(self, *, account: AccountConfig) -> BlueStacksSession:
+        """Resolves, logs, connects, and validates one canonical BlueStacks session for the selected account."""
+
+        instance = self._resolve_instance(account=account)
+        logging.LoggerAdapter(
+            self.logger.logger,
+            extra={
+                **self.logger.extra,
+                **self._build_shared_extra(account=account, instance=instance),
+                "instance_display_name": instance.display_name,
+                "device_id": instance.device_id,
+            },
+        ).info(
+            f"Resolved BlueStacks instance '{instance.display_name}' to '{instance.device_id}'.",
+        )
+        session = BlueStacksSession(adb_client=self.adb_client, instance=instance)
+        session.connect()
+        session.ensure_responsive()
+        return session
+
+    def _resolve_instance(self, *, account: AccountConfig) -> BlueStacksInstance:
+        """Resolves the configured BlueStacks display name for one account into a live runtime target."""
+
+        instance_config = self.config.require_instance(account.instance_id)
+        return self.instance_resolver.resolve(instance_config)
+
+    def _build_shared_extra(self, *, account: AccountConfig, instance: BlueStacksInstance) -> dict[str, str]:
+        """Builds the shared structured log context for one account-bound runtime session."""
+
+        return {
+            "account_id": account.id,
+            "instance_id": instance.id,
+            "pnc_account_id": account.pnc_account_id,
+        }
 
 
 def _prepare_account_session_steps(castle: CastleIdentity | None) -> tuple[ScriptStep, ...]:

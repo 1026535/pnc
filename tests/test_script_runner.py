@@ -1,0 +1,148 @@
+"""Script-runner runtime wiring tests."""
+
+from __future__ import annotations
+
+import tempfile
+import unittest
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from pnc_automation.adb.command_result import CommandResult
+from pnc_automation.automation.script_runner import ScriptRunner
+from pnc_automation.automation.observation_mode import ObservationMode
+from pnc_automation.config.models import (
+    AccountConfig,
+    AppConfig,
+    BlueStacksInstanceConfig,
+    DefaultsConfig,
+    RuntimeConfig,
+)
+from pnc_automation.emulator.bluestacks_instance import BlueStacksInstance
+from tests.test_support import build_logger
+
+
+@dataclass(slots=True)
+class _FakeAdbClient:
+    """Records canonical session-connect calls while returning ready command results."""
+
+    connect_calls: list[str] = field(default_factory=list)
+    state_calls: list[str] = field(default_factory=list)
+    shell_calls: list[tuple[str, tuple[str, ...]]] = field(default_factory=list)
+
+    def connect(self, device_id: str) -> CommandResult:
+        """Records one ADB connect call and returns success."""
+
+        self.connect_calls.append(device_id)
+        return _command_result(returncode=0, stdout_text="connected")
+
+    def get_state(self, device_id: str) -> CommandResult:
+        """Records one ADB get-state call and returns a ready device."""
+
+        self.state_calls.append(device_id)
+        return _command_result(returncode=0, stdout_text="device")
+
+    def shell(self, device_id: str, *arguments: str, timeout_seconds: float | None = 10) -> CommandResult:
+        """Records one shell command and returns a non-empty readiness response."""
+
+        del timeout_seconds
+        self.shell_calls.append((device_id, arguments))
+        return _command_result(returncode=0, stdout_text="BlueStacks")
+
+
+@dataclass(slots=True)
+class _FakeInstanceResolver:
+    """Returns one seeded runtime BlueStacks instance while recording the requested config."""
+
+    resolved_instance: BlueStacksInstance
+    requested_configs: list[BlueStacksInstanceConfig] = field(default_factory=list)
+
+    def resolve(self, config: BlueStacksInstanceConfig) -> BlueStacksInstance:
+        """Records the authored instance config and returns the seeded runtime instance."""
+
+        self.requested_configs.append(config)
+        return self.resolved_instance
+
+
+class ScriptRunnerTests(unittest.TestCase):
+    """Validates canonical runtime session construction in the script runner."""
+
+    def test_build_connected_session_uses_resolved_runtime_device_id(self) -> None:
+        """Connects through the resolver-provided device id instead of any authored endpoint field."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            authored_instance = BlueStacksInstanceConfig(
+                id="bs-main",
+                display_name="serious_stuff",
+                app_package="com.global.tmslg",
+            )
+            account = AccountConfig(
+                id="account_a",
+                instance_id="bs-main",
+                pnc_account_id="inline_user",
+            )
+            resolver = _FakeInstanceResolver(
+                resolved_instance=BlueStacksInstance(
+                    id="bs-main",
+                    display_name="serious_stuff",
+                    device_id="127.0.0.1:5566",
+                    app_package="com.global.tmslg",
+                )
+            )
+            adb_client = _FakeAdbClient()
+            script_runner = ScriptRunner(
+                config=_make_app_config(root=root, instance=authored_instance, account=account),
+                task_registry=object(),
+                screenshot_service=object(),
+                observation_builder=object(),
+                castle_roster_store=None,
+                mail_archive_store=None,
+                chat_archive_store=None,
+                adb_client=adb_client,
+                instance_resolver=resolver,
+                logger=build_logger(),
+            )
+
+            session = script_runner.build_connected_session(account=account)
+
+            self.assertEqual(resolver.requested_configs, [authored_instance])
+            self.assertEqual(session.instance.device_id, "127.0.0.1:5566")
+            self.assertEqual(adb_client.connect_calls, ["127.0.0.1:5566"])
+            self.assertEqual(adb_client.state_calls, ["127.0.0.1:5566"])
+            self.assertEqual(adb_client.shell_calls, [("127.0.0.1:5566", ("getprop", "ro.product.model"))])
+
+
+def _make_app_config(*, root: Path, instance: BlueStacksInstanceConfig, account: AccountConfig) -> AppConfig:
+    """Builds one minimal validated-looking app config for script-runner session tests."""
+
+    artifact_root = root / "artifacts"
+    archive_root = root / "archives"
+    artifact_root.mkdir()
+    archive_root.mkdir()
+    return AppConfig(
+        config_path=root / "accounts.yaml",
+        castle_roster_path=root / "castles.yaml",
+        castle_targets_path=root / "castle_targets.yaml",
+        artifact_root=artifact_root,
+        archive_root=archive_root,
+        defaults=DefaultsConfig(bluestacks_config_path=root / "bluestacks.conf"),
+        runtime=RuntimeConfig(observation_mode=ObservationMode.DEBUG),
+        instances=(instance,),
+        accounts=(account,),
+    )
+
+
+def _command_result(*, returncode: int, stdout_text: str = "", stderr_text: str = "") -> CommandResult:
+    """Builds one deterministic raw ADB command result for runtime wiring tests."""
+
+    return CommandResult(
+        command=("adb",),
+        returncode=returncode,
+        stdout=stdout_text.encode("utf-8"),
+        stderr=stderr_text.encode("utf-8"),
+        duration_seconds=0.01,
+    )
+
+
+if __name__ == "__main__":
+    unittest.main()

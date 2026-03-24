@@ -20,6 +20,7 @@ def validate_app_config(config: AppConfig) -> AppConfig:
     """Validates the loaded configuration and returns it when consistent."""
 
     _validate_unique_ids("instance", (instance.id for instance in config.instances))
+    _validate_unique_instance_display_names(config)
     _validate_unique_ids("account", (account.id for account in config.accounts))
     _validate_unique_runtime_targets(config.accounts)
     _validate_unique_account_artifact_directories(config.accounts)
@@ -35,6 +36,21 @@ def validate_app_config(config: AppConfig) -> AppConfig:
     _validate_archive_root(config)
     _validate_distinct_output_roots(config)
     return config
+
+
+def _validate_unique_instance_display_names(config: AppConfig) -> None:
+    """Ensures authored BlueStacks display names remain a single canonical mapping."""
+
+    seen: dict[str, str] = {}
+    for instance in config.instances:
+        if instance.display_name in seen:
+            raise ConfigurationError(
+                "Each configured BlueStacks display_name may map to only one instance id.",
+                display_name=instance.display_name,
+                first_instance_id=seen[instance.display_name],
+                duplicate_instance_id=instance.id,
+            )
+        seen[instance.display_name] = instance.id
 
 
 def _validate_unique_ids(label: str, values: Iterable[str]) -> None:

@@ -11,11 +11,15 @@ from pnc_automation.artifact_naming import format_account_artifact_directory
 from pnc_automation.errors import ConfigurationError
 
 
+DEFAULT_BLUESTACKS_CONFIG_PATH = Path(r"C:\ProgramData\BlueStacks_nxt\bluestacks.conf")
+
+
 @dataclass(frozen=True, slots=True)
 class DefaultsConfig:
     """Shared timing and transport defaults applied across runs."""
 
     adb_path: str = "adb"
+    bluestacks_config_path: Path = DEFAULT_BLUESTACKS_CONFIG_PATH
     screenshot_format: str = "png"
     stable_click_delay_ms: int = 300
     post_action_observe_delay_ms: int = 800
@@ -32,10 +36,10 @@ class RuntimeConfig:
 
 @dataclass(frozen=True, slots=True)
 class BlueStacksInstanceConfig:
-    """Binds one automation target to one ADB device and app package."""
+    """Binds one automation target to one stable BlueStacks display name and app package."""
 
     id: str
-    device_id: str
+    display_name: str
     app_package: str
 
 

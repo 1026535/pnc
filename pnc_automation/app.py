@@ -20,6 +20,7 @@ from pnc_automation.config.castle_roster_store import CastleRosterStore
 from pnc_automation.config.loader import load_app_config
 from pnc_automation.config.models import AppConfig, CastleIdentity
 from pnc_automation.diagnostics.logging_setup import configure_logging
+from pnc_automation.emulator.bluestacks_instance_resolver import BlueStacksInstanceResolver
 from pnc_automation.vision.observation_builder import (
     ObservationBuilder,
     PillowSelectorEngine,
@@ -112,6 +113,7 @@ def build_application_runner(
         mail_archive_store=MailArchiveStore(root=app_config.archive_root / "mail"),
         chat_archive_store=ChatArchiveStore(root=app_config.archive_root / "chat"),
         adb_client=AdbClient(adb_path=app_config.defaults.adb_path),
+        instance_resolver=BlueStacksInstanceResolver(config_path=app_config.defaults.bluestacks_config_path),
         logger=logger,
     )
     return ApplicationRunner(script_runner=script_runner)

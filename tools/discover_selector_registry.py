@@ -17,7 +17,6 @@ from pnc_automation.app import ApplicationRunner, build_application_runner
 from pnc_automation.artifact_naming import sanitize_artifact_segment
 from pnc_automation.automation.action_executor import ActionExecutor
 from pnc_automation.automation.observed_action_executor import ObservedActionExecutor
-from pnc_automation.emulator.bluestacks_instance import BlueStacksInstance
 from pnc_automation.emulator.session import BlueStacksSession
 from pnc_automation.errors import SelectorResolutionError
 from pnc_automation.pnc.action_requests import ActionRequest, KeyEventAction, TapAction
@@ -190,13 +189,7 @@ def _run_live_discovery(
 
     script_runner = runtime.application.script_runner
     account = script_runner.config.require_account(account_id)
-    instance_config = script_runner.config.require_instance(account.instance_id)
-    session = BlueStacksSession(
-        adb_client=script_runner.adb_client,
-        instance=BlueStacksInstance.from_config(instance_config),
-    )
-    session.connect()
-    session.ensure_responsive()
+    session = script_runner.build_connected_session(account=account)
 
     observation_service = ObservationService(
         screenshot_service=script_runner.screenshot_service,

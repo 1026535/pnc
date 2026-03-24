@@ -17,6 +17,7 @@ from pnc_automation.config.models import (
     CastleRosterOrdering,
     CastleTargetDefinition,
     CredentialSource,
+    DEFAULT_BLUESTACKS_CONFIG_PATH,
     DefaultsConfig,
     PncAccountCastleRosterConfig,
     ResolvedCredentials,
@@ -53,7 +54,7 @@ def load_app_config(
     environment = env if env is not None else os.environ
     workspace_root = _resolve_workspace_root(config_path)
 
-    defaults = _load_defaults(raw.get("defaults"))
+    defaults = _load_defaults(raw.get("defaults"), workspace_root=workspace_root)
     artifact_root = _load_artifact_root(raw.get("artifacts"), workspace_root)
     archive_root = _load_archive_root(raw.get("archives"), workspace_root)
     runtime = _load_runtime(raw.get("runtime"))
@@ -81,12 +82,16 @@ def load_app_config(
     )
 
 
-def _load_defaults(raw_defaults: Any) -> DefaultsConfig:
+def _load_defaults(raw_defaults: Any, *, workspace_root: Path) -> DefaultsConfig:
     """Loads the defaults section with sensible v1 fallbacks."""
 
     raw = require_mapping(raw_defaults or {}, context="defaults")
     return DefaultsConfig(
         adb_path=require_string(raw.get("adb_path", "adb"), context="defaults.adb_path"),
+        bluestacks_config_path=_load_bluestacks_config_path(
+            raw.get("bluestacks_config_path", str(DEFAULT_BLUESTACKS_CONFIG_PATH)),
+            workspace_root=workspace_root,
+        ),
         screenshot_format=require_string(raw.get("screenshot_format", "png"), context="defaults.screenshot_format"),
         stable_click_delay_ms=require_int(
             raw.get("stable_click_delay_ms", 300),
@@ -156,6 +161,15 @@ def _load_runtime(raw_runtime: Any) -> RuntimeConfig:
         ) from error
 
 
+def _load_bluestacks_config_path(raw_path: Any, *, workspace_root: Path) -> Path:
+    """Loads the canonical BlueStacks host-metadata path used for runtime port resolution."""
+
+    path = Path(require_string(raw_path, context="defaults.bluestacks_config_path"))
+    if path.is_absolute():
+        return path
+    return (workspace_root / path).resolve()
+
+
 def _load_instances(raw_instances: Any) -> tuple[BlueStacksInstanceConfig, ...]:
     """Loads the configured BlueStacks bindings."""
 
@@ -163,14 +177,26 @@ def _load_instances(raw_instances: Any) -> tuple[BlueStacksInstanceConfig, ...]:
     instances: list[BlueStacksInstanceConfig] = []
     for index, item in enumerate(items):
         raw = require_mapping(item, context=f"instances[{index}]")
+        _reject_legacy_instance_device_id(raw, index=index)
         instances.append(
             BlueStacksInstanceConfig(
                 id=require_string(raw.get("id"), context=f"instances[{index}].id"),
-                device_id=require_string(raw.get("device_id"), context=f"instances[{index}].device_id"),
+                display_name=require_string(raw.get("display_name"), context=f"instances[{index}].display_name"),
                 app_package=require_string(raw.get("app_package"), context=f"instances[{index}].app_package"),
             )
         )
     return tuple(instances)
+
+
+def _reject_legacy_instance_device_id(raw_instance: Mapping[str, Any], *, index: int) -> None:
+    """Rejects the removed authored ADB endpoint field instead of silently accepting stale ports."""
+
+    if "device_id" not in raw_instance:
+        return
+    raise ConfigurationError(
+        "accounts.yaml no longer supports instances[].device_id; configure the stable BlueStacks display_name and let runtime port discovery resolve the live ADB endpoint.",
+        context=f"instances[{index}].device_id",
+    )
 
 
 def _load_accounts(raw_accounts: Any, env: Mapping[str, str]) -> tuple[AccountConfig, ...]:
