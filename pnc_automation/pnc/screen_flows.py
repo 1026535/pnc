@@ -378,18 +378,18 @@ class ScreenFlowPlanner:
     def open_visible_world_object(
         self,
         observation: Observation,
-        query: SpatialObjectQuery,
+        target: DetectedSpatialObject,
         *,
         reason: str,
         observe_after: bool = True,
     ) -> list[ActionRequest]:
-        """Plans one tap against a visible world-map spatial object."""
+        """Plans one tap against one exact visible world-map spatial object."""
 
         if observation.screen_type != ScreenType.PNC_WORLD_MAP:
             return self.open_world_map(observation)
         return self.world_map_navigator.tap_visible_object(
             observation,
-            query,
+            target,
             reason=reason,
             observe_after=observe_after,
         )
@@ -792,13 +792,35 @@ class ScreenFlowPlanner:
             metadata_key="category",
             metadata_value="academy",
         )
-        if observation.find_spatial_object(academy_query) is not None:
+        academy = observation.find_spatial_object(academy_query)
+        if academy is not None:
             return self.home_city_navigator.tap_visible_object(
                 observation,
-                academy_query,
+                academy,
                 reason="open_academy",
             )
         return self.home_city_navigator.plan_focus_object(observation, academy_query)
+
+    def open_visible_home_city_object(
+        self,
+        observation: Observation,
+        target: DetectedSpatialObject,
+        *,
+        reason: str,
+        runtime_state: dict[str, Any] | None = None,
+        observe_after: bool = True,
+    ) -> list[ActionRequest]:
+        """Plans one tap against one exact visible home-city spatial object."""
+
+        if observation.screen_type != ScreenType.PNC_HOME_CITY:
+            return self.ensure_home_city(observation)
+        return self.home_city_navigator.tap_visible_object(
+            observation,
+            target,
+            reason=reason,
+            runtime_state=runtime_state,
+            observe_after=observe_after,
+        )
 
     def focus_home_city_object(
         self,
@@ -830,10 +852,11 @@ class ScreenFlowPlanner:
 
         if observation.screen_type != ScreenType.PNC_HOME_CITY:
             return self.ensure_home_city(observation)
-        if observation.find_spatial_object(query) is not None:
+        target = observation.find_spatial_object(query)
+        if target is not None:
             return self.home_city_navigator.tap_visible_object(
                 observation,
-                query,
+                target,
                 reason=reason,
                 runtime_state=runtime_state,
                 observe_after=observe_after,

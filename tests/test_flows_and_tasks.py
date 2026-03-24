@@ -51,7 +51,7 @@ from pnc_automation.pnc.observation import (
     SpatialSurfaceType,
 )
 from pnc_automation.pnc.spatial_navigation import WorldCoordinate
-from pnc_automation.pnc.policy_models import BuildingUpgradePolicy, GatheringPolicy
+from pnc_automation.pnc.policy_models import BuildingPriority, BuildingUpgradePolicy, GatheringPolicy
 from pnc_automation.pnc.screen_flows import ChatChannel, ScreenFlowPlanner
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
@@ -238,6 +238,7 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertEqual(actions[0].query.kind, SpatialObjectKind.HOME_BUILDING)
         self.assertEqual(actions[0].query.metadata_key, "category")
         self.assertEqual(actions[0].query.metadata_value, "academy")
+        self.assertEqual(actions[0].target_point, (50, 50))
 
     def test_focus_world_coordinate_plans_one_coordinate_driven_swipe(self) -> None:
         """Uses the shared world-map navigator instead of task-local swipe heuristics."""
@@ -1130,7 +1131,7 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertTrue(actions[1].observe_after)
 
     def test_building_upgrade_task_chooses_highest_priority_candidate(self) -> None:
-        """Selects the configured highest-priority building candidate from visible entries."""
+        """Selects the configured highest-priority building candidate for inspection before claiming eligibility."""
 
         task = BuildingUpgradeTask()
         context = self._make_context(
@@ -1164,9 +1165,115 @@ class FlowAndTaskTests(unittest.TestCase):
 
         actions = task.plan(context, observation)
 
-        self.assertEqual(len(actions), 2)
+        self.assertEqual(len(actions), 1)
         self.assertIsInstance(actions[0], TapSpatialObjectAction)
         self.assertEqual(actions[0].query.name_text, "Castle")
+        self.assertEqual(actions[0].target_point, (70, 60))
+
+    def test_building_upgrade_task_replans_when_details_confirm_upgrade_button(self) -> None:
+        """Treats the details screen as the canonical proof that a building is actually upgradeable."""
+
+        task = BuildingUpgradeTask()
+        context = self._make_context(params=BuildingUpgradePolicy(), task_id=TaskId.BUILDING_UPGRADE)
+
+        result = task.verify(
+            context,
+            make_observation(
+                ScreenType.PNC_HOME_CITY,
+                spatial_surface=make_spatial_surface(
+                    SpatialSurfaceType.HOME_CITY_SURFACE,
+                    objects=(
+                        make_spatial_object(
+                            SpatialObjectKind.HOME_BUILDING,
+                            name_text="Castle",
+                            metadata={"category": "castle"},
+                            action_point=(70, 60),
+                        ),
+                    ),
+                ),
+            ),
+            make_observation(
+                ScreenType.PNC_BUILDING_DETAILS,
+                visible_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
+            ),
+        )
+
+        self.assertEqual(result.status, TaskStatus.REPLAN)
+        self.assertIn("upgrade button is available", result.message)
+
+    def test_building_upgrade_task_replans_when_details_show_no_upgrade_button(self) -> None:
+        """Does not report success when the inspected building lacks a visible upgrade action."""
+
+        task = BuildingUpgradeTask()
+        context = self._make_context(params=BuildingUpgradePolicy(), task_id=TaskId.BUILDING_UPGRADE)
+        context.runtime_state["building_upgrade_pending_target"] = (BuildingPriority.CASTLE, "Castle", (70, 60))
+
+        result = task.verify(
+            context,
+            make_observation(
+                ScreenType.PNC_HOME_CITY,
+                spatial_surface=make_spatial_surface(
+                    SpatialSurfaceType.HOME_CITY_SURFACE,
+                    objects=(
+                        make_spatial_object(
+                            SpatialObjectKind.HOME_BUILDING,
+                            name_text="Castle",
+                            metadata={"category": "castle"},
+                            action_point=(70, 60),
+                        ),
+                    ),
+                ),
+            ),
+            make_observation(ScreenType.PNC_BUILDING_DETAILS),
+        )
+
+        self.assertEqual(result.status, TaskStatus.REPLAN)
+        self.assertIn("not upgradeable", result.message)
+        self.assertIn((BuildingPriority.CASTLE, "Castle", (70, 60)), context.runtime_state["building_upgrade_ineligible_targets"])
+
+    def test_building_upgrade_task_taps_upgrade_only_from_verified_details_screen(self) -> None:
+        """Starts the upgrade only after the task is already on a details screen with the upgrade button."""
+
+        task = BuildingUpgradeTask()
+        context = self._make_context(params=BuildingUpgradePolicy(), task_id=TaskId.BUILDING_UPGRADE)
+
+        actions = task.plan(
+            context,
+            make_observation(
+                ScreenType.PNC_BUILDING_DETAILS,
+                visible_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
+            ),
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], TapAction)
+        self.assertEqual(actions[0].selector_id, UiElementId.PNC_BUILDING_UPGRADE_BUTTON)
+
+    def test_building_upgrade_task_skips_after_all_visible_candidates_prove_ineligible(self) -> None:
+        """Stops cleanly once every visible supported building has already been inspected and rejected."""
+
+        task = BuildingUpgradeTask()
+        context = self._make_context(params=BuildingUpgradePolicy(), task_id=TaskId.BUILDING_UPGRADE)
+        context.runtime_state["building_upgrade_ineligible_targets"] = {(BuildingPriority.CASTLE, "Castle", (70, 60))}
+        before = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.HOME_CITY_SURFACE,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Castle",
+                        metadata={"category": "castle"},
+                        action_point=(70, 60),
+                    ),
+                ),
+            ),
+        )
+
+        result = task.verify(context, before, before)
+
+        self.assertEqual(result.status, TaskStatus.SKIPPED)
+        self.assertIn("No eligible building upgrades", result.message)
 
     def test_gathering_task_chooses_highest_priority_visible_resource_node(self) -> None:
         """Chooses visible world-map resource nodes from the spatial surface instead of list entries."""
@@ -1203,6 +1310,67 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertEqual(actions[0].query.kind, SpatialObjectKind.RESOURCE_NODE)
         self.assertEqual(actions[0].query.metadata_key, "resource_type")
         self.assertEqual(actions[0].query.metadata_value, "food")
+        self.assertEqual(actions[0].target_point, (68, 52))
+
+    def test_open_visible_world_object_preserves_selected_duplicate_resource_identity(self) -> None:
+        """Keeps the chosen world-map duplicate target instead of retargeting by a broad semantic query."""
+
+        first = make_spatial_object(
+            SpatialObjectKind.RESOURCE_NODE,
+            name_text="Food Farm",
+            metadata={"resource_type": "food"},
+            action_point=(41, 51),
+        )
+        second = make_spatial_object(
+            SpatialObjectKind.RESOURCE_NODE,
+            name_text="Food Farm",
+            metadata={"resource_type": "food"},
+            action_point=(88, 99),
+        )
+        observation = make_observation(
+            ScreenType.PNC_WORLD_MAP,
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.WORLD_MAP,
+                x=253,
+                y=447,
+                objects=(first, second),
+            ),
+        )
+
+        actions = self.flows.open_visible_world_object(observation, second, reason="open_duplicate_food")
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], TapSpatialObjectAction)
+        self.assertEqual(actions[0].target_point, (88, 99))
+
+    def test_open_visible_home_city_object_preserves_selected_duplicate_building_identity(self) -> None:
+        """Keeps the chosen home-city duplicate target instead of collapsing repeated buildings into one query match."""
+
+        first = make_spatial_object(
+            SpatialObjectKind.HOME_BUILDING,
+            name_text="Barracks",
+            metadata={"category": "barracks"},
+            action_point=(61, 71),
+        )
+        second = make_spatial_object(
+            SpatialObjectKind.HOME_BUILDING,
+            name_text="Barracks",
+            metadata={"category": "barracks"},
+            action_point=(133, 144),
+        )
+        observation = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.HOME_CITY_SURFACE,
+                objects=(first, second),
+            ),
+        )
+
+        actions = self.flows.open_visible_home_city_object(observation, second, reason="open_duplicate_barracks")
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], TapSpatialObjectAction)
+        self.assertEqual(actions[0].target_point, (133, 144))
 
     def test_gathering_task_skips_when_no_march_slots_remain(self) -> None:
         """Treats zero available march slots as a safe no-op."""

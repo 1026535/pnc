@@ -270,7 +270,8 @@ class DetectedSpatialObject:
     action_point: tuple[int, int] | None = None
     viewport_offset: tuple[int, int] | None = None
     viewport_offset_ratio: tuple[float, float] | None = None
-    world_coordinate: tuple[int, int] | None = None
+    estimated_world_coordinate: tuple[int, int] | None = None
+    confirmed_world_coordinate: tuple[int, int] | None = None
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -306,11 +307,17 @@ class DetectedSpatialObject:
                 object_kind=self.kind,
                 viewport_offset_ratio=self.viewport_offset_ratio,
             )
-        if self.world_coordinate is not None and not _is_integer_pair(self.world_coordinate):
+        if self.estimated_world_coordinate is not None and not _is_integer_pair(self.estimated_world_coordinate):
             raise SelectorResolutionError(
-                "Spatial objects must use integer world coordinates when present.",
+                "Spatial objects must use integer estimated world coordinates when present.",
                 object_kind=self.kind,
-                world_coordinate=self.world_coordinate,
+                estimated_world_coordinate=self.estimated_world_coordinate,
+            )
+        if self.confirmed_world_coordinate is not None and not _is_integer_pair(self.confirmed_world_coordinate):
+            raise SelectorResolutionError(
+                "Spatial objects must use integer confirmed world coordinates when present.",
+                object_kind=self.kind,
+                confirmed_world_coordinate=self.confirmed_world_coordinate,
             )
 
     def require_metadata(self, key: str) -> Any:
@@ -385,6 +392,19 @@ class SpatialSurfaceObservation:
             level=query.level,
             metadata_key=query.metadata_key,
             metadata_value=query.metadata_value,
+        )
+
+    def require_visible_object(self, target: DetectedSpatialObject) -> DetectedSpatialObject:
+        """Returns one exact visible spatial object instance or fails fast when it is no longer present."""
+
+        if target in self.objects:
+            return target
+        raise SelectorResolutionError(
+            "The requested spatial object instance is not visible on the active surface.",
+            surface_type=self.surface_type,
+            object_kind=target.kind,
+            name_text=target.name_text,
+            action_point=target.action_point,
         )
 
 

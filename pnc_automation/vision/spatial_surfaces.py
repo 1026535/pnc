@@ -40,6 +40,8 @@ _WORLD_RESOURCE_TYPE_BY_TOKEN = {
 _ALLIANCE_TAG_PATTERN = re.compile(r"^\[(?P<tag>[A-Z0-9]{2,5})\]\s*(?P<name>.+)$")
 _WORLD_CASTLE_LABEL_PATTERN = re.compile(r"^K(?P<kingdom>\d{3})(?P<identifier>[A-Z0-9]{5,})$")
 _MONSTER_LEVEL_PATTERN = re.compile(r"^(?:LV\.?|LEVEL)\s*(?P<level>\d{1,3})\s*(?P<name>.+)$", re.IGNORECASE)
+_WORLD_MAP_ESTIMATED_VIEWPORT_WIDTH_UNITS = 900
+_WORLD_MAP_ESTIMATED_VIEWPORT_HEIGHT_UNITS = 1184
 _HOME_BUILDING_CATEGORY_BY_TEXT = {
     "CASTLE": "castle",
     "WALL": "wall",
@@ -258,12 +260,6 @@ def _classify_world_map_object(
     )
     viewport_offset = _bounds_center_offset(bounds=bounds, origin=viewport_bounds.center())
     viewport_offset_ratio = _bounds_center_offset_ratio(bounds=bounds, viewport_bounds=viewport_bounds)
-    world_coordinate = None
-    if viewport_coordinate is not None:
-        world_coordinate = (
-            viewport_coordinate[0] + viewport_offset[0],
-            viewport_coordinate[1] + viewport_offset[1],
-        )
     return DetectedSpatialObject(
         kind=kind,
         bounds=bounds,
@@ -275,7 +271,10 @@ def _classify_world_map_object(
         action_point=bounds.center(),
         viewport_offset=viewport_offset,
         viewport_offset_ratio=viewport_offset_ratio,
-        world_coordinate=world_coordinate,
+        estimated_world_coordinate=_estimate_world_coordinate(
+            viewport_coordinate=viewport_coordinate,
+            viewport_offset_ratio=viewport_offset_ratio,
+        ),
         metadata=metadata,
     )
 
@@ -556,4 +555,19 @@ def _bounds_center_offset_ratio(*, bounds: Bounds, viewport_bounds: Bounds) -> t
     return (
         offset_x / max(viewport_bounds.width, 1),
         offset_y / max(viewport_bounds.height, 1),
+    )
+
+
+def _estimate_world_coordinate(
+    *,
+    viewport_coordinate: tuple[int, int] | None,
+    viewport_offset_ratio: tuple[float, float] | None,
+) -> tuple[int, int] | None:
+    """Returns a calibrated normalized world-coordinate estimate without mixing in raw screenshot pixels."""
+
+    if viewport_coordinate is None or viewport_offset_ratio is None:
+        return None
+    return (
+        viewport_coordinate[0] + int(round(viewport_offset_ratio[0] * _WORLD_MAP_ESTIMATED_VIEWPORT_WIDTH_UNITS)),
+        viewport_coordinate[1] + int(round(viewport_offset_ratio[1] * _WORLD_MAP_ESTIMATED_VIEWPORT_HEIGHT_UNITS)),
     )

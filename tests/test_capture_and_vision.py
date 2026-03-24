@@ -1367,7 +1367,7 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertEqual(self_castle.viewport_offset, (-150, -235))
             self.assertAlmostEqual(self_castle.viewport_offset_ratio[0], -150 / 900)
             self.assertAlmostEqual(self_castle.viewport_offset_ratio[1], -235 / 1184)
-            self.assertEqual(self_castle.world_coordinate, (103, 212))
+            self.assertEqual(self_castle.estimated_world_coordinate, (103, 212))
             self.assertEqual(
                 observation.require_spatial_object(
                     _spatial_query(
@@ -1437,7 +1437,7 @@ class CaptureAndVisionTests(unittest.TestCase):
         self.assertEqual(surface.objects[0].viewport_offset, (-150, -235))
         self.assertAlmostEqual(surface.objects[0].viewport_offset_ratio[0], -150 / 900)
         self.assertAlmostEqual(surface.objects[0].viewport_offset_ratio[1], -235 / 1184)
-        self.assertEqual(surface.objects[0].world_coordinate, (103, 212))
+        self.assertEqual(surface.objects[0].estimated_world_coordinate, (103, 212))
 
     def test_world_map_spatial_surface_accepts_coordinate_lines_when_ocr_orders_y_before_x(self) -> None:
         """Keeps valid world-map frames parseable when OCR emits the Y line before the X line."""
@@ -1456,6 +1456,50 @@ class CaptureAndVisionTests(unittest.TestCase):
         assert surface is not None
         self.assertEqual(surface.viewport.coordinate, (253, 447))
         self.assertEqual(len(surface.objects), 1)
+
+    def test_world_map_estimated_coordinates_are_resolution_invariant_for_matching_normalized_offsets(self) -> None:
+        """Keeps estimated world coordinates stable when the same normalized object placement is observed at different resolutions."""
+
+        baseline_surface = build_world_map_spatial_surface(
+            image=Image.new("RGB", (900, 1600), (15, 28, 68)),
+            lines=(
+                _ocr_line("X:253", x=73, y=67, width=71, height=24),
+                _ocr_line("Y:447", x=177, y=67, width=69, height=24),
+                _ocr_line("My Territory", x=210, y=505, width=180, height=24),
+            ),
+            selector_registry=build_default_selector_registry(),
+        )
+        scaled_surface = build_world_map_spatial_surface(
+            image=Image.new("RGB", (1800, 3200), (15, 28, 68)),
+            lines=(
+                _ocr_line("X:253", x=146, y=134, width=142, height=48),
+                _ocr_line("Y:447", x=354, y=134, width=138, height=48),
+                _ocr_line("My Territory", x=420, y=1010, width=360, height=48),
+            ),
+            selector_registry=build_default_selector_registry(),
+        )
+
+        self.assertIsNotNone(baseline_surface)
+        self.assertIsNotNone(scaled_surface)
+        assert baseline_surface is not None
+        assert scaled_surface is not None
+        baseline_castle = baseline_surface.require_object(
+            _spatial_query(
+                surface_type=SpatialSurfaceType.WORLD_MAP,
+                kind=SpatialObjectKind.CASTLE,
+                name_text="My Territory",
+            )
+        )
+        scaled_castle = scaled_surface.require_object(
+            _spatial_query(
+                surface_type=SpatialSurfaceType.WORLD_MAP,
+                kind=SpatialObjectKind.CASTLE,
+                name_text="My Territory",
+            )
+        )
+
+        self.assertEqual(baseline_castle.estimated_world_coordinate, (103, 212))
+        self.assertEqual(scaled_castle.estimated_world_coordinate, baseline_castle.estimated_world_coordinate)
 
     def test_world_map_spatial_surface_accepts_noisy_coordinate_bar_text(self) -> None:
         """Parses the viewport coordinates even when OCR injects extra characters around the X/Y tokens."""
@@ -1498,7 +1542,7 @@ class CaptureAndVisionTests(unittest.TestCase):
         self.assertEqual(castle.name_text, "K2875067781632")
         self.assertEqual(castle.kingdom, "K287")
         self.assertEqual(castle.metadata["castle_identifier"], "5067781632")
-        self.assertEqual(castle.world_coordinate, (201, 659))
+        self.assertEqual(castle.estimated_world_coordinate, (201, 659))
 
     def test_world_map_spatial_surface_classifies_altar_dragonia_and_hell_fortress(self) -> None:
         """Parses the remaining planned neutral world-object classes as typed spatial objects."""
@@ -1541,9 +1585,9 @@ class CaptureAndVisionTests(unittest.TestCase):
         self.assertEqual(altar.relationship, SpatialObjectRelationship.NEUTRAL)
         self.assertEqual(dragonia.relationship, SpatialObjectRelationship.NEUTRAL)
         self.assertEqual(hell_fortress.relationship, SpatialObjectRelationship.NEUTRAL)
-        self.assertEqual(altar.world_coordinate, (145, 280))
-        self.assertEqual(dragonia.world_coordinate, (350, 500))
-        self.assertEqual(hell_fortress.world_coordinate, (480, 660))
+        self.assertEqual(altar.estimated_world_coordinate, (145, 280))
+        self.assertEqual(dragonia.estimated_world_coordinate, (350, 500))
+        self.assertEqual(hell_fortress.estimated_world_coordinate, (480, 660))
 
     def test_world_map_spatial_surface_rejects_sections_outside_the_visible_viewport(self) -> None:
         """Fails fast when a caller requests a world-map scan region that cannot see any map content."""

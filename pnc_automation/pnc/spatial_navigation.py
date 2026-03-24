@@ -9,7 +9,13 @@ from typing import Any
 
 from pnc_automation.errors import SelectorResolutionError
 from pnc_automation.pnc.action_requests import ActionRequest, SwipeAction, TapSpatialObjectAction
-from pnc_automation.pnc.observation import Observation, SpatialObjectQuery, SpatialSurfaceObservation, SpatialSurfaceType
+from pnc_automation.pnc.observation import (
+    DetectedSpatialObject,
+    Observation,
+    SpatialObjectQuery,
+    SpatialSurfaceObservation,
+    SpatialSurfaceType,
+)
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.vision.observation_request import ObservationRequest
 
@@ -100,17 +106,18 @@ class WorldMapNavigator(SpatialSurfaceNavigator):
     def tap_visible_object(
         self,
         observation: Observation,
-        query: SpatialObjectQuery,
+        target: DetectedSpatialObject,
         *,
         reason: str,
         observe_after: bool = True,
     ) -> list[ActionRequest]:
-        """Returns one canonical tap against a visible world-map spatial object."""
+        """Returns one canonical tap against one exact visible world-map spatial object."""
 
-        self.require_surface(observation).require_object(query)
+        self.require_surface(observation).require_visible_object(target)
         return [
             TapSpatialObjectAction(
-                query=query,
+                query=_query_for_target(self.surface_type, target),
+                target_point=_resolve_target_point(target=target, use_action_point=True),
                 reason=reason,
                 observe_after=observe_after,
             )
@@ -231,19 +238,20 @@ class HomeCityNavigator(SpatialSurfaceNavigator):
     def tap_visible_object(
         self,
         observation: Observation,
-        query: SpatialObjectQuery,
+        target: DetectedSpatialObject,
         *,
         reason: str,
         runtime_state: dict[str, Any] | None = None,
         observe_after: bool = True,
     ) -> list[ActionRequest]:
-        """Returns one canonical tap against a visible home-city spatial object."""
+        """Returns one canonical tap against one exact visible home-city spatial object."""
 
-        self.require_surface(observation).require_object(query)
+        self.require_surface(observation).require_visible_object(target)
         _clear_state(runtime_state, _HOME_CITY_NAVIGATION_STATE_KEY)
         return [
             TapSpatialObjectAction(
-                query=query,
+                query=_query_for_target(self.surface_type, target),
+                target_point=_resolve_target_point(target=target, use_action_point=True),
                 reason=reason,
                 observe_after=observe_after,
             )
@@ -350,4 +358,37 @@ def _home_city_scan_steps() -> tuple[SwipeAction, ...]:
             end_x_ratio=0.55,
             end_y_ratio=0.7,
         ),
+    )
+
+
+def _resolve_target_point(*, target: DetectedSpatialObject, use_action_point: bool) -> tuple[int, int]:
+    """Returns the concrete tap point captured for one visible spatial object."""
+
+    if use_action_point and target.action_point is not None:
+        return target.action_point
+    return target.bounds.center()
+
+
+def _query_for_target(surface_type: SpatialSurfaceType, target: DetectedSpatialObject) -> SpatialObjectQuery:
+    """Builds the narrowest reusable semantic query available for one visible spatial object."""
+
+    metadata = dict(target.metadata)
+    metadata_key = None
+    metadata_value = None
+    if "category" in metadata:
+        metadata_key = "category"
+        metadata_value = metadata["category"]
+    elif "resource_type" in metadata:
+        metadata_key = "resource_type"
+        metadata_value = metadata["resource_type"]
+    return SpatialObjectQuery(
+        surface_type=surface_type,
+        kind=target.kind,
+        relationship=target.relationship,
+        name_text=target.name_text,
+        alliance_tag=target.alliance_tag,
+        kingdom=target.kingdom,
+        level=target.level,
+        metadata_key=metadata_key,
+        metadata_value=metadata_value,
     )
