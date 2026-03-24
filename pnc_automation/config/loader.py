@@ -20,7 +20,9 @@ from pnc_automation.config.models import (
     DefaultsConfig,
     PncAccountCastleRosterConfig,
     ResolvedCredentials,
+    RuntimeConfig,
 )
+from pnc_automation.automation.observation_mode import ObservationMode
 from pnc_automation.config.validation import validate_app_config
 from pnc_automation.config.yaml_helpers import (
     load_castle_identity,
@@ -53,6 +55,8 @@ def load_app_config(
 
     defaults = _load_defaults(raw.get("defaults"))
     artifact_root = _load_artifact_root(raw.get("artifacts"), workspace_root)
+    archive_root = _load_archive_root(raw.get("archives"), workspace_root)
+    runtime = _load_runtime(raw.get("runtime"))
     instances = _load_instances(raw.get("instances"))
     accounts = _load_accounts(raw.get("accounts"), environment)
     resolved_castle_roster_path = _resolve_castle_roster_path(config_path, castle_roster_path)
@@ -66,7 +70,9 @@ def load_app_config(
             castle_roster_path=resolved_castle_roster_path,
             castle_targets_path=resolved_castle_targets_path,
             artifact_root=artifact_root,
+            archive_root=archive_root,
             defaults=defaults,
+            runtime=runtime,
             instances=instances,
             accounts=accounts,
             castle_rosters=rosters,
@@ -122,6 +128,32 @@ def _load_artifact_root(raw_artifacts: Any, workspace_root: Path) -> Path:
     raw = require_mapping(raw_artifacts or {}, context="artifacts")
     artifact_root = require_string(raw.get("root", "artifacts"), context="artifacts.root")
     return (workspace_root / artifact_root).resolve()
+
+
+def _load_archive_root(raw_archives: Any, workspace_root: Path) -> Path:
+    """Loads and resolves the durable archive root relative to the workspace root."""
+
+    raw = require_mapping(raw_archives or {}, context="archives")
+    archive_root = require_string(raw.get("root", "archives"), context="archives.root")
+    return (workspace_root / archive_root).resolve()
+
+
+def _load_runtime(raw_runtime: Any) -> RuntimeConfig:
+    """Loads shared runtime policy toggles."""
+
+    raw = require_mapping(raw_runtime or {}, context="runtime")
+    observation_mode = require_string(
+        raw.get("observation_mode", ObservationMode.DEBUG.value),
+        context="runtime.observation_mode",
+    )
+    try:
+        return RuntimeConfig(observation_mode=ObservationMode(observation_mode))
+    except ValueError as error:
+        raise ConfigurationError(
+            f"Expected runtime.observation_mode to be one of {[mode.value for mode in ObservationMode]}.",
+            context="runtime.observation_mode",
+            observation_mode=observation_mode,
+        ) from error
 
 
 def _load_instances(raw_instances: Any) -> tuple[BlueStacksInstanceConfig, ...]:

@@ -5,13 +5,17 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+from pnc_automation.capture.chat_archive_store import ChatArchiveStore
 from pnc_automation.capture.mail_archive_store import MailArchiveStore
 from pnc_automation.config.castle_roster_store import CastleRosterStore
 from pnc_automation.config.models import AccountConfig, CastleIdentity, DefaultsConfig, PncAccountCastleRosterConfig
 from pnc_automation.errors import TaskVerificationError
 from pnc_automation.pnc.screen_flows import ScreenFlowPlanner
+
+if TYPE_CHECKING:
+    from pnc_automation.vision.observation_builder import ObservationService
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,6 +32,8 @@ class TaskContext:
     target_castle: CastleIdentity | None = None
     castle_roster_store: CastleRosterStore | None = None
     mail_archive_store: MailArchiveStore | None = None
+    chat_archive_store: ChatArchiveStore | None = None
+    observation_service: ObservationService | None = None
     runtime_state: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -65,6 +71,28 @@ class TaskContext:
             return self.mail_archive_store
         raise TaskVerificationError(
             "This task requires a writable mail archive store.",
+            account_id=self.account.id,
+            task_id=getattr(self.step, "task", None),
+        )
+
+    def require_chat_archive_store(self) -> ChatArchiveStore:
+        """Returns the writable chat-archive store or fails fast when it is unavailable."""
+
+        if self.chat_archive_store is not None:
+            return self.chat_archive_store
+        raise TaskVerificationError(
+            "This task requires a writable chat archive store.",
+            account_id=self.account.id,
+            task_id=getattr(self.step, "task", None),
+        )
+
+    def require_observation_service(self) -> "ObservationService":
+        """Returns the live observation service or fails fast when the task needs one explicitly."""
+
+        if self.observation_service is not None:
+            return self.observation_service
+        raise TaskVerificationError(
+            "This task requires the live observation service.",
             account_id=self.account.id,
             task_id=getattr(self.step, "task", None),
         )

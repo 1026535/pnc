@@ -31,6 +31,8 @@ def validate_app_config(config: AppConfig) -> AppConfig:
     _validate_castle_rosters(config)
     _validate_castle_targets(config)
     _validate_artifact_root(config)
+    _validate_archive_root(config)
+    _validate_distinct_output_roots(config)
     return config
 
 
@@ -198,3 +200,28 @@ def _validate_artifact_root(config: AppConfig) -> None:
             f"Artifact root '{config.artifact_root}' is not writable.",
             artifact_root=str(config.artifact_root),
         ) from error
+
+
+def _validate_archive_root(config: AppConfig) -> None:
+    """Ensures the archive root exists and is writable before a run starts."""
+
+    config.archive_root.mkdir(parents=True, exist_ok=True)
+    try:
+        with tempfile.NamedTemporaryFile(dir=config.archive_root, delete=True):
+            return
+    except OSError as error:
+        raise ConfigurationError(
+            f"Archive root '{config.archive_root}' is not writable.",
+            archive_root=str(config.archive_root),
+        ) from error
+
+
+def _validate_distinct_output_roots(config: AppConfig) -> None:
+    """Rejects configurations that collapse durable archives into runtime artifacts."""
+
+    if config.artifact_root == config.archive_root:
+        raise ConfigurationError(
+            "artifact_root and archive_root must resolve to different directories.",
+            artifact_root=str(config.artifact_root),
+            archive_root=str(config.archive_root),
+        )

@@ -9,6 +9,7 @@ from pathlib import Path
 import sys
 from typing import Sequence
 
+from pnc_automation.automation.observation_mode import ObservationMode
 from pnc_automation.app import build_application_runner
 from pnc_automation.config.models import CastleIdentity
 from pnc_automation.config.yaml_helpers import build_castle_identity
@@ -33,7 +34,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     _add_castle_arguments(login_parser)
 
     parsed = parser.parse_args(arguments)
-    application = build_application_runner(Path(parsed.config), verbose=parsed.verbose)
+    application = build_application_runner(
+        Path(parsed.config),
+        verbose=parsed.verbose,
+        observation_mode=None if parsed.observation_mode is None else ObservationMode(parsed.observation_mode),
+    )
     if parsed.command == "run":
         result = application.run(account_id=parsed.account, script_path=parsed.script)
     else:
@@ -51,6 +56,11 @@ def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--config", default="config/accounts.yaml", help="Path to the account configuration file.")
     parser.add_argument("--account", required=True, help="Configured account id to run.")
     parser.add_argument("--verbose", action="store_true", help="Enable verbose structured logging.")
+    parser.add_argument(
+        "--observation-mode",
+        choices=[mode.value for mode in ObservationMode],
+        help="Override the configured runtime observation mode for this one invocation.",
+    )
 
 
 def _add_castle_arguments(parser: argparse.ArgumentParser) -> None:

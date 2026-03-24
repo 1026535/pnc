@@ -10,6 +10,7 @@ from pathlib import Path
 
 from PIL import Image
 
+from pnc_automation.automation.observation_mode import ObservationMode
 from pnc_automation.capture.artifact_store import ArtifactStore
 from pnc_automation.capture.screenshot_service import ScreenshotService
 from pnc_automation.config.castle_roster_store import CastleRosterStore
@@ -749,6 +750,56 @@ class CaptureAndVisionTests(unittest.TestCase):
         self.assertTrue(observation.chat_draft_empty)
         self.assertEqual(ocr_service.read_result_calls, 0)
         self.assertGreater(ocr_service.read_text_calls, 0)
+
+    def test_chat_transcript_observation_still_runs_ocr_after_geometry_proves_chat(self) -> None:
+        """Keeps transcript-row extraction enabled for chat transcript polls even when geometry already proves chat."""
+
+        registry = build_default_selector_registry()
+        image_size = (900, 1600)
+        image = Image.new("RGB", image_size, (15, 28, 68))
+        input_region = _materialize_chat_region(registry, UiElementId.PNC_CHAT_INPUT_FIELD, image_size=image_size)
+        kingdom_region = _materialize_chat_region(registry, UiElementId.PNC_CHAT_TAB_KINGDOM, image_size=image_size)
+        alliance_region = _materialize_chat_region(registry, UiElementId.PNC_CHAT_TAB_ALLIANCE, image_size=image_size)
+        image.paste((20, 20, 20), (input_region.x, input_region.y, input_region.x + input_region.width, input_region.y + input_region.height))
+        image.paste((228, 178, 48), (kingdom_region.x, kingdom_region.y, kingdom_region.x + kingdom_region.width, kingdom_region.y + kingdom_region.height))
+        image.paste((64, 68, 82), (alliance_region.x, alliance_region.y, alliance_region.x + alliance_region.width, alliance_region.y + alliance_region.height))
+        ocr_service = _RecordingOcrService(
+            lines=(
+                _ocr_line("Chat", x=181, y=20, width=113, height=49),
+                _ocr_line("Kingdom", x=202, y=117, width=143, height=40),
+                _ocr_line("Alliance", x=652, y=116, width=123, height=39),
+                _ocr_line("Enemy Bob", x=120, y=260, width=180, height=24),
+                _ocr_line("Hello there", x=160, y=292, width=200, height=24),
+            )
+        )
+        builder = ObservationBuilder(
+            selector_registry=registry,
+            selector_engine=PillowSelectorEngine(
+                template_matcher=PillowTemplateMatcher(),
+                ocr_service=UnavailableOcrService(),
+            ),
+            screen_classifier=ScreenClassifier(),
+            enricher=PncObservationEnricher(
+                ocr_service=ocr_service,
+                selector_registry=registry,
+            ),
+        )
+        screenshot = type(
+            "Captured",
+            (),
+            {
+                "image": image,
+                "artifact": type("Artifact", (), {"path": Path("chat_transcript.png"), "captured_at": None})(),
+            },
+        )()
+
+        observation = builder.build(screenshot, request=ObservationRequest.chat_transcript_observation())
+
+        self.assertEqual(observation.screen_type, ScreenType.PNC_CHAT)
+        self.assertEqual(observation.active_chat_channel, ChatChannel.WORLD)
+        self.assertEqual(len(observation.entries(ListEntryKind.CHAT_MESSAGE)), 1)
+        self.assertEqual(observation.entries(ListEntryKind.CHAT_MESSAGE)[0].title_text, "Enemy Bob")
+        self.assertEqual(ocr_service.read_result_calls, 1)
 
     def test_observation_builder_classifies_loading_reconnect_from_live_like_ocr(self) -> None:
         """Recognizes reconnect prompts as loading-state bootstrap screens."""
@@ -2797,6 +2848,50 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertEqual(more_menu.current_castle_name, "K304554ca2797")
             self.assertEqual(castle_selection.current_castle_name, "K313alpha")
             self.assertIsNone(post_switch_home.current_castle)
+
+    def test_observation_service_skips_routine_artifact_persistence_in_light_mode(self) -> None:
+        """Leaves routine observations ephemeral in light mode so idle scheduler runs do not flood artifacts."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            payload = _encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))
+            service = ObservationService(
+                screenshot_service=screenshot_service,
+                observation_builder=_SequencedObservationBuilder(
+                    observations=[make_observation(ScreenType.PNC_HOME_CITY)]
+                ),
+                session=_FakeScreenshotSession(payload),
+                artifact_directory="light_mode_test",
+                mode=ObservationMode.LIGHT,
+            )
+
+            observation = service.observe("light_scan")
+
+            self.assertIsNone(observation.artifact_path)
+            self.assertFalse(any((root / "artifacts").rglob("*.png")))
+
+    def test_observation_service_honors_explicit_artifact_requests_in_light_mode(self) -> None:
+        """Still persists explicitly requested archive-grade captures while the runtime stays in light mode."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            payload = _encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))
+            service = ObservationService(
+                screenshot_service=screenshot_service,
+                observation_builder=_SequencedObservationBuilder(
+                    observations=[make_observation(ScreenType.PNC_MAIL_THREAD)]
+                ),
+                session=_FakeScreenshotSession(payload),
+                artifact_directory="light_mode_test",
+                mode=ObservationMode.LIGHT,
+            )
+
+            capture = service.capture_observation("mail_thread_scan", request=ObservationRequest.mail_thread_observation())
+
+            self.assertIsNotNone(capture.screenshot.artifact_path)
+            self.assertTrue(any((root / "artifacts").rglob("*.png")))
 
 
 def _ocr_line(text: str, *, x: int, y: int, width: int, height: int) -> OcrLine:

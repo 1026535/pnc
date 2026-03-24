@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pnc_automation.automation.task import BaseAutomationTask, CastleTargetPolicy, TaskId
 from pnc_automation.automation.tasks.building_upgrade_task import BuildingUpgradeTask
 from pnc_automation.automation.tasks.campaign_task import CampaignTask
+from pnc_automation.automation.tasks.collect_kingdom_chat_task import CollectKingdomChatTask
 from pnc_automation.automation.tasks.collect_mail_task import CollectMailTask
 from pnc_automation.automation.tasks.ensure_game_running_task import EnsureGameRunningTask
 from pnc_automation.automation.tasks.gathering_task import GatheringTask
@@ -172,6 +173,7 @@ def build_default_task_registry() -> TaskRegistry:
             SendWorldChatMessageTask(),
             SendMailTask(),
             CollectMailTask(),
+            CollectKingdomChatTask(),
             BuildingUpgradeTask(),
             ResearchTask(),
             GatheringTask(),

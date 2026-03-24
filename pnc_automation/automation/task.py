@@ -28,6 +28,7 @@ class TaskId(StrEnum):
     SEND_WORLD_CHAT_MESSAGE = "send_world_chat_message"
     SEND_MAIL = "send_mail"
     COLLECT_MAIL = "collect_mail"
+    COLLECT_KINGDOM_CHAT = "collect_kingdom_chat"
     BUILDING_UPGRADE = "building_upgrade"
     RESEARCH = "research"
     GATHERING = "gathering"

@@ -21,8 +21,10 @@ class ObservationRequest:
     include_popup_guard: bool = False
     include_loading_guard: bool = False
     include_chat_state: bool = False
+    include_chat_entries: bool = False
     text_field_selectors: frozenset[UiElementId] = frozenset()
     expected_mailbox: MailboxType | None = None
+    persist_artifact: bool | None = None
 
     @classmethod
     def base(cls) -> "ObservationRequest":
@@ -101,6 +103,19 @@ class ObservationRequest:
         )
 
     @classmethod
+    def chat_transcript_observation(cls) -> "ObservationRequest":
+        """Returns the narrow OCR scope used for Kingdom Chat transcript polling."""
+
+        return cls(
+            candidate_screen_types=frozenset({ScreenType.PNC_CHAT}),
+            ocr_screen_types=frozenset({ScreenType.PNC_CHAT}),
+            include_chat_state=True,
+            include_chat_entries=True,
+            text_field_selectors=frozenset({UiElementId.PNC_CHAT_INPUT_FIELD}),
+            persist_artifact=False,
+        )
+
+    @classmethod
     def home_city_follow_up(cls, *source_screens: ScreenType) -> "ObservationRequest":
         """Returns the narrow follow-up used while backing out toward the home-city root."""
 
@@ -156,6 +171,7 @@ class ObservationRequest:
         return cls(
             candidate_screen_types=frozenset({ScreenType.PNC_MAIL_THREAD}),
             ocr_screen_types=frozenset({ScreenType.PNC_MAIL_THREAD}),
+            persist_artifact=True,
         )
 
     @classmethod

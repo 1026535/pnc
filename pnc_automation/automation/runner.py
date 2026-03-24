@@ -13,6 +13,7 @@ from pnc_automation.scripts.models import PreparedRunScript, PreparedScriptStep,
 from pnc_automation.scripts.registry import TaskRegistry
 from pnc_automation.automation.task import CastleTargetPolicy, TaskId, TaskResult, TaskStatus
 from pnc_automation.automation.task_context import TaskContext
+from pnc_automation.capture.chat_archive_store import ChatArchiveStore
 from pnc_automation.capture.mail_archive_store import MailArchiveStore
 from pnc_automation.config.castle_roster_store import CastleRosterStore
 from pnc_automation.config.models import AccountConfig, CastleIdentity, DefaultsConfig, PncAccountCastleRosterConfig
@@ -20,6 +21,7 @@ from pnc_automation.errors import TaskVerificationError
 from pnc_automation.pnc.observation import Observation
 from pnc_automation.pnc.screen_flows import ScreenFlowPlanner
 from pnc_automation.vision.observation_builder import ObservationService
+from pnc_automation.vision.observation_request import ObservationRequest
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,6 +91,7 @@ class AutomationRunner:
         castle_roster_provider: Callable[[], PncAccountCastleRosterConfig | None] | None = None,
         castle_roster_store: CastleRosterStore | None = None,
         mail_archive_store: MailArchiveStore | None = None,
+        chat_archive_store: ChatArchiveStore | None = None,
     ) -> RunResult:
         """Runs the provided script for one account target."""
 
@@ -100,6 +103,7 @@ class AutomationRunner:
                 castle_roster_provider=castle_roster_provider,
                 castle_roster_store=castle_roster_store,
                 mail_archive_store=mail_archive_store,
+                chat_archive_store=chat_archive_store,
             )
             for step in script.steps
         ]
@@ -120,6 +124,7 @@ class AutomationRunner:
         castle_roster_provider: Callable[[], PncAccountCastleRosterConfig | None] | None,
         castle_roster_store: CastleRosterStore | None,
         mail_archive_store: MailArchiveStore | None,
+        chat_archive_store: ChatArchiveStore | None,
     ) -> StepRunResult:
         """Executes one script step until it succeeds or fails."""
 
@@ -131,12 +136,14 @@ class AutomationRunner:
             castle_roster_provider=castle_roster_provider,
             castle_roster_store=castle_roster_store,
             mail_archive_store=mail_archive_store,
+            chat_archive_store=chat_archive_store,
         )
         execution = self._execute_step_loop(
             account=account,
             castle_roster_provider=castle_roster_provider,
             castle_roster_store=castle_roster_store,
             mail_archive_store=mail_archive_store,
+            chat_archive_store=chat_archive_store,
             step=step.script_step,
             parsed_params=step.parsed_params,
             target_castle=step.castle,
@@ -160,6 +167,7 @@ class AutomationRunner:
         castle_roster_provider: Callable[[], PncAccountCastleRosterConfig | None] | None,
         castle_roster_store: CastleRosterStore | None,
         mail_archive_store: MailArchiveStore | None,
+        chat_archive_store: ChatArchiveStore | None,
     ) -> Observation:
         """Runs the canonical synthetic pre-step castle alignment when one target was requested."""
 
@@ -172,6 +180,7 @@ class AutomationRunner:
             castle_roster_provider=castle_roster_provider,
             castle_roster_store=castle_roster_store,
             mail_archive_store=mail_archive_store,
+            chat_archive_store=chat_archive_store,
             step=synthetic_step,
             parsed_params=select_castle_task.parse_params({}),
             target_castle=step.castle,
@@ -187,6 +196,7 @@ class AutomationRunner:
         castle_roster_provider: Callable[[], PncAccountCastleRosterConfig | None] | None,
         castle_roster_store: CastleRosterStore | None,
         mail_archive_store: MailArchiveStore | None,
+        chat_archive_store: ChatArchiveStore | None,
         step: ScriptStep,
         parsed_params: Any,
         target_castle: CastleIdentity | None,
@@ -201,6 +211,7 @@ class AutomationRunner:
             castle_roster_provider=castle_roster_provider,
             castle_roster_store=castle_roster_store,
             mail_archive_store=mail_archive_store,
+            chat_archive_store=chat_archive_store,
             step=step,
             parsed_params=parsed_params,
             target_castle=target_castle,
@@ -216,13 +227,15 @@ class AutomationRunner:
                     account=account,
                     castle_roster_store=castle_roster_store,
                     mail_archive_store=mail_archive_store,
+                    chat_archive_store=chat_archive_store,
                 )
             if not task.is_applicable(context, current_before):
-                raise TaskVerificationError(
+                self._raise_task_verification_error(
                     f"Task '{step.task}' is not applicable on screen '{current_before.screen_type}'.",
                     task_id=step.task,
+                    observation=current_before,
                     screen_type=current_before.screen_type,
-                    artifact_path=str(current_before.artifact_path) if current_before.artifact_path else None,
+                    label=f"{step.task.value}_failure_not_applicable",
                 )
 
             context.logger.info(
@@ -268,11 +281,12 @@ class AutomationRunner:
             if result.retryable and attempts <= self.policy.max_retries_per_step:
                 current_before = self.observation_service.observe(f"{step.task.value}_retry_{attempts}")
                 continue
-            raise TaskVerificationError(
+            self._raise_task_verification_error(
                 result.message,
                 task_id=step.task,
+                observation=after,
                 screen_type=after.screen_type,
-                artifact_path=str(after.artifact_path) if after.artifact_path else None,
+                label=f"{step.task.value}_failure_result",
             )
 
     def _build_context(
@@ -282,6 +296,7 @@ class AutomationRunner:
         castle_roster_provider: Callable[[], PncAccountCastleRosterConfig | None] | None,
         castle_roster_store: CastleRosterStore | None,
         mail_archive_store: MailArchiveStore | None,
+        chat_archive_store: ChatArchiveStore | None,
         step: ScriptStep,
         parsed_params: Any,
         target_castle: CastleIdentity | None,
@@ -302,6 +317,8 @@ class AutomationRunner:
             target_castle=target_castle,
             castle_roster_store=castle_roster_store,
             mail_archive_store=mail_archive_store,
+            chat_archive_store=chat_archive_store,
+            observation_service=self.observation_service,
         )
 
     def _ensure_no_blocking_popup(
@@ -311,6 +328,7 @@ class AutomationRunner:
         account: AccountConfig,
         castle_roster_store: CastleRosterStore | None,
         mail_archive_store: MailArchiveStore | None,
+        chat_archive_store: ChatArchiveStore | None,
     ) -> Observation:
         """Executes centralized popup recovery ahead of non-popup tasks."""
 
@@ -323,6 +341,7 @@ class AutomationRunner:
             castle_roster_provider=None,
             castle_roster_store=castle_roster_store,
             mail_archive_store=mail_archive_store,
+            chat_archive_store=chat_archive_store,
             step=popup_step,
             parsed_params=popup_task.parse_params({}),
             target_castle=None,
@@ -330,4 +349,42 @@ class AutomationRunner:
             allow_popup_recovery=False,
         )
         return execution.final_observation
+
+    def _raise_task_verification_error(
+        self,
+        message: str,
+        *,
+        task_id: TaskId,
+        observation: Observation | None,
+        screen_type: object | None,
+        label: str,
+        **details: object,
+    ) -> None:
+        """Raises one task verification error after forcing a persisted failure artifact when needed."""
+
+        artifact_path = None if observation is None or observation.artifact_path is None else str(observation.artifact_path)
+        if artifact_path is None:
+            failure_observation = self._capture_failure_observation(label)
+            if failure_observation is not None and failure_observation.artifact_path is not None:
+                artifact_path = str(failure_observation.artifact_path)
+        raise TaskVerificationError(
+            message,
+            task_id=task_id,
+            screen_type=screen_type,
+            artifact_path=artifact_path,
+            **details,
+        )
+
+    def _capture_failure_observation(self, label: str) -> Observation | None:
+        """Captures one persisted full-runtime failure observation when the current one was ephemeral."""
+
+        try:
+            return self.observation_service.observe(
+                label,
+                request=ObservationRequest.full_runtime_default(),
+                persist=True,
+            )
+        except Exception:
+            self.logger.exception("Failed to persist a debug artifact for task failure.")
+            return None
 

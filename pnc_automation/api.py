@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from pnc_automation.automation.observation_mode import ObservationMode
 from pnc_automation.app import ApplicationRunner, build_application_runner
 from pnc_automation.automation.runner import RunResult, StepRunResult
 from pnc_automation.automation.task import TaskId
@@ -155,6 +156,11 @@ class AutomationSession:
             limit_per_mailbox=limit_per_mailbox,
             only_new=only_new,
         )
+
+    def collect_kingdom_chat(self) -> StepRunResult:
+        """Runs one direct Kingdom Chat heartbeat poll against the prepared session."""
+
+        return self.api.collect_kingdom_chat(account_id=self.account_id)
 
 
 @dataclass(frozen=True, slots=True)
@@ -373,6 +379,15 @@ class AutomationApi:
             },
         )
 
+    def collect_kingdom_chat(self, *, account_id: str | None = None) -> StepRunResult:
+        """Runs one direct collect_kingdom_chat task using current-castle semantics."""
+
+        return self.run_task(
+            account_id=self._resolve_account_id(account_id),
+            task_id=TaskId.COLLECT_KINGDOM_CHAT,
+            params={},
+        )
+
     def _resolve_account_id(self, account_id: str | None) -> str:
         """Returns an explicit account id or the currently active context-scoped account."""
 
@@ -391,6 +406,7 @@ def build_api(
     *,
     verbose: bool = False,
     catalog_path: Path | None = None,
+    observation_mode: ObservationMode | None = None,
 ) -> AutomationApi:
     """Builds one Python automation facade from the canonical application runner."""
 
@@ -399,6 +415,7 @@ def build_api(
             config_path=config_path,
             verbose=verbose,
             catalog_path=catalog_path,
+            observation_mode=observation_mode,
         )
     )
 
@@ -524,6 +541,12 @@ def collect_mail(
         limit_per_mailbox=limit_per_mailbox,
         only_new=only_new,
     )
+
+
+def collect_kingdom_chat(*, account_id: str | None = None) -> StepRunResult:
+    """Runs one direct Kingdom Chat heartbeat poll through the default application facade."""
+
+    return _default_api().collect_kingdom_chat(account_id=account_id)
 
 
 def _default_api() -> AutomationApi:

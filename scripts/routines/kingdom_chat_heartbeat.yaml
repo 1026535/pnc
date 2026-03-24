@@ -1,0 +1,7 @@
+name: kingdom_chat_heartbeat
+
+steps:
+  - task: ensure_game_running
+  - task: login
+  - task: collect_kingdom_chat
+    castle_ref: main

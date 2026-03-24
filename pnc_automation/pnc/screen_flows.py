@@ -21,6 +21,7 @@ from pnc_automation.pnc.action_requests import (
     WaitAction,
 )
 from pnc_automation.pnc.chat import ChatChannel
+from pnc_automation.pnc.chat import is_player_chat_entry
 from pnc_automation.pnc.mail import (
     MailRecipientKind,
     MailboxType,
@@ -428,6 +429,27 @@ class ScreenFlowPlanner:
         )
         return actions
 
+    def ensure_chat_channel(
+        self,
+        observation: Observation,
+        channel: ChatChannel,
+    ) -> list[ActionRequest]:
+        """Plans navigation that lands on the shared chat overlay with the requested tab active."""
+
+        if observation.screen_type != ScreenType.PNC_CHAT:
+            return self.open_chat(observation)
+        if observation.active_chat_channel == channel:
+            return []
+        return [
+            SelectChatChannelAction(
+                channel=channel,
+                reason=f"select_chat_channel_{channel.value}",
+                observe_after=True,
+                follow_up_request=ObservationRequest.source_screen_retry(ScreenType.PNC_CHAT),
+                timing_profile=ActionTimingProfile.CHAT,
+            )
+        ]
+
     def open_alliance_home(self, observation: Observation) -> list[ActionRequest]:
         """Plans navigation from home-adjacent screens to the alliance home screen."""
 
@@ -578,7 +600,21 @@ class ScreenFlowPlanner:
                 ]
             if observation.screen_type != ScreenType.PNC_CHAT:
                 return self.open_chat(observation)
-            entry = _require_named_entry(observation, kind=ListEntryKind.CHAT_MESSAGE, title_text=route.player_name)
+            entry = next(
+                (
+                    candidate
+                    for candidate in observation.entries(ListEntryKind.CHAT_MESSAGE)
+                    if candidate.title_text == route.player_name and is_player_chat_entry(candidate)
+                ),
+                None,
+            )
+            if entry is None:
+                raise SelectorResolutionError(
+                    "The requested target row is not currently visible for the selected route.",
+                    entry_kind=ListEntryKind.CHAT_MESSAGE,
+                    title_text=route.player_name,
+                    screen_type=observation.screen_type,
+                )
             target = entry.action_point if entry.action_point is not None else entry.bounds.center()
             return [
                 TapPointAction(
@@ -743,18 +779,9 @@ class ScreenFlowPlanner:
 
         if message.strip() == "":
             raise ValueError("Chat messages must contain at least one non-whitespace character.")
-        if observation.screen_type != ScreenType.PNC_CHAT:
-            return self.open_chat(observation)
-        if observation.active_chat_channel != channel:
-            return [
-                SelectChatChannelAction(
-                    channel=channel,
-                    reason=f"select_chat_channel_{channel.value}",
-                    observe_after=True,
-                    follow_up_request=ObservationRequest.source_screen_retry(ScreenType.PNC_CHAT),
-                    timing_profile=ActionTimingProfile.CHAT,
-                )
-            ]
+        channel_actions = self.ensure_chat_channel(observation, channel)
+        if channel_actions:
+            return channel_actions
         return [
             InputTextAction(
                 selector_id=UiElementId.PNC_CHAT_INPUT_FIELD,

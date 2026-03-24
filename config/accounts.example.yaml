@@ -1,11 +1,19 @@
 artifacts:
   root: artifacts
 
+archives:
+  root: archives
+
+runtime:
+  observation_mode: debug
+
 defaults:
   adb_path: adb
   screenshot_format: png
   stable_click_delay_ms: 300
   post_action_observe_delay_ms: 800
+  chat_stable_click_delay_ms: 120
+  chat_post_action_observe_delay_ms: 250
 
 instances:
   - id: bs-main

@@ -163,13 +163,14 @@ class AutomationFrameworkTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             TaskRegistry(tasks=(EnsureGameRunningTask(), EnsureGameRunningTask()))
 
-    def test_default_task_registry_includes_fixed_channel_chat_tasks(self) -> None:
-        """Exposes the new fixed-channel chat tasks through the standard script registry."""
+    def test_default_task_registry_includes_chat_tasks(self) -> None:
+        """Exposes both chat send tasks and the Kingdom Chat monitor through the standard registry."""
 
         registry = build_default_task_registry()
 
         self.assertEqual(registry.require(TaskId.SEND_ALLIANCE_CHAT_MESSAGE).id, TaskId.SEND_ALLIANCE_CHAT_MESSAGE)
         self.assertEqual(registry.require(TaskId.SEND_WORLD_CHAT_MESSAGE).id, TaskId.SEND_WORLD_CHAT_MESSAGE)
+        self.assertEqual(registry.require(TaskId.COLLECT_KINGDOM_CHAT).id, TaskId.COLLECT_KINGDOM_CHAT)
 
     def test_runner_executes_observe_click_reobserve_verify_loop_for_trivial_task(self) -> None:
         """Exercises the minimal generic runner loop with one synthetic tap task."""
