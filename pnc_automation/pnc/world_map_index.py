@@ -20,7 +20,8 @@ from pnc_automation.pnc.observation import (
 class WorldMapObjectAddressingKind(StrEnum):
     """Describes how one indexed world-map object key was derived."""
 
-    PROJECTED_WORLD = "projected_world"
+    ESTIMATED_WORLD = "estimated_world"
+    CONFIRMED_WORLD = "confirmed_world"
     VIEWPORT_RELATIVE = "viewport_relative"
 
 
@@ -98,7 +99,7 @@ class WorldMapObjectSighting:
 
 @dataclass(slots=True)
 class WorldMapSurveyIndex:
-    """Indexes typed world-map object sightings across repeated viewport captures."""
+    """Indexes typed world-map object sightings across repeated viewport captures without conflating evidence classes."""
 
     _ordered_keys: list[WorldMapObjectKey] = field(default_factory=list)
     _sightings_by_key: dict[WorldMapObjectKey, WorldMapObjectSighting] = field(default_factory=dict)
@@ -226,18 +227,32 @@ def build_world_map_object_key(
     surface: SpatialSurfaceObservation,
     object_: DetectedSpatialObject,
 ) -> WorldMapObjectKey:
-    """Builds the canonical reusable index key for one visible world-map object."""
+    """Builds the canonical reusable index key for one visible world-map object while keeping coordinate evidence explicit."""
 
     if surface.surface_type != SpatialSurfaceType.WORLD_MAP:
         raise SelectorResolutionError(
             "World-map object keys can only be built from world-map spatial surfaces.",
             surface_type=surface.surface_type,
         )
-    if object_.world_coordinate is not None:
+    if object_.confirmed_world_coordinate is not None:
         return WorldMapObjectKey(
             kind=object_.kind,
-            addressing_kind=WorldMapObjectAddressingKind.PROJECTED_WORLD,
-            coordinate=object_.world_coordinate,
+            addressing_kind=WorldMapObjectAddressingKind.CONFIRMED_WORLD,
+            coordinate=object_.confirmed_world_coordinate,
+            label_text=object_.name_text,
+            alliance_tag=object_.alliance_tag,
+            kingdom=object_.kingdom,
+            level=object_.level,
+        )
+    if object_.estimated_world_coordinate is not None:
+        return WorldMapObjectKey(
+            kind=object_.kind,
+            addressing_kind=WorldMapObjectAddressingKind.ESTIMATED_WORLD,
+            coordinate=object_.estimated_world_coordinate,
+            label_text=object_.name_text,
+            alliance_tag=object_.alliance_tag,
+            kingdom=object_.kingdom,
+            level=object_.level,
         )
     viewport_coordinate = surface.viewport.coordinate
     if viewport_coordinate is None:

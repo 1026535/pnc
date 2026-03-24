@@ -97,7 +97,8 @@ def make_spatial_object(
     action_point: tuple[int, int] = (50, 50),
     viewport_offset: tuple[int, int] | None = None,
     viewport_offset_ratio: tuple[float, float] | None = None,
-    world_coordinate: tuple[int, int] | None = None,
+    estimated_world_coordinate: tuple[int, int] | None = None,
+    confirmed_world_coordinate: tuple[int, int] | None = None,
 ) -> DetectedSpatialObject:
     """Builds a spatial object with deterministic bounds for tests."""
 
@@ -110,7 +111,8 @@ def make_spatial_object(
         action_point=action_point,
         viewport_offset=viewport_offset,
         viewport_offset_ratio=viewport_offset_ratio,
-        world_coordinate=world_coordinate,
+        estimated_world_coordinate=estimated_world_coordinate,
+        confirmed_world_coordinate=confirmed_world_coordinate,
         metadata=metadata or {},
     )
 

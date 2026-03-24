@@ -90,12 +90,14 @@ class ActionExecutor:
             self._sleep_ms(self._stable_delay_ms_for(action))
             return True
         if isinstance(action, TapSpatialObjectAction):
-            object_ = self._require_spatial_object(action, observation)
-            target = (
-                object_.action_point
-                if action.use_action_point and object_.action_point is not None
-                else object_.bounds.center()
-            )
+            target = action.target_point
+            if target is None:
+                object_ = self._require_spatial_object(action, observation)
+                target = (
+                    object_.action_point
+                    if action.use_action_point and object_.action_point is not None
+                    else object_.bounds.center()
+                )
             self.session.tap_point(*target)
             self._sleep_ms(self._stable_delay_ms_for(action))
             return True

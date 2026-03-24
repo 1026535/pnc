@@ -370,6 +370,57 @@ class AutomationFrameworkTests(unittest.TestCase):
 
         self.assertEqual(executor.session.taps, [(167, 241)])
 
+    def test_tap_spatial_object_actions_preserve_duplicate_target_points(self) -> None:
+        """Uses the concrete target point captured during planning instead of re-resolving duplicate semantic matches."""
+
+        executor = ActionExecutor(
+            session=FakeSession(),
+            stable_click_delay_ms=0,
+            post_action_observe_delay_ms=0,
+            chat_stable_click_delay_ms=0,
+            chat_post_action_observe_delay_ms=0,
+            logger=build_logger(),
+            sleep=lambda _: None,
+        )
+        observation = make_observation(
+            ScreenType.PNC_WORLD_MAP,
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.WORLD_MAP,
+                x=253,
+                y=447,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.RESOURCE_NODE,
+                        name_text="Food Farm",
+                        metadata={"resource_type": "food"},
+                        action_point=(55, 66),
+                    ),
+                    make_spatial_object(
+                        SpatialObjectKind.RESOURCE_NODE,
+                        name_text="Food Farm",
+                        metadata={"resource_type": "food"},
+                        action_point=(155, 166),
+                    ),
+                ),
+            ),
+        )
+
+        executor.execute_action(
+            TapSpatialObjectAction(
+                query=SpatialObjectQuery(
+                    surface_type=SpatialSurfaceType.WORLD_MAP,
+                    kind=SpatialObjectKind.RESOURCE_NODE,
+                    name_text="Food Farm",
+                    metadata_key="resource_type",
+                    metadata_value="food",
+                ),
+                target_point=(155, 166),
+            ),
+            observation,
+        )
+
+        self.assertEqual(executor.session.taps, [(155, 166)])
+
     def test_runner_uses_task_local_replan_budget_instead_of_runner_wide_override(self) -> None:
         """Allows one task to own an extended bounded replan budget without broadening the global runner cap."""
 

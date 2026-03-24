@@ -18,8 +18,8 @@ from tests.test_support import make_observation, make_spatial_object, make_spati
 class WorldMapSurveyIndexTests(unittest.TestCase):
     """Validates canonical indexing of repeated typed world-map observations."""
 
-    def test_ingest_observation_indexes_projected_world_objects(self) -> None:
-        """Stores typed visible objects under one projected-world key when the surface exposes world coordinates."""
+    def test_ingest_observation_indexes_estimated_world_objects(self) -> None:
+        """Stores typed visible objects under one estimated-world key when the surface exposes normalized coordinate estimates."""
 
         index = WorldMapSurveyIndex()
         observation = make_observation(
@@ -35,14 +35,14 @@ class WorldMapSurveyIndexTests(unittest.TestCase):
                         kingdom="K287",
                         viewport_offset=(4, 252),
                         viewport_offset_ratio=(4 / 900, 252 / 1184),
-                        world_coordinate=(201, 659),
+                        estimated_world_coordinate=(201, 659),
                     ),
                     make_spatial_object(
                         SpatialObjectKind.RESOURCE_NODE,
                         name_text="Food Farm",
                         viewport_offset=(-120, -80),
                         viewport_offset_ratio=(-120 / 900, -80 / 1184),
-                        world_coordinate=(77, 327),
+                        estimated_world_coordinate=(77, 327),
                     ),
                 ),
             ),
@@ -53,13 +53,13 @@ class WorldMapSurveyIndexTests(unittest.TestCase):
 
         self.assertEqual(len(sightings), 2)
         castle = index.castle_sightings()[0]
-        self.assertEqual(castle.key.addressing_kind, WorldMapObjectAddressingKind.PROJECTED_WORLD)
+        self.assertEqual(castle.key.addressing_kind, WorldMapObjectAddressingKind.ESTIMATED_WORLD)
         self.assertEqual(castle.key.coordinate, (201, 659))
         self.assertEqual(castle.object_.kingdom, "K287")
         self.assertEqual(castle.artifact_path, Path("artifacts/world_probe.png"))
 
-    def test_ingest_surface_updates_existing_projected_sighting_with_latest_artifact(self) -> None:
-        """Keeps one canonical sighting per projected world object while refreshing the latest runtime provenance."""
+    def test_ingest_surface_updates_existing_estimated_sighting_with_latest_artifact(self) -> None:
+        """Keeps one canonical sighting per estimated world object while refreshing the latest runtime provenance."""
 
         index = WorldMapSurveyIndex()
         first_surface = make_spatial_surface(
@@ -73,7 +73,7 @@ class WorldMapSurveyIndexTests(unittest.TestCase):
                     kingdom="K287",
                     viewport_offset=(4, 252),
                     viewport_offset_ratio=(4 / 900, 252 / 1184),
-                    world_coordinate=(201, 659),
+                    estimated_world_coordinate=(201, 659),
                     action_point=(454, 1004),
                 ),
             ),
@@ -89,7 +89,7 @@ class WorldMapSurveyIndexTests(unittest.TestCase):
                     kingdom="K287",
                     viewport_offset=(-6, 210),
                     viewport_offset_ratio=(-6 / 900, 210 / 1184),
-                    world_coordinate=(201, 659),
+                    estimated_world_coordinate=(201, 659),
                     action_point=(444, 962),
                 ),
             ),
@@ -120,7 +120,7 @@ class WorldMapSurveyIndexTests(unittest.TestCase):
                         kingdom="K287",
                         viewport_offset=(4, 252),
                         viewport_offset_ratio=(4 / 900, 252 / 1184),
-                        world_coordinate=(201, 659),
+                        estimated_world_coordinate=(201, 659),
                     ),
                 ),
             ),
@@ -152,7 +152,7 @@ class WorldMapSurveyIndexTests(unittest.TestCase):
                         name_text="LadiesLoveCake",
                         viewport_offset=(96, 110),
                         viewport_offset_ratio=(96 / 900, 110 / 1184),
-                        world_coordinate=(349, 557),
+                        estimated_world_coordinate=(349, 557),
                     ),
                 ),
             )
@@ -175,7 +175,7 @@ class WorldMapSurveyIndexTests(unittest.TestCase):
                         name_text="Food Farm",
                         viewport_offset=(-120, -80),
                         viewport_offset_ratio=(-120 / 900, -80 / 1184),
-                        world_coordinate=(77, 327),
+                        estimated_world_coordinate=(77, 327),
                     ),
                 ),
             )
@@ -183,6 +183,33 @@ class WorldMapSurveyIndexTests(unittest.TestCase):
 
         with self.assertRaises(SelectorResolutionError):
             index.annotate_castle_player_name(resource.key, player_name="LadiesLoveCake")
+
+    def test_ingest_surface_prefers_confirmed_world_coordinates_over_estimated_keys(self) -> None:
+        """Uses a confirmed-world key when authoritative object coordinates are available."""
+
+        index = WorldMapSurveyIndex()
+
+        sighting = index.ingest_surface(
+            make_spatial_surface(
+                SpatialSurfaceType.WORLD_MAP,
+                x=197,
+                y=407,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.CASTLE,
+                        name_text="K2875067781632",
+                        kingdom="K287",
+                        viewport_offset=(4, 252),
+                        viewport_offset_ratio=(4 / 900, 252 / 1184),
+                        estimated_world_coordinate=(201, 659),
+                        confirmed_world_coordinate=(198, 655),
+                    ),
+                ),
+            )
+        )[0]
+
+        self.assertEqual(sighting.key.addressing_kind, WorldMapObjectAddressingKind.CONFIRMED_WORLD)
+        self.assertEqual(sighting.key.coordinate, (198, 655))
 
 
 if __name__ == "__main__":

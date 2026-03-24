@@ -18,8 +18,6 @@ from pnc_automation.pnc.observation import (
     DetectedSpatialObject,
     Observation,
     SpatialObjectKind,
-    SpatialObjectQuery,
-    SpatialSurfaceType,
 )
 from pnc_automation.pnc.policy_models import GatheringPolicy, ResourceType
 from pnc_automation.pnc.screen_type import ScreenType
@@ -67,7 +65,7 @@ class GatheringTask(BaseAutomationTask):
         return [
             *context.flows.open_visible_world_object(
                 observation,
-                _query_for_resource_node(target),
+                target,
                 reason="open_gather_node",
             ),
             TapAction(selector_id=UiElementId.PNC_GATHER_BUTTON, reason="open_gather_march", observe_after=True),
@@ -129,15 +127,3 @@ def _require_resource_type(object_: DetectedSpatialObject) -> ResourceType:
     if resource_type is not None:
         return resource_type
     raise ValueError("Unsupported resource-node type.")
-
-
-def _query_for_resource_node(object_: DetectedSpatialObject) -> SpatialObjectQuery:
-    """Builds the canonical semantic query used to retarget one visible world-map resource node."""
-
-    return SpatialObjectQuery(
-        surface_type=SpatialSurfaceType.WORLD_MAP,
-        kind=SpatialObjectKind.RESOURCE_NODE,
-        name_text=getattr(object_, "name_text", None),
-        metadata_key="resource_type",
-        metadata_value=getattr(object_, "metadata", {}).get("resource_type"),
-    )

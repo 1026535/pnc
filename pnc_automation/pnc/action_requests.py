@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
+from pnc_automation.errors import SelectorResolutionError
 from pnc_automation.pnc.chat import ChatChannel
 from pnc_automation.pnc.observation import ListEntryKind, SpatialObjectQuery
 from pnc_automation.pnc.ui_element_id import UiElementId
@@ -57,10 +58,27 @@ class TapListEntryAction(ActionRequest):
 
 @dataclass(frozen=True, slots=True)
 class TapSpatialObjectAction(ActionRequest):
-    """Taps one visible spatial object resolved from the current observation."""
+    """Taps one visible spatial object, preferably using the exact target captured during planning."""
 
     query: SpatialObjectQuery | None = None
+    target_point: tuple[int, int] | None = None
     use_action_point: bool = True
+
+    def __post_init__(self) -> None:
+        """Rejects empty or malformed spatial tap requests before execution begins."""
+
+        if self.query is None and self.target_point is None:
+            raise SelectorResolutionError("TapSpatialObjectAction requires either a query or a concrete target_point.")
+        if self.target_point is not None and (
+            not isinstance(self.target_point, tuple)
+            or len(self.target_point) != 2
+            or not isinstance(self.target_point[0], int)
+            or not isinstance(self.target_point[1], int)
+        ):
+            raise SelectorResolutionError(
+                "TapSpatialObjectAction target_point must be one integer coordinate pair.",
+                target_point=self.target_point,
+            )
 
 
 @dataclass(frozen=True, slots=True)
