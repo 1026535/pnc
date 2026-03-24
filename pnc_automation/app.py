@@ -7,16 +7,18 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from pnc_automation.adb.client import AdbClient
+from pnc_automation.automation.observation_mode import ObservationMode
 from pnc_automation.automation.runner import RunResult, StepRunResult
 from pnc_automation.automation.script_runner import ScriptRunner
 from pnc_automation.automation.task import TaskId
 from pnc_automation.scripts.registry import build_default_task_registry
 from pnc_automation.capture.artifact_store import ArtifactStore
+from pnc_automation.capture.chat_archive_store import ChatArchiveStore
 from pnc_automation.capture.mail_archive_store import MailArchiveStore
 from pnc_automation.capture.screenshot_service import ScreenshotService
 from pnc_automation.config.castle_roster_store import CastleRosterStore
 from pnc_automation.config.loader import load_app_config
-from pnc_automation.config.models import CastleIdentity
+from pnc_automation.config.models import AppConfig, CastleIdentity
 from pnc_automation.diagnostics.logging_setup import configure_logging
 from pnc_automation.vision.observation_builder import (
     ObservationBuilder,
@@ -67,12 +69,17 @@ def build_application_runner(
     *,
     verbose: bool = False,
     catalog_path: Path | None = None,
+    observation_mode: ObservationMode | None = None,
 ) -> ApplicationRunner:
     """Builds the configured application runtime for the provided config and selector catalog."""
 
     root_logger = configure_logging(verbose=verbose)
     logger = logging.LoggerAdapter(root_logger, extra={})
-    app_config = load_app_config(config_path)
+    loaded_config = load_app_config(config_path)
+    app_config = loaded_config if observation_mode is None else _override_observation_mode(
+        loaded_config,
+        observation_mode=observation_mode,
+    )
 
     artifact_store = ArtifactStore(root=app_config.artifact_root)
     screenshot_service = ScreenshotService(
@@ -102,9 +109,21 @@ def build_application_runner(
             path=app_config.castle_roster_path,
             rosters=app_config.castle_rosters,
         ),
-        mail_archive_store=MailArchiveStore(root=app_config.artifact_root / "mail"),
+        mail_archive_store=MailArchiveStore(root=app_config.archive_root / "mail"),
+        chat_archive_store=ChatArchiveStore(root=app_config.archive_root / "chat"),
         adb_client=AdbClient(adb_path=app_config.defaults.adb_path),
         logger=logger,
     )
     return ApplicationRunner(script_runner=script_runner)
+
+
+def _override_observation_mode(config: AppConfig, *, observation_mode: ObservationMode) -> AppConfig:
+    """Returns the loaded app config with one CLI-selected observation mode override applied."""
+
+    from dataclasses import replace
+
+    return replace(
+        config,
+        runtime=replace(config.runtime, observation_mode=observation_mode),
+    )
 

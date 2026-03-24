@@ -7,6 +7,7 @@ import textwrap
 import unittest
 from pathlib import Path
 
+from pnc_automation.automation.observation_mode import ObservationMode
 from pnc_automation.config.loader import load_app_config
 from pnc_automation.config.models import CastleRosterOrdering, CredentialSource
 from pnc_automation.errors import ConfigurationError
@@ -54,7 +55,10 @@ class ConfigLoaderTests(unittest.TestCase):
             self.assertEqual(config.defaults.chat_stable_click_delay_ms, 33)
             self.assertEqual(config.defaults.chat_post_action_observe_delay_ms, 44)
             self.assertTrue(config.artifact_root.is_dir())
+            self.assertTrue(config.archive_root.is_dir())
             self.assertEqual(config.artifact_root, (root / "artifacts").resolve())
+            self.assertEqual(config.archive_root, (root / "archives").resolve())
+            self.assertEqual(config.runtime.observation_mode, ObservationMode.DEBUG)
             self.assertEqual(config.require_account("account_a").credentials.username, "user")
             self.assertEqual(config.require_instance("bs-main").device_id, "127.0.0.1:5555")
 
@@ -90,6 +94,67 @@ class ConfigLoaderTests(unittest.TestCase):
 
             self.assertEqual(config.artifact_root, (root / "artifacts").resolve())
             self.assertNotEqual(config.artifact_root, (config_dir / "artifacts").resolve())
+            self.assertEqual(config.archive_root, (root / "archives").resolve())
+            self.assertNotEqual(config.archive_root, (config_dir / "archives").resolve())
+
+    def test_load_app_config_accepts_runtime_observation_mode(self) -> None:
+        """Loads the shared runtime observation mode from config when explicitly authored."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            config_path = Path(temp_directory) / "accounts.yaml"
+            config_path.write_text(
+                textwrap.dedent(
+                    """
+                    runtime:
+                      observation_mode: light
+                    instances:
+                      - id: bs-main
+                        device_id: 127.0.0.1:5555
+                        app_package: com.global.tmslg
+                    accounts:
+                      - id: account_a
+                        instance_id: bs-main
+                        pnc_account_id: inline_user
+                        username: inline_user
+                        password: inline_pass
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+
+            config = load_app_config(config_path)
+
+            self.assertEqual(config.runtime.observation_mode, ObservationMode.LIGHT)
+
+    def test_load_app_config_rejects_collapsed_artifact_and_archive_roots(self) -> None:
+        """Rejects configs that point durable archives at the same directory as runtime artifacts."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            config_path = Path(temp_directory) / "accounts.yaml"
+            config_path.write_text(
+                textwrap.dedent(
+                    """
+                    artifacts:
+                      root: shared_output
+                    archives:
+                      root: shared_output
+                    instances:
+                      - id: bs-main
+                        device_id: 127.0.0.1:5555
+                        app_package: com.global.tmslg
+                    accounts:
+                      - id: account_a
+                        instance_id: bs-main
+                        pnc_account_id: inline_user
+                        username: inline_user
+                        password: inline_pass
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(ConfigurationError):
+                load_app_config(config_path)
 
     def test_load_app_config_fails_when_secret_is_missing(self) -> None:
         """Rejects login-enabled accounts that reference missing environment variables."""

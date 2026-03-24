@@ -5,11 +5,14 @@ from __future__ import annotations
 import io
 import logging
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from PIL import Image
 
+from pnc_automation.capture.artifact_store import ArtifactRecord
+from pnc_automation.capture.screenshot_service import CapturedScreenshot
 from pnc_automation.config.models import CastleIdentity, PncAccountCastleRosterConfig
 from pnc_automation.pnc.chat import ChatChannel
 from pnc_automation.pnc.mail import MailboxType
@@ -33,6 +36,7 @@ from pnc_automation.pnc.observation import (
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
 from pnc_automation.vision.observation_request import ObservationRequest
+from pnc_automation.vision.observation_builder import CapturedObservation
 
 
 def build_png_bytes(*, size: tuple[int, int] = (20, 20), color: tuple[int, int, int, int] = (255, 255, 255, 255)) -> bytes:
@@ -278,14 +282,53 @@ class FakeObservationService:
     labels: list[str] = field(default_factory=list)
     requests: list[ObservationRequest | None] = field(default_factory=list)
 
-    def observe(self, label: str, request: ObservationRequest | None = None) -> Observation:
+    def observe(
+        self,
+        label: str,
+        request: ObservationRequest | None = None,
+        *,
+        persist: bool | None = None,
+    ) -> Observation:
         """Returns the next queued observation."""
 
+        del persist
         self.labels.append(label)
         self.requests.append(request)
         if not self.observations:
             raise AssertionError(f"No observation queued for label '{label}'.")
         return self.observations.pop(0)
+
+    def capture_observation(
+        self,
+        label: str,
+        request: ObservationRequest | None = None,
+        *,
+        persist: bool | None = None,
+    ) -> CapturedObservation:
+        """Returns the next queued observation wrapped in a synthetic captured screenshot."""
+
+        observation = self.observe(label, request=request, persist=persist)
+        artifact = (
+            ArtifactRecord(
+                path=observation.artifact_path or Path(f"{label}.png"),
+                label=label,
+                captured_at=observation.captured_at,
+                size_bytes=0,
+                sha256="0" * 64,
+            )
+            if persist is not False
+            else None
+        )
+        return CapturedObservation(
+            screenshot=CapturedScreenshot(
+                artifact=artifact,
+                image=Image.new("RGB", observation.image_size or (10, 10), (0, 0, 0)),
+                image_format="PNG",
+                payload=build_png_bytes(size=observation.image_size or (10, 10)),
+                ephemeral_captured_at=None if artifact is not None else datetime.now(tz=UTC),
+            ),
+            observation=observation,
+        )
 
 
 def build_logger() -> logging.LoggerAdapter:

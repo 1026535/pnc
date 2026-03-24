@@ -9,6 +9,7 @@ import unittest
 from unittest.mock import patch
 
 from pnc_automation.api import AutomationApi
+from pnc_automation.automation.observation_mode import ObservationMode
 from pnc_automation.automation.action_executor import ActionExecutor
 from pnc_automation.automation.observed_action_executor import ObservedActionExecutor
 from pnc_automation.automation.runner import AutomationRunner, RunResult, StepRunResult
@@ -365,6 +366,31 @@ class RuntimeCastleTargetingTests(unittest.TestCase):
 
         self.assertEqual(exit_code, 0)
         self.assertEqual(fake_runner.run_calls, [("account_a", "scripts/daily.yaml")])
+
+    def test_cli_passes_observation_mode_override_to_application_builder(self) -> None:
+        """Threads the explicit CLI observation-mode override into the canonical application builder."""
+
+        fake_runner = _FakeApplicationRunner()
+        with (
+            patch("pnc_automation.cli.build_application_runner", return_value=fake_runner) as build_runner,
+            patch("builtins.print"),
+        ):
+            exit_code = cli_main(
+                [
+                    "run",
+                    "--account",
+                    "account_a",
+                    "--config",
+                    "config/accounts.yaml",
+                    "--script",
+                    "scripts/daily.yaml",
+                    "--observation-mode",
+                    "light",
+                ]
+            )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(build_runner.call_args.kwargs["observation_mode"], ObservationMode.LIGHT)
 
 
 @dataclass(slots=True)

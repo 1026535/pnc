@@ -214,6 +214,33 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertIsInstance(actions[0], TapAction)
         self.assertEqual(actions[0].selector_id, UiElementId.PNC_CHAT_SHORTCUT)
 
+    def test_ensure_chat_channel_reuses_open_chat_until_chat_is_visible(self) -> None:
+        """Uses the shared open-chat flow before attempting any channel-specific chat action."""
+
+        observation = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            visible_ids=(UiElementId.PNC_CHAT_SHORTCUT,),
+        )
+
+        actions = self.flows.ensure_chat_channel(observation, ChatChannel.WORLD)
+
+        self.assertEqual(actions, self.flows.open_chat(observation))
+
+    def test_ensure_chat_channel_selects_requested_tab_from_shared_chat_overlay(self) -> None:
+        """Uses one canonical channel-selection action once the shared chat overlay is already open."""
+
+        observation = make_observation(
+            ScreenType.PNC_CHAT,
+            active_chat_channel=ChatChannel.ALLIANCE,
+        )
+
+        actions = self.flows.ensure_chat_channel(observation, ChatChannel.WORLD)
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], SelectChatChannelAction)
+        self.assertEqual(actions[0].channel, ChatChannel.WORLD)
+        self.assertEqual(actions[0].follow_up_request, ObservationRequest.source_screen_retry(ScreenType.PNC_CHAT))
+
     def test_open_academy_uses_home_city_spatial_building_when_fixed_button_is_missing(self) -> None:
         """Falls back to the home-city spatial surface instead of a legacy academy selector."""
 

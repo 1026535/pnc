@@ -7,6 +7,11 @@ from typing import Any
 
 from pnc_automation.automation.task import BaseAutomationTask, CastleTargetPolicy, TaskId, TaskResult
 from pnc_automation.automation.task_context import TaskContext
+from pnc_automation.automation.tasks.active_castle_resolution import (
+    plan_active_castle_resolution,
+    remember_active_castle_name,
+    require_active_castle_name,
+)
 from pnc_automation.errors import SelectorResolutionError
 from pnc_automation.pnc.action_requests import ActionRequest, KeyEventAction, SwipeAction, TapPointAction, WaitAction
 from pnc_automation.pnc.mail import (
@@ -47,7 +52,13 @@ class CollectMailTask(BaseAutomationTask):
         if observation.screen_type in {ScreenType.PNC_LOADING, ScreenType.UNKNOWN}:
             return [WaitAction(milliseconds=1000, reason="wait_for_mail_collection_settle", observe_after=True)]
         if _requires_active_castle_resolution(context):
-            return _plan_active_castle_resolution(context, observation)
+            return plan_active_castle_resolution(
+                context,
+                observation,
+                task_label="collect_mail",
+                purpose="archiving",
+                require_exact_identity=False,
+            )
         mailbox = _current_mailbox(context)
         if observation.screen_type == ScreenType.PNC_MAIL_THREAD:
             return [
@@ -148,20 +159,11 @@ def _reset_mailbox_iteration_state(context: TaskContext) -> None:
 def _remember_active_castle(context: TaskContext, observation: Observation) -> str | None:
     """Caches the active castle label once it becomes trustworthy for archive persistence."""
 
-    cached_label = context.runtime_state.get("collect_mail_active_castle")
-    if isinstance(cached_label, str) and cached_label.strip() != "":
-        return cached_label
-    if observation.current_castle_name is not None and observation.current_castle_name.strip() != "":
-        context.runtime_state["collect_mail_active_castle"] = observation.current_castle_name.strip()
-        return observation.current_castle_name.strip()
-    if context.target_castle is not None and context.target_castle.castle_name.strip() != "":
-        context.runtime_state["collect_mail_active_castle"] = context.target_castle.castle_name.strip()
-        return context.target_castle.castle_name.strip()
-    roster = context.castle_roster
-    if roster is not None and len(roster.castles) == 1 and roster.castles[0].castle_name.strip() != "":
-        context.runtime_state["collect_mail_active_castle"] = roster.castles[0].castle_name.strip()
-        return roster.castles[0].castle_name.strip()
-    return None
+    remembered = remember_active_castle_name(context, observation)
+    if remembered is None:
+        return None
+    context.runtime_state["collect_mail_active_castle"] = remembered
+    return remembered
 
 
 def _requires_active_castle_resolution(context: TaskContext) -> bool:
@@ -174,18 +176,12 @@ def _requires_active_castle_resolution(context: TaskContext) -> bool:
 def _plan_active_castle_resolution(context: TaskContext, observation: Observation) -> list[ActionRequest]:
     """Plans the shared active-castle validation needed before archive persistence can begin."""
 
-    if observation.screen_type in {ScreenType.PNC_HOME_CITY, ScreenType.PNC_MORE_MENU}:
-        return context.flows.open_lord_info(observation)
-    if observation.screen_type == ScreenType.PNC_LORD_INFO:
-        if observation.current_castle_name is None or observation.current_castle_name.strip() == "":
-            raise SelectorResolutionError(
-                "collect_mail reached Lord Info but could not resolve the active castle name.",
-                screen_type=observation.screen_type,
-            )
-        return context.flows.ensure_home_city(observation)
-    raise SelectorResolutionError(
-        "collect_mail requires an explicit castle target, a single-castle roster, or a home-adjacent screen so it can validate the active castle before archiving.",
-        screen_type=observation.screen_type,
+    return plan_active_castle_resolution(
+        context,
+        observation,
+        task_label="collect_mail",
+        purpose="archiving",
+        require_exact_identity=False,
     )
 
 
@@ -356,10 +352,6 @@ def _mailbox_scroll_stalled(context: TaskContext, *, before: Observation, after:
 def _active_castle_label(context: TaskContext, observation: Observation) -> str:
     """Returns the canonical active-castle label used for mail archive paths."""
 
-    remembered = _remember_active_castle(context, observation)
-    if remembered is not None:
-        return remembered
-    raise SelectorResolutionError(
-        "collect_mail could not resolve the active castle required for archive persistence.",
-        screen_type=observation.screen_type,
-    )
+    label = require_active_castle_name(context, observation, task_label="collect_mail")
+    context.runtime_state["collect_mail_active_castle"] = label
+    return label

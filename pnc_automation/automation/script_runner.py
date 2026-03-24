@@ -16,6 +16,7 @@ from pnc_automation.scripts.loader import load_run_script
 from pnc_automation.scripts.models import RunScript, ScriptStep
 from pnc_automation.scripts.registry import TaskRegistry
 from pnc_automation.automation.task import TaskId
+from pnc_automation.capture.chat_archive_store import ChatArchiveStore
 from pnc_automation.capture.mail_archive_store import MailArchiveStore
 from pnc_automation.capture.screenshot_service import ScreenshotService
 from pnc_automation.config.castle_roster_store import CastleRosterStore
@@ -36,6 +37,7 @@ class ScriptRunner:
     observation_builder: ObservationBuilder
     castle_roster_store: CastleRosterStore | None
     mail_archive_store: MailArchiveStore | None
+    chat_archive_store: ChatArchiveStore | None
     adb_client: AdbClient
     logger: logging.LoggerAdapter
 
@@ -59,6 +61,7 @@ class ScriptRunner:
             castle_roster_provider=castle_roster_provider,
             castle_roster_store=self.castle_roster_store,
             mail_archive_store=self.mail_archive_store,
+            chat_archive_store=self.chat_archive_store,
         )
 
     def prepare_account_session(
@@ -122,6 +125,7 @@ class ScriptRunner:
             observation_builder=self.observation_builder,
             session=session,
             artifact_directory=account.artifact_directory_name,
+            mode=self.config.runtime.observation_mode,
             pnc_account_id=account.pnc_account_id,
             castle_roster_store=self.castle_roster_store,
         )

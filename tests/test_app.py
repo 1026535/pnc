@@ -53,6 +53,39 @@ class ApplicationRunnerTests(unittest.TestCase):
         build_registry.assert_called_once_with(catalog_path=catalog_path)
         self.assertIs(application.script_runner.observation_builder.selector_registry, registry)
 
+    def test_build_application_runner_wires_durable_archive_stores_under_archive_root(self) -> None:
+        """Builds the durable mail and chat archive stores under the configured archive root instead of artifacts."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            config_path = root / "accounts.yaml"
+            config_path.write_text(
+                textwrap.dedent(
+                    """
+                    artifacts:
+                      root: artifacts
+                    archives:
+                      root: archives
+                    instances:
+                      - id: bs-main
+                        device_id: 127.0.0.1:5555
+                        app_package: com.global.tmslg
+                    accounts:
+                      - id: account_a
+                        instance_id: bs-main
+                        pnc_account_id: inline_user
+                        username: inline_user
+                        password: inline_pass
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+
+            application = build_application_runner(config_path)
+
+        self.assertEqual(application.script_runner.mail_archive_store.root, (root / "archives" / "mail").resolve())
+        self.assertEqual(application.script_runner.chat_archive_store.root, (root / "archives" / "chat").resolve())
+
 
 if __name__ == "__main__":
     unittest.main()

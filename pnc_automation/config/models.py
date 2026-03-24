@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
+from pnc_automation.automation.observation_mode import ObservationMode
 from pnc_automation.artifact_naming import format_account_artifact_directory
 from pnc_automation.errors import ConfigurationError
 
@@ -20,6 +21,13 @@ class DefaultsConfig:
     post_action_observe_delay_ms: int = 800
     chat_stable_click_delay_ms: int = 120
     chat_post_action_observe_delay_ms: int = 250
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeConfig:
+    """Owns shared runtime policy toggles that are not tied to emulator timings."""
+
+    observation_mode: ObservationMode = ObservationMode.DEBUG
 
 
 @dataclass(frozen=True, slots=True)
@@ -152,7 +160,9 @@ class AppConfig:
     castle_roster_path: Path
     castle_targets_path: Path
     artifact_root: Path
+    archive_root: Path
     defaults: DefaultsConfig
+    runtime: RuntimeConfig
     instances: tuple[BlueStacksInstanceConfig, ...]
     accounts: tuple[AccountConfig, ...]
     castle_rosters: tuple[PncAccountCastleRosterConfig, ...] = ()

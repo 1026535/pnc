@@ -96,6 +96,30 @@ class ScriptLoaderTests(unittest.TestCase):
             with self.assertRaises(ScriptValidationError):
                 load_run_script(script_path)
 
+    def test_load_run_script_parses_collect_kingdom_chat_routine(self) -> None:
+        """Loads the heartbeat routine shape used for scheduler-driven Kingdom Chat polling."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            script_path = Path(temp_directory) / "kingdom_chat_heartbeat.yaml"
+            script_path.write_text(
+                textwrap.dedent(
+                    """
+                    name: kingdom_chat_heartbeat
+                    steps:
+                      - task: ensure_game_running
+                      - task: login
+                      - task: collect_kingdom_chat
+                        castle_ref: main
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+
+            script = load_run_script(script_path)
+
+            self.assertEqual(script.steps[2].task, TaskId.COLLECT_KINGDOM_CHAT)
+            self.assertEqual(script.steps[2].castle_ref, "main")
+
 
 if __name__ == "__main__":
     unittest.main()

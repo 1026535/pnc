@@ -21,6 +21,7 @@ from pnc_automation.capture.screenshot_service import ScreenshotService
 from pnc_automation.config.models import AccountConfig, CastleIdentity, CredentialSource, DefaultsConfig, ResolvedCredentials
 from pnc_automation.errors import ScriptValidationError, SelectorResolutionError
 from pnc_automation.pnc.action_requests import InputTextAction, KeyEventAction, LaunchAppAction, SwipeAction, TapAction, TapPointAction
+from pnc_automation.pnc.chat import ChatEntryKind, visible_player_chat_entries
 from pnc_automation.pnc.mail import (
     CollectMailParams,
     MailArchiveMode,
@@ -1398,6 +1399,46 @@ class MailWorkflowTests(unittest.TestCase):
         self.assertEqual(len(chat_entries), 1)
         self.assertEqual(chat_entries[0].title_text, "Enemy Bob")
         self.assertEqual(chat_entries[0].subtitle_text, "Hello there")
+        self.assertEqual(chat_entries[0].metadata["chat_entry_kind"], ChatEntryKind.PLAYER.value)
+        self.assertEqual(chat_entries[0].metadata["message_text"], "Hello there")
+
+    def test_observation_builder_marks_announcement_rows_without_promoting_them_to_player_chat(self) -> None:
+        """Keeps announcement rows visible for diagnostics while excluding them from player-chat projections."""
+
+        observation = _build_observation(
+            request=ObservationRequest.chat_transcript_observation(),
+            lines=(
+                _ocr_line("Chat", x=250, y=40, width=120, height=24),
+                _ocr_line("Kingdom", x=180, y=96, width=120, height=24),
+                _ocr_line("Alliance", x=520, y=96, width=120, height=24),
+                _ocr_line("Enemy Bob", x=120, y=260, width=180, height=24),
+                _ocr_line("Hello there", x=160, y=292, width=200, height=24),
+                _ocr_line("System Announcement", x=160, y=380, width=260, height=24),
+            ),
+        )
+
+        chat_entries = observation.entries(ListEntryKind.CHAT_MESSAGE)
+        player_entries = visible_player_chat_entries(chat_entries)
+
+        self.assertEqual(len(chat_entries), 2)
+        self.assertEqual(chat_entries[1].metadata["chat_entry_kind"], ChatEntryKind.ANNOUNCEMENT.value)
+        self.assertEqual([entry.sender_name for entry in player_entries], ["Enemy Bob"])
+
+    def test_observation_builder_does_not_create_false_player_rows_from_announcement_only_chat(self) -> None:
+        """Treats announcement-only Kingdom Chat windows as non-player content so transcript deltas stay quiet."""
+
+        observation = _build_observation(
+            request=ObservationRequest.chat_transcript_observation(),
+            lines=(
+                _ocr_line("Chat", x=250, y=40, width=120, height=24),
+                _ocr_line("Kingdom", x=180, y=96, width=120, height=24),
+                _ocr_line("Alliance", x=520, y=96, width=120, height=24),
+                _ocr_line("System Announcement", x=160, y=360, width=260, height=24),
+            ),
+        )
+
+        self.assertEqual(observation.screen_type, ScreenType.PNC_CHAT)
+        self.assertEqual(len(visible_player_chat_entries(observation.entries(ListEntryKind.CHAT_MESSAGE))), 0)
 
     def test_observation_builder_groups_alliance_member_rows_without_promoting_stats_or_actions(self) -> None:
         """Extracts one member entry per alliance row instead of treating stats and action labels as names."""

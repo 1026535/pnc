@@ -10,7 +10,7 @@ from PIL import Image
 
 from pnc_automation.config.models import CastleIdentity
 from pnc_automation.errors import SelectorResolutionError
-from pnc_automation.pnc.chat import ChatChannel
+from pnc_automation.pnc.chat import ChatChannel, ChatEntryKind
 from pnc_automation.pnc.mail import MailboxType, compose_text_field_selector_ids
 from pnc_automation.pnc.observation import (
     Bounds,
@@ -207,6 +207,17 @@ _CHAT_ALLIANCE_TEXT = "ALLIANCE"
 _CHAT_EMPTY_INPUT_PLACEHOLDER_TEXT = "PLEASEENTERCONTENT"
 _CHAT_ACTIVE_TAB_MIN_WARMTH = 120
 _CHAT_ACTIVE_TAB_MIN_DELTA = 80
+_CHAT_ANNOUNCEMENT_TOKENS = frozenset(
+    {
+        "SYSTEM",
+        "ANNOUNCEMENT",
+        "NOTICE",
+        "GOVERNOR",
+        "KINGDOM",
+        "SERVER",
+        "EVENT",
+    }
+)
 _MAIL_HUB_CATEGORY_TEXTS = frozenset(
     {
         "SYSTEMMESSAGE",
@@ -338,7 +349,12 @@ class PncObservationEnricher:
             screen_type=screen_type,
             request=request,
         )
-        if chat_geometry is not None and not request.include_popup_guard and not request.include_loading_guard:
+        if (
+            chat_geometry is not None
+            and not request.include_popup_guard
+            and not request.include_loading_guard
+            and not request.include_chat_entries
+        ):
             return chat_geometry
         if not request.requires_ocr(screen_type):
             return ObservationAdditions()
@@ -1382,31 +1398,167 @@ def _extract_chat_message_entries(
     image: Image.Image,
     lines: tuple[OcrLine, ...],
 ) -> tuple[DetectedListEntry, ...]:
-    """Extracts visible chat sender rows that can open the shared player-action popup."""
+    """Extracts typed visible chat rows while preserving the shared dynamic-entry model."""
 
     candidate_lines = [line for line in lines if _is_chat_message_candidate_line(image=image, line=line)]
     grouped_rows = _group_lines_by_vertical_gap(candidate_lines, gap=max(24, image.height // 36))
     entries: list[DetectedListEntry] = []
-    for row_lines in grouped_rows:
+    for visible_order, row_lines in enumerate(grouped_rows):
         if not row_lines:
             continue
-        sender_line = row_lines[0]
-        sender_name = sender_line.text.strip()
-        if sender_name == "":
-            continue
-        message_lines = tuple(line.text.strip() for line in row_lines[1:] if line.text.strip() != "")
-        bounds = _entry_bounds_from_lines(image=image, row_lines=row_lines)
-        entries.append(
-            DetectedListEntry(
-                kind=ListEntryKind.CHAT_MESSAGE,
-                bounds=bounds,
-                title_text=sender_name,
-                subtitle_text=" ".join(message_lines) or None,
-                action_point=bounds.center(),
-                metadata={"message_preview": " ".join(message_lines) or None},
-            )
-        )
+        entry = _build_chat_message_entry(image=image, row_lines=row_lines, visible_order=visible_order)
+        if entry is not None:
+            entries.append(entry)
     return tuple(entries)
+
+
+def _build_chat_message_entry(
+    *,
+    image: Image.Image,
+    row_lines: list[OcrLine],
+    visible_order: int,
+) -> DetectedListEntry | None:
+    """Builds one typed chat-row entry from the OCR lines assigned to one visible row."""
+
+    bounds = _entry_bounds_from_lines(image=image, row_lines=row_lines)
+    player_entry = _try_build_player_chat_entry(bounds=bounds, row_lines=row_lines, visible_order=visible_order)
+    if player_entry is not None:
+        return player_entry
+    announcement_text = " ".join(line.text.strip() for line in row_lines if line.text.strip() != "")
+    if announcement_text == "":
+        return None
+    kind = (
+        ChatEntryKind.ANNOUNCEMENT
+        if _looks_like_announcement_chat_row(image=image, row_lines=row_lines)
+        else ChatEntryKind.UNSUPPORTED
+    )
+    return DetectedListEntry(
+        kind=ListEntryKind.CHAT_MESSAGE,
+        bounds=bounds,
+        title_text=announcement_text,
+        subtitle_text=None,
+        action_point=None,
+        metadata={
+            "chat_entry_kind": kind.value,
+            "message_text": announcement_text,
+            "message_preview": announcement_text,
+            "visible_order": visible_order,
+        },
+    )
+
+
+def _try_build_player_chat_entry(
+    *,
+    bounds: Bounds,
+    row_lines: list[OcrLine],
+    visible_order: int,
+) -> DetectedListEntry | None:
+    """Returns one player-chat entry when the row exposes trustworthy sender/message structure."""
+
+    inline_player = _try_parse_inline_player_chat_row(bounds=bounds, row_lines=row_lines, visible_order=visible_order)
+    if inline_player is not None:
+        return inline_player
+    sender_line = row_lines[0]
+    sender_name = sender_line.text.strip()
+    if not _looks_like_player_chat_sender_line(sender_line):
+        return None
+    message_text = " ".join(line.text.strip() for line in row_lines[1:] if line.text.strip() != "")
+    if message_text == "":
+        return None
+    return DetectedListEntry(
+        kind=ListEntryKind.CHAT_MESSAGE,
+        bounds=bounds,
+        title_text=sender_name,
+        subtitle_text=message_text,
+        action_point=bounds.center(),
+        metadata={
+            "chat_entry_kind": ChatEntryKind.PLAYER.value,
+            "message_text": message_text,
+            "message_preview": message_text,
+            "visible_order": visible_order,
+        },
+    )
+
+
+def _try_parse_inline_player_chat_row(
+    *,
+    bounds: Bounds,
+    row_lines: list[OcrLine],
+    visible_order: int,
+) -> DetectedListEntry | None:
+    """Parses the common OCR-merged `Sender: message` chat-row shape when present."""
+
+    if len(row_lines) != 1:
+        return None
+    match = re.match(r"^\s*([^:]{2,32})\s*:\s*(.+?)\s*$", row_lines[0].text)
+    if match is None:
+        return None
+    sender_name = match.group(1).strip()
+    message_text = match.group(2).strip()
+    if sender_name == "" or message_text == "":
+        return None
+    if not _looks_like_player_chat_sender_text(sender_name):
+        return None
+    return DetectedListEntry(
+        kind=ListEntryKind.CHAT_MESSAGE,
+        bounds=bounds,
+        title_text=sender_name,
+        subtitle_text=message_text,
+        action_point=bounds.center(),
+        metadata={
+            "chat_entry_kind": ChatEntryKind.PLAYER.value,
+            "message_text": message_text,
+            "message_preview": message_text,
+            "visible_order": visible_order,
+        },
+    )
+
+
+def _looks_like_player_chat_sender_line(line: OcrLine) -> bool:
+    """Returns whether the first OCR line of a chat row looks like a player sender label."""
+
+    return _looks_like_player_chat_sender_text(line.text)
+
+
+def _looks_like_player_chat_sender_text(text: str) -> bool:
+    """Returns whether one OCR string is conservative enough to trust as a player sender label."""
+
+    normalized_text = normalize_ocr_text(text)
+    if normalized_text == "":
+        return False
+    if normalized_text in {_CHAT_HEADER_TEXT, _CHAT_KINGDOM_TEXT, _CHAT_ALLIANCE_TEXT}:
+        return False
+    if normalized_text in _CHAT_ANNOUNCEMENT_TOKENS:
+        return False
+    if len(normalized_text) < 3 or len(normalized_text) > 32:
+        return False
+    if ":" in text:
+        return False
+    if re.search(r"[A-Za-z0-9]", text) is None:
+        return False
+    return True
+
+
+def _looks_like_announcement_chat_row(
+    *,
+    image: Image.Image,
+    row_lines: list[OcrLine],
+) -> bool:
+    """Returns whether one visible chat row looks like shared game announcement chrome."""
+
+    combined_text = " ".join(normalize_ocr_text(line.text) for line in row_lines if normalize_ocr_text(line.text) != "")
+    if combined_text == "":
+        return False
+    if any(token in combined_text for token in _CHAT_ANNOUNCEMENT_TOKENS):
+        return True
+    first_line = row_lines[0]
+    if len(row_lines) == 1:
+        return True
+    if first_line.bounds.x > int(image.width * 0.24):
+        return True
+    if first_line.bounds.width > int(image.width * 0.6):
+        return True
+    return False
 
 
 def _extract_simple_named_rows(

@@ -8,6 +8,7 @@ from typing import Protocol
 
 from PIL import Image
 
+from pnc_automation.automation.observation_mode import ObservationMode
 from pnc_automation.config.models import CastleIdentity, CastleRosterOrdering, PncAccountCastleRosterConfig
 from pnc_automation.capture.screenshot_service import CapturedScreenshot, ScreenshotService
 from pnc_automation.config.castle_roster_store import CastleRosterStore
@@ -218,9 +219,9 @@ class ObservationBuilder:
             visible_elements=visible_elements,
             list_entries=additions.list_entries,
             spatial_surface=additions.spatial_surface,
-            artifact_path=screenshot.artifact.path,
+            artifact_path=_screenshot_artifact_path(screenshot),
             image_size=screenshot.image.size,
-            captured_at=screenshot.artifact.captured_at,
+            captured_at=_screenshot_captured_at(screenshot),
             blocking_popup=screen_type == ScreenType.PNC_POPUP or UiElementId.PNC_POPUP_CLOSE_BUTTON in visible_elements,
             current_castle=additions.current_castle,
             current_castle_evidence=additions.current_castle_evidence,
@@ -285,6 +286,7 @@ class ObservationService:
     observation_builder: ObservationBuilder
     session: BlueStacksSession
     artifact_directory: str
+    mode: ObservationMode = ObservationMode.DEBUG
     pnc_account_id: str | None = None
     castle_roster_store: CastleRosterStore | None = None
     verified_pnc_account_id: str | None = None
@@ -295,10 +297,17 @@ class ObservationService:
         self,
         label: str,
         request: ObservationRequest | None = None,
+        *,
+        persist: bool | None = None,
     ) -> CapturedObservation:
         """Captures a fresh screenshot artifact and returns both the screenshot and typed observation."""
 
-        screenshot = self.screenshot_service.capture(self.session, artifact_directory=self.artifact_directory, label=label)
+        screenshot = self.screenshot_service.capture(
+            self.session,
+            artifact_directory=self.artifact_directory,
+            label=label,
+            persist=self._resolve_persist_artifact(request=request, persist=persist),
+        )
         roster_snapshot = self._get_castle_roster_snapshot()
         observation = self.observation_builder.build(screenshot, request=request)
         current_castle, current_castle_evidence = self._resolve_current_castle(observation)
@@ -315,10 +324,25 @@ class ObservationService:
         self._sync_castle_roster(observation)
         return CapturedObservation(screenshot=screenshot, observation=observation)
 
-    def observe(self, label: str, request: ObservationRequest | None = None) -> Observation:
+    def observe(
+        self,
+        label: str,
+        request: ObservationRequest | None = None,
+        *,
+        persist: bool | None = None,
+    ) -> Observation:
         """Captures a fresh screenshot artifact and returns the built observation."""
 
-        return self.capture_observation(label, request=request).observation
+        return self.capture_observation(label, request=request, persist=persist).observation
+
+    def _resolve_persist_artifact(self, *, request: ObservationRequest | None, persist: bool | None) -> bool:
+        """Returns whether the requested observation should persist a runtime artifact screenshot."""
+
+        if persist is not None:
+            return persist
+        if request is not None and request.persist_artifact is not None:
+            return request.persist_artifact
+        return self.mode == ObservationMode.DEBUG
 
     def _sync_castle_roster(self, observation: Observation) -> None:
         """Persists discovered castle rosters whenever the castle-selection screen is observed."""
@@ -461,6 +485,35 @@ def _trusted_observed_account_id(observation: Observation) -> str | None:
     if observation.screen_type not in {ScreenType.PNC_LOGIN, ScreenType.PNC_ACCOUNT_SWITCH}:
         return None
     return observation.current_pnc_account_id
+
+
+def _screenshot_artifact_path(screenshot: object) -> object:
+    """Returns the persisted screenshot path from both real and synthetic captured screenshots."""
+
+    artifact_path = getattr(screenshot, "artifact_path", None)
+    if artifact_path is not None:
+        return artifact_path
+    artifact = getattr(screenshot, "artifact", None)
+    if artifact is None:
+        return None
+    return getattr(artifact, "path", None)
+
+
+def _screenshot_captured_at(screenshot: object) -> object:
+    """Returns the capture timestamp from both real and synthetic captured screenshots."""
+
+    captured_at = getattr(screenshot, "captured_at", None)
+    if captured_at is not None:
+        return captured_at
+    artifact = getattr(screenshot, "artifact", None)
+    if artifact is not None and getattr(artifact, "captured_at", None) is not None:
+        return artifact.captured_at
+    fallback_captured_at = screenshot.image.info.get("captured_at")
+    if fallback_captured_at is not None:
+        return fallback_captured_at
+    from datetime import UTC, datetime
+
+    return datetime.now(tz=UTC)
 
 
 def _castle_selection_matches_snapshot(
