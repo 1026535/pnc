@@ -23,6 +23,7 @@ from pnc_automation.diagnostics.logging_setup import configure_logging
 from pnc_automation.emulator.bluestacks_instance_resolver import BlueStacksInstanceResolver
 from pnc_automation.vision.observation_builder import (
     ObservationBuilder,
+    ObservationDebugArtifactCollector,
     PillowSelectorEngine,
 )
 from pnc_automation.vision.ocr_service import CachedOcrService, RapidOcrService
@@ -100,6 +101,7 @@ def build_application_runner(
             ocr_service=ocr_service,
             selector_registry=selector_registry,
         ),
+        debug_artifact_collector=ObservationDebugArtifactCollector(ocr_service=ocr_service),
     )
     script_runner = ScriptRunner(
         config=app_config,

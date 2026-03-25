@@ -661,6 +661,22 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertIsInstance(actions[2], TapAction)
         self.assertEqual(actions[2].selector_id, UiElementId.PNC_MORE_MANAGE_CHAR)
 
+    def test_login_task_opens_lord_info_when_home_city_is_unverified_and_no_roster_exists(self) -> None:
+        """Uses the faster Lord Info shortcut when no trusted roster snapshot is available."""
+
+        task = LoginTask()
+        context = self._make_context(params=None, task_id=TaskId.LOGIN)
+        observation = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            visible_ids=(UiElementId.PNC_HOME_LORD_INFO_SHORTCUT,),
+        )
+
+        actions = task.plan(context, observation)
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], TapAction)
+        self.assertEqual(actions[0].selector_id, UiElementId.PNC_HOME_LORD_INFO_SHORTCUT)
+
     def test_login_task_uses_manage_char_from_more_menu_when_verifying_in_game_account(self) -> None:
         """Continues the verification path from the More menu into Manage Char."""
 
@@ -686,6 +702,22 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertEqual(actions[0].selector_id, UiElementId.PNC_MORE_SETTINGS)
         self.assertIsInstance(actions[1], TapAction)
         self.assertEqual(actions[1].selector_id, UiElementId.PNC_MORE_MANAGE_CHAR)
+
+    def test_login_task_returns_home_city_when_started_from_world_map(self) -> None:
+        """Supports already-logged sessions from other in-game screens by routing back to home city first."""
+
+        task = LoginTask()
+        context = self._make_context(params=None, task_id=TaskId.LOGIN)
+        observation = make_observation(
+            ScreenType.PNC_WORLD_MAP,
+            visible_ids=(UiElementId.PNC_WORLD_HOME_NAV,),
+        )
+
+        actions = task.plan(context, observation)
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], TapAction)
+        self.assertEqual(actions[0].selector_id, UiElementId.PNC_WORLD_HOME_NAV)
 
     def test_login_task_verifies_castle_selection_against_pre_observation_roster_snapshot(self) -> None:
         """Accepts a castle-selection state only when the trusted pre-observation snapshot matches."""
@@ -713,6 +745,39 @@ class FlowAndTaskTests(unittest.TestCase):
 
         self.assertTrue(result.succeeded)
         self.assertIn("trusted cached castle roster", result.message)
+
+    def test_login_task_verifies_lord_info_without_trusted_roster_snapshot(self) -> None:
+        """Accepts Lord Info as usable session proof when no cached roster is available."""
+
+        task = LoginTask()
+        context = self._make_context(params=None, task_id=TaskId.LOGIN)
+
+        result = task.verify(
+            context,
+            make_observation(ScreenType.PNC_HOME_CITY),
+            make_observation(ScreenType.PNC_LORD_INFO, current_castle_name="Main"),
+        )
+
+        self.assertTrue(result.succeeded)
+        self.assertIn("Lord Info", result.message)
+
+    def test_login_task_verifies_manage_char_without_trusted_roster_snapshot(self) -> None:
+        """Accepts Manage Char as usable session proof even when the roster cache is missing or stale."""
+
+        task = LoginTask()
+        context = self._make_context(params=None, task_id=TaskId.LOGIN)
+
+        result = task.verify(
+            context,
+            make_observation(ScreenType.PNC_MORE_MENU),
+            make_observation(
+                ScreenType.PNC_CASTLE_SELECTION,
+                list_entries=(make_entry(ListEntryKind.CASTLE, title="Main", metadata={"kingdom": "K230"}),),
+            ),
+        )
+
+        self.assertTrue(result.succeeded)
+        self.assertIn("Manage Char", result.message)
 
     def test_login_task_replans_wrong_account_on_recoverable_login_states(self) -> None:
         """Keeps wrong-account login and account-switch states on the task's replan path."""
