@@ -189,12 +189,17 @@ def _parse_world_map_objects(
     relationship_rules = None if surface_definition is None else surface_definition.relationship_rules
     parsed_objects: list[DetectedSpatialObject] = []
     seen_keys: set[tuple[object, ...]] = set()
-    for line in lines:
-        if not _bounds_center_within_region(bounds=line.bounds, region=scan_bounds):
-            continue
-        normalized_text = normalize_ocr_text(line.text)
-        if normalized_text == "" or normalized_text in _WORLD_UI_CHROME_TEXTS or _looks_like_coordinate_overlay(normalized_text):
-            continue
+    candidate_lines = _visible_world_map_candidate_lines(lines=lines, scan_bounds=scan_bounds)
+    index = 0
+    while index < len(candidate_lines):
+        line, consumed_count = _resolve_world_map_label_line(
+            image=image,
+            lines=candidate_lines,
+            start_index=index,
+            relationship_rules=relationship_rules,
+            viewport_bounds=viewport_bounds,
+            viewport_coordinate=viewport_coordinate,
+        )
         object_ = _classify_world_map_object(
             image=image,
             line=line,
@@ -202,6 +207,7 @@ def _parse_world_map_objects(
             viewport_bounds=viewport_bounds,
             viewport_coordinate=viewport_coordinate,
         )
+        index += consumed_count
         if object_ is None:
             continue
         if supported_kinds is not None and object_.kind not in supported_kinds:
@@ -212,6 +218,135 @@ def _parse_world_map_objects(
         seen_keys.add(key)
         parsed_objects.append(object_)
     return tuple(parsed_objects)
+
+
+def _visible_world_map_candidate_lines(
+    *,
+    lines: tuple[OcrLine, ...],
+    scan_bounds: Bounds,
+) -> tuple[OcrLine, ...]:
+    """Returns only OCR lines that can plausibly describe visible world-map scene objects."""
+
+    return tuple(
+        line
+        for line in lines
+        if _bounds_center_within_region(bounds=line.bounds, region=scan_bounds)
+        and (normalized_text := normalize_ocr_text(line.text)) != ""
+        and normalized_text not in _WORLD_UI_CHROME_TEXTS
+        and not _looks_like_coordinate_overlay(normalized_text)
+    )
+
+
+def _resolve_world_map_label_line(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+    start_index: int,
+    relationship_rules: object | None,
+    viewport_bounds: Bounds,
+    viewport_coordinate: tuple[int, int] | None,
+) -> tuple[OcrLine, int]:
+    """Returns the strongest canonical label line for one world-map object, merging wrapped OCR rows when helpful."""
+
+    best_line = lines[start_index]
+    best_object = _classify_world_map_object(
+        image=image,
+        line=best_line,
+        relationship_rules=relationship_rules,
+        viewport_bounds=viewport_bounds,
+        viewport_coordinate=viewport_coordinate,
+    )
+    last_consumed_index = start_index
+    max_index = min(len(lines), start_index + 3)
+    for next_index in range(start_index + 1, max_index):
+        next_line = lines[next_index]
+        if not _can_merge_world_map_label_lines(upper_line=best_line, lower_line=next_line):
+            break
+        merged_line = _merge_ocr_lines(upper_line=best_line, lower_line=next_line)
+        merged_object = _classify_world_map_object(
+            image=image,
+            line=merged_line,
+            relationship_rules=relationship_rules,
+            viewport_bounds=viewport_bounds,
+            viewport_coordinate=viewport_coordinate,
+        )
+        if not _merged_world_map_object_is_stronger(current_object=best_object, merged_object=merged_object):
+            break
+        best_line = merged_line
+        best_object = merged_object
+        last_consumed_index = next_index
+    return best_line, last_consumed_index - start_index + 1
+
+
+def _can_merge_world_map_label_lines(
+    *,
+    upper_line: OcrLine,
+    lower_line: OcrLine,
+) -> bool:
+    """Returns whether two vertically stacked OCR lines plausibly belong to the same world-map label."""
+
+    upper_bottom = upper_line.bounds.y + upper_line.bounds.height
+    vertical_gap = lower_line.bounds.y - upper_bottom
+    if vertical_gap < -max(upper_line.bounds.height, lower_line.bounds.height) * 0.35:
+        return False
+    if vertical_gap > max(upper_line.bounds.height, lower_line.bounds.height) * 1.2:
+        return False
+    upper_center_x = upper_line.bounds.x + (upper_line.bounds.width // 2)
+    lower_center_x = lower_line.bounds.x + (lower_line.bounds.width // 2)
+    allowed_center_delta = max(upper_line.bounds.width, lower_line.bounds.width) * 0.6
+    return abs(upper_center_x - lower_center_x) <= allowed_center_delta
+
+
+def _merge_ocr_lines(
+    *,
+    upper_line: OcrLine,
+    lower_line: OcrLine,
+) -> OcrLine:
+    """Returns one synthetic OCR line that combines two vertically stacked world-map label fragments."""
+
+    separator = "" if upper_line.text.rstrip().endswith(("]", ")", "}")) else " "
+    left = min(upper_line.bounds.x, lower_line.bounds.x)
+    top = min(upper_line.bounds.y, lower_line.bounds.y)
+    right = max(
+        upper_line.bounds.x + upper_line.bounds.width,
+        lower_line.bounds.x + lower_line.bounds.width,
+    )
+    bottom = max(
+        upper_line.bounds.y + upper_line.bounds.height,
+        lower_line.bounds.y + lower_line.bounds.height,
+    )
+    return OcrLine(
+        text=f"{upper_line.text.rstrip()}{separator}{lower_line.text.lstrip()}".strip(),
+        bounds=Bounds(x=left, y=top, width=max(1, right - left), height=max(1, bottom - top)),
+        confidence=min(upper_line.confidence, lower_line.confidence),
+        words=upper_line.words + lower_line.words,
+    )
+
+
+def _merged_world_map_object_is_stronger(
+    *,
+    current_object: DetectedSpatialObject | None,
+    merged_object: DetectedSpatialObject | None,
+) -> bool:
+    """Returns whether a merged label carries meaningfully better world-object evidence than the current line."""
+
+    if merged_object is None:
+        return False
+    if current_object is None:
+        return True
+    if merged_object.kind != current_object.kind:
+        return True
+    current_name = normalize_ocr_text(current_object.name_text or "")
+    merged_name = normalize_ocr_text(merged_object.name_text or "")
+    if len(merged_name) > len(current_name):
+        return True
+    if current_object.level is None and merged_object.level is not None:
+        return True
+    if current_object.alliance_tag is None and merged_object.alliance_tag is not None:
+        return True
+    if current_object.kingdom is None and merged_object.kingdom is not None:
+        return True
+    return len(merged_object.metadata) > len(current_object.metadata)
 
 
 def _classify_world_map_object(

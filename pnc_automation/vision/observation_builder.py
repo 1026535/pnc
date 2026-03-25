@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Protocol
@@ -31,9 +32,10 @@ from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
 from pnc_automation.vision.image_models import SelectorMatch
 from pnc_automation.vision.observation_request import ObservationRequest
-from pnc_automation.vision.ocr_service import OcrService
+from pnc_automation.vision.ocr_service import OcrLine, OcrService
 from pnc_automation.vision.screen_classifier import ScreenClassifier, ScreenEvidence
 from pnc_automation.vision.selectors import DetectionKind, SelectorRegistry
+from pnc_automation.vision.text_anchors import normalize_ocr_text
 from pnc_automation.vision.template_matcher import PillowTemplateMatcher
 
 
@@ -111,6 +113,60 @@ class SelectorEngine(Protocol):
 
 
 @dataclass(slots=True)
+class ObservationDebugArtifactCollector:
+    """Persists debug-only OCR sidecars that capture lines the runtime could not yet classify."""
+
+    ocr_service: OcrService
+
+    def persist_unidentified_ocr_sidecar(
+        self,
+        *,
+        screenshot: CapturedScreenshot,
+        observation: Observation,
+    ) -> None:
+        """Writes one sidecar containing unmatched OCR lines next to the persisted screenshot artifact."""
+
+        artifact_path = screenshot.artifact_path
+        if artifact_path is None:
+            return
+        recognized_texts = _recognized_ocr_text_hints(observation)
+        unidentified_lines = _unidentified_ocr_lines(
+            lines=self.ocr_service.read_lines(screenshot.image),
+            recognized_texts=recognized_texts,
+        )
+        if not unidentified_lines:
+            return
+        sidecar_path = artifact_path.with_name(f"{artifact_path.stem}_unidentified_ocr.json")
+        sidecar_path.write_text(
+            json.dumps(
+                {
+                    "artifact_path": str(artifact_path),
+                    "screen_type": observation.screen_type.value,
+                    "captured_at": observation.captured_at.isoformat(),
+                    "recognized_text_hints": sorted(recognized_texts),
+                    "unidentified_ocr_lines": [
+                        {
+                            "text": line.text,
+                            "normalized_text": normalize_ocr_text(line.text),
+                            "bounds": {
+                                "x": line.bounds.x,
+                                "y": line.bounds.y,
+                                "width": line.bounds.width,
+                                "height": line.bounds.height,
+                            },
+                            "confidence": line.confidence,
+                        }
+                        for line in unidentified_lines
+                    ],
+                },
+                indent=2,
+                ensure_ascii=True,
+            ),
+            encoding="utf-8",
+        )
+
+
+@dataclass(slots=True)
 class PillowSelectorEngine:
     """Detects selectors using template matching and optional OCR."""
 
@@ -175,6 +231,7 @@ class ObservationBuilder:
     selector_engine: SelectorEngine
     screen_classifier: ScreenClassifier
     enricher: ObservationEnricher = field(default_factory=DefaultObservationEnricher)
+    debug_artifact_collector: ObservationDebugArtifactCollector | None = None
 
     def build(self, screenshot: CapturedScreenshot, *, request: ObservationRequest | None = None) -> Observation:
         """Builds one observation from a captured screenshot."""
@@ -234,6 +291,16 @@ class ObservationBuilder:
             text_field_states=additions.text_field_states,
             chat_draft_empty=additions.chat_draft_empty,
             chat_draft_text=additions.chat_draft_text,
+        )
+
+    def persist_debug_artifacts(self, *, screenshot: CapturedScreenshot, observation: Observation) -> None:
+        """Persists any configured debug-only sidecars for one completed observation capture."""
+
+        if self.debug_artifact_collector is None:
+            return
+        self.debug_artifact_collector.persist_unidentified_ocr_sidecar(
+            screenshot=screenshot,
+            observation=observation,
         )
 
     def _complete_screen_scope(
@@ -322,6 +389,7 @@ class ObservationService:
         self.verified_pnc_account_id = verified_pnc_account_id
         self._update_validated_current_castle(observation)
         self._sync_castle_roster(observation)
+        self._persist_debug_artifacts(screenshot=screenshot, observation=observation)
         return CapturedObservation(screenshot=screenshot, observation=observation)
 
     def observe(
@@ -343,6 +411,15 @@ class ObservationService:
         if request is not None and request.persist_artifact is not None:
             return request.persist_artifact
         return self.mode == ObservationMode.DEBUG
+
+    def _persist_debug_artifacts(self, *, screenshot: CapturedScreenshot, observation: Observation) -> None:
+        """Persists debug-only OCR sidecars without affecting the light-mode runtime path."""
+
+        if self.mode != ObservationMode.DEBUG or screenshot.artifact_path is None:
+            return
+        persist_debug_artifacts = getattr(self.observation_builder, "persist_debug_artifacts", None)
+        if callable(persist_debug_artifacts):
+            persist_debug_artifacts(screenshot=screenshot, observation=observation)
 
     def _sync_castle_roster(self, observation: Observation) -> None:
         """Persists discovered castle rosters whenever the castle-selection screen is observed."""
@@ -485,6 +562,77 @@ def _trusted_observed_account_id(observation: Observation) -> str | None:
     if observation.screen_type not in {ScreenType.PNC_LOGIN, ScreenType.PNC_ACCOUNT_SWITCH}:
         return None
     return observation.current_pnc_account_id
+
+
+def _recognized_ocr_text_hints(observation: Observation) -> frozenset[str]:
+    """Returns normalized OCR phrases already explained by the typed observation."""
+
+    recognized_texts: set[str] = set()
+    _add_recognized_text(recognized_texts, observation.current_pnc_account_id)
+    _add_recognized_text(recognized_texts, observation.verified_pnc_account_id)
+    _add_recognized_text(recognized_texts, observation.profile_player_name)
+    _add_recognized_text(recognized_texts, observation.chat_draft_text)
+    if observation.current_castle is not None:
+        _add_recognized_text(recognized_texts, observation.current_castle.castle_name)
+        _add_recognized_text(recognized_texts, observation.current_castle.kingdom)
+    for element in observation.visible_elements.values():
+        _add_recognized_text(recognized_texts, element.extracted_text)
+    for entry in observation.list_entries:
+        _add_recognized_text(recognized_texts, entry.title_text)
+        _add_recognized_text(recognized_texts, entry.subtitle_text)
+        for value in entry.metadata.values():
+            if isinstance(value, str):
+                _add_recognized_text(recognized_texts, value)
+    if observation.spatial_surface is not None:
+        coordinate_text = observation.spatial_surface.metadata.get("coordinate_text")
+        if isinstance(coordinate_text, str):
+            _add_recognized_text(recognized_texts, coordinate_text)
+        for object_ in observation.spatial_surface.objects:
+            _add_recognized_text(recognized_texts, object_.name_text)
+            _add_recognized_text(recognized_texts, object_.alliance_tag)
+            _add_recognized_text(recognized_texts, object_.kingdom)
+            if object_.alliance_tag is not None and object_.name_text is not None:
+                _add_recognized_text(recognized_texts, f"{object_.alliance_tag}{object_.name_text}")
+    return frozenset(recognized_texts)
+
+
+def _add_recognized_text(recognized_texts: set[str], text: str | None) -> None:
+    """Adds one non-blank normalized text hint to the recognized OCR set."""
+
+    if text is None:
+        return
+    normalized_text = normalize_ocr_text(text)
+    if normalized_text == "":
+        return
+    recognized_texts.add(normalized_text)
+
+
+def _unidentified_ocr_lines(
+    *,
+    lines: Sequence[OcrLine],
+    recognized_texts: frozenset[str],
+) -> tuple[OcrLine, ...]:
+    """Returns only OCR lines whose normalized text is not already explained by the observation."""
+
+    unidentified_lines: list[OcrLine] = []
+    for line in lines:
+        normalized_text = normalize_ocr_text(line.text)
+        if normalized_text == "" or _recognized_text_matches_line(normalized_text, recognized_texts):
+            continue
+        unidentified_lines.append(line)
+    return tuple(unidentified_lines)
+
+
+def _recognized_text_matches_line(normalized_text: str, recognized_texts: frozenset[str]) -> bool:
+    """Returns whether one normalized OCR line is already represented by the typed observation."""
+
+    for recognized_text in recognized_texts:
+        if normalized_text == recognized_text:
+            return True
+        if len(normalized_text) >= 4 and len(recognized_text) >= 4:
+            if normalized_text in recognized_text or recognized_text in normalized_text:
+                return True
+    return False
 
 
 def _screenshot_artifact_path(screenshot: object) -> object:

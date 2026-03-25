@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import io
+import json
+import shutil
 import tempfile
 import unittest
 from dataclasses import dataclass, field
@@ -33,6 +35,7 @@ from pnc_automation.pnc.ui_element_id import UiElementId
 from pnc_automation.vision.observation_builder import (
     DefaultObservationEnricher,
     ObservationBuilder,
+    ObservationDebugArtifactCollector,
     ObservationService,
     PillowSelectorEngine,
 )
@@ -1595,6 +1598,69 @@ class CaptureAndVisionTests(unittest.TestCase):
         self.assertEqual(castle.metadata["castle_identifier"], "5067781632")
         self.assertEqual(castle.estimated_world_coordinate, (201, 659))
 
+    def test_world_map_spatial_surface_merges_wrapped_alliance_castle_name(self) -> None:
+        """Keeps a wrapped alliance castle label as one canonical castle object with the full player name."""
+
+        surface = build_world_map_spatial_surface(
+            image=Image.new("RGB", (900, 1600), (15, 28, 68)),
+            lines=(
+                _ocr_line("X:239", x=373, y=147, width=87, height=31),
+                _ocr_line("Y:483", x=483, y=145, width=84, height=31),
+                _ocr_line("[DON]THE NORTH", x=320, y=1110, width=220, height=20),
+                _ocr_line("FACE", x=388, y=1136, width=92, height=20),
+            ),
+            selector_registry=build_default_selector_registry(),
+        )
+
+        self.assertIsNotNone(surface)
+        assert surface is not None
+        castles = surface.objects_of_kind(SpatialObjectKind.CASTLE)
+        self.assertEqual(len(castles), 1)
+        self.assertEqual(castles[0].alliance_tag, "DON")
+        self.assertEqual(castles[0].name_text, "THE NORTH FACE")
+
+    def test_world_map_spatial_surface_merges_wrapped_alliance_building_name(self) -> None:
+        """Prefers the merged alliance-building label over the weaker single-line castle fallback."""
+
+        surface = build_world_map_spatial_surface(
+            image=Image.new("RGB", (900, 1600), (15, 28, 68)),
+            lines=(
+                _ocr_line("X:253", x=73, y=67, width=71, height=24),
+                _ocr_line("Y:447", x=177, y=67, width=69, height=24),
+                _ocr_line("[RST] Alliance", x=455, y=645, width=180, height=24),
+                _ocr_line("Tower", x=505, y=673, width=92, height=22),
+            ),
+            selector_registry=build_default_selector_registry(),
+        )
+
+        self.assertIsNotNone(surface)
+        assert surface is not None
+        buildings = surface.objects_of_kind(SpatialObjectKind.ALLIANCE_BUILDING)
+        self.assertEqual(len(buildings), 1)
+        self.assertEqual(buildings[0].alliance_tag, "RST")
+        self.assertEqual(buildings[0].name_text, "Alliance Tower")
+        self.assertEqual(len(surface.objects_of_kind(SpatialObjectKind.CASTLE)), 0)
+
+    def test_world_map_spatial_surface_skips_unclassified_noise_without_hanging(self) -> None:
+        """Advances past non-object OCR lines instead of looping forever before the next valid map object."""
+
+        surface = build_world_map_spatial_surface(
+            image=Image.new("RGB", (900, 1600), (15, 28, 68)),
+            lines=(
+                _ocr_line("X:253", x=73, y=67, width=71, height=24),
+                _ocr_line("Y:447", x=177, y=67, width=69, height=24),
+                _ocr_line("07:41:22", x=505, y=700, width=120, height=24),
+                _ocr_line("My Territory", x=210, y=1010, width=180, height=24),
+            ),
+            selector_registry=build_default_selector_registry(),
+        )
+
+        self.assertIsNotNone(surface)
+        assert surface is not None
+        castles = surface.objects_of_kind(SpatialObjectKind.CASTLE)
+        self.assertEqual(len(castles), 1)
+        self.assertEqual(castles[0].name_text, "My Territory")
+
     def test_world_map_spatial_surface_classifies_altar_dragonia_and_hell_fortress(self) -> None:
         """Parses the remaining planned neutral world-object classes as typed spatial objects."""
 
@@ -2892,6 +2958,80 @@ class CaptureAndVisionTests(unittest.TestCase):
 
             self.assertIsNotNone(capture.screenshot.artifact_path)
             self.assertTrue(any((root / "artifacts").rglob("*.png")))
+
+    def test_observation_service_persists_unidentified_ocr_sidecars_only_in_debug_mode(self) -> None:
+        """Writes a debug-only OCR sidecar for unmatched lines without changing normal light-mode behavior."""
+
+        for mode, persist_request, expect_artifact, expect_sidecar in (
+            (ObservationMode.DEBUG, None, True, True),
+            (ObservationMode.LIGHT, None, False, False),
+            (ObservationMode.LIGHT, ObservationRequest.mail_thread_observation(), True, False),
+        ):
+            with self.subTest(mode=mode, explicit_request=persist_request is not None):
+                root = Path.cwd() / ".tmp_test_artifacts" / f"debug_sidecar_{mode.value}_{persist_request is not None}"
+                if root.exists():
+                    shutil.rmtree(root)
+                root.mkdir(parents=True, exist_ok=True)
+                try:
+                    screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+                    payload = _encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))
+                    registry = build_default_selector_registry()
+                    ocr_service = _FakeOcrService(
+                        lines=(
+                            _ocr_line("X:253", x=73, y=67, width=71, height=24),
+                            _ocr_line("Y:447", x=177, y=67, width=69, height=24),
+                            _ocr_line("My Territory", x=210, y=505, width=180, height=24),
+                            _ocr_line("Mystery Badge", x=640, y=820, width=140, height=24),
+                            _ocr_line("Home", x=50, y=1564, width=90, height=24),
+                            _ocr_line("Hero", x=215, y=1564, width=90, height=24),
+                            _ocr_line("Quest", x=330, y=1569, width=90, height=24),
+                            _ocr_line("Mail", x=570, y=1568, width=90, height=24),
+                            _ocr_line("Alliance", x=665, y=1566, width=120, height=24),
+                            _ocr_line("More", x=794, y=1567, width=90, height=24),
+                        )
+                    )
+                    builder = ObservationBuilder(
+                        selector_registry=registry,
+                        selector_engine=PillowSelectorEngine(
+                            template_matcher=PillowTemplateMatcher(),
+                            ocr_service=UnavailableOcrService(),
+                        ),
+                        screen_classifier=ScreenClassifier(),
+                        enricher=PncObservationEnricher(
+                            ocr_service=ocr_service,
+                            selector_registry=registry,
+                        ),
+                        debug_artifact_collector=ObservationDebugArtifactCollector(ocr_service=ocr_service),
+                    )
+                    service = ObservationService(
+                        screenshot_service=screenshot_service,
+                        observation_builder=builder,
+                        session=_FakeScreenshotSession(payload),
+                        artifact_directory="debug_sidecar_test",
+                        mode=mode,
+                    )
+
+                    capture = service.capture_observation("world_scan", request=persist_request)
+
+                    expected_screen_type = ScreenType.UNKNOWN if persist_request is not None else ScreenType.PNC_WORLD_MAP
+                    self.assertEqual(capture.observation.screen_type, expected_screen_type)
+                    if expect_artifact:
+                        self.assertIsNotNone(capture.screenshot.artifact_path)
+                    else:
+                        self.assertIsNone(capture.screenshot.artifact_path)
+                    artifact_files = tuple((root / "artifacts").rglob("*.png"))
+                    self.assertEqual(bool(artifact_files), expect_artifact)
+                    sidecar_files = tuple((root / "artifacts").rglob("*_unidentified_ocr.json"))
+                    self.assertEqual(bool(sidecar_files), expect_sidecar)
+                    if not expect_sidecar:
+                        continue
+                    document = json.loads(sidecar_files[0].read_text(encoding="utf-8"))
+                    unidentified_texts = [entry["text"] for entry in document["unidentified_ocr_lines"]]
+                    self.assertIn("Mystery Badge", unidentified_texts)
+                    self.assertNotIn("My Territory", unidentified_texts)
+                finally:
+                    if root.exists():
+                        shutil.rmtree(root)
 
     def test_chat_transcript_observation_uses_the_shared_artifact_mode_policy(self) -> None:
         """Keeps transcript captures ephemeral in light mode while preserving them in debug mode through the shared policy."""

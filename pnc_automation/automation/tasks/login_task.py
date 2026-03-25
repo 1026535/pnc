@@ -1,4 +1,4 @@
-"""Task that logs into the configured P&C account when required."""
+"""Task that logs into the configured P&C account or revalidates an active session."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from pnc_automation.pnc.ui_element_id import UiElementId
 
 
 class LoginTask(BaseAutomationTask):
-    """Logs in using the configured account credentials."""
+    """Logs in or revalidates an already accessible in-game session for the configured account."""
 
     id = TaskId.LOGIN
     castle_target_policy = CastleTargetPolicy.DISALLOWED
@@ -27,32 +27,23 @@ class LoginTask(BaseAutomationTask):
         return None
 
     def is_applicable(self, context: TaskContext, observation: Observation) -> bool:
-        """Allows login handling only on supported login or already-logged states."""
+        """Allows login handling anywhere except the Android launcher, which `ensure_game_running` owns."""
 
-        return observation.screen_type in {
-            ScreenType.PNC_LOGIN,
-            ScreenType.PNC_ACCOUNT_SWITCH,
-            ScreenType.PNC_LOADING,
-            ScreenType.PNC_CASTLE_SELECTION,
-            ScreenType.PNC_HOME_CITY,
-            ScreenType.PNC_MORE_MENU,
-        }
+        del context
+        return observation.screen_type != ScreenType.ANDROID_HOME
 
     def plan(self, context: TaskContext, observation: Observation) -> list[ActionRequest]:
         """Plans the next bootstrap action for loading, account-switch, or login states."""
 
-        if observation.screen_type in {ScreenType.PNC_HOME_CITY, ScreenType.PNC_MORE_MENU}:
-            if self._configured_account_is_verified(context, observation):
+        if observation.screen_type in {
+            ScreenType.PNC_HOME_CITY,
+            ScreenType.PNC_MORE_MENU,
+            ScreenType.PNC_LORD_INFO,
+            ScreenType.PNC_CASTLE_SELECTION,
+        }:
+            if self._configured_account_is_verified(context, observation) or self._has_accessible_session_proof(observation):
                 return []
-            if context.castle_roster is None:
-                raise TaskVerificationError(
-                    "Login reached home city without verified account evidence and no trusted castle roster snapshot is available.",
-                    account_id=context.account.id,
-                    pnc_account_id=context.account.pnc_account_id,
-                )
-            return context.flows.open_castle_selection(observation)
-        if observation.screen_type == ScreenType.PNC_CASTLE_SELECTION:
-            return []
+            return self._plan_in_game_session_verification(context, observation)
         if observation.screen_type == ScreenType.PNC_LOADING:
             if observation.has(UiElementId.PNC_LOADING_RECONNECT_BUTTON):
                 return [
@@ -66,11 +57,7 @@ class LoginTask(BaseAutomationTask):
         if observation.screen_type == ScreenType.PNC_ACCOUNT_SWITCH:
             return self._plan_account_switch(context, observation)
         if observation.screen_type != ScreenType.PNC_LOGIN:
-            raise TaskVerificationError(
-                f"Login task cannot plan from unsupported screen '{observation.screen_type}'.",
-                screen_type=observation.screen_type,
-                account_id=context.account.id,
-            )
+            return context.flows.ensure_home_city(observation)
         credentials = context.account.credentials
         if credentials is None:
             raise TaskVerificationError(
@@ -96,12 +83,17 @@ class LoginTask(BaseAutomationTask):
         ]
 
     def verify(self, context: TaskContext, before: Observation, after: Observation) -> TaskResult:
-        """Succeeds once the expected account reaches a verified in-game state."""
+        """Succeeds once the task reaches explicit account proof or a stable in-game verification screen."""
 
         account_mismatch = self._detect_account_mismatch(context, after)
         if account_mismatch is not None:
             return account_mismatch
-        if after.screen_type in {ScreenType.PNC_HOME_CITY, ScreenType.PNC_CASTLE_SELECTION}:
+        if after.screen_type in {
+            ScreenType.PNC_HOME_CITY,
+            ScreenType.PNC_MORE_MENU,
+            ScreenType.PNC_LORD_INFO,
+            ScreenType.PNC_CASTLE_SELECTION,
+        }:
             if (
                 self._configured_account_is_verified(context, after)
                 or self._configured_account_is_verified(context, before)
@@ -111,18 +103,23 @@ class LoginTask(BaseAutomationTask):
             roster_verification = self._verify_castle_roster_snapshot(after)
             if roster_verification is not None:
                 return roster_verification
-            return TaskResult.failure(
-                "Login reached an in-game screen without verified account ownership evidence.",
-            )
-        if after.screen_type == ScreenType.PNC_MORE_MENU:
-            return TaskResult.replan("Login opened the More menu and still needs to reach Manage Char for verification.")
+            session_verification = self._verify_accessible_in_game_session(after)
+            if session_verification is not None:
+                return session_verification
+            if after.screen_type == ScreenType.PNC_HOME_CITY:
+                return TaskResult.replan("Login reached home city and still needs Lord Info or Manage Char verification.")
+            if after.screen_type == ScreenType.PNC_MORE_MENU:
+                return TaskResult.replan("Login opened the More menu and still needs Manage Char verification.")
+            return TaskResult.failure("Login reached a verification screen without usable character evidence.")
         if after.screen_type in {ScreenType.PNC_LOADING, ScreenType.PNC_ACCOUNT_SWITCH}:
             return TaskResult.replan("Login is still resolving through a bootstrap transition.")
         if after.screen_type == ScreenType.PNC_LOGIN:
             if self._configured_account_is_verified(context, after):
                 return TaskResult.replan("Login still shows the configured account and needs another bootstrap increment.")
             return TaskResult.failure("Login screen is still visible after credential entry.", retryable=True)
-        return TaskResult.failure("Login did not reach a verified in-game state.")
+        return TaskResult.replan(
+            f"Login is still returning to a verifiable in-game state from '{after.screen_type.value}'."
+        )
 
     def _configured_account_is_verified(self, context: TaskContext, observation: Observation) -> bool:
         """Returns whether one observation carries trusted ownership proof for the configured account."""
@@ -157,6 +154,22 @@ class LoginTask(BaseAutomationTask):
             return TaskResult.replan(message)
         return TaskResult.failure(message)
 
+    def _has_accessible_session_proof(self, observation: Observation) -> bool:
+        """Returns whether the observation already proves one active in-game character is reachable."""
+
+        return self._verify_accessible_in_game_session(observation) is not None
+
+    def _verify_accessible_in_game_session(self, observation: Observation) -> TaskResult | None:
+        """Returns success when the bot can prove a live in-game character without relying on cached rosters."""
+
+        if observation.screen_type == ScreenType.PNC_CASTLE_SELECTION:
+            return TaskResult.success("Login verified through the Manage Char roster.")
+        if observation.screen_type == ScreenType.PNC_LORD_INFO:
+            return TaskResult.success("Login verified through the current Lord Info screen.")
+        if observation.screen_type in {ScreenType.PNC_HOME_CITY, ScreenType.PNC_MORE_MENU} and observation.current_castle is not None:
+            return TaskResult.success("Login verified through carried current-character evidence.")
+        return None
+
     def _verify_castle_roster_snapshot(self, observation: Observation) -> TaskResult | None:
         """Returns roster-backed verification when the visible roster window matches the trusted cache snapshot."""
 
@@ -177,6 +190,23 @@ class LoginTask(BaseAutomationTask):
         if matched_castles == 0:
             return None
         return TaskResult.success("Login verified against the trusted cached castle roster.")
+
+    def _plan_in_game_session_verification(
+        self,
+        context: TaskContext,
+        observation: Observation,
+    ) -> list[ActionRequest]:
+        """Plans the fastest canonical route toward Manage Char or Lord Info session proof."""
+
+        if observation.screen_type == ScreenType.PNC_HOME_CITY:
+            if context.castle_roster is not None or not observation.has(UiElementId.PNC_HOME_LORD_INFO_SHORTCUT):
+                return context.flows.open_castle_selection(observation)
+            return context.flows.open_lord_info(observation)
+        if observation.screen_type == ScreenType.PNC_MORE_MENU:
+            return context.flows.open_castle_selection(observation)
+        if observation.screen_type in {ScreenType.PNC_LORD_INFO, ScreenType.PNC_CASTLE_SELECTION}:
+            return []
+        return context.flows.ensure_home_city(observation)
 
     def _plan_account_switch(self, context: TaskContext, observation: Observation) -> list[ActionRequest]:
         """Plans the account-switch action required to continue with the configured account."""
