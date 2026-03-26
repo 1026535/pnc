@@ -118,7 +118,7 @@ class ObservationRequest:
     def home_city_follow_up(cls, *source_screens: ScreenType) -> "ObservationRequest":
         """Returns the narrow follow-up used while backing out toward the home-city root."""
 
-        target_screens = frozenset({ScreenType.PNC_HOME_CITY, *source_screens})
+        target_screens = frozenset({ScreenType.PNC_HOME_CITY, ScreenType.PNC_MORE_MENU, *source_screens})
         return cls(
             candidate_screen_types=target_screens,
             ocr_screen_types=target_screens,

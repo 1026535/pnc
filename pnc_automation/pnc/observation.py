@@ -15,6 +15,7 @@ from pnc_automation.pnc.chat import ChatChannel
 from pnc_automation.pnc.mail import MailboxType
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
+from pnc_automation.text_normalization import normalize_ocr_text
 
 
 @dataclass(frozen=True, slots=True)
@@ -619,7 +620,7 @@ def castle_entry_identity_matches(entry: DetectedListEntry, castle: CastleIdenti
 
     if entry.kind != ListEntryKind.CASTLE:
         return False
-    if entry.title_text != castle.castle_name:
+    if not castle_names_match(entry.title_text, castle.castle_name):
         return False
     return entry.metadata.get("kingdom") == castle.kingdom
 
@@ -627,13 +628,42 @@ def castle_entry_identity_matches(entry: DetectedListEntry, castle: CastleIdenti
 def castle_identities_match(left: CastleIdentity, right: CastleIdentity) -> bool:
     """Returns whether two castle identities describe the same managed castle."""
 
-    if left.castle_name != right.castle_name:
+    if not castle_names_match(left.castle_name, right.castle_name):
         return False
     if left.kingdom != "" and right.kingdom != "" and left.kingdom != right.kingdom:
         return False
     if left.castle_level is None or right.castle_level is None:
         return True
     return left.castle_level == right.castle_level
+
+
+def castle_names_match(left: str, right: str) -> bool:
+    """Returns whether two castle names match exactly or through stable OCR normalization."""
+
+    if left == right:
+        return True
+    return normalize_ocr_text(left) == normalize_ocr_text(right)
+
+
+def resolve_unambiguous_castle_identity(
+    candidates: tuple[CastleIdentity, ...],
+    *,
+    preferred_name: str | None = None,
+) -> CastleIdentity | None:
+    """Returns one canonical castle when all candidates collapse to the same semantic identity."""
+
+    groups = _group_semantic_castle_identities(candidates)
+    if preferred_name is not None:
+        exact_groups = tuple(
+            group for group in groups if any(candidate.castle_name == preferred_name for candidate in group)
+        )
+        if len(exact_groups) == 1:
+            return exact_groups[0][0]
+        if len(exact_groups) > 1:
+            return None
+    if len(groups) == 1:
+        return groups[0][0]
+    return None
 
 
 def resolve_current_castle_match(
@@ -651,16 +681,21 @@ def resolve_current_castle_match(
         if _castle_identities_match_exact(current_castle, target):
             return CurrentCastleMatch(status=CurrentCastleMatchStatus.MATCH, evidence_kind=evidence_kind)
         return CurrentCastleMatch(status=CurrentCastleMatchStatus.MISMATCH, evidence_kind=evidence_kind)
-    if current_castle.castle_name != target.castle_name:
+    if not castle_names_match(current_castle.castle_name, target.castle_name):
         return CurrentCastleMatch(status=CurrentCastleMatchStatus.MISMATCH, evidence_kind=evidence_kind)
     if roster is None:
         return CurrentCastleMatch(status=CurrentCastleMatchStatus.INSUFFICIENT_EVIDENCE, evidence_kind=evidence_kind)
-    matching_castles = tuple(castle for castle in roster.castles if castle.castle_name == current_castle.castle_name)
+    matching_castles = tuple(
+        castle for castle in roster.castles if castle_names_match(castle.castle_name, current_castle.castle_name)
+    )
     if not matching_castles:
         return CurrentCastleMatch(status=CurrentCastleMatchStatus.INSUFFICIENT_EVIDENCE, evidence_kind=evidence_kind)
-    if len(matching_castles) > 1:
+    matched_castle = resolve_unambiguous_castle_identity(
+        matching_castles,
+        preferred_name=current_castle.castle_name,
+    )
+    if matched_castle is None:
         return CurrentCastleMatch(status=CurrentCastleMatchStatus.AMBIGUOUS_NAME, evidence_kind=evidence_kind)
-    matched_castle = matching_castles[0]
     if not _castle_levels_match(current_castle, matched_castle):
         return CurrentCastleMatch(status=CurrentCastleMatchStatus.MISMATCH, evidence_kind=evidence_kind)
     if _castle_identities_match_exact(matched_castle, target):
@@ -671,7 +706,11 @@ def resolve_current_castle_match(
 def _castle_identities_match_exact(left: CastleIdentity, right: CastleIdentity) -> bool:
     """Returns whether two castle identities match without wildcard kingdom behavior."""
 
-    return castle_identity_key(left) == castle_identity_key(right) and _castle_levels_match(left, right)
+    return (
+        left.kingdom == right.kingdom
+        and castle_names_match(left.castle_name, right.castle_name)
+        and _castle_levels_match(left, right)
+    )
 
 
 def _castle_levels_match(left: CastleIdentity, right: CastleIdentity) -> bool:
@@ -680,6 +719,20 @@ def _castle_levels_match(left: CastleIdentity, right: CastleIdentity) -> bool:
     if left.castle_level is None or right.castle_level is None:
         return True
     return left.castle_level == right.castle_level
+
+
+def _group_semantic_castle_identities(candidates: tuple[CastleIdentity, ...]) -> tuple[tuple[CastleIdentity, ...], ...]:
+    """Groups castles by shared semantic identity while preserving roster order."""
+
+    groups: list[list[CastleIdentity]] = []
+    for candidate in candidates:
+        for group in groups:
+            if castle_identities_match(group[0], candidate):
+                group.append(candidate)
+                break
+        else:
+            groups.append([candidate])
+    return tuple(tuple(group) for group in groups)
 
 
 def _is_integer_pair(value: object) -> bool:

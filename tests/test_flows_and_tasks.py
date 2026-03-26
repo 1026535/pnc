@@ -16,6 +16,7 @@ from pnc_automation.automation.tasks.gathering_task import GatheringTask
 from pnc_automation.automation.tasks.login_task import LoginTask
 from pnc_automation.automation.tasks.refresh_castle_roster_task import RefreshCastleRosterTask
 from pnc_automation.automation.tasks.select_castle_task import SelectCastleTask
+from pnc_automation.automation.tasks.active_castle_resolution import remember_active_castle_identity
 from pnc_automation.automation.tasks.send_chat_message_task import (
     ChatMessageTaskParams,
     SendAllianceChatMessageTask,
@@ -779,6 +780,29 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertTrue(result.succeeded)
         self.assertIn("Manage Char", result.message)
 
+    def test_login_task_falls_back_to_manage_char_when_snapshot_membership_is_stale(self) -> None:
+        """Accepts Manage Char session proof even when a trusted snapshot no longer matches exactly."""
+
+        task = LoginTask()
+        roster = PncAccountCastleRosterConfig(
+            pnc_account_id=self.account.pnc_account_id,
+            castles=(CastleIdentity(kingdom="K230", castle_name="Main"),),
+        )
+        context = self._make_context(params=None, task_id=TaskId.LOGIN)
+
+        result = task.verify(
+            context,
+            make_observation(ScreenType.PNC_MORE_MENU),
+            make_observation(
+                ScreenType.PNC_CASTLE_SELECTION,
+                list_entries=(make_entry(ListEntryKind.CASTLE, title="Renamed Main", metadata={"kingdom": "K230"}),),
+                castle_roster_snapshot=roster,
+            ),
+        )
+
+        self.assertTrue(result.succeeded)
+        self.assertIn("Manage Char", result.message)
+
     def test_login_task_replans_wrong_account_on_recoverable_login_states(self) -> None:
         """Keeps wrong-account login and account-switch states on the task's replan path."""
 
@@ -844,7 +868,11 @@ class FlowAndTaskTests(unittest.TestCase):
         )
         settings_observation = make_observation(
             ScreenType.PNC_MORE_MENU,
-            visible_ids=(UiElementId.PNC_MORE_MANAGE_CHAR,),
+            visible_ids=(
+                UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+                UiElementId.PNC_MORE_SETTINGS,
+                UiElementId.PNC_MORE_MANAGE_CHAR,
+            ),
         )
 
         home_actions = self.flows.open_lord_info(home_observation)
@@ -859,12 +887,9 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertEqual(more_actions[0].selector_id, UiElementId.PNC_BOTTOM_NAV_MORE)
         self.assertIsInstance(more_actions[1], TapAction)
         self.assertEqual(more_actions[1].selector_id, UiElementId.PNC_HOME_LORD_INFO_SHORTCUT)
-        self.assertEqual(len(settings_actions), 3)
-        self.assertIsInstance(settings_actions[0], KeyEventAction)
-        self.assertIsInstance(settings_actions[1], TapAction)
-        self.assertEqual(settings_actions[1].selector_id, UiElementId.PNC_BOTTOM_NAV_MORE)
-        self.assertIsInstance(settings_actions[2], TapAction)
-        self.assertEqual(settings_actions[2].selector_id, UiElementId.PNC_HOME_LORD_INFO_SHORTCUT)
+        self.assertEqual(len(settings_actions), 1)
+        self.assertIsInstance(settings_actions[0], TapAction)
+        self.assertEqual(settings_actions[0].selector_id, UiElementId.PNC_BACK_BUTTON_TOP_LEFT)
 
     def test_select_castle_opens_lord_info_before_switch_when_current_castle_is_unknown(self) -> None:
         """Validates the origin castle from Lord Info before entering Manage Char."""
@@ -910,6 +935,36 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertEqual(actions[2].selector_id, UiElementId.PNC_MORE_SETTINGS)
         self.assertIsInstance(actions[3], TapAction)
         self.assertEqual(actions[3].selector_id, UiElementId.PNC_MORE_MANAGE_CHAR)
+
+    def test_select_castle_taps_visible_target_despite_spacing_only_ocr_drift(self) -> None:
+        """Treats spacing-only OCR drift as the same visible target castle on Manage Char."""
+
+        task = SelectCastleTask()
+        target_castle = CastleIdentity(kingdom="K226", castle_name="please b gentle", castle_level=12)
+        context = self._make_context(
+            params=None,
+            task_id=TaskId.SELECT_CASTLE,
+            target_castle=target_castle,
+        )
+        observation = make_observation(
+            ScreenType.PNC_CASTLE_SELECTION,
+            list_entries=(
+                make_entry(
+                    ListEntryKind.CASTLE,
+                    title="please bgentle",
+                    metadata={"kingdom": "K226", "castle_level": 12},
+                ),
+            ),
+        )
+
+        actions = task.plan(context, observation)
+
+        self.assertEqual(len(actions), 2)
+        self.assertIsInstance(actions[0], TapListEntryAction)
+        self.assertEqual(actions[0].title_text, "please b gentle")
+        self.assertEqual(actions[0].metadata_key, "kingdom")
+        self.assertEqual(actions[0].metadata_value, "K226")
+        self.assertIsInstance(actions[1], WaitAction)
 
     def test_select_castle_fails_fast_without_an_explicit_target(self) -> None:
         """Rejects direct select-castle execution when the step omitted its runtime castle target."""
@@ -988,6 +1043,83 @@ class FlowAndTaskTests(unittest.TestCase):
 
         self.assertEqual(actions, [])
         self.assertTrue(result.succeeded)
+
+    def test_select_castle_succeeds_on_lord_info_confirmation_despite_spacing_only_ocr_drift(self) -> None:
+        """Treats spacing-only Lord Info OCR drift as the same configured target castle."""
+
+        task = SelectCastleTask()
+        target_castle = CastleIdentity(kingdom="K226", castle_name="please b gentle", castle_level=12)
+        roster = PncAccountCastleRosterConfig(
+            pnc_account_id=self.account.pnc_account_id,
+            castles=(target_castle,),
+        )
+        context = self._make_context(
+            params=None,
+            task_id=TaskId.SELECT_CASTLE,
+            target_castle=target_castle,
+            castle_roster_provider=lambda: roster,
+        )
+        matching_lord_info = make_observation(
+            ScreenType.PNC_LORD_INFO,
+            current_castle_name="please bgentle",
+        )
+
+        actions = task.plan(context, matching_lord_info)
+        result = task.verify(context, make_observation(ScreenType.PNC_HOME_CITY), matching_lord_info)
+
+        self.assertEqual(actions, [])
+        self.assertTrue(result.succeeded)
+
+    def test_select_castle_succeeds_on_lord_info_confirmation_with_duplicate_semantic_roster_variants(self) -> None:
+        """Does not treat OCR-variant duplicate roster rows as ambiguous Lord Info evidence."""
+
+        task = SelectCastleTask()
+        target_castle = CastleIdentity(kingdom="K226", castle_name="please b gentle", castle_level=12)
+        roster = PncAccountCastleRosterConfig(
+            pnc_account_id=self.account.pnc_account_id,
+            castles=(
+                target_castle,
+                CastleIdentity(kingdom="K226", castle_name="please bgentle", castle_level=12),
+            ),
+        )
+        context = self._make_context(
+            params=None,
+            task_id=TaskId.SELECT_CASTLE,
+            target_castle=target_castle,
+            castle_roster_provider=lambda: roster,
+        )
+        matching_lord_info = make_observation(
+            ScreenType.PNC_LORD_INFO,
+            current_castle_name="please b gentle",
+        )
+
+        result = task.verify(context, make_observation(ScreenType.PNC_HOME_CITY), matching_lord_info)
+
+        self.assertTrue(result.succeeded)
+
+    def test_remember_active_castle_identity_tolerates_spacing_only_lord_info_drift(self) -> None:
+        """Resolves Lord Info castle names through the shared OCR-tolerant castle-name matcher."""
+
+        target_castle = CastleIdentity(kingdom="K226", castle_name="please b gentle", castle_level=12)
+        roster = PncAccountCastleRosterConfig(
+            pnc_account_id=self.account.pnc_account_id,
+            castles=(
+                target_castle,
+                CastleIdentity(kingdom="K226", castle_name="please bgentle", castle_level=12),
+            ),
+        )
+        context = self._make_context(
+            params=None,
+            task_id=TaskId.COLLECT_KINGDOM_CHAT,
+            castle_roster_provider=lambda: roster,
+        )
+
+        resolved = remember_active_castle_identity(
+            context,
+            make_observation(ScreenType.PNC_LORD_INFO, current_castle_name="please bgentle"),
+        )
+
+        self.assertEqual(resolved, target_castle)
 
     def test_select_castle_replans_when_lord_info_name_is_ambiguous_across_kingdoms(self) -> None:
         """Does not accept Lord Info name-only evidence when the cached roster contains duplicate castle names."""

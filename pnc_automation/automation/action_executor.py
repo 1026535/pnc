@@ -25,7 +25,13 @@ from pnc_automation.pnc.action_requests import (
     TapSpatialObjectAction,
     WaitAction,
 )
-from pnc_automation.pnc.observation import DetectedListEntry, DetectedSpatialObject, Observation
+from pnc_automation.pnc.observation import (
+    DetectedListEntry,
+    DetectedSpatialObject,
+    ListEntryKind,
+    Observation,
+    castle_names_match,
+)
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
 from pnc_automation.vision.observation_request import ObservationRequest
@@ -175,7 +181,7 @@ class ActionExecutor:
         """Returns the matching list entry for one dynamic-entry tap."""
 
         for entry in observation.entries(action.entry_kind):
-            if action.title_text is not None and entry.title_text != action.title_text:
+            if action.title_text is not None and not self._entry_title_matches(action=action, entry=entry):
                 continue
             if action.metadata_key is not None and entry.metadata.get(action.metadata_key) != action.metadata_value:
                 continue
@@ -189,6 +195,17 @@ class ActionExecutor:
             metadata_key=action.metadata_key,
             metadata_value=action.metadata_value,
         )
+
+    def _entry_title_matches(self, *, action: TapListEntryAction, entry: DetectedListEntry) -> bool:
+        """Returns whether one observed list-entry title satisfies the tap request."""
+
+        if action.title_text is None:
+            return True
+        if entry.title_text is None:
+            return False
+        if action.entry_kind == ListEntryKind.CASTLE:
+            return castle_names_match(entry.title_text, action.title_text)
+        return entry.title_text == action.title_text
 
     def _require_spatial_object(self, action: TapSpatialObjectAction, observation: Observation) -> DetectedSpatialObject:
         """Returns the matching visible spatial object for one spatial-object tap."""

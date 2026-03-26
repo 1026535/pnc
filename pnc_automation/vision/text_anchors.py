@@ -7,6 +7,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum
 
+from pnc_automation.text_normalization import normalize_ocr_text
 from pnc_automation.vision.ocr_service import OcrLine, OcrResult, OcrWord
 from pnc_automation.vision.selectors import Region
 
@@ -73,13 +74,6 @@ class TextAnchorDetector:
                 continue
             _append_word_span_matches(anchors, seen, line.words, max_words=3)
         return tuple(anchors)
-
-
-def normalize_ocr_text(text: str) -> str:
-    """Normalizes OCR text for tolerant anchor matching."""
-
-    return "".join(character for character in text.upper() if character.isalnum())
-
 
 _ANCHOR_IDS_BY_NORMALIZED_TEXT: dict[str, TextAnchorId] = {
     "ALLIANCE": TextAnchorId.LABEL_ALLIANCE,

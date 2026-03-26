@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from enum import StrEnum
 
 from PIL import Image
 
@@ -207,6 +208,15 @@ _CHAT_ALLIANCE_TEXT = "ALLIANCE"
 _CHAT_EMPTY_INPUT_PLACEHOLDER_TEXT = "PLEASEENTERCONTENT"
 _CHAT_ACTIVE_TAB_MIN_WARMTH = 120
 _CHAT_ACTIVE_TAB_MIN_DELTA = 80
+_CHAT_MAX_SENDER_LENGTH = 64
+_CHAT_BOUNDARY_FRAGMENT_MARGIN = 40
+_CHAT_ANNOUNCEMENT_MIN_WARM_RATIO = 0.28
+_CHAT_NON_TEXT_FOREGROUND_BRIGHTNESS = 90
+_CHAT_NON_TEXT_FOREGROUND_VARIANCE = 35
+_CHAT_TEXT_BUBBLE_MAX_DENSITY = 0.82
+_CHAT_STICKER_MIN_DIMENSION = 72
+_CHAT_EMOJI_MAX_DIMENSION = 72
+_CHAT_NON_TEXT_MIN_FOREGROUND_PIXELS = 90
 _CHAT_ANNOUNCEMENT_TOKENS = frozenset(
     {
         "SYSTEM",
@@ -217,6 +227,10 @@ _CHAT_ANNOUNCEMENT_TOKENS = frozenset(
         "SERVER",
         "EVENT",
     }
+)
+_CHAT_SYSTEM_SENDER_TEXTS = frozenset({"SYSTEMMESSAGE", "SYSTEMANNOUNCEMENT"})
+_CHAT_TIMESTAMP_SEPARATOR_PATTERN = re.compile(
+    r"^\s*(?:\d{4}[-./]\d{1,2}[-./]\d{1,2}\s*)?\d{1,2}:\d{2}(?::\d{2})?\s*$"
 )
 _MAIL_HUB_CATEGORY_TEXTS = frozenset(
     {
@@ -325,6 +339,39 @@ _ACCOUNT_SWITCH_HEADER_TEXTS = frozenset(
         "SELECTACCOUNT",
     }
 )
+
+
+class _ChatViewportEdgeKind(StrEnum):
+    """Identifies whether one grouped chat fragment touches the trusted viewport boundary."""
+
+    TOP = "top"
+    INTERIOR = "interior"
+    BOTTOM = "bottom"
+
+
+@dataclass(frozen=True, slots=True)
+class _ChatTranscriptViewport:
+    """Stores the trusted visible transcript window used for chat-row normalization."""
+
+    top: int
+    bottom: int
+    content_left: int
+    content_right: int
+
+
+@dataclass(frozen=True, slots=True)
+class _ChatRowCandidate:
+    """Represents one normalized visible chat-row candidate before entry projection."""
+
+    bounds: Bounds
+    source_lines: tuple[OcrLine, ...]
+    edge_kind: _ChatViewportEdgeKind
+    kind: ChatEntryKind | None = None
+    title_text: str | None = None
+    message_text: str | None = None
+    sender_evidence: str | None = None
+    message_evidence: str | None = None
+    unsupported_reason: str | None = None
 
 
 @dataclass(slots=True)
@@ -665,12 +712,53 @@ class PncObservationEnricher:
         chat_state = self._build_proven_chat_state_additions(image=image, request=request)
         return ObservationAdditions(
             visible_elements=chat.visible_elements,
-            list_entries=_extract_chat_message_entries(image=image, lines=lines),
+            list_entries=self._extract_chat_message_entries(image=image, lines=lines),
             screen_evidence=chat.screen_evidence,
             active_chat_channel=chat_state.active_chat_channel,
             text_field_states=chat_state.text_field_states,
             chat_draft_empty=chat_state.chat_draft_empty,
             chat_draft_text=chat_state.chat_draft_text,
+        )
+
+    def _extract_chat_message_entries(
+        self,
+        *,
+        image: Image.Image,
+        lines: tuple[OcrLine, ...],
+    ) -> tuple[DetectedListEntry, ...]:
+        """Extracts normalized chat rows using the trusted chat viewport and one canonical candidate pipeline."""
+
+        viewport = self._resolve_chat_transcript_viewport(image=image)
+        candidate_lines = [line for line in lines if _is_chat_message_candidate_line(line=line, viewport=viewport)]
+        grouped_rows: list[_ChatRowCandidate] = []
+        for row_lines in _group_lines_by_vertical_gap(candidate_lines, gap=max(24, image.height // 36)):
+            if not row_lines:
+                continue
+            bounds = _entry_bounds_from_lines(image=image, row_lines=row_lines)
+            grouped_rows.append(
+                _ChatRowCandidate(
+                    bounds=bounds,
+                    source_lines=tuple(row_lines),
+                    edge_kind=_chat_row_edge_kind(bounds=bounds, viewport=viewport),
+                )
+            )
+        normalized_rows = _normalize_chat_row_candidates(image=image, raw_candidates=tuple(grouped_rows), viewport=viewport)
+        return tuple(
+            _chat_row_entry_from_candidate(candidate=candidate, visible_order=visible_order)
+            for visible_order, candidate in enumerate(candidate for candidate in normalized_rows if candidate.kind is not None)
+        )
+
+    def _resolve_chat_transcript_viewport(self, *, image: Image.Image) -> _ChatTranscriptViewport:
+        """Returns the shared trusted transcript viewport bounded by the chat tabs and input field."""
+
+        input_region = self._require_chat_region(UiElementId.PNC_CHAT_INPUT_FIELD, image=image)
+        kingdom_region = self._require_chat_region(UiElementId.PNC_CHAT_TAB_KINGDOM, image=image)
+        alliance_region = self._require_chat_region(UiElementId.PNC_CHAT_TAB_ALLIANCE, image=image)
+        return _ChatTranscriptViewport(
+            top=max(int(image.height * 0.14), max(kingdom_region.y + kingdom_region.height, alliance_region.y + alliance_region.height) + 12),
+            bottom=max(1, input_region.y - 12),
+            content_left=max(0, int(image.width * 0.14)),
+            content_right=min(image.width, int(image.width * 0.78)),
         )
 
     def _build_proven_chat_state_additions(
@@ -1393,125 +1481,319 @@ def _extract_mail_message_entries(
     return tuple(entries)
 
 
-def _extract_chat_message_entries(
+def _normalize_chat_row_candidates(
     *,
     image: Image.Image,
-    lines: tuple[OcrLine, ...],
-) -> tuple[DetectedListEntry, ...]:
-    """Extracts typed visible chat rows while preserving the shared dynamic-entry model."""
+    raw_candidates: tuple[_ChatRowCandidate, ...],
+    viewport: _ChatTranscriptViewport,
+) -> tuple[_ChatRowCandidate, ...]:
+    """Normalizes grouped OCR fragments into one canonical stream of supported or unsupported chat rows."""
 
-    candidate_lines = [line for line in lines if _is_chat_message_candidate_line(image=image, line=line)]
-    grouped_rows = _group_lines_by_vertical_gap(candidate_lines, gap=max(24, image.height // 36))
-    entries: list[DetectedListEntry] = []
-    for visible_order, row_lines in enumerate(grouped_rows):
-        if not row_lines:
+    normalized: list[_ChatRowCandidate] = []
+    index = 0
+    while index < len(raw_candidates):
+        candidate = raw_candidates[index]
+        next_candidate = None if index + 1 >= len(raw_candidates) else raw_candidates[index + 1]
+        if _looks_like_chat_timestamp_separator_text(_chat_row_combined_text(candidate)):
+            index += 1
             continue
-        entry = _build_chat_message_entry(image=image, row_lines=row_lines, visible_order=visible_order)
-        if entry is not None:
-            entries.append(entry)
-    return tuple(entries)
+        inline_player = _try_build_inline_player_chat_candidate(candidate)
+        if inline_player is not None:
+            normalized.append(inline_player)
+            index += 1
+            continue
+        announcement = _try_build_announcement_chat_candidate(image=image, candidate=candidate)
+        if announcement is not None:
+            normalized.append(announcement)
+            index += 1
+            continue
+        grouped_player = _try_build_grouped_player_chat_candidate(candidate)
+        if grouped_player is not None:
+            normalized.append(grouped_player)
+            index += 1
+            continue
+        split_player = _try_build_split_player_chat_candidate(image=image, sender_candidate=candidate, message_candidate=next_candidate)
+        if split_player is not None:
+            normalized.append(split_player)
+            index += 2
+            continue
+        if _is_absorbed_duplicate_sender_fragment(candidate=candidate, following_candidate=next_candidate):
+            index += 1
+            continue
+        image_only_player = _try_build_image_only_player_chat_candidate(
+            image=image,
+            candidate=candidate,
+            next_candidate=next_candidate,
+            viewport=viewport,
+        )
+        if image_only_player is not None:
+            normalized.append(image_only_player)
+            index += 1
+            continue
+        if _is_chat_boundary_fragment(candidate):
+            index += 1
+            continue
+        unsupported_reason = "sender_only" if _looks_like_sender_only_chat_candidate(candidate) else "message_only" if _looks_like_message_only_chat_candidate(candidate) else "ambiguous_merge"
+        normalized.append(_build_unsupported_chat_candidate(candidate=candidate, reason=unsupported_reason))
+        index += 1
+    return tuple(normalized)
 
 
-def _build_chat_message_entry(
-    *,
-    image: Image.Image,
-    row_lines: list[OcrLine],
-    visible_order: int,
-) -> DetectedListEntry | None:
-    """Builds one typed chat-row entry from the OCR lines assigned to one visible row."""
+def _chat_row_entry_from_candidate(*, candidate: _ChatRowCandidate, visible_order: int) -> DetectedListEntry:
+    """Projects one normalized chat-row candidate into the shared detected-list entry model."""
 
-    bounds = _entry_bounds_from_lines(image=image, row_lines=row_lines)
-    player_entry = _try_build_player_chat_entry(bounds=bounds, row_lines=row_lines, visible_order=visible_order)
-    if player_entry is not None:
-        return player_entry
-    announcement_text = " ".join(line.text.strip() for line in row_lines if line.text.strip() != "")
-    if announcement_text == "":
-        return None
-    kind = (
-        ChatEntryKind.ANNOUNCEMENT
-        if _looks_like_announcement_chat_row(image=image, row_lines=row_lines)
-        else ChatEntryKind.UNSUPPORTED
-    )
+    if candidate.kind is None:
+        raise SelectorResolutionError("Only classified chat-row candidates can be projected as entries.")
+    message_text = candidate.message_text if isinstance(candidate.message_text, str) and candidate.message_text != "" else candidate.title_text or ""
+    subtitle_text = None if candidate.title_text is None or message_text == candidate.title_text else message_text
+    metadata: dict[str, object] = {
+        "chat_entry_kind": candidate.kind.value,
+        "message_text": message_text,
+        "message_preview": message_text,
+        "visible_order": visible_order,
+    }
+    if candidate.sender_evidence is not None:
+        metadata["sender_evidence"] = candidate.sender_evidence
+    if candidate.message_evidence is not None:
+        metadata["message_evidence"] = candidate.message_evidence
+    if candidate.unsupported_reason is not None:
+        metadata["unsupported_reason"] = candidate.unsupported_reason
     return DetectedListEntry(
         kind=ListEntryKind.CHAT_MESSAGE,
-        bounds=bounds,
-        title_text=announcement_text,
-        subtitle_text=None,
-        action_point=None,
-        metadata={
-            "chat_entry_kind": kind.value,
-            "message_text": announcement_text,
-            "message_preview": announcement_text,
-            "visible_order": visible_order,
-        },
+        bounds=candidate.bounds,
+        title_text=candidate.title_text,
+        subtitle_text=subtitle_text,
+        action_point=candidate.bounds.center() if candidate.kind == ChatEntryKind.PLAYER else None,
+        metadata=metadata,
     )
 
 
-def _try_build_player_chat_entry(
-    *,
-    bounds: Bounds,
-    row_lines: list[OcrLine],
-    visible_order: int,
-) -> DetectedListEntry | None:
-    """Returns one player-chat entry when the row exposes trustworthy sender/message structure."""
+def _try_build_inline_player_chat_candidate(candidate: _ChatRowCandidate) -> _ChatRowCandidate | None:
+    """Parses the OCR-merged single-line `Sender: message` shape when it remains trustworthy."""
 
-    inline_player = _try_parse_inline_player_chat_row(bounds=bounds, row_lines=row_lines, visible_order=visible_order)
-    if inline_player is not None:
-        return inline_player
-    sender_line = row_lines[0]
-    sender_name = sender_line.text.strip()
-    if not _looks_like_player_chat_sender_line(sender_line):
+    if len(candidate.source_lines) != 1:
         return None
-    message_text = " ".join(line.text.strip() for line in row_lines[1:] if line.text.strip() != "")
-    if message_text == "":
-        return None
-    return DetectedListEntry(
-        kind=ListEntryKind.CHAT_MESSAGE,
-        bounds=bounds,
-        title_text=sender_name,
-        subtitle_text=message_text,
-        action_point=bounds.center(),
-        metadata={
-            "chat_entry_kind": ChatEntryKind.PLAYER.value,
-            "message_text": message_text,
-            "message_preview": message_text,
-            "visible_order": visible_order,
-        },
-    )
-
-
-def _try_parse_inline_player_chat_row(
-    *,
-    bounds: Bounds,
-    row_lines: list[OcrLine],
-    visible_order: int,
-) -> DetectedListEntry | None:
-    """Parses the common OCR-merged `Sender: message` chat-row shape when present."""
-
-    if len(row_lines) != 1:
-        return None
-    match = re.match(r"^\s*([^:]{2,32})\s*:\s*(.+?)\s*$", row_lines[0].text)
+    match = re.match(r"^\s*([^:]{2,64})\s*:\s*(.+?)\s*$", candidate.source_lines[0].text)
     if match is None:
         return None
     sender_name = match.group(1).strip()
     message_text = match.group(2).strip()
-    if sender_name == "" or message_text == "":
+    if sender_name == "" or message_text == "" or not _looks_like_player_chat_sender_text(sender_name):
         return None
-    if not _looks_like_player_chat_sender_text(sender_name):
+    return _build_player_chat_candidate(candidate=candidate, sender_name=sender_name, message_text=message_text)
+
+
+def _try_build_grouped_player_chat_candidate(candidate: _ChatRowCandidate) -> _ChatRowCandidate | None:
+    """Parses one grouped sender-plus-message cluster into a supported player row when exact."""
+
+    if not candidate.source_lines:
         return None
-    return DetectedListEntry(
-        kind=ListEntryKind.CHAT_MESSAGE,
-        bounds=bounds,
-        title_text=sender_name,
-        subtitle_text=message_text,
-        action_point=bounds.center(),
-        metadata={
-            "chat_entry_kind": ChatEntryKind.PLAYER.value,
-            "message_text": message_text,
-            "message_preview": message_text,
-            "visible_order": visible_order,
-        },
+    sender_line = candidate.source_lines[0]
+    if not _looks_like_player_chat_sender_line(sender_line):
+        return None
+    message_text = _chat_message_text_from_lines(candidate.source_lines[1:])
+    if message_text == "":
+        return None
+    return _build_player_chat_candidate(candidate=candidate, sender_name=sender_line.text.strip(), message_text=message_text)
+
+
+def _try_build_split_player_chat_candidate(
+    *,
+    image: Image.Image,
+    sender_candidate: _ChatRowCandidate,
+    message_candidate: _ChatRowCandidate | None,
+) -> _ChatRowCandidate | None:
+    """Merges an isolated sender fragment with exactly one neighboring message block when geometry is decisive."""
+
+    if message_candidate is None or not _looks_like_sender_only_chat_candidate(sender_candidate):
+        return None
+    if not _looks_like_message_only_chat_candidate(message_candidate):
+        return None
+    gap = message_candidate.bounds.y - (sender_candidate.bounds.y + sender_candidate.bounds.height)
+    if gap < 0 or gap > max(56, image.height // 20):
+        return None
+    sender_line = sender_candidate.source_lines[0]
+    first_message_line = message_candidate.source_lines[0]
+    if first_message_line.bounds.x < sender_line.bounds.x - 28:
+        return None
+    merged_candidate = _merge_chat_row_candidates(sender_candidate, message_candidate)
+    return _build_player_chat_candidate(
+        candidate=merged_candidate,
+        sender_name=sender_line.text.strip(),
+        message_text=_chat_message_text_from_lines(message_candidate.source_lines),
     )
+
+
+def _try_build_image_only_player_chat_candidate(
+    *,
+    image: Image.Image,
+    candidate: _ChatRowCandidate,
+    next_candidate: _ChatRowCandidate | None,
+    viewport: _ChatTranscriptViewport,
+) -> _ChatRowCandidate | None:
+    """Builds a placeholder-backed player row when the sender is visible and the bubble is confidently non-text."""
+
+    if not _looks_like_sender_only_chat_candidate(candidate):
+        return None
+    sender_line = candidate.source_lines[0]
+    search_top = sender_line.bounds.y + sender_line.bounds.height + 4
+    search_bottom = viewport.bottom if next_candidate is None else min(viewport.bottom, next_candidate.bounds.y - 4)
+    placeholder = _classify_non_text_chat_placeholder(
+        image=image,
+        search_bounds=Bounds(
+            x=viewport.content_left,
+            y=search_top,
+            width=max(1, viewport.content_right - viewport.content_left),
+            height=max(1, search_bottom - search_top),
+        ),
+    )
+    if placeholder is None:
+        return None
+    return _build_player_chat_candidate(candidate=candidate, sender_name=sender_line.text.strip(), message_text=placeholder)
+
+
+def _try_build_announcement_chat_candidate(
+    *,
+    image: Image.Image,
+    candidate: _ChatRowCandidate,
+) -> _ChatRowCandidate | None:
+    """Returns one strict announcement candidate only for the supported brown system-message family."""
+
+    if not candidate.source_lines:
+        return None
+    first_line = candidate.source_lines[0]
+    if _is_explicit_system_message_sender_text(first_line.text):
+        announcement_body = _chat_message_text_from_lines(candidate.source_lines[1:])
+        return _build_announcement_chat_candidate(
+            candidate=candidate,
+            title_text=first_line.text.strip(),
+            message_text=announcement_body if announcement_body != "" else first_line.text.strip(),
+        )
+    if _looks_like_player_chat_sender_line(first_line):
+        return None
+    if not _row_has_announcement_chrome(image=image, bounds=candidate.bounds):
+        return None
+    announcement_text = _chat_row_combined_text(candidate)
+    if announcement_text == "":
+        return None
+    return _build_announcement_chat_candidate(
+        candidate=candidate,
+        title_text=announcement_text,
+        message_text=announcement_text,
+    )
+
+
+def _build_player_chat_candidate(
+    *,
+    candidate: _ChatRowCandidate,
+    sender_name: str,
+    message_text: str,
+) -> _ChatRowCandidate:
+    """Returns one supported player candidate from normalized sender and message evidence."""
+
+    return _ChatRowCandidate(
+        bounds=candidate.bounds,
+        source_lines=candidate.source_lines,
+        edge_kind=candidate.edge_kind,
+        kind=ChatEntryKind.PLAYER,
+        title_text=sender_name,
+        message_text=message_text,
+        sender_evidence=sender_name,
+        message_evidence=message_text,
+    )
+
+
+def _build_announcement_chat_candidate(
+    *,
+    candidate: _ChatRowCandidate,
+    title_text: str,
+    message_text: str,
+) -> _ChatRowCandidate:
+    """Returns one strict supported announcement candidate."""
+
+    return _ChatRowCandidate(
+        bounds=candidate.bounds,
+        source_lines=candidate.source_lines,
+        edge_kind=candidate.edge_kind,
+        kind=ChatEntryKind.ANNOUNCEMENT,
+        title_text=title_text,
+        message_text=message_text,
+        sender_evidence=title_text,
+        message_evidence=message_text,
+    )
+
+
+def _build_unsupported_chat_candidate(
+    *,
+    candidate: _ChatRowCandidate,
+    reason: str,
+) -> _ChatRowCandidate:
+    """Returns one fail-fast unsupported candidate with enough evidence for downstream diagnostics."""
+
+    combined_text = _chat_row_combined_text(candidate)
+    sender_evidence = None if not candidate.source_lines or not _looks_like_player_chat_sender_line(candidate.source_lines[0]) else candidate.source_lines[0].text.strip()
+    message_evidence = _chat_message_text_from_lines(candidate.source_lines[1:]) if sender_evidence is not None else combined_text
+    return _ChatRowCandidate(
+        bounds=candidate.bounds,
+        source_lines=candidate.source_lines,
+        edge_kind=candidate.edge_kind,
+        kind=ChatEntryKind.UNSUPPORTED,
+        title_text=sender_evidence or combined_text or None,
+        message_text=combined_text,
+        sender_evidence=sender_evidence,
+        message_evidence=None if message_evidence == "" else message_evidence,
+        unsupported_reason=reason,
+    )
+
+
+def _merge_chat_row_candidates(first: _ChatRowCandidate, second: _ChatRowCandidate) -> _ChatRowCandidate:
+    """Combines two adjacent OCR fragments into one normalized candidate shell."""
+
+    merged_lines = tuple(sorted((*first.source_lines, *second.source_lines), key=lambda line: (line.bounds.y, line.bounds.x)))
+    return _ChatRowCandidate(
+        bounds=Bounds(
+            x=min(first.bounds.x, second.bounds.x),
+            y=min(first.bounds.y, second.bounds.y),
+            width=max(first.bounds.width, second.bounds.width),
+            height=max(first.bounds.y + first.bounds.height, second.bounds.y + second.bounds.height)
+            - min(first.bounds.y, second.bounds.y),
+        ),
+        source_lines=merged_lines,
+        edge_kind=first.edge_kind if first.edge_kind != _ChatViewportEdgeKind.INTERIOR else second.edge_kind,
+    )
+
+
+def _looks_like_sender_only_chat_candidate(candidate: _ChatRowCandidate) -> bool:
+    """Returns whether one grouped fragment contains only trustworthy sender evidence."""
+
+    return len(candidate.source_lines) == 1 and _looks_like_player_chat_sender_line(candidate.source_lines[0])
+
+
+def _looks_like_message_only_chat_candidate(candidate: _ChatRowCandidate) -> bool:
+    """Returns whether one grouped fragment contains message text without attributable sender evidence."""
+
+    if not candidate.source_lines:
+        return False
+    if _looks_like_chat_timestamp_separator_text(_chat_row_combined_text(candidate)):
+        return False
+    if _is_explicit_system_message_sender_text(candidate.source_lines[0].text):
+        return False
+    return not _looks_like_player_chat_sender_line(candidate.source_lines[0])
+
+
+def _is_absorbed_duplicate_sender_fragment(
+    *,
+    candidate: _ChatRowCandidate,
+    following_candidate: _ChatRowCandidate | None,
+) -> bool:
+    """Returns whether one sender-only fragment is duplicated verbatim by the following complete player row."""
+
+    if following_candidate is None or not _looks_like_sender_only_chat_candidate(candidate):
+        return False
+    following_player = _try_build_grouped_player_chat_candidate(following_candidate)
+    if following_player is None:
+        return False
+    return following_player.title_text == candidate.source_lines[0].text.strip()
 
 
 def _looks_like_player_chat_sender_line(line: OcrLine) -> bool:
@@ -1528,35 +1810,196 @@ def _looks_like_player_chat_sender_text(text: str) -> bool:
         return False
     if normalized_text in {_CHAT_HEADER_TEXT, _CHAT_KINGDOM_TEXT, _CHAT_ALLIANCE_TEXT}:
         return False
-    if normalized_text in _CHAT_ANNOUNCEMENT_TOKENS:
+    if normalized_text in _CHAT_SYSTEM_SENDER_TEXTS or _looks_like_chat_timestamp_separator_text(text):
         return False
-    if len(normalized_text) < 3 or len(normalized_text) > 32:
+    if len(normalized_text) < 3 or len(normalized_text) > _CHAT_MAX_SENDER_LENGTH:
+        return False
+    if len(re.findall(r"\S+", text.strip())) > 4:
         return False
     if ":" in text:
         return False
-    if re.search(r"[A-Za-z0-9]", text) is None:
+    letters = sum(character.isalpha() for character in normalized_text)
+    digits = sum(character.isdigit() for character in normalized_text)
+    if letters == 0 and digits > 0:
         return False
-    return True
+    if digits > max(4, letters * 2):
+        return False
+    return re.search(r"\w", text, flags=re.UNICODE) is not None
 
 
-def _looks_like_announcement_chat_row(
+def _is_explicit_system_message_sender_text(text: str) -> bool:
+    """Returns whether one OCR line names the strict system-message sender family."""
+
+    return normalize_ocr_text(text) in _CHAT_SYSTEM_SENDER_TEXTS
+
+
+def _looks_like_chat_timestamp_separator_text(text: str) -> bool:
+    """Returns whether one OCR line is the centered transcript date separator rather than a chat row."""
+
+    stripped = text.strip()
+    if stripped == "":
+        return False
+    if _CHAT_TIMESTAMP_SEPARATOR_PATTERN.match(stripped) is not None:
+        return True
+    normalized_text = normalize_ocr_text(stripped)
+    digit_count = sum(character.isdigit() for character in normalized_text)
+    return digit_count >= 10 and (":" in stripped or normalized_text.endswith("AM") or normalized_text.endswith("PM"))
+
+
+def _chat_row_edge_kind(*, bounds: Bounds, viewport: _ChatTranscriptViewport) -> _ChatViewportEdgeKind:
+    """Returns whether one grouped row touches the top or bottom boundary of the trusted viewport."""
+
+    if bounds.y <= viewport.top + _CHAT_BOUNDARY_FRAGMENT_MARGIN:
+        return _ChatViewportEdgeKind.TOP
+    if bounds.y + bounds.height >= viewport.bottom - _CHAT_BOUNDARY_FRAGMENT_MARGIN:
+        return _ChatViewportEdgeKind.BOTTOM
+    return _ChatViewportEdgeKind.INTERIOR
+
+
+def _is_chat_boundary_fragment(candidate: _ChatRowCandidate) -> bool:
+    """Returns whether one unresolved candidate should be dropped because it is clipped at the viewport edge."""
+
+    return candidate.edge_kind != _ChatViewportEdgeKind.INTERIOR
+
+
+def _chat_row_combined_text(candidate: _ChatRowCandidate) -> str:
+    """Returns the joined OCR text carried by one grouped row candidate."""
+
+    return " ".join(line.text.strip() for line in candidate.source_lines if line.text.strip() != "")
+
+
+def _chat_message_text_from_lines(lines: tuple[OcrLine, ...]) -> str:
+    """Returns one normalized multi-line message payload from the provided OCR lines."""
+
+    return " ".join(line.text.strip() for line in lines if line.text.strip() != "")
+
+
+def _row_has_announcement_chrome(*, image: Image.Image, bounds: Bounds) -> bool:
+    """Returns whether one chat row crop is dominated by the warm brown system-message chrome."""
+
+    crop = image.crop((max(0, int(image.width * 0.16)), bounds.y, image.width, bounds.y + bounds.height)).convert("RGB")
+    warm_pixels = _count_pixels(
+        crop,
+        predicate=lambda red, green, blue: red >= 70 and red >= blue + 20 and green >= blue + 10,
+    )
+    return warm_pixels / max(1, crop.width * crop.height) >= _CHAT_ANNOUNCEMENT_MIN_WARM_RATIO
+
+
+def _classify_non_text_chat_placeholder(
     *,
     image: Image.Image,
-    row_lines: list[OcrLine],
-) -> bool:
-    """Returns whether one visible chat row looks like shared game announcement chrome."""
+    search_bounds: Bounds,
+) -> str | None:
+    """Returns a deterministic placeholder for confidently image-only chat content when visible."""
 
-    combined_text = " ".join(normalize_ocr_text(line.text) for line in row_lines if normalize_ocr_text(line.text) != "")
-    if combined_text == "":
-        return False
-    if any(token in combined_text for token in _CHAT_ANNOUNCEMENT_TOKENS):
-        return True
-    if len(row_lines) != 1:
-        return False
-    first_line = row_lines[0]
-    return (
-        first_line.bounds.x >= int(image.width * 0.24)
-        and first_line.bounds.width >= int(image.width * 0.6)
+    if search_bounds.height <= 0 or search_bounds.width <= 0:
+        return None
+    foreground_bounds = _find_non_text_chat_foreground_bounds(image=image, search_bounds=search_bounds)
+    if foreground_bounds is None:
+        return None
+    crop = image.crop(
+        (
+            foreground_bounds.x,
+            foreground_bounds.y,
+            foreground_bounds.x + foreground_bounds.width,
+            foreground_bounds.y + foreground_bounds.height,
+        )
+    ).convert("RGB")
+    total_pixels = max(1, crop.width * crop.height)
+    foreground_pixels = _count_pixels(crop, predicate=_is_non_text_chat_foreground_pixel)
+    density = foreground_pixels / total_pixels
+    if (
+        foreground_bounds.width >= _CHAT_STICKER_MIN_DIMENSION
+        and foreground_bounds.height >= _CHAT_STICKER_MIN_DIMENSION
+        and density < _CHAT_TEXT_BUBBLE_MAX_DENSITY
+    ):
+        return "[sticker]"
+    if foreground_bounds.width > _CHAT_EMOJI_MAX_DIMENSION or foreground_bounds.height > _CHAT_EMOJI_MAX_DIMENSION:
+        return None
+    if density >= _CHAT_TEXT_BUBBLE_MAX_DENSITY and foreground_bounds.width >= foreground_bounds.height * 2:
+        return None
+    return _classify_emoji_placeholder(crop)
+
+
+def _find_non_text_chat_foreground_bounds(
+    *,
+    image: Image.Image,
+    search_bounds: Bounds,
+) -> Bounds | None:
+    """Returns the bounding box of the visible non-background foreground inside one candidate message region."""
+
+    crop = image.crop(
+        (
+            search_bounds.x,
+            search_bounds.y,
+            search_bounds.x + search_bounds.width,
+            search_bounds.y + search_bounds.height,
+        )
+    ).convert("RGB")
+    xs: list[int] = []
+    ys: list[int] = []
+    for y in range(crop.height):
+        for x in range(crop.width):
+            if not _is_non_text_chat_foreground_pixel(*crop.getpixel((x, y))):
+                continue
+            xs.append(x)
+            ys.append(y)
+    if len(xs) < _CHAT_NON_TEXT_MIN_FOREGROUND_PIXELS:
+        return None
+    left = min(xs)
+    right = max(xs)
+    top = min(ys)
+    bottom = max(ys)
+    return Bounds(
+        x=search_bounds.x + left,
+        y=search_bounds.y + top,
+        width=max(1, right - left + 1),
+        height=max(1, bottom - top + 1),
+    )
+
+
+def _classify_emoji_placeholder(crop: Image.Image) -> str:
+    """Returns the most specific safe emoji placeholder supported by the coarse visual classifier."""
+
+    white_pixels = _count_pixels(
+        crop,
+        predicate=lambda red, green, blue: red >= 210 and green >= 210 and blue >= 210,
+    )
+    yellow_pixels = _count_pixels(
+        crop,
+        predicate=lambda red, green, blue: red >= 170 and green >= 140 and blue <= 120,
+    )
+    lower_half = crop.crop((0, crop.height // 2, crop.width, crop.height))
+    lower_dark_pixels = _count_pixels(
+        lower_half,
+        predicate=lambda red, green, blue: red <= 80 and green <= 80 and blue <= 80,
+    )
+    total_pixels = max(1, crop.width * crop.height)
+    if white_pixels / total_pixels >= 0.14:
+        return "[eyes emoji]"
+    if yellow_pixels / total_pixels >= 0.2 and lower_dark_pixels / max(1, lower_half.width * lower_half.height) >= 0.03:
+        return "[happy emoji]"
+    return "[emoji]"
+
+
+def _count_pixels(image: Image.Image, *, predicate: Callable[[int, int, int], bool]) -> int:
+    """Counts pixels matching one RGB predicate inside the provided crop."""
+
+    matches = 0
+    pixels = image.load()
+    for y in range(image.height):
+        for x in range(image.width):
+            if predicate(*pixels[x, y]):
+                matches += 1
+    return matches
+
+
+def _is_non_text_chat_foreground_pixel(red: int, green: int, blue: int) -> bool:
+    """Returns whether one pixel belongs to visible chat content rather than the dark background."""
+
+    brightest = max(red, green, blue)
+    return brightest >= _CHAT_NON_TEXT_FOREGROUND_BRIGHTNESS or (
+        brightest >= 80 and brightest - min(red, green, blue) >= _CHAT_NON_TEXT_FOREGROUND_VARIANCE
     )
 
 
@@ -1750,17 +2193,17 @@ def _looks_like_mail_date_text(text: str) -> bool:
     return bool(re.search(r"\d", normalized_text) and any(token in normalized_text for token in ("AM", "PM", "AGO", "DAY", "HOUR", "MIN", "SEC")))
 
 
-def _is_chat_message_candidate_line(*, image: Image.Image, line: OcrLine) -> bool:
+def _is_chat_message_candidate_line(*, line: OcrLine, viewport: _ChatTranscriptViewport) -> bool:
     """Returns whether one OCR line can belong to the visible chat-message list."""
 
     normalized_text = normalize_ocr_text(line.text)
     if normalized_text == "":
         return False
-    if line.bounds.y < int(image.height * 0.16) or line.bounds.y > int(image.height * 0.8):
+    if line.bounds.y < viewport.top or line.bounds.y > viewport.bottom:
         return False
     if normalized_text in {_CHAT_HEADER_TEXT, _CHAT_KINGDOM_TEXT, _CHAT_ALLIANCE_TEXT, *_SEND_TEXTS}:
         return False
-    if _is_empty_chat_draft_text(normalized_text):
+    if _is_empty_chat_draft_text(normalized_text) or _looks_like_chat_timestamp_separator_text(line.text):
         return False
     return True
 
@@ -2882,10 +3325,10 @@ def _looks_like_castle_selection(
 ) -> bool:
     """Returns whether OCR output matches the Manage Char screen structure."""
 
-    if any(anchor.id == TextAnchorId.LABEL_MANAGE_CHAR for anchor in anchors):
-        return True
     if len(entries) < 2:
         return False
+    if any(anchor.id == TextAnchorId.LABEL_MANAGE_CHAR for anchor in anchors):
+        return True
     leveled_entries = sum(1 for entry in entries if entry.metadata.get("castle_level") is not None)
     return leveled_entries >= 2
 

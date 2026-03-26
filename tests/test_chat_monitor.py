@@ -314,6 +314,53 @@ class ChatMonitorTests(unittest.TestCase):
             self.assertIn("unsupported rows", result.message)
             self.assertFalse(any((Path(temp_directory) / "chat").rglob("transcript.log")))
 
+    def test_collect_kingdom_chat_task_reports_unsupported_row_shape_in_failure_diagnostics(self) -> None:
+        """Includes row-shape detail in the failure result so unsupported OCR is easier to debug live."""
+
+        task = CollectKingdomChatTask()
+        with tempfile.TemporaryDirectory() as temp_directory:
+            store = ChatArchiveStore(root=Path(temp_directory) / "chat")
+            fake_observer = FakeObservationService(
+                observations=[
+                    make_observation(
+                        ScreenType.PNC_CHAT,
+                        active_chat_channel=ChatChannel.WORLD,
+                        list_entries=(
+                            make_entry(
+                                ListEntryKind.CHAT_MESSAGE,
+                                title="[DMG]p2o2i2u2ueu3u47484",
+                                metadata={
+                                    "chat_entry_kind": ChatEntryKind.UNSUPPORTED.value,
+                                    "message_text": "[DMG]p2o2i2u2ueu3u47484",
+                                    "message_preview": "[DMG]p2o2i2u2ueu3u47484",
+                                    "visible_order": 0,
+                                    "unsupported_reason": "sender_only",
+                                    "sender_evidence": "[DMG]p2o2i2u2ueu3u47484",
+                                },
+                                action_point=(0, 0),
+                            ),
+                        ),
+                    ),
+                ]
+            )
+            context = self._make_context(
+                params=None,
+                task_id=TaskId.COLLECT_KINGDOM_CHAT,
+                target_castle=self.target_castle,
+                chat_archive_store=store,
+                observation_service=fake_observer,
+            )
+
+            result = task.verify(
+                context,
+                make_observation(ScreenType.PNC_CHAT, active_chat_channel=ChatChannel.WORLD),
+                make_observation(ScreenType.PNC_CHAT, active_chat_channel=ChatChannel.WORLD),
+            )
+
+            self.assertEqual(result.status, TaskStatus.FAILED)
+            self.assertIn("sender_only", result.message)
+            self.assertIn("[DMG]p2o2i2u2ueu3u47484", result.message)
+
     def _make_context(
         self,
         *,
