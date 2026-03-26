@@ -6,7 +6,7 @@ from pnc_automation.automation.task_context import TaskContext
 from pnc_automation.config.models import CastleIdentity
 from pnc_automation.errors import SelectorResolutionError
 from pnc_automation.pnc.action_requests import ActionRequest
-from pnc_automation.pnc.observation import Observation
+from pnc_automation.pnc.observation import Observation, castle_names_match, resolve_unambiguous_castle_identity
 from pnc_automation.pnc.screen_type import ScreenType
 
 _ACTIVE_CASTLE_IDENTITY_STATE_KEY = "active_castle_identity"
@@ -124,12 +124,10 @@ def _resolve_castle_name(context: TaskContext, castle_name: str) -> CastleIdenti
     normalized_name = castle_name.strip()
     if normalized_name == "":
         return None
-    if context.target_castle is not None and context.target_castle.castle_name == normalized_name:
+    if context.target_castle is not None and castle_names_match(context.target_castle.castle_name, normalized_name):
         return context.target_castle
     roster = context.castle_roster
     if roster is None:
         return None
-    matching_castles = tuple(castle for castle in roster.castles if castle.castle_name == normalized_name)
-    if len(matching_castles) != 1:
-        return None
-    return matching_castles[0]
+    matching_castles = tuple(castle for castle in roster.castles if castle_names_match(castle.castle_name, normalized_name))
+    return resolve_unambiguous_castle_identity(matching_castles, preferred_name=normalized_name)

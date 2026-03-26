@@ -21,10 +21,12 @@ from pnc_automation.pnc.action_requests import (
     InputTextAction,
     SelectChatChannelAction,
     TapAction,
+    TapListEntryAction,
     TapSpatialObjectAction,
 )
 from pnc_automation.pnc.chat import ChatChannel
 from pnc_automation.pnc.observation import (
+    ListEntryKind,
     Observation,
     SpatialObjectKind,
     SpatialObjectQuery,
@@ -49,6 +51,7 @@ from tests.test_support import (
     FakeObservationService,
     FakeSession,
     build_logger,
+    make_entry,
     make_observation,
     make_spatial_object,
     make_spatial_surface,
@@ -328,6 +331,43 @@ class AutomationFrameworkTests(unittest.TestCase):
         )
 
         self.assertEqual(executor.session.taps, [(482, 1529)])
+
+    def test_tap_list_entry_action_matches_castle_titles_with_spacing_only_ocr_drift(self) -> None:
+        """Resolves castle-row taps through the shared OCR-tolerant castle-name matcher."""
+
+        executor = ActionExecutor(
+            session=FakeSession(),
+            stable_click_delay_ms=0,
+            post_action_observe_delay_ms=0,
+            chat_stable_click_delay_ms=0,
+            chat_post_action_observe_delay_ms=0,
+            logger=build_logger(),
+            sleep=lambda _: None,
+        )
+        observation = make_observation(
+            ScreenType.PNC_CASTLE_SELECTION,
+            list_entries=(
+                make_entry(
+                    ListEntryKind.CASTLE,
+                    title="please bgentle",
+                    metadata={"kingdom": "K226", "castle_level": 12},
+                    action_point=(240, 872),
+                ),
+            ),
+        )
+
+        executor.execute_action(
+            TapListEntryAction(
+                entry_kind=ListEntryKind.CASTLE,
+                title_text="please b gentle",
+                metadata_key="kingdom",
+                metadata_value="K226",
+                use_action_point=True,
+            ),
+            observation,
+        )
+
+        self.assertEqual(executor.session.taps, [(240, 872)])
 
     def test_tap_spatial_object_actions_use_current_viewport_action_points(self) -> None:
         """Uses the live spatial-object action point from the current viewport instead of any fixed building coordinate."""

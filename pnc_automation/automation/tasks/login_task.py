@@ -101,11 +101,13 @@ class LoginTask(BaseAutomationTask):
             ):
                 return TaskResult.success("Login completed or was already satisfied.")
             roster_verification = self._verify_castle_roster_snapshot(after)
-            if roster_verification is not None:
-                return roster_verification
             session_verification = self._verify_accessible_in_game_session(after)
+            if roster_verification is not None and roster_verification.succeeded:
+                return roster_verification
             if session_verification is not None:
                 return session_verification
+            if roster_verification is not None:
+                return roster_verification
             if after.screen_type == ScreenType.PNC_HOME_CITY:
                 return TaskResult.replan("Login reached home city and still needs Lord Info or Manage Char verification.")
             if after.screen_type == ScreenType.PNC_MORE_MENU:

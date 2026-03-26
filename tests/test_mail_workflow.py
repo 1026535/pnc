@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from pnc_automation.automation.action_executor import ActionExecutor
 from pnc_automation.scripts.models import ScriptStep
@@ -1413,7 +1413,8 @@ class MailWorkflowTests(unittest.TestCase):
                 _ocr_line("Alliance", x=520, y=96, width=120, height=24),
                 _ocr_line("Enemy Bob", x=120, y=260, width=180, height=24),
                 _ocr_line("Hello there", x=160, y=292, width=200, height=24),
-                _ocr_line("System Announcement", x=160, y=380, width=260, height=24),
+                _ocr_line("System Message", x=120, y=380, width=220, height=24),
+                _ocr_line("Castle battle begins soon", x=160, y=412, width=340, height=24),
             ),
         )
 
@@ -1462,8 +1463,8 @@ class MailWorkflowTests(unittest.TestCase):
         self.assertEqual(chat_entries[0].metadata["chat_entry_kind"], ChatEntryKind.UNSUPPORTED.value)
         self.assertEqual(len(visible_unsupported_chat_entries(chat_entries)), 1)
 
-    def test_observation_builder_keeps_centered_wide_announcement_rows_as_announcements(self) -> None:
-        """Keeps token-free centered banner rows classified as announcements when the layout matches announcement chrome."""
+    def test_observation_builder_keeps_explicit_system_message_rows_as_announcements(self) -> None:
+        """Keeps the brown System Message row family classified as announcements instead of player chat."""
 
         observation = _build_observation(
             request=ObservationRequest.chat_transcript_observation(),
@@ -1471,7 +1472,8 @@ class MailWorkflowTests(unittest.TestCase):
                 _ocr_line("Chat", x=250, y=40, width=120, height=24),
                 _ocr_line("Kingdom", x=180, y=96, width=120, height=24),
                 _ocr_line("Alliance", x=520, y=96, width=120, height=24),
-                _ocr_line("Battle begins soon", x=260, y=360, width=560, height=24),
+                _ocr_line("System Message", x=120, y=360, width=220, height=24),
+                _ocr_line("Battle begins soon", x=160, y=392, width=300, height=24),
             ),
         )
 
@@ -1479,6 +1481,8 @@ class MailWorkflowTests(unittest.TestCase):
 
         self.assertEqual(len(chat_entries), 1)
         self.assertEqual(chat_entries[0].metadata["chat_entry_kind"], ChatEntryKind.ANNOUNCEMENT.value)
+        self.assertEqual(chat_entries[0].title_text, "System Message")
+        self.assertEqual(chat_entries[0].subtitle_text, "Battle begins soon")
 
     def test_observation_builder_does_not_create_false_player_rows_from_announcement_only_chat(self) -> None:
         """Treats announcement-only Kingdom Chat windows as non-player content so transcript deltas stay quiet."""
@@ -1489,12 +1493,197 @@ class MailWorkflowTests(unittest.TestCase):
                 _ocr_line("Chat", x=250, y=40, width=120, height=24),
                 _ocr_line("Kingdom", x=180, y=96, width=120, height=24),
                 _ocr_line("Alliance", x=520, y=96, width=120, height=24),
-                _ocr_line("System Announcement", x=160, y=360, width=260, height=24),
+                _ocr_line("System Message", x=120, y=360, width=220, height=24),
+                _ocr_line("The Apex Match World Championship has ended!", x=160, y=392, width=420, height=24),
             ),
         )
 
         self.assertEqual(observation.screen_type, ScreenType.PNC_CHAT)
         self.assertEqual(len(visible_player_chat_entries(observation.entries(ListEntryKind.CHAT_MESSAGE))), 0)
+
+    def test_observation_builder_merges_split_sender_and_message_fragments_into_one_player_row(self) -> None:
+        """Merges one isolated sender label with the adjacent message block when the attachment is unique."""
+
+        observation = _build_observation(
+            request=ObservationRequest.chat_transcript_observation(),
+            lines=(
+                _ocr_line("Chat", x=250, y=40, width=120, height=24),
+                _ocr_line("Kingdom", x=180, y=96, width=120, height=24),
+                _ocr_line("Alliance", x=520, y=96, width=120, height=24),
+                _ocr_line("[DMG]Toast.", x=120, y=360, width=180, height=24),
+                _ocr_line("it's a mystery", x=170, y=424, width=220, height=24),
+            ),
+        )
+
+        chat_entries = observation.entries(ListEntryKind.CHAT_MESSAGE)
+
+        self.assertEqual(len(chat_entries), 1)
+        self.assertEqual(chat_entries[0].title_text, "[DMG]Toast.")
+        self.assertEqual(chat_entries[0].metadata["chat_entry_kind"], ChatEntryKind.PLAYER.value)
+        self.assertEqual(chat_entries[0].metadata["message_text"], "it's a mystery")
+
+    def test_observation_builder_keeps_titled_and_tagged_player_rows_archivable(self) -> None:
+        """Accepts optional title and alliance-tag prefixes as normal player sender evidence."""
+
+        observation = _build_observation(
+            request=ObservationRequest.chat_transcript_observation(),
+            lines=(
+                _ocr_line("Chat", x=250, y=40, width=120, height=24),
+                _ocr_line("Kingdom", x=180, y=96, width=120, height=24),
+                _ocr_line("Alliance", x=520, y=96, width=120, height=24),
+                _ocr_line("[Ruler][RST]Queen Bee", x=120, y=260, width=260, height=24),
+                _ocr_line("Good luck all", x=160, y=292, width=220, height=24),
+                _ocr_line("[DMG]Toast.", x=120, y=380, width=180, height=24),
+                _ocr_line("Still normal player chat", x=160, y=412, width=280, height=24),
+            ),
+        )
+
+        chat_entries = observation.entries(ListEntryKind.CHAT_MESSAGE)
+
+        self.assertEqual([entry.title_text for entry in chat_entries], ["[Ruler][RST]Queen Bee", "[DMG]Toast."])
+        self.assertTrue(all(entry.metadata["chat_entry_kind"] == ChatEntryKind.PLAYER.value for entry in chat_entries))
+
+    def test_observation_builder_keeps_autogenerated_player_style_rows_and_admin_rows_archivable(self) -> None:
+        """Keeps player-chrome broadcasts and blue-bubble Admin rows in the player archive bucket."""
+
+        observation = _build_observation(
+            request=ObservationRequest.chat_transcript_observation(),
+            lines=(
+                _ocr_line("Chat", x=250, y=40, width=120, height=24),
+                _ocr_line("Kingdom", x=180, y=96, width=120, height=24),
+                _ocr_line("Alliance", x=520, y=96, width=120, height=24),
+                _ocr_line("Admin", x=120, y=260, width=140, height=24),
+                _ocr_line("I obtained legendary hero Phoenix (Tap to Join)", x=160, y=292, width=520, height=24),
+                _ocr_line("Cutie Voj", x=120, y=380, width=160, height=24),
+                _ocr_line("I crafted Mythic Hammer! (Tap to view)", x=160, y=412, width=430, height=24),
+            ),
+        )
+
+        chat_entries = observation.entries(ListEntryKind.CHAT_MESSAGE)
+
+        self.assertEqual([entry.title_text for entry in chat_entries], ["Admin", "Cutie Voj"])
+        self.assertTrue(all(entry.metadata["chat_entry_kind"] == ChatEntryKind.PLAYER.value for entry in chat_entries))
+
+    def test_observation_builder_drops_bottom_clipped_sender_only_boundary_fragments(self) -> None:
+        """Skips bottom-edge sender fragments that are visibly clipped instead of failing an otherwise valid snapshot."""
+
+        observation = _build_observation(
+            request=ObservationRequest.chat_transcript_observation(),
+            lines=(
+                _ocr_line("Chat", x=250, y=40, width=120, height=24),
+                _ocr_line("Kingdom", x=180, y=96, width=120, height=24),
+                _ocr_line("Alliance", x=520, y=96, width=120, height=24),
+                _ocr_line("Enemy Bob", x=120, y=1120, width=180, height=24),
+                _ocr_line("Hello there", x=160, y=1152, width=220, height=24),
+                _ocr_line("[DMG]Toast.", x=120, y=1450, width=180, height=24),
+            ),
+            image_size=(900, 1600),
+        )
+
+        chat_entries = observation.entries(ListEntryKind.CHAT_MESSAGE)
+
+        self.assertEqual(len(chat_entries), 1)
+        self.assertEqual(chat_entries[0].title_text, "Enemy Bob")
+        self.assertEqual(len(visible_unsupported_chat_entries(chat_entries)), 0)
+
+    def test_observation_builder_marks_interior_message_only_fragments_as_unsupported(self) -> None:
+        """Keeps interior message-only OCR fragments fail-fast when no trustworthy sender can be attached."""
+
+        observation = _build_observation(
+            request=ObservationRequest.chat_transcript_observation(),
+            lines=(
+                _ocr_line("Chat", x=250, y=40, width=120, height=24),
+                _ocr_line("Kingdom", x=180, y=96, width=120, height=24),
+                _ocr_line("Alliance", x=520, y=96, width=120, height=24),
+                _ocr_line("just some floating message text", x=200, y=360, width=300, height=24),
+            ),
+        )
+
+        chat_entries = observation.entries(ListEntryKind.CHAT_MESSAGE)
+
+        self.assertEqual(len(chat_entries), 1)
+        self.assertEqual(chat_entries[0].metadata["chat_entry_kind"], ChatEntryKind.UNSUPPORTED.value)
+        self.assertEqual(chat_entries[0].metadata["unsupported_reason"], "message_only")
+
+    def test_observation_builder_archives_emoji_only_rows_with_controlled_placeholders(self) -> None:
+        """Maps confidently image-only emoji rows onto the canonical placeholder vocabulary."""
+
+        image = _build_chat_fixture_image()
+        _draw_chat_emoji(image, top=330, kind="happy")
+        _draw_chat_emoji(image, top=520, kind="eyes")
+        _draw_chat_emoji(image, top=710, kind="generic")
+        observation = _build_observation(
+            request=ObservationRequest.chat_transcript_observation(),
+            image=image,
+            lines=(
+                _ocr_line("Chat", x=250, y=40, width=120, height=24),
+                _ocr_line("Kingdom", x=180, y=96, width=120, height=24),
+                _ocr_line("Alliance", x=520, y=96, width=120, height=24),
+                _ocr_line("Happy Bot", x=120, y=290, width=180, height=24),
+                _ocr_line("Eyes Bot", x=120, y=480, width=180, height=24),
+                _ocr_line("Mystery Bot", x=120, y=670, width=180, height=24),
+            ),
+        )
+
+        chat_entries = observation.entries(ListEntryKind.CHAT_MESSAGE)
+
+        self.assertEqual(
+            [entry.metadata["message_text"] for entry in chat_entries],
+            ["[happy emoji]", "[eyes emoji]", "[emoji]"],
+        )
+        self.assertTrue(all(entry.metadata["chat_entry_kind"] == ChatEntryKind.PLAYER.value for entry in chat_entries))
+
+    def test_observation_builder_normalizes_live_march_24_kingdom_chat_failure_shape(self) -> None:
+        """Covers the March 24, 2026 live OCR shape so split rows, timestamps, and sticker rows normalize safely."""
+
+        image = Image.open(
+            Path(__file__).resolve().parents[1]
+            / "artifacts"
+            / "2026-03-24"
+            / "serious_stuff"
+            / "20260324T143723Z_collect_kingdom_chat_failure_result.png"
+        )
+        observation = _build_observation(
+            request=ObservationRequest.chat_transcript_observation(),
+            image=image,
+            image_size=image.size,
+            lines=(
+                _ocr_line("Chat", x=107, y=10, width=70, height=33),
+                _ocr_line("Kingdom", x=123, y=70, width=85, height=24),
+                _ocr_line("Alliance", x=391, y=68, width=75, height=26),
+                _ocr_line("[Deceiver] [DMG]   Sonny Corinthos", x=109, y=165, width=253, height=16),
+                _ocr_line("plscometome", x=112, y=198, width=115, height=17),
+                _ocr_line("[MIR]yJeTalO", x=109, y=270, width=107, height=18),
+                _ocr_line("ABOTAyMarOyTOTyTKTOeCTbAaXeHe3HarOTKaKW3", x=110, y=304, width=382, height=17),
+                _ocr_line("3ayeroBceHayaocb)", x=111, y=327, width=169, height=15),
+                _ocr_line("2026-03-2410:00", x=196, y=382, width=149, height=17),
+                _ocr_line("SystemMessage", x=103, y=431, width=123, height=21),
+                _ocr_line("The Apex Match World Championship has ended!", x=112, y=465, width=362, height=19),
+                _ocr_line("Congrats to Xo-xo-xo.from Kingdom 297 on winning", x=111, y=487, width=391, height=20),
+                _ocr_line("theworldchampion title!", x=112, y=511, width=185, height=15),
+                _ocr_line("2026-03-2410:37", x=196, y=567, width=148, height=17),
+                _ocr_line("[DMG]  Toast.", x=108, y=618, width=100, height=18),
+                _ocr_line("it'samystery", x=109, y=650, width=102, height=21),
+                _ocr_line("[DMG]p2o2i2u2ueu3u47484", x=108, y=724, width=220, height=17),
+            ),
+        )
+
+        chat_entries = observation.entries(ListEntryKind.CHAT_MESSAGE)
+
+        self.assertEqual(len(chat_entries), 5)
+        self.assertEqual(
+            [entry.metadata["chat_entry_kind"] for entry in chat_entries],
+            [
+                ChatEntryKind.PLAYER.value,
+                ChatEntryKind.PLAYER.value,
+                ChatEntryKind.ANNOUNCEMENT.value,
+                ChatEntryKind.PLAYER.value,
+                ChatEntryKind.PLAYER.value,
+            ],
+        )
+        self.assertEqual(chat_entries[2].title_text, "SystemMessage")
+        self.assertEqual(chat_entries[4].metadata["message_text"], "[sticker]")
+        self.assertEqual(len(visible_unsupported_chat_entries(chat_entries)), 0)
 
     def test_observation_builder_groups_alliance_member_rows_without_promoting_stats_or_actions(self) -> None:
         """Extracts one member entry per alliance row instead of treating stats and action labels as names."""
@@ -1905,11 +2094,12 @@ def _build_observation(
     request: ObservationRequest,
     lines: tuple[OcrLine, ...],
     image_size: tuple[int, int] = (900, 1600),
+    image: Image.Image | None = None,
 ):
     """Builds one synthetic OCR-backed observation using the default selector registry."""
 
-    image = Image.new("RGB", image_size, (18, 30, 72))
-    payload = _encode_png(image)
+    active_image = image.copy() if image is not None else _build_chat_fixture_image(image_size=image_size)
+    payload = _encode_png(active_image)
     with tempfile.TemporaryDirectory() as temp_directory:
         screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=Path(temp_directory) / "artifacts"))
         screenshot = screenshot_service.capture(
@@ -1930,6 +2120,35 @@ def _build_observation(
             ),
         )
         return builder.build(screenshot, request=request)
+
+
+def _build_chat_fixture_image(*, image_size: tuple[int, int] = (900, 1600)) -> Image.Image:
+    """Builds the shared dark chat-surface image used by OCR-only and icon-placeholder tests."""
+
+    return Image.new("RGB", image_size, (18, 30, 72))
+
+
+def _draw_chat_emoji(image: Image.Image, *, top: int, kind: str) -> None:
+    """Draws one deterministic non-text chat icon used by the placeholder-classifier tests."""
+
+    draw = ImageDraw.Draw(image)
+    if kind == "happy":
+        box = (170, top, 230, top + 60)
+        draw.ellipse(box, fill=(250, 210, 48))
+        draw.ellipse((184, top + 18, 194, top + 28), fill=(20, 20, 20))
+        draw.ellipse((206, top + 18, 216, top + 28), fill=(20, 20, 20))
+        draw.arc((186, top + 26, 214, top + 48), start=20, end=160, fill=(20, 20, 20), width=3)
+        return
+    if kind == "eyes":
+        draw.ellipse((166, top + 10, 198, top + 42), fill=(245, 245, 245))
+        draw.ellipse((202, top + 10, 234, top + 42), fill=(245, 245, 245))
+        draw.ellipse((178, top + 20, 188, top + 30), fill=(20, 20, 20))
+        draw.ellipse((214, top + 20, 224, top + 30), fill=(20, 20, 20))
+        return
+    draw.polygon(
+        ((180, top + 8), (220, top + 20), (232, top + 54), (200, top + 66), (168, top + 50)),
+        fill=(175, 90, 220),
+    )
 
 
 def _mail_archive_record() -> MailArchiveRecord:

@@ -13,8 +13,8 @@ from pnc_automation.automation.tasks.active_castle_resolution import (
     require_active_castle_identity,
 )
 from pnc_automation.pnc.action_requests import ActionRequest, WaitAction
-from pnc_automation.pnc.chat import ChatChannel, visible_player_chat_entries, visible_unsupported_chat_entries
-from pnc_automation.pnc.observation import ListEntryKind, Observation
+from pnc_automation.pnc.chat import ChatChannel, ChatEntryKind, visible_player_chat_entries
+from pnc_automation.pnc.observation import DetectedListEntry, ListEntryKind, Observation
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.vision.observation_request import ObservationRequest
 
@@ -87,13 +87,21 @@ class CollectKingdomChatTask(BaseAutomationTask):
         if observation.screen_type != ScreenType.PNC_CHAT or observation.active_chat_channel != ChatChannel.WORLD:
             return TaskResult.replan("Kingdom chat polling is refreshing the final Kingdom transcript state.")
         chat_entries = observation.entries(ListEntryKind.CHAT_MESSAGE)
-        unsupported_entries = visible_unsupported_chat_entries(chat_entries)
+        unsupported_entries = tuple(
+            entry
+            for entry in chat_entries
+            if entry.metadata.get("chat_entry_kind") == ChatEntryKind.UNSUPPORTED.value
+        )
         if unsupported_entries:
+            unsupported_diagnostics = tuple(_describe_unsupported_chat_row(entry) for entry in unsupported_entries)
             context.logger.warning(
                 "Kingdom chat transcript contained unsupported rows.",
-                extra={"unsupported_rows": [entry.message_text for entry in unsupported_entries]},
+                extra={"unsupported_rows": unsupported_diagnostics},
             )
-            return TaskResult.failure("Kingdom chat observation contained unsupported rows that could not be archived safely.")
+            return TaskResult.failure(
+                "Kingdom chat observation contained unsupported rows that could not be archived safely: "
+                + "; ".join(unsupported_diagnostics)
+            )
         player_entries = visible_player_chat_entries(chat_entries)
         castle = require_active_castle_identity(context, observation, task_label="collect_kingdom_chat")
         try:
@@ -127,3 +135,30 @@ def _screenshot_extension(image_format: str) -> str:
     if normalized in {"png", "jpeg", "jpg", "webp"}:
         return normalized
     return "png"
+
+
+def _describe_unsupported_chat_row(entry: DetectedListEntry) -> str:
+    """Returns one compact diagnostic string describing why a chat row remained unsupported."""
+
+    reason = entry.metadata.get("unsupported_reason")
+    sender_evidence = entry.metadata.get("sender_evidence")
+    message_evidence = entry.metadata.get("message_evidence")
+    preview = entry.metadata.get("message_text")
+    if reason == "sender_only":
+        return f"sender_only:{_truncate_chat_preview(sender_evidence or preview)}"
+    if reason == "message_only":
+        return f"message_only:{_truncate_chat_preview(message_evidence or preview)}"
+    if isinstance(sender_evidence, str) and sender_evidence.strip() != "" and isinstance(message_evidence, str) and message_evidence.strip() != "":
+        return f"ambiguous:{_truncate_chat_preview(sender_evidence)} -> {_truncate_chat_preview(message_evidence)}"
+    return f"ambiguous:{_truncate_chat_preview(preview)}"
+
+
+def _truncate_chat_preview(value: object, *, limit: int = 72) -> str:
+    """Returns one normalized preview snippet suitable for failure and log diagnostics."""
+
+    if not isinstance(value, str):
+        return "<?>"
+    normalized = " ".join(value.split())
+    if len(normalized) <= limit:
+        return normalized
+    return f"{normalized[: limit - 3]}..."

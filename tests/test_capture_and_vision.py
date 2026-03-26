@@ -999,6 +999,47 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             self.assertEqual(observation.current_castle_name, "K304554ca2797")
 
+    def test_home_city_follow_up_still_classifies_full_screen_settings_as_more_menu(self) -> None:
+        """Keeps More > Settings identifiable during home-city follow-ups from Manage Char."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (540, 960), (15, 28, 68)))),
+                artifact_directory="k304_more_settings_follow_up",
+                label="more_settings_follow_up",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Settings", x=112, y=20, width=128, height=28),
+                            _ocr_line("Account", x=120, y=94, width=102, height=24),
+                            _ocr_line("Manage Char.", x=304, y=94, width=134, height=24),
+                            _ocr_line("Search", x=122, y=188, width=88, height=24),
+                            _ocr_line("Rank", x=344, y=188, width=64, height=24),
+                            _ocr_line("Blacklist", x=320, y=374, width=104, height=24),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(
+                screenshot,
+                request=ObservationRequest.home_city_follow_up(ScreenType.PNC_CASTLE_SELECTION),
+            )
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_MORE_MENU)
+            self.assertTrue(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
+            self.assertTrue(observation.has(UiElementId.PNC_MORE_MANAGE_CHAR))
+
     def test_observation_builder_classifies_vip_from_live_like_ocr(self) -> None:
         """Recognizes the VIP benefits screen from its header and support text."""
 

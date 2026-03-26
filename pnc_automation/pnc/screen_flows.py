@@ -247,7 +247,17 @@ class ScreenFlowPlanner:
                 "Lord Info navigation requires home city, the More overlay, or the Lord Info screen itself.",
                 screen_type=observation.screen_type,
             )
-        if observation.has(UiElementId.PNC_MORE_SETTINGS):
+        if observation.has(UiElementId.PNC_MORE_MANAGE_CHAR) and observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT):
+            if observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT):
+                return [
+                    TapAction(
+                        selector_id=UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+                        reason="leave_settings_menu",
+                        observe_after=True,
+                        follow_up_request=ObservationRequest.home_city_follow_up(ScreenType.PNC_MORE_MENU),
+                    )
+                ]
+        if observation.has(UiElementId.PNC_MORE_SETTINGS) and observation.has(UiElementId.PNC_BOTTOM_NAV_MORE):
             return [
                 TapAction(
                     selector_id=UiElementId.PNC_BOTTOM_NAV_MORE,
@@ -262,17 +272,12 @@ class ScreenFlowPlanner:
             ]
         if observation.has(UiElementId.PNC_MORE_MANAGE_CHAR):
             return [
-                KeyEventAction(key_code="KEYCODE_BACK", reason="leave_settings_menu", observe_after=True),
-                TapAction(
-                    selector_id=UiElementId.PNC_BOTTOM_NAV_MORE,
-                    reason="close_more_menu",
+                KeyEventAction(
+                    key_code="KEYCODE_BACK",
+                    reason="leave_settings_menu",
                     observe_after=True,
-                ),
-                TapAction(
-                    selector_id=UiElementId.PNC_HOME_LORD_INFO_SHORTCUT,
-                    reason="open_lord_info",
-                    observe_after=True,
-                ),
+                    follow_up_request=ObservationRequest.home_city_follow_up(ScreenType.PNC_MORE_MENU),
+                )
             ]
         raise SelectorResolutionError(
             "More-menu navigation cannot locate a safe path back to the home-city Lord Info shortcut.",
