@@ -30,12 +30,12 @@ from pnc_automation.pnc.observation import (
 )
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
+from pnc_automation.text_normalization import normalize_ocr_text
 from pnc_automation.vision.image_models import SelectorMatch
 from pnc_automation.vision.observation_request import ObservationRequest
 from pnc_automation.vision.ocr_service import OcrLine, OcrService
 from pnc_automation.vision.screen_classifier import ScreenClassifier, ScreenEvidence
 from pnc_automation.vision.selectors import DetectionKind, SelectorRegistry
-from pnc_automation.vision.text_anchors import normalize_ocr_text
 from pnc_automation.vision.template_matcher import PillowTemplateMatcher
 
 
