@@ -19,9 +19,9 @@ from pnc_automation.pnc.observation import (
     SpatialViewportAddressingKind,
 )
 from pnc_automation.pnc.screen_type import ScreenType
+from pnc_automation.text_normalization import normalize_ocr_text
 from pnc_automation.vision.ocr_service import OcrLine
 from pnc_automation.vision.selectors import SelectorRegistry, SurfaceDefinition
-from pnc_automation.vision.text_anchors import normalize_ocr_text
 
 _WORLD_X_COORDINATE_PATTERN = re.compile(r"X\s*[:：]\s*(?P<value>\d{1,4})", re.IGNORECASE)
 _WORLD_Y_COORDINATE_PATTERN = re.compile(r"Y\s*[:：]\s*(?P<value>\d{1,4})", re.IGNORECASE)

@@ -28,9 +28,8 @@ from pnc_automation.pnc.action_requests import (
 from pnc_automation.pnc.observation import (
     DetectedListEntry,
     DetectedSpatialObject,
-    ListEntryKind,
     Observation,
-    castle_names_match,
+    list_entry_matches,
 )
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
@@ -181,13 +180,14 @@ class ActionExecutor:
         """Returns the matching list entry for one dynamic-entry tap."""
 
         for entry in observation.entries(action.entry_kind):
-            if action.title_text is not None and not self._entry_title_matches(action=action, entry=entry):
-                continue
-            if action.metadata_key is not None and entry.metadata.get(action.metadata_key) != action.metadata_value:
-                continue
-            if action.selected is not None and entry.selected != action.selected:
-                continue
-            return entry
+            if list_entry_matches(
+                entry,
+                title_text=action.title_text,
+                metadata_key=action.metadata_key,
+                metadata_value=action.metadata_value,
+                selected=action.selected,
+            ):
+                return entry
         raise SelectorResolutionError(
             "Could not resolve the requested list entry tap target.",
             entry_kind=action.entry_kind,
@@ -195,17 +195,6 @@ class ActionExecutor:
             metadata_key=action.metadata_key,
             metadata_value=action.metadata_value,
         )
-
-    def _entry_title_matches(self, *, action: TapListEntryAction, entry: DetectedListEntry) -> bool:
-        """Returns whether one observed list-entry title satisfies the tap request."""
-
-        if action.title_text is None:
-            return True
-        if entry.title_text is None:
-            return False
-        if action.entry_kind == ListEntryKind.CASTLE:
-            return castle_names_match(entry.title_text, action.title_text)
-        return entry.title_text == action.title_text
 
     def _require_spatial_object(self, action: TapSpatialObjectAction, observation: Observation) -> DetectedSpatialObject:
         """Returns the matching visible spatial object for one spatial-object tap."""

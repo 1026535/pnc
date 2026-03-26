@@ -50,6 +50,7 @@ from pnc_automation.pnc.observation import (
     SpatialObjectKind,
     SpatialObjectQuery,
     SpatialSurfaceType,
+    resolve_unambiguous_castle_identity,
 )
 from pnc_automation.pnc.spatial_navigation import WorldCoordinate
 from pnc_automation.pnc.policy_models import BuildingPriority, BuildingUpgradePolicy, GatheringPolicy
@@ -966,6 +967,19 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertEqual(actions[0].metadata_value, "K226")
         self.assertIsInstance(actions[1], WaitAction)
 
+    def test_resolve_unambiguous_castle_identity_prefers_the_exact_requested_name_variant(self) -> None:
+        """Returns the exact preferred castle spelling even when an equivalent variant appears first."""
+
+        first_variant = CastleIdentity(kingdom="K226", castle_name="please bgentle", castle_level=12)
+        exact_variant = CastleIdentity(kingdom="K226", castle_name="please b gentle", castle_level=12)
+
+        resolved = resolve_unambiguous_castle_identity(
+            (first_variant, exact_variant),
+            preferred_name="please b gentle",
+        )
+
+        self.assertEqual(resolved, exact_variant)
+
     def test_select_castle_fails_fast_without_an_explicit_target(self) -> None:
         """Rejects direct select-castle execution when the step omitted its runtime castle target."""
 
@@ -1097,15 +1111,16 @@ class FlowAndTaskTests(unittest.TestCase):
 
         self.assertTrue(result.succeeded)
 
-    def test_remember_active_castle_identity_tolerates_spacing_only_lord_info_drift(self) -> None:
-        """Resolves Lord Info castle names through the shared OCR-tolerant castle-name matcher."""
+    def test_remember_active_castle_identity_prefers_the_exact_lord_info_name_variant(self) -> None:
+        """Preserves the exact Lord Info spelling when semantically equivalent roster entries coexist."""
 
         target_castle = CastleIdentity(kingdom="K226", castle_name="please b gentle", castle_level=12)
+        exact_variant = CastleIdentity(kingdom="K226", castle_name="please bgentle", castle_level=12)
         roster = PncAccountCastleRosterConfig(
             pnc_account_id=self.account.pnc_account_id,
             castles=(
                 target_castle,
-                CastleIdentity(kingdom="K226", castle_name="please bgentle", castle_level=12),
+                exact_variant,
             ),
         )
         context = self._make_context(
@@ -1119,7 +1134,7 @@ class FlowAndTaskTests(unittest.TestCase):
             make_observation(ScreenType.PNC_LORD_INFO, current_castle_name="please bgentle"),
         )
 
-        self.assertEqual(resolved, target_castle)
+        self.assertEqual(resolved, exact_variant)
 
     def test_select_castle_replans_when_lord_info_name_is_ambiguous_across_kingdoms(self) -> None:
         """Does not accept Lord Info name-only evidence when the cached roster contains duplicate castle names."""

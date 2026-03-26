@@ -580,6 +580,25 @@ class Observation:
         return self.active_chat_channel == channel
 
 
+def list_entry_matches(
+    entry: DetectedListEntry,
+    *,
+    title_text: str | None = None,
+    metadata_key: str | None = None,
+    metadata_value: str | int | bool | None = None,
+    selected: bool | None = None,
+) -> bool:
+    """Returns whether one observed list entry satisfies one dynamic-entry resolution request."""
+
+    if title_text is not None and not _list_entry_title_matches(entry, title_text):
+        return False
+    if metadata_key is not None and entry.metadata.get(metadata_key) != metadata_value:
+        return False
+    if selected is not None and entry.selected != selected:
+        return False
+    return True
+
+
 def castle_identity_from_entry(entry: DetectedListEntry) -> CastleIdentity:
     """Converts one observed castle row into the canonical shared castle identity model."""
 
@@ -658,7 +677,7 @@ def resolve_unambiguous_castle_identity(
             group for group in groups if any(candidate.castle_name == preferred_name for candidate in group)
         )
         if len(exact_groups) == 1:
-            return exact_groups[0][0]
+            return next(candidate for candidate in exact_groups[0] if candidate.castle_name == preferred_name)
         if len(exact_groups) > 1:
             return None
     if len(groups) == 1:
@@ -733,6 +752,16 @@ def _group_semantic_castle_identities(candidates: tuple[CastleIdentity, ...]) ->
         else:
             groups.append([candidate])
     return tuple(tuple(group) for group in groups)
+
+
+def _list_entry_title_matches(entry: DetectedListEntry, title_text: str) -> bool:
+    """Returns whether one observed title satisfies the canonical matching policy for its entry kind."""
+
+    if entry.title_text is None:
+        return False
+    if entry.kind == ListEntryKind.CASTLE:
+        return castle_names_match(entry.title_text, title_text)
+    return entry.title_text == title_text
 
 
 def _is_integer_pair(value: object) -> bool:

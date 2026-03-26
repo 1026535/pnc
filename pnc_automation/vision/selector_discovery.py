@@ -20,6 +20,7 @@ from pnc_automation.errors import SelectorResolutionError
 from pnc_automation.pnc.observation import Observation, VisibleElement, VisibleElementSourceKind
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
+from pnc_automation.text_normalization import normalize_ocr_text
 from pnc_automation.vision.observation_builder import CapturedObservation, ObservationBuilder
 from pnc_automation.vision.ocr_service import OcrLine, OcrResult, OcrService
 from pnc_automation.vision.selector_catalog import (
@@ -31,7 +32,7 @@ from pnc_automation.vision.selector_catalog import (
 )
 from pnc_automation.vision.selector_interaction_kind import SelectorInteractionKind
 from pnc_automation.vision.selectors import DetectionKind, SelectorStatus
-from pnc_automation.vision.text_anchors import DetectedTextAnchor, TextAnchorDetector, normalize_ocr_text
+from pnc_automation.vision.text_anchors import DetectedTextAnchor, TextAnchorDetector
 
 _STATUS_RANK = {status.value: index for index, status in enumerate(SelectorStatus)}
 _MergedValue = TypeVar("_MergedValue")

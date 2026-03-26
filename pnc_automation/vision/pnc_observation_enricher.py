@@ -24,6 +24,7 @@ from pnc_automation.pnc.observation import (
 )
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
+from pnc_automation.text_normalization import normalize_ocr_text
 from pnc_automation.vision.observation_builder import ObservationAdditions
 from pnc_automation.vision.observation_request import ObservationRequest
 from pnc_automation.vision.pnc_ocr_capabilities import can_attempt_screen_family_ocr
@@ -39,7 +40,6 @@ from pnc_automation.vision.text_anchors import (
     DetectedTextAnchor,
     TextAnchorDetector,
     TextAnchorId,
-    normalize_ocr_text,
 )
 
 _HOME_NAV_SELECTOR_BY_TEXT_ANCHOR = {
@@ -3325,10 +3325,10 @@ def _looks_like_castle_selection(
 ) -> bool:
     """Returns whether OCR output matches the Manage Char screen structure."""
 
+    if any(anchor.id == TextAnchorId.LABEL_MANAGE_CHAR for anchor in anchors):
+        return len(entries) >= 1
     if len(entries) < 2:
         return False
-    if any(anchor.id == TextAnchorId.LABEL_MANAGE_CHAR for anchor in anchors):
-        return True
     leveled_entries = sum(1 for entry in entries if entry.metadata.get("castle_level") is not None)
     return leveled_entries >= 2
 

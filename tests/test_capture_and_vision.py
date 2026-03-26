@@ -460,6 +460,43 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertTrue(castle_entries[1].selected)
             self.assertEqual(observation.current_castle_name, "Lv.5 Hellhound")
 
+    def test_observation_builder_parses_single_castle_manage_char_from_ocr(self) -> None:
+        """Recognizes Manage Char even when OCR only exposes one visible castle row."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (480, 854), (15, 28, 68)))),
+                artifact_directory="k230_single_castle_manage_char",
+                label="single_castle_manage_char",
+            )
+            builder = ObservationBuilder(
+                selector_registry=build_default_selector_registry(),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Manage Char.", x=132, y=18, width=152, height=24),
+                            _ocr_line("K230 Kingdom", x=98, y=494, width=128, height=18),
+                            _ocr_line("Lv.5 Hellhound", x=99, y=522, width=139, height=19),
+                            _ocr_line("Castle Level 9", x=98, y=549, width=126, height=18),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+            castle_entries = observation.entries(ListEntryKind.CASTLE)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_CASTLE_SELECTION)
+            self.assertEqual(len(castle_entries), 1)
+            self.assertEqual(castle_entries[0].title_text, "Lv.5 Hellhound")
+
     def test_observation_builder_classifies_login_from_live_like_ocr(self) -> None:
         """Recognizes the credential form from OCR and exposes the actionable login controls."""
 

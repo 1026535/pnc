@@ -247,16 +247,17 @@ class ScreenFlowPlanner:
                 "Lord Info navigation requires home city, the More overlay, or the Lord Info screen itself.",
                 screen_type=observation.screen_type,
             )
-        if observation.has(UiElementId.PNC_MORE_MANAGE_CHAR) and observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT):
-            if observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT):
-                return [
-                    TapAction(
-                        selector_id=UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
-                        reason="leave_settings_menu",
-                        observe_after=True,
-                        follow_up_request=ObservationRequest.home_city_follow_up(ScreenType.PNC_MORE_MENU),
-                    )
-                ]
+        settings_exit_follow_up = ObservationRequest.home_city_follow_up(ScreenType.PNC_MORE_MENU)
+        has_manage_char = observation.has(UiElementId.PNC_MORE_MANAGE_CHAR)
+        if has_manage_char and observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT):
+            return [
+                TapAction(
+                    selector_id=UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+                    reason="leave_settings_menu",
+                    observe_after=True,
+                    follow_up_request=settings_exit_follow_up,
+                )
+            ]
         if observation.has(UiElementId.PNC_MORE_SETTINGS) and observation.has(UiElementId.PNC_BOTTOM_NAV_MORE):
             return [
                 TapAction(
@@ -270,13 +271,13 @@ class ScreenFlowPlanner:
                     observe_after=True,
                 ),
             ]
-        if observation.has(UiElementId.PNC_MORE_MANAGE_CHAR):
+        if has_manage_char:
             return [
                 KeyEventAction(
                     key_code="KEYCODE_BACK",
                     reason="leave_settings_menu",
                     observe_after=True,
-                    follow_up_request=ObservationRequest.home_city_follow_up(ScreenType.PNC_MORE_MENU),
+                    follow_up_request=settings_exit_follow_up,
                 )
             ]
         raise SelectorResolutionError(
