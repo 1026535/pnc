@@ -23,7 +23,6 @@ from pnc_automation.app.authoring.config.models import (
     ResolvedCredentials,
     RuntimeConfig,
 )
-from pnc_automation.app.authoring.mail.loader import load_mail_schedule_catalog
 from pnc_automation.app.runtime.observation_mode import ObservationMode
 from pnc_automation.app.authoring.config.validation import validate_app_config
 from pnc_automation.app.authoring.config.yaml_helpers import (
@@ -69,10 +68,6 @@ def load_app_config(
     resolved_mail_schedules_path = _resolve_mail_schedules_path(config_path, mail_schedules_path)
     rosters = _load_castle_rosters(resolved_castle_roster_path)
     castle_targets = _load_account_castle_targets(resolved_castle_targets_path)
-    mail_schedule_catalog = _load_optional_mail_schedule_catalog(
-        definitions_path=resolved_mail_definitions_path,
-        schedules_path=resolved_mail_schedules_path,
-    )
 
     return validate_app_config(
         AppConfig(
@@ -89,7 +84,6 @@ def load_app_config(
             accounts=accounts,
             castle_rosters=rosters,
             castle_targets=castle_targets,
-            mail_schedule_catalog=mail_schedule_catalog,
         )
     )
 
@@ -346,24 +340,6 @@ def _load_account_castle_targets(path: Path) -> tuple[AccountCastleTargetsConfig
             )
         )
     return tuple(account_targets)
-
-
-def _load_optional_mail_schedule_catalog(*, definitions_path: Path, schedules_path: Path):
-    """Loads the authored scheduled-mail catalog only when both sibling files are present."""
-
-    definitions_exists = definitions_path.is_file()
-    schedules_exists = schedules_path.is_file()
-    if not definitions_exists and not schedules_exists:
-        return None
-    if not definitions_exists or not schedules_exists:
-        missing_path = definitions_path if not definitions_exists else schedules_path
-        present_path = schedules_path if not definitions_exists else definitions_path
-        raise ConfigurationError(
-            "Scheduled mail requires both mail_definitions.yaml and mail_schedules.yaml when either file is present.",
-            missing_path=str(missing_path),
-            present_path=str(present_path),
-        )
-    return load_mail_schedule_catalog(definitions_path=definitions_path, schedules_path=schedules_path)
 
 
 def _load_castle_roster_ordering(value: Any, *, context: str) -> CastleRosterOrdering:

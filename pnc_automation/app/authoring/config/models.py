@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -169,7 +169,7 @@ class AppConfig:
     accounts: tuple[AccountConfig, ...]
     castle_rosters: tuple[PncAccountCastleRosterConfig, ...] = ()
     castle_targets: tuple[AccountCastleTargetsConfig, ...] = ()
-    mail_schedule_catalog: MailScheduleCatalog | None = None
+    mail_schedule_catalog: MailScheduleCatalog | None = field(default=None, compare=False, repr=False)
 
     def require_instance(self, instance_id: str) -> BlueStacksInstanceConfig:
         """Returns a known emulator instance or fails fast."""
@@ -204,12 +204,31 @@ class AppConfig:
         return None
 
     def require_mail_schedule_catalog(self) -> MailScheduleCatalog:
-        """Returns the loaded scheduled-mail catalog or fails fast when the feature is not configured."""
+        """Loads and caches the scheduled-mail catalog or fails fast when the feature is not configured."""
 
         if self.mail_schedule_catalog is not None:
             return self.mail_schedule_catalog
-        raise ConfigurationError(
-            "Scheduled mail is not configured for this workspace. Add both config/mail_definitions.yaml and config/mail_schedules.yaml before invoking run_mail_schedules.",
-            mail_definitions_path=str(self.mail_definitions_path),
-            mail_schedules_path=str(self.mail_schedules_path),
+        definitions_exists = self.mail_definitions_path.is_file()
+        schedules_exists = self.mail_schedules_path.is_file()
+        if not definitions_exists and not schedules_exists:
+            raise ConfigurationError(
+                "Scheduled mail is not configured for this workspace. Add both config/mail_definitions.yaml and config/mail_schedules.yaml before invoking run_mail_schedules.",
+                mail_definitions_path=str(self.mail_definitions_path),
+                mail_schedules_path=str(self.mail_schedules_path),
+            )
+        if not definitions_exists or not schedules_exists:
+            missing_path = self.mail_definitions_path if not definitions_exists else self.mail_schedules_path
+            present_path = self.mail_schedules_path if not definitions_exists else self.mail_definitions_path
+            raise ConfigurationError(
+                "Scheduled mail requires both mail_definitions.yaml and mail_schedules.yaml when either file is present.",
+                missing_path=str(missing_path),
+                present_path=str(present_path),
+            )
+        from pnc_automation.app.authoring.mail.loader import load_mail_schedule_catalog
+
+        catalog = load_mail_schedule_catalog(
+            definitions_path=self.mail_definitions_path,
+            schedules_path=self.mail_schedules_path,
         )
+        object.__setattr__(self, "mail_schedule_catalog", catalog)
+        return catalog

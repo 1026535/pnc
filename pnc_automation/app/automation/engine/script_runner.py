@@ -18,8 +18,9 @@ from pnc_automation.app.authoring.scripts.models import RunScript, ScriptStep
 from pnc_automation.app.authoring.scripts.registry import TaskRegistry
 from pnc_automation.app.automation.engine.task import TaskId
 from pnc_automation.app.authoring.mail.loader import (
-    build_generated_send_mail_script,
-    resolve_due_mail_definitions,
+    build_generated_send_mail_script_for_hour,
+    generated_mail_schedule_name_for_hour,
+    resolve_due_mail_dispatches_for_hour,
     resolve_scheduled_hour_bucket,
 )
 from pnc_automation.app.pnc.persistence.chat_archive_store import ChatArchiveStore
@@ -66,6 +67,11 @@ class ScriptRunner:
         """Executes one already-loaded run script for the selected account."""
 
         account = self.config.require_account(account_id)
+        return self._run_script_for_account(account=account, script=script)
+
+    def _run_script_for_account(self, *, account: AccountConfig, script: RunScript) -> RunResult:
+        """Executes one already-loaded run script for one already-resolved account target."""
+
         prepared_script = self.task_registry.prepare_script(
             script,
             castle_targets=self.config.find_castle_targets(account.id),
@@ -125,23 +131,24 @@ class ScriptRunner:
     ) -> RunResult:
         """Resolves the due authored mail schedules and executes them as canonical send-mail steps."""
 
+        account = self.config.require_account(account_id)
         catalog = self.config.require_mail_schedule_catalog()
         scheduled_hour = resolve_scheduled_hour_bucket(scheduled_for_utc)
-        due_mail_definitions = resolve_due_mail_definitions(
+        due_mail_dispatches = resolve_due_mail_dispatches_for_hour(
             catalog,
+            scheduled_hour_utc=scheduled_hour,
             schedule_ids=schedule_ids,
-            scheduled_for_utc=scheduled_hour,
         )
-        if not due_mail_definitions:
+        if not due_mail_dispatches:
             return _build_noop_run_result(
-                account_id=account_id,
-                script_name=_generated_mail_schedule_name(scheduled_hour),
+                account_id=account.id,
+                script_name=generated_mail_schedule_name_for_hour(scheduled_hour),
             )
-        return self.run_script(
-            account_id=account_id,
-            script=build_generated_send_mail_script(
-                scheduled_for_utc=scheduled_hour,
-                due_mail_definitions=due_mail_definitions,
+        return self._run_script_for_account(
+            account=account,
+            script=build_generated_send_mail_script_for_hour(
+                scheduled_hour_utc=scheduled_hour,
+                due_mail_dispatches=due_mail_dispatches,
             ),
         )
 
@@ -280,10 +287,4 @@ def _build_noop_run_result(*, account_id: str, script_name: str) -> RunResult:
         started_at=now,
         finished_at=now,
     )
-
-
-def _generated_mail_schedule_name(scheduled_hour: datetime) -> str:
-    """Returns the canonical generated script name for one scheduled-mail execution hour."""
-
-    return f"generated_mail_schedule_{scheduled_hour.strftime('%Y%m%dT%H0000Z')}"
 

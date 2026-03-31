@@ -22,8 +22,9 @@ from pnc_automation.app.authoring.mail.loader import (
     build_generated_send_mail_script,
     load_mail_schedule_catalog,
     resolve_due_mail_definitions,
+    resolve_scheduled_hour_bucket,
 )
-from pnc_automation.app.authoring.mail.models import AuthoredMailDefinition
+from pnc_automation.app.authoring.mail.models import AuthoredMailDefinition, ScheduledMailDispatch
 from pnc_automation.app.entrypoints.api import AutomationApi
 from pnc_automation.app.entrypoints.cli import main as cli_main
 from pnc_automation.app.pnc.domain.mail import MailRecipientKind, PlayerProfileRoute, SendMailParams
@@ -64,6 +65,32 @@ class ScheduledMailCatalogTests(unittest.TestCase):
                     rotation:
                       cycle_days: 14
                       start_utc: 2026-03-31T01:00:00Z
+                    mail_schedules:
+                      - id: mailschedule_1
+                        day_indices: [0]
+                        hour_utc: 5
+                        mail_ids: [alliance_reset]
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(ConfigurationError):
+                load_mail_schedule_catalog(definitions_path=definitions_path, schedules_path=schedules_path)
+
+    def test_load_mail_schedule_catalog_rejects_non_utc_rotation_start_offset(self) -> None:
+        """Rejects authored rotation anchors whose original offset is not already UTC."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            definitions_path = _write_mail_definitions(root)
+            schedules_path = root / "mail_schedules.yaml"
+            schedules_path.write_text(
+                textwrap.dedent(
+                    """
+                    rotation:
+                      cycle_days: 14
+                      start_utc: 2026-03-30T00:00:00+02:00
                     mail_schedules:
                       - id: mailschedule_1
                         day_indices: [0]
@@ -188,50 +215,92 @@ class ScheduledMailCatalogTests(unittest.TestCase):
         with self.assertRaises(ConfigurationError):
             resolve_due_mail_definitions(catalog, scheduled_for_utc=datetime(2026, 3, 30, 5, 0, tzinfo=UTC))
 
-    def test_build_generated_send_mail_script_emits_canonical_steps(self) -> None:
-        """Builds ensure/login plus canonical send_mail steps with preserved castle refs."""
+    def test_resolve_due_mail_definitions_returns_nothing_before_rotation_start(self) -> None:
+        """Keeps the rotation inactive until the authored Monday midnight UTC start anchor."""
 
-        due_mail_definitions = (
-            AuthoredMailDefinition(
-                id="alliance_reset",
-                castle_ref="main",
-                params=SendMailParams(
-                    recipient_kind=MailRecipientKind.ALLIANCE,
-                    player_name=None,
-                    profile_route=None,
-                    subject="Reset",
-                    body="Please donate.",
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            definitions_path = _write_mail_definitions(root)
+            schedules_path = root / "mail_schedules.yaml"
+            schedules_path.write_text(
+                textwrap.dedent(
+                    """
+                    rotation:
+                      cycle_days: 14
+                      start_utc: 2026-03-30T00:00:00Z
+                    mail_schedules:
+                      - id: mailschedule_1
+                        day_indices: [13]
+                        hour_utc: 23
+                        mail_ids: [alliance_reset]
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+            catalog = load_mail_schedule_catalog(definitions_path=definitions_path, schedules_path=schedules_path)
+
+        due = resolve_due_mail_definitions(catalog, scheduled_for_utc=datetime(2026, 3, 29, 23, 0, tzinfo=UTC))
+
+        self.assertEqual(due, ())
+
+    def test_resolve_scheduled_hour_bucket_rejects_non_utc_runtime_offset(self) -> None:
+        """Rejects runtime replay timestamps whose original offset is not already UTC."""
+
+        with self.assertRaises(ConfigurationError):
+            resolve_scheduled_hour_bucket(datetime.fromisoformat("2026-03-30T05:00:00+02:00"))
+
+    def test_build_generated_send_mail_script_emits_canonical_steps(self) -> None:
+        """Builds ensure/login plus canonical send_mail steps with preserved castle refs and provenance."""
+
+        due_mail_dispatches = (
+            ScheduledMailDispatch(
+                schedule_id="mailschedule_1",
+                definition=AuthoredMailDefinition(
+                    id="alliance_reset",
+                    castle_ref="main",
+                    params=SendMailParams(
+                        recipient_kind=MailRecipientKind.ALLIANCE,
+                        player_name=None,
+                        profile_route=None,
+                        subject="Reset",
+                        body="Please donate.",
+                    ),
                 ),
             ),
-            AuthoredMailDefinition(
-                id="player_followup",
-                castle_ref=None,
-                params=SendMailParams(
-                    recipient_kind=MailRecipientKind.PLAYER,
-                    player_name=None,
-                    profile_route=PlayerProfileRoute(
-                        kind=PlayerProfileRouteKind.ALLIANCE_MEMBER,
-                        player_name="SomePlayer",
+            ScheduledMailDispatch(
+                schedule_id="mailschedule_2",
+                definition=AuthoredMailDefinition(
+                    id="player_followup",
+                    castle_ref=None,
+                    params=SendMailParams(
+                        recipient_kind=MailRecipientKind.PLAYER,
+                        player_name=None,
+                        profile_route=PlayerProfileRoute(
+                            kind=PlayerProfileRouteKind.ALLIANCE_MEMBER,
+                            player_name="SomePlayer",
+                        ),
+                        subject="Hi",
+                        body="Checking in.",
                     ),
-                    subject="Hi",
-                    body="Checking in.",
                 ),
             ),
         )
 
         script = build_generated_send_mail_script(
             scheduled_for_utc=datetime(2026, 3, 31, 5, 0, tzinfo=UTC),
-            due_mail_definitions=due_mail_definitions,
+            due_mail_dispatches=due_mail_dispatches,
         )
 
         self.assertEqual(script.name, "generated_mail_schedule_20260331T050000Z")
         self.assertEqual([step.task for step in script.steps], [TaskId.ENSURE_GAME_RUNNING, TaskId.LOGIN, TaskId.SEND_MAIL, TaskId.SEND_MAIL])
         self.assertEqual(script.steps[2].castle_ref, "main")
         self.assertEqual(script.steps[2].params["recipient_kind"], "alliance")
+        self.assertEqual(script.steps[2].provenance, {"mail_id": "alliance_reset", "schedule_id": "mailschedule_1"})
         self.assertEqual(script.steps[3].params["profile_route"], {"kind": "alliance_member", "player_name": "SomePlayer"})
+        self.assertEqual(script.steps[3].provenance, {"mail_id": "player_followup", "schedule_id": "mailschedule_2"})
 
-    def test_load_app_config_loads_optional_scheduled_mail_catalog(self) -> None:
-        """Wires the sibling mail definition and schedule files into AppConfig."""
+    def test_load_app_config_lazy_loads_optional_scheduled_mail_catalog(self) -> None:
+        """Records the sibling scheduled-mail paths and loads the catalog only on first use."""
 
         with tempfile.TemporaryDirectory() as temp_directory:
             root = Path(temp_directory)
@@ -240,21 +309,53 @@ class ScheduledMailCatalogTests(unittest.TestCase):
             _write_mail_schedules(root)
 
             config = load_app_config(config_path)
+            self.assertIsNone(config.mail_schedule_catalog)
+            first_catalog = config.require_mail_schedule_catalog()
+            second_catalog = config.require_mail_schedule_catalog()
+            self.assertIs(first_catalog, second_catalog)
+            self.assertIs(config.mail_schedule_catalog, first_catalog)
+            self.assertEqual(config.mail_definitions_path, (root / "mail_definitions.yaml").resolve())
+            self.assertEqual(config.mail_schedules_path, (root / "mail_schedules.yaml").resolve())
 
-        self.assertIsNotNone(config.mail_schedule_catalog)
-        self.assertEqual(config.mail_definitions_path, (root / "mail_definitions.yaml").resolve())
-        self.assertEqual(config.mail_schedules_path, (root / "mail_schedules.yaml").resolve())
-
-    def test_load_app_config_rejects_partial_scheduled_mail_files(self) -> None:
-        """Rejects workspaces that author only one half of the scheduled-mail catalog."""
+    def test_load_app_config_allows_partial_scheduled_mail_files_until_feature_use(self) -> None:
+        """Allows unrelated startup work to proceed until scheduled-mail functionality is invoked."""
 
         with tempfile.TemporaryDirectory() as temp_directory:
             root = Path(temp_directory)
             config_path = _write_accounts_config(root)
             _write_mail_definitions(root)
 
+            config = load_app_config(config_path)
             with self.assertRaises(ConfigurationError):
-                load_app_config(config_path)
+                config.require_mail_schedule_catalog()
+
+    def test_load_app_config_allows_malformed_scheduled_mail_files_until_feature_use(self) -> None:
+        """Allows unrelated startup work to proceed until lazy scheduled-mail validation is requested."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            config_path = _write_accounts_config(root)
+            _write_mail_definitions(root)
+            malformed_schedules_path = root / "mail_schedules.yaml"
+            malformed_schedules_path.write_text(
+                textwrap.dedent(
+                    """
+                    rotation:
+                      cycle_days: 14
+                      start_utc: 2026-03-30T00:00:00Z
+                    mail_schedules:
+                      - id: mailschedule_1
+                        day_indices: [0]
+                        hour_utc: 24
+                        mail_ids: [alliance_reset]
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+
+            config = load_app_config(config_path)
+            with self.assertRaises(ConfigurationError):
+                config.require_mail_schedule_catalog()
 
 
 class ScheduledMailRuntimeTests(unittest.TestCase):
@@ -304,6 +405,128 @@ class ScheduledMailRuntimeTests(unittest.TestCase):
         self.assertEqual(adb_client.connect_calls, [])
         self.assertEqual(resolver.requested_configs, [])
 
+    def test_script_runner_run_mail_schedules_rejects_unknown_account_during_empty_hour(self) -> None:
+        """Fails fast on unknown accounts even when no schedules are due for that hour."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            config_path = _write_accounts_config(root)
+            _write_mail_definitions(root)
+            _write_mail_schedules(root)
+            config = load_app_config(config_path)
+            instance = config.instances[0]
+            resolver = _FakeInstanceResolver(
+                resolved_instance=BlueStacksInstance(
+                    id=instance.id,
+                    display_name=instance.display_name,
+                    device_id="127.0.0.1:5566",
+                    app_package=instance.app_package,
+                )
+            )
+            adb_client = _FakeAdbClient()
+            runner = ScriptRunner(
+                config=config,
+                task_registry=object(),
+                screenshot_service=object(),
+                observation_builder=object(),
+                castle_roster_store=None,
+                mail_archive_store=None,
+                chat_archive_store=None,
+                adb_client=adb_client,
+                instance_resolver=resolver,
+                logger=build_logger(),
+            )
+
+            with self.assertRaises(ConfigurationError):
+                runner.run_mail_schedules(
+                    account_id="missing_account",
+                    scheduled_for_utc=datetime(2026, 3, 30, 4, 0, tzinfo=UTC),
+                )
+
+        self.assertEqual(adb_client.connect_calls, [])
+        self.assertEqual(resolver.requested_configs, [])
+
+    def test_script_runner_run_mail_schedules_rejects_non_utc_runtime_timestamp(self) -> None:
+        """Rejects runtime replay timestamps whose original offset is not already UTC."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            config_path = _write_accounts_config(root)
+            _write_mail_definitions(root)
+            _write_mail_schedules(root)
+            config = load_app_config(config_path)
+            runner = ScriptRunner(
+                config=config,
+                task_registry=object(),
+                screenshot_service=object(),
+                observation_builder=object(),
+                castle_roster_store=None,
+                mail_archive_store=None,
+                chat_archive_store=None,
+                adb_client=object(),
+                instance_resolver=object(),
+                logger=build_logger(),
+            )
+
+            with self.assertRaises(ConfigurationError):
+                runner.run_mail_schedules(
+                    account_id="account_a",
+                    scheduled_for_utc=datetime.fromisoformat("2026-03-30T05:00:00+02:00"),
+                )
+
+    def test_script_runner_run_mail_schedules_fails_fast_when_lazy_loaded_catalog_is_invalid(self) -> None:
+        """Fails on malformed optional scheduled-mail files only when scheduled-mail execution is invoked."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            config_path = _write_accounts_config(root)
+            _write_mail_definitions(root)
+            malformed_schedules_path = root / "mail_schedules.yaml"
+            malformed_schedules_path.write_text(
+                textwrap.dedent(
+                    """
+                    rotation:
+                      cycle_days: 14
+                      start_utc: 2026-03-30T00:00:00Z
+                    mail_schedules:
+                      - id: mailschedule_1
+                        day_indices: [0]
+                        hour_utc: 24
+                        mail_ids: [alliance_reset]
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+            config = load_app_config(config_path)
+            instance = config.instances[0]
+            resolver = _FakeInstanceResolver(
+                resolved_instance=BlueStacksInstance(
+                    id=instance.id,
+                    display_name=instance.display_name,
+                    device_id="127.0.0.1:5566",
+                    app_package=instance.app_package,
+                )
+            )
+            adb_client = _FakeAdbClient()
+            runner = ScriptRunner(
+                config=config,
+                task_registry=object(),
+                screenshot_service=object(),
+                observation_builder=object(),
+                castle_roster_store=None,
+                mail_archive_store=None,
+                chat_archive_store=None,
+                adb_client=adb_client,
+                instance_resolver=resolver,
+                logger=build_logger(),
+            )
+
+            with self.assertRaises(ConfigurationError):
+                runner.run_mail_schedules(account_id="account_a")
+
+        self.assertEqual(adb_client.connect_calls, [])
+        self.assertEqual(resolver.requested_configs, [])
+
     def test_script_runner_run_mail_schedules_builds_and_executes_generated_script(self) -> None:
         """Expands due schedules into a generated canonical send_mail script before execution."""
 
@@ -327,7 +550,7 @@ class ScheduledMailRuntimeTests(unittest.TestCase):
             )
             run_result = _make_run_result(script_name="generated_mail_schedule_20260330T050000Z")
 
-            with patch.object(ScriptRunner, "run_script", return_value=run_result) as run_script:
+            with patch.object(ScriptRunner, "_run_script_for_account", return_value=run_result) as run_script:
                 result = runner.run_mail_schedules(
                     account_id="account_a",
                     scheduled_for_utc=datetime(2026, 3, 30, 5, 30, tzinfo=UTC),
@@ -335,10 +558,14 @@ class ScheduledMailRuntimeTests(unittest.TestCase):
 
         self.assertIs(result, run_result)
         script = run_script.call_args.kwargs["script"]
+        account = run_script.call_args.kwargs["account"]
+        self.assertEqual(account.id, "account_a")
         self.assertEqual(script.name, "generated_mail_schedule_20260330T050000Z")
         self.assertEqual([step.task for step in script.steps], [TaskId.ENSURE_GAME_RUNNING, TaskId.LOGIN, TaskId.SEND_MAIL, TaskId.SEND_MAIL])
         self.assertEqual(script.steps[2].castle_ref, "main")
         self.assertEqual(script.steps[3].params["player_name"], "SomePlayer")
+        self.assertEqual(script.steps[2].provenance, {"mail_id": "alliance_reset", "schedule_id": "mailschedule_1"})
+        self.assertEqual(script.steps[3].provenance, {"mail_id": "player_followup", "schedule_id": "mailschedule_1"})
 
 
 class ScheduledMailApiAndCliTests(unittest.TestCase):
