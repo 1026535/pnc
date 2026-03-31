@@ -56,8 +56,8 @@ class LoginTask(BaseAutomationTask):
             return [WaitAction(milliseconds=1000, reason="wait_for_loading_screen", observe_after=True)]
         if observation.screen_type == ScreenType.PNC_ACCOUNT_SWITCH:
             return self._plan_account_switch(context, observation)
-        if observation.screen_type != ScreenType.PNC_LOGIN:
-            return context.flows.ensure_home_city(observation)
+        if observation.screen_type not in {ScreenType.PNC_LOGIN, ScreenType.PNC_LOADING}:
+            return []
         credentials = context.account.credentials
         if credentials is None:
             raise TaskVerificationError(
@@ -83,7 +83,7 @@ class LoginTask(BaseAutomationTask):
         ]
 
     def verify(self, context: TaskContext, before: Observation, after: Observation) -> TaskResult:
-        """Succeeds once the task reaches explicit account proof or a stable in-game verification screen."""
+        """Succeeds once the task reaches a stable in-game session or explicit account proof."""
 
         account_mismatch = self._detect_account_mismatch(context, after)
         if account_mismatch is not None:
@@ -119,9 +119,7 @@ class LoginTask(BaseAutomationTask):
             if self._configured_account_is_verified(context, after):
                 return TaskResult.replan("Login still shows the configured account and needs another bootstrap increment.")
             return TaskResult.failure("Login screen is still visible after credential entry.", retryable=True)
-        return TaskResult.replan(
-            f"Login is still returning to a verifiable in-game state from '{after.screen_type.value}'."
-        )
+        return TaskResult.success("Login completed and an in-game session is already open.")
 
     def _configured_account_is_verified(self, context: TaskContext, observation: Observation) -> bool:
         """Returns whether one observation carries trusted ownership proof for the configured account."""
@@ -198,7 +196,7 @@ class LoginTask(BaseAutomationTask):
         context: TaskContext,
         observation: Observation,
     ) -> list[ActionRequest]:
-        """Plans the fastest canonical route toward Manage Char or Lord Info session proof."""
+        """Plans session verification only from root-adjacent in-game screens owned by login."""
 
         if observation.screen_type == ScreenType.PNC_HOME_CITY:
             if context.castle_roster is not None or not observation.has(UiElementId.PNC_HOME_LORD_INFO_SHORTCUT):
@@ -208,7 +206,7 @@ class LoginTask(BaseAutomationTask):
             return context.flows.open_castle_selection(observation)
         if observation.screen_type in {ScreenType.PNC_LORD_INFO, ScreenType.PNC_CASTLE_SELECTION}:
             return []
-        return context.flows.ensure_home_city(observation)
+        return []
 
     def _plan_account_switch(self, context: TaskContext, observation: Observation) -> list[ActionRequest]:
         """Plans the account-switch action required to continue with the configured account."""

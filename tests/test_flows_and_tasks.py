@@ -14,6 +14,8 @@ from pnc_automation.automation.tasks.building_upgrade_task import BuildingUpgrad
 from pnc_automation.automation.tasks.ensure_game_running_task import EnsureGameRunningTask
 from pnc_automation.automation.tasks.gathering_task import GatheringTask
 from pnc_automation.automation.tasks.login_task import LoginTask
+from pnc_automation.automation.tasks.open_building_task import OpenBuildingTask
+from pnc_automation.automation.tasks.research_task import ResearchTask
 from pnc_automation.automation.tasks.refresh_castle_roster_task import RefreshCastleRosterTask
 from pnc_automation.automation.tasks.select_castle_task import SelectCastleTask
 from pnc_automation.automation.tasks.active_castle_resolution import remember_active_castle_identity
@@ -40,11 +42,14 @@ from pnc_automation.pnc.action_requests import (
     SelectChatChannelAction,
     SwipeAction,
     TapAction,
+    TapPointAction,
     TapListEntryAction,
     TapSpatialObjectAction,
     WaitAction,
 )
+from pnc_automation.pnc.building_catalog import HomeCityMapCoordinate, HomeCityObjectId, build_home_city_object_metadata
 from pnc_automation.pnc.observation import (
+    CurrentCastleEvidenceKind,
     ListEntryKind,
     Observation,
     SpatialObjectKind,
@@ -53,7 +58,7 @@ from pnc_automation.pnc.observation import (
     resolve_unambiguous_castle_identity,
 )
 from pnc_automation.pnc.spatial_navigation import WorldCoordinate
-from pnc_automation.pnc.policy_models import BuildingPriority, BuildingUpgradePolicy, GatheringPolicy
+from pnc_automation.pnc.policy_models import BuildingPriority, BuildingUpgradePolicy, GatheringPolicy, OpenBuildingPolicy
 from pnc_automation.pnc.screen_flows import ChatChannel, ScreenFlowPlanner
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
@@ -202,6 +207,17 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertIsInstance(actions[0], KeyEventAction)
         self.assertEqual(actions[0].key_code, "KEYCODE_BACK")
 
+    def test_ensure_home_city_from_build_queue_uses_back_navigation(self) -> None:
+        """Treats the build queue overlay as a dismissible home-adjacent screen."""
+
+        observation = make_observation(ScreenType.PNC_BUILD_QUEUE)
+
+        actions = self.flows.ensure_home_city(observation)
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], KeyEventAction)
+        self.assertEqual(actions[0].key_code, "KEYCODE_BACK")
+
     def test_open_chat_from_world_map_uses_shared_shortcut(self) -> None:
         """Uses the shared chat shortcut instead of forcing a return to home city first."""
 
@@ -243,7 +259,7 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertEqual(actions[0].channel, ChatChannel.WORLD)
         self.assertEqual(actions[0].follow_up_request, ObservationRequest.source_screen_retry(ScreenType.PNC_CHAT))
 
-    def test_open_academy_uses_home_city_spatial_building_when_fixed_button_is_missing(self) -> None:
+    def test_open_institute_uses_home_city_spatial_building_when_fixed_button_is_missing(self) -> None:
         """Falls back to the home-city spatial surface instead of a legacy academy selector."""
 
         observation = make_observation(
@@ -254,20 +270,1286 @@ class FlowAndTaskTests(unittest.TestCase):
                     make_spatial_object(
                         SpatialObjectKind.HOME_BUILDING,
                         name_text="Academy",
-                        metadata={"category": "academy"},
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.INSTITUTE),
                     ),
                 ),
             ),
         )
 
-        actions = self.flows.open_academy(observation)
+        actions = self.flows.open_institute(observation)
 
         self.assertEqual(len(actions), 1)
         self.assertIsInstance(actions[0], TapSpatialObjectAction)
         self.assertEqual(actions[0].query.kind, SpatialObjectKind.HOME_BUILDING)
-        self.assertEqual(actions[0].query.metadata_key, "category")
-        self.assertEqual(actions[0].query.metadata_value, "academy")
+        self.assertEqual(actions[0].query.metadata_key, "home_city_object_id")
+        self.assertEqual(actions[0].query.metadata_value, "institute")
         self.assertEqual(actions[0].target_point, (50, 50))
+
+    def test_focus_home_city_object_uses_extended_fixed_map_tour_before_exhaustion(self) -> None:
+        """Keeps home-city search alive across the full canonical fixed-map tour before failing fast."""
+
+        observation = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            spatial_surface=make_spatial_surface(SpatialSurfaceType.HOME_CITY_SURFACE),
+        )
+        runtime_state: dict[str, object] = {}
+        query = SpatialObjectQuery(
+            surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+            kind=SpatialObjectKind.HOME_BUILDING,
+            metadata_key="home_city_object_id",
+            metadata_value="wall",
+        )
+
+        first_actions = self.flows.focus_home_city_object(observation, query, runtime_state=runtime_state)
+        second_actions = self.flows.focus_home_city_object(observation, query, runtime_state=runtime_state)
+        third_actions = self.flows.focus_home_city_object(observation, query, runtime_state=runtime_state)
+        fourth_actions = self.flows.focus_home_city_object(observation, query, runtime_state=runtime_state)
+        fifth_actions = self.flows.focus_home_city_object(observation, query, runtime_state=runtime_state)
+        sixth_actions = self.flows.focus_home_city_object(observation, query, runtime_state=runtime_state)
+
+        for actions in (
+            first_actions,
+            second_actions,
+            third_actions,
+            fourth_actions,
+            fifth_actions,
+            sixth_actions,
+        ):
+            self.assertEqual(len(actions), 1)
+            self.assertIsInstance(actions[0], SwipeAction)
+        self.assertEqual(first_actions[0].direction, "left")
+        self.assertEqual(first_actions[0].reason, "scan_home_city_upper_right_to_left_1")
+        self.assertEqual(second_actions[0].direction, "left")
+        self.assertEqual(second_actions[0].reason, "scan_home_city_upper_right_to_left_2")
+        self.assertEqual(third_actions[0].direction, "down")
+        self.assertEqual(third_actions[0].reason, "scan_home_city_shift_to_lower_view")
+        self.assertEqual(fourth_actions[0].direction, "right")
+        self.assertEqual(fourth_actions[0].reason, "scan_home_city_lower_left_to_right_1")
+        self.assertEqual(fifth_actions[0].direction, "right")
+        self.assertEqual(fifth_actions[0].reason, "scan_home_city_lower_left_to_right_2")
+        self.assertEqual(sixth_actions[0].direction, "up")
+        self.assertEqual(sixth_actions[0].reason, "scan_home_city_reset_to_upper_view")
+
+        remaining_steps = self.flows.home_city_navigator.focus_step_budget() - 6
+        for _ in range(remaining_steps):
+            actions = self.flows.focus_home_city_object(observation, query, runtime_state=runtime_state)
+            self.assertEqual(len(actions), 1)
+            self.assertIsInstance(actions[0], SwipeAction)
+        with self.assertRaises(SelectorResolutionError):
+            self.flows.focus_home_city_object(observation, query, runtime_state=runtime_state)
+
+    def test_open_home_city_object_uses_atlas_tap_when_target_should_already_be_visible(self) -> None:
+        """Uses the static home-city atlas to click the target even when OCR only recognized the anchor building."""
+
+        observation = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.HOME_CITY_SURFACE,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Castle",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.CASTLE),
+                        viewport_offset_ratio=(-9 / 900, -375 / 1600),
+                    ),
+                ),
+            ),
+            image_size=(900, 1600),
+        )
+
+        actions = self.flows.open_home_city_object(
+            observation,
+            SpatialObjectQuery(
+                surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+                kind=SpatialObjectKind.HOME_BUILDING,
+                metadata_key="home_city_object_id",
+                metadata_value="infantry_barracks",
+            ),
+            reason="open_infantry_barracks",
+        )
+
+        self.assertEqual(len(actions), 2)
+        self.assertIsInstance(actions[0], SwipeAction)
+        self.assertEqual(actions[0].direction, "right")
+        self.assertEqual(actions[0].reason, "focus_infantry_barracks_from_home_city_atlas_x")
+        self.assertIsInstance(actions[1], TapPointAction)
+        self.assertEqual((actions[1].x, actions[1].y), (150, 699))
+        self.assertEqual(actions[1].reason, "open_infantry_barracks_from_home_city_atlas")
+
+    def test_build_home_city_object_metadata_exposes_static_atlas_coordinate(self) -> None:
+        """Keeps the atlas coordinate on canonical building metadata so runtime inference only consumes static data."""
+
+        metadata = build_home_city_object_metadata(HomeCityObjectId.ALLIANCE_HALL)
+
+        self.assertEqual(metadata["home_city_map_coordinate"], (1881, 1538))
+
+    def test_open_home_city_object_uses_atlas_swipe_when_target_is_offscreen(self) -> None:
+        """Uses the static home-city atlas to move toward an offscreen target before any generic sweep starts."""
+
+        observation = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.HOME_CITY_SURFACE,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Castle",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.CASTLE),
+                        viewport_offset_ratio=(-9 / 900, -375 / 1600),
+                    ),
+                ),
+            ),
+            image_size=(900, 1600),
+        )
+        runtime_state: dict[str, object] = {}
+
+        actions = self.flows.open_home_city_object(
+            observation,
+            SpatialObjectQuery(
+                surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+                kind=SpatialObjectKind.HOME_BUILDING,
+                metadata_key="home_city_object_id",
+                metadata_value="alliance_hall",
+            ),
+            reason="open_alliance_hall",
+            runtime_state=runtime_state,
+        )
+
+        self.assertEqual(len(actions), 3)
+        self.assertIsInstance(actions[0], SwipeAction)
+        self.assertFalse(actions[0].observe_after)
+        self.assertEqual(actions[0].direction, "left")
+        self.assertEqual(actions[0].reason, "focus_alliance_hall_from_home_city_atlas_x")
+        self.assertIsInstance(actions[1], SwipeAction)
+        self.assertFalse(actions[1].observe_after)
+        self.assertEqual(actions[1].direction, "up")
+        self.assertEqual(actions[1].reason, "focus_alliance_hall_from_home_city_atlas_y")
+        self.assertIsInstance(actions[2], TapPointAction)
+        self.assertEqual((actions[2].x, actions[2].y), (810, 1085))
+        self.assertTrue(actions[2].observe_after)
+        self.assertEqual(actions[2].reason, "open_alliance_hall_from_home_city_atlas")
+
+    def test_open_home_city_object_ignores_repeatable_small_buildings_as_atlas_anchors(self) -> None:
+        """Refuses to infer the atlas center from repeatable small-building labels whose slots are not uniquely fixed."""
+
+        observation = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.HOME_CITY_SURFACE,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Farm",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.FARM),
+                        viewport_offset_ratio=(0.1, -0.2),
+                    ),
+                ),
+            ),
+            image_size=(900, 1600),
+        )
+
+        actions = self.flows.open_home_city_object(
+            observation,
+            SpatialObjectQuery(
+                surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+                kind=SpatialObjectKind.HOME_BUILDING,
+                metadata_key="home_city_object_id",
+                metadata_value="castle",
+            ),
+            reason="open_castle",
+            runtime_state={},
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], SwipeAction)
+        self.assertEqual(actions[0].reason, "scan_home_city_upper_right_to_left_1")
+
+    def test_open_home_city_object_can_use_remembered_atlas_center_when_current_view_has_no_unique_anchor(self) -> None:
+        """Keeps using the last planned viewport center when the latest screenshot is visually ambiguous after blind motion."""
+
+        observation = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            spatial_surface=make_spatial_surface(SpatialSurfaceType.HOME_CITY_SURFACE),
+            image_size=(900, 1600),
+        )
+        runtime_state: dict[str, object] = {
+            "home_city_navigation": {
+                "known_viewport_center": (1521, 1000),
+            }
+        }
+
+        actions = self.flows.open_home_city_object(
+            observation,
+            SpatialObjectQuery(
+                surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+                kind=SpatialObjectKind.HOME_BUILDING,
+                metadata_key="home_city_object_id",
+                metadata_value="castle",
+            ),
+            reason="open_castle",
+            runtime_state=runtime_state,
+        )
+
+        self.assertEqual(len(actions), 2)
+        self.assertIsInstance(actions[0], SwipeAction)
+        self.assertEqual(actions[0].direction, "right")
+        self.assertEqual(actions[0].reason, "focus_castle_from_home_city_atlas_x")
+        self.assertIsInstance(actions[1], TapPointAction)
+        self.assertEqual(actions[1].reason, "open_castle_from_home_city_atlas")
+
+    def test_open_home_city_object_repositions_before_tapping_when_the_current_view_would_put_the_target_under_hud(self) -> None:
+        """Refuses blind taps that would land inside the persistent home-city HUD and nudges the camera first."""
+
+        observation = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            spatial_surface=make_spatial_surface(SpatialSurfaceType.HOME_CITY_SURFACE),
+            image_size=(900, 1600),
+        )
+        runtime_state: dict[str, object] = {
+            "home_city_navigation": {
+                "known_viewport_center": (1394, 851),
+            }
+        }
+
+        actions = self.flows.open_home_city_object(
+            observation,
+            SpatialObjectQuery(
+                surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+                kind=SpatialObjectKind.HOME_BUILDING,
+                metadata_key="home_city_object_id",
+                metadata_value="trap_workshop",
+            ),
+            reason="open_trap_workshop",
+            runtime_state=runtime_state,
+        )
+
+        self.assertEqual(len(actions), 2)
+        self.assertIsInstance(actions[0], SwipeAction)
+        self.assertEqual(actions[0].direction, "up")
+        self.assertEqual(actions[0].reason, "focus_trap_workshop_from_home_city_atlas_y")
+        self.assertEqual(actions[0].start_x_ratio, 0.55)
+        self.assertIsNotNone(actions[0].start_y_ratio)
+        self.assertEqual(actions[0].end_x_ratio, 0.55)
+        self.assertIsNotNone(actions[0].end_y_ratio)
+        self.assertIsInstance(actions[1], TapPointAction)
+        self.assertEqual((actions[1].x, actions[1].y), (351, 1085))
+        self.assertEqual(actions[1].reason, "open_trap_workshop_from_home_city_atlas")
+
+    def test_open_home_city_object_routes_exactly_to_the_safe_band_for_final_taps(self) -> None:
+        """Uses exact atlas routing for open actions so the final blind tap never stops just outside the safe band."""
+
+        observation = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            spatial_surface=make_spatial_surface(SpatialSurfaceType.HOME_CITY_SURFACE),
+            image_size=(900, 1600),
+        )
+        runtime_state: dict[str, object] = {
+            "home_city_navigation": {
+                "known_viewport_center": (1774, 704),
+            }
+        }
+
+        actions = self.flows.open_home_city_object(
+            observation,
+            SpatialObjectQuery(
+                surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+                kind=SpatialObjectKind.HOME_BUILDING,
+                metadata_key="home_city_object_id",
+                metadata_value="trap_workshop",
+            ),
+            reason="open_trap_workshop",
+            runtime_state=runtime_state,
+        )
+
+        self.assertEqual(len(actions), 3)
+        self.assertIsInstance(actions[0], SwipeAction)
+        self.assertEqual(actions[0].direction, "up")
+        self.assertEqual(actions[0].reason, "focus_trap_workshop_from_home_city_atlas_y")
+        self.assertIsInstance(actions[1], SwipeAction)
+        self.assertEqual(actions[1].direction, "right")
+        self.assertEqual(actions[1].reason, "focus_trap_workshop_from_home_city_atlas_x")
+        self.assertIsInstance(actions[2], TapPointAction)
+        self.assertEqual((actions[2].x, actions[2].y), (150, 1085))
+        self.assertEqual(actions[2].reason, "open_trap_workshop_from_home_city_atlas")
+
+    def test_open_home_city_object_prioritizes_the_x_axis_before_vertical_motion_in_the_sauroi_band(self) -> None:
+        """Keeps blind routes through the Sauroi/Campaign skyline deterministic by shifting horizontally before vertical motion."""
+
+        observation = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.HOME_CITY_SURFACE,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Sauroi Lair",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.SAUROI_LAIR),
+                        viewport_offset_ratio=(0.005555555555555556, 0.03875),
+                    ),
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Arena",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.ARENA),
+                        viewport_offset_ratio=(0.37777777777777777, 0.223125),
+                    ),
+                ),
+            ),
+            image_size=(900, 1600),
+        )
+
+        actions = self.flows.open_home_city_object(
+            observation,
+            SpatialObjectQuery(
+                surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+                kind=SpatialObjectKind.HOME_BUILDING,
+                metadata_key="home_city_object_id",
+                metadata_value="trap_workshop",
+            ),
+            reason="open_trap_workshop",
+            runtime_state={},
+        )
+
+        self.assertGreaterEqual(len(actions), 2)
+        self.assertIsInstance(actions[0], SwipeAction)
+        self.assertEqual(actions[0].direction, "right")
+        self.assertEqual(actions[0].reason, "focus_trap_workshop_from_home_city_atlas_x")
+        self.assertIsInstance(actions[1], SwipeAction)
+        self.assertEqual(actions[1].direction, "up")
+        self.assertEqual(actions[1].reason, "focus_trap_workshop_from_home_city_atlas_y")
+        self.assertEqual(actions[1].start_x_ratio, 0.55)
+        self.assertEqual(actions[1].end_x_ratio, 0.55)
+
+    def test_open_home_city_object_uses_the_castle_utility_vertical_swipe_lane_for_trap_workshop(self) -> None:
+        """Routes y-first trap-workshop pans through the reviewed right-side lane when the castle utility band is visible."""
+
+        observation = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.HOME_CITY_SURFACE,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Castle",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.CASTLE),
+                        viewport_offset_ratio=(-9 / 900, -375 / 1600),
+                    ),
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Institute",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.INSTITUTE),
+                        viewport_offset_ratio=(55 / 900, 460 / 1600),
+                    ),
+                ),
+            ),
+            image_size=(900, 1600),
+        )
+
+        actions = self.flows.open_home_city_object(
+            observation,
+            SpatialObjectQuery(
+                surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+                kind=SpatialObjectKind.HOME_BUILDING,
+                metadata_key="home_city_object_id",
+                metadata_value="trap_workshop",
+            ),
+            reason="open_trap_workshop",
+            runtime_state={},
+        )
+
+        self.assertGreaterEqual(len(actions), 2)
+        self.assertIsInstance(actions[0], SwipeAction)
+        self.assertEqual(actions[0].direction, "up")
+        self.assertEqual(actions[0].reason, "focus_trap_workshop_from_home_city_atlas_y")
+        self.assertEqual(actions[0].start_x_ratio, 0.69)
+        self.assertEqual(actions[0].end_x_ratio, 0.69)
+
+    def test_open_home_city_object_guides_trap_workshop_into_the_blacksmith_lower_band(self) -> None:
+        """Uses a deterministic short upward pan once the blacksmith-only skyline proves the lower-band trap view is nearby."""
+
+        observation = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.HOME_CITY_SURFACE,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Blacksmith",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.BLACKSMITH),
+                        viewport_offset_ratio=(0.18333333333333332, 0.009375),
+                    ),
+                ),
+            ),
+            image_size=(900, 1600),
+        )
+
+        actions = self.flows.open_home_city_object(
+            observation,
+            SpatialObjectQuery(
+                surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+                kind=SpatialObjectKind.HOME_BUILDING,
+                metadata_key="home_city_object_id",
+                metadata_value="trap_workshop",
+            ),
+            reason="open_trap_workshop",
+            runtime_state={},
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], SwipeAction)
+        self.assertEqual(actions[0].direction, "up")
+        self.assertEqual(actions[0].reason, "guide_trap_workshop_lower_band_from_blacksmith")
+
+    def test_open_home_city_object_uses_blacksmith_lower_band_direct_tap_for_trap_workshop(self) -> None:
+        """Treats the calibrated blacksmith-plus-farm lower band as a trusted direct-tap view for trap workshop."""
+
+        observation = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.HOME_CITY_SURFACE,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Blacksmith",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.BLACKSMITH),
+                        viewport_offset_ratio=(0.18444444444444444, -0.22875),
+                    ),
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Farm",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.FARM),
+                        viewport_offset_ratio=(0.31666666666666665, 0.1775),
+                    ),
+                ),
+            ),
+            image_size=(900, 1600),
+        )
+
+        actions = self.flows.open_home_city_object(
+            observation,
+            SpatialObjectQuery(
+                surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+                kind=SpatialObjectKind.HOME_BUILDING,
+                metadata_key="home_city_object_id",
+                metadata_value="trap_workshop",
+            ),
+            reason="open_trap_workshop",
+            runtime_state={},
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], TapPointAction)
+        self.assertEqual(actions[0].reason, "open_trap_workshop_from_blacksmith_lower_band")
+        self.assertEqual((actions[0].x, actions[0].y), (667, 875))
+
+    def test_focus_home_city_coordinate_uses_inferred_atlas_center(self) -> None:
+        """Moves the home-city camera toward one requested atlas coordinate from the inferred current center."""
+
+        observation = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.HOME_CITY_SURFACE,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Castle",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.CASTLE),
+                        viewport_offset_ratio=(-9 / 900, -375 / 1600),
+                    ),
+                ),
+            ),
+        )
+
+        actions = self.flows.focus_home_city_coordinate(
+            observation,
+            HomeCityMapCoordinate(x=1500, y=1000),
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], SwipeAction)
+        self.assertEqual(actions[0].direction, "left")
+        self.assertEqual(actions[0].reason, "focus_home_city_atlas_x")
+
+    def test_focus_home_city_coordinate_precomputes_full_swipe_series_before_observing(self) -> None:
+        """Plans the whole atlas route up front and only observes after the last swipe in the series."""
+
+        observation = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.HOME_CITY_SURFACE,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Castle",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.CASTLE),
+                        viewport_offset_ratio=(-9 / 900, -375 / 1600),
+                    ),
+                ),
+            ),
+        )
+
+        actions = self.flows.focus_home_city_coordinate(
+            observation,
+            HomeCityMapCoordinate(x=2350, y=1000),
+        )
+
+        self.assertEqual(len(actions), 2)
+        self.assertTrue(all(isinstance(action, SwipeAction) for action in actions))
+        self.assertEqual(actions[0].direction, "left")
+        self.assertEqual(actions[0].reason, "focus_home_city_atlas_x")
+        self.assertFalse(actions[0].observe_after)
+        self.assertEqual(actions[1].direction, "left")
+        self.assertEqual(actions[1].reason, "focus_home_city_atlas_x")
+        self.assertTrue(actions[1].observe_after)
+        self.assertEqual(actions[1].follow_up_request, ObservationRequest.source_screen_retry(ScreenType.PNC_HOME_CITY))
+        self.assertIsNotNone(actions[1].start_x_ratio)
+        self.assertEqual(actions[1].start_y_ratio, 0.56)
+        self.assertIsNotNone(actions[1].end_x_ratio)
+        self.assertEqual(actions[1].end_y_ratio, 0.56)
+
+    def test_open_home_city_object_guides_wall_search_from_castle_before_generic_scan(self) -> None:
+        """Uses the reviewed Castle-to-Blacksmith shift before the generic wall raster begins."""
+
+        observation = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.HOME_CITY_SURFACE,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Castle",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.CASTLE),
+                    ),
+                ),
+            ),
+        )
+        runtime_state: dict[str, object] = {}
+
+        actions = self.flows.open_home_city_object(
+            observation,
+            SpatialObjectQuery(
+                surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+                kind=SpatialObjectKind.HOME_BUILDING,
+                metadata_key="home_city_object_id",
+                metadata_value="wall",
+            ),
+            reason="open_wall",
+            runtime_state=runtime_state,
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], SwipeAction)
+        self.assertEqual(actions[0].reason, "guide_wall_search_from_castle")
+        self.assertEqual(actions[0].direction, "up")
+
+    def test_open_home_city_object_guides_wall_search_from_blacksmith_before_generic_scan(self) -> None:
+        """Uses the reviewed Blacksmith-to-Wall shift before the generic wall raster begins."""
+
+        observation = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.HOME_CITY_SURFACE,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Blacksmith",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.BLACKSMITH),
+                    ),
+                ),
+            ),
+        )
+        runtime_state: dict[str, object] = {}
+
+        actions = self.flows.open_home_city_object(
+            observation,
+            SpatialObjectQuery(
+                surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+                kind=SpatialObjectKind.HOME_BUILDING,
+                metadata_key="home_city_object_id",
+                metadata_value="wall",
+            ),
+            reason="open_wall",
+            runtime_state=runtime_state,
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], SwipeAction)
+        self.assertEqual(actions[0].reason, "guide_wall_search_from_blacksmith")
+        self.assertEqual(actions[0].direction, "left")
+
+    def test_open_home_city_object_does_not_repeat_wall_guidance_from_same_anchor_view(self) -> None:
+        """Falls back to the generic raster after the current Castle-guided wall move was already spent."""
+
+        observation = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.HOME_CITY_SURFACE,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Castle",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.CASTLE),
+                    ),
+                ),
+            ),
+        )
+        runtime_state: dict[str, object] = {}
+        query = SpatialObjectQuery(
+            surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+            kind=SpatialObjectKind.HOME_BUILDING,
+            metadata_key="home_city_object_id",
+            metadata_value="wall",
+        )
+
+        first_actions = self.flows.open_home_city_object(
+            observation,
+            query,
+            reason="open_wall",
+            runtime_state=runtime_state,
+        )
+        second_actions = self.flows.open_home_city_object(
+            observation,
+            query,
+            reason="open_wall",
+            runtime_state=runtime_state,
+        )
+
+        self.assertEqual(first_actions[0].reason, "guide_wall_search_from_castle")
+        self.assertEqual(len(second_actions), 1)
+        self.assertIsInstance(second_actions[0], SwipeAction)
+        self.assertEqual(second_actions[0].reason, "scan_home_city_upper_right_to_left_1")
+
+    def test_open_home_city_object_uses_research_shortcut_for_institute(self) -> None:
+        """Uses the fixed home-city research shortcut instead of moving the camera for Institute."""
+
+        observation = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            visible_ids=(UiElementId.PNC_HOME_RESEARCH_BUTTON,),
+        )
+
+        actions = self.flows.open_home_city_object(
+            observation,
+            SpatialObjectQuery(
+                surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+                kind=SpatialObjectKind.HOME_BUILDING,
+                metadata_key="home_city_object_id",
+                metadata_value="institute",
+            ),
+            reason="open_institute",
+            runtime_state={},
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], TapAction)
+        self.assertEqual(actions[0].selector_id, UiElementId.PNC_HOME_RESEARCH_BUTTON)
+        self.assertEqual(actions[0].reason, "open_institute")
+
+    def test_open_home_city_object_uses_root_view_direct_tap_for_institute_when_label_is_missing(self) -> None:
+        """Uses the canonical fixed root-view tap when Institute is off the OCR surface but its anchor buildings prove the view."""
+
+        observation = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.HOME_CITY_SURFACE,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Castle",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.CASTLE),
+                    ),
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Infantry Barracks",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.INFANTRY_BARRACKS),
+                    ),
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Ranged Barracks",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.RANGED_BARRACKS),
+                    ),
+                ),
+            ),
+            image_size=(900, 1600),
+        )
+
+        actions = self.flows.open_home_city_object(
+            observation,
+            SpatialObjectQuery(
+                surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+                kind=SpatialObjectKind.HOME_BUILDING,
+                metadata_key="home_city_object_id",
+                metadata_value="institute",
+            ),
+            reason="open_institute",
+            runtime_state={},
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], TapPointAction)
+        self.assertEqual(actions[0].reason, "open_institute_from_root_view")
+        self.assertEqual((actions[0].x, actions[0].y), (722, 912))
+
+    def test_open_home_city_object_uses_root_view_direct_tap_for_castle_when_label_is_missing(self) -> None:
+        """Uses the canonical root-view tap for Castle when the barracks pair proves the framing despite OCR drift on Castle itself."""
+
+        observation = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.HOME_CITY_SURFACE,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Infantry Barracks",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.INFANTRY_BARRACKS),
+                    ),
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Ranged Barracks",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.RANGED_BARRACKS),
+                    ),
+                ),
+            ),
+            image_size=(900, 1600),
+        )
+
+        actions = self.flows.open_home_city_object(
+            observation,
+            SpatialObjectQuery(
+                surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+                kind=SpatialObjectKind.HOME_BUILDING,
+                metadata_key="home_city_object_id",
+                metadata_value="castle",
+            ),
+            reason="open_castle",
+            runtime_state={},
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], TapPointAction)
+        self.assertEqual(actions[0].reason, "open_castle_from_root_view")
+        self.assertEqual((actions[0].x, actions[0].y), (441, 425))
+
+    def test_open_home_city_object_uses_utility_view_direct_tap_for_warehouse_when_label_is_missing(self) -> None:
+        """Uses the canonical utility-view tap when Warehouse OCR is missing but the right-side anchor view is known."""
+
+        observation = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.HOME_CITY_SURFACE,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Watch Tower",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.WATCHTOWER),
+                    ),
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Sauroi Lair",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.SAUROI_LAIR),
+                    ),
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Campaign",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.CAMPAIGN),
+                    ),
+                ),
+            ),
+            image_size=(900, 1600),
+        )
+
+        actions = self.flows.open_home_city_object(
+            observation,
+            SpatialObjectQuery(
+                surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+                kind=SpatialObjectKind.HOME_BUILDING,
+                metadata_key="home_city_object_id",
+                metadata_value="warehouse",
+            ),
+            reason="open_warehouse",
+            runtime_state={},
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], TapPointAction)
+        self.assertEqual(actions[0].reason, "open_warehouse_from_utility_view")
+        self.assertEqual((actions[0].x, actions[0].y), (395, 841))
+
+    def test_open_home_city_object_uses_institute_wall_quadrant_direct_tap_for_alliance_hall(self) -> None:
+        """Uses the known lower-right quadrant tap for Alliance Hall when the surrounding fixed buildings prove the view."""
+
+        observation = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.HOME_CITY_SURFACE,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Institute",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.INSTITUTE),
+                    ),
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Blacksmith",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.BLACKSMITH),
+                    ),
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Wall",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.WALL),
+                    ),
+                ),
+            ),
+            image_size=(900, 1600),
+        )
+
+        actions = self.flows.open_home_city_object(
+            observation,
+            SpatialObjectQuery(
+                surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+                kind=SpatialObjectKind.HOME_BUILDING,
+                metadata_key="home_city_object_id",
+                metadata_value="alliance_hall",
+            ),
+            reason="open_alliance_hall",
+            runtime_state={},
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], TapPointAction)
+        self.assertEqual(actions[0].reason, "open_alliance_hall_from_institute_wall_quadrant")
+        self.assertEqual((actions[0].x, actions[0].y), (827, 666))
+
+    def test_open_home_city_object_uses_institute_wall_quadrant_direct_tap_for_blacksmith(self) -> None:
+        """Uses the known lower-left quadrant tap for Blacksmith when the surrounding fixed buildings prove the view."""
+
+        observation = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.HOME_CITY_SURFACE,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Institute",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.INSTITUTE),
+                    ),
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Alliance Hall",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.ALLIANCE_HALL),
+                    ),
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Wall",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.WALL),
+                    ),
+                ),
+            ),
+            image_size=(900, 1600),
+        )
+
+        actions = self.flows.open_home_city_object(
+            observation,
+            SpatialObjectQuery(
+                surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+                kind=SpatialObjectKind.HOME_BUILDING,
+                metadata_key="home_city_object_id",
+                metadata_value="blacksmith",
+            ),
+            reason="open_blacksmith",
+            runtime_state={},
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], TapPointAction)
+        self.assertEqual(actions[0].reason, "open_blacksmith_from_institute_wall_quadrant")
+        self.assertEqual((actions[0].x, actions[0].y), (190, 924))
+
+    def test_open_home_city_object_uses_institute_wall_quadrant_direct_tap_for_trap_workshop(self) -> None:
+        """Uses the fixed lower-left support-slot tap for Trap Workshop when the institute-wall framing is proven."""
+
+        observation = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.HOME_CITY_SURFACE,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Institute",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.INSTITUTE),
+                    ),
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Blacksmith",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.BLACKSMITH),
+                    ),
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Wall",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.WALL),
+                    ),
+                ),
+            ),
+            image_size=(900, 1600),
+        )
+
+        actions = self.flows.open_home_city_object(
+            observation,
+            SpatialObjectQuery(
+                surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+                kind=SpatialObjectKind.HOME_BUILDING,
+                metadata_key="home_city_object_id",
+                metadata_value="trap_workshop",
+            ),
+            reason="open_trap_workshop",
+            runtime_state={},
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], TapPointAction)
+        self.assertEqual(actions[0].reason, "open_trap_workshop_from_institute_wall_quadrant")
+        self.assertEqual((actions[0].x, actions[0].y), (241, 1365))
+
+    def test_open_home_city_object_does_not_repeat_direct_tap_from_same_anchor_view(self) -> None:
+        """Spends one trusted fixed-view tap attempt once before falling back to the remaining fixed-map navigation budget."""
+
+        observation = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.HOME_CITY_SURFACE,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Castle",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.CASTLE),
+                    ),
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Infantry Barracks",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.INFANTRY_BARRACKS),
+                    ),
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Ranged Barracks",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.RANGED_BARRACKS),
+                    ),
+                ),
+            ),
+            image_size=(900, 1600),
+        )
+        runtime_state: dict[str, object] = {}
+        query = SpatialObjectQuery(
+            surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+            kind=SpatialObjectKind.HOME_BUILDING,
+            metadata_key="home_city_object_id",
+            metadata_value="institute",
+        )
+
+        first_actions = self.flows.open_home_city_object(
+            observation,
+            query,
+            reason="open_institute",
+            runtime_state=runtime_state,
+        )
+        second_actions = self.flows.open_home_city_object(
+            observation,
+            query,
+            reason="open_institute",
+            runtime_state=runtime_state,
+        )
+
+        self.assertEqual(len(first_actions), 1)
+        self.assertIsInstance(first_actions[0], TapPointAction)
+        self.assertEqual(first_actions[0].reason, "open_institute_from_root_view")
+        self.assertEqual(len(second_actions), 1)
+        self.assertIsInstance(second_actions[0], SwipeAction)
+        self.assertEqual(second_actions[0].reason, "scan_home_city_upper_right_to_left_1")
+
+    def test_open_home_city_object_guides_utility_view_from_root_before_generic_scan(self) -> None:
+        """Uses the deterministic root-to-utility transition before falling back to raster movement for right-side fixed buildings."""
+
+        observation = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.HOME_CITY_SURFACE,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Infantry Barracks",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.INFANTRY_BARRACKS),
+                    ),
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Ranged Barracks",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.RANGED_BARRACKS),
+                    ),
+                ),
+            ),
+        )
+
+        actions = self.flows.open_home_city_object(
+            observation,
+            SpatialObjectQuery(
+                surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+                kind=SpatialObjectKind.HOME_BUILDING,
+                metadata_key="home_city_object_id",
+                metadata_value="alliance_hall",
+            ),
+            reason="open_alliance_hall",
+            runtime_state={},
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], SwipeAction)
+        self.assertEqual(actions[0].reason, "guide_utility_view_from_root_view")
+        self.assertEqual(actions[0].direction, "left")
+
+    def test_open_home_city_object_guides_institute_wall_quadrant_from_utility_view(self) -> None:
+        """Uses the deterministic utility-to-support-quadrant transition before generic scan for alliance buildings and wall-side structures."""
+
+        observation = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.HOME_CITY_SURFACE,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Watch Tower",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.WATCHTOWER),
+                    ),
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Sauroi Lair",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.SAUROI_LAIR),
+                    ),
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Campaign",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.CAMPAIGN),
+                    ),
+                ),
+            ),
+        )
+
+        actions = self.flows.open_home_city_object(
+            observation,
+            SpatialObjectQuery(
+                surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+                kind=SpatialObjectKind.HOME_BUILDING,
+                metadata_key="home_city_object_id",
+                metadata_value="blacksmith",
+            ),
+            reason="open_blacksmith",
+            runtime_state={},
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], SwipeAction)
+        self.assertEqual(actions[0].reason, "guide_institute_wall_quadrant_from_utility_view")
+        self.assertEqual(actions[0].direction, "up")
+
+    def test_open_home_city_object_guides_root_view_from_utility_for_infantry_barracks(self) -> None:
+        """Uses the deterministic utility-to-root transition before generic scan for root-view barracks targets."""
+
+        observation = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.HOME_CITY_SURFACE,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Watch Tower",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.WATCHTOWER),
+                    ),
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Sauroi Lair",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.SAUROI_LAIR),
+                    ),
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Campaign",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.CAMPAIGN),
+                    ),
+                ),
+            ),
+        )
+
+        actions = self.flows.open_home_city_object(
+            observation,
+            SpatialObjectQuery(
+                surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+                kind=SpatialObjectKind.HOME_BUILDING,
+                metadata_key="home_city_object_id",
+                metadata_value="infantry_barracks",
+            ),
+            reason="open_infantry_barracks",
+            runtime_state={},
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], SwipeAction)
+        self.assertEqual(actions[0].reason, "guide_root_view_from_utility_view")
+        self.assertEqual(actions[0].direction, "right")
+
+    def test_open_home_city_object_guides_hero_war_view_from_root(self) -> None:
+        """Uses the deterministic root-to-hero-war transition before generic scan for the upper support band."""
+
+        observation = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.HOME_CITY_SURFACE,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Infantry Barracks",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.INFANTRY_BARRACKS),
+                    ),
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Ranged Barracks",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.RANGED_BARRACKS),
+                    ),
+                ),
+            ),
+        )
+
+        actions = self.flows.open_home_city_object(
+            observation,
+            SpatialObjectQuery(
+                surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+                kind=SpatialObjectKind.HOME_BUILDING,
+                metadata_key="home_city_object_id",
+                metadata_value="hero_hall",
+            ),
+            reason="open_hero_hall",
+            runtime_state={},
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], SwipeAction)
+        self.assertEqual(actions[0].reason, "guide_hero_war_view_from_root_view")
+        self.assertEqual(actions[0].direction, "up")
+
+    def test_open_home_city_object_guides_sacred_tree_band_from_hero_war_view(self) -> None:
+        """Uses the deterministic hero-war-to-sacred-tree transition before generic scan for the lower-left support band."""
+
+        observation = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.HOME_CITY_SURFACE,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Hero Hall",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.HERO_HALL),
+                    ),
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Hall of War",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.HALL_OF_WAR),
+                    ),
+                ),
+            ),
+        )
+
+        actions = self.flows.open_home_city_object(
+            observation,
+            SpatialObjectQuery(
+                surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+                kind=SpatialObjectKind.HOME_BUILDING,
+                metadata_key="home_city_object_id",
+                metadata_value="sacred_tree",
+            ),
+            reason="open_sacred_tree",
+            runtime_state={},
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], SwipeAction)
+        self.assertEqual(actions[0].reason, "guide_sacred_tree_band_from_hero_war_view")
+        self.assertEqual(actions[0].direction, "up")
+
+    def test_open_home_city_object_guides_warehouse_search_from_hall_of_war_and_recruiting_center_band(self) -> None:
+        """Uses the fixed-map downward warehouse route from the Hall of War / Sacred Tree / Recruiting Center view."""
+
+        observation = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.HOME_CITY_SURFACE,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Hall of War",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.HALL_OF_WAR),
+                    ),
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Sacred Tree",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.SACRED_TREE),
+                    ),
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Recruiting Center",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.RECRUITING_CENTER),
+                    ),
+                ),
+            ),
+        )
+
+        actions = self.flows.open_home_city_object(
+            observation,
+            SpatialObjectQuery(
+                surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+                kind=SpatialObjectKind.HOME_BUILDING,
+                metadata_key="home_city_object_id",
+                metadata_value="warehouse",
+            ),
+            reason="open_warehouse",
+            runtime_state={},
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], SwipeAction)
+        self.assertEqual(actions[0].reason, "guide_warehouse_search_from_hall_of_war_and_recruiting_center_band")
+        self.assertEqual(actions[0].direction, "down")
+
+    def test_open_home_city_object_guides_warehouse_search_from_hall_of_war_and_hero_hall(self) -> None:
+        """Uses the fixed-map warehouse route once Hall of War and Hero Hall prove the correct intermediate view."""
+
+        observation = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.HOME_CITY_SURFACE,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Hall of War",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.HALL_OF_WAR),
+                    ),
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Hero Hall",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.HERO_HALL),
+                    ),
+                ),
+            ),
+        )
+
+        actions = self.flows.open_home_city_object(
+            observation,
+            SpatialObjectQuery(
+                surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+                kind=SpatialObjectKind.HOME_BUILDING,
+                metadata_key="home_city_object_id",
+                metadata_value="warehouse",
+            ),
+            reason="open_warehouse",
+            runtime_state={},
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], SwipeAction)
+        self.assertEqual(actions[0].reason, "guide_warehouse_search_from_hall_of_war_and_hero_hall")
+        self.assertEqual(actions[0].direction, "left")
 
     def test_focus_world_coordinate_plans_one_coordinate_driven_swipe(self) -> None:
         """Uses the shared world-map navigator instead of task-local swipe heuristics."""
@@ -334,6 +1616,22 @@ class FlowAndTaskTests(unittest.TestCase):
 
         self.assertEqual(result.status, TaskStatus.REPLAN)
         self.assertTrue(context.runtime_state["ensure_game_running_launch_started"])
+
+    def test_ensure_game_running_keeps_waiting_after_four_unknown_launch_observations(self) -> None:
+        """Allows slower live launch/login handoffs instead of hard-failing after only a few splash observations."""
+
+        task = EnsureGameRunningTask()
+        context = self._make_context(params=None)
+        context.runtime_state["ensure_game_running_launch_started"] = True
+        context.runtime_state["ensure_game_running_launch_wait_attempts"] = 4
+
+        result = task.verify(
+            context,
+            make_observation(ScreenType.UNKNOWN),
+            make_observation(ScreenType.UNKNOWN),
+        )
+
+        self.assertEqual(result.status, TaskStatus.REPLAN)
 
     def test_send_chat_message_from_home_city_opens_chat_selects_channel_and_sends(self) -> None:
         """Uses one chat-opening increment from home so the chat origin is observed before sending."""
@@ -705,8 +2003,8 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertIsInstance(actions[1], TapAction)
         self.assertEqual(actions[1].selector_id, UiElementId.PNC_MORE_MANAGE_CHAR)
 
-    def test_login_task_returns_home_city_when_started_from_world_map(self) -> None:
-        """Supports already-logged sessions from other in-game screens by routing back to home city first."""
+    def test_login_task_does_not_interrupt_an_already_open_world_map_session(self) -> None:
+        """Avoids redundant root navigation when login is invoked from another active in-game screen."""
 
         task = LoginTask()
         context = self._make_context(params=None, task_id=TaskId.LOGIN)
@@ -717,9 +2015,20 @@ class FlowAndTaskTests(unittest.TestCase):
 
         actions = task.plan(context, observation)
 
-        self.assertEqual(len(actions), 1)
-        self.assertIsInstance(actions[0], TapAction)
-        self.assertEqual(actions[0].selector_id, UiElementId.PNC_WORLD_HOME_NAV)
+        self.assertEqual(actions, [])
+
+    def test_login_task_does_not_interrupt_an_open_building_screen(self) -> None:
+        """Treats an in-progress building screen as an already-open session instead of relogging through root."""
+
+        task = LoginTask()
+        context = self._make_context(params=None, task_id=TaskId.LOGIN)
+
+        actions = task.plan(
+            context,
+            make_observation(ScreenType.PNC_INFANTRY_BARRACKS),
+        )
+
+        self.assertEqual(actions, [])
 
     def test_login_task_verifies_castle_selection_against_pre_observation_roster_snapshot(self) -> None:
         """Accepts a castle-selection state only when the trusted pre-observation snapshot matches."""
@@ -892,8 +2201,8 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertIsInstance(settings_actions[0], TapAction)
         self.assertEqual(settings_actions[0].selector_id, UiElementId.PNC_BACK_BUTTON_TOP_LEFT)
 
-    def test_select_castle_opens_lord_info_before_switch_when_current_castle_is_unknown(self) -> None:
-        """Validates the origin castle from Lord Info before entering Manage Char."""
+    def test_select_castle_opens_manage_char_directly_when_current_castle_is_unknown(self) -> None:
+        """Uses the explicit Manage Char switch path directly instead of chaining Lord Info first."""
 
         task = SelectCastleTask()
         context = self._make_context(
@@ -903,14 +2212,18 @@ class FlowAndTaskTests(unittest.TestCase):
         )
         observation = make_observation(
             ScreenType.PNC_HOME_CITY,
-            visible_ids=(UiElementId.PNC_HOME_LORD_INFO_SHORTCUT,),
+            visible_ids=(UiElementId.PNC_BOTTOM_NAV_MORE,),
         )
 
         actions = task.plan(context, observation)
 
-        self.assertEqual(len(actions), 1)
+        self.assertEqual(len(actions), 3)
         self.assertIsInstance(actions[0], TapAction)
-        self.assertEqual(actions[0].selector_id, UiElementId.PNC_HOME_LORD_INFO_SHORTCUT)
+        self.assertEqual(actions[0].selector_id, UiElementId.PNC_BOTTOM_NAV_MORE)
+        self.assertIsInstance(actions[1], TapAction)
+        self.assertEqual(actions[1].selector_id, UiElementId.PNC_MORE_SETTINGS)
+        self.assertIsInstance(actions[2], TapAction)
+        self.assertEqual(actions[2].selector_id, UiElementId.PNC_MORE_MANAGE_CHAR)
 
     def test_select_castle_switches_from_lord_info_when_origin_castle_is_wrong(self) -> None:
         """Leaves Lord Info and continues straight into Manage Char when the origin castle is not the target."""
@@ -936,6 +2249,24 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertEqual(actions[2].selector_id, UiElementId.PNC_MORE_SETTINGS)
         self.assertIsInstance(actions[3], TapAction)
         self.assertEqual(actions[3].selector_id, UiElementId.PNC_MORE_MANAGE_CHAR)
+
+    def test_select_castle_returns_to_home_from_a_building_screen_before_opening_manage_char(self) -> None:
+        """Uses the explicit castle-switch step to leave in-progress screens before Manage Char navigation."""
+
+        task = SelectCastleTask()
+        context = self._make_context(
+            params=None,
+            task_id=TaskId.SELECT_CASTLE,
+            target_castle=self.target_castle,
+        )
+        observation = make_observation(ScreenType.PNC_INFANTRY_BARRACKS)
+
+        actions = task.plan(context, observation)
+        result = task.verify(context, observation, make_observation(ScreenType.PNC_HOME_CITY))
+
+        self.assertEqual(actions, self.flows.ensure_home_city(observation))
+        self.assertEqual(result.status, TaskStatus.REPLAN)
+        self.assertIn("root-adjacent", result.message)
 
     def test_select_castle_taps_visible_target_despite_spacing_only_ocr_drift(self) -> None:
         """Treats spacing-only OCR drift as the same visible target castle on Manage Char."""
@@ -1056,6 +2387,59 @@ class FlowAndTaskTests(unittest.TestCase):
         result = task.verify(context, make_observation(ScreenType.PNC_HOME_CITY), matching_lord_info)
 
         self.assertEqual(actions, [])
+        self.assertTrue(result.succeeded)
+
+    def test_select_castle_succeeds_on_lord_info_confirmation_for_live_target_name(self) -> None:
+        """Keeps the terminal Lord Info success path working for the live pine cobaye target."""
+
+        task = SelectCastleTask()
+        target_castle = CastleIdentity(kingdom="K287", castle_name="pine cobaye 1")
+        roster = PncAccountCastleRosterConfig(
+            pnc_account_id=self.account.pnc_account_id,
+            castles=(target_castle,),
+        )
+        context = self._make_context(
+            params=None,
+            task_id=TaskId.SELECT_CASTLE,
+            target_castle=target_castle,
+            castle_roster_provider=lambda: roster,
+        )
+        matching_lord_info = make_observation(
+            ScreenType.PNC_LORD_INFO,
+            current_castle_name="pine cobaye 1",
+        )
+
+        actions = task.plan(context, matching_lord_info)
+        result = task.verify(context, make_observation(ScreenType.PNC_HOME_CITY), matching_lord_info)
+
+        self.assertEqual(actions, [])
+        self.assertTrue(result.succeeded)
+
+    def test_select_castle_succeeds_after_returning_home_from_selected_manage_char_without_roster(self) -> None:
+        """Treats exact Manage Char selection as sufficient once home city inherits the validated target."""
+
+        task = SelectCastleTask()
+        target_castle = CastleIdentity(kingdom="K287", castle_name="pine cobaye 1")
+        context = self._make_context(
+            params=None,
+            task_id=TaskId.SELECT_CASTLE,
+            target_castle=target_castle,
+        )
+        selected_manage_char = make_observation(
+            ScreenType.PNC_CASTLE_SELECTION,
+            current_castle=target_castle,
+            current_castle_evidence=CurrentCastleEvidenceKind.EXACT,
+        )
+        returned_home = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            current_castle=target_castle,
+            current_castle_evidence=CurrentCastleEvidenceKind.EXACT,
+        )
+
+        actions = task.plan(context, selected_manage_char)
+        result = task.verify(context, selected_manage_char, returned_home)
+
+        self.assertEqual(len(actions), 1)
         self.assertTrue(result.succeeded)
 
     def test_select_castle_succeeds_on_lord_info_confirmation_despite_spacing_only_ocr_drift(self) -> None:
@@ -1369,6 +2753,170 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertIsInstance(actions[1], WaitAction)
         self.assertTrue(actions[1].observe_after)
 
+    def test_open_building_task_parse_params_accepts_sanctum(self) -> None:
+        """Allows direct open-building scripts to target non-upgrade sanctum navigation explicitly."""
+
+        params = OpenBuildingTask().parse_params({"building": "sanctum"})
+
+        self.assertEqual(params, OpenBuildingPolicy(building=HomeCityObjectId.SANCTUM))
+
+    def test_open_building_task_opens_visible_requested_building(self) -> None:
+        """Taps the visible requested home-city building instead of sweeping when it is already on-screen."""
+
+        task = OpenBuildingTask()
+        context = self._make_context(
+            params=OpenBuildingPolicy(building=HomeCityObjectId.INFANTRY_BARRACKS),
+            task_id=TaskId.OPEN_BUILDING,
+        )
+
+        actions = task.plan(
+            context,
+            make_observation(
+                ScreenType.PNC_HOME_CITY,
+                spatial_surface=make_spatial_surface(
+                    SpatialSurfaceType.HOME_CITY_SURFACE,
+                    objects=(
+                        make_spatial_object(
+                            SpatialObjectKind.HOME_BUILDING,
+                            name_text="Infantry Barracks",
+                            metadata=build_home_city_object_metadata(HomeCityObjectId.INFANTRY_BARRACKS),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], TapSpatialObjectAction)
+        self.assertEqual(actions[0].reason, "open_requested_building")
+
+    def test_open_building_task_replans_after_camera_focus_when_target_is_offscreen(self) -> None:
+        """Keeps the dedicated open-building task alive while the shared home-city search adjusts the camera."""
+
+        task = OpenBuildingTask()
+        context = self._make_context(
+            params=OpenBuildingPolicy(building=HomeCityObjectId.WALL),
+            task_id=TaskId.OPEN_BUILDING,
+        )
+        before = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            spatial_surface=make_spatial_surface(SpatialSurfaceType.HOME_CITY_SURFACE),
+        )
+
+        actions = task.plan(context, before)
+        result = task.verify(context, before, make_observation(ScreenType.PNC_HOME_CITY, spatial_surface=before.spatial_surface))
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], SwipeAction)
+        self.assertEqual(result.status, TaskStatus.REPLAN)
+        self.assertIn("searching", result.message)
+
+    def test_open_building_task_succeeds_when_requested_building_screen_opens(self) -> None:
+        """Finishes once the exact requested building-owned screen becomes visible."""
+
+        task = OpenBuildingTask()
+        context = self._make_context(
+            params=OpenBuildingPolicy(building=HomeCityObjectId.INFANTRY_BARRACKS),
+            task_id=TaskId.OPEN_BUILDING,
+        )
+
+        result = task.verify(
+            context,
+            make_observation(ScreenType.PNC_HOME_CITY),
+            make_observation(ScreenType.PNC_INFANTRY_BARRACKS),
+        )
+
+        self.assertEqual(result.status, TaskStatus.SUCCESS)
+        self.assertIn("Infantry Barracks", result.message)
+
+    def test_open_building_task_accepts_sanctum_icons_as_success(self) -> None:
+        """Accepts Sanctum's artifact-plus-relic controls as an open-screen proof even when classification lags."""
+
+        task = OpenBuildingTask()
+        context = self._make_context(
+            params=OpenBuildingPolicy(building=HomeCityObjectId.SANCTUM),
+            task_id=TaskId.OPEN_BUILDING,
+        )
+
+        result = task.verify(
+            context,
+            make_observation(ScreenType.PNC_HOME_CITY),
+            make_observation(
+                ScreenType.UNKNOWN,
+                visible_ids=(UiElementId.PNC_SANCTUM_ARTIFACT_BUTTON, UiElementId.PNC_SANCTUM_RELIC_BUTTON),
+            ),
+        )
+
+        self.assertEqual(result.status, TaskStatus.SUCCESS)
+        self.assertIn("Sanctum", result.message)
+
+    def test_open_building_task_accepts_matching_build_menu_for_unbuilt_target(self) -> None:
+        """Accepts the exact build-menu option as success when the requested building slot is not built yet."""
+
+        task = OpenBuildingTask()
+        context = self._make_context(
+            params=OpenBuildingPolicy(building=HomeCityObjectId.MARKET),
+            task_id=TaskId.OPEN_BUILDING,
+        )
+
+        result = task.verify(
+            context,
+            make_observation(ScreenType.PNC_HOME_CITY),
+            make_observation(
+                ScreenType.PNC_BUILD_MENU_LARGE_SLOT,
+                visible_ids=(UiElementId.PNC_BUILD_MARKET_OPTION,),
+            ),
+        )
+
+        self.assertEqual(result.status, TaskStatus.SUCCESS)
+        self.assertIn("Market", result.message)
+
+    def test_open_building_task_accepts_generic_building_details_for_unmodeled_screen_owner(self) -> None:
+        """Accepts generic building details when the requested building has no dedicated screen enum yet."""
+
+        task = OpenBuildingTask()
+        context = self._make_context(
+            params=OpenBuildingPolicy(building=HomeCityObjectId.BANK),
+            task_id=TaskId.OPEN_BUILDING,
+        )
+
+        result = task.verify(
+            context,
+            make_observation(ScreenType.PNC_HOME_CITY),
+            make_observation(ScreenType.PNC_BUILDING_DETAILS),
+        )
+
+        self.assertEqual(result.status, TaskStatus.SUCCESS)
+        self.assertIn("Bank", result.message)
+
+    def test_building_upgrade_task_parse_params_accepts_priority_file(self) -> None:
+        """Loads one ordered building list from a text file so scripts do not need one YAML per target sequence."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            priority_file = Path(temp_directory) / "priorities.txt"
+            priority_file.write_text("institute\nwarehouse\n", encoding="utf-8")
+
+            params = BuildingUpgradeTask().parse_params({"priority_file": str(priority_file), "allow_speedups": False})
+
+        self.assertEqual(params.priority, (BuildingPriority.INSTITUTE, BuildingPriority.WAREHOUSE))
+        self.assertFalse(params.allow_speedups)
+
+    def test_building_upgrade_task_parse_params_rejects_priority_and_priority_file_together(self) -> None:
+        """Fails fast when scripts try to mix direct building priorities with one priority-file source."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            priority_file = Path(temp_directory) / "priorities.txt"
+            priority_file.write_text("institute\n", encoding="utf-8")
+
+            with self.assertRaises(ScriptValidationError):
+                BuildingUpgradeTask().parse_params(
+                    {
+                        "priority": ["warehouse"],
+                        "priority_file": str(priority_file),
+                        "allow_speedups": False,
+                    }
+                )
+
     def test_building_upgrade_task_chooses_highest_priority_candidate(self) -> None:
         """Selects the configured highest-priority building candidate for inspection before claiming eligibility."""
 
@@ -1389,13 +2937,13 @@ class FlowAndTaskTests(unittest.TestCase):
                 objects=(
                     make_spatial_object(
                         SpatialObjectKind.HOME_BUILDING,
-                        name_text="Academy",
-                        metadata={"category": "academy"},
+                        name_text="Institute",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.INSTITUTE),
                     ),
                     make_spatial_object(
                         SpatialObjectKind.HOME_BUILDING,
                         name_text="Castle",
-                        metadata={"category": "castle"},
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.CASTLE),
                         action_point=(70, 60),
                     ),
                 ),
@@ -1408,6 +2956,41 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertIsInstance(actions[0], TapSpatialObjectAction)
         self.assertEqual(actions[0].query.name_text, "Castle")
         self.assertEqual(actions[0].target_point, (70, 60))
+
+    def test_building_upgrade_task_replans_after_camera_focus_when_target_priority_is_offscreen(self) -> None:
+        """Treats a home-city search swipe as progress even when other upgradeable buildings were already visible."""
+
+        task = BuildingUpgradeTask()
+        context = self._make_context(
+            params=BuildingUpgradePolicy(priority=(BuildingPriority.INFANTRY_BARRACKS,)),
+            task_id=TaskId.BUILDING_UPGRADE,
+        )
+        before = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.HOME_CITY_SURFACE,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Castle",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.CASTLE),
+                    ),
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Institute",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.INSTITUTE),
+                    ),
+                ),
+            ),
+        )
+
+        actions = task.plan(context, before)
+        result = task.verify(context, before, make_observation(ScreenType.PNC_HOME_CITY))
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], SwipeAction)
+        self.assertEqual(result.status, TaskStatus.REPLAN)
+        self.assertIn("searching for the requested building", result.message)
 
     def test_building_upgrade_task_replans_when_details_confirm_upgrade_button(self) -> None:
         """Treats the details screen as the canonical proof that a building is actually upgradeable."""
@@ -1425,7 +3008,7 @@ class FlowAndTaskTests(unittest.TestCase):
                         make_spatial_object(
                             SpatialObjectKind.HOME_BUILDING,
                             name_text="Castle",
-                            metadata={"category": "castle"},
+                            metadata=build_home_city_object_metadata(HomeCityObjectId.CASTLE),
                             action_point=(70, 60),
                         ),
                     ),
@@ -1445,7 +3028,38 @@ class FlowAndTaskTests(unittest.TestCase):
 
         task = BuildingUpgradeTask()
         context = self._make_context(params=BuildingUpgradePolicy(), task_id=TaskId.BUILDING_UPGRADE)
-        context.runtime_state["building_upgrade_pending_target"] = (BuildingPriority.CASTLE, "Castle", (70, 60))
+        before = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.HOME_CITY_SURFACE,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Castle",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.CASTLE),
+                        action_point=(70, 60),
+                    ),
+                ),
+            ),
+        )
+        task.plan(context, before)
+
+        result = task.verify(
+            context,
+            before,
+            make_observation(ScreenType.PNC_BUILDING_DETAILS),
+        )
+
+        self.assertEqual(result.status, TaskStatus.REPLAN)
+        self.assertIn("not upgradeable", result.message)
+        self.assertIn((BuildingPriority.CASTLE, "Castle", (70, 60)), context.runtime_state["building_upgrade_ineligible_targets"])
+        self.assertIn(BuildingPriority.CASTLE, context.runtime_state["building_upgrade_ineligible_object_ids"])
+
+    def test_building_upgrade_task_accepts_exact_building_screen_as_verified_upgrade_context(self) -> None:
+        """Treats exact building-owned screens as equivalent to the legacy generic detail screen."""
+
+        task = BuildingUpgradeTask()
+        context = self._make_context(params=BuildingUpgradePolicy(), task_id=TaskId.BUILDING_UPGRADE)
 
         result = task.verify(
             context,
@@ -1457,18 +3071,20 @@ class FlowAndTaskTests(unittest.TestCase):
                         make_spatial_object(
                             SpatialObjectKind.HOME_BUILDING,
                             name_text="Castle",
-                            metadata={"category": "castle"},
+                            metadata=build_home_city_object_metadata(HomeCityObjectId.CASTLE),
                             action_point=(70, 60),
                         ),
                     ),
                 ),
             ),
-            make_observation(ScreenType.PNC_BUILDING_DETAILS),
+            make_observation(
+                ScreenType.PNC_CASTLE,
+                visible_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
+            ),
         )
 
         self.assertEqual(result.status, TaskStatus.REPLAN)
-        self.assertIn("not upgradeable", result.message)
-        self.assertIn((BuildingPriority.CASTLE, "Castle", (70, 60)), context.runtime_state["building_upgrade_ineligible_targets"])
+        self.assertIn("upgrade button is available", result.message)
 
     def test_building_upgrade_task_taps_upgrade_only_from_verified_details_screen(self) -> None:
         """Starts the upgrade only after the task is already on a details screen with the upgrade button."""
@@ -1484,16 +3100,228 @@ class FlowAndTaskTests(unittest.TestCase):
             ),
         )
 
-        self.assertEqual(len(actions), 1)
+        self.assertEqual(len(actions), 2)
         self.assertIsInstance(actions[0], TapAction)
         self.assertEqual(actions[0].selector_id, UiElementId.PNC_BUILDING_UPGRADE_BUTTON)
+        self.assertIsInstance(actions[1], WaitAction)
+        self.assertTrue(actions[1].observe_after)
 
-    def test_building_upgrade_task_skips_after_all_visible_candidates_prove_ineligible(self) -> None:
-        """Stops cleanly once every visible supported building has already been inspected and rejected."""
+    def test_building_upgrade_task_waits_for_unknown_screen_to_settle(self) -> None:
+        """Allows the task to recover from a transient unknown frame instead of failing applicability."""
 
         task = BuildingUpgradeTask()
         context = self._make_context(params=BuildingUpgradePolicy(), task_id=TaskId.BUILDING_UPGRADE)
-        context.runtime_state["building_upgrade_ineligible_targets"] = {(BuildingPriority.CASTLE, "Castle", (70, 60))}
+
+        actions = task.plan(
+            context,
+            make_observation(ScreenType.UNKNOWN),
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], WaitAction)
+        self.assertTrue(actions[0].observe_after)
+
+    def test_building_upgrade_task_requests_visible_active_build_help_before_searching(self) -> None:
+        """Treats a visible home-city `Help` button as an already-active build that should be helped opportunistically."""
+
+        task = BuildingUpgradeTask()
+        context = self._make_context(params=BuildingUpgradePolicy(), task_id=TaskId.BUILDING_UPGRADE)
+
+        actions = task.plan(
+            context,
+            make_observation(
+                ScreenType.PNC_HOME_CITY,
+                visible_ids=(UiElementId.PNC_HOME_BUILD_BUTTON,),
+                visible_texts={UiElementId.PNC_HOME_BUILD_BUTTON: "Help"},
+            ),
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], TapAction)
+        self.assertEqual(actions[0].selector_id, UiElementId.PNC_HOME_BUILD_BUTTON)
+        self.assertEqual(actions[0].reason, "request_active_build_help")
+        self.assertTrue(actions[0].observe_after)
+
+    def test_building_upgrade_task_skips_when_another_build_is_already_active_after_help_request(self) -> None:
+        """Stops cleanly once a visible active build proves the construction queue is already occupied."""
+
+        task = BuildingUpgradeTask()
+        context = self._make_context(params=BuildingUpgradePolicy(), task_id=TaskId.BUILDING_UPGRADE)
+
+        result = task.verify(
+            context,
+            make_observation(
+                ScreenType.PNC_HOME_CITY,
+                visible_ids=(UiElementId.PNC_HOME_BUILD_BUTTON,),
+                visible_texts={UiElementId.PNC_HOME_BUILD_BUTTON: "Help"},
+            ),
+            make_observation(ScreenType.PNC_HOME_CITY),
+        )
+
+        self.assertEqual(result.status, TaskStatus.SKIPPED)
+        self.assertIn("already active", result.message)
+
+    def test_building_upgrade_task_skips_when_active_timer_is_visible_without_help(self) -> None:
+        """Uses the shared home-city active-timer signal to skip when the builder is busy outside an alliance."""
+
+        task = BuildingUpgradeTask()
+        context = self._make_context(params=BuildingUpgradePolicy(), task_id=TaskId.BUILDING_UPGRADE)
+
+        result = task.verify(
+            context,
+            make_observation(
+                ScreenType.PNC_HOME_CITY,
+                spatial_surface=make_spatial_surface(
+                    SpatialSurfaceType.HOME_CITY_SURFACE,
+                    metadata={"active_build_timer_text": "00:48:33"},
+                ),
+            ),
+            make_observation(
+                ScreenType.PNC_HOME_CITY,
+                spatial_surface=make_spatial_surface(
+                    SpatialSurfaceType.HOME_CITY_SURFACE,
+                    metadata={"active_build_timer_text": "00:48:33"},
+                ),
+            ),
+        )
+
+        self.assertEqual(result.status, TaskStatus.SKIPPED)
+        self.assertIn("already active", result.message)
+
+    def test_building_upgrade_task_replans_once_when_upgrade_opens_final_confirmation(self) -> None:
+        """Allows one extra confirmation pass when the first verified upgrade click opens the shared confirmation layout."""
+
+        task = BuildingUpgradeTask()
+        context = self._make_context(params=BuildingUpgradePolicy(), task_id=TaskId.BUILDING_UPGRADE)
+
+        result = task.verify(
+            context,
+            make_observation(
+                ScreenType.PNC_INFANTRY_BARRACKS,
+                visible_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
+            ),
+            make_observation(
+                ScreenType.PNC_INFANTRY_BARRACKS,
+                visible_ids=(
+                    UiElementId.PNC_BUILDING_UPGRADE_BUTTON,
+                    UiElementId.PNC_BUILDING_UPGRADE_CONFIRMATION_PANEL,
+                ),
+            ),
+        )
+
+        self.assertEqual(result.status, TaskStatus.REPLAN)
+        self.assertIn("final `Upgrade` click", result.message)
+        self.assertTrue(context.runtime_state["building_upgrade_confirmation_pending"])
+
+    def test_building_upgrade_task_replans_when_upgrade_opens_unmet_requirement_panel(self) -> None:
+        """Marks the requested building ineligible when the verified upgrade click reveals a prerequisite gate."""
+
+        task = BuildingUpgradeTask()
+        context = self._make_context(
+            params=BuildingUpgradePolicy(priority=(BuildingPriority.INFANTRY_BARRACKS,)),
+            task_id=TaskId.BUILDING_UPGRADE,
+        )
+
+        result = task.verify(
+            context,
+            make_observation(
+                ScreenType.PNC_INFANTRY_BARRACKS,
+                visible_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
+            ),
+            make_observation(
+                ScreenType.PNC_INFANTRY_BARRACKS,
+                visible_ids=(
+                    UiElementId.PNC_BUILDING_UPGRADE_BUTTON,
+                    UiElementId.PNC_BUILDING_REQUIREMENT_HEADER,
+                    UiElementId.PNC_BUILDING_REQUIREMENT_TARGET_LABEL,
+                    UiElementId.PNC_BUILDING_REQUIREMENT_GO_BUTTON,
+                ),
+                visible_texts={
+                    UiElementId.PNC_BUILDING_REQUIREMENT_TARGET_LABEL: "Recruiting Center : Lv.7",
+                },
+            ),
+        )
+
+        self.assertEqual(result.status, TaskStatus.REPLAN)
+        self.assertIn("Recruiting Center : Lv.7", result.message)
+        self.assertIn(BuildingPriority.INFANTRY_BARRACKS, context.runtime_state["building_upgrade_ineligible_object_ids"])
+
+    def test_building_upgrade_task_backs_out_of_unmet_requirement_panel(self) -> None:
+        """Leaves the requirement-gated building screen instead of treating it as another confirmation click."""
+
+        task = BuildingUpgradeTask()
+        context = self._make_context(
+            params=BuildingUpgradePolicy(priority=(BuildingPriority.INFANTRY_BARRACKS,)),
+            task_id=TaskId.BUILDING_UPGRADE,
+        )
+
+        actions = task.plan(
+            context,
+            make_observation(
+                ScreenType.PNC_INFANTRY_BARRACKS,
+                visible_ids=(
+                    UiElementId.PNC_BUILDING_UPGRADE_BUTTON,
+                    UiElementId.PNC_BUILDING_REQUIREMENT_HEADER,
+                    UiElementId.PNC_BUILDING_REQUIREMENT_GO_BUTTON,
+                ),
+            ),
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], KeyEventAction)
+        self.assertEqual(actions[0].reason, "leave_building_requirement_panel")
+        self.assertTrue(actions[0].observe_after)
+
+    def test_building_upgrade_task_replans_when_upgrade_click_lands_on_unknown_transition(self) -> None:
+        """Keeps the task alive when a verified upgrade click lands on a transient unknown frame."""
+
+        task = BuildingUpgradeTask()
+        context = self._make_context(params=BuildingUpgradePolicy(), task_id=TaskId.BUILDING_UPGRADE)
+
+        result = task.verify(
+            context,
+            make_observation(
+                ScreenType.PNC_INFANTRY_BARRACKS,
+                visible_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
+            ),
+            make_observation(ScreenType.UNKNOWN),
+        )
+
+        self.assertEqual(result.status, TaskStatus.REPLAN)
+        self.assertIn("still settling", result.message)
+
+    def test_building_upgrade_task_replans_for_help_when_upgrade_returns_home_city_with_help_visible(self) -> None:
+        """Requests optional alliance help after the upgrade starts when the home-city help affordance is available."""
+
+        task = BuildingUpgradeTask()
+        context = self._make_context(params=BuildingUpgradePolicy(), task_id=TaskId.BUILDING_UPGRADE)
+
+        result = task.verify(
+            context,
+            make_observation(
+                ScreenType.PNC_INFANTRY_BARRACKS,
+                visible_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
+            ),
+            make_observation(
+                ScreenType.PNC_HOME_CITY,
+                visible_ids=(UiElementId.PNC_HOME_BUILD_BUTTON,),
+                visible_texts={UiElementId.PNC_HOME_BUILD_BUTTON: "Help"},
+                spatial_surface=make_spatial_surface(
+                    SpatialSurfaceType.HOME_CITY_SURFACE,
+                    metadata={"active_build_timer_text": "00:48:33"},
+                ),
+            ),
+        )
+
+        self.assertEqual(result.status, TaskStatus.REPLAN)
+        self.assertIn("alliance help", result.message)
+        self.assertTrue(context.runtime_state["building_upgrade_post_start_help_pending"])
+
+    def test_building_upgrade_task_replans_for_build_queue_when_home_city_has_no_timer_or_level_change(self) -> None:
+        """Falls through to the second ordered success proof when the home-city observation cannot yet prove the start."""
+
+        task = BuildingUpgradeTask()
+        context = self._make_context(params=BuildingUpgradePolicy(), task_id=TaskId.BUILDING_UPGRADE)
         before = make_observation(
             ScreenType.PNC_HOME_CITY,
             spatial_surface=make_spatial_surface(
@@ -1501,18 +3329,438 @@ class FlowAndTaskTests(unittest.TestCase):
                 objects=(
                     make_spatial_object(
                         SpatialObjectKind.HOME_BUILDING,
-                        name_text="Castle",
-                        metadata={"category": "castle"},
-                        action_point=(70, 60),
+                        name_text="Wall",
+                        level=3,
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.WALL),
+                    ),
+                ),
+            ),
+        )
+        task.plan(context, before)
+
+        result = task.verify(
+            context,
+            make_observation(
+                ScreenType.PNC_WALL,
+                visible_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
+            ),
+            make_observation(
+                ScreenType.PNC_HOME_CITY,
+                visible_ids=(UiElementId.PNC_HOME_BUILD_BUTTON,),
+                visible_texts={UiElementId.PNC_HOME_BUILD_BUTTON: "Build"},
+                spatial_surface=make_spatial_surface(
+                    SpatialSurfaceType.HOME_CITY_SURFACE,
+                    objects=(
+                        make_spatial_object(
+                            SpatialObjectKind.HOME_BUILDING,
+                            name_text="Wall",
+                            level=3,
+                            metadata=build_home_city_object_metadata(HomeCityObjectId.WALL),
+                        ),
                     ),
                 ),
             ),
         )
 
-        result = task.verify(context, before, before)
+        self.assertEqual(result.status, TaskStatus.REPLAN)
+        self.assertIn("build queue", result.message)
+        self.assertEqual(context.runtime_state["building_upgrade_success_verification_stage"], "open_build_queue")
+
+    def test_building_upgrade_task_checks_build_queue_before_accepting_level_change(self) -> None:
+        """Preserves the requested timer-first verification order when the level already changed quickly."""
+
+        task = BuildingUpgradeTask()
+        context = self._make_context(params=BuildingUpgradePolicy(), task_id=TaskId.BUILDING_UPGRADE)
+        before = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.HOME_CITY_SURFACE,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Wall",
+                        level=3,
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.WALL),
+                    ),
+                ),
+            ),
+        )
+        task.plan(context, before)
+
+        result = task.verify(
+            context,
+            make_observation(
+                ScreenType.PNC_WALL,
+                visible_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
+            ),
+            make_observation(
+                ScreenType.PNC_HOME_CITY,
+                visible_ids=(UiElementId.PNC_HOME_BUILD_BUTTON,),
+                visible_texts={UiElementId.PNC_HOME_BUILD_BUTTON: "Build"},
+                spatial_surface=make_spatial_surface(
+                    SpatialSurfaceType.HOME_CITY_SURFACE,
+                    objects=(
+                        make_spatial_object(
+                            SpatialObjectKind.HOME_BUILDING,
+                            name_text="Wall",
+                            level=4,
+                            metadata=build_home_city_object_metadata(HomeCityObjectId.WALL),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        self.assertEqual(result.status, TaskStatus.REPLAN)
+        self.assertIn("build queue", result.message)
+        self.assertEqual(context.runtime_state["building_upgrade_success_verification_stage"], "open_build_queue")
+
+    def test_building_upgrade_task_extends_replan_budget_for_home_city_search(self) -> None:
+        """Uses a task-local replan budget sized to the shared home-city sweep plus verification overhead."""
+
+        task = BuildingUpgradeTask()
+        context = self._make_context(
+            params=BuildingUpgradePolicy(priority=(BuildingPriority.WALL,)),
+            task_id=TaskId.BUILDING_UPGRADE,
+        )
+
+        budget = task.max_replans_per_step(context)
+
+        self.assertIsNotNone(budget)
+        assert budget is not None
+        self.assertEqual(
+            budget,
+            self.flows.home_city_navigator.focus_step_budget() + 10,
+        )
+        self.assertGreater(budget, 5)
+
+    def test_building_upgrade_task_opens_build_queue_for_verification(self) -> None:
+        """Uses the shared left-rail build control for the second ordered success proof."""
+
+        task = BuildingUpgradeTask()
+        context = self._make_context(params=BuildingUpgradePolicy(), task_id=TaskId.BUILDING_UPGRADE)
+        context.runtime_state["building_upgrade_success_verification_stage"] = "open_build_queue"
+
+        actions = task.plan(
+            context,
+            make_observation(
+                ScreenType.PNC_HOME_CITY,
+                visible_ids=(UiElementId.PNC_HOME_BUILD_BUTTON,),
+                visible_texts={UiElementId.PNC_HOME_BUILD_BUTTON: "Build"},
+            ),
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], TapAction)
+        self.assertEqual(actions[0].selector_id, UiElementId.PNC_HOME_BUILD_BUTTON)
+        self.assertEqual(actions[0].reason, "open_build_queue_for_upgrade_verification")
+        self.assertEqual(actions[0].follow_up_request, ObservationRequest.build_queue_follow_up())
+
+    def test_building_upgrade_task_succeeds_when_build_queue_shows_timer(self) -> None:
+        """Accepts the second ordered success proof when the build queue exposes an active timer row."""
+
+        task = BuildingUpgradeTask()
+        context = self._make_context(params=BuildingUpgradePolicy(), task_id=TaskId.BUILDING_UPGRADE)
+        context.runtime_state["building_upgrade_success_verification_stage"] = "open_build_queue"
+
+        result = task.verify(
+            context,
+            make_observation(
+                ScreenType.PNC_HOME_CITY,
+                visible_ids=(UiElementId.PNC_HOME_BUILD_BUTTON,),
+                visible_texts={UiElementId.PNC_HOME_BUILD_BUTTON: "Build"},
+            ),
+            make_observation(
+                ScreenType.PNC_BUILD_QUEUE,
+                list_entries=(
+                    make_entry(
+                        ListEntryKind.BUILDING,
+                        title="Wall",
+                        timer_text="00:48:16",
+                        metadata={"queue_state": "upgrading"},
+                    ),
+                ),
+            ),
+        )
+
+        self.assertEqual(result.status, TaskStatus.SUCCESS)
+        self.assertIn("build queue", result.message)
+
+    def test_building_upgrade_task_succeeds_when_level_increases_after_build_queue_fallback(self) -> None:
+        """Uses the final ordered level-change proof when neither timer-based observation stayed visible."""
+
+        task = BuildingUpgradeTask()
+        context = self._make_context(params=BuildingUpgradePolicy(), task_id=TaskId.BUILDING_UPGRADE)
+        task.plan(
+            context,
+            make_observation(
+                ScreenType.PNC_HOME_CITY,
+                spatial_surface=make_spatial_surface(
+                    SpatialSurfaceType.HOME_CITY_SURFACE,
+                    objects=(
+                        make_spatial_object(
+                            SpatialObjectKind.HOME_BUILDING,
+                            name_text="Wall",
+                            level=3,
+                            metadata=build_home_city_object_metadata(HomeCityObjectId.WALL),
+                        ),
+                    ),
+                ),
+            ),
+        )
+        context.runtime_state["building_upgrade_success_verification_stage"] = "return_home_for_level"
+
+        result = task.verify(
+            context,
+            make_observation(ScreenType.PNC_BUILD_QUEUE),
+            make_observation(
+                ScreenType.PNC_HOME_CITY,
+                spatial_surface=make_spatial_surface(
+                    SpatialSurfaceType.HOME_CITY_SURFACE,
+                    objects=(
+                        make_spatial_object(
+                            SpatialObjectKind.HOME_BUILDING,
+                            name_text="Wall",
+                            level=4,
+                            metadata=build_home_city_object_metadata(HomeCityObjectId.WALL),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        self.assertEqual(result.status, TaskStatus.SUCCESS)
+        self.assertIn("Lv.3 to Lv.4", result.message)
+
+    def test_building_upgrade_task_taps_upgrade_button_again_when_confirmation_is_pending(self) -> None:
+        """Uses the shared blue `Upgrade` control as the final confirmation click on the exact screen."""
+
+        task = BuildingUpgradeTask()
+        context = self._make_context(params=BuildingUpgradePolicy(), task_id=TaskId.BUILDING_UPGRADE)
+        context.runtime_state["building_upgrade_confirmation_pending"] = True
+
+        actions = task.plan(
+            context,
+            make_observation(
+                ScreenType.PNC_WALL,
+                visible_ids=(
+                    UiElementId.PNC_BUILDING_UPGRADE_BUTTON,
+                    UiElementId.PNC_BUILDING_UPGRADE_CONFIRMATION_PANEL,
+                    UiElementId.PNC_BUILDING_UPGRADE_CONFIRM_BUTTON,
+                ),
+            ),
+        )
+
+        self.assertEqual(len(actions), 2)
+        self.assertIsInstance(actions[0], TapAction)
+        self.assertEqual(actions[0].selector_id, UiElementId.PNC_BUILDING_UPGRADE_BUTTON)
+        self.assertEqual(actions[0].reason, "confirm_building_upgrade")
+
+    def test_building_upgrade_task_replans_when_upgrade_confirmation_layout_appears(self) -> None:
+        """Treats the shared exact-screen confirmation layout as a real confirmation step instead of a failed click."""
+
+        task = BuildingUpgradeTask()
+        context = self._make_context(params=BuildingUpgradePolicy(), task_id=TaskId.BUILDING_UPGRADE)
+
+        result = task.verify(
+            context,
+            make_observation(
+                ScreenType.PNC_WALL,
+                visible_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
+            ),
+            make_observation(
+                ScreenType.PNC_WALL,
+                visible_ids=(
+                    UiElementId.PNC_BUILDING_UPGRADE_BUTTON,
+                    UiElementId.PNC_BUILDING_UPGRADE_CONFIRMATION_PANEL,
+                    UiElementId.PNC_BUILDING_UPGRADE_CONFIRM_BUTTON,
+                ),
+            ),
+        )
+
+        self.assertEqual(result.status, TaskStatus.REPLAN)
+        self.assertIn("final `Upgrade` click", result.message)
+        self.assertTrue(context.runtime_state["building_upgrade_confirmation_pending"])
+
+    def test_building_upgrade_task_succeeds_when_speedup_replaces_upgrade_button(self) -> None:
+        """Treats the shared `Speedup` control as a direct upgrade-start success proof."""
+
+        task = BuildingUpgradeTask()
+        context = self._make_context(params=BuildingUpgradePolicy(), task_id=TaskId.BUILDING_UPGRADE)
+
+        result = task.verify(
+            context,
+            make_observation(
+                ScreenType.PNC_WALL,
+                visible_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
+            ),
+            make_observation(
+                ScreenType.PNC_WALL,
+                visible_ids=(UiElementId.PNC_BUILDING_SPEEDUP_BUTTON,),
+            ),
+        )
+
+        self.assertEqual(result.status, TaskStatus.SUCCESS)
+        self.assertIn("Speedup", result.message)
+
+    def test_building_upgrade_task_taps_post_upgrade_help_when_pending(self) -> None:
+        """Uses the shared home-city build-slot control to request help after a successful upgrade start."""
+
+        task = BuildingUpgradeTask()
+        context = self._make_context(params=BuildingUpgradePolicy(), task_id=TaskId.BUILDING_UPGRADE)
+        context.runtime_state["building_upgrade_post_start_help_pending"] = True
+
+        actions = task.plan(
+            context,
+            make_observation(
+                ScreenType.PNC_HOME_CITY,
+                visible_ids=(UiElementId.PNC_HOME_BUILD_BUTTON,),
+                visible_texts={UiElementId.PNC_HOME_BUILD_BUTTON: "Help"},
+            ),
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], TapAction)
+        self.assertEqual(actions[0].selector_id, UiElementId.PNC_HOME_BUILD_BUTTON)
+        self.assertEqual(actions[0].reason, "request_post_upgrade_help")
+        self.assertTrue(actions[0].observe_after)
+
+    def test_building_upgrade_task_succeeds_when_confirmation_click_returns_home_city(self) -> None:
+        """Treats the second verified click as success once the final confirmation is consumed."""
+
+        task = BuildingUpgradeTask()
+        context = self._make_context(params=BuildingUpgradePolicy(), task_id=TaskId.BUILDING_UPGRADE)
+        context.runtime_state["building_upgrade_confirmation_pending"] = True
+
+        result = task.verify(
+            context,
+            make_observation(
+                ScreenType.PNC_INFANTRY_BARRACKS,
+                visible_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
+            ),
+            make_observation(
+                ScreenType.PNC_HOME_CITY,
+                spatial_surface=make_spatial_surface(
+                    SpatialSurfaceType.HOME_CITY_SURFACE,
+                    metadata={"active_build_timer_text": "00:48:33"},
+                ),
+            ),
+        )
+
+        self.assertTrue(result.succeeded)
+        self.assertNotIn("building_upgrade_confirmation_pending", context.runtime_state)
+
+    def test_building_upgrade_task_succeeds_after_post_upgrade_help_tap_returns_home_city(self) -> None:
+        """Treats the help tap as best-effort and still finishes once the task settles back at home city."""
+
+        task = BuildingUpgradeTask()
+        context = self._make_context(params=BuildingUpgradePolicy(), task_id=TaskId.BUILDING_UPGRADE)
+        context.runtime_state["building_upgrade_post_start_help_pending"] = True
+
+        result = task.verify(
+            context,
+            make_observation(
+                ScreenType.PNC_HOME_CITY,
+                visible_ids=(UiElementId.PNC_HOME_BUILD_BUTTON,),
+                visible_texts={UiElementId.PNC_HOME_BUILD_BUTTON: "Help"},
+            ),
+            make_observation(ScreenType.PNC_HOME_CITY),
+        )
+
+        self.assertTrue(result.succeeded)
+        self.assertNotIn("building_upgrade_post_start_help_pending", context.runtime_state)
+
+    def test_building_upgrade_task_succeeds_when_unknown_settle_returns_home_after_confirmation(self) -> None:
+        """Accepts the post-confirm settle path once the transient unknown frame resolves to home city."""
+
+        task = BuildingUpgradeTask()
+        context = self._make_context(params=BuildingUpgradePolicy(), task_id=TaskId.BUILDING_UPGRADE)
+        context.runtime_state["building_upgrade_confirmation_pending"] = True
+
+        result = task.verify(
+            context,
+            make_observation(ScreenType.UNKNOWN),
+            make_observation(
+                ScreenType.PNC_HOME_CITY,
+                spatial_surface=make_spatial_surface(
+                    SpatialSurfaceType.HOME_CITY_SURFACE,
+                    metadata={"active_build_timer_text": "00:48:33"},
+                ),
+            ),
+        )
+
+        self.assertTrue(result.succeeded)
+        self.assertNotIn("building_upgrade_confirmation_pending", context.runtime_state)
+
+    def test_building_upgrade_task_fails_after_returning_home_with_no_remaining_requested_priorities(self) -> None:
+        """Returns one known terminal failure once the explicit requested target is blocked by an unsupported prerequisite."""
+
+        task = BuildingUpgradeTask()
+        context = self._make_context(
+            params=BuildingUpgradePolicy(priority=(BuildingPriority.INFANTRY_BARRACKS,)),
+            task_id=TaskId.BUILDING_UPGRADE,
+        )
+        context.runtime_state["building_upgrade_ineligible_object_ids"] = {BuildingPriority.INFANTRY_BARRACKS}
+        context.runtime_state["building_upgrade_last_unmet_requirement"] = "Recruiting Center : Lv.7"
+
+        result = task.verify(
+            context,
+            make_observation(
+                ScreenType.PNC_INFANTRY_BARRACKS,
+                visible_ids=(
+                    UiElementId.PNC_BUILDING_REQUIREMENT_HEADER,
+                    UiElementId.PNC_BUILDING_REQUIREMENT_TARGET_LABEL,
+                    UiElementId.PNC_BUILDING_REQUIREMENT_GO_BUTTON,
+                ),
+                visible_texts={UiElementId.PNC_BUILDING_REQUIREMENT_TARGET_LABEL: "Recruiting Center : Lv.7"},
+            ),
+            make_observation(ScreenType.PNC_HOME_CITY),
+        )
+
+        self.assertEqual(result.status, TaskStatus.FAILED)
+        self.assertFalse(result.retryable)
+        self.assertIn("Recruiting Center : Lv.7", result.message)
+        self.assertIn("not supported yet", result.message)
+
+    def test_building_upgrade_task_skips_after_returning_home_with_no_remaining_requested_priorities_and_no_requirement(self) -> None:
+        """Keeps generic no-candidate exhaustion as a skip when no unsupported prerequisite was observed."""
+
+        task = BuildingUpgradeTask()
+        context = self._make_context(
+            params=BuildingUpgradePolicy(priority=(BuildingPriority.INFANTRY_BARRACKS,)),
+            task_id=TaskId.BUILDING_UPGRADE,
+        )
+        context.runtime_state["building_upgrade_ineligible_object_ids"] = {BuildingPriority.INFANTRY_BARRACKS}
+
+        result = task.verify(
+            context,
+            make_observation(ScreenType.PNC_INFANTRY_BARRACKS),
+            make_observation(ScreenType.PNC_HOME_CITY),
+        )
 
         self.assertEqual(result.status, TaskStatus.SKIPPED)
-        self.assertIn("No eligible building upgrades", result.message)
+        self.assertIn("currently eligible", result.message)
+
+    def test_research_task_uses_highest_priority_visible_institute_button(self) -> None:
+        """Uses the exact institute category buttons instead of a generic academy badge."""
+
+        task = ResearchTask()
+        context = self._make_context(task_id=TaskId.RESEARCH, params=task.parse_params({"priority": ["economy", "development"]}))
+
+        actions = task.plan(
+            context,
+            make_observation(
+                ScreenType.PNC_INSTITUTE,
+                visible_ids=(
+                    UiElementId.PNC_INSTITUTE_DEVELOPMENT_BUTTON,
+                    UiElementId.PNC_INSTITUTE_ECONOMY_BUTTON,
+                ),
+            ),
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], TapAction)
+        self.assertEqual(actions[0].selector_id, UiElementId.PNC_INSTITUTE_ECONOMY_BUTTON)
 
     def test_gathering_task_chooses_highest_priority_visible_resource_node(self) -> None:
         """Chooses visible world-map resource nodes from the spatial surface instead of list entries."""
@@ -1587,14 +3835,14 @@ class FlowAndTaskTests(unittest.TestCase):
 
         first = make_spatial_object(
             SpatialObjectKind.HOME_BUILDING,
-            name_text="Barracks",
-            metadata={"category": "barracks"},
+            name_text="Infantry Barracks",
+            metadata=build_home_city_object_metadata(HomeCityObjectId.INFANTRY_BARRACKS),
             action_point=(61, 71),
         )
         second = make_spatial_object(
             SpatialObjectKind.HOME_BUILDING,
-            name_text="Barracks",
-            metadata={"category": "barracks"},
+            name_text="Infantry Barracks",
+            metadata=build_home_city_object_metadata(HomeCityObjectId.INFANTRY_BARRACKS),
             action_point=(133, 144),
         )
         observation = make_observation(
@@ -1605,7 +3853,7 @@ class FlowAndTaskTests(unittest.TestCase):
             ),
         )
 
-        actions = self.flows.open_visible_home_city_object(observation, second, reason="open_duplicate_barracks")
+        actions = self.flows.open_visible_home_city_object(observation, second, reason="open_duplicate_infantry_barracks")
 
         self.assertEqual(len(actions), 1)
         self.assertIsInstance(actions[0], TapSpatialObjectAction)

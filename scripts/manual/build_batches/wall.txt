@@ -1,0 +1,2 @@
+# Start a wall upgrade when it is currently eligible.
+wall

@@ -57,6 +57,7 @@ def make_visible(
     height: int = 10,
     source_kind: VisibleElementSourceKind = VisibleElementSourceKind.TEMPLATE,
     action_point: tuple[int, int] | None = None,
+    extracted_text: str | None = None,
 ) -> VisibleElement:
     """Builds a visible selector with deterministic bounds."""
 
@@ -65,6 +66,7 @@ def make_visible(
         bounds=Bounds(x=x, y=y, width=width, height=height),
         confidence=1.0,
         source_kind=source_kind,
+        extracted_text=extracted_text,
         action_point=action_point,
     )
 
@@ -74,6 +76,7 @@ def make_entry(
     *,
     title: str,
     subtitle: str | None = None,
+    timer_text: str | None = None,
     metadata: dict[str, Any] | None = None,
     selected: bool = False,
     action_point: tuple[int, int] = (50, 50),
@@ -85,6 +88,7 @@ def make_entry(
         bounds=Bounds(x=40, y=40, width=20, height=20),
         title_text=title,
         subtitle_text=subtitle,
+        timer_text=timer_text,
         selected=selected,
         action_point=action_point,
         metadata=metadata or {},
@@ -97,6 +101,7 @@ def make_spatial_object(
     name_text: str | None = None,
     relationship: SpatialObjectRelationship = SpatialObjectRelationship.UNKNOWN,
     kingdom: str | None = None,
+    level: int | None = None,
     metadata: dict[str, Any] | None = None,
     action_point: tuple[int, int] = (50, 50),
     viewport_offset: tuple[int, int] | None = None,
@@ -112,6 +117,7 @@ def make_spatial_object(
         relationship=relationship,
         name_text=name_text,
         kingdom=kingdom,
+        level=level,
         action_point=action_point,
         viewport_offset=viewport_offset,
         viewport_offset_ratio=viewport_offset_ratio,
@@ -155,6 +161,7 @@ def make_observation(
     *,
     visible_ids: tuple[UiElementId, ...] = (),
     source_kinds: dict[UiElementId, VisibleElementSourceKind] | None = None,
+    visible_texts: dict[UiElementId, str | None] | None = None,
     list_entries: tuple[DetectedListEntry, ...] = (),
     spatial_surface: SpatialSurfaceObservation | None = None,
     blocking_popup: bool = False,
@@ -173,6 +180,7 @@ def make_observation(
     chat_draft_empty: bool | None = None,
     chat_draft_text: str | None = None,
     artifact_path: Path | None = None,
+    image_size: tuple[int, int] = (200, 100),
 ) -> Observation:
     """Builds a typed observation with synthetic visible elements."""
 
@@ -182,6 +190,7 @@ def make_observation(
             x=index * 15,
             y=index * 15,
             source_kind=(source_kinds or {}).get(selector_id, VisibleElementSourceKind.TEMPLATE),
+            extracted_text=(visible_texts or {}).get(selector_id),
         )
         for index, selector_id in enumerate(visible_ids)
     }
@@ -209,7 +218,7 @@ def make_observation(
         chat_draft_empty=chat_draft_empty,
         chat_draft_text=chat_draft_text,
         artifact_path=artifact_path,
-        image_size=(200, 100),
+        image_size=image_size,
     )
 
 

@@ -41,6 +41,7 @@ from pnc_automation.pnc.observation import (
     castle_entry_identity_matches,
     castle_identities_match,
 )
+from pnc_automation.pnc.building_catalog import HomeCityMapCoordinate
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.spatial_navigation import HomeCityNavigator, WorldCoordinate, WorldMapNavigator
 from pnc_automation.pnc.ui_element_id import UiElementId
@@ -154,23 +155,67 @@ class ScreenFlowPlanner:
             ScreenType.PNC_GIFT_CENTER,
             ScreenType.PNC_EVENT_CENTER,
             ScreenType.PNC_BUILDING_DETAILS,
+            ScreenType.PNC_CASTLE,
+            ScreenType.PNC_TERRITORY_OVERVIEW,
+            ScreenType.PNC_HALL_OF_WAR,
+            ScreenType.PNC_SACRED_TREE,
+            ScreenType.PNC_SACRED_TREE_BLESSING_RECORD,
+            ScreenType.PNC_OTHER_LORD_SACRED_TREE,
+            ScreenType.PNC_PIT,
+            ScreenType.PNC_RARE_EARTH_FIELD,
+            ScreenType.PNC_DISPATCH,
+            ScreenType.PNC_SANCTUM,
+            ScreenType.PNC_RELICS,
+            ScreenType.PNC_TOWER_OF_TRIAL,
+            ScreenType.PNC_TRIAL_CHALLENGE,
+            ScreenType.PNC_GODDESS_STATUE,
+            ScreenType.PNC_BUILD_MENU_FIXED_SLOT,
+            ScreenType.PNC_BUILD_MENU_LARGE_SLOT,
+            ScreenType.PNC_BUILD_MENU_SMALL_SLOT,
             ScreenType.PNC_LORD_INFO,
             ScreenType.PNC_PLAYER_TERRITORY,
             ScreenType.PNC_PLAYER_PROFILE,
             ScreenType.PNC_VIP,
             ScreenType.PNC_IMPROVE_MIGHT,
-            ScreenType.PNC_ACADEMY,
+            ScreenType.PNC_INSTITUTE,
+            ScreenType.PNC_WAREHOUSE,
+            ScreenType.PNC_TRAP_WORKSHOP,
+            ScreenType.PNC_TRAP_WORKSHOP_EFFECT_TABLE,
+            ScreenType.PNC_HERO_HALL,
+            ScreenType.PNC_WATCHTOWER,
+            ScreenType.PNC_BLACKSMITH,
+            ScreenType.PNC_GEAR,
+            ScreenType.PNC_GEM,
+            ScreenType.PNC_SAURGEM,
+            ScreenType.PNC_WARSIGIL,
+            ScreenType.PNC_HERO_CURIO,
+            ScreenType.PNC_ASCEND,
+            ScreenType.PNC_ALLIANCE_HALL,
+            ScreenType.PNC_MARKET,
+            ScreenType.PNC_ALLIANCE_MEMBER_REINFORCE,
+            ScreenType.PNC_ALLIANCE_MEMBER_TRANSPORT,
+            ScreenType.PNC_INFANTRY_BARRACKS,
+            ScreenType.PNC_CAVALRY_BARRACKS,
+            ScreenType.PNC_RANGED_BARRACKS,
+            ScreenType.PNC_SIEGE_FACTORY,
+            ScreenType.PNC_BARRACKS_UNLOCK_TABLE,
+            ScreenType.PNC_SAUROI_LAIR,
+            ScreenType.PNC_SAUREGG,
+            ScreenType.PNC_WALL,
+            ScreenType.PNC_DEFENSE_INFO,
             ScreenType.PNC_RESEARCH_TREE,
             ScreenType.PNC_DAILY_TO_DO,
             ScreenType.PNC_GATHER_NODE,
             ScreenType.PNC_MARCH_CONFIRM,
-            ScreenType.PNC_CAMPAIGN,
+            ScreenType.PNC_CAMPAIGN_MAP,
             ScreenType.PNC_CAMPAIGN_STAGE,
+            ScreenType.PNC_VERSUS_CENTER,
             ScreenType.PNC_BATTLE_PREP,
             ScreenType.PNC_CHAT,
             ScreenType.PNC_CHAT_PLAYER_ACTION_POPUP,
             ScreenType.PNC_CASTLE_SELECTION,
             ScreenType.PNC_MIGHT_RANK,
+            ScreenType.PNC_BUILD_QUEUE,
         }:
             if observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT):
                 return [
@@ -810,29 +855,18 @@ class ScreenFlowPlanner:
 
         return ClickOutcome(target_screen=ScreenType.PNC_CHAT)
 
-    def open_academy(self, observation: Observation) -> list[ActionRequest]:
-        """Plans navigation from home city to the academy or research tree."""
+    def open_institute(self, observation: Observation) -> list[ActionRequest]:
+        """Plans navigation from home city to the institute or one opened research tree."""
 
-        if observation.screen_type in {ScreenType.PNC_ACADEMY, ScreenType.PNC_RESEARCH_TREE}:
+        if observation.screen_type in {ScreenType.PNC_INSTITUTE, ScreenType.PNC_RESEARCH_TREE}:
             return []
-        if observation.screen_type != ScreenType.PNC_HOME_CITY:
-            return self.ensure_home_city(observation)
-        if observation.has(UiElementId.PNC_HOME_RESEARCH_BUTTON):
-            return [TapAction(selector_id=UiElementId.PNC_HOME_RESEARCH_BUTTON, reason="open_academy", observe_after=True)]
-        academy_query = SpatialObjectQuery(
+        institute_query = SpatialObjectQuery(
             surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
             kind=SpatialObjectKind.HOME_BUILDING,
-            metadata_key="category",
-            metadata_value="academy",
+            metadata_key="home_city_object_id",
+            metadata_value="institute",
         )
-        academy = observation.find_spatial_object(academy_query)
-        if academy is not None:
-            return self.home_city_navigator.tap_visible_object(
-                observation,
-                academy,
-                reason="open_academy",
-            )
-        return self.home_city_navigator.plan_focus_object(observation, academy_query)
+        return self.open_home_city_object(observation, institute_query, reason="open_institute")
 
     def open_visible_home_city_object(
         self,
@@ -872,6 +906,23 @@ class ScreenFlowPlanner:
             runtime_state=runtime_state,
         )
 
+    def focus_home_city_coordinate(
+        self,
+        observation: Observation,
+        target: HomeCityMapCoordinate,
+        *,
+        runtime_state: dict[str, Any] | None = None,
+    ) -> list[ActionRequest]:
+        """Plans one atlas-guided home-city navigation increment toward the requested viewport center."""
+
+        if observation.screen_type != ScreenType.PNC_HOME_CITY:
+            return self.ensure_home_city(observation)
+        return self.home_city_navigator.plan_focus_coordinate(
+            observation,
+            target,
+            runtime_state=runtime_state,
+        )
+
     def open_home_city_object(
         self,
         observation: Observation,
@@ -885,19 +936,12 @@ class ScreenFlowPlanner:
 
         if observation.screen_type != ScreenType.PNC_HOME_CITY:
             return self.ensure_home_city(observation)
-        target = observation.find_spatial_object(query)
-        if target is not None:
-            return self.home_city_navigator.tap_visible_object(
-                observation,
-                target,
-                reason=reason,
-                runtime_state=runtime_state,
-                observe_after=observe_after,
-            )
-        return self.home_city_navigator.plan_focus_object(
+        return self.home_city_navigator.plan_open_object(
             observation,
             query,
+            reason=reason,
             runtime_state=runtime_state,
+            observe_after=observe_after,
         )
 
     def open_home_city_empty_slot(
@@ -969,8 +1013,6 @@ class ScreenFlowPlanner:
             )
         )
         return actions
-
-
 def _plan_castle_roster_scroll(
     *,
     observation: Observation,

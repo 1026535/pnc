@@ -1,4 +1,4 @@
-"""Task that starts one eligible research item."""
+"""Task that starts one eligible institute research item."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from pnc_automation.pnc.ui_element_id import UiElementId
 
 
 class ResearchTask(BaseAutomationTask):
-    """Starts one academy research item using the configured priority policy."""
+    """Starts one institute research item using the configured priority policy."""
 
     id = TaskId.RESEARCH
     castle_target_policy = CastleTargetPolicy.OPTIONAL
@@ -40,9 +40,18 @@ class ResearchTask(BaseAutomationTask):
     def plan(self, context: TaskContext, observation: Observation) -> list[ActionRequest]:
         """Plans one research-start increment from the current screen."""
 
-        if observation.screen_type not in {ScreenType.PNC_ACADEMY, ScreenType.PNC_RESEARCH_TREE}:
-            return context.flows.open_academy(observation)
-        if observation.screen_type == ScreenType.PNC_ACADEMY:
+        if observation.screen_type not in {ScreenType.PNC_INSTITUTE, ScreenType.PNC_RESEARCH_TREE}:
+            return context.flows.open_institute(observation)
+        if observation.screen_type == ScreenType.PNC_INSTITUTE:
+            selector_id = _choose_institute_category_selector(observation, context.params.priority)
+            if selector_id is not None:
+                return [
+                    TapAction(
+                        selector_id=selector_id,
+                        reason="open_research_tree",
+                        observe_after=True,
+                    )
+                ]
             if observation.has(UiElementId.PNC_RESEARCH_AVAILABLE_BADGE):
                 return [
                     TapAction(
@@ -73,13 +82,15 @@ class ResearchTask(BaseAutomationTask):
     def verify(self, context: TaskContext, before: Observation, after: Observation) -> TaskResult:
         """Verifies either navigation to the research tree or a started research item."""
 
-        if before.screen_type not in {ScreenType.PNC_ACADEMY, ScreenType.PNC_RESEARCH_TREE}:
-            if after.screen_type in {ScreenType.PNC_ACADEMY, ScreenType.PNC_RESEARCH_TREE}:
-                return TaskResult.replan("Reached academy flow for research planning.")
-            return TaskResult.failure("Research task could not reach the academy flow.", retryable=True)
-        if before.screen_type == ScreenType.PNC_ACADEMY:
-            if not before.has(UiElementId.PNC_RESEARCH_AVAILABLE_BADGE):
-                return TaskResult.skipped("No research badge was visible in the academy.")
+        if before.screen_type not in {ScreenType.PNC_INSTITUTE, ScreenType.PNC_RESEARCH_TREE}:
+            if after.screen_type in {ScreenType.PNC_INSTITUTE, ScreenType.PNC_RESEARCH_TREE}:
+                return TaskResult.replan("Reached institute flow for research planning.")
+            return TaskResult.failure("Research task could not reach the institute flow.", retryable=True)
+        if before.screen_type == ScreenType.PNC_INSTITUTE:
+            if _choose_institute_category_selector(before, context.params.priority) is None and not before.has(
+                UiElementId.PNC_RESEARCH_AVAILABLE_BADGE
+            ):
+                return TaskResult.skipped("No research category button was visible in the institute.")
             if after.screen_type == ScreenType.PNC_RESEARCH_TREE:
                 return TaskResult.replan("Opened the research tree.")
         if before.screen_type == ScreenType.PNC_RESEARCH_TREE and not before.entries(ListEntryKind.RESEARCH):
@@ -103,3 +114,23 @@ def _tap_entry(entry: object, *, kind: ListEntryKind, reason: str) -> TapListEnt
         reason=reason,
         observe_after=True,
     )
+
+
+_INSTITUTE_CATEGORY_SELECTOR_BY_RESEARCH_CATEGORY = {
+    ResearchCategory.DEVELOPMENT: UiElementId.PNC_INSTITUTE_DEVELOPMENT_BUTTON,
+    ResearchCategory.ECONOMY: UiElementId.PNC_INSTITUTE_ECONOMY_BUTTON,
+    ResearchCategory.MILITARY: UiElementId.PNC_INSTITUTE_MILITARY_BUTTON,
+}
+
+
+def _choose_institute_category_selector(
+    observation: Observation,
+    priority: tuple[ResearchCategory, ...],
+) -> UiElementId | None:
+    """Returns the highest-priority visible institute category selector."""
+
+    for category in priority:
+        selector_id = _INSTITUTE_CATEGORY_SELECTOR_BY_RESEARCH_CATEGORY.get(category)
+        if selector_id is not None and observation.has(selector_id):
+            return selector_id
+    return None

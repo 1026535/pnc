@@ -8,25 +8,47 @@ from enum import StrEnum
 from typing import Any, TypeVar
 
 from pnc_automation.errors import ScriptValidationError
+from pnc_automation.pnc.building_catalog import (
+    HomeCityObjectId,
+    HomeCityObjectRole,
+    default_building_upgrade_priority,
+    home_city_object_definition,
+)
+from pnc_automation.pnc.building_priority_input import resolve_building_priority_values
 
 TEnum = TypeVar("TEnum", bound=StrEnum)
 
 
 class BuildingPriority(StrEnum):
-    """Supported building-priority categories for upgrade policy."""
+    """Supported exact home-city building ids for upgrade policy."""
 
     CASTLE = "castle"
     WALL = "wall"
-    ACADEMY = "academy"
-    BARRACKS = "barracks"
+    INSTITUTE = "institute"
+    WAREHOUSE = "warehouse"
+    TRAP_WORKSHOP = "trap_workshop"
+    WATCHTOWER = "watchtower"
     FARM = "farm"
-    LUMBER_MILL = "lumber_mill"
-    QUARRY = "quarry"
+    LUMBER_CAMP = "lumber_camp"
+    MOON_WELL = "moon_well"
+    RECRUITING_CENTER = "recruiting_center"
+    INFIRMARY = "infirmary"
     IRON_MINE = "iron_mine"
+    GOLD_MINE = "gold_mine"
+    BLACKSMITH = "blacksmith"
+    ALLIANCE_HALL = "alliance_hall"
+    MARKET = "market"
+    INFANTRY_BARRACKS = "infantry_barracks"
+    CAVALRY_BARRACKS = "cavalry_barracks"
+    RANGED_BARRACKS = "ranged_barracks"
+    SIEGE_FACTORY = "siege_factory"
+    HALL_OF_WAR = "hall_of_war"
+    SAUROI_LAIR = "sauroi_lair"
+    GODDESS_STATUE = "goddess_statue"
 
 
 class ResearchCategory(StrEnum):
-    """Supported research categories for academy automation."""
+    """Supported research categories for institute automation."""
 
     ECONOMY = "economy"
     DEVELOPMENT = "development"
@@ -53,11 +75,8 @@ class CampaignMode(StrEnum):
 class BuildingUpgradePolicy:
     """Task parameters for building upgrade execution."""
 
-    priority: tuple[BuildingPriority, ...] = (
-        BuildingPriority.CASTLE,
-        BuildingPriority.WALL,
-        BuildingPriority.ACADEMY,
-        BuildingPriority.BARRACKS,
+    priority: tuple[BuildingPriority, ...] = tuple(
+        BuildingPriority(home_city_object_id.value) for home_city_object_id in default_building_upgrade_priority()
     )
     allow_speedups: bool = False
 
@@ -65,9 +84,17 @@ class BuildingUpgradePolicy:
     def from_params(cls, params: Mapping[str, Any]) -> "BuildingUpgradePolicy":
         """Builds a typed policy from raw script params."""
 
+        try:
+            priority_values = resolve_building_priority_values(
+                priority=params.get("priority"),
+                priority_file=params.get("priority_file"),
+                default_priority=[member.value for member in cls().priority],
+            )
+        except (OSError, TypeError, ValueError) as error:
+            raise ScriptValidationError(str(error), field="priority") from error
         return cls(
             priority=_parse_enum_list(
-                params.get("priority", [member.value for member in cls().priority]),
+                priority_values,
                 enum_type=BuildingPriority,
                 field_name="priority",
             ),
@@ -76,8 +103,39 @@ class BuildingUpgradePolicy:
 
 
 @dataclass(frozen=True, slots=True)
+class OpenBuildingPolicy:
+    """Task parameters for opening one exact home-city building screen."""
+
+    building: HomeCityObjectId = HomeCityObjectId.CASTLE
+
+    @classmethod
+    def from_params(cls, params: Mapping[str, Any]) -> "OpenBuildingPolicy":
+        """Builds a typed policy from raw script params."""
+
+        raw_building = params.get("building")
+        if not isinstance(raw_building, str):
+            raise ScriptValidationError("Expected 'building' to be a string.", field="building")
+        try:
+            building = HomeCityObjectId(raw_building)
+        except ValueError as error:
+            raise ScriptValidationError(
+                f"Unsupported value '{raw_building}' for 'building'.",
+                field="building",
+                value=raw_building,
+            ) from error
+        role = home_city_object_definition(building).role
+        if role not in {HomeCityObjectRole.HOME_CITY_BUILDING, HomeCityObjectRole.REPEATABLE_SMALL_BUILDING}:
+            raise ScriptValidationError(
+                f"Unsupported value '{raw_building}' for 'building'.",
+                field="building",
+                value=raw_building,
+            )
+        return cls(building=building)
+
+
+@dataclass(frozen=True, slots=True)
 class ResearchPolicy:
-    """Task parameters for research execution."""
+    """Task parameters for institute research execution."""
 
     priority: tuple[ResearchCategory, ...] = (
         ResearchCategory.ECONOMY,

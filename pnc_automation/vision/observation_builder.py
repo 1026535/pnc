@@ -459,9 +459,9 @@ class ObservationService:
         return None, None
 
     def _update_validated_current_castle(self, observation: Observation) -> None:
-        """Keeps Lord Info validation only while the session remains on home-adjacent screens."""
+        """Keeps validated current-castle evidence alive while the session stays home-adjacent."""
 
-        if observation.screen_type == ScreenType.PNC_LORD_INFO and observation.current_castle is not None:
+        if observation.screen_type in {ScreenType.PNC_LORD_INFO, ScreenType.PNC_CASTLE_SELECTION} and observation.current_castle is not None:
             self.validated_current_castle = observation.current_castle
             self.validated_current_castle_evidence = observation.resolved_current_castle_evidence
             return

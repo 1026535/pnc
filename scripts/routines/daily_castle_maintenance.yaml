@@ -7,7 +7,7 @@ steps:
     castle_ref: main
   - task: building_upgrade
     params:
-      priority: [castle, wall, academy, barracks]
+      priority: [castle, wall, institute, infantry_barracks]
       allow_speedups: false
   - task: research
     params:
@@ -15,7 +15,7 @@ steps:
   - task: gathering
     params:
       preferred_resources: [food, wood, iron]
-      max_parallel_marches: 2
+      max_parallel_marches: 5
   - task: campaign
     params:
       enabled_modes: [standard]

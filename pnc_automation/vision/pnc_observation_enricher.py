@@ -12,6 +12,7 @@ from PIL import Image
 from pnc_automation.config.models import CastleIdentity
 from pnc_automation.errors import SelectorResolutionError
 from pnc_automation.pnc.chat import ChatChannel, ChatEntryKind
+from pnc_automation.pnc.building_catalog import is_upgradeable_primary_screen
 from pnc_automation.pnc.mail import MailboxType, compose_text_field_selector_ids
 from pnc_automation.pnc.observation import (
     Bounds,
@@ -27,8 +28,9 @@ from pnc_automation.pnc.ui_element_id import UiElementId
 from pnc_automation.text_normalization import normalize_ocr_text
 from pnc_automation.vision.observation_builder import ObservationAdditions
 from pnc_automation.vision.observation_request import ObservationRequest
-from pnc_automation.vision.pnc_ocr_capabilities import can_attempt_screen_family_ocr
+from pnc_automation.vision.ocr_lines import merge_ocr_lines
 from pnc_automation.vision.ocr_service import OcrLine, OcrService
+from pnc_automation.vision.pnc_ocr_capabilities import can_attempt_screen_family_ocr
 from pnc_automation.vision.screen_classifier import ScreenEvidence
 from pnc_automation.vision.selectors import Region, SelectorRegistry
 from pnc_automation.vision.spatial_surfaces import (
@@ -53,6 +55,7 @@ _HOME_NAV_SELECTOR_BY_TEXT_ANCHOR = {
 }
 _HOME_ACTION_SELECTOR_BY_TEXT_ANCHOR = {
     TextAnchorId.LABEL_BUILD: UiElementId.PNC_HOME_BUILD_BUTTON,
+    TextAnchorId.LABEL_HELP: UiElementId.PNC_HOME_BUILD_BUTTON,
     TextAnchorId.LABEL_RESEARCH: UiElementId.PNC_HOME_RESEARCH_BUTTON,
     TextAnchorId.LABEL_CAMPAIGN: UiElementId.PNC_HOME_CAMPAIGN_ENTRY,
 }
@@ -139,6 +142,7 @@ _POPUP_PRIMARY_ACTION_ANCHOR_IDS = frozenset(
     {
         TextAnchorId.LABEL_CONFIRM,
         TextAnchorId.LABEL_JOIN_APPLY,
+        TextAnchorId.LABEL_NEXT,
     }
 )
 _BUILDING_DETAIL_CONFLICT_ANCHOR_IDS = frozenset(
@@ -171,6 +175,16 @@ _BUILDING_DETAIL_TITLE_TEXTS = frozenset(
         "WATCHTOWER",
     }
 )
+_BUILDING_REQUIREMENT_HEADER_TEXTS = frozenset({"REQUIREMENT"})
+_BUILDING_REQUIREMENT_SECTION_TERMINATORS = frozenset({"MATERIALSREQUIRED", "EFFECT"})
+_BUILDING_UPGRADE_CONFIRMATION_REQUIRED_SECTION_TEXTS = frozenset({"TIME"})
+_BUILDING_UPGRADE_CONFIRMATION_SUPPORT_SECTION_TEXTS = frozenset({"REQUIREMENT", "MATERIALSREQUIRED", "EFFECT"})
+_BUILD_QUEUE_HEADER_TEXTS = frozenset({"BUILDQUEUE"})
+_BUILD_QUEUE_SUPPORT_TEXTS = frozenset({"SPEEDUP", "GO", "IDLE", "EXPIRED"})
+_RESEARCH_QUEUE_HEADER_TEXTS = frozenset({"RESEARCHQUEUE"})
+_RESEARCH_QUEUE_SUPPORT_TEXTS = frozenset({"GO", "IDLE"})
+_BUILD_QUEUE_ACTIVE_TITLE_PATTERN = re.compile(r"^\s*UPGRADING\s*[:.]?\s*(?P<title>.+?)\s*$", re.IGNORECASE)
+_QUEUE_TIMER_PATTERN = re.compile(r"^\d{1,2}:\d{2}:\d{2}$")
 _CURRENCY_TEXT_PATTERN = re.compile(r"\$\s*\d+(?:[.,]\d+)?")
 _RESEARCH_TREE_HEADER_TEXTS = frozenset(
     {
@@ -178,22 +192,6 @@ _RESEARCH_TREE_HEADER_TEXTS = frozenset(
         "DEVELOPMENT",
         "ECONOMY",
         "COMBAT",
-    }
-)
-_ACADEMY_TITLE_TEXTS = frozenset(
-    {
-        "ACADEMY",
-        "INSTITUTE",
-    }
-)
-_ACADEMY_CATEGORY_TEXTS = frozenset(
-    {
-        "DEVELOPMENT",
-        "ECONOMY",
-        "MILITARY",
-        "FORTIFICATION",
-        "UNITTACTICS",
-        "FORMATIONS",
     }
 )
 _DAILY_TO_DO_SECTION_TEXTS = frozenset(
@@ -374,6 +372,1161 @@ class _ChatRowCandidate:
     unsupported_reason: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class _TextScreenControlSpec:
+    """Describes one OCR-labeled selector expected on an exact building-owned screen."""
+
+    selector_id: UiElementId
+    texts: frozenset[str]
+    required: bool = False
+    min_x_ratio: float = 0.0
+    max_x_ratio: float = 1.0
+    min_y_ratio: float = 0.0
+    max_y_ratio: float = 1.0
+    contains_match: bool = False
+    alias_selector_ids: tuple[UiElementId, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class _TextScreenDefinition:
+    """Defines one exact OCR-classified building-owned or linked screen."""
+
+    screen_type: ScreenType
+    header_selector_id: UiElementId
+    header_texts: frozenset[str]
+    controls: tuple[_TextScreenControlSpec, ...] = ()
+    minimum_control_matches: int = 0
+    add_back_button: bool = True
+
+
+_TEXT_SCREEN_DEFINITIONS = (
+    _TextScreenDefinition(
+        screen_type=ScreenType.PNC_CASTLE,
+        header_selector_id=UiElementId.PNC_CASTLE_HEADER,
+        header_texts=frozenset({"CASTLE"}),
+        controls=(
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_CASTLE_TERRITORY_OVERVIEW_BUTTON,
+                texts=frozenset({"TERRITORYOVERVIEW"}),
+                required=True,
+                min_y_ratio=0.06,
+                max_y_ratio=0.45,
+                contains_match=True,
+            ),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_CASTLE_GLORY_LEVEL_BUTTON,
+                texts=frozenset({"GLORYLEVEL"}),
+                min_y_ratio=0.12,
+                max_y_ratio=0.45,
+            ),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_CASTLE_UPGRADE_BUTTON,
+                texts=frozenset({"UPGRADE"}),
+                min_x_ratio=0.55,
+                max_y_ratio=0.45,
+                alias_selector_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
+            ),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_BUILDING_SPEEDUP_BUTTON,
+                texts=frozenset({"SPEEDUP"}),
+                min_x_ratio=0.55,
+                max_y_ratio=0.45,
+            ),
+        ),
+        minimum_control_matches=1,
+    ),
+    _TextScreenDefinition(
+        screen_type=ScreenType.PNC_TERRITORY_OVERVIEW,
+        header_selector_id=UiElementId.PNC_TERRITORY_OVERVIEW_HEADER,
+        header_texts=frozenset({"TERRITORYOVERVIEW"}),
+    ),
+    _TextScreenDefinition(
+        screen_type=ScreenType.PNC_HALL_OF_WAR,
+        header_selector_id=UiElementId.PNC_HALL_OF_WAR_HEADER,
+        header_texts=frozenset({"HALLOFWAR"}),
+        controls=(
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_HALL_OF_WAR_PRIORITIZED_UNIT_TYPE_DROPDOWN,
+                texts=frozenset({"PRIORITIZEDUNITTYPE"}),
+                min_y_ratio=0.1,
+                max_y_ratio=0.45,
+                contains_match=True,
+            ),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_HALL_OF_WAR_GLORY_LEVEL_BUTTON,
+                texts=frozenset({"GLORYLEVEL"}),
+                min_y_ratio=0.1,
+                max_y_ratio=0.45,
+            ),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_HALL_OF_WAR_UPGRADE_BUTTON,
+                texts=frozenset({"UPGRADE"}),
+                min_x_ratio=0.55,
+                max_y_ratio=0.45,
+                alias_selector_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
+            ),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_HALL_OF_WAR_JOIN_RALLY_ATTACK_GO_BUTTON,
+                texts=frozenset({"GO"}),
+                min_x_ratio=0.62,
+                min_y_ratio=0.3,
+                max_y_ratio=0.75,
+            ),
+        ),
+        minimum_control_matches=1,
+    ),
+    _TextScreenDefinition(
+        screen_type=ScreenType.PNC_SACRED_TREE,
+        header_selector_id=UiElementId.PNC_SACRED_TREE_HEADER,
+        header_texts=frozenset({"SACREDTREE"}),
+        controls=(
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_SACRED_TREE_BLESSING_RECORD_BUTTON,
+                texts=frozenset({"BLESSINGRECORD"}),
+                min_y_ratio=0.1,
+                max_y_ratio=0.45,
+            ),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_SACRED_TREE_HARVEST_BUTTON,
+                texts=frozenset({"HARVEST"}),
+                min_y_ratio=0.65,
+            ),
+        ),
+        minimum_control_matches=1,
+    ),
+    _TextScreenDefinition(
+        screen_type=ScreenType.PNC_SACRED_TREE_BLESSING_RECORD,
+        header_selector_id=UiElementId.PNC_SACRED_TREE_BLESSING_RECORD_HEADER,
+        header_texts=frozenset({"BLESSINGRECORD"}),
+    ),
+    _TextScreenDefinition(
+        screen_type=ScreenType.PNC_RARE_EARTH_FIELD,
+        header_selector_id=UiElementId.PNC_RARE_EARTH_FIELD_HEADER,
+        header_texts=frozenset({"RAREEARTHFIELD"}),
+        controls=(
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_RARE_EARTH_FIELD_EXCHANGE_BUTTON,
+                texts=frozenset({"EXCHANGE"}),
+                min_y_ratio=0.08,
+                max_y_ratio=0.35,
+            ),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_RARE_EARTH_FIELD_GOLD_PICKAXE_CONTROL,
+                texts=frozenset({"GOLDPICKAXE", "GOLDPICKAXEINACTIVE"}),
+                min_y_ratio=0.1,
+                max_y_ratio=0.6,
+                contains_match=True,
+            ),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_RARE_EARTH_FIELD_ENTER_FIELD_BUTTON,
+                texts=frozenset({"ENTERFIELD"}),
+                min_x_ratio=0.55,
+                min_y_ratio=0.3,
+                max_y_ratio=0.9,
+            ),
+        ),
+        minimum_control_matches=1,
+    ),
+    _TextScreenDefinition(
+        screen_type=ScreenType.PNC_DISPATCH,
+        header_selector_id=UiElementId.PNC_DISPATCH_HEADER,
+        header_texts=frozenset({"DISPATCH"}),
+        controls=(
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_DISPATCH_CLEAR_HERO_BUTTON,
+                texts=frozenset({"CLEARHERO"}),
+                min_y_ratio=0.08,
+                max_y_ratio=0.35,
+            ),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_DISPATCH_BUTTON,
+                texts=frozenset({"DISPATCH"}),
+                min_y_ratio=0.65,
+            ),
+        ),
+        minimum_control_matches=1,
+    ),
+    _TextScreenDefinition(
+        screen_type=ScreenType.PNC_SANCTUM,
+        header_selector_id=UiElementId.PNC_SANCTUM_HEADER,
+        header_texts=frozenset({"SANCTUM"}),
+    ),
+    _TextScreenDefinition(
+        screen_type=ScreenType.PNC_RELICS,
+        header_selector_id=UiElementId.PNC_RELICS_HEADER,
+        header_texts=frozenset({"RELICS"}),
+        controls=(
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_RELICS_TAB_SET_LIST, texts=frozenset({"SETLIST"})),
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_RELICS_TAB_EVENT_RELIC, texts=frozenset({"EVENTRELIC"})),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_RELICS_TAB_PRIVATE_COLLECTION,
+                texts=frozenset({"PRIVATECOLLECTION"}),
+            ),
+        ),
+        minimum_control_matches=2,
+    ),
+    _TextScreenDefinition(
+        screen_type=ScreenType.PNC_TRIAL_CHALLENGE,
+        header_selector_id=UiElementId.PNC_TRIAL_CHALLENGE_HEADER,
+        header_texts=frozenset({"TRIALCHALLENGE"}),
+        controls=(
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_TRIAL_CHALLENGE_EXCHANGE_BUTTON, texts=frozenset({"EXCHANGE"})),
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_TRIAL_CHALLENGE_PROGRESS_BUTTON, texts=frozenset({"PROGRESS"})),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_TRIAL_CHALLENGE_TOTAL_RANK_BUTTON,
+                texts=frozenset({"TOTALRANK"}),
+            ),
+        ),
+        minimum_control_matches=2,
+    ),
+    _TextScreenDefinition(
+        screen_type=ScreenType.PNC_GODDESS_STATUE,
+        header_selector_id=UiElementId.PNC_GODDESS_STATUE_HEADER,
+        header_texts=frozenset({"GODDESSSTATUE"}),
+        controls=(
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_GODDESS_STATUE_GLORY_LEVEL_BUTTON,
+                texts=frozenset({"GLORYLEVEL"}),
+                min_y_ratio=0.08,
+                max_y_ratio=0.4,
+            ),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_GODDESS_STATUE_UPGRADE_BUTTON,
+                texts=frozenset({"UPGRADE"}),
+                min_x_ratio=0.55,
+                max_y_ratio=0.45,
+                alias_selector_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
+            ),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_GODDESS_STATUE_SPEEDUP_BUTTON,
+                texts=frozenset({"SPEEDUP"}),
+                min_x_ratio=0.55,
+                max_y_ratio=0.45,
+                alias_selector_ids=(UiElementId.PNC_BUILDING_SPEEDUP_BUTTON,),
+            ),
+        ),
+        minimum_control_matches=1,
+    ),
+    _TextScreenDefinition(
+        screen_type=ScreenType.PNC_INSTITUTE,
+        header_selector_id=UiElementId.PNC_INSTITUTE_HEADER,
+        header_texts=frozenset({"INSTITUTE", "ACADEMY"}),
+        controls=(
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_INSTITUTE_GLORY_LEVEL_BUTTON,
+                texts=frozenset({"GLORYLEVEL"}),
+                min_y_ratio=0.08,
+                max_y_ratio=0.4,
+            ),
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_INSTITUTE_DEVELOPMENT_BUTTON, texts=frozenset({"DEVELOPMENT"})),
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_INSTITUTE_ECONOMY_BUTTON, texts=frozenset({"ECONOMY"})),
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_INSTITUTE_MILITARY_BUTTON, texts=frozenset({"MILITARY"})),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_INSTITUTE_FORTIFICATION_BUTTON,
+                texts=frozenset({"FORTIFICATION"}),
+            ),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_INSTITUTE_UPGRADE_BUTTON,
+                texts=frozenset({"UPGRADE"}),
+                min_x_ratio=0.55,
+                max_y_ratio=0.45,
+                alias_selector_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
+            ),
+        ),
+        minimum_control_matches=3,
+    ),
+    _TextScreenDefinition(
+        screen_type=ScreenType.PNC_WAREHOUSE,
+        header_selector_id=UiElementId.PNC_WAREHOUSE_HEADER,
+        header_texts=frozenset({"WAREHOUSE"}),
+        controls=(
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_WAREHOUSE_UPGRADE_BUTTON,
+                texts=frozenset({"UPGRADE"}),
+                min_x_ratio=0.55,
+                max_y_ratio=0.45,
+                alias_selector_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
+            ),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_WAREHOUSE_GLORY_LEVEL_BUTTON,
+                texts=frozenset({"GLORYLEVEL"}),
+                min_y_ratio=0.08,
+                max_y_ratio=0.4,
+            ),
+        ),
+        minimum_control_matches=1,
+    ),
+    _TextScreenDefinition(
+        screen_type=ScreenType.PNC_TRAP_WORKSHOP,
+        header_selector_id=UiElementId.PNC_TRAP_WORKSHOP_HEADER,
+        header_texts=frozenset({"TRAPWORKSHOP"}),
+        controls=(
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_TRAP_WORKSHOP_GLORY_LEVEL_BUTTON,
+                texts=frozenset({"GLORYLEVEL"}),
+                min_y_ratio=0.08,
+                max_y_ratio=0.4,
+            ),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_TRAP_WORKSHOP_UNIT_ADVANTAGE_BUTTON,
+                texts=frozenset({"UNITADVANTAGE"}),
+                min_y_ratio=0.12,
+                max_y_ratio=0.6,
+            ),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_TRAP_WORKSHOP_CRAFT_NOW_BUTTON,
+                texts=frozenset({"CRAFTNOW"}),
+                min_y_ratio=0.6,
+                contains_match=True,
+            ),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_TRAP_WORKSHOP_CRAFT_BUTTON,
+                texts=frozenset({"CRAFT"}),
+                min_y_ratio=0.6,
+            ),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_TRAP_WORKSHOP_COLLECT_BUTTON,
+                texts=frozenset({"COLLECT"}),
+                min_y_ratio=0.6,
+            ),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_TRAP_WORKSHOP_SPEEDUP_BUTTON,
+                texts=frozenset({"SPEEDUP"}),
+                min_y_ratio=0.6,
+            ),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_TRAP_WORKSHOP_UPGRADE_BUTTON,
+                texts=frozenset({"UPGRADE"}),
+                min_x_ratio=0.55,
+                max_y_ratio=0.45,
+                alias_selector_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
+            ),
+        ),
+        minimum_control_matches=1,
+    ),
+    _TextScreenDefinition(
+        screen_type=ScreenType.PNC_HERO_HALL,
+        header_selector_id=UiElementId.PNC_HERO_HALL_HEADER,
+        header_texts=frozenset({"HEROHALL"}),
+        controls=(
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_HERO_HALL_RECRUIT_TAB, texts=frozenset({"RECRUIT"})),
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_HERO_HALL_EXCHANGE_TAB, texts=frozenset({"EXCHANGE"})),
+        ),
+        minimum_control_matches=2,
+    ),
+    _TextScreenDefinition(
+        screen_type=ScreenType.PNC_WATCHTOWER,
+        header_selector_id=UiElementId.PNC_WATCHTOWER_HEADER,
+        header_texts=frozenset({"WATCHTOWER"}),
+        controls=(
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_WATCHTOWER_GLORY_LEVEL_BUTTON,
+                texts=frozenset({"GLORYLEVEL"}),
+                min_y_ratio=0.08,
+                max_y_ratio=0.4,
+            ),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_WATCHTOWER_UPGRADE_BUTTON,
+                texts=frozenset({"UPGRADE"}),
+                min_x_ratio=0.55,
+                max_y_ratio=0.45,
+                alias_selector_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
+            ),
+        ),
+        minimum_control_matches=1,
+    ),
+    _TextScreenDefinition(
+        screen_type=ScreenType.PNC_BLACKSMITH,
+        header_selector_id=UiElementId.PNC_BLACKSMITH_HEADER,
+        header_texts=frozenset({"BLACKSMITH"}),
+        controls=(
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_BLACKSMITH_GLORY_LEVEL_BUTTON,
+                texts=frozenset({"GLORYLEVEL"}),
+                min_y_ratio=0.08,
+                max_y_ratio=0.4,
+            ),
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_BLACKSMITH_GEAR_ROW, texts=frozenset({"GEAR"})),
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_BLACKSMITH_GEM_ROW, texts=frozenset({"GEM"})),
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_BLACKSMITH_SAURGEM_ROW, texts=frozenset({"SAURGEM"})),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_BLACKSMITH_HERO_CURIO_ROW,
+                texts=frozenset({"HEROCURIO"}),
+            ),
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_BLACKSMITH_WARSIGIL_ROW, texts=frozenset({"WARSIGIL"})),
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_BLACKSMITH_ASCEND_ROW, texts=frozenset({"ASCEND"})),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_BLACKSMITH_UPGRADE_BUTTON,
+                texts=frozenset({"UPGRADE"}),
+                min_x_ratio=0.55,
+                max_y_ratio=0.45,
+                alias_selector_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
+            ),
+        ),
+        minimum_control_matches=1,
+    ),
+    _TextScreenDefinition(
+        screen_type=ScreenType.PNC_GEAR,
+        header_selector_id=UiElementId.PNC_GEAR_HEADER,
+        header_texts=frozenset({"GEAR"}),
+    ),
+    _TextScreenDefinition(
+        screen_type=ScreenType.PNC_GEM,
+        header_selector_id=UiElementId.PNC_GEM_HEADER,
+        header_texts=frozenset({"GEM"}),
+    ),
+    _TextScreenDefinition(
+        screen_type=ScreenType.PNC_SAURGEM,
+        header_selector_id=UiElementId.PNC_SAURGEM_HEADER,
+        header_texts=frozenset({"SAURGEM"}),
+        controls=(
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_SAURGEM_GET_BUTTON,
+                texts=frozenset({"GETSAURGEM"}),
+                min_y_ratio=0.65,
+                contains_match=True,
+            ),
+        ),
+    ),
+    _TextScreenDefinition(
+        screen_type=ScreenType.PNC_WARSIGIL,
+        header_selector_id=UiElementId.PNC_WARSIGIL_HEADER,
+        header_texts=frozenset({"WARSIGIL"}),
+    ),
+    _TextScreenDefinition(
+        screen_type=ScreenType.PNC_HERO_CURIO,
+        header_selector_id=UiElementId.PNC_HERO_CURIO_HEADER,
+        header_texts=frozenset({"HEROCURIO"}),
+    ),
+    _TextScreenDefinition(
+        screen_type=ScreenType.PNC_ASCEND,
+        header_selector_id=UiElementId.PNC_ASCEND_HEADER,
+        header_texts=frozenset({"ASCEND"}),
+        controls=(
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_ASCEND_BUTTON, texts=frozenset({"ASCEND"}), min_y_ratio=0.65),
+        ),
+    ),
+    _TextScreenDefinition(
+        screen_type=ScreenType.PNC_ALLIANCE_HALL,
+        header_selector_id=UiElementId.PNC_ALLIANCE_HALL_HEADER,
+        header_texts=frozenset({"ALLIANCEHALL"}),
+        controls=(
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_ALLIANCE_HALL_GLORY_LEVEL_BUTTON,
+                texts=frozenset({"GLORYLEVEL"}),
+                min_y_ratio=0.08,
+                max_y_ratio=0.4,
+            ),
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_ALLIANCE_HALL_SEND_BACK_BUTTON, texts=frozenset({"SENDBACK"})),
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_ALLIANCE_HALL_REINFORCE_BUTTON, texts=frozenset({"REINFORCE"})),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_ALLIANCE_HALL_UPGRADE_BUTTON,
+                texts=frozenset({"UPGRADE"}),
+                min_x_ratio=0.55,
+                max_y_ratio=0.45,
+                alias_selector_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
+            ),
+        ),
+        minimum_control_matches=1,
+    ),
+    _TextScreenDefinition(
+        screen_type=ScreenType.PNC_MARKET,
+        header_selector_id=UiElementId.PNC_MARKET_HEADER,
+        header_texts=frozenset({"MARKET"}),
+        controls=(
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_MARKET_GLORY_LEVEL_BUTTON,
+                texts=frozenset({"GLORYLEVEL"}),
+                min_y_ratio=0.08,
+                max_y_ratio=0.4,
+            ),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_MARKET_RESOURCE_TRANSPORT_BUTTON,
+                texts=frozenset({"RESOURCETRANSPORT"}),
+                contains_match=True,
+            ),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_MARKET_UPGRADE_BUTTON,
+                texts=frozenset({"UPGRADE"}),
+                min_x_ratio=0.55,
+                max_y_ratio=0.45,
+                alias_selector_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
+            ),
+        ),
+        minimum_control_matches=1,
+    ),
+    _TextScreenDefinition(
+        screen_type=ScreenType.PNC_ALLIANCE_MEMBER_REINFORCE,
+        header_selector_id=UiElementId.PNC_ALLIANCE_MEMBER_HEADER,
+        header_texts=frozenset({"ALLIANCEMEMBER"}),
+        controls=(
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_ALLIANCE_MEMBER_REINFORCE_BUTTON,
+                texts=frozenset({"REINFORCE"}),
+                required=True,
+                min_x_ratio=0.6,
+            ),
+        ),
+        minimum_control_matches=1,
+    ),
+    _TextScreenDefinition(
+        screen_type=ScreenType.PNC_ALLIANCE_MEMBER_TRANSPORT,
+        header_selector_id=UiElementId.PNC_ALLIANCE_MEMBER_HEADER,
+        header_texts=frozenset({"ALLIANCEMEMBER"}),
+        controls=(
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_ALLIANCE_MEMBER_TRANSPORT_BUTTON,
+                texts=frozenset({"TRANSPORT"}),
+                required=True,
+                min_x_ratio=0.6,
+            ),
+        ),
+        minimum_control_matches=1,
+    ),
+    _TextScreenDefinition(
+        screen_type=ScreenType.PNC_INFANTRY_BARRACKS,
+        header_selector_id=UiElementId.PNC_INFANTRY_BARRACKS_HEADER,
+        header_texts=frozenset({"INFANTRYBARRACKS"}),
+        controls=(
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_BARRACKS_GLORY_LEVEL_BUTTON,
+                texts=frozenset({"GLORYLEVEL"}),
+                min_y_ratio=0.08,
+                max_y_ratio=0.4,
+            ),
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_BARRACKS_UNIT_ADVANTAGE_BUTTON, texts=frozenset({"UNITADVANTAGE"})),
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_BARRACKS_TRAIN_BUTTON, texts=frozenset({"TRAIN"}), min_y_ratio=0.6),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_BARRACKS_TRAIN_NOW_BUTTON,
+                texts=frozenset({"TRAINNOW"}),
+                min_y_ratio=0.6,
+                contains_match=True,
+            ),
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_BARRACKS_SPEEDUP_BUTTON, texts=frozenset({"SPEEDUP"}), min_y_ratio=0.6),
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_BARRACKS_COLLECT_BUTTON, texts=frozenset({"COLLECT"}), min_y_ratio=0.6),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_BARRACKS_UPGRADE_BUTTON,
+                texts=frozenset({"UPGRADE"}),
+                min_x_ratio=0.55,
+                max_y_ratio=0.45,
+                alias_selector_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
+            ),
+        ),
+        minimum_control_matches=1,
+    ),
+    _TextScreenDefinition(
+        screen_type=ScreenType.PNC_CAVALRY_BARRACKS,
+        header_selector_id=UiElementId.PNC_CAVALRY_BARRACKS_HEADER,
+        header_texts=frozenset({"CAVALRYBARRACKS"}),
+        controls=(
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_BARRACKS_GLORY_LEVEL_BUTTON,
+                texts=frozenset({"GLORYLEVEL"}),
+                min_y_ratio=0.08,
+                max_y_ratio=0.4,
+            ),
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_BARRACKS_UNIT_ADVANTAGE_BUTTON, texts=frozenset({"UNITADVANTAGE"})),
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_BARRACKS_TRAIN_BUTTON, texts=frozenset({"TRAIN"}), min_y_ratio=0.6),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_BARRACKS_TRAIN_NOW_BUTTON,
+                texts=frozenset({"TRAINNOW"}),
+                min_y_ratio=0.6,
+                contains_match=True,
+            ),
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_BARRACKS_SPEEDUP_BUTTON, texts=frozenset({"SPEEDUP"}), min_y_ratio=0.6),
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_BARRACKS_COLLECT_BUTTON, texts=frozenset({"COLLECT"}), min_y_ratio=0.6),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_BARRACKS_UPGRADE_BUTTON,
+                texts=frozenset({"UPGRADE"}),
+                min_x_ratio=0.55,
+                max_y_ratio=0.45,
+                alias_selector_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
+            ),
+        ),
+        minimum_control_matches=1,
+    ),
+    _TextScreenDefinition(
+        screen_type=ScreenType.PNC_RANGED_BARRACKS,
+        header_selector_id=UiElementId.PNC_RANGED_BARRACKS_HEADER,
+        header_texts=frozenset({"RANGEDBARRACKS"}),
+        controls=(
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_BARRACKS_GLORY_LEVEL_BUTTON,
+                texts=frozenset({"GLORYLEVEL"}),
+                min_y_ratio=0.08,
+                max_y_ratio=0.4,
+            ),
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_BARRACKS_UNIT_ADVANTAGE_BUTTON, texts=frozenset({"UNITADVANTAGE"})),
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_BARRACKS_TRAIN_BUTTON, texts=frozenset({"TRAIN"}), min_y_ratio=0.6),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_BARRACKS_TRAIN_NOW_BUTTON,
+                texts=frozenset({"TRAINNOW"}),
+                min_y_ratio=0.6,
+                contains_match=True,
+            ),
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_BARRACKS_SPEEDUP_BUTTON, texts=frozenset({"SPEEDUP"}), min_y_ratio=0.6),
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_BARRACKS_COLLECT_BUTTON, texts=frozenset({"COLLECT"}), min_y_ratio=0.6),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_BARRACKS_UPGRADE_BUTTON,
+                texts=frozenset({"UPGRADE"}),
+                min_x_ratio=0.55,
+                max_y_ratio=0.45,
+                alias_selector_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
+            ),
+        ),
+        minimum_control_matches=1,
+    ),
+    _TextScreenDefinition(
+        screen_type=ScreenType.PNC_SIEGE_FACTORY,
+        header_selector_id=UiElementId.PNC_SIEGE_FACTORY_HEADER,
+        header_texts=frozenset({"SIEGEFACTORY"}),
+        controls=(
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_BARRACKS_GLORY_LEVEL_BUTTON,
+                texts=frozenset({"GLORYLEVEL"}),
+                min_y_ratio=0.08,
+                max_y_ratio=0.4,
+            ),
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_BARRACKS_UNIT_ADVANTAGE_BUTTON, texts=frozenset({"UNITADVANTAGE"})),
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_BARRACKS_TRAIN_BUTTON, texts=frozenset({"TRAIN"}), min_y_ratio=0.6),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_BARRACKS_TRAIN_NOW_BUTTON,
+                texts=frozenset({"TRAINNOW"}),
+                min_y_ratio=0.6,
+                contains_match=True,
+            ),
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_BARRACKS_SPEEDUP_BUTTON, texts=frozenset({"SPEEDUP"}), min_y_ratio=0.6),
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_BARRACKS_COLLECT_BUTTON, texts=frozenset({"COLLECT"}), min_y_ratio=0.6),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_BARRACKS_UPGRADE_BUTTON,
+                texts=frozenset({"UPGRADE"}),
+                min_x_ratio=0.55,
+                max_y_ratio=0.45,
+                alias_selector_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
+            ),
+        ),
+        minimum_control_matches=1,
+    ),
+    _TextScreenDefinition(
+        screen_type=ScreenType.PNC_SAUROI_LAIR,
+        header_selector_id=UiElementId.PNC_SAUROI_LAIR_HEADER,
+        header_texts=frozenset({"SAUROILAIR"}),
+        controls=(
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_SAUROI_LAIR_UPGRADE_BUTTON,
+                texts=frozenset({"UPGRADE"}),
+                min_x_ratio=0.55,
+                max_y_ratio=0.45,
+                alias_selector_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
+            ),
+        ),
+    ),
+    _TextScreenDefinition(
+        screen_type=ScreenType.PNC_SAUREGG,
+        header_selector_id=UiElementId.PNC_SAUREGG_HEADER,
+        header_texts=frozenset({"SAUREGG"}),
+        controls=(
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_SAUREGG_OBTAIN_BUTTON, texts=frozenset({"OBTAIN"}), min_y_ratio=0.65),
+        ),
+        minimum_control_matches=1,
+    ),
+    _TextScreenDefinition(
+        screen_type=ScreenType.PNC_VERSUS_CENTER,
+        header_selector_id=UiElementId.PNC_VERSUS_CENTER_HEADER,
+        header_texts=frozenset({"VERSUSCENTER"}),
+        controls=(
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_VERSUS_CENTER_TAB_ARENA, texts=frozenset({"ARENA"})),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_VERSUS_CENTER_TAB_EXCHANGE_SHOP,
+                texts=frozenset({"EXCHANGESHOP"}),
+            ),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_VERSUS_CENTER_HERO_SHOWDOWN_ENTRY,
+                texts=frozenset({"HEROSHOWDOWN"}),
+                contains_match=True,
+            ),
+        ),
+        minimum_control_matches=1,
+    ),
+    _TextScreenDefinition(
+        screen_type=ScreenType.PNC_WALL,
+        header_selector_id=UiElementId.PNC_WALL_HEADER,
+        header_texts=frozenset({"WALL"}),
+        controls=(
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_WALL_DEFENSE_INFO_TILE, texts=frozenset({"DEFENSEINFO"}), required=True),
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_WALL_REPAIR_WALL_TILE, texts=frozenset({"REPAIRWALL"})),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_WALL_UPGRADE_BUTTON,
+                texts=frozenset({"UPGRADE"}),
+                min_x_ratio=0.55,
+                max_y_ratio=0.45,
+                alias_selector_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
+            ),
+        ),
+        minimum_control_matches=1,
+    ),
+    _TextScreenDefinition(
+        screen_type=ScreenType.PNC_DEFENSE_INFO,
+        header_selector_id=UiElementId.PNC_DEFENSE_INFO_HEADER,
+        header_texts=frozenset({"DEFENSEINFO"}),
+    ),
+    _TextScreenDefinition(
+        screen_type=ScreenType.PNC_BUILD_MENU_FIXED_SLOT,
+        header_selector_id=UiElementId.PNC_BUILD_HEADER,
+        header_texts=frozenset({"BUILD"}),
+        controls=(
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_BUILD_INSTITUTE_OPTION, texts=frozenset({"INSTITUTE"})),
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_BUILD_WAREHOUSE_OPTION, texts=frozenset({"WAREHOUSE"})),
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_BUILD_TRAP_WORKSHOP_OPTION, texts=frozenset({"TRAPWORKSHOP"})),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_BUILD_GODDESS_STATUE_OPTION,
+                texts=frozenset({"GODDESSSTATUE"}),
+            ),
+        ),
+        minimum_control_matches=1,
+    ),
+    _TextScreenDefinition(
+        screen_type=ScreenType.PNC_BUILD_MENU_LARGE_SLOT,
+        header_selector_id=UiElementId.PNC_BUILD_HEADER,
+        header_texts=frozenset({"BUILD"}),
+        controls=(
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_BUILD_ALLIANCE_HALL_OPTION,
+                texts=frozenset({"ALLIANCEHALL"}),
+            ),
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_BUILD_BLACKSMITH_OPTION, texts=frozenset({"BLACKSMITH"})),
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_BUILD_MARKET_OPTION, texts=frozenset({"MARKET"})),
+        ),
+        minimum_control_matches=1,
+    ),
+    _TextScreenDefinition(
+        screen_type=ScreenType.PNC_BUILD_MENU_SMALL_SLOT,
+        header_selector_id=UiElementId.PNC_BUILD_HEADER,
+        header_texts=frozenset({"BUILD"}),
+        controls=(
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_BUILD_FARM_OPTION, texts=frozenset({"FARM"})),
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_BUILD_LUMBER_CAMP_OPTION, texts=frozenset({"LUMBERCAMP"})),
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_BUILD_MOON_WELL_OPTION, texts=frozenset({"MOONWELL"})),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_BUILD_RECRUITING_CENTER_OPTION,
+                texts=frozenset({"RECRUITINGCENTER"}),
+            ),
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_BUILD_INFIRMARY_OPTION, texts=frozenset({"INFIRMARY"})),
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_BUILD_IRON_MINE_OPTION, texts=frozenset({"IRONMINE"})),
+            _TextScreenControlSpec(selector_id=UiElementId.PNC_BUILD_GOLD_MINE_OPTION, texts=frozenset({"GOLDMINE"})),
+        ),
+        minimum_control_matches=1,
+    ),
+)
+
+
+def _build_matching_text_screen_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+    request: ObservationRequest,
+    observed_screen: ScreenType,
+) -> ObservationAdditions | None:
+    """Returns the first exact text-screen observation allowed by the current OCR request."""
+
+    for definition in _TEXT_SCREEN_DEFINITIONS:
+        if not request.allows_screen(definition.screen_type):
+            continue
+        if not can_attempt_screen_family_ocr(
+            request_screen=definition.screen_type,
+            observed_screen=observed_screen,
+        ):
+            continue
+        additions = _build_text_screen_additions(
+            image=image,
+            lines=lines,
+            definition=definition,
+        )
+        if additions is not None:
+            return additions
+    return None
+
+
+def _build_text_screen_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+    definition: _TextScreenDefinition,
+) -> ObservationAdditions | None:
+    """Builds one exact building-owned screen observation from a shared header-and-controls definition."""
+
+    header = _find_line_matching(
+        lines=lines,
+        predicate=lambda line: normalize_ocr_text(line.text) in definition.header_texts,
+        max_y=int(image.height * 0.15),
+    )
+    if header is None:
+        return None
+    base_visible_elements = _build_text_screen_visible_elements(
+        image=image,
+        lines=lines,
+        definition=definition,
+        header=header,
+    )
+    if base_visible_elements is None:
+        if not is_upgradeable_primary_screen(definition.screen_type):
+            return None
+        confirmation_visible_elements = _build_upgrade_confirmation_visible_elements(
+            image=image,
+            lines=lines,
+            definition=definition,
+            header=header,
+        )
+        if confirmation_visible_elements is None:
+            return None
+        visible_elements = confirmation_visible_elements
+    else:
+        visible_elements = base_visible_elements
+    _add_upgrade_requirement_controls(
+        image=image,
+        lines=lines,
+        screen_type=definition.screen_type,
+        visible_elements=visible_elements,
+    )
+    return ObservationAdditions(
+        visible_elements=visible_elements,
+        screen_evidence=(
+            ScreenEvidence(
+                definition.screen_type,
+                f"ocr_text_screen_{definition.screen_type.value}",
+            ),
+        ),
+    )
+
+
+def _build_text_screen_visible_elements(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+    definition: _TextScreenDefinition,
+    header: OcrLine,
+) -> dict[UiElementId, VisibleElement] | None:
+    """Returns the canonical exact-screen controls when the base building-owned layout is present."""
+
+    visible_elements = _make_text_screen_visible_element_seed(
+        image=image,
+        definition=definition,
+        header=header,
+    )
+    control_matches = 0
+    for control in definition.controls:
+        line = _find_text_screen_control_line(
+            image=image,
+            lines=lines,
+            control=control,
+        )
+        if line is None:
+            if control.required:
+                return None
+            continue
+        control_matches += 1
+        _add_text_screen_control_visible_elements(
+            visible_elements=visible_elements,
+            control=control,
+            line=line,
+        )
+    if control_matches < definition.minimum_control_matches:
+        return None
+    return visible_elements
+
+
+def _build_upgrade_confirmation_visible_elements(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+    definition: _TextScreenDefinition,
+    header: OcrLine,
+) -> dict[UiElementId, VisibleElement] | None:
+    """Returns the exact building-owned confirmation layout when upgrade details replace the base controls."""
+
+    upgrade_control = _find_shared_upgrade_control(definition)
+    if upgrade_control is None:
+        return None
+    upgrade_line = _find_text_screen_control_line(
+        image=image,
+        lines=lines,
+        control=upgrade_control,
+    )
+    if upgrade_line is None:
+        return None
+    required_section_lines = _find_text_lines_in_texts(
+        lines=lines,
+        texts=_BUILDING_UPGRADE_CONFIRMATION_REQUIRED_SECTION_TEXTS,
+        min_y=int(image.height * 0.3),
+    )
+    if not required_section_lines:
+        return None
+    support_section_lines = _find_text_lines_in_texts(
+        lines=lines,
+        texts=_BUILDING_UPGRADE_CONFIRMATION_SUPPORT_SECTION_TEXTS,
+        min_y=int(image.height * 0.35),
+    )
+    if not support_section_lines:
+        return None
+    visible_elements = _make_text_screen_visible_element_seed(
+        image=image,
+        definition=definition,
+        header=header,
+    )
+    _add_text_screen_control_visible_elements(
+        visible_elements=visible_elements,
+        control=upgrade_control,
+        line=upgrade_line,
+    )
+    panel_lines = [header, upgrade_line, *required_section_lines, *support_section_lines]
+    confirm_line = _find_building_upgrade_confirm_line(image=image, lines=lines)
+    if confirm_line is not None:
+        panel_lines.append(confirm_line)
+        visible_elements[UiElementId.PNC_BUILDING_UPGRADE_CONFIRM_BUTTON] = _make_visible_from_line(
+            selector_id=UiElementId.PNC_BUILDING_UPGRADE_CONFIRM_BUTTON,
+            line=confirm_line,
+        )
+    visible_elements[UiElementId.PNC_BUILDING_UPGRADE_CONFIRMATION_PANEL] = _make_visible_from_lines(
+        selector_id=UiElementId.PNC_BUILDING_UPGRADE_CONFIRMATION_PANEL,
+        lines=tuple(panel_lines),
+    )
+    return visible_elements
+
+
+def _make_text_screen_visible_element_seed(
+    *,
+    image: Image.Image,
+    definition: _TextScreenDefinition,
+    header: OcrLine,
+) -> dict[UiElementId, VisibleElement]:
+    """Builds the shared exact-screen header and back-button selectors."""
+
+    visible_elements: dict[UiElementId, VisibleElement] = {
+        definition.header_selector_id: _make_visible_from_line(
+            selector_id=definition.header_selector_id,
+            line=header,
+        )
+    }
+    if definition.add_back_button:
+        visible_elements[UiElementId.PNC_BACK_BUTTON_TOP_LEFT] = _make_visible(
+            selector_id=UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+            x=0,
+            y=0,
+            width=max(1, int(image.width * 0.12)),
+            height=max(1, int(image.height * 0.08)),
+        )
+    return visible_elements
+
+
+def _add_text_screen_control_visible_elements(
+    *,
+    visible_elements: dict[UiElementId, VisibleElement],
+    control: _TextScreenControlSpec,
+    line: OcrLine,
+) -> None:
+    """Projects one matched text-screen control into its selector ids and shared aliases."""
+
+    visible_elements[control.selector_id] = _make_visible_from_line(
+        selector_id=control.selector_id,
+        line=line,
+    )
+    for alias_selector_id in control.alias_selector_ids:
+        visible_elements[alias_selector_id] = _make_visible_from_line(
+            selector_id=alias_selector_id,
+            line=line,
+        )
+
+
+def _find_shared_upgrade_control(definition: _TextScreenDefinition) -> _TextScreenControlSpec | None:
+    """Returns the shared exact-screen control that aliases the canonical building upgrade button."""
+
+    for control in definition.controls:
+        if UiElementId.PNC_BUILDING_UPGRADE_BUTTON in control.alias_selector_ids:
+            return control
+    return None
+
+
+def _find_text_screen_control_line(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+    control: _TextScreenControlSpec,
+) -> OcrLine | None:
+    """Returns one OCR line that satisfies a shared exact-screen control specification."""
+
+    min_x = int(image.width * control.min_x_ratio)
+    max_x = int(image.width * control.max_x_ratio)
+    min_y = int(image.height * control.min_y_ratio)
+    max_y = int(image.height * control.max_y_ratio)
+    candidate_lines = tuple(
+        line
+        for line in lines
+        if line.bounds.x >= min_x and line.bounds.x <= max_x and line.bounds.y >= min_y and line.bounds.y <= max_y
+    )
+    for index, line in enumerate(candidate_lines):
+        if _text_screen_control_matches(control=control, raw_text=line.text):
+            return line
+        merged_line = _merge_text_screen_control_candidate(candidate_lines=candidate_lines, index=index)
+        if merged_line is not None and _text_screen_control_matches(control=control, raw_text=merged_line.text):
+            return merged_line
+    return None
+
+
+def _text_screen_control_matches(*, control: _TextScreenControlSpec, raw_text: str) -> bool:
+    """Returns whether one OCR text fragment satisfies the requested exact-screen control contract."""
+
+    normalized_text = normalize_ocr_text(raw_text)
+    if normalized_text == "":
+        return False
+    if control.contains_match:
+        return any(text in normalized_text for text in control.texts)
+    return normalized_text in control.texts
+
+
+def _merge_text_screen_control_candidate(
+    *,
+    candidate_lines: tuple[OcrLine, ...],
+    index: int,
+) -> OcrLine | None:
+    """Returns a merged stacked OCR fragment when one control phrase was split across two rows."""
+
+    if index + 1 >= len(candidate_lines):
+        return None
+    upper_line = candidate_lines[index]
+    lower_line = candidate_lines[index + 1]
+    upper_bottom = upper_line.bounds.y + upper_line.bounds.height
+    vertical_gap = lower_line.bounds.y - upper_bottom
+    if vertical_gap < -max(upper_line.bounds.height, lower_line.bounds.height) * 0.35:
+        return None
+    if vertical_gap > max(upper_line.bounds.height, lower_line.bounds.height) * 1.2:
+        return None
+    upper_center_x = upper_line.bounds.x + (upper_line.bounds.width // 2)
+    lower_center_x = lower_line.bounds.x + (lower_line.bounds.width // 2)
+    allowed_center_delta = max(upper_line.bounds.width, lower_line.bounds.width) * 0.65
+    if abs(upper_center_x - lower_center_x) > allowed_center_delta:
+        return None
+    return merge_ocr_lines(upper_line, lower_line)
+
+
+def _add_upgrade_requirement_controls(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+    screen_type: ScreenType,
+    visible_elements: dict[UiElementId, VisibleElement],
+) -> None:
+    """Adds shared unmet-upgrade-requirement controls for upgradeable building-owned screens."""
+
+    if not is_upgradeable_primary_screen(screen_type):
+        return
+    header = _find_building_requirement_header_line(image=image, lines=lines)
+    if header is None:
+        return
+    requirement_line = _find_building_requirement_target_line(
+        image=image,
+        lines=lines,
+        header=header,
+    )
+    go_line = _find_building_requirement_go_line(
+        image=image,
+        lines=lines,
+        header=header,
+        requirement_line=requirement_line,
+    )
+    if go_line is None:
+        return
+    visible_elements[UiElementId.PNC_BUILDING_REQUIREMENT_HEADER] = _make_visible_from_line(
+        selector_id=UiElementId.PNC_BUILDING_REQUIREMENT_HEADER,
+        line=header,
+    )
+    if requirement_line is not None:
+        visible_elements[UiElementId.PNC_BUILDING_REQUIREMENT_TARGET_LABEL] = _make_visible_from_line(
+            selector_id=UiElementId.PNC_BUILDING_REQUIREMENT_TARGET_LABEL,
+            line=requirement_line,
+        )
+    visible_elements[UiElementId.PNC_BUILDING_REQUIREMENT_GO_BUTTON] = _make_visible_from_line(
+        selector_id=UiElementId.PNC_BUILDING_REQUIREMENT_GO_BUTTON,
+        line=go_line,
+    )
+
+
+def _find_building_requirement_header_line(*, image: Image.Image, lines: tuple[OcrLine, ...]) -> OcrLine | None:
+    """Returns the shared unmet-requirement section header when one upgrade gate is visible."""
+
+    max_x = int(image.width * 0.35)
+    return _find_line_matching(
+        lines=lines,
+        predicate=lambda line: normalize_ocr_text(line.text) in _BUILDING_REQUIREMENT_HEADER_TEXTS and line.bounds.x <= max_x,
+        min_y=int(image.height * 0.35),
+    )
+
+
+def _find_building_requirement_target_line(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+    header: OcrLine,
+) -> OcrLine | None:
+    """Returns the first visible prerequisite label listed under the unmet-requirement header."""
+
+    header_bottom = header.bounds.y + header.bounds.height
+    max_y = min(image.height, header_bottom + int(image.height * 0.14))
+    max_x = int(image.width * 0.65)
+    for line in lines:
+        normalized_text = normalize_ocr_text(line.text)
+        if normalized_text in {"", "GO"} or normalized_text in _BUILDING_REQUIREMENT_SECTION_TERMINATORS:
+            continue
+        if line.bounds.y <= header_bottom or line.bounds.y > max_y:
+            continue
+        if line.bounds.x > max_x:
+            continue
+        return line
+    return None
+
+
+def _find_building_requirement_go_line(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+    header: OcrLine,
+    requirement_line: OcrLine | None,
+) -> OcrLine | None:
+    """Returns the right-side `Go` affordance associated with one unmet-requirement row when visible."""
+
+    min_y = header.bounds.y
+    max_y = min(image.height, header.bounds.y + header.bounds.height + int(image.height * 0.14))
+    if requirement_line is not None:
+        min_y = max(min_y, requirement_line.bounds.y - requirement_line.bounds.height)
+        max_y = min(max_y, requirement_line.bounds.y + requirement_line.bounds.height + int(image.height * 0.03))
+    min_x = int(image.width * 0.6)
+    for line in lines:
+        if normalize_ocr_text(line.text) != "GO":
+            continue
+        if line.bounds.x < min_x:
+            continue
+        if line.bounds.y < min_y or line.bounds.y > max_y:
+            continue
+        return line
+    return None
+
+
+def _find_building_upgrade_confirm_line(*, image: Image.Image, lines: tuple[OcrLine, ...]) -> OcrLine | None:
+    """Returns the shared `Upgrade Now` confirmation affordance shown after the first upgrade tap."""
+
+    min_x = int(image.width * 0.4)
+    min_y = int(image.height * 0.2)
+    max_y = int(image.height * 0.55)
+    for line in lines:
+        if normalize_ocr_text(line.text) != "UPGRADENOW":
+            continue
+        if line.bounds.x < min_x:
+            continue
+        if line.bounds.y < min_y or line.bounds.y > max_y:
+            continue
+        return line
+    return None
+
+
 @dataclass(slots=True)
 class PncObservationEnricher:
     """Derives P&C screen facts that are more reliable via OCR than selectors."""
@@ -480,6 +1633,14 @@ class PncObservationEnricher:
             more_menu = _build_more_menu_additions(image=image, lines=lines, anchors=anchors)
             if more_menu is not None:
                 return more_menu
+        text_screen = _build_matching_text_screen_additions(
+            image=image,
+            lines=lines,
+            request=request,
+            observed_screen=screen_type,
+        )
+        if text_screen is not None:
+            return text_screen
         if request.allows_screen(ScreenType.PNC_BUILDING_DETAILS) and can_attempt_screen_family_ocr(
             request_screen=ScreenType.PNC_BUILDING_DETAILS,
             observed_screen=screen_type,
@@ -487,6 +1648,20 @@ class PncObservationEnricher:
             building_detail = _build_building_detail_additions(image=image, lines=lines, anchors=anchors)
             if building_detail is not None:
                 return building_detail
+        if request.allows_screen(ScreenType.PNC_BUILD_QUEUE) and can_attempt_screen_family_ocr(
+            request_screen=ScreenType.PNC_BUILD_QUEUE,
+            observed_screen=screen_type,
+        ):
+            build_queue = _build_build_queue_additions(image=image, lines=lines)
+            if build_queue is not None:
+                return build_queue
+        if request.allows_screen(ScreenType.PNC_POPUP) and can_attempt_screen_family_ocr(
+            request_screen=ScreenType.PNC_POPUP,
+            observed_screen=screen_type,
+        ):
+            research_queue_popup = _build_research_queue_popup_additions(image=image, lines=lines)
+            if research_queue_popup is not None:
+                return research_queue_popup
         if request.allows_screen(ScreenType.PNC_WORLD_MAP) and can_attempt_screen_family_ocr(
             request_screen=ScreenType.PNC_WORLD_MAP,
             observed_screen=screen_type,
@@ -611,13 +1786,6 @@ class PncObservationEnricher:
             might_rank = _build_might_rank_additions(image=image, lines=lines)
             if might_rank is not None:
                 return might_rank
-        if request.allows_screen(ScreenType.PNC_ACADEMY) and can_attempt_screen_family_ocr(
-            request_screen=ScreenType.PNC_ACADEMY,
-            observed_screen=screen_type,
-        ):
-            academy = _build_academy_additions(image=image, lines=lines, anchors=anchors)
-            if academy is not None:
-                return academy
         if request.allows_screen(ScreenType.PNC_RESEARCH_TREE) and can_attempt_screen_family_ocr(
             request_screen=ScreenType.PNC_RESEARCH_TREE,
             observed_screen=screen_type,
@@ -1400,6 +2568,24 @@ def _find_first_line_in_texts(
         predicate=lambda line: normalize_ocr_text(line.text) in texts,
         min_y=min_y,
         max_y=max_y,
+    )
+
+
+def _find_text_lines_in_texts(
+    *,
+    lines: tuple[OcrLine, ...],
+    texts: frozenset[str],
+    min_y: int = 0,
+    max_y: int | None = None,
+) -> tuple[OcrLine, ...]:
+    """Returns all OCR lines whose normalized text matches one supported label set."""
+
+    return tuple(
+        line
+        for line in lines
+        if line.bounds.y >= min_y
+        and (max_y is None or line.bounds.y <= max_y)
+        and normalize_ocr_text(line.text) in texts
     )
 
 
@@ -2342,13 +3528,13 @@ def _is_popup_footer_anchor(
     image: Image.Image,
     anchor: DetectedTextAnchor,
 ) -> bool:
-    """Returns whether one OCR anchor sits where centered modal buttons normally appear."""
+    """Returns whether one OCR anchor sits where modal footer actions normally appear, including bottom sheets."""
 
     return (
         anchor.bounds.y >= int(image.height * 0.45)
-        and anchor.bounds.y <= int(image.height * 0.78)
-        and anchor.bounds.x >= int(image.width * 0.08)
-        and anchor.bounds.x <= int(image.width * 0.85)
+        and anchor.bounds.y <= int(image.height * 0.97)
+        and anchor.bounds.x >= int(image.width * 0.04)
+        and anchor.bounds.x <= int(image.width * 0.92)
     )
 
 
@@ -2556,6 +3742,99 @@ def _build_building_detail_additions(
             ),
         },
         screen_evidence=(ScreenEvidence(ScreenType.PNC_BUILDING_DETAILS, "ocr_building_detail"),),
+    )
+
+
+def _build_build_queue_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Returns the build-queue overlay when OCR exposes its header plus queue-row support."""
+
+    header = _find_header_line(lines=lines, header_texts=_BUILD_QUEUE_HEADER_TEXTS, max_y=int(image.height * 0.18))
+    if header is None:
+        return None
+    entries: list[DetectedListEntry] = []
+    active_entry = _extract_build_queue_active_entry(image=image, lines=lines)
+    if active_entry is not None:
+        entries.append(active_entry)
+    support_count = sum(
+        1
+        for line in lines
+        if line.bounds.y >= header.bounds.y and normalize_ocr_text(line.text) in _BUILD_QUEUE_SUPPORT_TEXTS
+    )
+    if active_entry is None and support_count < 2:
+        return None
+    return ObservationAdditions(
+        list_entries=tuple(entries),
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_BUILD_QUEUE, "ocr_build_queue"),),
+    )
+
+
+def _extract_build_queue_active_entry(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> DetectedListEntry | None:
+    """Returns the visible active construction row from the build queue when OCR proves one exists."""
+
+    title_line = _find_line_matching(
+        lines=lines,
+        predicate=lambda line: _BUILD_QUEUE_ACTIVE_TITLE_PATTERN.match(line.text.strip()) is not None,
+        min_y=int(image.height * 0.14),
+        max_y=int(image.height * 0.55),
+    )
+    timer_line = _find_line_matching(
+        lines=lines,
+        predicate=lambda line: _QUEUE_TIMER_PATTERN.match(line.text.strip()) is not None,
+        min_y=int(image.height * 0.18),
+        max_y=int(image.height * 0.65),
+    )
+    speedup_line = _find_first_line_in_texts(
+        lines=lines,
+        texts=frozenset({"SPEEDUP"}),
+        min_y=int(image.height * 0.18),
+        max_y=int(image.height * 0.65),
+    )
+    if title_line is None and timer_line is None:
+        return None
+    title_text: str | None = None
+    if title_line is not None:
+        title_match = _BUILD_QUEUE_ACTIVE_TITLE_PATTERN.match(title_line.text.strip())
+        if title_match is not None:
+            title_text = title_match.group("title").strip() or None
+    row_lines = [line for line in (title_line, timer_line, speedup_line) if line is not None]
+    top = max(0, min(line.bounds.y for line in row_lines) - 12)
+    bottom = min(image.height, max(line.bounds.y + line.bounds.height for line in row_lines) + 12)
+    return DetectedListEntry(
+        kind=ListEntryKind.BUILDING,
+        bounds=Bounds(x=0, y=top, width=image.width, height=max(1, bottom - top)),
+        title_text=title_text,
+        timer_text=None if timer_line is None else timer_line.text.strip(),
+        metadata={"queue_state": "upgrading"},
+    )
+
+
+def _build_research_queue_popup_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Returns the in-game research-queue overlay as a blocking popup when OCR proves its header and idle row."""
+
+    header = _find_header_line(lines=lines, header_texts=_RESEARCH_QUEUE_HEADER_TEXTS, max_y=int(image.height * 0.4))
+    if header is None:
+        return None
+    support_count = sum(
+        1
+        for line in lines
+        if line.bounds.y >= header.bounds.y and normalize_ocr_text(line.text) in _RESEARCH_QUEUE_SUPPORT_TEXTS
+    )
+    if support_count < 2:
+        return None
+    return ObservationAdditions(
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_POPUP, "ocr_research_queue_popup"),),
     )
 
 
@@ -3102,56 +4381,6 @@ def _build_research_tree_additions(
     return ObservationAdditions(
         screen_evidence=(ScreenEvidence(ScreenType.PNC_RESEARCH_TREE, "ocr_research_tree"),),
     )
-
-
-def _build_academy_additions(
-    *,
-    image: Image.Image,
-    lines: tuple[OcrLine, ...],
-    anchors: tuple[DetectedTextAnchor, ...],
-) -> ObservationAdditions | None:
-    """Returns the academy or institute overview screen from live OCR structure."""
-
-    title_line = _find_line_matching(
-        lines=lines,
-        predicate=lambda line: normalize_ocr_text(line.text) in _ACADEMY_TITLE_TEXTS,
-        max_y=int(image.height * 0.1),
-    )
-    if title_line is None:
-        return None
-    upgrade_anchor = next(
-        (
-            anchor
-            for anchor in anchors
-            if anchor.id == TextAnchorId.LABEL_UPGRADE
-            and anchor.bounds.x >= int(image.width * 0.55)
-            and anchor.bounds.y <= int(image.height * 0.4)
-        ),
-        None,
-    )
-    if upgrade_anchor is None:
-        return None
-    category_count = sum(
-        1
-        for line in lines
-        if normalize_ocr_text(line.text) in _ACADEMY_CATEGORY_TEXTS
-    )
-    if category_count < 3:
-        return None
-    return ObservationAdditions(
-        visible_elements={
-            UiElementId.PNC_BACK_BUTTON_TOP_LEFT: _make_visible(
-                selector_id=UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
-                x=0,
-                y=0,
-                width=max(1, int(image.width * 0.12)),
-                height=max(1, int(image.height * 0.08)),
-            )
-        },
-        screen_evidence=(ScreenEvidence(ScreenType.PNC_ACADEMY, "ocr_academy_overview"),),
-    )
-
-
 def _has_loading_support(lines: tuple[OcrLine, ...]) -> bool:
     """Returns whether OCR around a reconnect button also contains loading-related language."""
 
@@ -3304,8 +4533,23 @@ def _lord_info_name_to_current_castle(name_text: str) -> CastleIdentity:
 
     return CastleIdentity(
         kingdom="",
-        castle_name=name_text.strip(),
+        castle_name=_normalize_lord_info_current_castle_name(name_text),
     )
+
+
+def _normalize_lord_info_current_castle_name(name_text: str) -> str:
+    """Returns the canonical castle name from the Lord Info display label.
+
+    The live Lord Info header can prepend the alliance tag, for example
+    ``[AAS] pine cobaye 1``, even though the configured castle identity and the
+    Manage Char roster use the bare castle name. Current-castle matching should
+    therefore strip one leading bracketed alliance tag while preserving the
+    exact visible spelling of the castle name itself.
+    """
+
+    stripped = name_text.strip()
+    normalized = re.sub(r"^\[[^\]]+\]\s*", "", stripped, count=1).strip()
+    return stripped if normalized == "" else normalized
 
 
 def _is_research_tree_support_line(line: OcrLine) -> bool:
@@ -3617,6 +4861,24 @@ def _make_visible_from_line(*, selector_id: UiElementId, line: OcrLine) -> Visib
         width=line.bounds.width,
         height=line.bounds.height,
         extracted_text=line.text,
+    )
+
+
+def _make_visible_from_lines(*, selector_id: UiElementId, lines: tuple[OcrLine, ...]) -> VisibleElement:
+    """Builds one derived visible element that spans a related group of OCR lines."""
+
+    if not lines:
+        raise ValueError("Visible OCR groups require at least one line.")
+    left = min(line.bounds.x for line in lines)
+    top = min(line.bounds.y for line in lines)
+    right = max(line.bounds.x + line.bounds.width for line in lines)
+    bottom = max(line.bounds.y + line.bounds.height for line in lines)
+    return _make_visible(
+        selector_id=selector_id,
+        x=left,
+        y=top,
+        width=max(1, right - left),
+        height=max(1, bottom - top),
     )
 
 

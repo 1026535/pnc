@@ -24,6 +24,7 @@ from pnc_automation.pnc.action_requests import (
     TapListEntryAction,
     TapSpatialObjectAction,
 )
+from pnc_automation.pnc.building_catalog import HomeCityObjectId, build_home_city_object_metadata
 from pnc_automation.pnc.chat import ChatChannel
 from pnc_automation.pnc.observation import (
     ListEntryKind,
@@ -389,7 +390,7 @@ class AutomationFrameworkTests(unittest.TestCase):
                     make_spatial_object(
                         SpatialObjectKind.HOME_BUILDING,
                         name_text="Castle",
-                        metadata={"category": "castle"},
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.CASTLE),
                         action_point=(167, 241),
                     ),
                 ),
@@ -402,7 +403,7 @@ class AutomationFrameworkTests(unittest.TestCase):
                     surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
                     kind=SpatialObjectKind.HOME_BUILDING,
                     name_text="Castle",
-                    metadata_key="category",
+                    metadata_key="home_city_object_id",
                     metadata_value="castle",
                 )
             ),

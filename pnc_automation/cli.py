@@ -9,17 +9,20 @@ from pathlib import Path
 import sys
 from typing import Sequence
 
+from pnc_automation.automation.runner import StepRunResult
+from pnc_automation.automation.task import TaskId
 from pnc_automation.automation.observation_mode import ObservationMode
 from pnc_automation.app import build_application_runner
 from pnc_automation.config.models import CastleIdentity
 from pnc_automation.config.yaml_helpers import build_castle_identity
+from pnc_automation.pnc.building_priority_input import resolve_building_priority_values
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Parses CLI arguments, runs automation, and prints a summary."""
 
     arguments = list(sys.argv[1:] if argv is None else argv)
-    if arguments and arguments[0] not in {"run", "login"}:
+    if arguments and arguments[0] not in {"run", "login", "build", "open-building"}:
         arguments.insert(0, "run")
 
     parser = argparse.ArgumentParser(description="Run Puzzles & Conquest automation.")
@@ -33,6 +36,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     _add_common_arguments(login_parser)
     _add_castle_arguments(login_parser)
 
+    build_parser = subparsers.add_parser(
+        "build",
+        help="Run one direct building-upgrade step using the current session or an explicit castle target.",
+    )
+    _add_common_arguments(build_parser)
+    _add_castle_arguments(build_parser)
+    _add_building_upgrade_arguments(build_parser)
+
+    open_building_parser = subparsers.add_parser(
+        "open-building",
+        help="Open one exact home-city building screen using the current session or an explicit castle target.",
+    )
+    _add_common_arguments(open_building_parser)
+    _add_castle_arguments(open_building_parser)
+    _add_open_building_arguments(open_building_parser)
+
     parsed = parser.parse_args(arguments)
     application = build_application_runner(
         Path(parsed.config),
@@ -41,12 +60,39 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     if parsed.command == "run":
         result = application.run(account_id=parsed.account, script_path=parsed.script)
-    else:
+        print(_serialize_run_result(result))
+        return 0
+    if parsed.command == "login":
         result = application.prepare_account_session(
             account_id=parsed.account,
             castle=_parse_optional_castle(parser, parsed),
         )
-    print(_serialize_run_result(result))
+        print(_serialize_run_result(result))
+        return 0
+    if parsed.command == "open-building":
+        castle = _parse_optional_castle(parser, parsed)
+        if castle is not None:
+            application.prepare_account_session(account_id=parsed.account, castle=castle)
+        step_result = application.run_task(
+            account_id=parsed.account,
+            task_id=TaskId.OPEN_BUILDING,
+            params={"building": parsed.building},
+        )
+        print(_serialize_step_result(account_id=parsed.account, step_result=step_result))
+        return 0
+    castle = _parse_optional_castle(parser, parsed)
+    if castle is not None:
+        application.prepare_account_session(account_id=parsed.account, castle=castle)
+    priority = resolve_building_priority_values(priority=parsed.priority, priority_file=parsed.priority_file)
+    step_result = application.run_task(
+        account_id=parsed.account,
+        task_id=TaskId.BUILDING_UPGRADE,
+        params={
+            "priority": priority,
+            "allow_speedups": parsed.allow_speedups,
+        },
+    )
+    print(_serialize_step_result(account_id=parsed.account, step_result=step_result))
     return 0
 
 
@@ -69,6 +115,36 @@ def _add_castle_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--kingdom", help="Canonical kingdom identifier such as K230.")
     parser.add_argument("--castle-name", help="Exact castle name to align before exiting.")
     parser.add_argument("--castle-level", type=int, help="Optional expected castle level.")
+
+
+def _add_building_upgrade_arguments(parser: argparse.ArgumentParser) -> None:
+    """Adds the direct building-upgrade input flags shared by CLI task entry points."""
+
+    priority_group = parser.add_mutually_exclusive_group()
+    priority_group.add_argument(
+        "--priority",
+        nargs="+",
+        help="Ordered building ids to try, such as institute warehouse.",
+    )
+    priority_group.add_argument(
+        "--priority-file",
+        help="Path to one newline-delimited building-priority file.",
+    )
+    parser.add_argument(
+        "--allow-speedups",
+        action="store_true",
+        help="Allow the building-upgrade task to use supported speedups.",
+    )
+
+
+def _add_open_building_arguments(parser: argparse.ArgumentParser) -> None:
+    """Adds the exact requested building id used by the direct open-building entry point."""
+
+    parser.add_argument(
+        "--building",
+        required=True,
+        help="Exact home-city building id to open, such as infantry_barracks or sanctum.",
+    )
 
 
 def _parse_optional_castle(parser: argparse.ArgumentParser, parsed: argparse.Namespace) -> CastleIdentity | None:
@@ -100,6 +176,22 @@ def _serialize_run_result(result: object) -> str:
             "steps": [asdict(step) for step in result.steps],
             "started_at": result.started_at.isoformat(),
             "finished_at": result.finished_at.isoformat(),
+        },
+        default=str,
+    )
+
+
+def _serialize_step_result(*, account_id: str, step_result: StepRunResult) -> str:
+    """Serializes one direct task result using a stable task-oriented CLI JSON shape."""
+
+    return json.dumps(
+        {
+            "account_id": account_id,
+            "task_id": step_result.task_id.value,
+            "status": step_result.status.value,
+            "attempts": step_result.attempts,
+            "message": step_result.message,
+            "requested_castle": None if step_result.requested_castle is None else asdict(step_result.requested_castle),
         },
         default=str,
     )
