@@ -14,20 +14,18 @@ from _script_bootstrap import ensure_repo_root_on_path
 root = ensure_repo_root_on_path()
 
 from pnc_automation.app import ApplicationRunner, build_application_runner
-from pnc_automation.artifact_naming import sanitize_artifact_segment
-from pnc_automation.automation.action_executor import ActionExecutor
-from pnc_automation.automation.observed_action_executor import ObservedActionExecutor
-from pnc_automation.emulator.session import BlueStacksSession
-from pnc_automation.errors import SelectorResolutionError
-from pnc_automation.pnc.action_requests import ActionRequest, KeyEventAction, TapAction
-from pnc_automation.pnc.observation import Observation
-from pnc_automation.pnc.screen_flows import ScreenFlowPlanner
-from pnc_automation.pnc.screen_type import ScreenType
-from pnc_automation.pnc.ui_element_id import UiElementId
-from pnc_automation.vision.observation_builder import CapturedObservation, ObservationBuilder
-from pnc_automation.vision.observation_request import ObservationRequest
-from pnc_automation.vision.selector_catalog import default_selector_catalog_path, load_selector_catalog_document
-from pnc_automation.vision.selector_discovery import (
+from pnc_automation.app.automation.engine.action_executor import ActionExecutor
+from pnc_automation.app.automation.engine.observed_action_executor import ObservedActionExecutor
+from pnc_automation.app.pnc.domain.action_requests import ActionRequest, KeyEventAction, TapAction
+from pnc_automation.app.pnc.domain.observation import Observation
+from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
+from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
+from pnc_automation.app.pnc.persistence.artifact_naming import sanitize_artifact_segment
+from pnc_automation.app.pnc.vision.observation_builder import CapturedObservation, ObservationBuilder
+from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
+from pnc_automation.app.pnc.vision.selector_catalog import default_selector_catalog_path, load_selector_catalog_document
+from pnc_automation.app.pnc.vision.selector_discovery import (
     SelectorDiscoveryAnalyzer,
     SelectorDiscoveryDraft,
     SelectorDiscoveryProbe,
@@ -36,6 +34,8 @@ from pnc_automation.vision.selector_discovery import (
     write_selector_discovery_report,
     write_selector_discovery_spec,
 )
+from pnc_automation.core.errors import SelectorResolutionError
+from pnc_automation.core.infra.emulator.session import BlueStacksSession
 
 
 @dataclass(frozen=True, slots=True)

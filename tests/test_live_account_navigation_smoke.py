@@ -1,4 +1,4 @@
-﻿"""Opt-in live smoke tests for account bootstrap and castle targeting."""
+"""Opt-in live smoke tests for account bootstrap and castle targeting."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ import unittest
 from pathlib import Path
 
 from pnc_automation.app import build_application_runner
-from pnc_automation.scripts.loader import load_run_script
-from pnc_automation.pnc.screen_type import ScreenType
+from pnc_automation.app.authoring.scripts.loader import load_run_script
+from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from tests.live_smoke_support import build_live_runtime
 
 

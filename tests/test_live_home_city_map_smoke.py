@@ -8,15 +8,15 @@ import unittest
 from pathlib import Path
 
 from pnc_automation.app import build_application_runner
-from pnc_automation.automation.task import TaskStatus
-from pnc_automation.automation.tasks.open_building_support import (
+from pnc_automation.app.automation.engine.task import TaskStatus
+from pnc_automation.app.automation.tasks.open_building_support import (
     home_city_object_query,
     requested_home_city_object_observation_matches,
 )
-from pnc_automation.pnc.building_catalog import HomeCityMapCoordinate, HomeCityObjectId, home_city_map_atlas
-from pnc_automation.config.models import CastleIdentity
-from pnc_automation.pnc.observation import Observation
-from pnc_automation.pnc.screen_type import ScreenType
+from pnc_automation.app.pnc.domain.building_catalog import HomeCityMapCoordinate, HomeCityObjectId, home_city_map_atlas
+from pnc_automation.app.authoring.config.models import CastleIdentity
+from pnc_automation.app.pnc.domain.observation import Observation
+from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from tests.live_smoke_support import build_live_automation_runner, execute_live_flow_until
 
 

@@ -9,7 +9,10 @@ from _script_bootstrap import ensure_repo_root_on_path
 
 root = ensure_repo_root_on_path()
 
-from pnc_automation.capture.chat_transcript_cleanup import build_chat_transcript_cleanup_patterns, clean_chat_transcript_text
+from pnc_automation.app.pnc.persistence.chat_transcript_cleanup import (
+    build_chat_transcript_cleanup_patterns,
+    clean_chat_transcript_text,
+)
 
 
 def main() -> int:

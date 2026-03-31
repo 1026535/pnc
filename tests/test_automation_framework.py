@@ -1,4 +1,4 @@
-﻿"""Automation-framework tests for Phase 3 behavior."""
+"""Automation-framework tests for Phase 3 behavior."""
 
 from __future__ import annotations
 
@@ -6,17 +6,17 @@ import unittest
 from collections.abc import Sequence
 from pathlib import Path
 
-from pnc_automation.automation.action_executor import ActionExecutor
-from pnc_automation.automation.observed_action_executor import ObservedActionExecutor, ObservedActionExecutionPolicy
-from pnc_automation.automation.runner import AutomationRunner, StepExecutionPolicy
-from pnc_automation.scripts.models import RunScript, ScriptStep
-from pnc_automation.scripts.registry import TaskRegistry, build_default_task_registry
-from pnc_automation.automation.task import BaseAutomationTask, TaskId, TaskResult
-from pnc_automation.automation.task_context import TaskContext
-from pnc_automation.automation.tasks.ensure_game_running_task import EnsureGameRunningTask
-from pnc_automation.config.models import AccountConfig, CastleIdentity, CredentialSource, DefaultsConfig, ResolvedCredentials
-from pnc_automation.errors import ScriptValidationError, SelectorResolutionError, TaskVerificationError
-from pnc_automation.pnc.action_requests import (
+from pnc_automation.app.automation.engine.action_executor import ActionExecutor
+from pnc_automation.app.automation.engine.observed_action_executor import ObservedActionExecutor, ObservedActionExecutionPolicy
+from pnc_automation.app.automation.engine.runner import AutomationRunner, StepExecutionPolicy
+from pnc_automation.app.authoring.scripts.models import RunScript, ScriptStep
+from pnc_automation.app.authoring.scripts.registry import TaskRegistry, build_default_task_registry
+from pnc_automation.app.automation.engine.task import BaseAutomationTask, TaskId, TaskResult
+from pnc_automation.app.automation.engine.task_context import TaskContext
+from pnc_automation.app.automation.tasks.ensure_game_running_task import EnsureGameRunningTask
+from pnc_automation.app.authoring.config.models import AccountConfig, CastleIdentity, CredentialSource, DefaultsConfig, ResolvedCredentials
+from pnc_automation.core.errors import ScriptValidationError, SelectorResolutionError, TaskVerificationError
+from pnc_automation.app.pnc.domain.action_requests import (
     ActionRequest,
     InputTextAction,
     SelectChatChannelAction,
@@ -24,9 +24,9 @@ from pnc_automation.pnc.action_requests import (
     TapListEntryAction,
     TapSpatialObjectAction,
 )
-from pnc_automation.pnc.building_catalog import HomeCityObjectId, build_home_city_object_metadata
-from pnc_automation.pnc.chat import ChatChannel
-from pnc_automation.pnc.observation import (
+from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId, build_home_city_object_metadata
+from pnc_automation.app.pnc.domain.chat import ChatChannel
+from pnc_automation.app.pnc.domain.observation import (
     ListEntryKind,
     Observation,
     SpatialObjectKind,
@@ -34,12 +34,12 @@ from pnc_automation.pnc.observation import (
     SpatialSurfaceType,
     VisibleElementSourceKind,
 )
-from pnc_automation.pnc.screen_flows import ScreenFlowPlanner
-from pnc_automation.pnc.screen_type import ScreenType
-from pnc_automation.pnc.ui_element_id import UiElementId
-from pnc_automation.vision.observation_request import ObservationRequest
-from pnc_automation.vision.selector_interaction_kind import SelectorInteractionKind
-from pnc_automation.vision.selectors import (
+from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
+from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
+from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
+from pnc_automation.app.pnc.vision.selector_interaction_kind import SelectorInteractionKind
+from pnc_automation.app.pnc.vision.selectors import (
     ClickDefinition,
     ClickOutcome,
     DetectionKind,

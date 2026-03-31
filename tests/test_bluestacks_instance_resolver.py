@@ -8,13 +8,13 @@ import unittest
 from dataclasses import dataclass
 from pathlib import Path
 
-from pnc_automation.config.models import BlueStacksInstanceConfig
-from pnc_automation.emulator.bluestacks_instance_resolver import (
+from pnc_automation.app.authoring.config.models import BlueStacksInstanceConfig
+from pnc_automation.core.infra.emulator.bluestacks_instance_resolver import (
     BlueStacksInstanceResolver,
     BlueStacksRunningInstance,
     _parse_running_instances_json,
 )
-from pnc_automation.errors import ConfigurationError
+from pnc_automation.core.errors import ConfigurationError
 
 
 @dataclass(frozen=True, slots=True)

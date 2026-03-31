@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import unittest
 
-from pnc_automation.vision.ocr_service import OcrLine, OcrResult, OcrWord
-from pnc_automation.vision.selectors import Region
-from pnc_automation.vision.text_anchors import TextAnchorDetector, TextAnchorId
+from pnc_automation.core.vision.ocr.ocr_service import OcrLine, OcrResult, OcrWord
+from pnc_automation.app.pnc.vision.selectors import Region
+from pnc_automation.app.pnc.vision.text_anchors import TextAnchorDetector, TextAnchorId
 
 
 class TextAnchorTests(unittest.TestCase):

@@ -1,0 +1,286 @@
+"""Canonical survey/index helpers for repeated world-map viewport observations."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field, replace
+from datetime import datetime
+from enum import StrEnum
+from pathlib import Path
+
+from pnc_automation.core.errors import SelectorResolutionError
+from pnc_automation.app.pnc.domain.observation import (
+    DetectedSpatialObject,
+    Observation,
+    SpatialObjectKind,
+    SpatialSurfaceObservation,
+    SpatialSurfaceType,
+)
+
+
+class WorldMapObjectAddressingKind(StrEnum):
+    """Describes how one indexed world-map object key was derived."""
+
+    ESTIMATED_WORLD = "estimated_world"
+    CONFIRMED_WORLD = "confirmed_world"
+    VIEWPORT_RELATIVE = "viewport_relative"
+
+
+@dataclass(frozen=True, slots=True)
+class WorldMapObjectKey:
+    """Identifies one world-map object across repeated viewport observations."""
+
+    kind: SpatialObjectKind
+    addressing_kind: WorldMapObjectAddressingKind
+    coordinate: tuple[int, int]
+    viewport_offset_ratio: tuple[float, float] | None = None
+    label_text: str | None = None
+    alliance_tag: str | None = None
+    kingdom: str | None = None
+    level: int | None = None
+
+    def __post_init__(self) -> None:
+        """Rejects incomplete or malformed world-map object keys before indexing begins."""
+
+        if len(self.coordinate) != 2 or not all(isinstance(value, int) for value in self.coordinate):
+            raise SelectorResolutionError(
+                "World-map object keys require one integer coordinate pair.",
+                coordinate=self.coordinate,
+                addressing_kind=self.addressing_kind,
+            )
+        if self.viewport_offset_ratio is not None:
+            if len(self.viewport_offset_ratio) != 2 or not all(
+                isinstance(value, int | float) for value in self.viewport_offset_ratio
+            ):
+                raise SelectorResolutionError(
+                    "World-map object keys require numeric viewport_offset_ratio values when present.",
+                    viewport_offset_ratio=self.viewport_offset_ratio,
+                )
+        if self.label_text is not None and self.label_text.strip() == "":
+            raise SelectorResolutionError("World-map object keys must not use blank label_text values.")
+        if self.kingdom is not None and self.kingdom.strip() == "":
+            raise SelectorResolutionError("World-map object keys must not use blank kingdom values.")
+
+
+@dataclass(frozen=True, slots=True)
+class WorldMapObjectSighting:
+    """Stores the latest indexed evidence for one typed world-map object."""
+
+    key: WorldMapObjectKey
+    object_: DetectedSpatialObject
+    viewport_coordinate: tuple[int, int]
+    artifact_path: Path | None = None
+    captured_at: datetime | None = None
+    resolved_player_name: str | None = None
+    profile_artifact_path: Path | None = None
+
+    def __post_init__(self) -> None:
+        """Rejects incomplete world-map sightings so the index always stays queryable."""
+
+        if len(self.viewport_coordinate) != 2 or not all(isinstance(value, int) for value in self.viewport_coordinate):
+            raise SelectorResolutionError(
+                "World-map sightings require one integer viewport coordinate pair.",
+                viewport_coordinate=self.viewport_coordinate,
+            )
+        if self.resolved_player_name is not None and self.resolved_player_name.strip() == "":
+            raise SelectorResolutionError("World-map sightings must not use blank resolved_player_name values.")
+
+    @property
+    def is_castle(self) -> bool:
+        """Returns whether the indexed sighting is a castle candidate."""
+
+        return self.object_.kind == SpatialObjectKind.CASTLE
+
+    def matches_player_name(self, player_name: str) -> bool:
+        """Returns whether the sighting exposes the requested exact player name directly or through enrichment."""
+
+        normalized_name = player_name.strip()
+        return self.resolved_player_name == normalized_name or self.object_.name_text == normalized_name
+
+
+@dataclass(slots=True)
+class WorldMapSurveyIndex:
+    """Indexes typed world-map object sightings across repeated viewport captures without conflating evidence classes."""
+
+    _ordered_keys: list[WorldMapObjectKey] = field(default_factory=list)
+    _sightings_by_key: dict[WorldMapObjectKey, WorldMapObjectSighting] = field(default_factory=dict)
+
+    @property
+    def sightings(self) -> tuple[WorldMapObjectSighting, ...]:
+        """Returns every indexed sighting in first-seen order."""
+
+        return tuple(self._sightings_by_key[key] for key in self._ordered_keys)
+
+    def ingest_observation(self, observation: Observation) -> tuple[WorldMapObjectSighting, ...]:
+        """Indexes the visible objects from one world-map observation."""
+
+        surface = observation.require_spatial_surface(SpatialSurfaceType.WORLD_MAP)
+        return self.ingest_surface(
+            surface,
+            artifact_path=observation.artifact_path,
+            captured_at=observation.captured_at,
+        )
+
+    def ingest_surface(
+        self,
+        surface: SpatialSurfaceObservation,
+        *,
+        artifact_path: Path | None = None,
+        captured_at: datetime | None = None,
+    ) -> tuple[WorldMapObjectSighting, ...]:
+        """Indexes the visible objects from one world-map spatial surface."""
+
+        if surface.surface_type != SpatialSurfaceType.WORLD_MAP:
+            raise SelectorResolutionError(
+                "WorldMapSurveyIndex can only ingest world-map spatial surfaces.",
+                surface_type=surface.surface_type,
+            )
+        viewport_coordinate = surface.viewport.coordinate
+        if viewport_coordinate is None:
+            raise SelectorResolutionError(
+                "World-map survey indexing requires a coordinate-addressable viewport.",
+                surface_type=surface.surface_type,
+            )
+        updated_sightings: list[WorldMapObjectSighting] = []
+        for object_ in surface.objects:
+            key = build_world_map_object_key(surface=surface, object_=object_)
+            existing = self._sightings_by_key.get(key)
+            if existing is None:
+                self._ordered_keys.append(key)
+                sighting = WorldMapObjectSighting(
+                    key=key,
+                    object_=object_,
+                    viewport_coordinate=viewport_coordinate,
+                    artifact_path=artifact_path,
+                    captured_at=captured_at,
+                )
+            else:
+                sighting = replace(
+                    existing,
+                    object_=object_,
+                    viewport_coordinate=viewport_coordinate,
+                    artifact_path=artifact_path if artifact_path is not None else existing.artifact_path,
+                    captured_at=captured_at if captured_at is not None else existing.captured_at,
+                )
+            self._sightings_by_key[key] = sighting
+            updated_sightings.append(sighting)
+        return tuple(updated_sightings)
+
+    def annotate_castle_player_name(
+        self,
+        key: WorldMapObjectKey,
+        *,
+        player_name: str,
+        profile_artifact_path: Path | None = None,
+    ) -> WorldMapObjectSighting:
+        """Attaches one resolved player-profile name to an indexed castle sighting."""
+
+        normalized_name = player_name.strip()
+        if normalized_name == "":
+            raise SelectorResolutionError("World-map castle annotations require a non-blank player_name.")
+        sighting = self.require_sighting(key)
+        if not sighting.is_castle:
+            raise SelectorResolutionError(
+                "Only castle sightings can be annotated with player-profile names.",
+                object_kind=sighting.object_.kind,
+                key=key,
+            )
+        updated = replace(
+            sighting,
+            resolved_player_name=normalized_name,
+            profile_artifact_path=profile_artifact_path if profile_artifact_path is not None else sighting.profile_artifact_path,
+        )
+        self._sightings_by_key[key] = updated
+        return updated
+
+    def require_sighting(self, key: WorldMapObjectKey) -> WorldMapObjectSighting:
+        """Returns one indexed sighting or fails fast when the requested key is absent."""
+
+        sighting = self._sightings_by_key.get(key)
+        if sighting is not None:
+            return sighting
+        raise SelectorResolutionError("The requested world-map sighting key is not indexed.", key=key)
+
+    def castle_sightings(self) -> tuple[WorldMapObjectSighting, ...]:
+        """Returns every indexed castle sighting in first-seen order."""
+
+        return tuple(sighting for sighting in self.sightings if sighting.is_castle)
+
+    def unresolved_castle_sightings(self) -> tuple[WorldMapObjectSighting, ...]:
+        """Returns every indexed castle sighting whose player-profile name is still unresolved."""
+
+        return tuple(sighting for sighting in self.castle_sightings() if sighting.resolved_player_name is None)
+
+    def find_castle_by_player_name(self, player_name: str) -> WorldMapObjectSighting | None:
+        """Returns the indexed castle sighting whose direct or resolved player name matches exactly."""
+
+        normalized_name = player_name.strip()
+        if normalized_name == "":
+            raise SelectorResolutionError("World-map castle lookups require a non-blank player_name.")
+        for sighting in self.castle_sightings():
+            if sighting.matches_player_name(normalized_name):
+                return sighting
+        return None
+
+
+def build_world_map_object_key(
+    *,
+    surface: SpatialSurfaceObservation,
+    object_: DetectedSpatialObject,
+) -> WorldMapObjectKey:
+    """Builds the canonical reusable index key for one visible world-map object while keeping coordinate evidence explicit."""
+
+    if surface.surface_type != SpatialSurfaceType.WORLD_MAP:
+        raise SelectorResolutionError(
+            "World-map object keys can only be built from world-map spatial surfaces.",
+            surface_type=surface.surface_type,
+        )
+    if object_.confirmed_world_coordinate is not None:
+        return WorldMapObjectKey(
+            kind=object_.kind,
+            addressing_kind=WorldMapObjectAddressingKind.CONFIRMED_WORLD,
+            coordinate=object_.confirmed_world_coordinate,
+            label_text=object_.name_text,
+            alliance_tag=object_.alliance_tag,
+            kingdom=object_.kingdom,
+            level=object_.level,
+        )
+    if object_.estimated_world_coordinate is not None:
+        return WorldMapObjectKey(
+            kind=object_.kind,
+            addressing_kind=WorldMapObjectAddressingKind.ESTIMATED_WORLD,
+            coordinate=object_.estimated_world_coordinate,
+            label_text=object_.name_text,
+            alliance_tag=object_.alliance_tag,
+            kingdom=object_.kingdom,
+            level=object_.level,
+        )
+    viewport_coordinate = surface.viewport.coordinate
+    if viewport_coordinate is None:
+        raise SelectorResolutionError(
+            "Viewport-relative world-map object keys require a coordinate-addressable viewport.",
+            surface_type=surface.surface_type,
+        )
+    if object_.viewport_offset_ratio is None and object_.name_text is None:
+        raise SelectorResolutionError(
+            "Viewport-relative world-map object keys require either viewport_offset_ratio or name_text evidence.",
+            object_kind=object_.kind,
+            viewport_coordinate=viewport_coordinate,
+        )
+    return WorldMapObjectKey(
+        kind=object_.kind,
+        addressing_kind=WorldMapObjectAddressingKind.VIEWPORT_RELATIVE,
+        coordinate=viewport_coordinate,
+        viewport_offset_ratio=_rounded_ratio_pair(object_.viewport_offset_ratio),
+        label_text=object_.name_text,
+        alliance_tag=object_.alliance_tag,
+        kingdom=object_.kingdom,
+        level=object_.level,
+    )
+
+
+def _rounded_ratio_pair(value: tuple[float, float] | None) -> tuple[float, float] | None:
+    """Rounds normalized viewport ratios so repeated sightings hash together consistently."""
+
+    if value is None:
+        return None
+    return (round(float(value[0]), 4), round(float(value[1]), 4))

@@ -1,17 +1,17 @@
-﻿"""End-to-end runner test using fake observations and a fake session."""
+"""End-to-end runner test using fake observations and a fake session."""
 
 from __future__ import annotations
 
 import unittest
 from pathlib import Path
 
-from pnc_automation.automation.action_executor import ActionExecutor
-from pnc_automation.automation.observed_action_executor import ObservedActionExecutor
-from pnc_automation.automation.runner import AutomationRunner
-from pnc_automation.scripts.models import RunScript, ScriptStep
-from pnc_automation.scripts.registry import build_default_task_registry
-from pnc_automation.automation.task import TaskId
-from pnc_automation.config.models import (
+from pnc_automation.app.automation.engine.action_executor import ActionExecutor
+from pnc_automation.app.automation.engine.observed_action_executor import ObservedActionExecutor
+from pnc_automation.app.automation.engine.runner import AutomationRunner
+from pnc_automation.app.authoring.scripts.models import RunScript, ScriptStep
+from pnc_automation.app.authoring.scripts.registry import build_default_task_registry
+from pnc_automation.app.automation.engine.task import TaskId
+from pnc_automation.app.authoring.config.models import (
     AccountConfig,
     CastleIdentity,
     CredentialSource,
@@ -19,12 +19,12 @@ from pnc_automation.config.models import (
     PncAccountCastleRosterConfig,
     ResolvedCredentials,
 )
-from pnc_automation.pnc.building_catalog import HomeCityObjectId, build_home_city_object_metadata
-from pnc_automation.pnc.observation import ListEntryKind, SpatialObjectKind, SpatialSurfaceType
-from pnc_automation.pnc.screen_flows import ScreenFlowPlanner
-from pnc_automation.pnc.screen_type import ScreenType
-from pnc_automation.pnc.ui_element_id import UiElementId
-from pnc_automation.vision.selectors import build_default_selector_registry
+from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId, build_home_city_object_metadata
+from pnc_automation.app.pnc.domain.observation import ListEntryKind, SpatialObjectKind, SpatialSurfaceType
+from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
+from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
+from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
 from tests.test_support import (
     FakeObservationService,
     FakeSession,

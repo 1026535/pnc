@@ -8,8 +8,8 @@ from pathlib import Path
 
 import yaml
 
-from pnc_automation.errors import SelectorResolutionError
-from pnc_automation.vision.selector_catalog import (
+from pnc_automation.core.errors import SelectorResolutionError
+from pnc_automation.app.pnc.vision.selector_catalog import (
     SelectorCatalogDocument,
     SelectorCatalogEntry,
     SelectorCatalogRelativeBounds,
@@ -17,7 +17,7 @@ from pnc_automation.vision.selector_catalog import (
     SelectorCatalogSurfaceViewport,
     write_selector_catalog_document,
 )
-from pnc_automation.vision.selector_registry_updater import (
+from pnc_automation.app.pnc.vision.selector_registry_updater import (
     SelectorRegistryUpdate,
     apply_selector_updates,
     ensure_ui_element_ids,

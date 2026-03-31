@@ -1,4 +1,4 @@
-﻿"""Run-script loader tests."""
+"""Run-script loader tests."""
 
 from __future__ import annotations
 
@@ -7,9 +7,9 @@ import textwrap
 import unittest
 from pathlib import Path
 
-from pnc_automation.scripts.loader import load_run_script
-from pnc_automation.automation.task import TaskId
-from pnc_automation.errors import ScriptValidationError
+from pnc_automation.app.authoring.scripts.loader import load_run_script
+from pnc_automation.app.automation.engine.task import TaskId
+from pnc_automation.core.errors import ScriptValidationError
 
 
 class ScriptLoaderTests(unittest.TestCase):

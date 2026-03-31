@@ -7,10 +7,10 @@ import textwrap
 import unittest
 from pathlib import Path
 
-from pnc_automation.automation.observation_mode import ObservationMode
-from pnc_automation.config.loader import load_app_config
-from pnc_automation.config.models import CastleRosterOrdering, CredentialSource
-from pnc_automation.errors import ConfigurationError
+from pnc_automation.app.runtime.observation_mode import ObservationMode
+from pnc_automation.app.authoring.config.loader import load_app_config
+from pnc_automation.app.authoring.config.models import CastleRosterOrdering, CredentialSource
+from pnc_automation.core.errors import ConfigurationError
 
 
 class ConfigLoaderTests(unittest.TestCase):

@@ -1,4 +1,4 @@
-﻿"""Flow-planner and task unit tests."""
+"""Flow-planner and task unit tests."""
 
 from __future__ import annotations
 
@@ -7,25 +7,25 @@ import unittest
 from collections.abc import Callable
 from pathlib import Path
 
-from pnc_automation.scripts.models import ScriptStep
-from pnc_automation.automation.task import TaskId, TaskResult, TaskStatus
-from pnc_automation.automation.task_context import TaskContext
-from pnc_automation.automation.tasks.building_upgrade_task import BuildingUpgradeTask
-from pnc_automation.automation.tasks.ensure_game_running_task import EnsureGameRunningTask
-from pnc_automation.automation.tasks.gathering_task import GatheringTask
-from pnc_automation.automation.tasks.login_task import LoginTask
-from pnc_automation.automation.tasks.open_building_task import OpenBuildingTask
-from pnc_automation.automation.tasks.research_task import ResearchTask
-from pnc_automation.automation.tasks.refresh_castle_roster_task import RefreshCastleRosterTask
-from pnc_automation.automation.tasks.select_castle_task import SelectCastleTask
-from pnc_automation.automation.tasks.active_castle_resolution import remember_active_castle_identity
-from pnc_automation.automation.tasks.send_chat_message_task import (
+from pnc_automation.app.authoring.scripts.models import ScriptStep
+from pnc_automation.app.automation.engine.task import TaskId, TaskResult, TaskStatus
+from pnc_automation.app.automation.engine.task_context import TaskContext
+from pnc_automation.app.automation.tasks.building_upgrade_task import BuildingUpgradeTask
+from pnc_automation.app.automation.tasks.ensure_game_running_task import EnsureGameRunningTask
+from pnc_automation.app.automation.tasks.gathering_task import GatheringTask
+from pnc_automation.app.automation.tasks.login_task import LoginTask
+from pnc_automation.app.automation.tasks.open_building_task import OpenBuildingTask
+from pnc_automation.app.automation.tasks.research_task import ResearchTask
+from pnc_automation.app.automation.tasks.refresh_castle_roster_task import RefreshCastleRosterTask
+from pnc_automation.app.automation.tasks.select_castle_task import SelectCastleTask
+from pnc_automation.app.automation.tasks.active_castle_resolution import remember_active_castle_identity
+from pnc_automation.app.automation.tasks.send_chat_message_task import (
     ChatMessageTaskParams,
     SendAllianceChatMessageTask,
     SendWorldChatMessageTask,
 )
-from pnc_automation.config.castle_roster_store import CastleRosterStore
-from pnc_automation.config.models import (
+from pnc_automation.app.pnc.persistence.castle_roster_store import CastleRosterStore
+from pnc_automation.app.authoring.config.models import (
     AccountConfig,
     CastleIdentity,
     CastleRosterOrdering,
@@ -34,8 +34,8 @@ from pnc_automation.config.models import (
     PncAccountCastleRosterConfig,
     ResolvedCredentials,
 )
-from pnc_automation.errors import ScriptValidationError, SelectorResolutionError, TaskVerificationError
-from pnc_automation.pnc.action_requests import (
+from pnc_automation.core.errors import ScriptValidationError, SelectorResolutionError, TaskVerificationError
+from pnc_automation.app.pnc.domain.action_requests import (
     ActionTimingProfile,
     InputTextAction,
     KeyEventAction,
@@ -47,8 +47,8 @@ from pnc_automation.pnc.action_requests import (
     TapSpatialObjectAction,
     WaitAction,
 )
-from pnc_automation.pnc.building_catalog import HomeCityMapCoordinate, HomeCityObjectId, build_home_city_object_metadata
-from pnc_automation.pnc.observation import (
+from pnc_automation.app.pnc.domain.building_catalog import HomeCityMapCoordinate, HomeCityObjectId, build_home_city_object_metadata
+from pnc_automation.app.pnc.domain.observation import (
     CurrentCastleEvidenceKind,
     ListEntryKind,
     Observation,
@@ -57,12 +57,12 @@ from pnc_automation.pnc.observation import (
     SpatialSurfaceType,
     resolve_unambiguous_castle_identity,
 )
-from pnc_automation.pnc.spatial_navigation import WorldCoordinate
-from pnc_automation.pnc.policy_models import BuildingPriority, BuildingUpgradePolicy, GatheringPolicy, OpenBuildingPolicy
-from pnc_automation.pnc.screen_flows import ChatChannel, ScreenFlowPlanner
-from pnc_automation.pnc.screen_type import ScreenType
-from pnc_automation.pnc.ui_element_id import UiElementId
-from pnc_automation.vision.observation_request import ObservationRequest
+from pnc_automation.app.pnc.navigation.spatial_navigation import WorldCoordinate
+from pnc_automation.app.pnc.domain.policy_models import BuildingPriority, BuildingUpgradePolicy, GatheringPolicy, OpenBuildingPolicy
+from pnc_automation.app.pnc.navigation.screen_flows import ChatChannel, ScreenFlowPlanner
+from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
+from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from tests.test_support import (
     build_logger,
     make_entry,

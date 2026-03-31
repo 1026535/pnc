@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from pnc_automation.app import build_application_runner
-from pnc_automation.emulator.bluestacks_instance_resolver import BlueStacksInstanceResolver
+from pnc_automation.core.infra.emulator.bluestacks_instance_resolver import BlueStacksInstanceResolver
 
 
 class ApplicationRunnerTests(unittest.TestCase):
@@ -45,9 +45,9 @@ class ApplicationRunnerTests(unittest.TestCase):
             task_registry = object()
 
             with (
-                patch("pnc_automation.app.RapidOcrService", return_value=ocr_service),
-                patch("pnc_automation.app.build_default_selector_registry", return_value=registry) as build_registry,
-                patch("pnc_automation.app.build_default_task_registry", return_value=task_registry),
+                patch("pnc_automation.app.entrypoints.app.RapidOcrService", return_value=ocr_service),
+                patch("pnc_automation.app.entrypoints.app.build_default_selector_registry", return_value=registry) as build_registry,
+                patch("pnc_automation.app.entrypoints.app.build_default_task_registry", return_value=task_registry),
             ):
                 application = build_application_runner(config_path, catalog_path=catalog_path)
 

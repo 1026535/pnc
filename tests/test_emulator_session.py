@@ -5,10 +5,10 @@ from __future__ import annotations
 import unittest
 from dataclasses import dataclass, field
 
-from pnc_automation.adb.command_result import CommandResult
-from pnc_automation.emulator.bluestacks_instance import BlueStacksInstance
-from pnc_automation.emulator.session import BlueStacksSession
-from pnc_automation.errors import DeviceConnectionError
+from pnc_automation.core.infra.adb.command_result import CommandResult
+from pnc_automation.core.infra.emulator.bluestacks_instance import BlueStacksInstance
+from pnc_automation.core.infra.emulator.session import BlueStacksSession
+from pnc_automation.core.errors import DeviceConnectionError
 
 
 @dataclass(slots=True)

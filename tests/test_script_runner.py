@@ -7,17 +7,17 @@ import unittest
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from pnc_automation.adb.command_result import CommandResult
-from pnc_automation.automation.script_runner import ScriptRunner
-from pnc_automation.automation.observation_mode import ObservationMode
-from pnc_automation.config.models import (
+from pnc_automation.core.infra.adb.command_result import CommandResult
+from pnc_automation.app.automation.engine.script_runner import ScriptRunner
+from pnc_automation.app.runtime.observation_mode import ObservationMode
+from pnc_automation.app.authoring.config.models import (
     AccountConfig,
     AppConfig,
     BlueStacksInstanceConfig,
     DefaultsConfig,
     RuntimeConfig,
 )
-from pnc_automation.emulator.bluestacks_instance import BlueStacksInstance
+from pnc_automation.core.infra.emulator.bluestacks_instance import BlueStacksInstance
 from tests.test_support import build_logger
 
 

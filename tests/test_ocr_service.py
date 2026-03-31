@@ -7,8 +7,8 @@ from dataclasses import dataclass
 
 from PIL import Image
 
-from pnc_automation.vision.ocr_service import CachedOcrService, OcrResult
-from pnc_automation.vision.selectors import Region
+from pnc_automation.core.vision.ocr.ocr_service import CachedOcrService, OcrResult
+from pnc_automation.app.pnc.vision.selectors import Region
 
 
 @dataclass(slots=True)

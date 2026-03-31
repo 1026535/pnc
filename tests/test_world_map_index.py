@@ -5,10 +5,10 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
-from pnc_automation.errors import SelectorResolutionError
-from pnc_automation.pnc.observation import SpatialObjectKind, SpatialSurfaceType
-from pnc_automation.pnc.screen_type import ScreenType
-from pnc_automation.pnc.world_map_index import (
+from pnc_automation.core.errors import SelectorResolutionError
+from pnc_automation.app.pnc.domain.observation import SpatialObjectKind, SpatialSurfaceType
+from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.pnc.navigation.world_map_index import (
     WorldMapObjectAddressingKind,
     WorldMapSurveyIndex,
 )

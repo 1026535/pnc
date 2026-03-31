@@ -12,17 +12,17 @@ from _script_bootstrap import ensure_repo_root_on_path
 root = ensure_repo_root_on_path()
 
 from pnc_automation.app import build_application_runner
-from pnc_automation.artifact_naming import sanitize_artifact_segment
-from pnc_automation.automation.action_executor import ActionExecutor
-from pnc_automation.automation.observed_action_executor import ObservedActionExecutor
-from pnc_automation.errors import SelectorResolutionError
-from pnc_automation.pnc.screen_flows import ScreenFlowPlanner
-from pnc_automation.pnc.ui_element_id import UiElementId
-from pnc_automation.vision.navigation_selector_validator import (
+from pnc_automation.app.automation.engine.action_executor import ActionExecutor
+from pnc_automation.app.automation.engine.observed_action_executor import ObservedActionExecutor
+from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
+from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
+from pnc_automation.app.pnc.persistence.artifact_naming import sanitize_artifact_segment
+from pnc_automation.app.pnc.vision.navigation_selector_validator import (
     NavigationSelectorValidator,
     write_navigation_selector_validation_report,
 )
-from pnc_automation.vision.selector_catalog import default_selector_catalog_path
+from pnc_automation.app.pnc.vision.selector_catalog import default_selector_catalog_path
+from pnc_automation.core.errors import SelectorResolutionError
 
 
 def main() -> int:
