@@ -12,15 +12,20 @@ from pnc_automation.pnc.action_requests import (
     TapPointAction,
     WaitAction,
 )
-from pnc_automation.pnc.chat import ChatChannel
-from pnc_automation.pnc.mail import (
-    CollectMailParams,
+from pnc_automation.pnc.chat import ObservedChatEntry
+from pnc_automation.pnc.enums import (
+    ChatChannel,
     MailArchiveMode,
     MailRecipientKind,
-    MailThreadFingerprint,
     MailboxType,
-    PlayerProfileRoute,
     PlayerProfileRouteKind,
+    ScreenType,
+    UiElementId,
+)
+from pnc_automation.pnc.mail import (
+    CollectMailParams,
+    MailThreadFingerprint,
+    PlayerProfileRoute,
     SendMailParams,
 )
 from pnc_automation.pnc.observation import (
@@ -31,8 +36,6 @@ from pnc_automation.pnc.observation import (
     ObservedTextFieldState,
     VisibleElement,
 )
-from pnc_automation.pnc.screen_type import ScreenType
-from pnc_automation.pnc.ui_element_id import UiElementId
 
 __all__ = [
     "Bounds",
@@ -40,6 +43,7 @@ __all__ = [
     "DetectedListEntry",
     "ActionRequest",
     "ChatChannel",
+    "ObservedChatEntry",
     "InputTextAction",
     "KeyEventAction",
     "LaunchAppAction",
