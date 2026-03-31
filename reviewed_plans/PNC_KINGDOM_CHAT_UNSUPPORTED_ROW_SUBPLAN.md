@@ -6,9 +6,9 @@ This document defines the bounded follow-up plan for the live Kingdom Chat monit
 
 It is intentionally separate from:
 
-- [PNC_KINGDOM_CHAT_MONITOR_IMPLEMENTATION.md](/c:/Users/lebel/pnc/PNC_KINGDOM_CHAT_MONITOR_IMPLEMENTATION.md), which owns the overall monitor architecture,
-- [PNC_KINGDOM_CHAT_MONITOR_REVIEW.md](/c:/Users/lebel/pnc/PNC_KINGDOM_CHAT_MONITOR_REVIEW.md), which reviews the first implementation slice,
-- [PNC_CHAT_WORKFLOW_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_CHAT_WORKFLOW_SUBPLAN.md), which owns reusable chat navigation and send-flow mechanics.
+- [PNC_KINGDOM_CHAT_MONITOR_IMPLEMENTATION.md](/c:/Users/lebel/pnc/reviewed_plans/PNC_KINGDOM_CHAT_MONITOR_IMPLEMENTATION.md), which owns the overall monitor architecture,
+- [PNC_KINGDOM_CHAT_MONITOR_REVIEW.md](/c:/Users/lebel/pnc/reviewed_plans/PNC_KINGDOM_CHAT_MONITOR_REVIEW.md), which reviews the first implementation slice,
+- [PNC_CHAT_WORKFLOW_SUBPLAN.md](/c:/Users/lebel/pnc/reviewed_plans/PNC_CHAT_WORKFLOW_SUBPLAN.md), which owns reusable chat navigation and send-flow mechanics.
 
 This file owns one parser-quality correction:
 
@@ -273,3 +273,4 @@ This plan is complete only when all of the following are true:
 - truly ambiguous rows still surface as `UNSUPPORTED`,
 - `CollectKingdomChatTask` still refuses to archive when unresolved unsupported rows remain,
 - a live rerun on `please b gentle` no longer fails solely because a normal visible player row was split into parser fragments.
+

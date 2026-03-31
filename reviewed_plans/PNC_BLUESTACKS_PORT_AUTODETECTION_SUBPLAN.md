@@ -7,8 +7,8 @@ This document defines the bounded refactor that removes dynamic BlueStacks ADB p
 It is intentionally separate from:
 
 - [PNC_AUTOMATION_IMPLEMENTATION.md](/c:/Users/lebel/pnc/PNC_AUTOMATION_IMPLEMENTATION.md), which remains the primary platform architecture plan,
-- [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md), which owns login and castle-targeting behavior after a session exists,
-- [PNC_KINGDOM_CHAT_MONITOR_IMPLEMENTATION.md](/c:/Users/lebel/pnc/PNC_KINGDOM_CHAT_MONITOR_IMPLEMENTATION.md), which owns the Kingdom Chat monitor itself.
+- [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/reviewed_plans/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md), which owns login and castle-targeting behavior after a session exists,
+- [PNC_KINGDOM_CHAT_MONITOR_IMPLEMENTATION.md](/c:/Users/lebel/pnc/reviewed_plans/PNC_KINGDOM_CHAT_MONITOR_IMPLEMENTATION.md), which owns the Kingdom Chat monitor itself.
 
 This file owns one architectural correction:
 
@@ -187,3 +187,4 @@ This plan is complete only when all of the following are true:
 - the resolver fails fast and clearly on missing or ambiguous instance matches,
 - live runs no longer require temporary port-edit config overrides after BlueStacks is relaunched,
 - `serious_stuff` and `testing` can both reconnect successfully through the same canonical discovery path.
+

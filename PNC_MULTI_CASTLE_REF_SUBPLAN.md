@@ -104,7 +104,7 @@ steps:
     steps:
       - task: building_upgrade
         params:
-          priority: [castle, wall, academy, barracks]
+          priority: [castle, wall, institute, infantry_barracks]
           allow_speedups: false
       - task: research
         params:

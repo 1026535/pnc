@@ -8,7 +8,7 @@ It is intentionally separate from:
 
 - [PNC_AUTOMATION_IMPLEMENTATION.md](/c:/Users/lebel/pnc/PNC_AUTOMATION_IMPLEMENTATION.md), which remains the primary platform architecture plan,
 - [PNC_SCREEN_FLOW_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SCREEN_FLOW_SUBPLAN.md), which owns reusable screen-flow boundaries,
-- [PNC_SELECTOR_RESOLUTION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SELECTOR_RESOLUTION_SUBPLAN.md), which owns the generic observed-selector fallback model.
+- [PNC_SELECTOR_RESOLUTION_SUBPLAN.md](/c:/Users/lebel/pnc/reviewed_plans/PNC_SELECTOR_RESOLUTION_SUBPLAN.md), which owns the generic observed-selector fallback model.
 
 ## 1.1 Implementation status
 
@@ -97,3 +97,4 @@ This plan is complete only when all of the following are true:
 - input focus uses the canonical selector action point when present,
 - live sends on `testing` remain reliable for both `Kingdom` and `Alliance`,
 - the end-to-end live send path is measurably faster than the current baseline.
+
