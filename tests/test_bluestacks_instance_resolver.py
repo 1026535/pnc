@@ -12,6 +12,7 @@ from pnc_automation.config.models import BlueStacksInstanceConfig
 from pnc_automation.emulator.bluestacks_instance_resolver import (
     BlueStacksInstanceResolver,
     BlueStacksRunningInstance,
+    _parse_running_instances_json,
 )
 from pnc_automation.errors import ConfigurationError
 
@@ -221,6 +222,18 @@ class BlueStacksInstanceResolverTests(unittest.TestCase):
             instance = resolver.resolve(_make_instance_config(display_name="serious_stuff"))
 
             self.assertEqual(instance.device_id, "127.0.0.1:5555")
+
+    def test_parse_running_instances_json_accepts_one_single_process_object(self) -> None:
+        """Accepts PowerShell's single-row JSON object shape instead of requiring an array wrapper."""
+
+        running_instances = _parse_running_instances_json(
+            '{"ProcessId":101,"CommandLine":"\\"C:\\\\Program Files\\\\BlueStacks_nxt\\\\HD-Player.exe\\" \\"--instance\\" \\"Nougat32_1\\""}'
+        )
+
+        self.assertEqual(
+            running_instances,
+            (_make_running_instance(instance_key="Nougat32_1"),),
+        )
 
 
 def _write_bluestacks_config(root: Path, content: str) -> Path:

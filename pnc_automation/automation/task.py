@@ -29,6 +29,7 @@ class TaskId(StrEnum):
     SEND_MAIL = "send_mail"
     COLLECT_MAIL = "collect_mail"
     COLLECT_KINGDOM_CHAT = "collect_kingdom_chat"
+    OPEN_BUILDING = "open_building"
     BUILDING_UPGRADE = "building_upgrade"
     RESEARCH = "research"
     GATHERING = "gathering"

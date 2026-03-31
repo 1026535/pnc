@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from PIL import Image
 
 from pnc_automation.errors import SelectorResolutionError
+from pnc_automation.pnc.building_catalog import (
+    build_home_city_object_metadata,
+    home_city_object_definition_for_label,
+)
 from pnc_automation.pnc.observation import (
     Bounds,
     DetectedSpatialObject,
@@ -20,6 +24,7 @@ from pnc_automation.pnc.observation import (
 )
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.text_normalization import normalize_ocr_text
+from pnc_automation.vision.ocr_lines import merge_ocr_lines
 from pnc_automation.vision.ocr_service import OcrLine
 from pnc_automation.vision.selectors import SelectorRegistry, SurfaceDefinition
 
@@ -40,15 +45,10 @@ _WORLD_RESOURCE_TYPE_BY_TOKEN = {
 _ALLIANCE_TAG_PATTERN = re.compile(r"^\[(?P<tag>[A-Z0-9]{2,5})\]\s*(?P<name>.+)$")
 _WORLD_CASTLE_LABEL_PATTERN = re.compile(r"^K(?P<kingdom>\d{3})(?P<identifier>[A-Z0-9]{5,})$")
 _MONSTER_LEVEL_PATTERN = re.compile(r"^(?:LV\.?|LEVEL)\s*(?P<level>\d{1,3})\s*(?P<name>.+)$", re.IGNORECASE)
+_HOME_CITY_TIMER_PATTERN = re.compile(r"(?<!\d)(?P<timer>\d{1,2}:\d{2}:\d{2})(?!\d)")
+_HOME_CITY_LEVEL_PATTERN = re.compile(r"^(?:LV\.?|LEVEL)?\s*(?P<level>\d{1,3})$", re.IGNORECASE)
 _WORLD_MAP_ESTIMATED_VIEWPORT_WIDTH_UNITS = 900
 _WORLD_MAP_ESTIMATED_VIEWPORT_HEIGHT_UNITS = 1184
-_HOME_BUILDING_CATEGORY_BY_TEXT = {
-    "CASTLE": "castle",
-    "WALL": "wall",
-    "ACADEMY": "academy",
-    "INSTITUTE": "academy",
-    "BARRACKS": "barracks",
-}
 _HOME_EMPTY_SLOT_TEXTS = frozenset({"BUILD", "EMPTY"})
 
 
@@ -157,11 +157,19 @@ def build_home_city_spatial_surface(
     """Builds the canonical home-city spatial surface using camera-relative building parsing."""
 
     surface_definition = None if selector_registry is None else selector_registry.surface_for_screen(ScreenType.PNC_HOME_CITY)
-    objects = _parse_home_city_objects(
+    objects = _attach_home_city_building_levels(
         image=image,
         lines=lines,
-        surface_definition=surface_definition,
+        objects=_parse_home_city_objects(
+            image=image,
+            lines=lines,
+            surface_definition=surface_definition,
+        ),
     )
+    metadata = {} if surface_definition is None else {"surface_id": surface_definition.id}
+    active_build_timer_text = _find_home_city_active_build_timer_text(image=image, lines=lines)
+    if active_build_timer_text is not None:
+        metadata["active_build_timer_text"] = active_build_timer_text
     anchor_buildings = tuple(sorted(object_.name_text for object_ in objects if object_.name_text is not None))
     return SpatialSurfaceObservation(
         surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
@@ -170,8 +178,39 @@ def build_home_city_spatial_surface(
             metadata={"anchor_buildings": anchor_buildings},
         ),
         objects=objects,
-        metadata={} if surface_definition is None else {"surface_id": surface_definition.id},
+        metadata=metadata,
     )
+
+
+def _find_home_city_active_build_timer_text(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> str | None:
+    """Returns the strongest visible home-city construction timer when OCR proves one is on-screen."""
+
+    min_y = int(image.height * 0.4)
+    max_y = int(image.height * 0.95)
+    min_x = int(image.width * 0.08)
+    best_timer: str | None = None
+    best_score: tuple[int, int, int] | None = None
+    for line in lines:
+        if line.bounds.y < min_y or line.bounds.y > max_y or line.bounds.x < min_x:
+            continue
+        match = _HOME_CITY_TIMER_PATTERN.search(line.text.strip())
+        if match is None:
+            continue
+        surrounding_text = line.text.replace(match.group("timer"), "", 1).strip()
+        score = (
+            1 if surrounding_text != "" else 0,
+            line.bounds.y,
+            line.bounds.width,
+        )
+        if best_score is not None and score <= best_score:
+            continue
+        best_score = score
+        best_timer = match.group("timer")
+    return best_timer
 
 
 def _parse_world_map_objects(
@@ -262,7 +301,7 @@ def _resolve_world_map_label_line(
         next_line = lines[next_index]
         if not _can_merge_world_map_label_lines(upper_line=best_line, lower_line=next_line):
             break
-        merged_line = _merge_ocr_lines(upper_line=best_line, lower_line=next_line)
+        merged_line = merge_ocr_lines(best_line, next_line)
         merged_object = _classify_world_map_object(
             image=image,
             line=merged_line,
@@ -295,32 +334,6 @@ def _can_merge_world_map_label_lines(
     lower_center_x = lower_line.bounds.x + (lower_line.bounds.width // 2)
     allowed_center_delta = max(upper_line.bounds.width, lower_line.bounds.width) * 0.6
     return abs(upper_center_x - lower_center_x) <= allowed_center_delta
-
-
-def _merge_ocr_lines(
-    *,
-    upper_line: OcrLine,
-    lower_line: OcrLine,
-) -> OcrLine:
-    """Returns one synthetic OCR line that combines two vertically stacked world-map label fragments."""
-
-    separator = "" if upper_line.text.rstrip().endswith(("]", ")", "}")) else " "
-    left = min(upper_line.bounds.x, lower_line.bounds.x)
-    top = min(upper_line.bounds.y, lower_line.bounds.y)
-    right = max(
-        upper_line.bounds.x + upper_line.bounds.width,
-        lower_line.bounds.x + lower_line.bounds.width,
-    )
-    bottom = max(
-        upper_line.bounds.y + upper_line.bounds.height,
-        lower_line.bounds.y + lower_line.bounds.height,
-    )
-    return OcrLine(
-        text=f"{upper_line.text.rstrip()}{separator}{lower_line.text.lstrip()}".strip(),
-        bounds=Bounds(x=left, y=top, width=max(1, right - left), height=max(1, bottom - top)),
-        confidence=min(upper_line.confidence, lower_line.confidence),
-        words=upper_line.words + lower_line.words,
-    )
 
 
 def _merged_world_map_object_is_stronger(
@@ -476,6 +489,73 @@ def _classify_world_map_relationship(
     return SpatialObjectRelationship.UNKNOWN
 
 
+def _attach_home_city_building_levels(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+    objects: tuple[DetectedSpatialObject, ...],
+) -> tuple[DetectedSpatialObject, ...]:
+    """Associates visible home-city building level badges with the nearest parsed building labels."""
+
+    updated_objects = list(objects)
+    candidate_levels = [
+        (line, level)
+        for line in lines
+        if (level := _parse_home_city_level(line.text)) is not None
+    ]
+    for line, level in candidate_levels:
+        best_index: int | None = None
+        best_distance: int | None = None
+        for index, object_ in enumerate(updated_objects):
+            if object_.kind != SpatialObjectKind.HOME_BUILDING or object_.level is not None:
+                continue
+            if not _home_city_level_line_matches_object(image=image, line=line, object_=object_):
+                continue
+            object_center_x, object_center_y = object_.bounds.center()
+            line_center_x = line.bounds.x + (line.bounds.width // 2)
+            line_center_y = line.bounds.y + (line.bounds.height // 2)
+            distance = abs(line_center_x - object_center_x) + abs(line_center_y - object_center_y)
+            if best_distance is not None and distance >= best_distance:
+                continue
+            best_distance = distance
+            best_index = index
+        if best_index is None:
+            continue
+        updated_objects[best_index] = replace(updated_objects[best_index], level=level)
+    return tuple(updated_objects)
+
+
+def _parse_home_city_level(raw_text: str) -> int | None:
+    """Returns one visible home-city building level badge value when the OCR text is level-shaped."""
+
+    match = _HOME_CITY_LEVEL_PATTERN.match(raw_text.strip())
+    if match is None:
+        return None
+    level = int(match.group("level"))
+    if level <= 0:
+        return None
+    return level
+
+
+def _home_city_level_line_matches_object(
+    *,
+    image: Image.Image,
+    line: OcrLine,
+    object_: DetectedSpatialObject,
+) -> bool:
+    """Returns whether one OCR level badge sits where the parsed building would display it."""
+
+    max_horizontal_gap = max(64, int(image.width * 0.12))
+    max_vertical_gap = max(72, int(image.height * 0.1))
+    if line.bounds.y < object_.bounds.y - max(24, object_.bounds.height):
+        return False
+    if line.bounds.y > object_.bounds.y + max_vertical_gap:
+        return False
+    line_center_x = line.bounds.x + (line.bounds.width // 2)
+    object_center_x = object_.bounds.x + (object_.bounds.width // 2)
+    return abs(line_center_x - object_center_x) <= max_horizontal_gap
+
+
 def _parse_home_city_objects(
     *,
     image: Image.Image,
@@ -511,23 +591,33 @@ def _classify_home_city_object(
 ) -> DetectedSpatialObject | None:
     """Returns one typed home-city spatial object when the OCR line describes scene content."""
 
-    if normalized_text in _HOME_BUILDING_CATEGORY_BY_TEXT:
-        metadata = {"category": _HOME_BUILDING_CATEGORY_BY_TEXT[normalized_text], "building_name": line.text.strip()}
+    viewport_bounds = Bounds(x=0, y=0, width=image.width, height=image.height)
+    bounds = Bounds(x=line.bounds.x, y=line.bounds.y, width=line.bounds.width, height=line.bounds.height)
+    viewport_offset = _bounds_center_offset(bounds=bounds, origin=viewport_bounds.center())
+    viewport_offset_ratio = _bounds_center_offset_ratio(bounds=bounds, viewport_bounds=viewport_bounds)
+    object_definition = home_city_object_definition_for_label(line.text)
+    if object_definition is not None:
+        metadata = build_home_city_object_metadata(object_definition.id)
+        metadata["home_city_label"] = line.text.strip()
         return DetectedSpatialObject(
             kind=SpatialObjectKind.HOME_BUILDING,
-            bounds=Bounds(x=line.bounds.x, y=line.bounds.y, width=line.bounds.width, height=line.bounds.height),
+            bounds=bounds,
             relationship=SpatialObjectRelationship.SELF,
             name_text=line.text.strip(),
-            action_point=Bounds(x=line.bounds.x, y=line.bounds.y, width=line.bounds.width, height=line.bounds.height).center(),
+            action_point=bounds.center(),
+            viewport_offset=viewport_offset,
+            viewport_offset_ratio=viewport_offset_ratio,
             metadata=metadata,
         )
     if normalized_text in _HOME_EMPTY_SLOT_TEXTS and not _looks_like_home_action_label(image=image, line=line):
         return DetectedSpatialObject(
             kind=SpatialObjectKind.HOME_EMPTY_SLOT,
-            bounds=Bounds(x=line.bounds.x, y=line.bounds.y, width=line.bounds.width, height=line.bounds.height),
+            bounds=bounds,
             relationship=SpatialObjectRelationship.SELF,
             name_text=line.text.strip(),
-            action_point=Bounds(x=line.bounds.x, y=line.bounds.y, width=line.bounds.width, height=line.bounds.height).center(),
+            action_point=bounds.center(),
+            viewport_offset=viewport_offset,
+            viewport_offset_ratio=viewport_offset_ratio,
         )
     return None
 

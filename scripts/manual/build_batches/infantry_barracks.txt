@@ -1,0 +1,2 @@
+# Start an infantry barracks upgrade when it is currently eligible.
+infantry_barracks

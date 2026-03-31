@@ -11,6 +11,8 @@ from pnc_automation.pnc.action_requests import ActionRequest, WaitAction
 from pnc_automation.pnc.observation import Observation
 from pnc_automation.pnc.screen_type import ScreenType
 
+_MAX_LAUNCH_WAIT_ATTEMPTS = 12
+
 
 class EnsureGameRunningTask(BaseAutomationTask):
     """Ensures the target device is in a P&C-owned state."""
@@ -49,7 +51,7 @@ class EnsureGameRunningTask(BaseAutomationTask):
                 _mark_launch_started(context)
                 return TaskResult.replan("Puzzles & Conquest launch is in progress.")
             wait_attempts = _increment_launch_wait_attempts(context)
-            if wait_attempts <= 4:
+            if wait_attempts <= _MAX_LAUNCH_WAIT_ATTEMPTS:
                 return TaskResult.replan("Puzzles & Conquest launch is still in progress.")
             _clear_launch_state(context)
             return TaskResult.failure(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any
 
 from pnc_automation.automation.task import (
@@ -13,20 +14,54 @@ from pnc_automation.automation.task import (
     choose_priority_candidate,
 )
 from pnc_automation.automation.task_context import TaskContext
-from pnc_automation.pnc.action_requests import ActionRequest, KeyEventAction, TapAction
+from pnc_automation.automation.tasks.open_building_support import (
+    home_city_object_id_from_object,
+    plan_focus_requested_home_city_object,
+)
+from pnc_automation.pnc.action_requests import ActionRequest, KeyEventAction, TapAction, WaitAction
+from pnc_automation.pnc.building_catalog import (
+    BuildingAction,
+    HomeCityObjectId,
+    home_city_object_id_for_screen,
+    home_city_object_supports_action,
+    is_repeatable_home_city_object,
+    is_upgradeable_primary_screen,
+)
 from pnc_automation.pnc.observation import (
     DetectedSpatialObject,
+    ListEntryKind,
     Observation,
     SpatialObjectKind,
-    SpatialObjectQuery,
-    SpatialSurfaceType,
 )
 from pnc_automation.pnc.policy_models import BuildingPriority, BuildingUpgradePolicy
 from pnc_automation.pnc.screen_type import ScreenType
 from pnc_automation.pnc.ui_element_id import UiElementId
+from pnc_automation.text_normalization import normalize_ocr_text
+from pnc_automation.vision.observation_request import ObservationRequest
 
 _BUILDING_UPGRADE_PENDING_TARGET_STATE_KEY = "building_upgrade_pending_target"
 _BUILDING_UPGRADE_INELIGIBLE_TARGETS_STATE_KEY = "building_upgrade_ineligible_targets"
+_BUILDING_UPGRADE_INELIGIBLE_OBJECT_IDS_STATE_KEY = "building_upgrade_ineligible_object_ids"
+_BUILDING_UPGRADE_CONFIRMATION_PENDING_STATE_KEY = "building_upgrade_confirmation_pending"
+_BUILDING_UPGRADE_POST_START_HELP_PENDING_STATE_KEY = "building_upgrade_post_start_help_pending"
+_BUILDING_UPGRADE_FOCUS_PENDING_STATE_KEY = "building_upgrade_focus_pending"
+_BUILDING_UPGRADE_LAST_UNMET_REQUIREMENT_STATE_KEY = "building_upgrade_last_unmet_requirement"
+_BUILDING_UPGRADE_SUCCESS_VERIFICATION_STAGE_STATE_KEY = "building_upgrade_success_verification_stage"
+_BUILDING_UPGRADE_SETTLE_WAIT_MS = 1500
+_BUILDING_UPGRADE_REPLAN_BUDGET_TARGET_CAP = 3
+_BUILDING_UPGRADE_REPLAN_BUDGET_OVERHEAD = 10
+_SUCCESS_VERIFICATION_STAGE_RETURN_HOME = "return_home"
+_SUCCESS_VERIFICATION_STAGE_OPEN_BUILD_QUEUE = "open_build_queue"
+_SUCCESS_VERIFICATION_STAGE_RETURN_HOME_FOR_LEVEL = "return_home_for_level"
+
+
+@dataclass(frozen=True, slots=True)
+class _PendingBuildingTarget:
+    """Stores one currently inspected home-city building so ineligible results remain canonical."""
+
+    signature: tuple[object, ...]
+    priority: BuildingPriority | None
+    starting_level: int | None
 
 
 class BuildingUpgradeTask(BaseAutomationTask):
@@ -34,6 +69,12 @@ class BuildingUpgradeTask(BaseAutomationTask):
 
     id = TaskId.BUILDING_UPGRADE
     castle_target_policy = CastleTargetPolicy.OPTIONAL
+
+    def max_replans_per_step(self, context: TaskContext) -> int | None:
+        """Grants enough bounded replan budget for the canonical home-city sweep plus verification stages."""
+
+        requested_target_count = max(1, min(len(context.params.priority), _BUILDING_UPGRADE_REPLAN_BUDGET_TARGET_CAP))
+        return (context.flows.home_city_navigator.focus_step_budget() * requested_target_count) + _BUILDING_UPGRADE_REPLAN_BUDGET_OVERHEAD
 
     def parse_params(self, params: Mapping[str, Any]) -> BuildingUpgradePolicy:
         """Builds the typed building-upgrade policy."""
@@ -43,8 +84,8 @@ class BuildingUpgradeTask(BaseAutomationTask):
     def is_applicable(self, context: TaskContext, observation: Observation) -> bool:
         """Rejects unsupported bootstrap and login states."""
 
+        del context
         return observation.screen_type not in {
-            ScreenType.UNKNOWN,
             ScreenType.ANDROID_HOME,
             ScreenType.PNC_LOGIN,
             ScreenType.PNC_ACCOUNT_SWITCH,
@@ -54,16 +95,100 @@ class BuildingUpgradeTask(BaseAutomationTask):
     def plan(self, context: TaskContext, observation: Observation) -> list[ActionRequest]:
         """Plans one building-upgrade increment from the current screen."""
 
-        if observation.screen_type not in {ScreenType.PNC_HOME_CITY, ScreenType.PNC_BUILDING_DETAILS}:
+        remaining_priorities = _remaining_requested_priorities(context.params.priority, context.runtime_state)
+        verification_stage = _success_verification_stage(context.runtime_state)
+        if observation.screen_type == ScreenType.UNKNOWN:
+            return [
+                WaitAction(
+                    milliseconds=_BUILDING_UPGRADE_SETTLE_WAIT_MS,
+                    reason="wait_for_building_upgrade_unknown_settle",
+                    observe_after=True,
+                )
+            ]
+        if observation.screen_type == ScreenType.PNC_HOME_CITY and _has_post_start_help_pending(context.runtime_state):
+            if _home_build_help_is_available(observation):
+                return [
+                    TapAction(
+                        selector_id=UiElementId.PNC_HOME_BUILD_BUTTON,
+                        reason="request_post_upgrade_help",
+                        observe_after=True,
+                    )
+                ]
+            return []
+        if observation.screen_type == ScreenType.PNC_HOME_CITY and verification_stage == _SUCCESS_VERIFICATION_STAGE_OPEN_BUILD_QUEUE:
+            if _can_open_build_queue(observation):
+                return [
+                    TapAction(
+                        selector_id=UiElementId.PNC_HOME_BUILD_BUTTON,
+                        reason="open_build_queue_for_upgrade_verification",
+                        observe_after=True,
+                        follow_up_request=ObservationRequest.build_queue_follow_up(),
+                    )
+                ]
+            return []
+        if (
+            observation.screen_type == ScreenType.PNC_HOME_CITY
+            and _home_build_help_is_available(observation)
+            and _pending_target(context.runtime_state) is None
+            and verification_stage is None
+        ):
+            return [
+                TapAction(
+                    selector_id=UiElementId.PNC_HOME_BUILD_BUTTON,
+                    reason="request_active_build_help",
+                    observe_after=True,
+                )
+            ]
+        if (
+            observation.screen_type == ScreenType.PNC_HOME_CITY
+            and _home_city_active_build_is_visible(observation)
+            and _pending_target(context.runtime_state) is None
+            and verification_stage is None
+        ):
+            return []
+        if not _is_upgrade_context_screen(observation.screen_type) and observation.screen_type != ScreenType.PNC_HOME_CITY:
             return context.flows.ensure_home_city(observation)
-        if observation.screen_type == ScreenType.PNC_BUILDING_DETAILS:
+        if _is_upgrade_context_screen(observation.screen_type):
+            if verification_stage == _SUCCESS_VERIFICATION_STAGE_RETURN_HOME:
+                return [
+                    KeyEventAction(
+                        key_code="KEYCODE_BACK",
+                        reason="return_home_for_upgrade_verification",
+                        observe_after=True,
+                    )
+                ]
+            _clear_focus_pending(context.runtime_state)
+            if _building_requirement_is_visible(observation):
+                return [
+                    KeyEventAction(
+                        key_code="KEYCODE_BACK",
+                    reason="leave_building_requirement_panel",
+                    observe_after=True,
+                )
+            ]
+            if _has_upgrade_confirmation_pending(context.runtime_state) and observation.has(UiElementId.PNC_BUILDING_UPGRADE_BUTTON):
+                return [
+                    TapAction(
+                        selector_id=UiElementId.PNC_BUILDING_UPGRADE_BUTTON,
+                        reason="confirm_building_upgrade",
+                    ),
+                    WaitAction(
+                        milliseconds=_BUILDING_UPGRADE_SETTLE_WAIT_MS,
+                        reason="wait_for_building_upgrade_confirmation_settle",
+                        observe_after=True,
+                    ),
+                ]
             if observation.has(UiElementId.PNC_BUILDING_UPGRADE_BUTTON):
                 return [
                     TapAction(
                         selector_id=UiElementId.PNC_BUILDING_UPGRADE_BUTTON,
                         reason="start_building_upgrade",
+                    ),
+                    WaitAction(
+                        milliseconds=_BUILDING_UPGRADE_SETTLE_WAIT_MS,
+                        reason="wait_for_building_upgrade_settle",
                         observe_after=True,
-                    )
+                    ),
                 ]
             return [
                 KeyEventAction(
@@ -72,9 +197,17 @@ class BuildingUpgradeTask(BaseAutomationTask):
                     observe_after=True,
                 )
             ]
-        candidates = _visible_supported_buildings(observation, context.runtime_state)
-        target = choose_priority_candidate(candidates, context.params.priority, key_selector=_require_building_priority)
+        if not remaining_priorities:
+            _clear_focus_pending(context.runtime_state)
+            return []
+        candidates = _visible_requested_buildings(
+            observation,
+            context.runtime_state,
+            remaining_priorities,
+        )
+        target = choose_priority_candidate(candidates, remaining_priorities, key_selector=_require_building_priority)
         if target is not None:
+            _clear_focus_pending(context.runtime_state)
             _set_pending_target(context.runtime_state, target)
             return context.flows.open_visible_home_city_object(
                 observation,
@@ -82,49 +215,197 @@ class BuildingUpgradeTask(BaseAutomationTask):
                 reason="inspect_building_upgrade_candidate",
                 runtime_state=context.runtime_state,
             )
-        if _all_visible_supported_buildings_are_ineligible(observation, context.runtime_state):
-            return []
-        for priority in context.params.priority:
-            return context.flows.focus_home_city_object(
-                observation,
-                SpatialObjectQuery(
-                    surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
-                    kind=SpatialObjectKind.HOME_BUILDING,
-                    metadata_key="category",
-                    metadata_value=priority.value,
-                ),
+        for priority in remaining_priorities:
+            _set_focus_pending(context.runtime_state)
+            return plan_focus_requested_home_city_object(
+                flows=context.flows,
+                observation=observation,
+                target=HomeCityObjectId(priority.value),
                 runtime_state=context.runtime_state,
+                reason="focus_building_upgrade_candidate",
             )
         return []
 
     def verify(self, context: TaskContext, before: Observation, after: Observation) -> TaskResult:
         """Verifies navigation, eligibility inspection, and the eventual upgrade start."""
 
-        if before.screen_type not in {ScreenType.PNC_HOME_CITY, ScreenType.PNC_BUILDING_DETAILS}:
-            if after.screen_type in {ScreenType.PNC_HOME_CITY, ScreenType.PNC_BUILDING_DETAILS}:
+        if before.screen_type == ScreenType.PNC_HOME_CITY and _has_post_start_help_pending(context.runtime_state):
+            if after.screen_type == ScreenType.UNKNOWN:
+                return TaskResult.replan("Post-upgrade help request is still settling.")
+            if after.screen_type == ScreenType.PNC_HOME_CITY:
+                _clear_post_start_help_pending(context.runtime_state)
+                return _finish_started_upgrade_success(
+                    context.runtime_state,
+                    "Building upgrade started and available alliance help was requested.",
+                )
+            return TaskResult.failure("Post-upgrade help request left the home city unexpectedly.", retryable=True)
+        if (
+            before.screen_type == ScreenType.PNC_HOME_CITY
+            and _home_build_help_is_available(before)
+            and _pending_target(context.runtime_state) is None
+            and _success_verification_stage(context.runtime_state) is None
+        ):
+            if after.screen_type == ScreenType.UNKNOWN:
+                return TaskResult.replan("Active building help request is still settling.")
+            if after.screen_type == ScreenType.PNC_HOME_CITY:
+                return _finish_already_active_upgrade_skip(
+                    context.runtime_state,
+                    "Another building upgrade is already active; requested available alliance help.",
+                )
+            return TaskResult.skipped("Another building upgrade is already active.")
+        if (
+            before.screen_type == ScreenType.PNC_HOME_CITY
+            and _home_city_active_build_is_visible(before)
+            and _pending_target(context.runtime_state) is None
+            and _success_verification_stage(context.runtime_state) is None
+        ):
+            if after.screen_type == ScreenType.UNKNOWN:
+                return TaskResult.replan("Active building timer observation is still settling.")
+            return _finish_already_active_upgrade_skip(
+                context.runtime_state,
+                "Another building upgrade is already active.",
+            )
+        if before.screen_type == ScreenType.UNKNOWN:
+            if _has_upgrade_confirmation_pending(context.runtime_state) and after.screen_type == ScreenType.PNC_HOME_CITY:
+                return _verify_started_upgrade_at_home_city(context.runtime_state, after)
+            if after.screen_type == ScreenType.UNKNOWN:
+                return TaskResult.replan("Building upgrade is waiting for the transient screen to settle.")
+            if after.screen_type in {ScreenType.PNC_HOME_CITY, ScreenType.PNC_BUILD_QUEUE} or _is_upgrade_context_screen(after.screen_type):
+                return TaskResult.replan("Reached a stable game screen for continued building-upgrade planning.")
+            return TaskResult.failure("Building upgrade could not recover from the transient screen state.", retryable=True)
+        if before.screen_type == ScreenType.PNC_BUILD_QUEUE:
+            if _success_verification_stage(context.runtime_state) == _SUCCESS_VERIFICATION_STAGE_RETURN_HOME_FOR_LEVEL:
+                if after.screen_type == ScreenType.UNKNOWN:
+                    return TaskResult.replan("Returning home for final building-level verification is still settling.")
+                if after.screen_type == ScreenType.PNC_HOME_CITY:
+                    if _home_city_pending_target_level_increased(after, context.runtime_state):
+                        return _finish_started_upgrade_success(
+                            context.runtime_state,
+                            _home_city_level_increase_success_message(context.runtime_state, after),
+                        )
+                    return TaskResult.failure(
+                        "Building upgrade could not be verified by an increased building level after build-queue fallback.",
+                        retryable=True,
+                    )
+                if after.screen_type == ScreenType.PNC_BUILD_QUEUE:
+                    return TaskResult.replan("Build queue is still open while returning home for level verification.")
+                return TaskResult.failure(
+                    "Building upgrade could not return home after build-queue verification.",
+                    retryable=True,
+                )
+            if after.screen_type == ScreenType.PNC_HOME_CITY:
+                return TaskResult.replan("Returned to home city from the build queue.")
+            return TaskResult.failure("Building upgrade could not recover from the build queue.", retryable=True)
+        if before.screen_type != ScreenType.PNC_HOME_CITY and not _is_upgrade_context_screen(before.screen_type):
+            if after.screen_type == ScreenType.PNC_HOME_CITY or _is_upgrade_context_screen(after.screen_type):
                 return TaskResult.replan("Reached home city for building upgrade planning.")
             return TaskResult.failure("Building upgrade could not reach home city.", retryable=True)
         if before.screen_type == ScreenType.PNC_HOME_CITY:
-            if _all_visible_supported_buildings_are_ineligible(before, context.runtime_state):
-                return TaskResult.skipped("No eligible building upgrades were verified from the visible home-city buildings.")
-            if after.screen_type == ScreenType.PNC_BUILDING_DETAILS:
+            if _success_verification_stage(context.runtime_state) == _SUCCESS_VERIFICATION_STAGE_OPEN_BUILD_QUEUE:
+                if after.screen_type == ScreenType.UNKNOWN:
+                    return TaskResult.replan("Build queue verification is still settling.")
+                if after.screen_type == ScreenType.PNC_BUILD_QUEUE:
+                    return _verify_started_upgrade_from_build_queue(context.runtime_state, after)
+                if after.screen_type == ScreenType.PNC_HOME_CITY:
+                    if _home_city_pending_target_level_increased(after, context.runtime_state):
+                        return _finish_started_upgrade_success(
+                            context.runtime_state,
+                            _home_city_level_increase_success_message(context.runtime_state, after),
+                        )
+                    _clear_success_verification_stage(context.runtime_state)
+                    return TaskResult.failure(
+                        "Building upgrade could not be verified from the build queue or a changed building level.",
+                        retryable=True,
+                    )
+                return TaskResult.failure("Build queue verification left the home city unexpectedly.", retryable=True)
+            remaining_priorities = _remaining_requested_priorities(context.params.priority, context.runtime_state)
+            if not remaining_priorities:
+                return _requested_priority_exhausted_result(context.runtime_state)
+            if _is_upgrade_context_screen(after.screen_type):
+                if _building_requirement_is_visible(after):
+                    _mark_pending_target_ineligible(context.runtime_state)
+                    _mark_screen_priority_ineligible(context.runtime_state, after.screen_type)
+                    _clear_focus_pending(context.runtime_state)
+                    _clear_upgrade_confirmation_pending(context.runtime_state)
+                    _set_last_unmet_requirement(context.runtime_state, after)
+                    return TaskResult.replan(_unmet_requirement_replan_message(after))
                 if after.has(UiElementId.PNC_BUILDING_UPGRADE_BUTTON):
+                    _clear_focus_pending(context.runtime_state)
+                    _clear_upgrade_confirmation_pending(context.runtime_state)
                     return TaskResult.replan("Opened building details and confirmed the upgrade button is available.")
                 _mark_pending_target_ineligible(context.runtime_state)
+                _mark_screen_priority_ineligible(context.runtime_state, after.screen_type)
+                _clear_focus_pending(context.runtime_state)
+                _clear_upgrade_confirmation_pending(context.runtime_state)
                 return TaskResult.replan("Opened building details but the selected building is not upgradeable.")
-            if not _visible_supported_buildings(before, context.runtime_state):
+            if _has_focus_pending(context.runtime_state):
+                _clear_focus_pending(context.runtime_state)
                 if after.screen_type == ScreenType.PNC_HOME_CITY:
-                    return TaskResult.replan("Adjusted the home-city view while searching for a supported building.")
+                    return TaskResult.replan("Adjusted the home-city view while searching for the requested building.")
+                return TaskResult.failure("Building upgrade could not continue the home-city search.", retryable=True)
+            if not _visible_requested_buildings(before, context.runtime_state, remaining_priorities):
+                if after.screen_type == ScreenType.PNC_HOME_CITY:
+                    return TaskResult.replan("Adjusted the home-city view while searching for the requested building.")
                 return TaskResult.failure("Building upgrade could not continue the home-city search.", retryable=True)
             return TaskResult.failure("Building upgrade did not produce a verified state change.", retryable=True)
-        if before.has(UiElementId.PNC_BUILDING_UPGRADE_BUTTON):
-            _clear_pending_target(context.runtime_state)
-            if after.screen_type == ScreenType.PNC_BUILDING_DETAILS and not after.has(UiElementId.PNC_BUILDING_UPGRADE_BUTTON):
-                return TaskResult.success("Building upgrade started from the building details screen.")
+        if _is_upgrade_context_screen(before.screen_type) and _building_requirement_is_visible(before):
+            _mark_screen_priority_ineligible(context.runtime_state, before.screen_type)
+            _set_last_unmet_requirement(context.runtime_state, before)
+            if after.screen_type == ScreenType.UNKNOWN:
+                return TaskResult.replan("Building requirement panel is still settling while returning to home city.")
             if after.screen_type == ScreenType.PNC_HOME_CITY:
-                return TaskResult.success("Building upgrade started and the flow returned to home city.")
+                remaining_priorities = _remaining_requested_priorities(context.params.priority, context.runtime_state)
+                if not remaining_priorities:
+                    return _requested_priority_exhausted_result(context.runtime_state)
+                return TaskResult.replan("Returned to home city after recording the unmet building requirement.")
+            if _is_upgrade_context_screen(after.screen_type) and _building_requirement_is_visible(after):
+                return TaskResult.replan("Building requirement panel is still open and needs to return to home city.")
+            return TaskResult.failure("Building upgrade could not leave the unmet requirement panel.", retryable=True)
+        if _is_upgrade_context_screen(before.screen_type) and _success_verification_stage(context.runtime_state) == _SUCCESS_VERIFICATION_STAGE_RETURN_HOME:
+            if after.screen_type == ScreenType.UNKNOWN:
+                return TaskResult.replan("Returning home for upgrade verification is still settling.")
+            if after.screen_type == ScreenType.PNC_HOME_CITY:
+                return _verify_started_upgrade_at_home_city(context.runtime_state, after)
+            if _is_upgrade_context_screen(after.screen_type):
+                return TaskResult.replan("Building upgrade is still leaving the building screen for home-city verification.")
+            return TaskResult.failure("Building upgrade could not return home for verification.", retryable=True)
+        if _is_upgrade_context_screen(before.screen_type) and before.has(UiElementId.PNC_BUILDING_UPGRADE_BUTTON):
+            if _is_upgrade_context_screen(after.screen_type) and _building_requirement_is_visible(after):
+                _mark_pending_target_ineligible(context.runtime_state)
+                _mark_screen_priority_ineligible(context.runtime_state, after.screen_type)
+                _clear_upgrade_confirmation_pending(context.runtime_state)
+                _set_last_unmet_requirement(context.runtime_state, after)
+                return TaskResult.replan(_unmet_requirement_replan_message(after))
+            if _is_upgrade_context_screen(after.screen_type) and _building_upgrade_confirmation_is_visible(after):
+                if _has_upgrade_confirmation_pending(context.runtime_state):
+                    return TaskResult.failure("Building upgrade did not consume the confirmed final upgrade action.", retryable=True)
+                _set_upgrade_confirmation_pending(context.runtime_state)
+                return TaskResult.replan("Building upgrade confirmation opened and still needs the final `Upgrade` click.")
+            if _is_upgrade_context_screen(after.screen_type) and _building_speedup_is_visible(after):
+                return _finish_started_upgrade_success(
+                    context.runtime_state,
+                    "Building upgrade started and the building screen now shows `Speedup`.",
+                )
+            if _is_upgrade_context_screen(after.screen_type) and not after.has(UiElementId.PNC_BUILDING_UPGRADE_BUTTON):
+                _clear_upgrade_confirmation_pending(context.runtime_state)
+                _set_success_verification_stage(context.runtime_state, _SUCCESS_VERIFICATION_STAGE_RETURN_HOME)
+                return TaskResult.replan("Building upgrade needs one home-city verification pass after leaving the details screen.")
+            if after.screen_type == ScreenType.PNC_HOME_CITY:
+                return _verify_started_upgrade_at_home_city(context.runtime_state, after)
+            if after.screen_type == ScreenType.PNC_BUILD_QUEUE:
+                return _verify_started_upgrade_from_build_queue(context.runtime_state, after)
+            if after.screen_type == ScreenType.UNKNOWN:
+                return TaskResult.replan("Building upgrade transition is still settling after the verified upgrade click.")
+            if _is_upgrade_context_screen(after.screen_type) and after.has(UiElementId.PNC_BUILDING_UPGRADE_BUTTON):
+                if _has_upgrade_confirmation_pending(context.runtime_state):
+                    return TaskResult.failure("Building upgrade did not consume the confirmed final upgrade action.", retryable=True)
             return TaskResult.failure("Building upgrade did not consume the verified upgrade action.", retryable=True)
         if after.screen_type == ScreenType.PNC_HOME_CITY:
+            _clear_upgrade_confirmation_pending(context.runtime_state)
+            _clear_pending_target(context.runtime_state)
+            remaining_priorities = _remaining_requested_priorities(context.params.priority, context.runtime_state)
+            if not remaining_priorities:
+                return _requested_priority_exhausted_result(context.runtime_state)
             return TaskResult.replan("Returned to home city after verifying the selected building is not upgradeable.")
         return TaskResult.failure("Building upgrade did not produce a verified state change.", retryable=True)
 
@@ -135,22 +416,47 @@ def _visible_supported_buildings(
 ) -> tuple[DetectedSpatialObject, ...]:
     """Returns visible supported home-city buildings that have not already been proven ineligible."""
 
+    blocked_object_ids = _ineligible_object_ids(runtime_state)
+    blocked_signatures = _ineligible_target_signatures(runtime_state)
+    visible_buildings: list[DetectedSpatialObject] = []
+    for object_ in observation.spatial_objects(SpatialObjectKind.HOME_BUILDING):
+        priority = _building_priority_from_object(object_)
+        if priority is None:
+            continue
+        if priority in blocked_object_ids:
+            continue
+        if _building_target_signature(object_) in blocked_signatures:
+            continue
+        visible_buildings.append(object_)
+    return tuple(visible_buildings)
+
+
+def _visible_requested_buildings(
+    observation: Observation,
+    runtime_state: dict[str, Any],
+    priorities: tuple[BuildingPriority, ...],
+) -> tuple[DetectedSpatialObject, ...]:
+    """Returns visible supported buildings whose exact ids are still requested by the active policy."""
+
+    requested_priorities = set(priorities)
     return tuple(
         object_
-        for object_ in observation.spatial_objects(SpatialObjectKind.HOME_BUILDING)
-        if _building_priority_from_object(object_) is not None
-        and _building_target_signature(object_) not in _ineligible_target_signatures(runtime_state)
+        for object_ in _visible_supported_buildings(observation, runtime_state)
+        if _building_priority_from_object(object_) in requested_priorities
     )
 
 
 def _building_priority_from_object(object_: DetectedSpatialObject) -> BuildingPriority | None:
-    """Returns the typed building priority category for one home-city spatial object when supported."""
+    """Returns the typed building priority for one upgradeable home-city spatial object."""
 
-    category = getattr(object_, "metadata", {}).get("category")
-    if not isinstance(category, str):
+    metadata = getattr(object_, "metadata", {})
+    object_id = home_city_object_id_from_object(object_)
+    if object_id is None:
+        return None
+    if not home_city_object_supports_action(metadata, BuildingAction.UPGRADE):
         return None
     try:
-        return BuildingPriority(category)
+        return BuildingPriority(object_id.value)
     except ValueError:
         return None
 
@@ -177,7 +483,11 @@ def _building_target_signature(object_: DetectedSpatialObject) -> tuple[object, 
 def _set_pending_target(runtime_state: dict[str, Any], object_: DetectedSpatialObject) -> None:
     """Stores the currently inspected building target so failed eligibility checks can be remembered."""
 
-    runtime_state[_BUILDING_UPGRADE_PENDING_TARGET_STATE_KEY] = _building_target_signature(object_)
+    runtime_state[_BUILDING_UPGRADE_PENDING_TARGET_STATE_KEY] = _PendingBuildingTarget(
+        signature=_building_target_signature(object_),
+        priority=_building_priority_from_object(object_),
+        starting_level=object_.level,
+    )
 
 
 def _clear_pending_target(runtime_state: dict[str, Any]) -> None:
@@ -186,15 +496,107 @@ def _clear_pending_target(runtime_state: dict[str, Any]) -> None:
     runtime_state.pop(_BUILDING_UPGRADE_PENDING_TARGET_STATE_KEY, None)
 
 
+def _pending_target(runtime_state: dict[str, Any]) -> _PendingBuildingTarget | None:
+    """Returns the currently inspected building target when one is still tracked."""
+
+    pending = runtime_state.get(_BUILDING_UPGRADE_PENDING_TARGET_STATE_KEY)
+    if pending is None:
+        return None
+    if isinstance(pending, _PendingBuildingTarget):
+        return pending
+    raise TypeError("Unexpected building_upgrade_pending_target state.")
+
+
 def _mark_pending_target_ineligible(runtime_state: dict[str, Any]) -> None:
     """Records the currently inspected building target as not upgradeable and clears the pending slot."""
 
     pending = runtime_state.pop(_BUILDING_UPGRADE_PENDING_TARGET_STATE_KEY, None)
     if pending is None:
         return
+    if not isinstance(pending, _PendingBuildingTarget):
+        raise TypeError("Unexpected building_upgrade_pending_target state.")
     signatures = _ineligible_target_signatures(runtime_state)
-    signatures.add(pending)
+    signatures.add(pending.signature)
     runtime_state[_BUILDING_UPGRADE_INELIGIBLE_TARGETS_STATE_KEY] = signatures
+    if pending.priority is not None:
+        _remember_ineligible_priority(runtime_state, pending.priority)
+
+
+def _set_upgrade_confirmation_pending(runtime_state: dict[str, Any]) -> None:
+    """Records that one verified upgrade click opened a final confirmation step."""
+
+    runtime_state[_BUILDING_UPGRADE_CONFIRMATION_PENDING_STATE_KEY] = True
+
+
+def _clear_upgrade_confirmation_pending(runtime_state: dict[str, Any]) -> None:
+    """Clears any remembered final-confirmation state for the current upgrade attempt."""
+
+    runtime_state.pop(_BUILDING_UPGRADE_CONFIRMATION_PENDING_STATE_KEY, None)
+
+
+def _has_upgrade_confirmation_pending(runtime_state: dict[str, Any]) -> bool:
+    """Returns whether the current upgrade attempt already consumed its one confirmation replan."""
+
+    return bool(runtime_state.get(_BUILDING_UPGRADE_CONFIRMATION_PENDING_STATE_KEY))
+
+
+def _set_post_start_help_pending(runtime_state: dict[str, Any]) -> None:
+    """Records that the just-started upgrade exposed one optional alliance-help action."""
+
+    runtime_state[_BUILDING_UPGRADE_POST_START_HELP_PENDING_STATE_KEY] = True
+
+
+def _clear_post_start_help_pending(runtime_state: dict[str, Any]) -> None:
+    """Clears any remembered post-upgrade help action for the current task run."""
+
+    runtime_state.pop(_BUILDING_UPGRADE_POST_START_HELP_PENDING_STATE_KEY, None)
+
+
+def _has_post_start_help_pending(runtime_state: dict[str, Any]) -> bool:
+    """Returns whether the task still needs to opportunistically request post-upgrade help."""
+
+    return bool(runtime_state.get(_BUILDING_UPGRADE_POST_START_HELP_PENDING_STATE_KEY))
+
+
+def _set_focus_pending(runtime_state: dict[str, Any]) -> None:
+    """Records that the last planned increment was a home-city camera search move."""
+
+    runtime_state[_BUILDING_UPGRADE_FOCUS_PENDING_STATE_KEY] = True
+
+
+def _clear_focus_pending(runtime_state: dict[str, Any]) -> None:
+    """Clears any remembered home-city search increment state."""
+
+    runtime_state.pop(_BUILDING_UPGRADE_FOCUS_PENDING_STATE_KEY, None)
+
+
+def _has_focus_pending(runtime_state: dict[str, Any]) -> bool:
+    """Returns whether the task is waiting for one planned home-city search move to settle."""
+
+    return bool(runtime_state.get(_BUILDING_UPGRADE_FOCUS_PENDING_STATE_KEY))
+
+
+def _set_success_verification_stage(runtime_state: dict[str, Any], stage: str) -> None:
+    """Stores the ordered post-start verification stage for the current upgrade attempt."""
+
+    runtime_state[_BUILDING_UPGRADE_SUCCESS_VERIFICATION_STAGE_STATE_KEY] = stage
+
+
+def _clear_success_verification_stage(runtime_state: dict[str, Any]) -> None:
+    """Clears any remembered post-start verification stage for the current upgrade attempt."""
+
+    runtime_state.pop(_BUILDING_UPGRADE_SUCCESS_VERIFICATION_STAGE_STATE_KEY, None)
+
+
+def _success_verification_stage(runtime_state: dict[str, Any]) -> str | None:
+    """Returns the ordered post-start verification stage when one is still pending."""
+
+    stage = runtime_state.get(_BUILDING_UPGRADE_SUCCESS_VERIFICATION_STAGE_STATE_KEY)
+    if stage is None:
+        return None
+    if isinstance(stage, str):
+        return stage
+    raise TypeError("Unexpected building_upgrade_success_verification_stage state.")
 
 
 def _ineligible_target_signatures(runtime_state: dict[str, Any]) -> set[tuple[object, ...]]:
@@ -208,12 +610,311 @@ def _ineligible_target_signatures(runtime_state: dict[str, Any]) -> set[tuple[ob
     return signatures
 
 
-def _all_visible_supported_buildings_are_ineligible(observation: Observation, runtime_state: dict[str, Any]) -> bool:
-    """Returns whether every currently visible supported building has already been inspected and rejected."""
+def _ineligible_object_ids(runtime_state: dict[str, Any]) -> set[BuildingPriority]:
+    """Returns the mutable set of globally ineligible unique building ids for the current task run."""
 
-    visible_supported = tuple(
-        object_
-        for object_ in observation.spatial_objects(SpatialObjectKind.HOME_BUILDING)
-        if _building_priority_from_object(object_) is not None
+    value = runtime_state.get(_BUILDING_UPGRADE_INELIGIBLE_OBJECT_IDS_STATE_KEY)
+    if isinstance(value, set):
+        return value
+    blocked_object_ids: set[BuildingPriority] = set()
+    runtime_state[_BUILDING_UPGRADE_INELIGIBLE_OBJECT_IDS_STATE_KEY] = blocked_object_ids
+    return blocked_object_ids
+
+
+def _remaining_requested_priorities(
+    priorities: tuple[BuildingPriority, ...],
+    runtime_state: dict[str, Any],
+) -> tuple[BuildingPriority, ...]:
+    """Returns requested priorities that remain viable after unique-target ineligibility is accounted for."""
+
+    blocked_object_ids = _ineligible_object_ids(runtime_state)
+    return tuple(priority for priority in priorities if priority not in blocked_object_ids)
+
+
+def _building_priority_from_screen(screen_type: ScreenType) -> BuildingPriority | None:
+    """Returns the canonical building priority implied by one exact building-owned screen when modeled."""
+
+    object_id = home_city_object_id_for_screen(screen_type)
+    if object_id is None:
+        return None
+    try:
+        return BuildingPriority(object_id.value)
+    except ValueError:
+        return None
+
+
+def _mark_screen_priority_ineligible(runtime_state: dict[str, Any], screen_type: ScreenType) -> None:
+    """Marks one exact building-owned screen as globally ineligible when it represents a unique building."""
+
+    priority = _building_priority_from_screen(screen_type)
+    if priority is None:
+        return
+    _remember_ineligible_priority(runtime_state, priority)
+
+
+def _remember_ineligible_priority(runtime_state: dict[str, Any], priority: BuildingPriority) -> None:
+    """Stores one unique building priority as globally ineligible for the remainder of this step."""
+
+    if _building_priority_is_repeatable(priority):
+        return
+    blocked_object_ids = _ineligible_object_ids(runtime_state)
+    blocked_object_ids.add(priority)
+    runtime_state[_BUILDING_UPGRADE_INELIGIBLE_OBJECT_IDS_STATE_KEY] = blocked_object_ids
+
+
+def _building_priority_is_repeatable(priority: BuildingPriority) -> bool:
+    """Returns whether the requested building priority can have multiple distinct home-city instances."""
+
+    return is_repeatable_home_city_object(HomeCityObjectId(priority.value))
+
+
+def _is_upgrade_context_screen(screen_type: ScreenType) -> bool:
+    """Returns whether the current screen can verify or execute one building upgrade action."""
+
+    return screen_type == ScreenType.PNC_BUILDING_DETAILS or is_upgradeable_primary_screen(screen_type)
+
+
+def _verify_started_upgrade_at_home_city(runtime_state: dict[str, Any], observation: Observation) -> TaskResult:
+    """Evaluates the ordered home-city success proofs after a verified upgrade click has settled."""
+
+    if _home_city_active_build_is_visible(observation):
+        return _complete_started_upgrade_at_home_city(
+            runtime_state,
+            observation,
+            _home_city_timer_success_message(observation),
+        )
+    if _can_open_build_queue(observation):
+        _set_success_verification_stage(runtime_state, _SUCCESS_VERIFICATION_STAGE_OPEN_BUILD_QUEUE)
+        return TaskResult.replan(
+            "Home-city verification could not prove the upgrade start, so the build queue needs checking before the final level comparison."
+        )
+    if _home_city_pending_target_level_increased(observation, runtime_state):
+        return _complete_started_upgrade_at_home_city(
+            runtime_state,
+            observation,
+            _home_city_level_increase_success_message(runtime_state, observation),
+        )
+    return TaskResult.failure("Building upgrade could not be verified from the home city.", retryable=True)
+
+
+def _verify_started_upgrade_from_build_queue(runtime_state: dict[str, Any], observation: Observation) -> TaskResult:
+    """Evaluates the build-queue timer proof before falling back to one final level comparison."""
+
+    timer_text = _build_queue_active_timer_text(observation)
+    if timer_text is not None:
+        return _finish_started_upgrade_success(
+            runtime_state,
+            f"Building upgrade started and the build queue shows timer '{timer_text}'.",
+        )
+    _set_success_verification_stage(runtime_state, _SUCCESS_VERIFICATION_STAGE_RETURN_HOME_FOR_LEVEL)
+    return TaskResult.replan("Build queue did not expose an active timer and needs one final building-level verification.")
+
+
+def _complete_started_upgrade_at_home_city(
+    runtime_state: dict[str, Any],
+    observation: Observation,
+    success_message: str,
+) -> TaskResult:
+    """Returns the canonical success or help-follow-up result once one ordered success proof lands at home city."""
+
+    _clear_upgrade_confirmation_pending(runtime_state)
+    _clear_last_unmet_requirement(runtime_state)
+    _clear_success_verification_stage(runtime_state)
+    _clear_pending_target(runtime_state)
+    _clear_focus_pending(runtime_state)
+    if _home_build_help_is_available(observation):
+        _set_post_start_help_pending(runtime_state)
+        return TaskResult.replan(f"{success_message} Available alliance help can be requested.")
+    _clear_post_start_help_pending(runtime_state)
+    return TaskResult.success(success_message)
+
+
+def _finish_started_upgrade_success(runtime_state: dict[str, Any], message: str) -> TaskResult:
+    """Clears post-start runtime state once one non-home success proof has already completed the task."""
+
+    _clear_post_start_help_pending(runtime_state)
+    _clear_upgrade_confirmation_pending(runtime_state)
+    _clear_last_unmet_requirement(runtime_state)
+    _clear_success_verification_stage(runtime_state)
+    _clear_pending_target(runtime_state)
+    _clear_focus_pending(runtime_state)
+    return TaskResult.success(message)
+
+
+def _finish_already_active_upgrade_skip(runtime_state: dict[str, Any], message: str) -> TaskResult:
+    """Clears runtime upgrade state once the task proves another active construction already occupies the queue."""
+
+    _clear_post_start_help_pending(runtime_state)
+    _clear_upgrade_confirmation_pending(runtime_state)
+    _clear_last_unmet_requirement(runtime_state)
+    _clear_success_verification_stage(runtime_state)
+    _clear_pending_target(runtime_state)
+    _clear_focus_pending(runtime_state)
+    return TaskResult.skipped(message)
+
+
+def _home_city_active_build_timer_text(observation: Observation) -> str | None:
+    """Returns the visible home-city construction timer when the shared spatial surface captured one."""
+
+    surface = observation.spatial_surface
+    if surface is None:
+        return None
+    timer_text = surface.metadata.get("active_build_timer_text")
+    if not isinstance(timer_text, str):
+        return None
+    stripped = timer_text.strip()
+    return None if stripped == "" else stripped
+
+
+def _home_city_active_build_is_visible(observation: Observation) -> bool:
+    """Returns whether the shared home-city spatial surface proves one active construction timer is visible."""
+
+    return _home_city_active_build_timer_text(observation) is not None
+
+
+def _home_city_timer_success_message(observation: Observation) -> str:
+    """Returns the success message for the primary home-city timer proof."""
+
+    timer_text = _home_city_active_build_timer_text(observation)
+    if timer_text is None:
+        return "Building upgrade started and a home-city construction timer is visible."
+    return f"Building upgrade started and the home city shows timer '{timer_text}'."
+
+
+def _can_open_build_queue(observation: Observation) -> bool:
+    """Returns whether the shared left-rail build control can be used for queue verification."""
+
+    build_action = observation.get(UiElementId.PNC_HOME_BUILD_BUTTON)
+    if build_action is None:
+        return False
+    if build_action.extracted_text is None:
+        return True
+    return normalize_ocr_text(build_action.extracted_text) != "HELP"
+
+
+def _build_queue_active_timer_text(observation: Observation) -> str | None:
+    """Returns the active build-queue timer when the queue overlay exposes one upgrading row."""
+
+    for entry in observation.entries(ListEntryKind.BUILDING):
+        queue_state = entry.metadata.get("queue_state")
+        if queue_state != "upgrading":
+            continue
+        if entry.timer_text is None or entry.timer_text.strip() == "":
+            continue
+        return entry.timer_text.strip()
+    return None
+
+
+def _visible_pending_target(observation: Observation, runtime_state: dict[str, Any]) -> DetectedSpatialObject | None:
+    """Returns the pending home-city target when it remains visible after upgrade verification."""
+
+    pending = _pending_target(runtime_state)
+    if pending is None:
+        return None
+    visible_buildings = observation.spatial_objects(SpatialObjectKind.HOME_BUILDING)
+    exact_match = next((object_ for object_ in visible_buildings if _building_target_signature(object_) == pending.signature), None)
+    if exact_match is not None:
+        return exact_match
+    if pending.priority is None or _building_priority_is_repeatable(pending.priority):
+        return None
+    return next((object_ for object_ in visible_buildings if _building_priority_from_object(object_) == pending.priority), None)
+
+
+def _home_city_pending_target_level_increased(observation: Observation, runtime_state: dict[str, Any]) -> bool:
+    """Returns whether the visible pending target now shows a higher level than the pre-upgrade baseline."""
+
+    pending = _pending_target(runtime_state)
+    if pending is None or pending.starting_level is None:
+        return False
+    target = _visible_pending_target(observation, runtime_state)
+    if target is None or target.level is None:
+        return False
+    return target.level > pending.starting_level
+
+
+def _home_city_level_increase_success_message(runtime_state: dict[str, Any], observation: Observation) -> str:
+    """Returns the success message for the fast-complete level-increase fallback proof."""
+
+    pending = _pending_target(runtime_state)
+    target = _visible_pending_target(observation, runtime_state)
+    if pending is None or target is None or pending.starting_level is None or target.level is None:
+        return "Building upgrade finished quickly and the building level increased."
+    target_name = target.name_text or (pending.priority.value if pending.priority is not None else "building")
+    return (
+        f"Building upgrade finished quickly and '{target_name}' increased "
+        f"from Lv.{pending.starting_level} to Lv.{target.level}."
     )
-    return bool(visible_supported) and not _visible_supported_buildings(observation, runtime_state)
+
+
+def _home_build_help_is_available(observation: Observation) -> bool:
+    """Returns whether the shared home build-slot control is currently showing `Help` instead of `Build`."""
+
+    build_action = observation.get(UiElementId.PNC_HOME_BUILD_BUTTON)
+    if build_action is None or build_action.extracted_text is None:
+        return False
+    return normalize_ocr_text(build_action.extracted_text) == "HELP"
+
+
+def _building_requirement_is_visible(observation: Observation) -> bool:
+    """Returns whether the current building screen is showing an unmet upgrade requirement panel."""
+
+    return observation.has(UiElementId.PNC_BUILDING_REQUIREMENT_HEADER)
+
+
+def _building_upgrade_confirmation_is_visible(observation: Observation) -> bool:
+    """Returns whether the current building screen is showing the shared final upgrade-confirmation layout."""
+
+    return observation.has(UiElementId.PNC_BUILDING_UPGRADE_CONFIRMATION_PANEL)
+
+
+def _building_speedup_is_visible(observation: Observation) -> bool:
+    """Returns whether the current building screen replaced `Upgrade` with the shared `Speedup` control."""
+
+    return observation.has(UiElementId.PNC_BUILDING_SPEEDUP_BUTTON)
+
+
+def _building_requirement_text(observation: Observation) -> str | None:
+    """Returns the visible unmet prerequisite label from the shared requirement panel when available."""
+
+    requirement = observation.get(UiElementId.PNC_BUILDING_REQUIREMENT_TARGET_LABEL)
+    if requirement is None or requirement.extracted_text is None:
+        return None
+    text = requirement.extracted_text.strip()
+    return None if text == "" else text
+
+
+def _set_last_unmet_requirement(runtime_state: dict[str, Any], observation: Observation) -> None:
+    """Stores the most recent unmet prerequisite label so terminal skips can explain why the task stopped."""
+
+    requirement_text = _building_requirement_text(observation)
+    if requirement_text is None:
+        _clear_last_unmet_requirement(runtime_state)
+        return
+    runtime_state[_BUILDING_UPGRADE_LAST_UNMET_REQUIREMENT_STATE_KEY] = requirement_text
+
+
+def _clear_last_unmet_requirement(runtime_state: dict[str, Any]) -> None:
+    """Clears any remembered unmet prerequisite description for the current task run."""
+
+    runtime_state.pop(_BUILDING_UPGRADE_LAST_UNMET_REQUIREMENT_STATE_KEY, None)
+
+
+def _requested_priority_exhausted_result(runtime_state: dict[str, Any]) -> TaskResult:
+    """Returns the terminal known outcome once every requested unique target has been proven ineligible."""
+
+    requirement_text = runtime_state.get(_BUILDING_UPGRADE_LAST_UNMET_REQUIREMENT_STATE_KEY)
+    if isinstance(requirement_text, str) and requirement_text.strip() != "":
+        return TaskResult.failure(
+            f"Requested building upgrade is blocked by unmet prerequisite '{requirement_text}', "
+            "and prerequisite resolution is not supported yet."
+        )
+    return TaskResult.skipped("No requested building upgrades are currently eligible.")
+
+
+def _unmet_requirement_replan_message(observation: Observation) -> str:
+    """Returns the shared replan message for building screens gated by unmet upgrade prerequisites."""
+
+    requirement_text = _building_requirement_text(observation)
+    if requirement_text is None:
+        return "Building upgrade is blocked by an unmet requirement and needs to return to home city."
+    return f"Building upgrade is blocked by unmet requirement '{requirement_text}' and needs to return to home city."

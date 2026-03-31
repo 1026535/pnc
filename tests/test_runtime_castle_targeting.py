@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -308,6 +309,22 @@ class RuntimeCastleTargetingTests(unittest.TestCase):
             [(TaskId.BUILDING_UPGRADE, "account_a", {"priority": ["castle"], "allow_speedups": False})],
         )
 
+    def test_python_building_upgrade_loads_priority_file(self) -> None:
+        """Allows direct building-upgrade calls to load their ordered priority list from a text file."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            priority_file = Path(temp_directory) / "buildings.txt"
+            priority_file.write_text("institute\nwarehouse\n", encoding="utf-8")
+            fake_runner = _FakeApplicationRunner()
+            api = AutomationApi(application=fake_runner)
+
+            api.building_upgrade(account_id="account_a", priority_file=str(priority_file))
+
+        self.assertEqual(
+            fake_runner.task_calls,
+            [(TaskId.BUILDING_UPGRADE, "account_a", {"priority": ["institute", "warehouse"], "allow_speedups": False})],
+        )
+
     def test_python_generic_run_task_resolves_account_from_active_context(self) -> None:
         """Allows the generic direct-call task API to reuse the active prepared session scope."""
 
@@ -354,6 +371,64 @@ class RuntimeCastleTargetingTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertEqual(fake_runner.prepare_calls, [("account_a", self.target_castle)])
         self.assertEqual(fake_runner.task_calls, [])
+
+    def test_cli_build_without_castle_runs_direct_build_task(self) -> None:
+        """Uses the direct build command without forcing session preparation when no explicit castle target was given."""
+
+        fake_runner = _FakeApplicationRunner()
+        with patch("pnc_automation.cli.build_application_runner", return_value=fake_runner), patch("builtins.print"):
+            exit_code = cli_main(
+                [
+                    "build",
+                    "--account",
+                    "account_a",
+                    "--config",
+                    "config/accounts.yaml",
+                    "--priority",
+                    "institute",
+                    "warehouse",
+                ]
+            )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(fake_runner.prepare_calls, [])
+        self.assertEqual(
+            fake_runner.task_calls,
+            [(TaskId.BUILDING_UPGRADE, "account_a", {"priority": ["institute", "warehouse"], "allow_speedups": False})],
+        )
+
+    def test_cli_build_with_castle_and_priority_file_prepares_then_runs_direct_build_task(self) -> None:
+        """Allows one direct build invocation to load priorities from a file after explicit castle preparation."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            priority_file = Path(temp_directory) / "buildings.txt"
+            priority_file.write_text("institute\nwarehouse\n", encoding="utf-8")
+            fake_runner = _FakeApplicationRunner()
+            with patch("pnc_automation.cli.build_application_runner", return_value=fake_runner), patch("builtins.print"):
+                exit_code = cli_main(
+                    [
+                        "build",
+                        "--account",
+                        "account_a",
+                        "--config",
+                        "config/accounts.yaml",
+                        "--kingdom",
+                        "K230",
+                        "--castle-name",
+                        "Main",
+                        "--castle-level",
+                        "8",
+                        "--priority-file",
+                        str(priority_file),
+                    ]
+                )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(fake_runner.prepare_calls, [("account_a", self.target_castle)])
+        self.assertEqual(
+            fake_runner.task_calls,
+            [(TaskId.BUILDING_UPGRADE, "account_a", {"priority": ["institute", "warehouse"], "allow_speedups": False})],
+        )
 
     def test_cli_legacy_run_flags_still_route_through_the_shared_run_path(self) -> None:
         """Keeps the flag-only legacy invocation shape while executing the canonical run command path."""

@@ -29,8 +29,8 @@ from tests.test_support import make_observation
 class SelectorDiscoveryTests(unittest.TestCase):
     """Validates artifact and live-probe discovery draft generation."""
 
-    def test_analyze_artifact_path_discovers_academy_category_drafts(self) -> None:
-        """Builds academy category draft selectors from one saved artifact."""
+    def test_analyze_artifact_path_discovers_institute_category_drafts(self) -> None:
+        """Builds institute category draft selectors from one saved artifact."""
 
         with tempfile.TemporaryDirectory() as temp_directory:
             root = Path(temp_directory)
@@ -50,16 +50,14 @@ class SelectorDiscoveryTests(unittest.TestCase):
 
             snapshot = analyzer.analyze_artifact_path(screenshot.artifact.path)
 
-            self.assertEqual(snapshot.screen_type, ScreenType.PNC_ACADEMY)
+            self.assertEqual(snapshot.screen_type, ScreenType.PNC_INSTITUTE)
             self.assertEqual(
                 {draft.id for draft in snapshot.draft_selectors},
                 {
-                    "PNC_ACADEMY_CATEGORY_DEVELOPMENT",
-                    "PNC_ACADEMY_CATEGORY_ECONOMY",
-                    "PNC_ACADEMY_CATEGORY_MILITARY",
-                    "PNC_ACADEMY_CATEGORY_FORTIFICATION",
-                    "PNC_ACADEMY_CATEGORY_UNIT_TACTICS",
-                    "PNC_ACADEMY_CATEGORY_FORMATIONS",
+                    "PNC_INSTITUTE_DEVELOPMENT_BUTTON",
+                    "PNC_INSTITUTE_ECONOMY_BUTTON",
+                    "PNC_INSTITUTE_MILITARY_BUTTON",
+                    "PNC_INSTITUTE_FORTIFICATION_BUTTON",
                 },
             )
 
@@ -81,8 +79,8 @@ class SelectorDiscoveryTests(unittest.TestCase):
                 catalog=SelectorCatalogDocument(
                     selectors=(
                         SelectorCatalogEntry(
-                            id="PNC_ACADEMY_CATEGORY_ECONOMY",
-                            screens=("PNC_ACADEMY",),
+                            id="PNC_INSTITUTE_ECONOMY_BUTTON",
+                            screens=("PNC_INSTITUTE",),
                             status="screenshot_seeded",
                             detection_kind="template",
                         ),
@@ -93,9 +91,9 @@ class SelectorDiscoveryTests(unittest.TestCase):
             snapshot = analyzer.analyze_artifact_path(screenshot.artifact.path)
             draft_ids = {draft.id for draft in snapshot.draft_selectors}
 
-            self.assertEqual(snapshot.screen_type, ScreenType.PNC_ACADEMY)
-            self.assertIn("PNC_ACADEMY_CATEGORY_DEVELOPMENT", draft_ids)
-            self.assertNotIn("PNC_ACADEMY_CATEGORY_ECONOMY", draft_ids)
+            self.assertEqual(snapshot.screen_type, ScreenType.PNC_INSTITUTE)
+            self.assertIn("PNC_INSTITUTE_DEVELOPMENT_BUTTON", draft_ids)
+            self.assertNotIn("PNC_INSTITUTE_ECONOMY_BUTTON", draft_ids)
 
     def test_analyze_artifact_path_discovers_research_tree_collection_selector(self) -> None:
         """Builds the research-node collection draft from one research-tree artifact."""

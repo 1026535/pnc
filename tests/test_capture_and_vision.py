@@ -1036,6 +1036,55 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             self.assertEqual(observation.current_castle_name, "K304554ca2797")
 
+    def test_observation_builder_strips_alliance_tag_from_lord_info_current_castle_name(self) -> None:
+        """Normalizes the Lord Info castle signal so alliance tags do not break target matching."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                artifact_directory="k287_lord_info_tagged",
+                label="lord_info_tagged",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Lord Info", x=184, y=20, width=208, height=48),
+                            _ocr_line("Gear", x=52, y=111, width=83, height=42),
+                            _ocr_line("[AAS] pine cobaye 1", x=190, y=1048, width=287, height=35),
+                            _ocr_line("Talent", x=68, y=1560, width=82, height=28),
+                            _ocr_line("Lord Info", x=220, y=1559, width=114, height=30),
+                            _ocr_line("Boost Info", x=386, y=1561, width=124, height=27),
+                            _ocr_line("Alliance Info", x=561, y=1561, width=120, height=26),
+                            _ocr_line("Achievements", x=731, y=1567, width=115, height=17),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+            target_castle = CastleIdentity(kingdom="K287", castle_name="pine cobaye 1")
+            roster = PncAccountCastleRosterConfig(
+                pnc_account_id="user@example.com",
+                castles=(target_castle,),
+            )
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_LORD_INFO)
+            self.assertEqual(
+                observation.require(UiElementId.PNC_LORD_INFO_NAME_LABEL).extracted_text,
+                "[AAS] pine cobaye 1",
+            )
+            self.assertEqual(observation.current_castle_name, "pine cobaye 1")
+            self.assertTrue(observation.current_castle_match(target_castle, roster=roster).matches)
+
     def test_home_city_follow_up_still_classifies_full_screen_settings_as_more_menu(self) -> None:
         """Keeps More > Settings identifiable during home-city follow-ups from Manage Char."""
 
@@ -1217,6 +1266,134 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertTrue(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
             self.assertTrue(observation.has(UiElementId.PNC_BUILDING_UPGRADE_BUTTON))
 
+    def test_observation_builder_exposes_shared_building_requirement_controls_on_exact_building_screens(self) -> None:
+        """Recognizes unmet upgrade prerequisites on exact building-owned screens through shared OCR controls."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                artifact_directory="k287_infantry_requirement",
+                label="infantry_requirement",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Infantry Barracks", x=88, y=16, width=240, height=30),
+                            _ocr_line("Glory Level", x=588, y=142, width=154, height=32),
+                            _ocr_line("Upgrade", x=734, y=308, width=120, height=40),
+                            _ocr_line("Requirement", x=59, y=714, width=177, height=32),
+                            _ocr_line("Recruiting Center : Lv.7", x=152, y=769, width=278, height=28),
+                            _ocr_line("Go", x=732, y=766, width=47, height=31),
+                            _ocr_line("Materials required", x=58, y=866, width=246, height=33),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_INFANTRY_BARRACKS)
+            self.assertTrue(observation.has(UiElementId.PNC_BUILDING_UPGRADE_BUTTON))
+            self.assertTrue(observation.has(UiElementId.PNC_BUILDING_REQUIREMENT_HEADER))
+            self.assertTrue(observation.has(UiElementId.PNC_BUILDING_REQUIREMENT_TARGET_LABEL))
+            self.assertTrue(observation.has(UiElementId.PNC_BUILDING_REQUIREMENT_GO_BUTTON))
+            self.assertEqual(
+                observation.require(UiElementId.PNC_BUILDING_REQUIREMENT_TARGET_LABEL).extracted_text,
+                "Recruiting Center : Lv.7",
+            )
+
+    def test_observation_builder_classifies_castle_screen_when_territory_overview_wraps_across_two_ocr_lines(self) -> None:
+        """Keeps Castle on its exact screen when OCR splits `Territory Overview` into stacked fragments."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                artifact_directory="k287_castle_split_overview",
+                label="castle_split_overview",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Castle", x=181, y=18, width=144, height=51),
+                            _ocr_line("Territory", x=691, y=129, width=108, height=32),
+                            _ocr_line("Overview", x=691, y=157, width=115, height=27),
+                            _ocr_line("Glory Level", x=655, y=346, width=183, height=44),
+                            _ocr_line("Upgrade", x=673, y=438, width=146, height=41),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_CASTLE)
+            self.assertTrue(observation.has(UiElementId.PNC_CASTLE_TERRITORY_OVERVIEW_BUTTON))
+            self.assertTrue(observation.has(UiElementId.PNC_CASTLE_GLORY_LEVEL_BUTTON))
+            self.assertTrue(observation.has(UiElementId.PNC_BUILDING_UPGRADE_BUTTON))
+
+    def test_observation_builder_classifies_exact_building_upgrade_confirmation_layout(self) -> None:
+        """Keeps the exact building screen when the shared final-confirmation layout replaces the base tiles."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                artifact_directory="k287_wall_upgrade_confirm",
+                label="wall_upgrade_confirm",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Wall", x=182, y=18, width=107, height=50),
+                            _ocr_line("Glory Level", x=655, y=346, width=182, height=42),
+                            _ocr_line("Upgrade", x=672, y=437, width=146, height=41),
+                            _ocr_line("Upgrade Now", x=401, y=459, width=210, height=32),
+                            _ocr_line("Time", x=58, y=550, width=75, height=37),
+                            _ocr_line("Requirement", x=61, y=714, width=176, height=30),
+                            _ocr_line("Castle: Lv.8", x=153, y=768, width=141, height=27),
+                            _ocr_line("Materials required", x=60, y=866, width=242, height=30),
+                            _ocr_line("Effect", x=60, y=1036, width=83, height=33),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_WALL)
+            self.assertTrue(observation.has(UiElementId.PNC_BUILDING_UPGRADE_CONFIRMATION_PANEL))
+            self.assertTrue(observation.has(UiElementId.PNC_WALL_UPGRADE_BUTTON))
+            self.assertTrue(observation.has(UiElementId.PNC_BUILDING_UPGRADE_BUTTON))
+            self.assertTrue(observation.has(UiElementId.PNC_BUILDING_UPGRADE_CONFIRM_BUTTON))
+            self.assertFalse(observation.has(UiElementId.PNC_BUILDING_REQUIREMENT_HEADER))
+            self.assertFalse(observation.has(UiElementId.PNC_BUILDING_REQUIREMENT_GO_BUTTON))
+
     def test_observation_builder_rejects_upgrade_like_non_building_screens(self) -> None:
         """Keeps ambiguous upgrade screens unknown when the building evidence is incomplete."""
 
@@ -1350,6 +1527,139 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertTrue(observation.has(UiElementId.PNC_HOME_LORD_INFO_SHORTCUT))
             self.assertIsNotNone(observation.spatial_surface)
             self.assertEqual(observation.spatial_surface.surface_type, SpatialSurfaceType.HOME_CITY_SURFACE)
+
+    def test_observation_builder_classifies_busy_builder_home_city_from_help_anchor(self) -> None:
+        """Treats the occupied-builder Help label as the same canonical home-city build-slot signal."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                artifact_directory="k287_busy_builder_home",
+                label="home_city_help_anchor",
+            )
+            builder = ObservationBuilder(
+                selector_registry=build_default_selector_registry(),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Help", x=27, y=354, width=58, height=28),
+                            _ocr_line("(1/1)", x=20, y=389, width=76, height=26),
+                            _ocr_line("Research", x=121, y=1182, width=118, height=29),
+                            _ocr_line("Hero", x=219, y=1567, width=62, height=25),
+                            _ocr_line("Bag", x=455, y=1565, width=54, height=32),
+                            _ocr_line("Alliance", x=666, y=1567, width=100, height=26),
+                            _ocr_line("Quest", x=333, y=1571, width=69, height=20),
+                            _ocr_line("Mail", x=571, y=1568, width=57, height=24),
+                            _ocr_line("More", x=795, y=1568, width=70, height=25),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_HOME_CITY)
+            self.assertTrue(observation.has(UiElementId.PNC_HOME_BUILD_BUTTON))
+            self.assertTrue(observation.has(UiElementId.PNC_HOME_RESEARCH_BUTTON))
+            self.assertTrue(observation.has(UiElementId.PNC_BOTTOM_NAV_ALLIANCE))
+            self.assertTrue(observation.has(UiElementId.PNC_BOTTOM_NAV_MORE))
+
+    def test_observation_builder_exposes_home_city_active_build_timer_and_building_level(self) -> None:
+        """Adds the shared home-city timer proof plus building-level enrichment used by upgrade verification."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                artifact_directory="k230_home_city_active_build",
+                label="home_city_active_build",
+            )
+            builder = ObservationBuilder(
+                selector_registry=build_default_selector_registry(),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Build", x=27, y=354, width=65, height=28),
+                            _ocr_line("Wall", x=455, y=918, width=81, height=28),
+                            _ocr_line("6", x=506, y=956, width=22, height=22),
+                            _ocr_line("00:48:33", x=404, y=872, width=140, height=24),
+                            _ocr_line("Alliance", x=666, y=1567, width=100, height=26),
+                            _ocr_line("More", x=795, y=1568, width=70, height=25),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_HOME_CITY)
+            self.assertIsNotNone(observation.spatial_surface)
+            assert observation.spatial_surface is not None
+            self.assertEqual(observation.spatial_surface.metadata["active_build_timer_text"], "00:48:33")
+            wall = observation.require_spatial_object(
+                _spatial_query(
+                    surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+                    kind=SpatialObjectKind.HOME_BUILDING,
+                    metadata_key="home_city_object_id",
+                    metadata_value="wall",
+                )
+            )
+            self.assertEqual(wall.level, 6)
+
+    def test_observation_builder_classifies_build_queue_and_extracts_active_entry(self) -> None:
+        """Recognizes the build queue overlay and exposes its active upgrading row for task verification."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                artifact_directory="k230_build_queue",
+                label="build_queue",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Build Queue", x=315, y=64, width=256, height=36),
+                            _ocr_line("Upgrading: Wall", x=115, y=250, width=250, height=34),
+                            _ocr_line("00:48:16", x=262, y=303, width=128, height=28),
+                            _ocr_line("Speedup", x=673, y=244, width=154, height=40),
+                            _ocr_line("2nd Build Queue", x=101, y=420, width=278, height=32),
+                            _ocr_line("Idle", x=113, y=470, width=68, height=26),
+                            _ocr_line("Go", x=754, y=468, width=52, height=28),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_BUILD_QUEUE)
+            active_entries = observation.entries(ListEntryKind.BUILDING)
+            self.assertEqual(len(active_entries), 1)
+            self.assertEqual(active_entries[0].title_text, "Wall")
+            self.assertEqual(active_entries[0].timer_text, "00:48:16")
+            self.assertEqual(active_entries[0].metadata["queue_state"], "upgrading")
 
     def test_observation_builder_classifies_world_map_from_coordinates_and_bottom_nav_ocr(self) -> None:
         """Recognizes the live root-map layout so root navigation does not fall back to KEYCODE_BACK."""
@@ -1879,7 +2189,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                         kind=SpatialObjectKind.HOME_BUILDING,
                         name_text="Castle",
                     )
-                ).metadata["category"],
+                ).metadata["home_city_object_id"],
                 "castle",
             )
             self.assertEqual(
@@ -1889,8 +2199,8 @@ class CaptureAndVisionTests(unittest.TestCase):
                         kind=SpatialObjectKind.HOME_BUILDING,
                         name_text="Academy",
                     )
-                ).metadata["category"],
-                "academy",
+                ).metadata["home_city_object_id"],
+                "institute",
             )
             self.assertIsNotNone(
                 observation.find_spatial_object(
@@ -1973,8 +2283,14 @@ class CaptureAndVisionTests(unittest.TestCase):
 
             self.assertNotEqual(initial_castle.bounds, shifted_castle.bounds)
             self.assertNotEqual(initial_castle.action_point, shifted_castle.action_point)
-            self.assertEqual(initial_castle.metadata["category"], "castle")
-            self.assertEqual(shifted_castle.metadata["category"], "castle")
+            self.assertEqual(initial_castle.viewport_offset, (-80, -176))
+            self.assertAlmostEqual(initial_castle.viewport_offset_ratio[0], -80 / 900)
+            self.assertAlmostEqual(initial_castle.viewport_offset_ratio[1], -176 / 1600)
+            self.assertEqual(shifted_castle.viewport_offset, (138, -42))
+            self.assertAlmostEqual(shifted_castle.viewport_offset_ratio[0], 138 / 900)
+            self.assertAlmostEqual(shifted_castle.viewport_offset_ratio[1], -42 / 1600)
+            self.assertEqual(initial_castle.metadata["home_city_object_id"], "castle")
+            self.assertEqual(shifted_castle.metadata["home_city_object_id"], "castle")
 
     def test_observation_builder_classifies_blocking_popup_over_home_city_from_ocr(self) -> None:
         """Promotes centered modal cancel buttons into the canonical blocking-popup selector."""
@@ -2003,6 +2319,78 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("More", x=795, y=1568, width=70, height=25),
                             _ocr_line("Cancel", x=378, y=888, width=115, height=40),
                             _ocr_line("Join/Apply", x=607, y=888, width=178, height=44),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_POPUP)
+            self.assertTrue(observation.blocking_popup)
+            self.assertTrue(observation.has(UiElementId.PNC_POPUP_CLOSE_BUTTON))
+
+    def test_observation_builder_classifies_research_queue_overlay_as_blocking_popup(self) -> None:
+        """Recognizes the in-game research queue overlay as a popup so bootstrap stays inside the game."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                artifact_directory="k287_research_queue_popup",
+                label="research_queue_popup",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Research Queue", x=288, y=427, width=328, height=45),
+                            _ocr_line("1st Research Queue", x=213, y=544, width=265, height=30),
+                            _ocr_line("Go", x=700, y=573, width=50, height=35),
+                            _ocr_line("Idle", x=208, y=596, width=58, height=33),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_POPUP)
+            self.assertTrue(observation.blocking_popup)
+
+    def test_observation_builder_classifies_google_play_games_profile_prompt_as_blocking_popup(self) -> None:
+        """Treats the external Google Play Games profile prompt as a recoverable popup instead of bootstrap unknown."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                artifact_directory="k287_google_play_games_popup",
+                label="google_play_games_popup",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Google Play Games", x=369, y=440, width=214, height=27),
+                            _ocr_line("Create a Play Games profile", x=233, y=960, width=424, height=30),
+                            _ocr_line("No profile", x=154, y=1097, width=109, height=30),
+                            _ocr_line("Cancel", x=59, y=1529, width=78, height=24),
+                            _ocr_line("Next", x=782, y=1530, width=56, height=22),
                         )
                     )
                 ),
@@ -2264,7 +2652,7 @@ class CaptureAndVisionTests(unittest.TestCase):
 
             self.assertEqual(observation.screen_type, ScreenType.PNC_RESEARCH_TREE)
 
-    def test_observation_builder_classifies_academy_overview_from_live_like_ocr(self) -> None:
+    def test_observation_builder_classifies_institute_overview_from_live_like_ocr(self) -> None:
         """Recognizes the live institute overview and exposes a safe back target."""
 
         with tempfile.TemporaryDirectory() as temp_directory:
@@ -2298,8 +2686,10 @@ class CaptureAndVisionTests(unittest.TestCase):
 
             observation = builder.build(screenshot)
 
-            self.assertEqual(observation.screen_type, ScreenType.PNC_ACADEMY)
+            self.assertEqual(observation.screen_type, ScreenType.PNC_INSTITUTE)
             self.assertTrue(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
+            self.assertTrue(observation.has(UiElementId.PNC_INSTITUTE_DEVELOPMENT_BUTTON))
+            self.assertTrue(observation.has(UiElementId.PNC_INSTITUTE_ECONOMY_BUTTON))
 
     def test_observation_builder_rejects_academy_title_without_upgrade_and_categories(self) -> None:
         """Keeps isolated academy-like titles unknown when the overview structure is absent."""
@@ -2957,7 +3347,7 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertFalse((root / "castles.yaml").exists())
 
     def test_observation_service_carries_lord_info_castle_name_back_to_home_adjacent_screens(self) -> None:
-        """Keeps the last Lord Info castle name on home and More screens until the switch flow starts."""
+        """Keeps the last validated current castle on home-adjacent screens across Lord Info and Manage Char."""
 
         with tempfile.TemporaryDirectory() as temp_directory:
             root = Path(temp_directory)
@@ -2991,7 +3381,39 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertEqual(home_city.current_castle_name, "K304554ca2797")
             self.assertEqual(more_menu.current_castle_name, "K304554ca2797")
             self.assertEqual(castle_selection.current_castle_name, "K313alpha")
-            self.assertIsNone(post_switch_home.current_castle)
+            self.assertEqual(post_switch_home.current_castle_name, "K313alpha")
+
+    def test_observation_service_carries_selected_manage_char_castle_back_to_home_adjacent_screens(self) -> None:
+        """Keeps exact Manage Char castle selection on home-adjacent screens until a new switch flow starts."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            payload = _encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))
+            selected_castle = CastleIdentity(kingdom="K287", castle_name="pine cobaye 1")
+            service = ObservationService(
+                screenshot_service=screenshot_service,
+                observation_builder=_SequencedObservationBuilder(
+                    observations=[
+                        make_observation(ScreenType.PNC_CASTLE_SELECTION, current_castle=selected_castle),
+                        make_observation(ScreenType.PNC_HOME_CITY, visible_ids=(UiElementId.PNC_BOTTOM_NAV_MORE,)),
+                        make_observation(ScreenType.PNC_MORE_MENU, visible_ids=(UiElementId.PNC_MORE_MANAGE_CHAR,)),
+                        make_observation(ScreenType.PNC_WORLD_MAP),
+                    ]
+                ),
+                session=_FakeScreenshotSession(payload),
+                artifact_directory="k287_manage_char_validation",
+            )
+
+            castle_selection = service.observe("castle_selection")
+            home_city = service.observe("home_city")
+            more_menu = service.observe("more_menu")
+            world_map = service.observe("world_map")
+
+            self.assertEqual(castle_selection.current_castle, selected_castle)
+            self.assertEqual(home_city.current_castle, selected_castle)
+            self.assertEqual(more_menu.current_castle, selected_castle)
+            self.assertIsNone(world_map.current_castle)
 
     def test_observation_service_skips_routine_artifact_persistence_in_light_mode(self) -> None:
         """Leaves routine observations ephemeral in light mode so idle scheduler runs do not flood artifacts."""

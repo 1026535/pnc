@@ -12,6 +12,7 @@ from pnc_automation.automation.tasks.collect_mail_task import CollectMailTask
 from pnc_automation.automation.tasks.ensure_game_running_task import EnsureGameRunningTask
 from pnc_automation.automation.tasks.gathering_task import GatheringTask
 from pnc_automation.automation.tasks.login_task import LoginTask
+from pnc_automation.automation.tasks.open_building_task import OpenBuildingTask
 from pnc_automation.automation.tasks.popup_recovery_task import PopupRecoveryTask
 from pnc_automation.automation.tasks.refresh_castle_roster_task import RefreshCastleRosterTask
 from pnc_automation.automation.tasks.research_task import ResearchTask
@@ -174,6 +175,7 @@ def build_default_task_registry() -> TaskRegistry:
             SendMailTask(),
             CollectMailTask(),
             CollectKingdomChatTask(),
+            OpenBuildingTask(),
             BuildingUpgradeTask(),
             ResearchTask(),
             GatheringTask(),

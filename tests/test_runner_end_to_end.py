@@ -19,6 +19,7 @@ from pnc_automation.config.models import (
     PncAccountCastleRosterConfig,
     ResolvedCredentials,
 )
+from pnc_automation.pnc.building_catalog import HomeCityObjectId, build_home_city_object_metadata
 from pnc_automation.pnc.observation import ListEntryKind, SpatialObjectKind, SpatialSurfaceType
 from pnc_automation.pnc.screen_flows import ScreenFlowPlanner
 from pnc_automation.pnc.screen_type import ScreenType
@@ -60,7 +61,7 @@ class RunnerEndToEndTests(unittest.TestCase):
                 ScriptStep(task=TaskId.ENSURE_GAME_RUNNING),
                 ScriptStep(task=TaskId.LOGIN),
                 ScriptStep(task=TaskId.SELECT_CASTLE, castle=target_castle),
-                ScriptStep(task=TaskId.BUILDING_UPGRADE, params={"priority": ["castle", "academy"], "allow_speedups": False}),
+                ScriptStep(task=TaskId.BUILDING_UPGRADE, params={"priority": ["castle", "institute"], "allow_speedups": False}),
                 ScriptStep(task=TaskId.RESEARCH, params={"priority": ["economy", "development"]}),
                 ScriptStep(task=TaskId.GATHERING, params={"preferred_resources": ["food", "wood"], "max_parallel_marches": 2}),
                 ScriptStep(task=TaskId.CAMPAIGN, params={"enabled_modes": ["standard"]}),
@@ -99,30 +100,12 @@ class RunnerEndToEndTests(unittest.TestCase):
                 ),
             ),
             make_observation(
-                ScreenType.PNC_LORD_INFO,
-                current_castle_name="Wrong",
-            ),
-            make_observation(
-                ScreenType.PNC_HOME_CITY,
-                visible_ids=(
-                    UiElementId.PNC_HOME_WORLD_SWITCH,
-                    UiElementId.PNC_BOTTOM_NAV_MORE,
-                    UiElementId.PNC_HOME_LORD_INFO_SHORTCUT,
-                    UiElementId.PNC_HOME_BUILD_BUTTON,
-                    UiElementId.PNC_HOME_RESEARCH_BUTTON,
-                    UiElementId.PNC_HOME_CAMPAIGN_ENTRY,
-                ),
-                current_castle_name="Wrong",
-            ),
-            make_observation(
                 ScreenType.PNC_MORE_MENU,
                 visible_ids=(UiElementId.PNC_BOTTOM_NAV_MORE, UiElementId.PNC_MORE_SETTINGS),
-                current_castle_name="Wrong",
             ),
             make_observation(
                 ScreenType.PNC_MORE_MENU,
                 visible_ids=(UiElementId.PNC_MORE_MANAGE_CHAR,),
-                current_castle_name="Wrong",
             ),
             make_observation(
                 ScreenType.PNC_CASTLE_SELECTION,
@@ -145,47 +128,36 @@ class RunnerEndToEndTests(unittest.TestCase):
                     UiElementId.PNC_HOME_RESEARCH_BUTTON,
                     UiElementId.PNC_HOME_CAMPAIGN_ENTRY,
                 ),
-            ),
-            make_observation(
-                ScreenType.PNC_LORD_INFO,
-                current_castle_name="Main",
-            ),
-            make_observation(
-                ScreenType.PNC_HOME_CITY,
-                visible_ids=(
-                    UiElementId.PNC_HOME_WORLD_SWITCH,
-                    UiElementId.PNC_BOTTOM_NAV_MORE,
-                    UiElementId.PNC_HOME_LORD_INFO_SHORTCUT,
-                    UiElementId.PNC_HOME_BUILD_BUTTON,
-                    UiElementId.PNC_HOME_RESEARCH_BUTTON,
-                    UiElementId.PNC_HOME_CAMPAIGN_ENTRY,
-                ),
                 spatial_surface=make_spatial_surface(
                     SpatialSurfaceType.HOME_CITY_SURFACE,
                     objects=(
                         make_spatial_object(
                             SpatialObjectKind.HOME_BUILDING,
                             name_text="Castle",
-                            metadata={"category": "castle"},
+                            metadata=build_home_city_object_metadata(HomeCityObjectId.CASTLE),
                         ),
                         make_spatial_object(
                             SpatialObjectKind.HOME_BUILDING,
-                            name_text="Academy",
-                            metadata={"category": "academy"},
+                            name_text="Institute",
+                            metadata=build_home_city_object_metadata(HomeCityObjectId.INSTITUTE),
                         ),
                     ),
                 ),
-                current_castle_name="Main",
+                current_castle=target_castle,
             ),
             make_observation(
-                ScreenType.PNC_BUILDING_DETAILS,
+                ScreenType.PNC_CASTLE,
                 visible_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
             ),
-            make_observation(ScreenType.PNC_BUILDING_DETAILS),
+            make_observation(ScreenType.PNC_CASTLE),
             make_observation(
                 ScreenType.PNC_HOME_CITY,
                 visible_ids=(UiElementId.PNC_POPUP_CLOSE_BUTTON,),
                 blocking_popup=True,
+                spatial_surface=make_spatial_surface(
+                    SpatialSurfaceType.HOME_CITY_SURFACE,
+                    metadata={"active_build_timer_text": "00:48:33"},
+                ),
                 current_castle_name="Main",
             ),
             make_observation(
@@ -200,7 +172,10 @@ class RunnerEndToEndTests(unittest.TestCase):
                 ),
                 current_castle_name="Main",
             ),
-            make_observation(ScreenType.PNC_ACADEMY, visible_ids=(UiElementId.PNC_RESEARCH_AVAILABLE_BADGE,)),
+            make_observation(
+                ScreenType.PNC_INSTITUTE,
+                visible_ids=(UiElementId.PNC_INSTITUTE_ECONOMY_BUTTON, UiElementId.PNC_INSTITUTE_DEVELOPMENT_BUTTON),
+            ),
             make_observation(
                 ScreenType.PNC_RESEARCH_TREE,
                 visible_ids=(UiElementId.PNC_RESEARCH_START_BUTTON,),

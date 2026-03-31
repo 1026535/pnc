@@ -1381,7 +1381,27 @@ selectors:
   detection_kind: planned
 - id: PNC_RESEARCH_AVAILABLE_BADGE
   screens:
-  - PNC_ACADEMY
+  - PNC_INSTITUTE
+  status: planned
+  detection_kind: planned
+- id: PNC_INSTITUTE_DEVELOPMENT_BUTTON
+  screens:
+  - PNC_INSTITUTE
+  status: planned
+  detection_kind: planned
+- id: PNC_INSTITUTE_ECONOMY_BUTTON
+  screens:
+  - PNC_INSTITUTE
+  status: planned
+  detection_kind: planned
+- id: PNC_INSTITUTE_MILITARY_BUTTON
+  screens:
+  - PNC_INSTITUTE
+  status: planned
+  detection_kind: planned
+- id: PNC_INSTITUTE_FORTIFICATION_BUTTON
+  screens:
+  - PNC_INSTITUTE
   status: planned
   detection_kind: planned
 - id: PNC_RESEARCH_START_BUTTON

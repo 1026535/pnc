@@ -1,0 +1,3 @@
+# Try institute first, then fall back to warehouse if institute is not eligible.
+institute
+warehouse

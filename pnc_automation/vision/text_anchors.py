@@ -26,12 +26,14 @@ class TextAnchorId(StrEnum):
     LABEL_ENHANCE = "label_enhance"
     LABEL_EVOLVE = "label_evolve"
     LABEL_HERO = "label_hero"
+    LABEL_HELP = "label_help"
     LABEL_HERO_SKILL = "label_hero_skill"
     LABEL_HOME = "label_home"
     LABEL_JOIN_APPLY = "label_join_apply"
     LABEL_MAIL = "label_mail"
     LABEL_MANAGE_CHAR = "label_manage_char"
     LABEL_MORE = "label_more"
+    LABEL_NEXT = "label_next"
     LABEL_QUEST = "label_quest"
     LABEL_RESEARCH = "label_research"
     LABEL_TROOP_SKILL = "label_troop_skill"
@@ -85,12 +87,14 @@ _ANCHOR_IDS_BY_NORMALIZED_TEXT: dict[str, TextAnchorId] = {
     "ENHANCE": TextAnchorId.LABEL_ENHANCE,
     "EVOLVE": TextAnchorId.LABEL_EVOLVE,
     "HERO": TextAnchorId.LABEL_HERO,
+    "HELP": TextAnchorId.LABEL_HELP,
     "HEROSKILL": TextAnchorId.LABEL_HERO_SKILL,
     "HOME": TextAnchorId.LABEL_HOME,
     "JOINAPPLY": TextAnchorId.LABEL_JOIN_APPLY,
     "MAIL": TextAnchorId.LABEL_MAIL,
     "MANAGECHAR": TextAnchorId.LABEL_MANAGE_CHAR,
     "MORE": TextAnchorId.LABEL_MORE,
+    "NEXT": TextAnchorId.LABEL_NEXT,
     "QUEST": TextAnchorId.LABEL_QUEST,
     "RESEARCH": TextAnchorId.LABEL_RESEARCH,
     "TROOPSKILL": TextAnchorId.LABEL_TROOP_SKILL,

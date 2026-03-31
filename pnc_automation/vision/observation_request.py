@@ -103,6 +103,17 @@ class ObservationRequest:
         )
 
     @classmethod
+    def build_queue_follow_up(cls) -> "ObservationRequest":
+        """Returns the narrow OCR scope used while verifying one home-city build queue open attempt."""
+
+        return cls(
+            candidate_screen_types=frozenset({ScreenType.PNC_HOME_CITY, ScreenType.PNC_BUILD_QUEUE}),
+            ocr_screen_types=frozenset({ScreenType.PNC_HOME_CITY, ScreenType.PNC_BUILD_QUEUE}),
+            include_popup_guard=True,
+            include_loading_guard=True,
+        )
+
+    @classmethod
     def chat_transcript_observation(cls) -> "ObservationRequest":
         """Returns the narrow OCR scope used for Kingdom Chat transcript polling."""
 

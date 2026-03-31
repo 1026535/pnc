@@ -12,6 +12,7 @@ from pnc_automation.app import ApplicationRunner, build_application_runner
 from pnc_automation.automation.runner import RunResult, StepRunResult
 from pnc_automation.automation.task import TaskId
 from pnc_automation.config.models import CastleIdentity
+from pnc_automation.pnc.building_priority_input import resolve_building_priority_values
 
 _ACTIVE_SESSION: ContextVar["_ActiveSession | None"] = ContextVar("pnc_automation_active_session", default=None)
 _DEFAULT_API: "AutomationApi | None" = None
@@ -54,6 +55,7 @@ class AutomationSession:
         self,
         *,
         priority: list[str] | None = None,
+        priority_file: str | None = None,
         allow_speedups: bool = False,
     ) -> StepRunResult:
         """Runs one direct building-upgrade step against the prepared session."""
@@ -61,8 +63,14 @@ class AutomationSession:
         return self.api.building_upgrade(
             account_id=self.account_id,
             priority=priority,
+            priority_file=priority_file,
             allow_speedups=allow_speedups,
         )
+
+    def open_building(self, *, building: str) -> StepRunResult:
+        """Runs one direct open-building step against the prepared session."""
+
+        return self.api.open_building(account_id=self.account_id, building=building)
 
     def research(self, *, priority: list[str] | None = None) -> StepRunResult:
         """Runs one direct research step against the prepared session."""
@@ -209,17 +217,33 @@ class AutomationApi:
         *,
         account_id: str | None = None,
         priority: list[str] | None = None,
+        priority_file: str | None = None,
         allow_speedups: bool = False,
     ) -> StepRunResult:
         """Runs one direct building-upgrade step using current-castle semantics."""
 
+        resolved_priority = resolve_building_priority_values(priority=priority, priority_file=priority_file)
         return self.run_task(
             account_id=self._resolve_account_id(account_id),
             task_id=TaskId.BUILDING_UPGRADE,
             params={
-                "priority": ["castle", "wall", "academy", "barracks"] if priority is None else list(priority),
+                "priority": resolved_priority,
                 "allow_speedups": allow_speedups,
             },
+        )
+
+    def open_building(
+        self,
+        *,
+        account_id: str | None = None,
+        building: str,
+    ) -> StepRunResult:
+        """Runs one direct open-building step using current-castle semantics."""
+
+        return self.run_task(
+            account_id=self._resolve_account_id(account_id),
+            task_id=TaskId.OPEN_BUILDING,
+            params={"building": building},
         )
 
     def research(
@@ -430,6 +454,7 @@ def building_upgrade(
     *,
     account_id: str | None = None,
     priority: list[str] | None = None,
+    priority_file: str | None = None,
     allow_speedups: bool = False,
 ) -> StepRunResult:
     """Runs one direct building-upgrade step through the default application facade."""
@@ -437,8 +462,15 @@ def building_upgrade(
     return _default_api().building_upgrade(
         account_id=account_id,
         priority=priority,
+        priority_file=priority_file,
         allow_speedups=allow_speedups,
     )
+
+
+def open_building(*, account_id: str | None = None, building: str) -> StepRunResult:
+    """Runs one direct open-building step through the default application facade."""
+
+    return _default_api().open_building(account_id=account_id, building=building)
 
 
 def research(*, account_id: str | None = None, priority: list[str] | None = None) -> StepRunResult:

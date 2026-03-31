@@ -331,9 +331,11 @@ def _parse_running_instances_json(raw_output: str) -> tuple[BlueStacksRunningIns
             "BlueStacks process enumeration returned invalid JSON.",
             raw_output=raw_output,
         ) from error
+    if isinstance(parsed, Mapping):
+        parsed = [parsed]
     if not isinstance(parsed, list):
         raise ConfigurationError(
-            "BlueStacks process enumeration did not return a JSON array.",
+            "BlueStacks process enumeration did not return a JSON object or array.",
             raw_output=raw_output,
         )
     running_instances = tuple(
