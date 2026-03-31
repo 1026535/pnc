@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -169,6 +170,20 @@ class AutomationSession:
         """Runs one direct Kingdom Chat heartbeat poll against the prepared session."""
 
         return self.api.collect_kingdom_chat(account_id=self.account_id)
+
+    def run_mail_schedules(
+        self,
+        *,
+        schedule_ids: list[str] | None = None,
+        scheduled_for_utc: datetime | None = None,
+    ) -> RunResult:
+        """Runs authored scheduled mail against the prepared session's bound account."""
+
+        return self.api.run_mail_schedules(
+            account_id=self.account_id,
+            schedule_ids=schedule_ids,
+            scheduled_for_utc=scheduled_for_utc,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -412,6 +427,21 @@ class AutomationApi:
             params={},
         )
 
+    def run_mail_schedules(
+        self,
+        *,
+        account_id: str | None = None,
+        schedule_ids: list[str] | None = None,
+        scheduled_for_utc: datetime | None = None,
+    ) -> RunResult:
+        """Runs the authored scheduled-mail expansion path for the selected account."""
+
+        return self.application.run_mail_schedules(
+            account_id=self._resolve_account_id(account_id),
+            schedule_ids=None if schedule_ids is None else list(schedule_ids),
+            scheduled_for_utc=scheduled_for_utc,
+        )
+
     def _resolve_account_id(self, account_id: str | None) -> str:
         """Returns an explicit account id or the currently active context-scoped account."""
 
@@ -579,6 +609,21 @@ def collect_kingdom_chat(*, account_id: str | None = None) -> StepRunResult:
     """Runs one direct Kingdom Chat heartbeat poll through the default application facade."""
 
     return _default_api().collect_kingdom_chat(account_id=account_id)
+
+
+def run_mail_schedules(
+    *,
+    account_id: str | None = None,
+    schedule_ids: list[str] | None = None,
+    scheduled_for_utc: datetime | None = None,
+) -> RunResult:
+    """Runs authored scheduled mail through the default application facade."""
+
+    return _default_api().run_mail_schedules(
+        account_id=account_id,
+        schedule_ids=schedule_ids,
+        scheduled_for_utc=scheduled_for_utc,
+    )
 
 
 def _default_api() -> AutomationApi:

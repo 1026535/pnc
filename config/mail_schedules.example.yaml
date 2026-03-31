@@ -1,0 +1,19 @@
+rotation:
+  cycle_days: 14
+  start_utc: 2026-03-30T00:00:00Z
+
+mail_schedules:
+  - id: mailschedule_1
+    enabled: true
+    day_indices: [0, 7]
+    hour_utc: 5
+    mail_ids:
+      - alliance_reset
+      - player_followup_alpha
+
+  - id: mailschedule_2
+    enabled: true
+    day_indices: [9]
+    hour_utc: 19
+    mail_ids:
+      - player_followup_alpha

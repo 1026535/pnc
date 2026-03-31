@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +17,11 @@ from pnc_automation.app.authoring.scripts.loader import load_run_script
 from pnc_automation.app.authoring.scripts.models import RunScript, ScriptStep
 from pnc_automation.app.authoring.scripts.registry import TaskRegistry
 from pnc_automation.app.automation.engine.task import TaskId
+from pnc_automation.app.authoring.mail.loader import (
+    build_generated_send_mail_script,
+    resolve_due_mail_definitions,
+    resolve_scheduled_hour_bucket,
+)
 from pnc_automation.app.pnc.persistence.chat_archive_store import ChatArchiveStore
 from pnc_automation.app.pnc.persistence.mail_archive_store import MailArchiveStore
 from pnc_automation.core.infra.capture.screenshot_service import ScreenshotService
@@ -109,6 +115,35 @@ class ScriptRunner:
             ),
         )
         return result.steps[0]
+
+    def run_mail_schedules(
+        self,
+        *,
+        account_id: str,
+        schedule_ids: list[str] | None = None,
+        scheduled_for_utc: datetime | None = None,
+    ) -> RunResult:
+        """Resolves the due authored mail schedules and executes them as canonical send-mail steps."""
+
+        catalog = self.config.require_mail_schedule_catalog()
+        scheduled_hour = resolve_scheduled_hour_bucket(scheduled_for_utc)
+        due_mail_definitions = resolve_due_mail_definitions(
+            catalog,
+            schedule_ids=schedule_ids,
+            scheduled_for_utc=scheduled_hour,
+        )
+        if not due_mail_definitions:
+            return _build_noop_run_result(
+                account_id=account_id,
+                script_name=_generated_mail_schedule_name(scheduled_hour),
+            )
+        return self.run_script(
+            account_id=account_id,
+            script=build_generated_send_mail_script(
+                scheduled_for_utc=scheduled_hour,
+                due_mail_definitions=due_mail_definitions,
+            ),
+        )
 
     def build_connected_runtime(self, *, account: AccountConfig) -> ConnectedAccountRuntime:
         """Builds the canonical connected session plus observation service for one configured account."""
@@ -232,4 +267,23 @@ def _prepare_account_session_steps(castle: CastleIdentity | None) -> tuple[Scrip
     if castle is not None:
         steps.append(ScriptStep(task=TaskId.SELECT_CASTLE, castle=castle))
     return tuple(steps)
+
+
+def _build_noop_run_result(*, account_id: str, script_name: str) -> RunResult:
+    """Builds one successful no-op run result when no scheduled mail is due."""
+
+    now = datetime.now(tz=UTC)
+    return RunResult(
+        account_id=account_id,
+        script_name=script_name,
+        steps=(),
+        started_at=now,
+        finished_at=now,
+    )
+
+
+def _generated_mail_schedule_name(scheduled_hour: datetime) -> str:
+    """Returns the canonical generated script name for one scheduled-mail execution hour."""
+
+    return f"generated_mail_schedule_{scheduled_hour.strftime('%Y%m%dT%H0000Z')}"
 

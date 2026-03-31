@@ -23,6 +23,7 @@ from pnc_automation.app.authoring.config.models import (
     ResolvedCredentials,
     RuntimeConfig,
 )
+from pnc_automation.app.authoring.mail.loader import load_mail_schedule_catalog
 from pnc_automation.app.runtime.observation_mode import ObservationMode
 from pnc_automation.app.authoring.config.validation import validate_app_config
 from pnc_automation.app.authoring.config.yaml_helpers import (
@@ -40,6 +41,8 @@ def load_app_config(
     env: Mapping[str, str] | None = None,
     castle_roster_path: str | Path | None = None,
     castle_targets_path: str | Path | None = None,
+    mail_definitions_path: str | Path | None = None,
+    mail_schedules_path: str | Path | None = None,
 ) -> AppConfig:
     """Loads and validates the canonical application configuration file."""
 
@@ -62,14 +65,22 @@ def load_app_config(
     accounts = _load_accounts(raw.get("accounts"), environment)
     resolved_castle_roster_path = _resolve_castle_roster_path(config_path, castle_roster_path)
     resolved_castle_targets_path = _resolve_castle_targets_path(config_path, castle_targets_path)
+    resolved_mail_definitions_path = _resolve_mail_definitions_path(config_path, mail_definitions_path)
+    resolved_mail_schedules_path = _resolve_mail_schedules_path(config_path, mail_schedules_path)
     rosters = _load_castle_rosters(resolved_castle_roster_path)
     castle_targets = _load_account_castle_targets(resolved_castle_targets_path)
+    mail_schedule_catalog = _load_optional_mail_schedule_catalog(
+        definitions_path=resolved_mail_definitions_path,
+        schedules_path=resolved_mail_schedules_path,
+    )
 
     return validate_app_config(
         AppConfig(
             config_path=config_path,
             castle_roster_path=resolved_castle_roster_path,
             castle_targets_path=resolved_castle_targets_path,
+            mail_definitions_path=resolved_mail_definitions_path,
+            mail_schedules_path=resolved_mail_schedules_path,
             artifact_root=artifact_root,
             archive_root=archive_root,
             defaults=defaults,
@@ -78,6 +89,7 @@ def load_app_config(
             accounts=accounts,
             castle_rosters=rosters,
             castle_targets=castle_targets,
+            mail_schedule_catalog=mail_schedule_catalog,
         )
     )
 
@@ -246,6 +258,22 @@ def _resolve_castle_targets_path(config_path: Path, castle_targets_path: str | P
     return Path(castle_targets_path).resolve()
 
 
+def _resolve_mail_definitions_path(config_path: Path, mail_definitions_path: str | Path | None) -> Path:
+    """Resolves the optional sibling mail-definition configuration path."""
+
+    if mail_definitions_path is None:
+        return (config_path.parent / "mail_definitions.yaml").resolve()
+    return Path(mail_definitions_path).resolve()
+
+
+def _resolve_mail_schedules_path(config_path: Path, mail_schedules_path: str | Path | None) -> Path:
+    """Resolves the optional sibling mail-schedule configuration path."""
+
+    if mail_schedules_path is None:
+        return (config_path.parent / "mail_schedules.yaml").resolve()
+    return Path(mail_schedules_path).resolve()
+
+
 def _load_castle_rosters(path: Path) -> tuple[PncAccountCastleRosterConfig, ...]:
     """Loads the optional castle-roster file keyed by P&C account id."""
 
@@ -318,6 +346,24 @@ def _load_account_castle_targets(path: Path) -> tuple[AccountCastleTargetsConfig
             )
         )
     return tuple(account_targets)
+
+
+def _load_optional_mail_schedule_catalog(*, definitions_path: Path, schedules_path: Path):
+    """Loads the authored scheduled-mail catalog only when both sibling files are present."""
+
+    definitions_exists = definitions_path.is_file()
+    schedules_exists = schedules_path.is_file()
+    if not definitions_exists and not schedules_exists:
+        return None
+    if not definitions_exists or not schedules_exists:
+        missing_path = definitions_path if not definitions_exists else schedules_path
+        present_path = schedules_path if not definitions_exists else definitions_path
+        raise ConfigurationError(
+            "Scheduled mail requires both mail_definitions.yaml and mail_schedules.yaml when either file is present.",
+            missing_path=str(missing_path),
+            present_path=str(present_path),
+        )
+    return load_mail_schedule_catalog(definitions_path=definitions_path, schedules_path=schedules_path)
 
 
 def _load_castle_roster_ordering(value: Any, *, context: str) -> CastleRosterOrdering:

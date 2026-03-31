@@ -27,3 +27,10 @@ accounts:
     pnc_account_id: your_pnc_account_id
     username: your-email@example.com
     password: your-password
+
+# Optional scheduled-mail sibling files:
+# - config/mail_definitions.yaml
+# - config/mail_schedules.yaml
+# Day indices use the fixed 14-day rotation:
+# 0=Monday week 1 ... 6=Sunday week 1, 7=Monday week 2 ... 13=Sunday week 2.
+# rotation.start_utc must be the Monday 00:00:00 UTC anchor for day index 0.

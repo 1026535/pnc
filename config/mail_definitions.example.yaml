@@ -1,0 +1,17 @@
+mails:
+  - id: alliance_reset
+    castle_ref: main
+    recipient_kind: alliance
+    subject: Alliance Reset Reminder
+    body: |
+      Reset is today.
+      Please finish donations and rallies.
+
+  - id: player_followup_alpha
+    castle_ref: main
+    recipient_kind: player
+    player_name: SomePlayer
+    subject: Follow-up
+    body: |
+      Hi,
+      Checking in on today's plan.
