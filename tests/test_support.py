@@ -11,12 +11,12 @@ from typing import Any
 
 from PIL import Image
 
-from pnc_automation.capture.artifact_store import ArtifactRecord
-from pnc_automation.capture.screenshot_service import CapturedScreenshot
-from pnc_automation.config.models import CastleIdentity, PncAccountCastleRosterConfig
-from pnc_automation.pnc.chat import ChatChannel
-from pnc_automation.pnc.mail import MailboxType
-from pnc_automation.pnc.observation import (
+from pnc_automation.core.infra.storage.artifact_store import ArtifactRecord
+from pnc_automation.core.infra.capture.screenshot_service import CapturedScreenshot
+from pnc_automation.app.authoring.config.models import CastleIdentity, PncAccountCastleRosterConfig
+from pnc_automation.app.pnc.domain.chat import ChatChannel
+from pnc_automation.app.pnc.domain.mail import MailboxType
+from pnc_automation.app.pnc.domain.observation import (
     Bounds,
     CurrentCastleEvidenceKind,
     DetectedListEntry,
@@ -33,10 +33,10 @@ from pnc_automation.pnc.observation import (
     VisibleElement,
     VisibleElementSourceKind,
 )
-from pnc_automation.pnc.screen_type import ScreenType
-from pnc_automation.pnc.ui_element_id import UiElementId
-from pnc_automation.vision.observation_request import ObservationRequest
-from pnc_automation.vision.observation_builder import CapturedObservation
+from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
+from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
+from pnc_automation.app.pnc.vision.observation_builder import CapturedObservation
 
 
 def build_png_bytes(*, size: tuple[int, int] = (20, 20), color: tuple[int, int, int, int] = (255, 255, 255, 255)) -> bytes:

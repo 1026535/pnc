@@ -1,4 +1,4 @@
-﻿"""Castle-targeting runtime tests for registry, runner, Python API, and CLI surfaces."""
+"""Castle-targeting runtime tests for registry, runner, Python API, and CLI surfaces."""
 
 from __future__ import annotations
 
@@ -9,19 +9,19 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from pnc_automation.api import AutomationApi
-from pnc_automation.automation.observation_mode import ObservationMode
-from pnc_automation.automation.action_executor import ActionExecutor
-from pnc_automation.automation.observed_action_executor import ObservedActionExecutor
-from pnc_automation.automation.runner import AutomationRunner, RunResult, StepRunResult
-from pnc_automation.scripts.models import RunScript, ScriptStep
-from pnc_automation.scripts.registry import TaskRegistry, build_default_task_registry
-from pnc_automation.automation.task import BaseAutomationTask, CastleTargetPolicy, TaskId, TaskResult
-from pnc_automation.automation.task_context import TaskContext
-from pnc_automation.automation.tasks.popup_recovery_task import PopupRecoveryTask
-from pnc_automation.automation.tasks.select_castle_task import SelectCastleTask
-from pnc_automation.cli import main as cli_main
-from pnc_automation.config.models import (
+from pnc_automation.app.entrypoints.api import AutomationApi
+from pnc_automation.app.runtime.observation_mode import ObservationMode
+from pnc_automation.app.automation.engine.action_executor import ActionExecutor
+from pnc_automation.app.automation.engine.observed_action_executor import ObservedActionExecutor
+from pnc_automation.app.automation.engine.runner import AutomationRunner, RunResult, StepRunResult
+from pnc_automation.app.authoring.scripts.models import RunScript, ScriptStep
+from pnc_automation.app.authoring.scripts.registry import TaskRegistry, build_default_task_registry
+from pnc_automation.app.automation.engine.task import BaseAutomationTask, CastleTargetPolicy, TaskId, TaskResult
+from pnc_automation.app.automation.engine.task_context import TaskContext
+from pnc_automation.app.automation.tasks.popup_recovery_task import PopupRecoveryTask
+from pnc_automation.app.automation.tasks.select_castle_task import SelectCastleTask
+from pnc_automation.app.entrypoints.cli import main as cli_main
+from pnc_automation.app.authoring.config.models import (
     AccountConfig,
     AccountCastleTargetsConfig,
     CastleIdentity,
@@ -31,13 +31,13 @@ from pnc_automation.config.models import (
     PncAccountCastleRosterConfig,
     ResolvedCredentials,
 )
-from pnc_automation.errors import ScriptValidationError
-from pnc_automation.pnc.action_requests import ActionRequest
-from pnc_automation.pnc.observation import ListEntryKind, Observation
-from pnc_automation.pnc.screen_flows import ScreenFlowPlanner
-from pnc_automation.pnc.screen_type import ScreenType
-from pnc_automation.pnc.ui_element_id import UiElementId
-from pnc_automation.vision.selectors import build_default_selector_registry
+from pnc_automation.core.errors import ScriptValidationError
+from pnc_automation.app.pnc.domain.action_requests import ActionRequest
+from pnc_automation.app.pnc.domain.observation import ListEntryKind, Observation
+from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
+from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
+from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
 from tests.test_support import FakeObservationService, FakeSession, build_logger, make_entry, make_observation
 
 
@@ -340,7 +340,7 @@ class RuntimeCastleTargetingTests(unittest.TestCase):
         """Calls the shared preparation path without mutating the current castle when no target is given."""
 
         fake_runner = _FakeApplicationRunner()
-        with patch("pnc_automation.cli.build_application_runner", return_value=fake_runner), patch("builtins.print"):
+        with patch("pnc_automation.app.entrypoints.cli.build_application_runner", return_value=fake_runner), patch("builtins.print"):
             exit_code = cli_main(["login", "--account", "account_a", "--config", "config/accounts.yaml"])
 
         self.assertEqual(exit_code, 0)
@@ -351,7 +351,7 @@ class RuntimeCastleTargetingTests(unittest.TestCase):
         """Calls the shared preparation path with the explicit CLI castle target when one is provided."""
 
         fake_runner = _FakeApplicationRunner()
-        with patch("pnc_automation.cli.build_application_runner", return_value=fake_runner), patch("builtins.print"):
+        with patch("pnc_automation.app.entrypoints.cli.build_application_runner", return_value=fake_runner), patch("builtins.print"):
             exit_code = cli_main(
                 [
                     "login",
@@ -376,7 +376,7 @@ class RuntimeCastleTargetingTests(unittest.TestCase):
         """Uses the direct build command without forcing session preparation when no explicit castle target was given."""
 
         fake_runner = _FakeApplicationRunner()
-        with patch("pnc_automation.cli.build_application_runner", return_value=fake_runner), patch("builtins.print"):
+        with patch("pnc_automation.app.entrypoints.cli.build_application_runner", return_value=fake_runner), patch("builtins.print"):
             exit_code = cli_main(
                 [
                     "build",
@@ -404,7 +404,7 @@ class RuntimeCastleTargetingTests(unittest.TestCase):
             priority_file = Path(temp_directory) / "buildings.txt"
             priority_file.write_text("institute\nwarehouse\n", encoding="utf-8")
             fake_runner = _FakeApplicationRunner()
-            with patch("pnc_automation.cli.build_application_runner", return_value=fake_runner), patch("builtins.print"):
+            with patch("pnc_automation.app.entrypoints.cli.build_application_runner", return_value=fake_runner), patch("builtins.print"):
                 exit_code = cli_main(
                     [
                         "build",
@@ -434,7 +434,7 @@ class RuntimeCastleTargetingTests(unittest.TestCase):
         """Keeps the flag-only legacy invocation shape while executing the canonical run command path."""
 
         fake_runner = _FakeApplicationRunner()
-        with patch("pnc_automation.cli.build_application_runner", return_value=fake_runner), patch("builtins.print"):
+        with patch("pnc_automation.app.entrypoints.cli.build_application_runner", return_value=fake_runner), patch("builtins.print"):
             exit_code = cli_main(
                 ["--account", "account_a", "--config", "config/accounts.yaml", "--script", "scripts/daily.yaml"]
             )
@@ -447,7 +447,7 @@ class RuntimeCastleTargetingTests(unittest.TestCase):
 
         fake_runner = _FakeApplicationRunner()
         with (
-            patch("pnc_automation.cli.build_application_runner", return_value=fake_runner) as build_runner,
+            patch("pnc_automation.app.entrypoints.cli.build_application_runner", return_value=fake_runner) as build_runner,
             patch("builtins.print"),
         ):
             exit_code = cli_main(

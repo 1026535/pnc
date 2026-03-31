@@ -8,20 +8,20 @@ from pathlib import Path
 
 from PIL import Image
 
-from pnc_automation.capture.artifact_store import ArtifactStore
-from pnc_automation.capture.screenshot_service import ScreenshotService
-from pnc_automation.errors import SelectorResolutionError
-from pnc_automation.pnc.observation import Bounds, Observation, VisibleElement, VisibleElementSourceKind
-from pnc_automation.pnc.screen_type import ScreenType
-from pnc_automation.pnc.ui_element_id import UiElementId
-from pnc_automation.vision.observation_builder import ObservationBuilder, PillowSelectorEngine
-from pnc_automation.vision.ocr_service import UnavailableOcrService
-from pnc_automation.vision.pnc_observation_enricher import PncObservationEnricher
-from pnc_automation.vision.screen_classifier import ScreenClassifier
-from pnc_automation.vision.selector_catalog import SelectorCatalogDocument, SelectorCatalogEntry
-from pnc_automation.vision.selector_discovery import SelectorDiscoveryAnalyzer, load_artifact_paths
-from pnc_automation.vision.selectors import SelectorRegistry
-from pnc_automation.vision.template_matcher import PillowTemplateMatcher
+from pnc_automation.core.infra.storage.artifact_store import ArtifactStore
+from pnc_automation.core.infra.capture.screenshot_service import ScreenshotService
+from pnc_automation.core.errors import SelectorResolutionError
+from pnc_automation.app.pnc.domain.observation import Bounds, Observation, VisibleElement, VisibleElementSourceKind
+from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
+from pnc_automation.app.pnc.vision.observation_builder import ObservationBuilder, PillowSelectorEngine
+from pnc_automation.core.vision.ocr.ocr_service import UnavailableOcrService
+from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservationEnricher
+from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
+from pnc_automation.app.pnc.vision.selector_catalog import SelectorCatalogDocument, SelectorCatalogEntry
+from pnc_automation.app.pnc.vision.selector_discovery import SelectorDiscoveryAnalyzer, load_artifact_paths
+from pnc_automation.app.pnc.vision.selectors import SelectorRegistry
+from pnc_automation.core.vision.template.template_matcher import PillowTemplateMatcher
 from tests.test_capture_and_vision import _FakeOcrService, _FakeScreenshotSession, _encode_png, _ocr_line
 from tests.test_support import make_observation
 

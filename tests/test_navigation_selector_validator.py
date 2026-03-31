@@ -9,25 +9,25 @@ from pathlib import Path
 
 from PIL import Image
 
-from pnc_automation.automation.action_executor import ActionExecutor
-from pnc_automation.automation.observed_action_executor import ObservedActionExecutor
-from pnc_automation.capture.artifact_store import ArtifactRecord
-from pnc_automation.capture.screenshot_service import CapturedScreenshot
-from pnc_automation.errors import SelectorResolutionError
-from pnc_automation.pnc.observation import VisibleElementSourceKind
-from pnc_automation.pnc.screen_flows import ScreenFlowPlanner
-from pnc_automation.pnc.screen_type import ScreenType
-from pnc_automation.pnc.ui_element_id import UiElementId
-from pnc_automation.vision.navigation_selector_validator import (
+from pnc_automation.app.automation.engine.action_executor import ActionExecutor
+from pnc_automation.app.automation.engine.observed_action_executor import ObservedActionExecutor
+from pnc_automation.core.infra.storage.artifact_store import ArtifactRecord
+from pnc_automation.core.infra.capture.screenshot_service import CapturedScreenshot
+from pnc_automation.core.errors import SelectorResolutionError
+from pnc_automation.app.pnc.domain.observation import VisibleElementSourceKind
+from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
+from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
+from pnc_automation.app.pnc.vision.navigation_selector_validator import (
     NavigationSelectorValidator,
     NavigationValidationStatus,
     build_navigation_validation_cases,
     match_reviewed_navigation_outcome,
 )
-from pnc_automation.vision.observation_builder import CapturedObservation
-from pnc_automation.vision.observation_request import ObservationRequest
-from pnc_automation.vision.selector_interaction_kind import SelectorInteractionKind
-from pnc_automation.vision.selectors import (
+from pnc_automation.app.pnc.vision.observation_builder import CapturedObservation
+from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
+from pnc_automation.app.pnc.vision.selector_interaction_kind import SelectorInteractionKind
+from pnc_automation.app.pnc.vision.selectors import (
     ClickDefinition,
     ClickOutcome,
     DetectionKind,

@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from pnc_automation.automation.runner import AutomationRunner
-from pnc_automation.automation.script_runner import ConnectedAccountRuntime, ScriptRunner
-from pnc_automation.pnc.action_requests import ActionRequest
-from pnc_automation.pnc.observation import Observation
-from pnc_automation.pnc.screen_type import ScreenType
-from pnc_automation.config.models import AccountConfig
+from pnc_automation.app.automation.engine.runner import AutomationRunner
+from pnc_automation.app.automation.engine.script_runner import ConnectedAccountRuntime, ScriptRunner
+from pnc_automation.app.pnc.domain.action_requests import ActionRequest
+from pnc_automation.app.pnc.domain.observation import Observation
+from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.authoring.config.models import AccountConfig
 
 
 def build_live_runtime(*, config_account: AccountConfig, script_runner: ScriptRunner) -> ConnectedAccountRuntime:

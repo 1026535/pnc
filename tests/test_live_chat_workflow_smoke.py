@@ -9,12 +9,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from pnc_automation.app import build_application_runner
-from pnc_automation.automation.action_executor import ActionExecutor
-from pnc_automation.automation.observed_action_executor import ObservedActionExecutor
-from pnc_automation.pnc.chat import ChatChannel
-from pnc_automation.pnc.observation import Observation
-from pnc_automation.pnc.screen_flows import ScreenFlowPlanner
-from pnc_automation.pnc.screen_type import ScreenType
+from pnc_automation.app.automation.engine.action_executor import ActionExecutor
+from pnc_automation.app.automation.engine.observed_action_executor import ObservedActionExecutor
+from pnc_automation.app.pnc.domain.chat import ChatChannel
+from pnc_automation.app.pnc.domain.observation import Observation
+from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
+from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from tests.live_smoke_support import build_live_runtime
 from tests.test_support import build_logger
 

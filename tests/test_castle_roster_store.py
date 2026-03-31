@@ -6,8 +6,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from pnc_automation.config.castle_roster_store import CastleRosterStore
-from pnc_automation.config.models import CastleIdentity, CastleRosterOrdering, PncAccountCastleRosterConfig
+from pnc_automation.app.pnc.persistence.castle_roster_store import CastleRosterStore
+from pnc_automation.app.authoring.config.models import CastleIdentity, CastleRosterOrdering, PncAccountCastleRosterConfig
 
 
 class CastleRosterStoreTests(unittest.TestCase):

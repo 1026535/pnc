@@ -1,0 +1,2 @@
+"""Puzzles & Conquest domain packages."""
+

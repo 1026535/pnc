@@ -7,16 +7,16 @@ import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from pnc_automation.automation.task import TaskId, TaskStatus
-from pnc_automation.automation.task_context import TaskContext
-from pnc_automation.automation.tasks.collect_kingdom_chat_task import CollectKingdomChatTask
-from pnc_automation.capture.chat_archive_store import ChatArchiveStore
-from pnc_automation.config.models import AccountConfig, CastleIdentity, CredentialSource, DefaultsConfig, ResolvedCredentials
-from pnc_automation.pnc.chat import ChatChannel, ChatEntryKind, ObservedChatEntry
-from pnc_automation.pnc.observation import ListEntryKind
-from pnc_automation.pnc.screen_flows import ScreenFlowPlanner
-from pnc_automation.pnc.screen_type import ScreenType
-from pnc_automation.pnc.ui_element_id import UiElementId
+from pnc_automation.app.automation.engine.task import TaskId, TaskStatus
+from pnc_automation.app.automation.engine.task_context import TaskContext
+from pnc_automation.app.automation.tasks.collect_kingdom_chat_task import CollectKingdomChatTask
+from pnc_automation.app.pnc.persistence.chat_archive_store import ChatArchiveStore
+from pnc_automation.app.authoring.config.models import AccountConfig, CastleIdentity, CredentialSource, DefaultsConfig, ResolvedCredentials
+from pnc_automation.app.pnc.domain.chat import ChatChannel, ChatEntryKind, ObservedChatEntry
+from pnc_automation.app.pnc.domain.observation import ListEntryKind
+from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
+from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from tests.test_support import FakeObservationService, build_logger, make_entry, make_observation
 
 

@@ -1,6 +1,6 @@
 """Top-level package for the Puzzles & Conquest automation platform."""
 
-from pnc_automation.api import (
+from pnc_automation.app.entrypoints.api import (
     AutomationApi,
     build_api,
     building_upgrade,
@@ -13,7 +13,7 @@ from pnc_automation.api import (
     send_world_chat_message,
     use_account,
 )
-from pnc_automation.app import ApplicationRunner, build_application_runner
+from pnc_automation.app.entrypoints.app import ApplicationRunner, build_application_runner
 
 __all__ = [
     "ApplicationRunner",

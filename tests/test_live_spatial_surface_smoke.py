@@ -7,9 +7,9 @@ import unittest
 from pathlib import Path
 
 from pnc_automation.app import build_application_runner
-from pnc_automation.pnc.observation import Observation, SpatialSurfaceType
-from pnc_automation.pnc.screen_type import ScreenType
-from pnc_automation.pnc.spatial_navigation import WorldCoordinate
+from pnc_automation.app.pnc.domain.observation import Observation, SpatialSurfaceType
+from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.pnc.navigation.spatial_navigation import WorldCoordinate
 from tests.live_smoke_support import build_live_automation_runner, execute_live_flow_until
 
 

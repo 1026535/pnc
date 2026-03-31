@@ -12,16 +12,16 @@ from pathlib import Path
 
 from PIL import Image
 
-from pnc_automation.automation.observation_mode import ObservationMode
-from pnc_automation.capture.artifact_store import ArtifactStore
-from pnc_automation.capture.screenshot_service import ScreenshotService
-from pnc_automation.config.castle_roster_store import CastleRosterStore
-from pnc_automation.config.models import CastleIdentity, PncAccountCastleRosterConfig
-from pnc_automation.automation.action_executor import ActionExecutor
-from pnc_automation.errors import SelectorResolutionError
-from pnc_automation.pnc.chat import ChatChannel
-from pnc_automation.pnc.screen_flows import ScreenFlowPlanner
-from pnc_automation.pnc.observation import (
+from pnc_automation.app.runtime.observation_mode import ObservationMode
+from pnc_automation.core.infra.storage.artifact_store import ArtifactStore
+from pnc_automation.core.infra.capture.screenshot_service import ScreenshotService
+from pnc_automation.app.pnc.persistence.castle_roster_store import CastleRosterStore
+from pnc_automation.app.authoring.config.models import CastleIdentity, PncAccountCastleRosterConfig
+from pnc_automation.app.automation.engine.action_executor import ActionExecutor
+from pnc_automation.core.errors import SelectorResolutionError
+from pnc_automation.app.pnc.domain.chat import ChatChannel
+from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
+from pnc_automation.app.pnc.domain.observation import (
     Bounds,
     ListEntryKind,
     SpatialObjectKind,
@@ -30,28 +30,28 @@ from pnc_automation.pnc.observation import (
     SpatialSurfaceType,
     VisibleElementSourceKind,
 )
-from pnc_automation.pnc.screen_type import ScreenType
-from pnc_automation.pnc.ui_element_id import UiElementId
-from pnc_automation.vision.observation_builder import (
+from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
+from pnc_automation.app.pnc.vision.observation_builder import (
     DefaultObservationEnricher,
     ObservationBuilder,
     ObservationDebugArtifactCollector,
     ObservationService,
     PillowSelectorEngine,
 )
-from pnc_automation.vision.image_models import SelectorMatch
-from pnc_automation.vision.observation_request import ObservationRequest
-from pnc_automation.vision.ocr_service import OcrLine, OcrResult, UnavailableOcrService
-from pnc_automation.vision.pnc_observation_enricher import PncObservationEnricher
-from pnc_automation.vision.selector_catalog import (
+from pnc_automation.app.pnc.vision.image_models import SelectorMatch
+from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
+from pnc_automation.core.vision.ocr.ocr_service import OcrLine, OcrResult, UnavailableOcrService
+from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservationEnricher
+from pnc_automation.app.pnc.vision.selector_catalog import (
     SelectorCatalogDocument,
     SelectorCatalogEntry,
     SelectorCatalogRelativeBounds,
     write_selector_catalog_document,
 )
-from pnc_automation.vision.screen_classifier import ScreenClassifier
-from pnc_automation.vision.spatial_surfaces import build_world_map_spatial_surface
-from pnc_automation.vision.selectors import (
+from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
+from pnc_automation.app.pnc.vision.spatial_surfaces import build_world_map_spatial_surface
+from pnc_automation.app.pnc.vision.selectors import (
     ClickDefinition,
     DetectionKind,
     RelativeBounds,
@@ -61,7 +61,7 @@ from pnc_automation.vision.selectors import (
     SelectorStatus,
     build_default_selector_registry,
 )
-from pnc_automation.vision.template_matcher import PillowTemplateMatcher
+from pnc_automation.core.vision.template.template_matcher import PillowTemplateMatcher
 from tests.test_support import FakeObservationService, FakeSession, build_logger, build_png_bytes, make_observation
 
 

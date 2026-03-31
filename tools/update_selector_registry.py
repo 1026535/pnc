@@ -10,8 +10,8 @@ root = ensure_repo_root_on_path()
 
 from pathlib import Path
 
-from pnc_automation.vision.selector_catalog import default_selector_catalog_path
-from pnc_automation.vision.selector_registry_updater import update_selector_registry_files
+from pnc_automation.app.pnc.vision.selector_catalog import default_selector_catalog_path
+from pnc_automation.app.pnc.vision.selector_registry_updater import update_selector_registry_files
 
 
 def main() -> int:
@@ -26,7 +26,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--ui-element-ids",
-        default=str(root / "pnc_automation" / "pnc" / "ui_element_id.py"),
+        default=str(root / "pnc_automation" / "app" / "pnc" / "enums" / "ui_element_id.py"),
         help="Path to the UiElementId enum source file.",
     )
     parser.add_argument("--dry-run", action="store_true", help="Validate and summarize without writing files.")

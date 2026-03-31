@@ -6,11 +6,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from pnc_automation.errors import SelectorResolutionError
-from pnc_automation.pnc.observation import SpatialObjectKind, SpatialSurfaceType, SpatialViewportAddressingKind
-from pnc_automation.pnc.screen_type import ScreenType
-from pnc_automation.pnc.ui_element_id import UiElementId
-from pnc_automation.vision.selector_catalog import (
+from pnc_automation.core.errors import SelectorResolutionError
+from pnc_automation.app.pnc.domain.observation import SpatialObjectKind, SpatialSurfaceType, SpatialViewportAddressingKind
+from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
+from pnc_automation.app.pnc.vision.selector_catalog import (
     SelectorCatalogClickDefinition,
     SelectorCatalogClickOutcome,
     SelectorCatalogDocument,
@@ -18,8 +18,8 @@ from pnc_automation.vision.selector_catalog import (
     SelectorCatalogSurfaceEntry,
     SelectorCatalogSurfaceViewport,
 )
-from pnc_automation.vision.selector_interaction_kind import SelectorInteractionKind
-from pnc_automation.vision.selectors import build_default_selector_registry
+from pnc_automation.app.pnc.vision.selector_interaction_kind import SelectorInteractionKind
+from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
 
 
 class SelectorRegistryTests(unittest.TestCase):

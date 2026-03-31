@@ -1,4 +1,4 @@
-﻿"""Mail workflow tests covering params, flows, OCR enrichment, and archive persistence."""
+"""Mail workflow tests covering params, flows, OCR enrichment, and archive persistence."""
 
 from __future__ import annotations
 
@@ -9,20 +9,20 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-from pnc_automation.automation.action_executor import ActionExecutor
-from pnc_automation.scripts.models import ScriptStep
-from pnc_automation.automation.task import TaskId
-from pnc_automation.automation.task_context import TaskContext
-from pnc_automation.automation.tasks.collect_mail_task import CollectMailTask
-from pnc_automation.automation.tasks.send_mail_task import SendMailTask
-from pnc_automation.capture.artifact_store import ArtifactStore
-from pnc_automation.capture.mail_archive_store import MailArchiveStore
-from pnc_automation.capture.screenshot_service import ScreenshotService
-from pnc_automation.config.models import AccountConfig, CastleIdentity, CredentialSource, DefaultsConfig, ResolvedCredentials
-from pnc_automation.errors import ScriptValidationError, SelectorResolutionError
-from pnc_automation.pnc.action_requests import InputTextAction, KeyEventAction, LaunchAppAction, SwipeAction, TapAction, TapPointAction
-from pnc_automation.pnc.chat import ChatEntryKind, visible_player_chat_entries, visible_unsupported_chat_entries
-from pnc_automation.pnc.mail import (
+from pnc_automation.app.automation.engine.action_executor import ActionExecutor
+from pnc_automation.app.authoring.scripts.models import ScriptStep
+from pnc_automation.app.automation.engine.task import TaskId
+from pnc_automation.app.automation.engine.task_context import TaskContext
+from pnc_automation.app.automation.tasks.collect_mail_task import CollectMailTask
+from pnc_automation.app.automation.tasks.send_mail_task import SendMailTask
+from pnc_automation.core.infra.storage.artifact_store import ArtifactStore
+from pnc_automation.app.pnc.persistence.mail_archive_store import MailArchiveStore
+from pnc_automation.core.infra.capture.screenshot_service import ScreenshotService
+from pnc_automation.app.authoring.config.models import AccountConfig, CastleIdentity, CredentialSource, DefaultsConfig, ResolvedCredentials
+from pnc_automation.core.errors import ScriptValidationError, SelectorResolutionError
+from pnc_automation.app.pnc.domain.action_requests import InputTextAction, KeyEventAction, LaunchAppAction, SwipeAction, TapAction, TapPointAction
+from pnc_automation.app.pnc.domain.chat import ChatEntryKind, visible_player_chat_entries, visible_unsupported_chat_entries
+from pnc_automation.app.pnc.domain.mail import (
     CollectMailParams,
     MailArchiveMode,
     MailboxType,
@@ -31,7 +31,7 @@ from pnc_automation.pnc.mail import (
     PlayerProfileRouteKind,
     SendMailParams,
 )
-from pnc_automation.pnc.observation import (
+from pnc_automation.app.pnc.domain.observation import (
     Bounds,
     ListEntryKind,
     Observation,
@@ -39,16 +39,16 @@ from pnc_automation.pnc.observation import (
     VisibleElement,
     VisibleElementSourceKind,
 )
-from pnc_automation.pnc.screen_flows import ScreenFlowPlanner
-from pnc_automation.pnc.screen_type import ScreenType
-from pnc_automation.pnc.ui_element_id import UiElementId
-from pnc_automation.vision.observation_builder import ObservationBuilder, PillowSelectorEngine
-from pnc_automation.vision.observation_request import ObservationRequest
-from pnc_automation.vision.ocr_service import OcrLine, OcrResult, UnavailableOcrService
-from pnc_automation.vision.pnc_observation_enricher import PncObservationEnricher
-from pnc_automation.vision.screen_classifier import ScreenClassifier
-from pnc_automation.vision.selectors import Region, build_default_selector_registry
-from pnc_automation.vision.template_matcher import PillowTemplateMatcher
+from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
+from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
+from pnc_automation.app.pnc.vision.observation_builder import ObservationBuilder, PillowSelectorEngine
+from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
+from pnc_automation.core.vision.ocr.ocr_service import OcrLine, OcrResult, UnavailableOcrService
+from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservationEnricher
+from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
+from pnc_automation.app.pnc.vision.selectors import Region, build_default_selector_registry
+from pnc_automation.core.vision.template.template_matcher import PillowTemplateMatcher
 from tests.test_support import FakeObservationService, FakeSession, build_logger, build_png_bytes, make_entry, make_observation
 
 
@@ -2155,7 +2155,7 @@ def _mail_archive_record() -> MailArchiveRecord:
     """Builds one deterministic mail archive record for store tests."""
 
     from datetime import UTC, datetime
-    from pnc_automation.pnc.mail import MailArchiveRecord, MailboxType, MailThreadFingerprint
+    from pnc_automation.app.pnc.domain.mail import MailArchiveRecord, MailboxType, MailThreadFingerprint
 
     return MailArchiveRecord(
         account_id="account_a",
