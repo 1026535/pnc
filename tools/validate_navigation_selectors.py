@@ -16,13 +16,13 @@ from pnc_automation.app.automation.engine.action_executor import ActionExecutor
 from pnc_automation.app.automation.engine.observed_action_executor import ObservedActionExecutor
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
-from pnc_automation.app.pnc.persistence.artifact_naming import sanitize_artifact_segment
 from pnc_automation.app.pnc.vision.navigation_selector_validator import (
     NavigationSelectorValidator,
     write_navigation_selector_validation_report,
 )
 from pnc_automation.app.pnc.vision.selector_catalog import default_selector_catalog_path
 from pnc_automation.core.errors import SelectorResolutionError
+from pnc_automation.core.infra.storage.path_segments import sanitize_artifact_segment
 
 
 def main() -> int:

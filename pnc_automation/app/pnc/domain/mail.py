@@ -9,8 +9,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from pnc_automation.app.pnc.persistence.artifact_naming import sanitize_artifact_segment
 from pnc_automation.core.errors import ScriptValidationError
+from pnc_automation.core.infra.storage.path_segments import sanitize_artifact_segment
 from pnc_automation.app.pnc.enums.mail import MailArchiveMode, MailRecipientKind, MailboxType, PlayerProfileRouteKind
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 
