@@ -4,29 +4,14 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from pnc_automation.errors import SelectorResolutionError
+from pnc_automation.pnc.enums.chat import ChatChannel, ChatEntryKind
 from pnc_automation.pnc.ui_element_id import UiElementId
 
 if TYPE_CHECKING:
     from pnc_automation.pnc.observation import DetectedListEntry
-
-
-class ChatChannel(StrEnum):
-    """Supported reusable chat destinations."""
-
-    WORLD = "world"
-    ALLIANCE = "alliance"
-
-
-class ChatEntryKind(StrEnum):
-    """Typed meanings assigned to OCR-backed visible chat rows."""
-
-    PLAYER = "player"
-    ANNOUNCEMENT = "announcement"
-    UNSUPPORTED = "unsupported"
 
 
 @dataclass(frozen=True, slots=True)

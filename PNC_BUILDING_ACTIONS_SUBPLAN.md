@@ -17,6 +17,16 @@ This file is intentionally separate from:
 - [PNC_SCREEN_FLOW_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SCREEN_FLOW_SUBPLAN.md), which owns reusable navigation,
 - [PNC_AUTOMATION_IMPLEMENTATION.md](/c:/Users/lebel/pnc/PNC_AUTOMATION_IMPLEMENTATION.md), which owns the broader platform architecture.
 
+## 1.1 Implementation status
+
+Status:
+
+- unfinished,
+- currently abandoned as an active execution plan,
+- retained only as historical notes and possible screenshot inventory,
+- must not be treated as validated source of truth for current implementation work,
+- must be fully re-reviewed against current code, current screenshots, and [PNC_PACKAGE_ARCHITECTURE_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_PACKAGE_ARCHITECTURE_SUBPLAN.md) before any future revival.
+
 ## 2. Scope
 
 This plan currently covers only the building set already named or shown:

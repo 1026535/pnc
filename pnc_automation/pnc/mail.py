@@ -7,43 +7,12 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from enum import StrEnum
 from pathlib import Path
 
 from pnc_automation.artifact_naming import sanitize_artifact_segment
 from pnc_automation.errors import ScriptValidationError
+from pnc_automation.pnc.enums.mail import MailArchiveMode, MailRecipientKind, MailboxType, PlayerProfileRouteKind
 from pnc_automation.pnc.ui_element_id import UiElementId
-
-
-class MailboxType(StrEnum):
-    """Supported mailbox scopes in the current mail automation slice."""
-
-    PLAYER = "player"
-    ALLIANCE = "alliance"
-
-
-class MailRecipientKind(StrEnum):
-    """Supported mail recipient kinds in the current mail automation slice."""
-
-    PLAYER = "player"
-    ALLIANCE = "alliance"
-
-
-class MailArchiveMode(StrEnum):
-    """Controls which archive artifacts are persisted for collected mail."""
-
-    SCREENSHOT = "screenshot"
-    TEXT = "text"
-    BOTH = "both"
-
-
-class PlayerProfileRouteKind(StrEnum):
-    """Supported routes that can reach one remote player profile."""
-
-    PLAYER_TERRITORY = "player_territory"
-    CHAT_MESSAGE = "chat_message"
-    ALLIANCE_MEMBER = "alliance_member"
-    MIGHT_RANK = "might_rank"
 
 
 @dataclass(frozen=True, slots=True)
