@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 from pnc_automation.core.infra.adb.client import AdbClient
@@ -64,6 +65,21 @@ class ApplicationRunner:
         """Runs one direct task call against the current live session state."""
 
         return self.script_runner.run_task(account_id=account_id, task_id=task_id, params=params)
+
+    def run_mail_schedules(
+        self,
+        *,
+        account_id: str,
+        schedule_ids: list[str] | None = None,
+        scheduled_for_utc: datetime | None = None,
+    ) -> RunResult:
+        """Runs the authored scheduled-mail expansion path for one account."""
+
+        return self.script_runner.run_mail_schedules(
+            account_id=account_id,
+            schedule_ids=schedule_ids,
+            scheduled_for_utc=scheduled_for_utc,
+        )
 
 
 def build_application_runner(

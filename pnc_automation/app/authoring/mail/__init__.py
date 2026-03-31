@@ -1,0 +1,1 @@
+"""Authored scheduled-mail package."""

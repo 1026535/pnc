@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import asdict
+from datetime import datetime
 import json
 from pathlib import Path
 import sys
@@ -16,13 +17,15 @@ from pnc_automation.app import build_application_runner
 from pnc_automation.app.authoring.config.models import CastleIdentity
 from pnc_automation.app.authoring.config.yaml_helpers import build_castle_identity
 from pnc_automation.app.pnc.domain.building_priority_input import resolve_building_priority_values
+from pnc_automation.app.pnc.domain.mail import parse_send_mail_params, route_requires_player_name
+from pnc_automation.app.pnc.enums.mail import PlayerProfileRouteKind
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Parses CLI arguments, runs automation, and prints a summary."""
 
     arguments = list(sys.argv[1:] if argv is None else argv)
-    if arguments and arguments[0] not in {"run", "login", "build", "open-building"}:
+    if arguments and arguments[0] not in {"run", "login", "build", "open-building", "send-mail", "run-mail-schedules"}:
         arguments.insert(0, "run")
 
     parser = argparse.ArgumentParser(description="Run Puzzles & Conquest automation.")
@@ -52,6 +55,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     _add_castle_arguments(open_building_parser)
     _add_open_building_arguments(open_building_parser)
 
+    send_mail_parser = subparsers.add_parser(
+        "send-mail",
+        help="Run one direct canonical send_mail task from flat string CLI parameters.",
+    )
+    _add_common_arguments(send_mail_parser)
+    _add_castle_arguments(send_mail_parser)
+    _add_send_mail_arguments(send_mail_parser)
+
+    run_mail_schedules_parser = subparsers.add_parser(
+        "run-mail-schedules",
+        help="Resolve and execute any authored mail schedules due for the current UTC hour.",
+    )
+    _add_common_arguments(run_mail_schedules_parser)
+    _add_run_mail_schedules_arguments(run_mail_schedules_parser)
+
     parsed = parser.parse_args(arguments)
     application = build_application_runner(
         Path(parsed.config),
@@ -79,6 +97,25 @@ def main(argv: Sequence[str] | None = None) -> int:
             params={"building": parsed.building},
         )
         print(_serialize_step_result(account_id=parsed.account, step_result=step_result))
+        return 0
+    if parsed.command == "send-mail":
+        castle = _parse_optional_castle(parser, parsed)
+        if castle is not None:
+            application.prepare_account_session(account_id=parsed.account, castle=castle)
+        step_result = application.run_task(
+            account_id=parsed.account,
+            task_id=TaskId.SEND_MAIL,
+            params=_build_send_mail_cli_params(parser, parsed),
+        )
+        print(_serialize_step_result(account_id=parsed.account, step_result=step_result))
+        return 0
+    if parsed.command == "run-mail-schedules":
+        result = application.run_mail_schedules(
+            account_id=parsed.account,
+            schedule_ids=parsed.schedule_id,
+            scheduled_for_utc=_parse_optional_scheduled_for_utc(parser, parsed.scheduled_for_utc),
+        )
+        print(_serialize_run_result(result))
         return 0
     castle = _parse_optional_castle(parser, parsed)
     if castle is not None:
@@ -147,6 +184,45 @@ def _add_open_building_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_send_mail_arguments(parser: argparse.ArgumentParser) -> None:
+    """Adds the flat string CLI arguments for direct canonical mail sending."""
+
+    parser.add_argument(
+        "--recipient-kind",
+        required=True,
+        choices=["alliance", "player"],
+        help="Send to the alliance mailbox or one player recipient.",
+    )
+    parser.add_argument("--subject", required=True, help="Mail subject text.")
+    parser.add_argument("--body", required=True, help="Mail body text.")
+    recipient_group = parser.add_mutually_exclusive_group()
+    recipient_group.add_argument("--player-name", help="Exact player name for direct typed targeting.")
+    recipient_group.add_argument(
+        "--profile-route-kind",
+        choices=[kind.value for kind in PlayerProfileRouteKind],
+        help="Supported route used to reach a remote player profile before composing.",
+    )
+    parser.add_argument(
+        "--profile-route-player-name",
+        help="Player name attached to the selected profile route when that route requires one.",
+    )
+
+
+def _add_run_mail_schedules_arguments(parser: argparse.ArgumentParser) -> None:
+    """Adds the direct scheduled-mail execution arguments."""
+
+    parser.add_argument(
+        "--schedule-id",
+        action="append",
+        default=None,
+        help="Optional authored schedule id to include; may be repeated to preserve a specific schedule order.",
+    )
+    parser.add_argument(
+        "--scheduled-for-utc",
+        help="Optional ISO-8601 UTC timestamp used for deterministic replay or debugging.",
+    )
+
+
 def _parse_optional_castle(parser: argparse.ArgumentParser, parsed: argparse.Namespace) -> CastleIdentity | None:
     """Builds one optional CLI castle target or reports invalid flag combinations."""
 
@@ -164,6 +240,52 @@ def _parse_optional_castle(parser: argparse.ArgumentParser, parsed: argparse.Nam
     except Exception as error:
         parser.error(str(error))
         raise AssertionError("argparse.parser.error does not return")
+
+
+def _build_send_mail_cli_params(parser: argparse.ArgumentParser, parsed: argparse.Namespace) -> dict[str, object]:
+    """Builds one canonical send_mail task payload from the flat direct CLI flags."""
+
+    params: dict[str, object] = {
+        "recipient_kind": parsed.recipient_kind,
+        "subject": parsed.subject,
+        "body": parsed.body,
+    }
+    if parsed.player_name is not None:
+        params["player_name"] = parsed.player_name
+    if parsed.profile_route_player_name is not None and parsed.profile_route_kind is None:
+        parser.error("--profile-route-player-name requires --profile-route-kind.")
+    if parsed.profile_route_kind is not None:
+        route_kind = PlayerProfileRouteKind(parsed.profile_route_kind)
+        profile_route: dict[str, object] = {"kind": route_kind.value}
+        if parsed.profile_route_player_name is not None:
+            profile_route["player_name"] = parsed.profile_route_player_name
+        if route_requires_player_name(route_kind) and "player_name" not in profile_route:
+            parser.error(f"--profile-route-kind {route_kind.value} requires --profile-route-player-name.")
+        if not route_requires_player_name(route_kind) and "player_name" in profile_route:
+            parser.error(f"--profile-route-kind {route_kind.value} does not accept --profile-route-player-name.")
+        params["profile_route"] = profile_route
+    try:
+        parse_send_mail_params(task_label="cli send-mail", params=params)
+    except Exception as error:
+        parser.error(str(error))
+        raise AssertionError("argparse.parser.error does not return")
+    return params
+
+
+def _parse_optional_scheduled_for_utc(parser: argparse.ArgumentParser, raw_value: str | None) -> datetime | None:
+    """Parses one optional scheduled-mail replay timestamp from the CLI."""
+
+    if raw_value is None:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw_value.replace("Z", "+00:00"))
+    except ValueError:
+        parser.error("--scheduled-for-utc must be an ISO-8601 UTC timestamp such as 2026-03-31T05:00:00Z.")
+        raise AssertionError("argparse.parser.error does not return")
+    if parsed.tzinfo is None or parsed.utcoffset() is None or parsed.utcoffset().total_seconds() != 0:
+        parser.error("--scheduled-for-utc must use UTC, for example 2026-03-31T05:00:00Z.")
+        raise AssertionError("argparse.parser.error does not return")
+    return parsed
 
 
 def _serialize_run_result(result: object) -> str:

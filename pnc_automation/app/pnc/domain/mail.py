@@ -67,6 +67,24 @@ class MailArchiveRecord:
     source_artifact_paths: tuple[Path, ...] = ()
 
 
+def serialize_send_mail_params(params: SendMailParams) -> dict[str, object]:
+    """Serializes the canonical send-mail payload back into one script-compatible mapping."""
+
+    payload: dict[str, object] = {
+        "recipient_kind": params.recipient_kind.value,
+        "subject": params.subject,
+        "body": params.body,
+    }
+    if params.player_name is not None:
+        payload["player_name"] = params.player_name
+    if params.profile_route is not None:
+        profile_route_payload: dict[str, object] = {"kind": params.profile_route.kind.value}
+        if params.profile_route.player_name is not None:
+            profile_route_payload["player_name"] = params.profile_route.player_name
+        payload["profile_route"] = profile_route_payload
+    return payload
+
+
 def parse_send_mail_params(*, task_label: object, params: Mapping[str, object]) -> SendMailParams:
     """Builds the canonical validated send-mail payload from raw script parameters."""
 

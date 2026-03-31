@@ -5,11 +5,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from pnc_automation.app.runtime.observation_mode import ObservationMode
 from pnc_automation.core.errors import ConfigurationError
 from pnc_automation.core.infra.emulator.models import BlueStacksInstanceConfig
 from pnc_automation.core.infra.storage.artifact_naming import format_account_artifact_directory
+
+if TYPE_CHECKING:
+    from pnc_automation.app.authoring.mail.models import MailScheduleCatalog
 
 
 DEFAULT_BLUESTACKS_CONFIG_PATH = Path(r"C:\ProgramData\BlueStacks_nxt\bluestacks.conf")
@@ -155,6 +159,8 @@ class AppConfig:
     config_path: Path
     castle_roster_path: Path
     castle_targets_path: Path
+    mail_definitions_path: Path
+    mail_schedules_path: Path
     artifact_root: Path
     archive_root: Path
     defaults: DefaultsConfig
@@ -163,6 +169,7 @@ class AppConfig:
     accounts: tuple[AccountConfig, ...]
     castle_rosters: tuple[PncAccountCastleRosterConfig, ...] = ()
     castle_targets: tuple[AccountCastleTargetsConfig, ...] = ()
+    mail_schedule_catalog: MailScheduleCatalog | None = None
 
     def require_instance(self, instance_id: str) -> BlueStacksInstanceConfig:
         """Returns a known emulator instance or fails fast."""
@@ -195,3 +202,14 @@ class AppConfig:
             if targets.account_id == account_id:
                 return targets
         return None
+
+    def require_mail_schedule_catalog(self) -> MailScheduleCatalog:
+        """Returns the loaded scheduled-mail catalog or fails fast when the feature is not configured."""
+
+        if self.mail_schedule_catalog is not None:
+            return self.mail_schedule_catalog
+        raise ConfigurationError(
+            "Scheduled mail is not configured for this workspace. Add both config/mail_definitions.yaml and config/mail_schedules.yaml before invoking run_mail_schedules.",
+            mail_definitions_path=str(self.mail_definitions_path),
+            mail_schedules_path=str(self.mail_schedules_path),
+        )

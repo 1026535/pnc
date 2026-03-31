@@ -171,6 +171,8 @@ def _make_app_config(*, root: Path, instance: BlueStacksInstanceConfig, account:
         config_path=root / "accounts.yaml",
         castle_roster_path=root / "castles.yaml",
         castle_targets_path=root / "castle_targets.yaml",
+        mail_definitions_path=root / "mail_definitions.yaml",
+        mail_schedules_path=root / "mail_schedules.yaml",
         artifact_root=artifact_root,
         archive_root=archive_root,
         defaults=DefaultsConfig(bluestacks_config_path=root / "bluestacks.conf"),
