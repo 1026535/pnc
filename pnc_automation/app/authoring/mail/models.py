@@ -29,6 +29,14 @@ class AuthoredMailSchedule:
 
 
 @dataclass(frozen=True, slots=True)
+class ScheduledMailDispatch:
+    """Associates one due authored mail payload with the schedule that activated it."""
+
+    schedule_id: str
+    definition: AuthoredMailDefinition
+
+
+@dataclass(frozen=True, slots=True)
 class MailScheduleCatalog:
     """Bundles the validated authored mail definitions and schedules for one workspace."""
 

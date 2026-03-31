@@ -19,6 +19,7 @@ class ScriptStep:
     castle: CastleIdentity | None = None
     castle_ref: str | None = None
     params: Mapping[str, Any] = field(default_factory=dict)
+    provenance: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         """Rejects ambiguous steps that try to use both concrete and referenced castle targets."""
@@ -62,6 +63,12 @@ class PreparedScriptStep:
         """Returns the optional authored castle-target alias requested by the step."""
 
         return self.script_step.castle_ref
+
+    @property
+    def provenance(self) -> Mapping[str, Any]:
+        """Returns the optional diagnostic provenance attached to the authored or generated step."""
+
+        return self.script_step.provenance
 
 
 @dataclass(frozen=True, slots=True)

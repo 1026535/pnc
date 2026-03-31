@@ -33,6 +33,7 @@ class StepRunResult:
     attempts: int
     message: str
     requested_castle: CastleIdentity | None = None
+    provenance: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,6 +157,7 @@ class AutomationRunner:
             attempts=execution.attempts,
             message=execution.result.message,
             requested_castle=step.castle,
+            provenance=dict(step.provenance),
         )
 
     def _align_step_castle_target(
@@ -309,6 +311,12 @@ class AutomationRunner:
         logger_extra = {**self.logger.extra, "task_id": step.task}
         if target_castle is not None:
             logger_extra["target_castle"] = f"{target_castle.kingdom}/{target_castle.castle_name}"
+        mail_id = step.provenance.get("mail_id")
+        if isinstance(mail_id, str) and mail_id.strip() != "":
+            logger_extra["mail_id"] = mail_id
+        schedule_id = step.provenance.get("schedule_id")
+        if isinstance(schedule_id, str) and schedule_id.strip() != "":
+            logger_extra["schedule_id"] = schedule_id
         return TaskContext(
             account=account,
             castle_roster_provider=castle_roster_provider or (lambda: None),

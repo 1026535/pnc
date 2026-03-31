@@ -19,6 +19,7 @@ from pnc_automation.app.authoring.mail.models import (
     AuthoredMailDefinition,
     AuthoredMailSchedule,
     MailScheduleCatalog,
+    ScheduledMailDispatch,
 )
 from pnc_automation.app.pnc.domain.mail import parse_send_mail_params, serialize_send_mail_params
 from pnc_automation.core.errors import ConfigurationError
@@ -66,14 +67,34 @@ def resolve_due_mail_definitions(
     """Returns the ordered mail definitions due for one UTC hourly execution window."""
 
     scheduled_hour = resolve_scheduled_hour_bucket(scheduled_for_utc)
+    return tuple(
+        dispatch.definition
+        for dispatch in resolve_due_mail_dispatches_for_hour(
+            catalog,
+            scheduled_hour_utc=scheduled_hour,
+            schedule_ids=schedule_ids,
+        )
+    )
+
+
+def resolve_due_mail_dispatches_for_hour(
+    catalog: MailScheduleCatalog,
+    *,
+    scheduled_hour_utc: datetime,
+    schedule_ids: Sequence[str] | None = None,
+) -> tuple[ScheduledMailDispatch, ...]:
+    """Returns the ordered due mail dispatches for one already-resolved UTC hourly window."""
+
+    if scheduled_hour_utc < catalog.start_utc:
+        return ()
     definition_by_id = {definition.id: definition for definition in catalog.definitions}
-    due_mail_ids: list[str] = []
+    due_dispatches: list[ScheduledMailDispatch] = []
     seen_due_mail_ids: dict[str, str] = {}
-    current_day_index = _resolve_current_day_index(catalog.start_utc, scheduled_hour)
+    current_day_index = _resolve_current_day_index(catalog.start_utc, scheduled_hour_utc)
     for schedule in _select_schedules(catalog, schedule_ids=schedule_ids):
         if not schedule.enabled:
             continue
-        if current_day_index not in schedule.day_indices or scheduled_hour.hour != schedule.hour_utc:
+        if current_day_index not in schedule.day_indices or scheduled_hour_utc.hour != schedule.hour_utc:
             continue
         for mail_id in schedule.mail_ids:
             duplicate_schedule_id = seen_due_mail_ids.get(mail_id)
@@ -83,39 +104,62 @@ def resolve_due_mail_definitions(
                     mail_id=mail_id,
                     first_schedule_id=duplicate_schedule_id,
                     duplicate_schedule_id=schedule.id,
-                    scheduled_for_utc=scheduled_hour.isoformat(),
+                    scheduled_for_utc=scheduled_hour_utc.isoformat(),
                 )
             seen_due_mail_ids[mail_id] = schedule.id
-            due_mail_ids.append(mail_id)
-    return tuple(definition_by_id[mail_id] for mail_id in due_mail_ids)
+            due_dispatches.append(
+                ScheduledMailDispatch(
+                    schedule_id=schedule.id,
+                    definition=definition_by_id[mail_id],
+                )
+            )
+    return tuple(due_dispatches)
 
 
 def build_generated_send_mail_script(
     *,
     scheduled_for_utc: datetime | None = None,
-    due_mail_definitions: Sequence[AuthoredMailDefinition],
+    due_mail_dispatches: Sequence[ScheduledMailDispatch],
 ) -> "RunScript":
     """Builds one generated canonical send-mail script for the resolved hourly window."""
+
+    scheduled_hour = resolve_scheduled_hour_bucket(scheduled_for_utc)
+    return build_generated_send_mail_script_for_hour(
+        scheduled_hour_utc=scheduled_hour,
+        due_mail_dispatches=due_mail_dispatches,
+    )
+
+
+def build_generated_send_mail_script_for_hour(
+    *,
+    scheduled_hour_utc: datetime,
+    due_mail_dispatches: Sequence[ScheduledMailDispatch],
+) -> "RunScript":
+    """Builds one generated canonical send-mail script for one already-resolved UTC hour bucket."""
 
     from pnc_automation.app.automation.engine.task import TaskId
     from pnc_automation.app.authoring.scripts.models import RunScript, ScriptStep
 
-    scheduled_hour = resolve_scheduled_hour_bucket(scheduled_for_utc)
-    stamp = scheduled_hour.strftime("%Y%m%dT%H0000Z")
+    stamp = format_scheduled_hour_stamp(scheduled_hour_utc)
     steps = [
         ScriptStep(task=TaskId.ENSURE_GAME_RUNNING),
         ScriptStep(task=TaskId.LOGIN),
     ]
-    for definition in due_mail_definitions:
+    for dispatch in due_mail_dispatches:
+        definition = dispatch.definition
         steps.append(
             ScriptStep(
                 task=TaskId.SEND_MAIL,
                 castle_ref=definition.castle_ref,
                 params=serialize_send_mail_params(definition.params),
+                provenance={
+                    "mail_id": definition.id,
+                    "schedule_id": dispatch.schedule_id,
+                },
             )
         )
     return RunScript(
-        name=f"generated_mail_schedule_{stamp}",
+        name=generated_mail_schedule_name_for_hour(scheduled_hour_utc),
         path=Path(f"<generated:mail_schedule:{stamp}>"),
         steps=tuple(steps),
     )
@@ -125,18 +169,24 @@ def resolve_scheduled_hour_bucket(value: datetime | None) -> datetime:
     """Normalizes one runtime timestamp into the canonical UTC hourly execution bucket."""
 
     raw_value = datetime.now(tz=UTC) if value is None else value
-    if raw_value.tzinfo is None or raw_value.utcoffset() is None:
-        raise ConfigurationError(
-            "Scheduled mail timestamps must be timezone-aware UTC datetimes.",
-            scheduled_for_utc=str(raw_value),
-        )
-    normalized = raw_value.astimezone(UTC)
-    if normalized.utcoffset() != timedelta(0):
-        raise ConfigurationError(
-            "Scheduled mail timestamps must use UTC.",
-            scheduled_for_utc=raw_value.isoformat(),
-        )
+    normalized = _require_utc_datetime(
+        raw_value,
+        label="Scheduled mail timestamps",
+        scheduled_for_utc=raw_value.isoformat(),
+    )
     return normalized.replace(minute=0, second=0, microsecond=0)
+
+
+def format_scheduled_hour_stamp(scheduled_hour_utc: datetime) -> str:
+    """Returns the canonical UTC hour stamp shared by generated script names and paths."""
+
+    return scheduled_hour_utc.strftime("%Y%m%dT%H0000Z")
+
+
+def generated_mail_schedule_name_for_hour(scheduled_hour_utc: datetime) -> str:
+    """Returns the canonical generated script name for one already-resolved UTC hour bucket."""
+
+    return f"generated_mail_schedule_{format_scheduled_hour_stamp(scheduled_hour_utc)}"
 
 
 def _load_yaml_root(path: Path, *, context: str) -> Mapping[str, Any]:
@@ -374,6 +424,7 @@ def _load_utc_datetime_value(value: object, *, context: str) -> datetime:
 
     if isinstance(value, datetime):
         parsed = value
+        raw_detail_value = parsed.isoformat()
     else:
         raw_value = require_string(value, context=context)
         try:
@@ -384,20 +435,29 @@ def _load_utc_datetime_value(value: object, *, context: str) -> datetime:
                 context=context,
                 value=raw_value,
             ) from error
-    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raw_detail_value = raw_value
+    return _require_utc_datetime(
+        parsed,
+        label=context,
+        context=context,
+        raw_value=raw_detail_value,
+    )
+
+
+def _require_utc_datetime(value: datetime, *, label: str, **details: object) -> datetime:
+    """Validates that one datetime is already UTC before any normalization occurs."""
+
+    if value.tzinfo is None or value.utcoffset() is None:
         raise ConfigurationError(
-            f"Expected {context} to include a UTC timezone offset.",
-            context=context,
-            value=str(value),
+            f"{label} must be a timezone-aware UTC datetime.",
+            **details,
         )
-    normalized = parsed.astimezone(UTC)
-    if normalized.utcoffset() != timedelta(0):
+    if value.utcoffset() != timedelta(0):
         raise ConfigurationError(
-            f"Expected {context} to use UTC.",
-            context=context,
-            value=str(value),
+            f"{label} must use UTC.",
+            **details,
         )
-    return normalized
+    return value.astimezone(UTC)
 
 
 def _require_no_extra_keys(raw: Mapping[str, Any], *, allowed: set[str], context: str) -> None:
