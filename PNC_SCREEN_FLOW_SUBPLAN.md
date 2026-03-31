@@ -7,8 +7,8 @@ This document is the dependency-ordered fourth plan and owns only canonical reus
 It is intentionally separate from:
 
 - [PNC_AUTOMATION_IMPLEMENTATION.md](/c:/Users/lebel/pnc/PNC_AUTOMATION_IMPLEMENTATION.md), which remains the primary platform architecture plan,
-- [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md), which covers bootstrap, login, and castle-targeting behavior,
-- [PNC_SPATIAL_SURFACE_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SPATIAL_SURFACE_SUBPLAN.md), which covers the world-map and home-city spatial model consumed by scrollable-scene flows,
+- [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/reviewed_plans/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md), which covers bootstrap, login, and castle-targeting behavior,
+- [PNC_SPATIAL_SURFACE_SUBPLAN.md](/c:/Users/lebel/pnc/reviewed_plans/PNC_SPATIAL_SURFACE_SUBPLAN.md), which covers the world-map and home-city spatial model consumed by scrollable-scene flows,
 - [PNC_TASK_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_TASK_SUBPLAN.md), which now defines the feature-based tracer-bullet planning model for post-navigation work.
 
 This file is not the active feature backlog. Feature slices and account-navigation work may drive additions here, but only flows that are reusable or foundational should be promoted into this document.
@@ -22,7 +22,7 @@ This sub-plan should define shared flows that many tasks or features consume, su
 - `ensure_correct_castle_selected()`
 - `ensure_home_city()`
 - `open_world_map()`
-- `open_academy()`
+- `open_institute()`
 - `close_blocking_popup()`
 - `return_to_safe_root_screen()`
 
@@ -128,7 +128,7 @@ The first reusable flows to keep canonical here are:
 - `ensure_correct_castle_selected()`
 - `ensure_home_city()`
 - `open_world_map()`
-- `open_academy()`
+- `open_institute()`
 - `close_blocking_popup()`
 - `return_to_safe_root_screen()`
 
@@ -148,23 +148,23 @@ This keeps feature plans focused on feature-specific decisions, not on re-explai
 
 ## 9. Relationship to account navigation
 
-[PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md) should continue consuming the canonical flows in this file for bootstrap, popup recovery, and castle targeting.
+[PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/reviewed_plans/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md) should continue consuming the canonical flows in this file for bootstrap, popup recovery, and castle targeting.
 
-[PNC_SPATIAL_SURFACE_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SPATIAL_SURFACE_SUBPLAN.md) should own world-map and home-city scene semantics; this file should only own the reusable navigation guarantees built on top of that model.
+[PNC_SPATIAL_SURFACE_SUBPLAN.md](/c:/Users/lebel/pnc/reviewed_plans/PNC_SPATIAL_SURFACE_SUBPLAN.md) should own world-map and home-city scene semantics; this file should only own the reusable navigation guarantees built on top of that model.
 
 If account navigation needs a reusable path that later features will also depend on, that path belongs here rather than as duplicated bootstrap-only logic.
 
 ## 10. Relationship to automation orchestration
 
-This sub-plan should be consumed by [PNC_AUTOMATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_AUTOMATION_SUBPLAN.md), [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md), and the feature plans governed by [PNC_TASK_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_TASK_SUBPLAN.md).
+This sub-plan should be consumed by [PNC_AUTOMATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_AUTOMATION_SUBPLAN.md), [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/reviewed_plans/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md), and the feature plans governed by [PNC_TASK_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_TASK_SUBPLAN.md).
 
 It must not redefine script-runner policy, task ownership, or feature-specific business rules.
 
 ## 11. Relationship to selector refinement
 
-Reusable flows in this file should rely on selectors refined through [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SELECTOR_REFINEMENT_SUBPLAN.md).
+Reusable flows in this file should rely on selectors refined through [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/reviewed_plans/PNC_SELECTOR_REFINEMENT_SUBPLAN.md).
 
-Scrollable world-map and home-city flows should also rely on the spatial model defined in [PNC_SPATIAL_SURFACE_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SPATIAL_SURFACE_SUBPLAN.md) rather than inventing task-local swipe heuristics.
+Scrollable world-map and home-city flows should also rely on the spatial model defined in [PNC_SPATIAL_SURFACE_SUBPLAN.md](/c:/Users/lebel/pnc/reviewed_plans/PNC_SPATIAL_SURFACE_SUBPLAN.md) rather than inventing task-local swipe heuristics.
 
 Rules:
 
@@ -183,3 +183,4 @@ No flow should be treated as canonical only because one feature happened to use 
 - explicit source and destination guarantees,
 - selectors mature enough for safe reuse,
 - validation evidence that the flow works from its supported entry states.
+

@@ -83,7 +83,7 @@ Everything should plug into that loop:
 - login,
 - home-city navigation,
 - building upgrades,
-- academy research,
+- institute research,
 - world-map gathering,
 - campaign progression,
 - recovery from popups or interrupted flows.
@@ -100,7 +100,7 @@ The automation design should model the actual Puzzles & Conquest domain rather t
 - castle,
 - home city,
 - building,
-- academy research,
+- institute research,
 - world map,
 - march slot,
 - resource node,
@@ -398,7 +398,7 @@ steps:
     castle_ref: main
   - task: building_upgrade
     params:
-      priority: [castle, wall, academy, barracks]
+      priority: [castle, wall, institute, infantry_barracks]
       allow_speedups: false
   - task: research
     params:
@@ -534,7 +534,7 @@ All selectors must live in one canonical registry. No task may embed its own coo
 
 The screenshots currently documented in this file are an initial registry seed only. They are not the final selector map.
 
-The iterative click-mapping and selector-refinement process now lives in [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SELECTOR_REFINEMENT_SUBPLAN.md).
+The iterative click-mapping and selector-refinement process now lives in [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/reviewed_plans/PNC_SELECTOR_REFINEMENT_SUBPLAN.md).
 
 The selector registry is the authoritative catalog of UI elements the system can detect, interpret, and click. Each selector entry should define:
 
@@ -829,11 +829,11 @@ The plan files should be completed in this order, based on component dependency:
    This primary architecture plan defines ownership, core models, registry rules, and implementation phases.
 2. [PNC_AUTOMATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_AUTOMATION_SUBPLAN.md)
    Automation orchestration is already implemented in code. This sub-plan remains as the canonical reference for the generic execution loop, task contract, script runner, and retry or stop policy used by later work.
-3. [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SELECTOR_REFINEMENT_SUBPLAN.md)
+3. [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/reviewed_plans/PNC_SELECTOR_REFINEMENT_SUBPLAN.md)
    Selector refinement follows because screen flows and concrete tasks depend on validated clickable UI mappings, especially for unique buildings and empty building slots.
 4. [PNC_SCREEN_FLOW_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SCREEN_FLOW_SUBPLAN.md)
    Reusable navigation flows should be defined after selector refinement, because flows depend on trustworthy selectors and known source-to-destination transitions.
-5. [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md)
+5. [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/reviewed_plans/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md)
    Account-navigation planning follows screen-flow design because bootstrap, popup recovery, verified in-game entry, and castle targeting depend on reusable navigation plus refined selectors.
 6. [PNC_TASK_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_TASK_SUBPLAN.md)
    Post-navigation task design should come last because those tasks depend on the automation contract, refined selectors, reusable screen flows, and a defined account-navigation plan.
@@ -934,13 +934,13 @@ Exit condition:
 
 ### Phase 2: P&C observation baseline
 
-This phase is now owned by [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SELECTOR_REFINEMENT_SUBPLAN.md).
+This phase is now owned by [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/reviewed_plans/PNC_SELECTOR_REFINEMENT_SUBPLAN.md).
 
 Phase closure is recorded in the selector-refinement sub-plan. The repo now carries screenshot coverage, parser/classifier tests, and targeted live smoke evidence recorded on 2026-03-09 and 2026-03-10 across `127.0.0.1:5565` and the corrected first-instance port `127.0.0.1:5556`. Ongoing selector maintenance continues in that sub-plan without reopening this primary phase.
 
 ### Phase 2.5: Selector refinement
 
-This phase is now owned by [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SELECTOR_REFINEMENT_SUBPLAN.md).
+This phase is now owned by [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/reviewed_plans/PNC_SELECTOR_REFINEMENT_SUBPLAN.md).
 
 Phase closure is recorded in the selector-refinement sub-plan. The repo now carries the static catalog/updater path, reviewed discovery tooling for artifact folders and safe live probes, registry and observation tests, and targeted live smoke evidence for popup recovery plus selector-driven `home -> bag -> back` and `home -> alliance join -> back` validation across both configured BlueStacks instances on 2026-03-09 and 2026-03-10. Future selector additions and maintenance remain owned there.
 
@@ -950,13 +950,13 @@ This phase is implemented in code and validated by unit tests for runner, script
 
 ### Phase 4: Account login
 
-This phase is now owned by [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md).
+This phase is now owned by [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/reviewed_plans/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md).
 
 Runtime implementation now covers loading, login-form OCR fallback, account-switch correction, popup recovery integration, and verified transition into in-game bootstrap states with automated unit and screenshot coverage. This primary implementation plan still does not treat the phase as closed because live validation evidence remains tracked in the account-navigation sub-plan. Selector coverage will continue growing incrementally as required by that work rather than as one up-front full-registry milestone.
 
 ### Phase 5: Castle targeting
 
-This phase is now owned by [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md).
+This phase is now owned by [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/reviewed_plans/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md).
 
 Castle-roster parsing, full castle-identity matching, roster-aware off-screen scrolling, and selected-castle verification now exist in code with automated unit and screenshot coverage. This primary implementation plan still does not treat the phase as closed because the required live smoke validation evidence remains tracked in the account-navigation sub-plan. Selector coverage will continue growing incrementally as required by that work rather than as one up-front full-registry milestone.
 
@@ -974,9 +974,9 @@ Exit condition:
 ### Phase 6.5: Secondary task-design plan
 
 - collect real screenshots for selector-registry definition,
-- write and refine [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SELECTOR_REFINEMENT_SUBPLAN.md),
+- write and refine [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/reviewed_plans/PNC_SELECTOR_REFINEMENT_SUBPLAN.md),
 - write and refine [PNC_SCREEN_FLOW_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SCREEN_FLOW_SUBPLAN.md),
-- write and refine [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md),
+- write and refine [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/reviewed_plans/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md),
 - write and refine [PNC_TASK_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_TASK_SUBPLAN.md),
 - lock exact flows for login, castle selection, building, research, gathering, and campaign before implementation refinement.
 
@@ -1037,11 +1037,11 @@ Use the following mapping:
 Each implementation phase should be considered complete only when its required validation gate has been run:
 
 - Phase 1: unit tests for config and foundation logic, plus smoke check for emulator connection and screenshot persistence,
-- Phase 2: screenshot integration tests plus targeted smoke checks recorded by [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SELECTOR_REFINEMENT_SUBPLAN.md); future maintenance stays there without reopening the primary phase,
-- Phase 2.5: selector screenshot, click-mapping, and smoke evidence recorded by [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SELECTOR_REFINEMENT_SUBPLAN.md); future maintenance stays there without reopening the primary phase,
+- Phase 2: screenshot integration tests plus targeted smoke checks recorded by [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/reviewed_plans/PNC_SELECTOR_REFINEMENT_SUBPLAN.md); future maintenance stays there without reopening the primary phase,
+- Phase 2.5: selector screenshot, click-mapping, and smoke evidence recorded by [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/reviewed_plans/PNC_SELECTOR_REFINEMENT_SUBPLAN.md); future maintenance stays there without reopening the primary phase,
 - Phase 3: implemented in code and validated by unit tests for runner, script loading, and task contract behavior,
-- Phase 4: account-navigation screenshot and smoke evidence recorded by [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md); closure remains pending there until the evidence is complete,
-- Phase 5: castle-targeting screenshot and smoke evidence recorded by [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md); closure remains pending there until the evidence is complete,
+- Phase 4: account-navigation screenshot and smoke evidence recorded by [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/reviewed_plans/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md); closure remains pending there until the evidence is complete,
+- Phase 5: castle-targeting screenshot and smoke evidence recorded by [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/reviewed_plans/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md); closure remains pending there until the evidence is complete,
 - Phase 6: smoke validation per implemented feature, plus lower-level unit or screenshot tests for any logic extracted from the feature,
 - Phase 7: broader regression pass across the relevant unit, screenshot, and smoke suites.
 
@@ -1109,4 +1109,5 @@ Before implementation is considered correct, confirm:
 The correct solution for this repository is a **Puzzles & Conquest-specific automation platform**, not a larger version of the current one-file ADB script.
 
 The system should be built around one canonical screenshot-driven loop, one typed account-configuration model, one script model, one selector registry, one observation model, one script runner, and one task framework. That keeps the design lean, DRY, extensible, and well integrated while still matching the real P&C workflows you want to automate.
+
 

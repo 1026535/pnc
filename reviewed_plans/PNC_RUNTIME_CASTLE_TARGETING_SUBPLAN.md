@@ -1,4 +1,4 @@
-﻿# Puzzles & Conquest Runtime Castle Targeting Sub-Plan
+# Puzzles & Conquest Runtime Castle Targeting Sub-Plan
 
 ## 1. Purpose
 
@@ -7,7 +7,7 @@ This document defines the canonical refactor that removes castle selection from 
 It is intentionally separate from:
 
 - [PNC_AUTOMATION_IMPLEMENTATION.md](/c:/Users/lebel/pnc/PNC_AUTOMATION_IMPLEMENTATION.md), which remains the primary platform architecture plan,
-- [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md), which owns bootstrap, login, and castle-switch behavior,
+- [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/reviewed_plans/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md), which owns bootstrap, login, and castle-switch behavior,
 - [PNC_SCREEN_FLOW_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SCREEN_FLOW_SUBPLAN.md), which owns reusable navigation flows,
 - [PNC_TASK_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_TASK_SUBPLAN.md), which owns bounded feature-task slices.
 
@@ -889,4 +889,5 @@ The smallest coherent implementation slice is:
 7. then add `refresh_castle_roster` as the next follow-up slice.
 
 That sequence fixes the ownership problem first, keeps the runtime usable immediately, and adds full ordered roster refresh as the next bounded increment instead of blocking the whole refactor on it.
+
 

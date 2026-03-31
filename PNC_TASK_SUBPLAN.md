@@ -7,9 +7,9 @@ This document is the dependency-ordered sixth plan and now governs post-account-
 It is intentionally separate from:
 
 - [PNC_AUTOMATION_IMPLEMENTATION.md](/c:/Users/lebel/pnc/PNC_AUTOMATION_IMPLEMENTATION.md), which remains focused on the primary platform architecture,
-- [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md), which continues to own bootstrap, login, popup recovery, and castle targeting,
+- [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/reviewed_plans/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md), which continues to own bootstrap, login, popup recovery, and castle targeting,
 - [PNC_SCREEN_FLOW_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SCREEN_FLOW_SUBPLAN.md), which owns canonical reusable navigation,
-- [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SELECTOR_REFINEMENT_SUBPLAN.md), which owns selector maturity.
+- [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/reviewed_plans/PNC_SELECTOR_REFINEMENT_SUBPLAN.md), which owns selector maturity.
 
 This file is no longer the place to fully design every future task in one horizontal backlog. It now defines the planning model, migration rules, and active backlog shape for feature-scoped post-navigation work.
 
@@ -193,7 +193,7 @@ This sub-plan must consume the selector registry as input. It must not create a 
 
 If a feature needs a new selector:
 
-- add or refine it through [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SELECTOR_REFINEMENT_SUBPLAN.md),
+- add or refine it through [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/reviewed_plans/PNC_SELECTOR_REFINEMENT_SUBPLAN.md),
 - request only the selector increment needed for the active feature slice,
 - avoid treating full-registry completion as a prerequisite for bounded feature work.
 
@@ -211,7 +211,7 @@ If a feature needs a new reusable path:
 
 This sub-plan should consume generic task orchestration rules from [PNC_AUTOMATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_AUTOMATION_SUBPLAN.md). It must not redefine the global task contract, script-runner behavior, or run-level retry policy.
 
-This sub-plan also assumes that account navigation behavior, including login bootstrap and any explicit castle alignment requested by earlier steps, has already been handled by [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md).
+This sub-plan also assumes that account navigation behavior, including login bootstrap and any explicit castle alignment requested by earlier steps, has already been handled by [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/reviewed_plans/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md).
 
 ## 14. Validation requirement
 
@@ -231,3 +231,4 @@ Going forward:
 - this file should stay as the feature-planning contract and index,
 - detailed design should move into dedicated feature plans as features become active,
 - old duplicated task-planning text should be removed once its owning feature plan exists.
+

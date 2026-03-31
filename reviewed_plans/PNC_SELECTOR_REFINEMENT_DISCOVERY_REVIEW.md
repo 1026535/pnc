@@ -110,7 +110,7 @@ Clean fix:
 
 Evidence:
 
-- [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md#L29)
+- [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/reviewed_plans/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md#L29)
 - [PNC_AUTOMATION_IMPLEMENTATION.md](/c:/Users/lebel/pnc/PNC_AUTOMATION_IMPLEMENTATION.md#L944)
 - [PNC_SCREEN_FLOW_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SCREEN_FLOW_SUBPLAN.md#L108)
 - [PNC_TASK_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_TASK_SUBPLAN.md#L20)
@@ -140,3 +140,4 @@ Clean fix:
 2. Stop auto-promoting unknown probe destinations to `click_mapped`.
 3. Make the discovery runtime use the same catalog everywhere in one run.
 4. Keep the registry-growth model explicitly feature-scoped in the remaining plans, and extend the catalog schema only when the next feature actually needs new metadata.
+

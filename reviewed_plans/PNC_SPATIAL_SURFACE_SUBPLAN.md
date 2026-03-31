@@ -7,9 +7,9 @@ This document introduces the canonical design for scrollable, non-fixed game sur
 It is intentionally separate from:
 
 - [PNC_AUTOMATION_IMPLEMENTATION.md](/c:/Users/lebel/pnc/PNC_AUTOMATION_IMPLEMENTATION.md), which remains the primary architecture plan,
-- [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SELECTOR_REFINEMENT_SUBPLAN.md), which owns selector maturity and registry refinement,
+- [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/reviewed_plans/PNC_SELECTOR_REFINEMENT_SUBPLAN.md), which owns selector maturity and registry refinement,
 - [PNC_SCREEN_FLOW_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SCREEN_FLOW_SUBPLAN.md), which owns reusable navigation flows,
-- [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md), which owns bootstrap and castle targeting,
+- [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/reviewed_plans/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md), which owns bootstrap and castle targeting,
 - [PNC_TASK_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_TASK_SUBPLAN.md), which owns bounded feature/task slices.
 
 This file owns the missing architectural layer for:
@@ -591,7 +591,7 @@ The intended home-city building flow should be documented in a separate home-cit
 
 ## 14. Selector-refinement integration
 
-This plan depends on [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SELECTOR_REFINEMENT_SUBPLAN.md) and refines its ownership boundary.
+This plan depends on [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/reviewed_plans/PNC_SELECTOR_REFINEMENT_SUBPLAN.md) and refines its ownership boundary.
 
 Required refinement increments:
 
@@ -712,10 +712,10 @@ This sub-plan is done only when:
 
 ## 19. Relationship to other plans
 
-- [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SELECTOR_REFINEMENT_SUBPLAN.md) should request and validate the fixed overlay selectors and parser fixtures required here.
+- [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/reviewed_plans/PNC_SELECTOR_REFINEMENT_SUBPLAN.md) should request and validate the fixed overlay selectors and parser fixtures required here.
 - [PNC_SCREEN_FLOW_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SCREEN_FLOW_SUBPLAN.md) should own the reusable flows that consume this spatial model.
 - [PNC_TASK_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_TASK_SUBPLAN.md) should consume this spatial model for gathering and Lord Info from world map, while home-city building work should be specified by a dedicated follow-on plan.
-- [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md) should continue using only the reusable flows and selectors it actually needs.
+- [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/reviewed_plans/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md) should continue using only the reusable flows and selectors it actually needs.
 
 ## 20. Recommended immediate next increment
 
@@ -728,3 +728,4 @@ The next clean implementation increment should be:
 5. validate the existing `home city -> world map -> home city` round-trip against that stronger evidence.
 
 That is the smallest coherent slice that improves the architecture without overcommitting to a full world-object parser immediately.
+

@@ -7,9 +7,9 @@ This document defines the canonical runtime design for selector interaction reso
 It is intentionally separate from:
 
 - [PNC_AUTOMATION_IMPLEMENTATION.md](/c:/Users/lebel/pnc/PNC_AUTOMATION_IMPLEMENTATION.md), which remains the primary platform architecture plan,
-- [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SELECTOR_REFINEMENT_SUBPLAN.md), which owns selector discovery and registry maturity,
+- [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/reviewed_plans/PNC_SELECTOR_REFINEMENT_SUBPLAN.md), which owns selector discovery and registry maturity,
 - [PNC_SCREEN_FLOW_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SCREEN_FLOW_SUBPLAN.md), which owns reusable navigation flows,
-- [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md), which owns bootstrap and castle targeting,
+- [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/reviewed_plans/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md), which owns bootstrap and castle targeting,
 - [PNC_TASK_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_TASK_SUBPLAN.md), which owns bounded feature-task behavior.
 
 This file owns only the missing selector-resolution behavior:
@@ -808,3 +808,4 @@ The smallest coherent implementation slice is:
 5. validate with one `PNC_BOTTOM_NAV_MORE` primary-miss-to-OCR-recovery test, one base-pass-no-OCR test, and one negative transitional-state test.
 
 That slice is large enough to establish the correct architecture, but still small enough to remain clean, testable, and DRY.
+
