@@ -89,20 +89,19 @@ class RelativeBounds:
             _require_ratio(self.action_x_ratio, field_name="action_x_ratio", inclusive_zero=True)
             _require_ratio(self.action_y_ratio, field_name="action_y_ratio", inclusive_zero=True)
 
-    def materialize_region(self, *, image_size: tuple[int, int]) -> Region:
-        """Builds one concrete screenshot region from normalized bounds."""
+    def materialize_region(self, *, image_size: tuple[int, int]) -> Bounds:
+        """Builds one concrete screenshot bounds object from normalized selector ratios."""
 
         image_width, image_height = _require_positive_image_size(image_size)
         x, width = _materialize_axis(start_ratio=self.x_ratio, size_ratio=self.width_ratio, total=image_width)
         y, height = _materialize_axis(start_ratio=self.y_ratio, size_ratio=self.height_ratio, total=image_height)
-        return Region(x=x, y=y, width=width, height=height)
+        return Bounds(x=x, y=y, width=width, height=height)
 
     def materialize(self, *, selector_id: UiElementId, image_size: tuple[int, int]) -> VisibleElement:
         """Builds one visible selector using normalized top-left/size data for the current screenshot dimensions."""
 
         image_width, image_height = _require_positive_image_size(image_size)
-        region = self.materialize_region(image_size=image_size)
-        bounds = Bounds(x=region.x, y=region.y, width=region.width, height=region.height)
+        bounds = self.materialize_region(image_size=image_size)
         action_point = None
         if self.action_x_ratio is not None and self.action_y_ratio is not None:
             action_point = (
@@ -255,12 +254,18 @@ def build_default_selector_registry(
 ) -> SelectorRegistry:
     """Builds the static selector registry described by the implementation plan."""
 
-    root = template_root or (Path(__file__).resolve().parents[2] / "templates" / "pnc")
+    root = template_root or default_selector_template_root()
     catalog = load_selector_catalog_document(catalog_path)
     return SelectorRegistry(
         selectors=tuple(_create_selector_from_catalog_entry(selector=selector, root=root) for selector in catalog.selectors),
         surfaces=tuple(_create_surface_from_catalog_entry(surface=surface) for surface in catalog.surfaces),
     )
+
+
+def default_selector_template_root() -> Path:
+    """Returns the canonical package-root-relative template directory for selector assets."""
+
+    return Path(__file__).resolve().parents[3] / "templates" / "pnc"
 
 
 def _create_selector_from_catalog_entry(*, selector: object, root: Path) -> SelectorDefinition:

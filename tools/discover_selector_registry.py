@@ -21,7 +21,6 @@ from pnc_automation.app.pnc.domain.observation import Observation
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
-from pnc_automation.app.pnc.persistence.artifact_naming import sanitize_artifact_segment
 from pnc_automation.app.pnc.vision.observation_builder import CapturedObservation, ObservationBuilder
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.app.pnc.vision.selector_catalog import default_selector_catalog_path, load_selector_catalog_document
@@ -36,6 +35,7 @@ from pnc_automation.app.pnc.vision.selector_discovery import (
 )
 from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.core.infra.emulator.session import BlueStacksSession
+from pnc_automation.core.infra.storage.path_segments import sanitize_artifact_segment
 
 
 @dataclass(frozen=True, slots=True)

@@ -19,7 +19,7 @@ from pnc_automation.app.pnc.vision.selector_catalog import (
     SelectorCatalogSurfaceViewport,
 )
 from pnc_automation.app.pnc.vision.selector_interaction_kind import SelectorInteractionKind
-from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
+from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry, default_selector_template_root
 
 
 class SelectorRegistryTests(unittest.TestCase):
@@ -99,6 +99,14 @@ class SelectorRegistryTests(unittest.TestCase):
         )
         self.assertIsNotNone(registry.require(UiElementId.PNC_WORLD_COORDINATE_BAR).relative_bounds)
         self.assertIsNotNone(registry.require(UiElementId.PNC_WORLD_SEARCH_BUTTON).relative_bounds)
+
+    def test_default_selector_template_root_stays_package_root_relative(self) -> None:
+        """Keeps the default selector template root anchored at the package root after package moves."""
+
+        self.assertEqual(
+            default_selector_template_root(),
+            Path(__file__).resolve().parents[1] / "pnc_automation" / "templates" / "pnc",
+        )
 
     def test_selector_catalog_rejects_navigation_without_reviewed_destination(self) -> None:
         """Fails fast when a navigation selector omits the reviewed destination contract."""

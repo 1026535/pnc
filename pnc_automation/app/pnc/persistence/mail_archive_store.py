@@ -7,8 +7,8 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-from pnc_automation.app.pnc.persistence.artifact_naming import sanitize_artifact_segment
 from pnc_automation.app.pnc.domain.mail import MailArchiveMode, MailArchiveRecord, thread_partner_directory_name
+from pnc_automation.core.infra.storage.path_segments import sanitize_artifact_segment
 
 
 @dataclass(frozen=True, slots=True)

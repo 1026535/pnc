@@ -6,10 +6,10 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
-from pnc_automation.app.pnc.persistence.artifact_naming import format_account_artifact_directory
 from pnc_automation.app.runtime.observation_mode import ObservationMode
 from pnc_automation.core.errors import ConfigurationError
 from pnc_automation.core.infra.emulator.models import BlueStacksInstanceConfig
+from pnc_automation.core.infra.storage.artifact_naming import format_account_artifact_directory
 
 
 DEFAULT_BLUESTACKS_CONFIG_PATH = Path(r"C:\ProgramData\BlueStacks_nxt\bluestacks.conf")

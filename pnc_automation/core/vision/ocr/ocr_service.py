@@ -10,7 +10,7 @@ from typing import Any, Protocol
 from PIL import Image
 
 from pnc_automation.core.errors import ScreenClassificationError
-from pnc_automation.core.vision.image.models import Region
+from pnc_automation.core.vision.image.models import Bounds
 
 try:
     from rapidocr_onnxruntime import RapidOCR
@@ -23,7 +23,7 @@ class OcrWord:
     """Represents one OCR word localized to screenshot coordinates."""
 
     text: str
-    bounds: Region
+    bounds: Bounds
     confidence: float
 
 
@@ -32,7 +32,7 @@ class OcrLine:
     """Represents one OCR text line localized to screenshot coordinates."""
 
     text: str
-    bounds: Region
+    bounds: Bounds
     confidence: float
     words: tuple[OcrWord, ...] = ()
 
@@ -48,13 +48,13 @@ class OcrResult:
 class OcrService(Protocol):
     """Reads OCR text from one screenshot or cropped region."""
 
-    def read_result(self, image: Image.Image, region: Region | None = None) -> OcrResult:
+    def read_result(self, image: Image.Image, region: Bounds | None = None) -> OcrResult:
         """Returns localized OCR lines and words for the provided image region."""
 
-    def read_lines(self, image: Image.Image, region: Region | None = None) -> tuple[OcrLine, ...]:
+    def read_lines(self, image: Image.Image, region: Bounds | None = None) -> tuple[OcrLine, ...]:
         """Returns localized OCR lines for the provided image region."""
 
-    def read_text(self, image: Image.Image, region: Region) -> str:
+    def read_text(self, image: Image.Image, region: Bounds) -> str:
         """Returns OCR text for the provided region."""
 
 
@@ -67,7 +67,7 @@ class CachedOcrService:
     _last_region_key: tuple[int, int, int, int] | None = field(default=None, init=False, repr=False)
     _last_result: OcrResult | None = field(default=None, init=False, repr=False)
 
-    def read_result(self, image: Image.Image, region: Region | None = None) -> OcrResult:
+    def read_result(self, image: Image.Image, region: Bounds | None = None) -> OcrResult:
         """Returns cached OCR output when the same image and region are requested consecutively."""
 
         region_key = None if region is None else (region.x, region.y, region.width, region.height)
@@ -80,12 +80,12 @@ class CachedOcrService:
         self._last_result = result
         return result
 
-    def read_lines(self, image: Image.Image, region: Region | None = None) -> tuple[OcrLine, ...]:
+    def read_lines(self, image: Image.Image, region: Bounds | None = None) -> tuple[OcrLine, ...]:
         """Returns OCR lines while reusing the cached result path when available."""
 
         return self.read_result(image, region).lines
 
-    def read_text(self, image: Image.Image, region: Region) -> str:
+    def read_text(self, image: Image.Image, region: Bounds) -> str:
         """Returns OCR text while reusing the cached result path when available."""
 
         return "\n".join(line.text for line in self.read_result(image, region).lines)
@@ -104,7 +104,7 @@ class RapidOcrService:
             raise ScreenClassificationError("rapidocr_onnxruntime is required for OCR-backed observations.")
         self._engine = RapidOCR()
 
-    def read_result(self, image: Image.Image, region: Region | None = None) -> OcrResult:
+    def read_result(self, image: Image.Image, region: Bounds | None = None) -> OcrResult:
         """Returns OCR lines and synthesized words from the full screenshot or the requested crop."""
 
         crop, offset_x, offset_y = _crop_image(image, region)
@@ -120,12 +120,12 @@ class RapidOcrService:
         words = tuple(word for line in lines for word in line.words)
         return OcrResult(lines=lines, words=words)
 
-    def read_lines(self, image: Image.Image, region: Region | None = None) -> tuple[OcrLine, ...]:
+    def read_lines(self, image: Image.Image, region: Bounds | None = None) -> tuple[OcrLine, ...]:
         """Returns OCR lines from the full screenshot or the requested crop."""
 
         return self.read_result(image, region).lines
 
-    def read_text(self, image: Image.Image, region: Region) -> str:
+    def read_text(self, image: Image.Image, region: Bounds) -> str:
         """Returns newline-joined OCR text for the requested region."""
 
         return "\n".join(line.text for line in self.read_lines(image, region))
@@ -134,7 +134,7 @@ class RapidOcrService:
 class UnavailableOcrService:
     """Fail-fast OCR implementation used when no OCR backend is configured."""
 
-    def read_result(self, image: Image.Image, region: Region | None = None) -> OcrResult:
+    def read_result(self, image: Image.Image, region: Bounds | None = None) -> OcrResult:
         """Raises because OCR-dependent observations are unsupported without a backend."""
 
         del image
@@ -143,18 +143,18 @@ class UnavailableOcrService:
             region=region,
         )
 
-    def read_lines(self, image: Image.Image, region: Region | None = None) -> tuple[OcrLine, ...]:
+    def read_lines(self, image: Image.Image, region: Bounds | None = None) -> tuple[OcrLine, ...]:
         """Raises because OCR-dependent observations are unsupported without a backend."""
 
         return self.read_result(image, region).lines
 
-    def read_text(self, image: Image.Image, region: Region) -> str:
+    def read_text(self, image: Image.Image, region: Bounds) -> str:
         """Raises because OCR-dependent selectors are unsupported without a backend."""
 
         return "\n".join(line.text for line in self.read_result(image, region).lines)
 
 
-def _crop_image(image: Image.Image, region: Region | None) -> tuple[Image.Image, int, int]:
+def _crop_image(image: Image.Image, region: Bounds | None) -> tuple[Image.Image, int, int]:
     """Returns the cropped image and its coordinate offset within the screenshot."""
 
     if region is None:
@@ -186,7 +186,7 @@ def _to_ocr_line(
     top = min(ys) + offset_y
     right = max(xs) + offset_x
     bottom = max(ys) + offset_y
-    bounds = Region(x=left, y=top, width=max(1, right - left), height=max(1, bottom - top))
+    bounds = Bounds(x=left, y=top, width=max(1, right - left), height=max(1, bottom - top))
     words = _to_ocr_words(str(text).strip(), bounds=bounds, confidence=float(confidence))
     return OcrLine(
         text=str(text).strip(),
@@ -196,7 +196,7 @@ def _to_ocr_line(
     )
 
 
-def _to_ocr_words(text: str, *, bounds: Region, confidence: float) -> tuple[OcrWord, ...]:
+def _to_ocr_words(text: str, *, bounds: Bounds, confidence: float) -> tuple[OcrWord, ...]:
     """Synthesizes conservative word boxes from one OCR line when the backend is line-only."""
 
     raw_words = [word for word in text.split() if word.strip() != ""]
@@ -214,7 +214,7 @@ def _to_ocr_words(text: str, *, bounds: Region, confidence: float) -> tuple[OcrW
             width = max(1, bounds.width - consumed_width)
         else:
             width = max(1, round(bounds.width * (len(word) / total_characters)))
-        word_bounds = Region(
+        word_bounds = Bounds(
             x=bounds.x + consumed_width,
             y=bounds.y,
             width=width,

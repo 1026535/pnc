@@ -207,14 +207,14 @@ class PillowSelectorEngine:
             if selector.detection_kind == DetectionKind.OCR_REGION:
                 if selector.relative_bounds is None:
                     continue
-                region = selector.relative_bounds.materialize_region(image_size=image.size)
-                text = self.ocr_service.read_text(image, region).strip()
+                bounds = selector.relative_bounds.materialize_region(image_size=image.size)
+                text = self.ocr_service.read_text(image, bounds).strip()
                 if text == "":
                     continue
                 matches.append(
                     SelectorMatch(
                         selector_id=selector.id,
-                        bounds=selector_to_bounds(region),
+                        bounds=bounds,
                         confidence=1.0,
                         source_kind=VisibleElementSourceKind.OCR,
                         extracted_text=text,
@@ -495,16 +495,6 @@ class ObservationService:
         ):
             return self.pnc_account_id
         return None
-
-
-def selector_to_bounds(region: object) -> object:
-    """Converts a selector region into bounds while avoiding an import cycle."""
-
-    from pnc_automation.app.pnc.domain.observation import Bounds
-
-    return Bounds(x=region.x, y=region.y, width=region.width, height=region.height)
-
-
 def _matches_to_visible_elements(matches: Sequence[SelectorMatch]) -> dict[UiElementId, VisibleElement]:
     """Converts selector-engine output into the observation's visible-element map."""
 

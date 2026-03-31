@@ -10,9 +10,10 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from pnc_automation.app.pnc.persistence.artifact_naming import format_account_artifact_directory, format_castle_artifact_directory
 from pnc_automation.app.authoring.config.models import CastleIdentity
 from pnc_automation.app.pnc.domain.chat import ChatChannel, ObservedChatEntry, chat_channel_archive_directory, normalize_chat_text
+from pnc_automation.app.pnc.persistence.artifact_naming import format_castle_artifact_directory
+from pnc_automation.core.infra.storage.artifact_naming import format_account_artifact_directory
 
 
 @dataclass(frozen=True, slots=True)
