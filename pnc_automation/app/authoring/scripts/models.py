@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeAlias
 
 from pnc_automation.app.automation.engine.task import CastleTargetPolicy, TaskId
 from pnc_automation.app.authoring.config.models import CastleIdentity
@@ -27,6 +27,45 @@ class ScriptStep:
         if self.castle is not None and self.castle_ref is not None:
             raise ValueError("ScriptStep cannot define both 'castle' and 'castle_ref'.")
 
+    def with_castle_ref(
+        self,
+        castle_ref: str,
+        *,
+        provenance: Mapping[str, Any] | None = None,
+    ) -> ScriptStep:
+        """Returns one generated step copy bound to the provided authored castle alias."""
+
+        merged_provenance = dict(self.provenance)
+        if provenance is not None:
+            merged_provenance.update(provenance)
+        return ScriptStep(
+            task=self.task,
+            castle=self.castle,
+            castle_ref=castle_ref,
+            params=self.params,
+            provenance=merged_provenance,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class CastleRefRepeatBlock:
+    """Repeats one nested ordinary workflow for each authored castle alias in order."""
+
+    castle_refs: tuple[str, ...]
+    steps: tuple[ScriptStep, ...]
+    provenance: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        """Rejects malformed repeat blocks that omit targets or nested steps."""
+
+        if not self.castle_refs:
+            raise ValueError("CastleRefRepeatBlock requires at least one castle_ref.")
+        if not self.steps:
+            raise ValueError("CastleRefRepeatBlock requires at least one nested step.")
+
+
+ScriptNode: TypeAlias = ScriptStep | CastleRefRepeatBlock
+
 
 @dataclass(frozen=True, slots=True)
 class RunScript:
@@ -34,7 +73,7 @@ class RunScript:
 
     name: str
     path: Path
-    steps: tuple[ScriptStep, ...]
+    steps: tuple[ScriptNode, ...]
 
 
 @dataclass(frozen=True, slots=True)

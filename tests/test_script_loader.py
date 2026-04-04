@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 from pnc_automation.app.authoring.scripts.loader import load_run_script
+from pnc_automation.app.authoring.scripts.models import CastleRefRepeatBlock, ScriptStep
 from pnc_automation.app.automation.engine.task import TaskId
 from pnc_automation.core.errors import ScriptValidationError
 
@@ -119,6 +120,138 @@ class ScriptLoaderTests(unittest.TestCase):
 
             self.assertEqual(script.steps[2].task, TaskId.COLLECT_KINGDOM_CHAT)
             self.assertEqual(script.steps[2].castle_ref, "main")
+
+    def test_load_run_script_parses_multi_castle_repeat_block(self) -> None:
+        """Loads one repeat block into an explicit authored node with nested ordinary task steps."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            script_path = Path(temp_directory) / "multi_castle.yaml"
+            script_path.write_text(
+                textwrap.dedent(
+                    """
+                    name: daily_castle_maintenance
+                    steps:
+                      - task: ensure_game_running
+                      - castle_refs: [main, farm]
+                        steps:
+                          - task: building_upgrade
+                            params:
+                              priority: [castle, wall]
+                              allow_speedups: false
+                          - task: research
+                            params:
+                              priority: [economy, development]
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+
+            script = load_run_script(script_path)
+
+            self.assertEqual(len(script.steps), 2)
+            self.assertIsInstance(script.steps[0], ScriptStep)
+            self.assertIsInstance(script.steps[1], CastleRefRepeatBlock)
+            repeat_block = script.steps[1]
+            assert isinstance(repeat_block, CastleRefRepeatBlock)
+            self.assertEqual(repeat_block.castle_refs, ("main", "farm"))
+            self.assertEqual([step.task for step in repeat_block.steps], [TaskId.BUILDING_UPGRADE, TaskId.RESEARCH])
+
+    def test_load_run_script_rejects_repeat_block_that_mixes_task_and_castle_refs(self) -> None:
+        """Fails fast when one authored node tries to be both a task step and a repeat block."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            script_path = Path(temp_directory) / "invalid.yaml"
+            script_path.write_text(
+                textwrap.dedent(
+                    """
+                    name: invalid
+                    steps:
+                      - task: building_upgrade
+                        castle_refs: [main]
+                        steps:
+                          - task: research
+                            params:
+                              priority: [economy]
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(ScriptValidationError) as error_context:
+                load_run_script(script_path)
+
+        self.assertEqual(error_context.exception.details["step_path"], "steps[0]")
+
+    def test_load_run_script_rejects_repeat_block_with_empty_castle_refs(self) -> None:
+        """Fails fast when a repeat block does not declare any target aliases."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            script_path = Path(temp_directory) / "invalid.yaml"
+            script_path.write_text(
+                textwrap.dedent(
+                    """
+                    name: invalid
+                    steps:
+                      - castle_refs: []
+                        steps:
+                          - task: building_upgrade
+                            params:
+                              priority: [castle]
+                              allow_speedups: false
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(ScriptValidationError):
+                load_run_script(script_path)
+
+    def test_load_run_script_rejects_repeat_block_with_empty_steps(self) -> None:
+        """Fails fast when a repeat block omits its nested workflow body."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            script_path = Path(temp_directory) / "invalid.yaml"
+            script_path.write_text(
+                textwrap.dedent(
+                    """
+                    name: invalid
+                    steps:
+                      - castle_refs: [main]
+                        steps: []
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(ScriptValidationError):
+                load_run_script(script_path)
+
+    def test_load_run_script_rejects_nested_repeat_step_castle_ref_override(self) -> None:
+        """Fails fast when a repeat block's nested task step tries to declare its own castle alias."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            script_path = Path(temp_directory) / "invalid.yaml"
+            script_path.write_text(
+                textwrap.dedent(
+                    """
+                    name: invalid
+                    steps:
+                      - castle_refs: [main]
+                        steps:
+                          - task: building_upgrade
+                            castle_ref: farm
+                            params:
+                              priority: [castle]
+                              allow_speedups: false
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(ScriptValidationError) as error_context:
+                load_run_script(script_path)
+
+        self.assertEqual(error_context.exception.details["step_path"], "steps[0].steps[0]")
 
 
 if __name__ == "__main__":

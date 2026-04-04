@@ -14,7 +14,7 @@ from pnc_automation.app.runtime.observation_mode import ObservationMode
 from pnc_automation.app.automation.engine.action_executor import ActionExecutor
 from pnc_automation.app.automation.engine.observed_action_executor import ObservedActionExecutor
 from pnc_automation.app.automation.engine.runner import AutomationRunner, RunResult, StepRunResult
-from pnc_automation.app.authoring.scripts.models import RunScript, ScriptStep
+from pnc_automation.app.authoring.scripts.models import CastleRefRepeatBlock, RunScript, ScriptStep
 from pnc_automation.app.authoring.scripts.registry import TaskRegistry, build_default_task_registry
 from pnc_automation.app.automation.engine.task import BaseAutomationTask, CastleTargetPolicy, TaskId, TaskResult
 from pnc_automation.app.automation.engine.task_context import TaskContext
@@ -133,6 +133,139 @@ class RuntimeCastleTargetingTests(unittest.TestCase):
                 ),
                 castle_targets=AccountCastleTargetsConfig(account_id=self.account.id, targets=()),
             )
+
+    def test_prepare_script_expands_repeat_block_in_authored_castle_then_step_order(self) -> None:
+        """Flattens one multi-castle repeat block into the existing concrete prepared-step contract."""
+
+        registry = build_default_task_registry()
+        farm_castle = CastleIdentity(kingdom="K230", castle_name="Farm", castle_level=6)
+        prepared = registry.prepare_script(
+            RunScript(
+                name="multi_castle",
+                path=Path("multi_castle.yaml"),
+                steps=(
+                    ScriptStep(task=TaskId.ENSURE_GAME_RUNNING),
+                    CastleRefRepeatBlock(
+                        castle_refs=("main", "farm"),
+                        steps=(
+                            ScriptStep(
+                                task=TaskId.BUILDING_UPGRADE,
+                                params={"priority": ["castle"], "allow_speedups": False},
+                            ),
+                            ScriptStep(task=TaskId.RESEARCH, params={"priority": ["economy"]}),
+                        ),
+                    ),
+                ),
+            ),
+            castle_targets=AccountCastleTargetsConfig(
+                account_id=self.account.id,
+                targets=(
+                    CastleTargetDefinition(target_id="main", castle=self.target_castle),
+                    CastleTargetDefinition(target_id="farm", castle=farm_castle),
+                ),
+            ),
+        )
+
+        self.assertEqual(
+            [step.task for step in prepared.steps],
+            [
+                TaskId.ENSURE_GAME_RUNNING,
+                TaskId.BUILDING_UPGRADE,
+                TaskId.RESEARCH,
+                TaskId.BUILDING_UPGRADE,
+                TaskId.RESEARCH,
+            ],
+        )
+        self.assertEqual([step.castle_ref for step in prepared.steps[1:]], ["main", "main", "farm", "farm"])
+        self.assertEqual(
+            [step.castle for step in prepared.steps[1:]],
+            [self.target_castle, self.target_castle, farm_castle, farm_castle],
+        )
+        self.assertEqual(prepared.steps[1].provenance["step_path"], "steps[1].steps[0]")
+        self.assertEqual(prepared.steps[3].provenance["repeat_castle_ref"], "farm")
+
+    def test_prepare_script_rejects_unknown_repeat_block_castle_ref(self) -> None:
+        """Fails fast when a repeat block references an alias absent from the selected account."""
+
+        registry = build_default_task_registry()
+
+        with self.assertRaises(ScriptValidationError) as error_context:
+            registry.prepare_script(
+                RunScript(
+                    name="invalid",
+                    path=Path("invalid.yaml"),
+                    steps=(
+                        CastleRefRepeatBlock(
+                            castle_refs=("main",),
+                            steps=(
+                                ScriptStep(
+                                    task=TaskId.BUILDING_UPGRADE,
+                                    params={"priority": ["castle"], "allow_speedups": False},
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+                castle_targets=AccountCastleTargetsConfig(account_id=self.account.id, targets=()),
+            )
+
+        self.assertEqual(error_context.exception.details["step_path"], "steps[0].castle_refs[0]")
+
+    def test_prepare_script_applies_task_target_policy_after_repeat_block_expansion(self) -> None:
+        """Keeps the existing task target-policy validation after multi-castle authored expansion."""
+
+        registry = build_default_task_registry()
+
+        with self.assertRaises(ScriptValidationError) as error_context:
+            registry.prepare_script(
+                RunScript(
+                    name="invalid",
+                    path=Path("invalid.yaml"),
+                    steps=(
+                        CastleRefRepeatBlock(
+                            castle_refs=("main",),
+                            steps=(ScriptStep(task=TaskId.LOGIN),),
+                        ),
+                    ),
+                ),
+                castle_targets=AccountCastleTargetsConfig(
+                    account_id=self.account.id,
+                    targets=(CastleTargetDefinition(target_id="main", castle=self.target_castle),),
+                ),
+            )
+
+        self.assertEqual(error_context.exception.details["step_path"], "steps[0].steps[0]")
+
+    def test_prepare_script_rejects_programmatic_nested_castle_override_inside_repeat_block(self) -> None:
+        """Keeps repeat-block castle ownership canonical even for in-memory script construction."""
+
+        registry = build_default_task_registry()
+
+        with self.assertRaises(ScriptValidationError) as error_context:
+            registry.prepare_script(
+                RunScript(
+                    name="invalid",
+                    path=Path("invalid.yaml"),
+                    steps=(
+                        CastleRefRepeatBlock(
+                            castle_refs=("main",),
+                            steps=(
+                                ScriptStep(
+                                    task=TaskId.BUILDING_UPGRADE,
+                                    castle=self.target_castle,
+                                    params={"priority": ["castle"], "allow_speedups": False},
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+                castle_targets=AccountCastleTargetsConfig(
+                    account_id=self.account.id,
+                    targets=(CastleTargetDefinition(target_id="main", castle=self.target_castle),),
+                ),
+            )
+
+        self.assertEqual(error_context.exception.details["step_path"], "steps[0].steps[0]")
 
     def test_runner_auto_selects_explicit_castle_before_optional_task(self) -> None:
         """Runs the canonical select-castle pre-step before an optional castle-targeted task."""
