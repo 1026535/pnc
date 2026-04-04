@@ -1,0 +1,21 @@
+name: multi_castle_daily_maintenance
+
+steps:
+  - task: ensure_game_running
+  - task: login
+  - castle_refs: [main, farm]
+    steps:
+      - task: building_upgrade
+        params:
+          priority: [castle, wall, institute, infantry_barracks]
+          allow_speedups: false
+      - task: research
+        params:
+          priority: [economy, development, military]
+      - task: gathering
+        params:
+          preferred_resources: [food, wood, iron]
+          max_parallel_marches: 5
+      - task: campaign
+        params:
+          enabled_modes: [standard]

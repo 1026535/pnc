@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from pnc_automation.app.automation.engine.task import BaseAutomationTask, CastleTargetPolicy, TaskId
@@ -24,7 +25,14 @@ from pnc_automation.app.automation.tasks.send_chat_message_task import (
 from pnc_automation.app.automation.tasks.send_mail_task import SendMailTask
 from pnc_automation.app.authoring.config.models import AccountCastleTargetsConfig, CastleIdentity
 from pnc_automation.core.errors import ConfigurationError, ScriptValidationError
-from pnc_automation.app.authoring.scripts.models import PreparedRunScript, PreparedScriptStep, RunScript
+from pnc_automation.app.authoring.scripts.models import (
+    CastleRefRepeatBlock,
+    PreparedRunScript,
+    PreparedScriptStep,
+    RunScript,
+    ScriptNode,
+    ScriptStep,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,44 +73,158 @@ class TaskRegistry:
     ) -> PreparedRunScript:
         """Converts a raw run script into an execution-ready script with typed params."""
 
+        prepared_steps = self._prepare_script_nodes(script.steps, castle_targets=castle_targets)
+        return PreparedRunScript(name=script.name, path=script.path, steps=tuple(prepared_steps))
+
+    def _prepare_script_nodes(
+        self,
+        nodes: Sequence[ScriptNode],
+        *,
+        castle_targets: AccountCastleTargetsConfig | None,
+    ) -> list[PreparedScriptStep]:
+        """Flattens authored nodes into the canonical ordered prepared task-step list."""
+
         prepared_steps: list[PreparedScriptStep] = []
-        for index, step in enumerate(script.steps):
-            try:
-                task = self.require(step.task)
-            except KeyError as error:
-                raise ScriptValidationError(
-                    f"Task '{step.task}' is not registered in the active task registry.",
+        for index, node in enumerate(nodes):
+            prepared_steps.extend(
+                self._prepare_script_node(
+                    node,
                     step_index=index,
-                    task=step.task,
-                ) from error
-            resolved_castle = _resolve_step_castle(
-                step,
-                step_index=index,
-                castle_targets=castle_targets,
-            )
-            _validate_castle_target_policy(task, step_index=index, step=step, resolved_castle=resolved_castle)
-            try:
-                parsed_params = task.parse_params(step.params)
-            except ScriptValidationError as error:
-                details = dict(error.details)
-                details.setdefault("step_index", index)
-                details.setdefault("task", step.task)
-                raise ScriptValidationError(error.message, **details) from error
-            prepared_steps.append(
-                PreparedScriptStep(
-                    script_step=step,
-                    parsed_params=parsed_params,
-                    castle_target_policy=task.castle_target_policy,
-                    resolved_castle=resolved_castle,
+                    step_path=f"steps[{index}]",
+                    castle_targets=castle_targets,
                 )
             )
-        return PreparedRunScript(name=script.name, path=script.path, steps=tuple(prepared_steps))
+        return prepared_steps
+
+    def _prepare_script_node(
+        self,
+        node: ScriptNode,
+        *,
+        step_index: int,
+        step_path: str,
+        castle_targets: AccountCastleTargetsConfig | None,
+    ) -> list[PreparedScriptStep]:
+        """Prepares one authored node or expands one repeat block into ordinary prepared steps."""
+
+        if isinstance(node, ScriptStep):
+            return [self._prepare_task_step(node, step_index=step_index, step_path=step_path, castle_targets=castle_targets)]
+        if isinstance(node, CastleRefRepeatBlock):
+            return self._prepare_repeat_block(
+                node,
+                step_index=step_index,
+                step_path=step_path,
+                castle_targets=castle_targets,
+            )
+        raise AssertionError(f"Unsupported script node type '{type(node).__name__}'.")
+
+    def _prepare_repeat_block(
+        self,
+        block: CastleRefRepeatBlock,
+        *,
+        step_index: int,
+        step_path: str,
+        castle_targets: AccountCastleTargetsConfig | None,
+    ) -> list[PreparedScriptStep]:
+        """Expands one multi-castle workflow block into the canonical ordered prepared task steps."""
+
+        prepared_steps: list[PreparedScriptStep] = []
+        for castle_index, castle_ref in enumerate(block.castle_refs):
+            _resolve_step_castle(
+                _RepeatBlockCastleRef(castle_ref=castle_ref),
+                step_index=step_index,
+                step_path=f"{step_path}.castle_refs[{castle_index}]",
+                castle_targets=castle_targets,
+            )
+            for nested_index, nested_step in enumerate(block.steps):
+                if nested_step.castle is not None or nested_step.castle_ref is not None:
+                    raise ScriptValidationError(
+                        "Repeat-block nested task steps cannot define their own castle target; the repeat block owns castle targeting for its nested workflow.",
+                        step_index=step_index,
+                        step_path=f"{step_path}.steps[{nested_index}]",
+                        task=nested_step.task,
+                        castle=nested_step.castle,
+                        castle_ref=nested_step.castle_ref,
+                    )
+                generated_step = nested_step.with_castle_ref(
+                    castle_ref,
+                    provenance={
+                        **dict(block.provenance),
+                        "step_path": f"{step_path}.steps[{nested_index}]",
+                        "repeat_castle_ref": castle_ref,
+                    },
+                )
+                prepared_steps.append(
+                    self._prepare_task_step(
+                        generated_step,
+                        step_index=step_index,
+                        step_path=f"{step_path}.steps[{nested_index}]",
+                        castle_targets=castle_targets,
+                    )
+                )
+        return prepared_steps
+
+    def _prepare_task_step(
+        self,
+        step: ScriptStep,
+        *,
+        step_index: int,
+        step_path: str,
+        castle_targets: AccountCastleTargetsConfig | None,
+    ) -> PreparedScriptStep:
+        """Prepares one ordinary task step after validating task id, params, and castle targeting."""
+
+        try:
+            task = self.require(step.task)
+        except KeyError as error:
+            raise ScriptValidationError(
+                f"Task '{step.task}' is not registered in the active task registry.",
+                step_index=step_index,
+                step_path=step_path,
+                task=step.task,
+            ) from error
+        resolved_castle = _resolve_step_castle(
+            step,
+            step_index=step_index,
+            step_path=step_path,
+            castle_targets=castle_targets,
+        )
+        _validate_castle_target_policy(
+            task,
+            step_index=step_index,
+            step_path=step_path,
+            step=step,
+            resolved_castle=resolved_castle,
+        )
+        try:
+            parsed_params = task.parse_params(step.params)
+        except ScriptValidationError as error:
+            details = dict(error.details)
+            details.setdefault("step_index", step_index)
+            details.setdefault("step_path", step_path)
+            details.setdefault("task", step.task)
+            raise ScriptValidationError(error.message, **details) from error
+        return PreparedScriptStep(
+            script_step=step,
+            parsed_params=parsed_params,
+            castle_target_policy=task.castle_target_policy,
+            resolved_castle=resolved_castle,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class _RepeatBlockCastleRef:
+    """Carries one repeat-block castle alias through the shared castle-resolution helper."""
+
+    castle_ref: str
+    task: TaskId | None = None
+    castle: CastleIdentity | None = None
 
 
 def _resolve_step_castle(
     step: object,
     *,
     step_index: int,
+    step_path: str,
     castle_targets: AccountCastleTargetsConfig | None,
 ) -> CastleIdentity | None:
     """Resolves one script step's authored castle target into a concrete castle identity."""
@@ -117,6 +239,7 @@ def _resolve_step_castle(
         raise ScriptValidationError(
             "This run script requires account-scoped castle targets, but none were loaded for the selected account.",
             step_index=step_index,
+            step_path=step_path,
             task=getattr(step, "task", None),
             castle_ref=target_ref,
         )
@@ -126,6 +249,7 @@ def _resolve_step_castle(
         raise ScriptValidationError(
             f"Account '{castle_targets.account_id}' does not define castle target '{target_ref}'.",
             step_index=step_index,
+            step_path=step_path,
             task=getattr(step, "task", None),
             castle_ref=target_ref,
             account_id=castle_targets.account_id,
@@ -136,6 +260,7 @@ def _validate_castle_target_policy(
     task: BaseAutomationTask,
     *,
     step_index: int,
+    step_path: str,
     step: object,
     resolved_castle: CastleIdentity | None,
 ) -> None:
@@ -147,6 +272,7 @@ def _validate_castle_target_policy(
         raise ScriptValidationError(
             f"Task '{task.id}' does not accept a step-level castle target.",
             step_index=step_index,
+            step_path=step_path,
             task=task_id,
             castle=resolved_castle,
             castle_ref=target_ref,
@@ -155,6 +281,7 @@ def _validate_castle_target_policy(
         raise ScriptValidationError(
             f"Task '{task.id}' requires a step-level castle target.",
             step_index=step_index,
+            step_path=step_path,
             task=task_id,
             castle_ref=target_ref,
         )
