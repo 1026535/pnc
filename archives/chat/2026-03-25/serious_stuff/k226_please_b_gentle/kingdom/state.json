@@ -1,0 +1,44 @@
+{
+  "gap_detected": false,
+  "last_captured_at": "2026-03-25T23:47:10.802367+00:00",
+  "snapshot": {
+    "entries": [
+      {
+        "message_text": "und werentscheidetwer Geduldetwird",
+        "sender_name": "Deadpoole",
+        "visible_order": 0
+      },
+      {
+        "message_text": "lol",
+        "sender_name": "[Slacker] Toast.",
+        "visible_order": 1
+      },
+      {
+        "message_text": "you leave the windows open",
+        "sender_name": "[Architect] Barcode",
+        "visible_order": 2
+      },
+      {
+        "message_text": "[RST]SmokeX (K:226X:286Y:478)",
+        "sender_name": "[DMG]  Qyre",
+        "visible_order": 3
+      },
+      {
+        "message_text": "Ilikefreshair",
+        "sender_name": "[Slacker] Toast.",
+        "visible_order": 4
+      },
+      {
+        "message_text": "By him",
+        "sender_name": "[DMG]  Qyre",
+        "visible_order": 5
+      },
+      {
+        "message_text": "oki SpielermiteinergroBenKlappedieinder echtenWeltnixzusagenhaben ichverstehe",
+        "sender_name": "Deadpoole",
+        "visible_order": 6
+      }
+    ],
+    "fingerprint": "f4cb1dbb"
+  }
+}
