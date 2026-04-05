@@ -9,6 +9,7 @@ from typing import Any, TypeAlias
 
 from pnc_automation.app.automation.engine.task import CastleTargetPolicy, TaskId
 from pnc_automation.app.authoring.config.models import CastleIdentity
+from pnc_automation.core.errors import ScriptValidationError
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,12 +57,34 @@ class CastleRefRepeatBlock:
     provenance: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        """Rejects malformed repeat blocks that omit targets or nested steps."""
+        """Rejects malformed repeat blocks before runtime preparation needs to inspect them."""
 
         if not self.castle_refs:
-            raise ValueError("CastleRefRepeatBlock requires at least one castle_ref.")
+            raise ScriptValidationError("CastleRefRepeatBlock requires at least one castle_ref.")
+        for index, castle_ref in enumerate(self.castle_refs):
+            if not isinstance(castle_ref, str) or not castle_ref:
+                raise ScriptValidationError(
+                    "CastleRefRepeatBlock castle_refs must contain only non-empty strings.",
+                    castle_ref_index=index,
+                    castle_ref=castle_ref,
+                )
         if not self.steps:
-            raise ValueError("CastleRefRepeatBlock requires at least one nested step.")
+            raise ScriptValidationError("CastleRefRepeatBlock requires at least one nested step.")
+        for index, step in enumerate(self.steps):
+            if not isinstance(step, ScriptStep):
+                raise ScriptValidationError(
+                    "CastleRefRepeatBlock steps must contain only ScriptStep items.",
+                    nested_step_index=index,
+                    nested_step_type=type(step).__name__,
+                )
+            if step.castle is not None or step.castle_ref is not None:
+                raise ScriptValidationError(
+                    "Repeat-block nested task steps cannot define their own castle target; the repeat block owns castle targeting for its nested workflow.",
+                    nested_step_index=index,
+                    task=step.task,
+                    castle=step.castle,
+                    castle_ref=step.castle_ref,
+                )
 
 
 ScriptNode: TypeAlias = ScriptStep | CastleRefRepeatBlock

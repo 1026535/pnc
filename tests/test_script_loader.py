@@ -97,6 +97,79 @@ class ScriptLoaderTests(unittest.TestCase):
             with self.assertRaises(ScriptValidationError):
                 load_run_script(script_path)
 
+    def test_load_run_script_rejects_unexpected_root_keys(self) -> None:
+        """Fails fast when the script root includes unsupported schema keys."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            script_path = Path(temp_directory) / "invalid.yaml"
+            script_path.write_text(
+                textwrap.dedent(
+                    """
+                    name: invalid
+                    unexpected_root: true
+                    steps:
+                      - task: login
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(ScriptValidationError) as error_context:
+                load_run_script(script_path)
+
+        self.assertEqual(error_context.exception.details["extra_keys"], ["unexpected_root"])
+
+    def test_load_run_script_rejects_unexpected_task_step_keys(self) -> None:
+        """Fails fast when an ordinary task step includes unsupported schema keys."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            script_path = Path(temp_directory) / "invalid.yaml"
+            script_path.write_text(
+                textwrap.dedent(
+                    """
+                    name: invalid
+                    steps:
+                      - task: login
+                        unexpected: true
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(ScriptValidationError) as error_context:
+                load_run_script(script_path)
+
+        self.assertEqual(error_context.exception.details["step_path"], "steps[0]")
+        self.assertEqual(error_context.exception.details["extra_keys"], ["unexpected"])
+
+    def test_load_run_script_rejects_unexpected_repeat_block_keys(self) -> None:
+        """Fails fast when a repeat block includes unsupported schema keys."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            script_path = Path(temp_directory) / "invalid.yaml"
+            script_path.write_text(
+                textwrap.dedent(
+                    """
+                    name: invalid
+                    steps:
+                      - castle_refs: [main]
+                        unexpected: true
+                        steps:
+                          - task: building_upgrade
+                            params:
+                              priority: [castle]
+                              allow_speedups: false
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(ScriptValidationError) as error_context:
+                load_run_script(script_path)
+
+        self.assertEqual(error_context.exception.details["step_path"], "steps[0]")
+        self.assertEqual(error_context.exception.details["extra_keys"], ["unexpected"])
+
     def test_load_run_script_parses_collect_kingdom_chat_routine(self) -> None:
         """Loads the heartbeat routine shape used for scheduler-driven Kingdom Chat polling."""
 

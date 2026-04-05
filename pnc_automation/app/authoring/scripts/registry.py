@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from typing import Final
 
 from pnc_automation.app.automation.engine.task import BaseAutomationTask, CastleTargetPolicy, TaskId
 from pnc_automation.app.automation.tasks.building_upgrade_task import BuildingUpgradeTask
@@ -33,6 +34,8 @@ from pnc_automation.app.authoring.scripts.models import (
     ScriptNode,
     ScriptStep,
 )
+
+_UNRESOLVED_CASTLE: Final[object] = object()
 
 
 @dataclass(frozen=True, slots=True)
@@ -129,13 +132,20 @@ class TaskRegistry:
 
         prepared_steps: list[PreparedScriptStep] = []
         for castle_index, castle_ref in enumerate(block.castle_refs):
-            _resolve_step_castle(
-                _RepeatBlockCastleRef(castle_ref=castle_ref),
+            resolved_castle = _resolve_castle_ref(
+                castle_ref,
                 step_index=step_index,
                 step_path=f"{step_path}.castle_refs[{castle_index}]",
                 castle_targets=castle_targets,
             )
             for nested_index, nested_step in enumerate(block.steps):
+                if not isinstance(nested_step, ScriptStep):
+                    raise ScriptValidationError(
+                        "CastleRefRepeatBlock steps must contain only ScriptStep items.",
+                        step_index=step_index,
+                        step_path=f"{step_path}.steps[{nested_index}]",
+                        nested_step_type=type(nested_step).__name__,
+                    )
                 if nested_step.castle is not None or nested_step.castle_ref is not None:
                     raise ScriptValidationError(
                         "Repeat-block nested task steps cannot define their own castle target; the repeat block owns castle targeting for its nested workflow.",
@@ -159,6 +169,7 @@ class TaskRegistry:
                         step_index=step_index,
                         step_path=f"{step_path}.steps[{nested_index}]",
                         castle_targets=castle_targets,
+                        resolved_castle=resolved_castle,
                     )
                 )
         return prepared_steps
@@ -170,6 +181,7 @@ class TaskRegistry:
         step_index: int,
         step_path: str,
         castle_targets: AccountCastleTargetsConfig | None,
+        resolved_castle: CastleIdentity | object = _UNRESOLVED_CASTLE,
     ) -> PreparedScriptStep:
         """Prepares one ordinary task step after validating task id, params, and castle targeting."""
 
@@ -182,12 +194,13 @@ class TaskRegistry:
                 step_path=step_path,
                 task=step.task,
             ) from error
-        resolved_castle = _resolve_step_castle(
-            step,
-            step_index=step_index,
-            step_path=step_path,
-            castle_targets=castle_targets,
-        )
+        if resolved_castle is _UNRESOLVED_CASTLE:
+            resolved_castle = _resolve_step_castle(
+                step,
+                step_index=step_index,
+                step_path=step_path,
+                castle_targets=castle_targets,
+            )
         _validate_castle_target_policy(
             task,
             step_index=step_index,
@@ -211,15 +224,6 @@ class TaskRegistry:
         )
 
 
-@dataclass(frozen=True, slots=True)
-class _RepeatBlockCastleRef:
-    """Carries one repeat-block castle alias through the shared castle-resolution helper."""
-
-    castle_ref: str
-    task: TaskId | None = None
-    castle: CastleIdentity | None = None
-
-
 def _resolve_step_castle(
     step: object,
     *,
@@ -235,23 +239,42 @@ def _resolve_step_castle(
         return target_castle
     if target_ref is None:
         return None
+    return _resolve_castle_ref(
+        target_ref,
+        step_index=step_index,
+        step_path=step_path,
+        castle_targets=castle_targets,
+        task=getattr(step, "task", None),
+    )
+
+
+def _resolve_castle_ref(
+    castle_ref: str,
+    *,
+    step_index: int,
+    step_path: str,
+    castle_targets: AccountCastleTargetsConfig | None,
+    task: TaskId | None = None,
+) -> CastleIdentity:
+    """Resolves one authored castle alias into its concrete configured castle identity."""
+
     if castle_targets is None:
         raise ScriptValidationError(
             "This run script requires account-scoped castle targets, but none were loaded for the selected account.",
             step_index=step_index,
             step_path=step_path,
-            task=getattr(step, "task", None),
-            castle_ref=target_ref,
+            task=task,
+            castle_ref=castle_ref,
         )
     try:
-        return castle_targets.require(target_ref)
+        return castle_targets.require(castle_ref)
     except ConfigurationError as error:
         raise ScriptValidationError(
-            f"Account '{castle_targets.account_id}' does not define castle target '{target_ref}'.",
+            f"Account '{castle_targets.account_id}' does not define castle target '{castle_ref}'.",
             step_index=step_index,
             step_path=step_path,
-            task=getattr(step, "task", None),
-            castle_ref=target_ref,
+            task=task,
+            castle_ref=castle_ref,
             account_id=castle_targets.account_id,
         ) from error
 

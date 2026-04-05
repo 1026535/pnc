@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +23,7 @@ def load_run_script(path: str | Path) -> RunScript:
     with script_path.open("r", encoding="utf-8") as handle:
         raw_data = yaml.safe_load(handle) or {}
     raw = require_mapping(raw_data, context="run script root", error_builder=ScriptValidationError)
+    _require_no_extra_keys(raw, allowed={"name", "steps"}, context="run script root", path=str(script_path))
 
     name = require_string(raw.get("name"), context="run script name", error_builder=ScriptValidationError)
     raw_steps = require_list(raw.get("steps"), context="run script steps", error_builder=ScriptValidationError)
@@ -82,6 +84,13 @@ def _load_repeat_block(
 ) -> CastleRefRepeatBlock:
     """Loads one authored multi-castle repeat block and its nested ordinary steps."""
 
+    _require_no_extra_keys(
+        step,
+        allowed={"castle_refs", "steps", "params", "castle_ref", "castle"},
+        context=context,
+        step_index=step_index,
+        step_path=context,
+    )
     if "params" in step:
         raise ScriptValidationError(
             "Repeat blocks cannot define 'params'; move parameters onto the nested task steps.",
@@ -151,6 +160,13 @@ def _load_task_step(
 ) -> ScriptStep:
     """Loads one ordinary authored task step."""
 
+    _require_no_extra_keys(
+        step,
+        allowed={"task", "params", "castle_ref", "castle", "steps"},
+        context=context,
+        step_index=step_index,
+        step_path=context,
+    )
     raw_task = require_string(
         step.get("task"),
         context=f"{context}.task",
@@ -200,3 +216,22 @@ def _load_task_step(
             error_builder=ScriptValidationError,
         )
     return ScriptStep(task=task_id, castle_ref=castle_ref, params=dict(params))
+
+
+def _require_no_extra_keys(
+    raw: Mapping[str, Any],
+    *,
+    allowed: set[str],
+    context: str,
+    **details: Any,
+) -> None:
+    """Rejects unexpected keys instead of silently accepting stale or misspelled script schema."""
+
+    extra_keys = sorted(key for key in raw.keys() if key not in allowed)
+    if extra_keys:
+        raise ScriptValidationError(
+            f"{context} received unsupported keys.",
+            context=context,
+            extra_keys=extra_keys,
+            **details,
+        )

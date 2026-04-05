@@ -236,36 +236,32 @@ class RuntimeCastleTargetingTests(unittest.TestCase):
 
         self.assertEqual(error_context.exception.details["step_path"], "steps[0].steps[0]")
 
-    def test_prepare_script_rejects_programmatic_nested_castle_override_inside_repeat_block(self) -> None:
+    def test_repeat_block_model_rejects_programmatic_nested_castle_override_inside_repeat_block(self) -> None:
         """Keeps repeat-block castle ownership canonical even for in-memory script construction."""
 
-        registry = build_default_task_registry()
-
         with self.assertRaises(ScriptValidationError) as error_context:
-            registry.prepare_script(
-                RunScript(
-                    name="invalid",
-                    path=Path("invalid.yaml"),
-                    steps=(
-                        CastleRefRepeatBlock(
-                            castle_refs=("main",),
-                            steps=(
-                                ScriptStep(
-                                    task=TaskId.BUILDING_UPGRADE,
-                                    castle=self.target_castle,
-                                    params={"priority": ["castle"], "allow_speedups": False},
-                                ),
-                            ),
-                        ),
+            CastleRefRepeatBlock(
+                castle_refs=("main",),
+                steps=(
+                    ScriptStep(
+                        task=TaskId.BUILDING_UPGRADE,
+                        castle=self.target_castle,
+                        params={"priority": ["castle"], "allow_speedups": False},
                     ),
-                ),
-                castle_targets=AccountCastleTargetsConfig(
-                    account_id=self.account.id,
-                    targets=(CastleTargetDefinition(target_id="main", castle=self.target_castle),),
                 ),
             )
 
-        self.assertEqual(error_context.exception.details["step_path"], "steps[0].steps[0]")
+        self.assertEqual(error_context.exception.details["nested_step_index"], 0)
+        self.assertEqual(error_context.exception.details["castle"], self.target_castle)
+
+    def test_repeat_block_model_rejects_non_step_items_during_programmatic_construction(self) -> None:
+        """Fails fast with a typed validation error before registry preparation inspects malformed nested items."""
+
+        with self.assertRaises(ScriptValidationError) as error_context:
+            CastleRefRepeatBlock(castle_refs=("main",), steps=(object(),))
+
+        self.assertEqual(error_context.exception.details["nested_step_index"], 0)
+        self.assertEqual(error_context.exception.details["nested_step_type"], "object")
 
     def test_runner_auto_selects_explicit_castle_before_optional_task(self) -> None:
         """Runs the canonical select-castle pre-step before an optional castle-targeted task."""
