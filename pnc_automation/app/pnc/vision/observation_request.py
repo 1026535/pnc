@@ -10,6 +10,11 @@ from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.pnc_ocr_capabilities import runtime_screen_family_ocr_types
 from pnc_automation.app.pnc.vision.selectors import ClickOutcome
+from pnc_automation.app.runtime.observation_artifacts import (
+    ObservationArtifactKind,
+    ObservationArtifactSelection,
+    observation_artifact_selection,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,7 +29,7 @@ class ObservationRequest:
     include_chat_entries: bool = False
     text_field_selectors: frozenset[UiElementId] = frozenset()
     expected_mailbox: MailboxType | None = None
-    persist_artifact: bool | None = None
+    artifact_selection: ObservationArtifactSelection | None = None
 
     @classmethod
     def base(cls) -> "ObservationRequest":
@@ -181,7 +186,7 @@ class ObservationRequest:
         return cls(
             candidate_screen_types=frozenset({ScreenType.PNC_MAIL_THREAD}),
             ocr_screen_types=frozenset({ScreenType.PNC_MAIL_THREAD}),
-            persist_artifact=True,
+            artifact_selection=observation_artifact_selection(ObservationArtifactKind.SCREENSHOT),
         )
 
     @classmethod

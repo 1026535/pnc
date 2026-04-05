@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
+from typing import Any
 
 from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.app.pnc.domain.observation import (
@@ -221,6 +223,35 @@ class WorldMapSurveyIndex:
                 return sighting
         return None
 
+    def snapshot(
+        self,
+        *,
+        artifact_directory: str,
+        label: str,
+        captured_at: datetime,
+        artifact_path: Path | None,
+        surface: SpatialSurfaceObservation,
+    ) -> dict[str, object]:
+        """Exports the exact indexed survey state plus one explicit checkpoint context as a JSON-ready document."""
+
+        if surface.surface_type != SpatialSurfaceType.WORLD_MAP:
+            raise SelectorResolutionError(
+                "World-map survey snapshots require a world-map spatial surface.",
+                surface_type=surface.surface_type,
+            )
+        return {
+            "schema_version": 1,
+            "checkpoint": {
+                "artifact_directory": artifact_directory,
+                "label": label,
+                "captured_at": captured_at.isoformat(),
+                "surface_type": surface.surface_type.value,
+                "screenshot_artifact_path": None if artifact_path is None else str(artifact_path),
+                "viewport": _serialize_viewport(surface),
+            },
+            "sightings": [_serialize_sighting(sighting) for sighting in self.sightings],
+        }
+
 
 def build_world_map_object_key(
     *,
@@ -284,3 +315,119 @@ def _rounded_ratio_pair(value: tuple[float, float] | None) -> tuple[float, float
     if value is None:
         return None
     return (round(float(value[0]), 4), round(float(value[1]), 4))
+
+
+def _serialize_sighting(sighting: WorldMapObjectSighting) -> dict[str, object]:
+    """Serializes one indexed world-map sighting without dropping evidence distinctions."""
+
+    return {
+        "key": _serialize_key(sighting.key),
+        "object": _serialize_spatial_object(sighting.object_),
+        "viewport_coordinate": _serialize_int_pair(sighting.viewport_coordinate),
+        "artifact_path": None if sighting.artifact_path is None else str(sighting.artifact_path),
+        "captured_at": None if sighting.captured_at is None else sighting.captured_at.isoformat(),
+        "resolved_player_name": sighting.resolved_player_name,
+        "profile_artifact_path": None if sighting.profile_artifact_path is None else str(sighting.profile_artifact_path),
+    }
+
+
+def _serialize_key(key: WorldMapObjectKey) -> dict[str, object]:
+    """Serializes one stable world-map object key exactly as indexed."""
+
+    return {
+        "kind": key.kind.value,
+        "addressing_kind": key.addressing_kind.value,
+        "coordinate": _serialize_int_pair(key.coordinate),
+        "viewport_offset_ratio": _serialize_float_pair(key.viewport_offset_ratio),
+        "label_text": key.label_text,
+        "alliance_tag": key.alliance_tag,
+        "kingdom": key.kingdom,
+        "level": key.level,
+    }
+
+
+def _serialize_spatial_object(object_: DetectedSpatialObject) -> dict[str, object]:
+    """Serializes one typed spatial object with its full stored evidence payload."""
+
+    return {
+        "kind": object_.kind.value,
+        "bounds": {
+            "x": object_.bounds.x,
+            "y": object_.bounds.y,
+            "width": object_.bounds.width,
+            "height": object_.bounds.height,
+        },
+        "relationship": object_.relationship.value,
+        "name_text": object_.name_text,
+        "alliance_tag": object_.alliance_tag,
+        "level": object_.level,
+        "kingdom": object_.kingdom,
+        "action_point": _serialize_int_pair(object_.action_point),
+        "viewport_offset": _serialize_int_pair(object_.viewport_offset),
+        "viewport_offset_ratio": _serialize_float_pair(object_.viewport_offset_ratio),
+        "estimated_world_coordinate": _serialize_int_pair(object_.estimated_world_coordinate),
+        "confirmed_world_coordinate": _serialize_int_pair(object_.confirmed_world_coordinate),
+        "metadata": _serialize_mapping(object_.metadata),
+    }
+
+
+def _serialize_viewport(surface: SpatialSurfaceObservation) -> dict[str, object]:
+    """Serializes the checkpoint viewport context without inventing coordinate evidence."""
+
+    return {
+        "addressing_kind": surface.viewport.addressing_kind.value,
+        "coordinate": _serialize_int_pair(surface.viewport.coordinate),
+        "x": surface.viewport.x,
+        "y": surface.viewport.y,
+        "zoom_bucket": surface.viewport.zoom_bucket,
+        "metadata": _serialize_mapping(surface.viewport.metadata),
+    }
+
+
+def _serialize_mapping(value: Mapping[str, Any]) -> dict[str, Any]:
+    """Returns a JSON-safe shallow copy of one mapping payload."""
+
+    return {
+        key: _serialize_value(item)
+        for key, item in value.items()
+    }
+
+
+def _serialize_value(value: Any) -> Any:
+    """Serializes one arbitrary snapshot value into a JSON-safe primitive tree."""
+
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, Mapping):
+        return _serialize_mapping(value)
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, StrEnum):
+        return value.value
+    if isinstance(value, tuple):
+        return [_serialize_value(item) for item in value]
+    if isinstance(value, list):
+        return [_serialize_value(item) for item in value]
+    return value
+
+
+def _serialize_int_pair(value: tuple[int, int] | None) -> dict[str, int] | None:
+    """Serializes one integer pair into an explicit named coordinate object."""
+
+    if value is None:
+        return None
+    return {
+        "x": value[0],
+        "y": value[1],
+    }
+
+
+def _serialize_float_pair(value: tuple[float, float] | None) -> dict[str, float] | None:
+    """Serializes one float pair into an explicit named ratio object."""
+
+    if value is None:
+        return None
+    return {
+        "x": float(value[0]),
+        "y": float(value[1]),
+    }

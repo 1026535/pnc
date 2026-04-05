@@ -22,6 +22,7 @@ from pnc_automation.app.pnc.domain.observation import Observation
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
 from pnc_automation.app.pnc.vision.observation_builder import ObservationService
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
+from pnc_automation.app.runtime.observation_artifacts import ObservationArtifactKind, observation_artifact_selection
 
 
 @dataclass(frozen=True, slots=True)
@@ -393,7 +394,7 @@ class AutomationRunner:
             return self.observation_service.observe(
                 label,
                 request=ObservationRequest.full_runtime_default(),
-                persist=True,
+                artifact_selection=observation_artifact_selection(ObservationArtifactKind.SCREENSHOT),
             )
         except Exception:
             self.logger.exception("Failed to persist a debug artifact for task failure.")

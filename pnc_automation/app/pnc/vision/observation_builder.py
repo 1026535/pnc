@@ -9,6 +9,12 @@ from typing import Protocol
 
 from PIL import Image
 
+from pnc_automation.app.runtime.observation_artifacts import (
+    ObservationArtifactKind,
+    ObservationArtifactSelection,
+    observation_artifact_selection,
+    resolve_observation_artifact_selection,
+)
 from pnc_automation.app.runtime.observation_mode import ObservationMode
 from pnc_automation.app.authoring.config.models import CastleIdentity, CastleRosterOrdering, PncAccountCastleRosterConfig
 from pnc_automation.core.infra.capture.screenshot_service import CapturedScreenshot, ScreenshotService
@@ -365,15 +371,19 @@ class ObservationService:
         label: str,
         request: ObservationRequest | None = None,
         *,
-        persist: bool | None = None,
+        artifact_selection: ObservationArtifactSelection | None = None,
     ) -> CapturedObservation:
         """Captures a fresh screenshot artifact and returns both the screenshot and typed observation."""
 
+        resolved_artifact_selection = self._resolve_artifact_selection(
+            request=request,
+            artifact_selection=artifact_selection,
+        )
         screenshot = self.screenshot_service.capture(
             self.session,
             artifact_directory=self.artifact_directory,
             label=label,
-            persist=self._resolve_persist_artifact(request=request, persist=persist),
+            persist=ObservationArtifactKind.SCREENSHOT in resolved_artifact_selection,
         )
         roster_snapshot = self._get_castle_roster_snapshot()
         observation = self.observation_builder.build(screenshot, request=request)
@@ -397,20 +407,37 @@ class ObservationService:
         label: str,
         request: ObservationRequest | None = None,
         *,
-        persist: bool | None = None,
+        artifact_selection: ObservationArtifactSelection | None = None,
     ) -> Observation:
         """Captures a fresh screenshot artifact and returns the built observation."""
 
-        return self.capture_observation(label, request=request, persist=persist).observation
+        return self.capture_observation(
+            label,
+            request=request,
+            artifact_selection=artifact_selection,
+        ).observation
 
-    def _resolve_persist_artifact(self, *, request: ObservationRequest | None, persist: bool | None) -> bool:
-        """Returns whether the requested observation should persist a runtime artifact screenshot."""
+    def _resolve_artifact_selection(
+        self,
+        *,
+        request: ObservationRequest | None,
+        artifact_selection: ObservationArtifactSelection | None,
+    ) -> ObservationArtifactSelection:
+        """Returns the requested routine artifact selection and rejects kinds this service cannot own."""
 
-        if persist is not None:
-            return persist
-        if request is not None and request.persist_artifact is not None:
-            return request.persist_artifact
-        return self.mode == ObservationMode.DEBUG
+        resolved_selection = resolve_observation_artifact_selection(
+            mode=self.mode,
+            request_selection=None if request is None else request.artifact_selection,
+            override_selection=artifact_selection,
+        )
+        unsupported_artifact_kinds = resolved_selection - observation_artifact_selection(ObservationArtifactKind.SCREENSHOT)
+        if unsupported_artifact_kinds:
+            unsupported = ", ".join(sorted(kind.value for kind in unsupported_artifact_kinds))
+            raise ValueError(
+                "ObservationService cannot satisfy non-screenshot artifact requests outside their owning flow "
+                f"boundary: {unsupported}."
+            )
+        return resolved_selection
 
     def _persist_debug_artifacts(self, *, screenshot: CapturedScreenshot, observation: Observation) -> None:
         """Persists debug-only OCR sidecars without affecting the light-mode runtime path."""
