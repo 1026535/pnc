@@ -211,6 +211,97 @@ class WorldMapSurveyIndexTests(unittest.TestCase):
         self.assertEqual(sighting.key.addressing_kind, WorldMapObjectAddressingKind.CONFIRMED_WORLD)
         self.assertEqual(sighting.key.coordinate, (198, 655))
 
+    def test_snapshot_preserves_index_order_and_evidence_links_without_duplicate_history(self) -> None:
+        """Exports the canonical indexed state in first-seen order while preserving screenshot and profile evidence."""
+
+        index = WorldMapSurveyIndex()
+        first_surface = make_spatial_surface(
+            SpatialSurfaceType.WORLD_MAP,
+            x=253,
+            y=447,
+            objects=(
+                make_spatial_object(
+                    SpatialObjectKind.CASTLE,
+                    name_text="VisibleCastle",
+                    kingdom="K287",
+                    viewport_offset=(4, 252),
+                    viewport_offset_ratio=(4 / 900, 252 / 1184),
+                    estimated_world_coordinate=(201, 659),
+                ),
+                make_spatial_object(
+                    SpatialObjectKind.MONSTER,
+                    name_text="Lv.5 Fiend",
+                    viewport_offset=(-80, -60),
+                    viewport_offset_ratio=(-80 / 900, -60 / 1184),
+                ),
+            ),
+        )
+        updated_surface = make_spatial_surface(
+            SpatialSurfaceType.WORLD_MAP,
+            x=260,
+            y=452,
+            objects=(
+                make_spatial_object(
+                    SpatialObjectKind.CASTLE,
+                    name_text="VisibleCastle",
+                    kingdom="K287",
+                    viewport_offset=(12, 210),
+                    viewport_offset_ratio=(12 / 900, 210 / 1184),
+                    estimated_world_coordinate=(201, 659),
+                    action_point=(444, 962),
+                ),
+                make_spatial_object(
+                    SpatialObjectKind.RESOURCE_NODE,
+                    name_text="Mine",
+                    viewport_offset=(96, 110),
+                    viewport_offset_ratio=(96 / 900, 110 / 1184),
+                    confirmed_world_coordinate=(349, 557),
+                ),
+            ),
+        )
+
+        first_castle = index.ingest_surface(first_surface, artifact_path=Path("artifacts/first.png"))[0]
+        index.ingest_surface(updated_surface, artifact_path=Path("artifacts/second.png"))
+        index.annotate_castle_player_name(
+            first_castle.key,
+            player_name="LadiesLoveCake",
+            profile_artifact_path=Path("artifacts/profile.png"),
+        )
+
+        snapshot = index.snapshot(
+            artifact_directory="k287_visible_castle",
+            label="survey_step",
+            captured_at=first_castle.captured_at or make_observation(ScreenType.PNC_WORLD_MAP).captured_at,
+            artifact_path=Path("artifacts/second.png"),
+            surface=updated_surface,
+        )
+
+        sightings = snapshot["sightings"]
+        self.assertEqual(len(sightings), 3)
+        self.assertEqual(
+            [sighting["key"]["addressing_kind"] for sighting in sightings],
+            [
+                WorldMapObjectAddressingKind.ESTIMATED_WORLD.value,
+                WorldMapObjectAddressingKind.VIEWPORT_RELATIVE.value,
+                WorldMapObjectAddressingKind.CONFIRMED_WORLD.value,
+            ],
+        )
+        self.assertEqual(
+            sightings[0]["artifact_path"],
+            str(Path("artifacts/second.png")),
+        )
+        self.assertEqual(
+            sightings[0]["profile_artifact_path"],
+            str(Path("artifacts/profile.png")),
+        )
+        self.assertEqual(sightings[0]["resolved_player_name"], "LadiesLoveCake")
+        self.assertEqual(
+            sightings[1]["key"]["viewport_offset_ratio"],
+            {"x": round(-80 / 900, 4), "y": round(-60 / 1184, 4)},
+        )
+        self.assertEqual(snapshot["checkpoint"]["viewport"]["coordinate"], {"x": 260, "y": 452})
+        self.assertEqual(snapshot["checkpoint"]["viewport"]["addressing_kind"], "coordinate_bar")
+
 
 if __name__ == "__main__":
     unittest.main()

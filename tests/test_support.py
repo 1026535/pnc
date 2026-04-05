@@ -37,6 +37,12 @@ from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.app.pnc.vision.observation_builder import CapturedObservation
+from pnc_automation.app.runtime.observation_artifacts import (
+    ObservationArtifactKind,
+    ObservationArtifactSelection,
+    resolve_observation_artifact_selection,
+)
+from pnc_automation.app.runtime.observation_mode import ObservationMode
 
 
 def build_png_bytes(*, size: tuple[int, int] = (20, 20), color: tuple[int, int, int, int] = (255, 255, 255, 255)) -> bytes:
@@ -296,11 +302,11 @@ class FakeObservationService:
         label: str,
         request: ObservationRequest | None = None,
         *,
-        persist: bool | None = None,
+        artifact_selection: ObservationArtifactSelection | None = None,
     ) -> Observation:
         """Returns the next queued observation."""
 
-        del persist
+        del artifact_selection
         self.labels.append(label)
         self.requests.append(request)
         if not self.observations:
@@ -312,11 +318,16 @@ class FakeObservationService:
         label: str,
         request: ObservationRequest | None = None,
         *,
-        persist: bool | None = None,
+        artifact_selection: ObservationArtifactSelection | None = None,
     ) -> CapturedObservation:
         """Returns the next queued observation wrapped in a synthetic captured screenshot."""
 
-        observation = self.observe(label, request=request, persist=persist)
+        observation = self.observe(label, request=request, artifact_selection=artifact_selection)
+        resolved_artifact_selection = resolve_observation_artifact_selection(
+            mode=ObservationMode.DEBUG,
+            request_selection=None if request is None else request.artifact_selection,
+            override_selection=artifact_selection,
+        )
         artifact = (
             ArtifactRecord(
                 path=observation.artifact_path or Path(f"{label}.png"),
@@ -325,7 +336,7 @@ class FakeObservationService:
                 size_bytes=0,
                 sha256="0" * 64,
             )
-            if persist is not False
+            if ObservationArtifactKind.SCREENSHOT in resolved_artifact_selection
             else None
         )
         return CapturedObservation(
