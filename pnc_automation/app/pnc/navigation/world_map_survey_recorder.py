@@ -20,9 +20,10 @@ from pnc_automation.app.pnc.vision.observation_builder import CapturedObservatio
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.app.runtime.observation_artifacts import (
     ObservationArtifactKind,
+    ObservationArtifactOwner,
     ObservationArtifactSelection,
-    observation_artifact_selection,
-    resolve_observation_artifact_selection,
+    ResolvedObservationArtifactPolicy,
+    resolve_observation_artifact_policy,
 )
 from pnc_automation.core.errors import SelectorResolutionError
 
@@ -64,24 +65,23 @@ class WorldMapSurveyRecorder:
     ) -> WorldMapSurveyCheckpointResult:
         """Captures one world-map observation, ingests it into the canonical index, and persists one debug dump when requested."""
 
-        resolved_artifact_selection = self._resolve_artifact_selection(
+        artifact_policy = self._resolve_artifact_policy(
             request=request,
             artifact_selection=artifact_selection,
         )
         capture = self.observation_service.capture_observation(
             label,
             request=request,
-            artifact_selection=_observation_service_artifact_selection(resolved_artifact_selection),
+            artifact_selection=artifact_policy.for_owner(ObservationArtifactOwner.OBSERVATION_SERVICE),
         )
         updated_sightings = self.ingest_capture(capture)
         return WorldMapSurveyCheckpointResult(
             capture=capture,
             updated_sightings=updated_sightings,
-            artifact_selection=resolved_artifact_selection,
-            debug_dump=self.persist_checkpoint(
+            artifact_selection=artifact_policy.selection,
+            debug_dump=self._persist_checkpoint(
                 label,
-                request=request,
-                artifact_selection=artifact_selection,
+                artifact_policy=artifact_policy,
             ),
         )
 
@@ -105,11 +105,24 @@ class WorldMapSurveyRecorder:
     ) -> StoredWorldMapSurveyDebugDump | None:
         """Persists one debug dump for the latest ingested checkpoint when the artifact selection enables it."""
 
-        resolved_artifact_selection = self._resolve_artifact_selection(
-            request=request,
-            artifact_selection=artifact_selection,
+        return self._persist_checkpoint(
+            label,
+            artifact_policy=self._resolve_artifact_policy(
+                request=request,
+                artifact_selection=artifact_selection,
+            ),
         )
-        if ObservationArtifactKind.WORLD_MAP_SURVEY_STATE not in resolved_artifact_selection:
+
+    def _persist_checkpoint(
+        self,
+        label: str,
+        *,
+        artifact_policy: ResolvedObservationArtifactPolicy,
+    ) -> StoredWorldMapSurveyDebugDump | None:
+        """Persists one debug dump for the latest ingested checkpoint using one already-resolved artifact policy."""
+
+        survey_artifacts = artifact_policy.for_owner(ObservationArtifactOwner.WORLD_MAP_SURVEY)
+        if ObservationArtifactKind.WORLD_MAP_SURVEY_STATE not in survey_artifacts:
             return None
         if self._latest_checkpoint_context is None:
             raise SelectorResolutionError(
@@ -126,6 +139,20 @@ class WorldMapSurveyRecorder:
             )
         )
 
+    def _resolve_artifact_policy(
+        self,
+        *,
+        request: ObservationRequest | None,
+        artifact_selection: ObservationArtifactSelection | None,
+    ) -> ResolvedObservationArtifactPolicy:
+        """Resolves the effective artifact policy for one world-map survey checkpoint flow."""
+
+        return resolve_observation_artifact_policy(
+            mode=self.observation_service.mode,
+            request_selection=None if request is None else request.artifact_selection,
+            override_selection=artifact_selection,
+        )
+
     def annotate_castle_player_name(
         self,
         key: WorldMapObjectKey,
@@ -140,27 +167,3 @@ class WorldMapSurveyRecorder:
             player_name=player_name,
             profile_artifact_path=profile_artifact_path,
         )
-
-    def _resolve_artifact_selection(
-        self,
-        *,
-        request: ObservationRequest | None,
-        artifact_selection: ObservationArtifactSelection | None,
-    ) -> ObservationArtifactSelection:
-        """Resolves the effective artifact selection for one world-map survey checkpoint flow."""
-
-        return resolve_observation_artifact_selection(
-            mode=self.observation_service.mode,
-            request_selection=None if request is None else request.artifact_selection,
-            override_selection=artifact_selection,
-        )
-
-
-def _observation_service_artifact_selection(
-    artifact_selection: ObservationArtifactSelection,
-) -> ObservationArtifactSelection:
-    """Returns only the artifact kinds owned by ObservationService for one larger checkpoint selection."""
-
-    if ObservationArtifactKind.SCREENSHOT in artifact_selection:
-        return observation_artifact_selection(ObservationArtifactKind.SCREENSHOT)
-    return frozenset()

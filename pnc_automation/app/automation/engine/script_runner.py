@@ -27,9 +27,11 @@ from pnc_automation.app.pnc.persistence.chat_archive_store import ChatArchiveSto
 from pnc_automation.app.pnc.persistence.mail_archive_store import MailArchiveStore
 from pnc_automation.core.infra.capture.screenshot_service import ScreenshotService
 from pnc_automation.app.pnc.persistence.castle_roster_store import CastleRosterStore
+from pnc_automation.app.pnc.persistence.world_map_survey_debug_store import WorldMapSurveyDebugStore
 from pnc_automation.app.authoring.config.models import AccountConfig, AppConfig, CastleIdentity, PncAccountCastleRosterConfig
 from pnc_automation.core.infra.emulator.bluestacks_instance import BlueStacksInstance
 from pnc_automation.core.infra.emulator.bluestacks_instance_resolver import BlueStacksInstanceResolver
+from pnc_automation.app.pnc.navigation.world_map_survey_recorder import WorldMapSurveyRecorder
 from pnc_automation.core.infra.emulator.session import BlueStacksSession
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
 from pnc_automation.app.pnc.vision.observation_builder import ObservationBuilder, ObservationService
@@ -41,6 +43,7 @@ class ConnectedAccountRuntime:
 
     session: BlueStacksSession
     observation_service: ObservationService
+    world_map_survey_recorder: WorldMapSurveyRecorder
 
 
 @dataclass(slots=True)
@@ -153,12 +156,17 @@ class ScriptRunner:
         )
 
     def build_connected_runtime(self, *, account: AccountConfig) -> ConnectedAccountRuntime:
-        """Builds the canonical connected session plus observation service for one configured account."""
+        """Builds the canonical connected session plus observation-owned runtime helpers for one configured account."""
 
         session = self.build_connected_session(account=account)
+        observation_service = self._build_observation_service(account=account, session=session)
         return ConnectedAccountRuntime(
             session=session,
-            observation_service=self._build_observation_service(account=account, session=session),
+            observation_service=observation_service,
+            world_map_survey_recorder=WorldMapSurveyRecorder(
+                observation_service=observation_service,
+                debug_store=WorldMapSurveyDebugStore(root=self.config.artifact_root),
+            ),
         )
 
     def build_connected_automation_runner(self, *, account: AccountConfig) -> AutomationRunner:
@@ -198,6 +206,7 @@ class ScriptRunner:
             AutomationRunner(
                 defaults=self.config.defaults,
                 observation_service=connected_runtime.observation_service,
+                world_map_survey_recorder=connected_runtime.world_map_survey_recorder,
                 action_executor=ObservedActionExecutor(
                     selector_registry=self.observation_builder.selector_registry,
                     action_executor=action_executor,

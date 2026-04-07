@@ -15,6 +15,7 @@ from pnc_automation.core.errors import TaskVerificationError
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
 
 if TYPE_CHECKING:
+    from pnc_automation.app.pnc.navigation.world_map_survey_recorder import WorldMapSurveyRecorder
     from pnc_automation.app.pnc.vision.observation_builder import ObservationService
 
 
@@ -34,6 +35,7 @@ class TaskContext:
     mail_archive_store: MailArchiveStore | None = None
     chat_archive_store: ChatArchiveStore | None = None
     observation_service: ObservationService | None = None
+    world_map_survey_recorder: WorldMapSurveyRecorder | None = None
     runtime_state: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -93,6 +95,17 @@ class TaskContext:
             return self.observation_service
         raise TaskVerificationError(
             "This task requires the live observation service.",
+            account_id=self.account.id,
+            task_id=getattr(self.step, "task", None),
+        )
+
+    def require_world_map_survey_recorder(self) -> "WorldMapSurveyRecorder":
+        """Returns the live world-map survey recorder or fails fast when the task needs one explicitly."""
+
+        if self.world_map_survey_recorder is not None:
+            return self.world_map_survey_recorder
+        raise TaskVerificationError(
+            "This task requires the live world-map survey recorder.",
             account_id=self.account.id,
             task_id=getattr(self.step, "task", None),
         )
