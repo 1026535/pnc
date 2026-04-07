@@ -98,6 +98,69 @@ class WorldMapObjectSighting:
         normalized_name = player_name.strip()
         return self.resolved_player_name == normalized_name or self.object_.name_text == normalized_name
 
+    def matches_castle_query(self, query: "WorldMapCastleQuery") -> bool:
+        """Returns whether the castle sighting satisfies the requested high-level lookup constraints."""
+
+        if not self.is_castle:
+            return False
+        if query.player_name is not None and not self.matches_player_name(query.player_name):
+            return False
+        if query.label_text is not None and self.object_.name_text != query.label_text:
+            return False
+        if query.kingdom is not None and self.object_.kingdom != query.kingdom:
+            return False
+        if query.alliance_tag is not None and self.object_.alliance_tag != query.alliance_tag:
+            return False
+        if query.level is not None and self.object_.level != query.level:
+            return False
+        if query.coordinate is not None and self.key.coordinate != query.coordinate:
+            return False
+        return True
+
+
+@dataclass(frozen=True, slots=True)
+class WorldMapCastleQuery:
+    """Defines one high-level castle lookup against indexed world-map sightings."""
+
+    player_name: str | None = None
+    label_text: str | None = None
+    kingdom: str | None = None
+    alliance_tag: str | None = None
+    level: int | None = None
+    coordinate: tuple[int, int] | None = None
+
+    def __post_init__(self) -> None:
+        """Rejects blank or empty castle queries so runtime lookups stay explicit and deterministic."""
+
+        if self.player_name is not None and self.player_name.strip() == "":
+            raise SelectorResolutionError("World-map castle queries must not use blank player_name values.")
+        if self.label_text is not None and self.label_text.strip() == "":
+            raise SelectorResolutionError("World-map castle queries must not use blank label_text values.")
+        if self.kingdom is not None and self.kingdom.strip() == "":
+            raise SelectorResolutionError("World-map castle queries must not use blank kingdom values.")
+        if self.alliance_tag is not None and self.alliance_tag.strip() == "":
+            raise SelectorResolutionError("World-map castle queries must not use blank alliance_tag values.")
+        if self.level is not None and self.level <= 0:
+            raise SelectorResolutionError("World-map castle queries must use a positive level when present.", level=self.level)
+        if self.coordinate is not None:
+            if len(self.coordinate) != 2 or not all(isinstance(value, int) for value in self.coordinate):
+                raise SelectorResolutionError(
+                    "World-map castle queries require one integer coordinate pair when coordinate is provided.",
+                    coordinate=self.coordinate,
+                )
+        if all(
+            value is None
+            for value in (
+                self.player_name,
+                self.label_text,
+                self.kingdom,
+                self.alliance_tag,
+                self.level,
+                self.coordinate,
+            )
+        ):
+            raise SelectorResolutionError("World-map castle queries must constrain at least one identifying field.")
+
 
 @dataclass(slots=True)
 class WorldMapSurveyIndex:
@@ -212,16 +275,34 @@ class WorldMapSurveyIndex:
 
         return tuple(sighting for sighting in self.castle_sightings() if sighting.resolved_player_name is None)
 
+    def find_castle(self, query: WorldMapCastleQuery) -> WorldMapObjectSighting | None:
+        """Returns the indexed castle sighting satisfying the requested high-level lookup when available."""
+
+        for sighting in self.castle_sightings():
+            if sighting.matches_castle_query(query):
+                return sighting
+        return None
+
+    def require_castle(self, query: WorldMapCastleQuery) -> WorldMapObjectSighting:
+        """Returns one required indexed castle sighting or fails fast when the query does not resolve."""
+
+        sighting = self.find_castle(query)
+        if sighting is not None:
+            return sighting
+        raise SelectorResolutionError(
+            "The requested world-map castle sighting is not indexed.",
+            player_name=query.player_name,
+            label_text=query.label_text,
+            kingdom=query.kingdom,
+            alliance_tag=query.alliance_tag,
+            level=query.level,
+            coordinate=query.coordinate,
+        )
+
     def find_castle_by_player_name(self, player_name: str) -> WorldMapObjectSighting | None:
         """Returns the indexed castle sighting whose direct or resolved player name matches exactly."""
 
-        normalized_name = player_name.strip()
-        if normalized_name == "":
-            raise SelectorResolutionError("World-map castle lookups require a non-blank player_name.")
-        for sighting in self.castle_sightings():
-            if sighting.matches_player_name(normalized_name):
-                return sighting
-        return None
+        return self.find_castle(WorldMapCastleQuery(player_name=player_name))
 
     def snapshot(
         self,

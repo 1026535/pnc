@@ -9,6 +9,7 @@ from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.app.pnc.domain.observation import SpatialObjectKind, SpatialSurfaceType
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.navigation.world_map_index import (
+    WorldMapCastleQuery,
     WorldMapObjectAddressingKind,
     WorldMapSurveyIndex,
 )
@@ -159,6 +160,73 @@ class WorldMapSurveyIndexTests(unittest.TestCase):
         )[0]
 
         self.assertEqual(index.find_castle_by_player_name("LadiesLoveCake"), sighting)
+
+    def test_find_castle_matches_high_level_query_across_player_name_and_castle_fields(self) -> None:
+        """Supports one canonical castle lookup that combines lord-name evidence with typed castle constraints."""
+
+        index = WorldMapSurveyIndex()
+        sighting = index.ingest_surface(
+            make_spatial_surface(
+                SpatialSurfaceType.WORLD_MAP,
+                x=253,
+                y=447,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.CASTLE,
+                        name_text="K2875067781632",
+                        kingdom="K287",
+                        level=30,
+                        viewport_offset=(96, 110),
+                        viewport_offset_ratio=(96 / 900, 110 / 1184),
+                        estimated_world_coordinate=(349, 557),
+                    ),
+                ),
+            )
+        )[0]
+        annotated = index.annotate_castle_player_name(sighting.key, player_name="Lizard Dont Play")
+
+        resolved = index.find_castle(
+            WorldMapCastleQuery(
+                player_name="Lizard Dont Play",
+                kingdom="K287",
+                level=30,
+                coordinate=(349, 557),
+            )
+        )
+
+        self.assertEqual(resolved, index.require_castle(WorldMapCastleQuery(player_name="Lizard Dont Play")))
+        self.assertEqual(resolved, annotated)
+
+    def test_find_castle_returns_none_when_high_level_constraints_do_not_match(self) -> None:
+        """Keeps castle lookup deterministic by requiring every requested castle constraint to match the same sighting."""
+
+        index = WorldMapSurveyIndex()
+        index.ingest_surface(
+            make_spatial_surface(
+                SpatialSurfaceType.WORLD_MAP,
+                x=253,
+                y=447,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.CASTLE,
+                        name_text="VisibleCastle",
+                        kingdom="K287",
+                        level=30,
+                        viewport_offset=(96, 110),
+                        viewport_offset_ratio=(96 / 900, 110 / 1184),
+                        estimated_world_coordinate=(349, 557),
+                    ),
+                ),
+            )
+        )
+
+        self.assertIsNone(index.find_castle(WorldMapCastleQuery(label_text="VisibleCastle", kingdom="K999")))
+
+    def test_world_map_castle_query_rejects_empty_constraints(self) -> None:
+        """Fails fast when callers ask for a castle without providing any identifying constraint."""
+
+        with self.assertRaises(SelectorResolutionError):
+            WorldMapCastleQuery()
 
     def test_annotate_castle_player_name_rejects_non_castle_keys(self) -> None:
         """Fails fast when a caller tries to attach player ownership to a non-castle map object."""

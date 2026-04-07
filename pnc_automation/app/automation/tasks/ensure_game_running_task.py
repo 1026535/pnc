@@ -31,6 +31,12 @@ class EnsureGameRunningTask(BaseAutomationTask):
 
         return True
 
+    def max_replans_per_step(self, context: TaskContext) -> int | None:
+        """Uses the task-local splash wait budget instead of the smaller generic runner replan limit."""
+
+        del context
+        return _MAX_LAUNCH_WAIT_ATTEMPTS + 1
+
     def plan(self, context: TaskContext, observation: Observation) -> list[ActionRequest]:
         """Foregrounds P&C only when the observation is not already inside the game."""
 
