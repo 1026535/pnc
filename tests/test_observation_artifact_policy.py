@@ -16,7 +16,9 @@ from pnc_automation.app.pnc.vision.observation_builder import ObservationService
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.app.runtime.observation_artifacts import (
     ObservationArtifactKind,
+    ObservationArtifactOwner,
     observation_artifact_selection,
+    resolve_observation_artifact_policy,
     resolve_observation_artifact_selection,
 )
 from pnc_automation.app.runtime.observation_mode import ObservationMode
@@ -24,7 +26,7 @@ from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.core.infra.capture.screenshot_service import ScreenshotService
 from pnc_automation.core.infra.storage.artifact_store import ArtifactStore
 from pnc_automation.app.pnc.domain.observation import SpatialObjectKind, SpatialSurfaceType
-from tests.test_support import make_observation, make_spatial_object, make_spatial_surface
+from tests.test_support import FakeObservationService, make_observation, make_spatial_object, make_spatial_surface
 
 
 class ObservationArtifactSelectionTests(unittest.TestCase):
@@ -63,6 +65,30 @@ class ObservationArtifactSelectionTests(unittest.TestCase):
                 override_selection=observation_artifact_selection(ObservationArtifactKind.SCREENSHOT),
             ),
             observation_artifact_selection(ObservationArtifactKind.SCREENSHOT),
+        )
+
+    def test_resolved_policy_projects_kinds_to_their_owning_boundaries(self) -> None:
+        """Projects one mixed selection through the canonical owner-specific artifact boundaries."""
+
+        policy = resolve_observation_artifact_policy(
+            mode=ObservationMode.LIGHT,
+            override_selection=observation_artifact_selection(
+                ObservationArtifactKind.SCREENSHOT,
+                ObservationArtifactKind.WORLD_MAP_SURVEY_STATE,
+            ),
+        )
+
+        self.assertEqual(
+            policy.for_owner(ObservationArtifactOwner.OBSERVATION_SERVICE),
+            observation_artifact_selection(ObservationArtifactKind.SCREENSHOT),
+        )
+        self.assertEqual(
+            policy.for_owner(ObservationArtifactOwner.WORLD_MAP_SURVEY),
+            observation_artifact_selection(ObservationArtifactKind.WORLD_MAP_SURVEY_STATE),
+        )
+        self.assertEqual(
+            policy.unsupported_for_owner(ObservationArtifactOwner.OBSERVATION_SERVICE),
+            observation_artifact_selection(ObservationArtifactKind.WORLD_MAP_SURVEY_STATE),
         )
 
 
@@ -233,6 +259,30 @@ class WorldMapSurveyRecorderTests(unittest.TestCase):
                         ObservationArtifactKind.WORLD_MAP_SURVEY_STATE
                     ),
                 )
+
+
+class FakeObservationServiceArtifactTests(unittest.TestCase):
+    """Validates that the shared test fake mirrors production artifact-mode behavior."""
+
+    def test_fake_observation_service_uses_its_runtime_mode_for_default_artifacts(self) -> None:
+        """Resolves default screenshot persistence from the fake's configured mode instead of hard-coded debug behavior."""
+
+        light_service = FakeObservationService(
+            observations=[make_observation(ScreenType.PNC_HOME_CITY)],
+            mode=ObservationMode.LIGHT,
+        )
+        debug_service = FakeObservationService(
+            observations=[make_observation(ScreenType.PNC_HOME_CITY)],
+            mode=ObservationMode.DEBUG,
+        )
+
+        light_capture = light_service.capture_observation("light_default")
+        debug_capture = debug_service.capture_observation("debug_default")
+
+        self.assertIsNone(light_capture.screenshot.artifact_path)
+        self.assertIsNotNone(debug_capture.screenshot.artifact_path)
+        self.assertEqual(light_service.artifact_selections, [None])
+        self.assertEqual(debug_service.artifact_selections, [None])
 
 
 @dataclass(slots=True)

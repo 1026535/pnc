@@ -294,8 +294,10 @@ class FakeObservationService:
     """Returns a pre-seeded sequence of observations."""
 
     observations: list[Observation]
+    mode: ObservationMode = ObservationMode.DEBUG
     labels: list[str] = field(default_factory=list)
     requests: list[ObservationRequest | None] = field(default_factory=list)
+    artifact_selections: list[ObservationArtifactSelection | None] = field(default_factory=list)
 
     def observe(
         self,
@@ -306,9 +308,9 @@ class FakeObservationService:
     ) -> Observation:
         """Returns the next queued observation."""
 
-        del artifact_selection
         self.labels.append(label)
         self.requests.append(request)
+        self.artifact_selections.append(artifact_selection)
         if not self.observations:
             raise AssertionError(f"No observation queued for label '{label}'.")
         return self.observations.pop(0)
@@ -324,7 +326,7 @@ class FakeObservationService:
 
         observation = self.observe(label, request=request, artifact_selection=artifact_selection)
         resolved_artifact_selection = resolve_observation_artifact_selection(
-            mode=ObservationMode.DEBUG,
+            mode=self.mode,
             request_selection=None if request is None else request.artifact_selection,
             override_selection=artifact_selection,
         )

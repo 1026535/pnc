@@ -11,9 +11,10 @@ from PIL import Image
 
 from pnc_automation.app.runtime.observation_artifacts import (
     ObservationArtifactKind,
+    ObservationArtifactOwner,
     ObservationArtifactSelection,
-    observation_artifact_selection,
-    resolve_observation_artifact_selection,
+    ResolvedObservationArtifactPolicy,
+    resolve_observation_artifact_policy,
 )
 from pnc_automation.app.runtime.observation_mode import ObservationMode
 from pnc_automation.app.authoring.config.models import CastleIdentity, CastleRosterOrdering, PncAccountCastleRosterConfig
@@ -375,7 +376,7 @@ class ObservationService:
     ) -> CapturedObservation:
         """Captures a fresh screenshot artifact and returns both the screenshot and typed observation."""
 
-        resolved_artifact_selection = self._resolve_artifact_selection(
+        artifact_policy = self._resolve_artifact_policy(
             request=request,
             artifact_selection=artifact_selection,
         )
@@ -383,7 +384,9 @@ class ObservationService:
             self.session,
             artifact_directory=self.artifact_directory,
             label=label,
-            persist=ObservationArtifactKind.SCREENSHOT in resolved_artifact_selection,
+            persist=ObservationArtifactKind.SCREENSHOT in artifact_policy.for_owner(
+                ObservationArtifactOwner.OBSERVATION_SERVICE
+            ),
         )
         roster_snapshot = self._get_castle_roster_snapshot()
         observation = self.observation_builder.build(screenshot, request=request)
@@ -417,27 +420,27 @@ class ObservationService:
             artifact_selection=artifact_selection,
         ).observation
 
-    def _resolve_artifact_selection(
+    def _resolve_artifact_policy(
         self,
         *,
         request: ObservationRequest | None,
         artifact_selection: ObservationArtifactSelection | None,
-    ) -> ObservationArtifactSelection:
+    ) -> ResolvedObservationArtifactPolicy:
         """Returns the requested routine artifact selection and rejects kinds this service cannot own."""
 
-        resolved_selection = resolve_observation_artifact_selection(
+        artifact_policy = resolve_observation_artifact_policy(
             mode=self.mode,
             request_selection=None if request is None else request.artifact_selection,
             override_selection=artifact_selection,
         )
-        unsupported_artifact_kinds = resolved_selection - observation_artifact_selection(ObservationArtifactKind.SCREENSHOT)
+        unsupported_artifact_kinds = artifact_policy.unsupported_for_owner(ObservationArtifactOwner.OBSERVATION_SERVICE)
         if unsupported_artifact_kinds:
             unsupported = ", ".join(sorted(kind.value for kind in unsupported_artifact_kinds))
             raise ValueError(
                 "ObservationService cannot satisfy non-screenshot artifact requests outside their owning flow "
                 f"boundary: {unsupported}."
             )
-        return resolved_selection
+        return artifact_policy
 
     def _persist_debug_artifacts(self, *, screenshot: CapturedScreenshot, observation: Observation) -> None:
         """Persists debug-only OCR sidecars without affecting the light-mode runtime path."""
