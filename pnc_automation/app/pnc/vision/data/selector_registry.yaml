@@ -1237,7 +1237,7 @@ selectors:
   screens:
   - PNC_WORLD_MAP
   status: screenshot_seeded
-  detection_kind: planned
+  detection_kind: ocr_region
   interaction_kind: label
   relative_bounds:
     x_ratio: 0.055555555556
@@ -1248,7 +1248,7 @@ selectors:
   screens:
   - PNC_WORLD_MAP
   status: click_mapped
-  detection_kind: planned
+  detection_kind: ocr_region
   interaction_kind: navigation
   click:
     anchor: center

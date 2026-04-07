@@ -8,6 +8,7 @@ from pathlib import Path
 
 from pnc_automation.app.pnc.domain.observation import SpatialSurfaceObservation, SpatialSurfaceType
 from pnc_automation.app.pnc.navigation.world_map_index import (
+    WorldMapCastleQuery,
     WorldMapObjectKey,
     WorldMapObjectSighting,
     WorldMapSurveyIndex,
@@ -167,3 +168,13 @@ class WorldMapSurveyRecorder:
             player_name=player_name,
             profile_artifact_path=profile_artifact_path,
         )
+
+    def find_castle(self, query: WorldMapCastleQuery) -> WorldMapObjectSighting | None:
+        """Returns one indexed castle sighting satisfying the requested high-level lookup when available."""
+
+        return self.index.find_castle(query)
+
+    def require_castle(self, query: WorldMapCastleQuery) -> WorldMapObjectSighting:
+        """Returns one required indexed castle sighting or fails fast when the query does not resolve."""
+
+        return self.index.require_castle(query)

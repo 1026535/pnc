@@ -19,7 +19,7 @@ from pnc_automation.app.pnc.vision.selector_catalog import (
     SelectorCatalogSurfaceViewport,
 )
 from pnc_automation.app.pnc.vision.selector_interaction_kind import SelectorInteractionKind
-from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry, default_selector_template_root
+from pnc_automation.app.pnc.vision.selectors import DetectionKind, build_default_selector_registry, default_selector_template_root
 
 
 class SelectorRegistryTests(unittest.TestCase):
@@ -90,6 +90,8 @@ class SelectorRegistryTests(unittest.TestCase):
         self.assertEqual(world_surface.viewport.addressing_kind, SpatialViewportAddressingKind.COORDINATE_BAR)
         self.assertEqual(world_surface.viewport.coordinate_selector, UiElementId.PNC_WORLD_COORDINATE_BAR)
         self.assertIn(SpatialObjectKind.RESOURCE_NODE, world_surface.object_kinds)
+        self.assertEqual(registry.require(UiElementId.PNC_WORLD_COORDINATE_BAR).detection_kind, DetectionKind.OCR_REGION)
+        self.assertEqual(registry.require(UiElementId.PNC_WORLD_HOME_NAV).detection_kind, DetectionKind.OCR_REGION)
         home_surface = registry.require_surface(SpatialSurfaceType.HOME_CITY_SURFACE)
         self.assertEqual(home_surface.screen, ScreenType.PNC_HOME_CITY)
         self.assertEqual(home_surface.viewport.addressing_kind, SpatialViewportAddressingKind.CAMERA_RELATIVE)

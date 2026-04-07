@@ -9,6 +9,7 @@ from typing import Protocol
 
 from PIL import Image
 
+from pnc_automation.core.errors import ScreenClassificationError
 from pnc_automation.app.runtime.observation_artifacts import (
     ObservationArtifactKind,
     ObservationArtifactOwner,
@@ -215,7 +216,10 @@ class PillowSelectorEngine:
                 if selector.relative_bounds is None:
                     continue
                 bounds = selector.relative_bounds.materialize_region(image_size=image.size)
-                text = self.ocr_service.read_text(image, bounds).strip()
+                try:
+                    text = self.ocr_service.read_text(image, bounds).strip()
+                except ScreenClassificationError:
+                    continue
                 if text == "":
                     continue
                 matches.append(

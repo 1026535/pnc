@@ -4074,23 +4074,13 @@ def _build_world_map_additions(
     anchors: tuple[DetectedTextAnchor, ...],
     selector_registry: SelectorRegistry | None,
 ) -> ObservationAdditions | None:
-    """Returns world-map classification when coordinates and bottom navigation are both OCR-proven."""
+    """Returns world-map additions once OCR proves the coordinate bar, optionally enriching fixed footer chrome."""
 
     visible_nav_elements, nav_anchors = _extract_bottom_nav_additions(image=image, anchors=anchors)
-    if len(visible_nav_elements) < 3:
-        return None
-    home_anchor = nav_anchors.get(TextAnchorId.LABEL_HOME)
-    if home_anchor is None:
-        return None
     parsed_viewport = parse_world_viewport(image=image, lines=lines)
     if parsed_viewport is None:
         return None
     visible_elements = dict(visible_nav_elements)
-    visible_elements[UiElementId.PNC_WORLD_HOME_NAV] = _make_visible_from_bottom_nav_anchor(
-        image=image,
-        selector_id=UiElementId.PNC_WORLD_HOME_NAV,
-        anchor=home_anchor,
-    )
     visible_elements[UiElementId.PNC_WORLD_COORDINATE_BAR] = _make_visible(
         selector_id=UiElementId.PNC_WORLD_COORDINATE_BAR,
         x=parsed_viewport.coordinate_bounds.x,
@@ -4099,6 +4089,13 @@ def _build_world_map_additions(
         height=parsed_viewport.coordinate_bounds.height,
         extracted_text=parsed_viewport.coordinate_text,
     )
+    home_anchor = nav_anchors.get(TextAnchorId.LABEL_HOME)
+    if home_anchor is not None:
+        visible_elements[UiElementId.PNC_WORLD_HOME_NAV] = _make_visible_from_bottom_nav_anchor(
+            image=image,
+            selector_id=UiElementId.PNC_WORLD_HOME_NAV,
+            anchor=home_anchor,
+        )
     return ObservationAdditions(
         visible_elements=visible_elements,
         spatial_surface=build_world_map_spatial_surface(
