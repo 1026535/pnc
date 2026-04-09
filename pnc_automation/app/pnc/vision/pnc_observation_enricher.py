@@ -138,6 +138,11 @@ _HOME_CITY_EVIDENCE_SELECTOR_IDS = frozenset(
         UiElementId.PNC_HOME_TOP_RESOURCE_DIAMOND,
     }
 )
+_WORLD_ROOT_COORDINATE_PAIR_PATTERN = re.compile(
+    r"X\s*[:ï¼š]?\s*(?P<x>\d{1,4})\s*Y\s*[:ï¼š]?\s*(?P<y>\d{1,4})",
+    re.IGNORECASE,
+)
+_WORLD_ROOT_DISTANCE_PATTERN = re.compile(r"\b\d{1,4}\s*KM\b", re.IGNORECASE)
 _POPUP_PRIMARY_ACTION_ANCHOR_IDS = frozenset(
     {
         TextAnchorId.LABEL_CONFIRM,
@@ -1674,6 +1679,13 @@ class PncObservationEnricher:
             )
             if world_map is not None:
                 return world_map
+            world_map_root = _build_world_map_root_additions(
+                image=image,
+                lines=lines,
+                anchors=anchors,
+            )
+            if world_map_root is not None:
+                return world_map_root
         if request.allows_screen(ScreenType.PNC_HOME_CITY) and can_attempt_screen_family_ocr(
             request_screen=ScreenType.PNC_HOME_CITY,
             observed_screen=screen_type,
@@ -1687,6 +1699,13 @@ class PncObservationEnricher:
             )
             if home_city is not None:
                 return home_city
+            home_city_root = _build_home_city_root_additions(
+                image=image,
+                anchors=anchors,
+                visible_elements=visible_elements,
+            )
+            if home_city_root is not None:
+                return home_city_root
         if request.allows_screen(ScreenType.PNC_BAG) and can_attempt_screen_family_ocr(
             request_screen=ScreenType.PNC_BAG,
             observed_screen=screen_type,
@@ -4107,6 +4126,66 @@ def _build_world_map_additions(
     )
 
 
+def _build_world_map_root_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+    anchors: tuple[DetectedTextAnchor, ...],
+) -> ObservationAdditions | None:
+    """Returns coarse world-map-root evidence when map chrome is visible but strict viewport parsing still fails."""
+
+    visible_nav_elements, nav_anchors = _extract_bottom_nav_additions(image=image, anchors=anchors)
+    if len(visible_nav_elements) < 3:
+        return None
+    coordinate_line = _find_world_map_root_coordinate_line(image=image, lines=lines)
+    if coordinate_line is None:
+        return None
+    if _find_world_map_root_label_line(image=image, lines=lines) is None:
+        return None
+    home_anchor = nav_anchors.get(TextAnchorId.LABEL_HOME)
+    if home_anchor is None:
+        return None
+    visible_elements = dict(visible_nav_elements)
+    visible_elements[UiElementId.PNC_BOTTOM_NAV_HOME] = _make_visible_from_bottom_nav_anchor(
+        image=image,
+        selector_id=UiElementId.PNC_BOTTOM_NAV_HOME,
+        anchor=home_anchor,
+    )
+    visible_elements[UiElementId.PNC_WORLD_COORDINATE_BAR] = _make_visible(
+        selector_id=UiElementId.PNC_WORLD_COORDINATE_BAR,
+        x=coordinate_line.bounds.x,
+        y=coordinate_line.bounds.y,
+        width=coordinate_line.bounds.width,
+        height=coordinate_line.bounds.height,
+        extracted_text=coordinate_line.text.strip(),
+    )
+    return ObservationAdditions(
+        visible_elements=visible_elements,
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_WORLD_MAP_ROOT, "ocr_world_map_root"),),
+    )
+
+
+def _build_home_city_root_additions(
+    *,
+    image: Image.Image,
+    anchors: tuple[DetectedTextAnchor, ...],
+    visible_elements: Mapping[UiElementId, VisibleElement],
+) -> ObservationAdditions | None:
+    """Returns coarse home-city-root evidence when footer chrome proves the root but exact city support is incomplete."""
+
+    visible_nav_elements, _ = _extract_bottom_nav_additions(image=image, anchors=anchors)
+    if len(visible_nav_elements) < 3:
+        return None
+    if UiElementId.PNC_BOTTOM_NAV_MORE not in visible_nav_elements and UiElementId.PNC_BOTTOM_NAV_ALLIANCE not in visible_nav_elements:
+        return None
+    if UiElementId.PNC_HOME_WORLD_SWITCH not in visible_elements and UiElementId.PNC_HOME_CHARACTER_PANEL not in visible_elements:
+        return None
+    return ObservationAdditions(
+        visible_elements=visible_nav_elements,
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_HOME_CITY_ROOT, "partial_home_city_root"),),
+    )
+
+
 def _extract_bottom_nav_additions(
     *,
     image: Image.Image,
@@ -4129,6 +4208,48 @@ def _extract_bottom_nav_additions(
         )
         nav_anchors[anchor.id] = anchor
     return visible_nav_elements, nav_anchors
+
+
+def _find_world_map_root_coordinate_line(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> OcrLine | None:
+    """Returns one coarse coordinate-bar OCR line when both world axes are visible in the top HUD band."""
+
+    candidate_lines = tuple(
+        line
+        for line in lines
+        if line.bounds.y <= int(image.height * 0.18) and line.bounds.x <= int(image.width * 0.72)
+    )
+    for line in candidate_lines:
+        if _WORLD_ROOT_COORDINATE_PAIR_PATTERN.search(line.text) is not None:
+            return line
+    return None
+
+
+def _find_world_map_root_label_line(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> OcrLine | None:
+    """Returns one OCR line that looks map-owned instead of root-footer or resource chrome."""
+
+    min_y = int(image.height * 0.14)
+    max_y = int(image.height * 0.82)
+    for line in lines:
+        if line.bounds.y < min_y or line.bounds.y > max_y:
+            continue
+        normalized = normalize_ocr_text(line.text)
+        if normalized == "":
+            continue
+        if normalized.startswith("LFG") or normalized.startswith("K") and any(character.isdigit() for character in normalized):
+            return line
+        if _WORLD_ROOT_DISTANCE_PATTERN.search(normalized) is not None:
+            return line
+        if "GATHERING" in normalized or "ENCHANTED" in normalized:
+            return line
+    return None
 
 
 def _build_bag_additions(

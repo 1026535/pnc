@@ -119,8 +119,11 @@ class ObservedActionExecutor:
             action_executed = self.action_executor.execute_action(action, current_observation)
             executed_any_action = executed_any_action or action_executed
             if getattr(action, "observe_after", False) and action_executed:
-                self._sleep_for_observe(action)
-                current_observation = observe(f"post_action_{index + 1}", action.follow_up_request)
+                current_observation = self.action_executor.observe_action_follow_up(
+                    action=action,
+                    label_prefix=f"post_action_{index + 1}",
+                    observe=observe,
+                )
                 if not self.action_executor.validate_follow_up(action, current_observation):
                     return ObservedActionExecutionResult(
                         observation=current_observation,

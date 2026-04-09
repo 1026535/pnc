@@ -5,7 +5,14 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from pnc_automation.app.automation.engine.task import BaseAutomationTask, CastleTargetPolicy, TaskId, TaskResult, choose_priority_entry
+from pnc_automation.app.automation.engine.task import (
+    BaseAutomationTask,
+    CastleTargetPolicy,
+    TaskId,
+    TaskPreflight,
+    TaskResult,
+    choose_priority_entry,
+)
 from pnc_automation.app.automation.engine.task_context import TaskContext
 from pnc_automation.core.errors import TaskVerificationError
 from pnc_automation.app.pnc.domain.action_requests import ActionRequest, TapAction, TapListEntryAction
@@ -20,6 +27,7 @@ class CampaignTask(BaseAutomationTask):
 
     id = TaskId.CAMPAIGN
     castle_target_policy = CastleTargetPolicy.OPTIONAL
+    preflight = TaskPreflight.HOME_CITY
 
     def parse_params(self, params: Mapping[str, Any]) -> CampaignPolicy:
         """Builds the typed campaign policy."""
@@ -41,15 +49,13 @@ class CampaignTask(BaseAutomationTask):
         """Plans one campaign increment from the current screen."""
 
         if observation.screen_type not in {ScreenType.PNC_CAMPAIGN, ScreenType.PNC_CAMPAIGN_STAGE, ScreenType.PNC_BATTLE_PREP}:
-            actions = context.flows.ensure_home_city(observation)
-            actions.append(
+            return [
                 TapAction(
                     selector_id=UiElementId.PNC_HOME_CAMPAIGN_ENTRY,
                     reason="open_campaign",
                     observe_after=True,
                 )
-            )
-            return actions
+            ]
         if observation.screen_type == ScreenType.PNC_BATTLE_PREP:
             return []
         if observation.screen_type == ScreenType.PNC_CAMPAIGN_STAGE:

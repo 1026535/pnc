@@ -20,7 +20,14 @@ from pnc_automation.app.pnc.persistence.mail_archive_store import MailArchiveSto
 from pnc_automation.core.infra.capture.screenshot_service import ScreenshotService
 from pnc_automation.app.authoring.config.models import AccountConfig, CastleIdentity, CredentialSource, DefaultsConfig, ResolvedCredentials
 from pnc_automation.core.errors import ScriptValidationError, SelectorResolutionError
-from pnc_automation.app.pnc.domain.action_requests import InputTextAction, KeyEventAction, LaunchAppAction, SwipeAction, TapAction, TapPointAction
+from pnc_automation.app.pnc.domain.action_requests import (
+    InputTextAction,
+    KeyEventAction,
+    SwipeAction,
+    SwipeInputSource,
+    TapAction,
+    TapPointAction,
+)
 from pnc_automation.app.pnc.domain.chat import ChatEntryKind, visible_player_chat_entries, visible_unsupported_chat_entries
 from pnc_automation.app.pnc.domain.mail import (
     CollectMailParams,
@@ -277,15 +284,14 @@ class MailWorkflowTests(unittest.TestCase):
             ObservationRequest.mail_navigation_follow_up(ScreenType.PNC_MAIL_HUB, ScreenType.PNC_MAILBOX_LIST),
         )
 
-    def test_open_mail_hub_from_unknown_only_recovers_to_game_first(self) -> None:
+    def test_open_mail_hub_from_unknown_only_uses_in_game_recovery_first(self) -> None:
         """Keeps mail-hub navigation incremental when starting from an unknown screen."""
 
         actions = self.flows.open_mail_hub(make_observation(ScreenType.UNKNOWN))
 
-        self.assertEqual(len(actions), 2)
+        self.assertEqual(len(actions), 1)
         self.assertIsInstance(actions[0], KeyEventAction)
-        self.assertEqual(actions[0].key_code, "KEYCODE_HOME")
-        self.assertIsInstance(actions[1], LaunchAppAction)
+        self.assertEqual(actions[0].key_code, "KEYCODE_BACK")
 
     def test_open_mailbox_from_mail_hub_taps_requested_category(self) -> None:
         """Uses the requested mailbox category row instead of duplicating hub-specific navigation logic."""
@@ -417,15 +423,14 @@ class MailWorkflowTests(unittest.TestCase):
         self.assertIsInstance(actions[0], TapAction)
         self.assertEqual(actions[0].selector_id, UiElementId.PNC_BOTTOM_NAV_ALLIANCE)
 
-    def test_open_alliance_home_from_unknown_only_recovers_to_game_first(self) -> None:
+    def test_open_alliance_home_from_unknown_only_uses_in_game_recovery_first(self) -> None:
         """Keeps alliance-home navigation incremental when starting from an unknown screen."""
 
         actions = self.flows.open_alliance_home(make_observation(ScreenType.UNKNOWN))
 
-        self.assertEqual(len(actions), 2)
+        self.assertEqual(len(actions), 1)
         self.assertIsInstance(actions[0], KeyEventAction)
-        self.assertEqual(actions[0].key_code, "KEYCODE_HOME")
-        self.assertIsInstance(actions[1], LaunchAppAction)
+        self.assertEqual(actions[0].key_code, "KEYCODE_BACK")
 
     def test_open_alliance_home_uses_visible_bottom_nav_from_world_map(self) -> None:
         """Uses the visible Alliance bottom nav directly when world-adjacent screens already expose it."""
@@ -1144,6 +1149,34 @@ class MailWorkflowTests(unittest.TestCase):
         )
 
         self.assertEqual(executor.session.swipes, [(100, 25, 100, 75, 500)])
+
+    def test_action_executor_preserves_swipe_input_source(self) -> None:
+        """Forwards the requested swipe input source so profile-level gesture calibration survives execution."""
+
+        executor = ActionExecutor(
+            session=FakeSession(),
+            stable_click_delay_ms=0,
+            post_action_observe_delay_ms=0,
+            chat_stable_click_delay_ms=0,
+            chat_post_action_observe_delay_ms=0,
+            logger=self.logger,
+            sleep=lambda _: None,
+        )
+
+        executor.execute_action(
+            SwipeAction(
+                direction="right",
+                input_source=SwipeInputSource.DEFAULT,
+                start_x_ratio=0.4,
+                start_y_ratio=0.5,
+                end_x_ratio=0.6,
+                end_y_ratio=0.5,
+                duration_ms=500,
+            ),
+            make_observation(ScreenType.PNC_ALLIANCE_MEMBER_LIST),
+        )
+
+        self.assertEqual(executor.session.swipe_input_sources, [SwipeInputSource.DEFAULT])
 
     def test_action_executor_stops_mail_sequence_after_unexpected_follow_up_screen(self) -> None:
         """Stops a multi-step mail action sequence when the previous observed follow-up missed its expected screen."""

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Protocol
@@ -45,6 +46,9 @@ from pnc_automation.core.vision.ocr.ocr_service import OcrLine, OcrService
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier, ScreenEvidence
 from pnc_automation.app.pnc.vision.selectors import DetectionKind, SelectorRegistry
 from pnc_automation.core.vision.template.template_matcher import PillowTemplateMatcher
+
+_WORLD_X_COORDINATE_TEXT_PATTERN = re.compile(r"X\s*[:ï¼š]\s*\d{1,4}", re.IGNORECASE)
+_WORLD_Y_COORDINATE_TEXT_PATTERN = re.compile(r"Y\s*[:ï¼š]\s*\d{1,4}", re.IGNORECASE)
 
 
 class ObservationEnricher(Protocol):
@@ -220,7 +224,7 @@ class PillowSelectorEngine:
                     text = self.ocr_service.read_text(image, bounds).strip()
                 except ScreenClassificationError:
                     continue
-                if text == "":
+                if not _ocr_region_text_matches_selector(selector_id=selector.id, text=text):
                     continue
                 matches.append(
                     SelectorMatch(
@@ -578,6 +582,18 @@ def _visible_element_priority(element: VisibleElement) -> int:
     if element.source_kind == VisibleElementSourceKind.OCR:
         return 2
     raise ValueError(f"Unsupported visible-element source kind '{element.source_kind}'.")
+
+
+def _ocr_region_text_matches_selector(*, selector_id: UiElementId, text: str) -> bool:
+    """Returns whether one OCR-region crop proves the requested selector semantically."""
+
+    if text.strip() == "":
+        return False
+    if selector_id == UiElementId.PNC_WORLD_HOME_NAV:
+        return normalize_ocr_text(text) == "HOME"
+    if selector_id == UiElementId.PNC_WORLD_COORDINATE_BAR:
+        return _WORLD_X_COORDINATE_TEXT_PATTERN.search(text) is not None and _WORLD_Y_COORDINATE_TEXT_PATTERN.search(text) is not None
+    return True
 
 
 def _trusted_observed_account_id(observation: Observation) -> str | None:

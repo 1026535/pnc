@@ -44,6 +44,14 @@ class CastleTargetPolicy(StrEnum):
     REQUIRED = "required"
 
 
+class TaskPreflight(StrEnum):
+    """Declares the runner-owned entry state one task requires before its body executes."""
+
+    NONE = "none"
+    HOME_CITY = "home_city"
+    WORLD_MAP = "world_map"
+
+
 class TaskStatus(StrEnum):
     """High-level step execution outcomes."""
 
@@ -97,6 +105,7 @@ class AutomationTask(Protocol):
 
     id: TaskId
     castle_target_policy: CastleTargetPolicy
+    preflight: TaskPreflight
 
     def parse_params(self, params: Mapping[str, Any]) -> Any:
         """Validates and converts raw script parameters."""
@@ -119,6 +128,7 @@ class BaseAutomationTask(ABC):
 
     id: TaskId
     castle_target_policy = CastleTargetPolicy.DISALLOWED
+    preflight = TaskPreflight.NONE
 
     @abstractmethod
     def parse_params(self, params: Mapping[str, Any]) -> Any:

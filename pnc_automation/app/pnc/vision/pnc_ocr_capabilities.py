@@ -5,7 +5,13 @@ from __future__ import annotations
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 
 _HOME_CITY_ADJACENT_SCREENS = frozenset(
-    {ScreenType.UNKNOWN, ScreenType.PNC_CASTLE_SELECTION, ScreenType.PNC_HOME_CITY, ScreenType.PNC_MORE_MENU}
+    {
+        ScreenType.UNKNOWN,
+        ScreenType.PNC_CASTLE_SELECTION,
+        ScreenType.PNC_HOME_CITY_ROOT,
+        ScreenType.PNC_HOME_CITY,
+        ScreenType.PNC_MORE_MENU,
+    }
 )
 _HOME_CITY_BUILDING_FLOW_SCREENS = _HOME_CITY_ADJACENT_SCREENS | frozenset({ScreenType.PNC_BUILDING_DETAILS})
 _HOME_CITY_QUEUE_SCREENS = _HOME_CITY_ADJACENT_SCREENS | frozenset({ScreenType.PNC_BUILD_QUEUE, ScreenType.PNC_POPUP})
@@ -27,7 +33,7 @@ _SCREEN_FAMILY_OBSERVED_SCREENS = {
     ),
     ScreenType.PNC_VIP: frozenset({ScreenType.UNKNOWN, ScreenType.PNC_VIP}),
     ScreenType.PNC_IMPROVE_MIGHT: frozenset({ScreenType.UNKNOWN, ScreenType.PNC_IMPROVE_MIGHT}),
-    ScreenType.PNC_WORLD_MAP: frozenset({ScreenType.UNKNOWN, ScreenType.PNC_WORLD_MAP}),
+    ScreenType.PNC_WORLD_MAP: frozenset({ScreenType.UNKNOWN, ScreenType.PNC_WORLD_MAP_ROOT, ScreenType.PNC_WORLD_MAP}),
     ScreenType.PNC_MAIL_HUB: frozenset({ScreenType.UNKNOWN, ScreenType.PNC_MAIL_HUB, ScreenType.PNC_HOME_CITY}),
     ScreenType.PNC_MAILBOX_LIST: frozenset(
         {
@@ -112,7 +118,14 @@ _SCREEN_FAMILY_OBSERVED_SCREENS = {
         {ScreenType.UNKNOWN, ScreenType.PNC_CASTLE_SELECTION, ScreenType.PNC_HOME_CITY, ScreenType.PNC_MORE_MENU}
     ),
     ScreenType.PNC_CHAT: frozenset(
-        {ScreenType.UNKNOWN, ScreenType.PNC_CHAT, ScreenType.PNC_HOME_CITY, ScreenType.PNC_WORLD_MAP}
+        {
+            ScreenType.UNKNOWN,
+            ScreenType.PNC_CHAT,
+            ScreenType.PNC_HOME_CITY_ROOT,
+            ScreenType.PNC_HOME_CITY,
+            ScreenType.PNC_WORLD_MAP_ROOT,
+            ScreenType.PNC_WORLD_MAP,
+        }
     ),
     ScreenType.PNC_CHAT_PLAYER_ACTION_POPUP: frozenset({ScreenType.UNKNOWN, ScreenType.PNC_CHAT, ScreenType.PNC_CHAT_PLAYER_ACTION_POPUP}),
     ScreenType.PNC_ALLIANCE_MEMBER_LIST: frozenset(

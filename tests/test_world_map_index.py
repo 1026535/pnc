@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 from pnc_automation.core.errors import SelectorResolutionError
-from pnc_automation.app.pnc.domain.observation import SpatialObjectKind, SpatialSurfaceType
+from pnc_automation.app.pnc.domain.observation import SpatialObjectKind, SpatialObjectQuery, SpatialSurfaceType
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.navigation.world_map_index import (
     WorldMapCastleQuery,
@@ -32,7 +32,7 @@ class WorldMapSurveyIndexTests(unittest.TestCase):
                 objects=(
                     make_spatial_object(
                         SpatialObjectKind.CASTLE,
-                        name_text="K2875067781632",
+                        name_text="LadiesLoveCake",
                         kingdom="K287",
                         viewport_offset=(4, 252),
                         viewport_offset_ratio=(4 / 900, 252 / 1184),
@@ -106,7 +106,7 @@ class WorldMapSurveyIndexTests(unittest.TestCase):
         self.assertEqual(second.object_.action_point, (444, 962))
 
     def test_annotate_castle_player_name_supports_exact_lookup(self) -> None:
-        """Attaches resolved player names to castle sightings without changing their underlying map key."""
+        """Stores consistent profile annotations without changing the visible-label-based lookup result."""
 
         index = WorldMapSurveyIndex()
         sighting = index.ingest_surface(
@@ -117,7 +117,7 @@ class WorldMapSurveyIndexTests(unittest.TestCase):
                 objects=(
                     make_spatial_object(
                         SpatialObjectKind.CASTLE,
-                        name_text="K2875067781632",
+                        name_text="LadiesLoveCake",
                         kingdom="K287",
                         viewport_offset=(4, 252),
                         viewport_offset_ratio=(4 / 900, 252 / 1184),
@@ -161,8 +161,8 @@ class WorldMapSurveyIndexTests(unittest.TestCase):
 
         self.assertEqual(index.find_castle_by_player_name("LadiesLoveCake"), sighting)
 
-    def test_find_castle_matches_high_level_query_across_player_name_and_castle_fields(self) -> None:
-        """Supports one canonical castle lookup that combines lord-name evidence with typed castle constraints."""
+    def test_find_castle_matches_high_level_query_across_visible_label_and_castle_fields(self) -> None:
+        """Supports one canonical castle lookup that combines visible map-label player name with typed castle constraints."""
 
         index = WorldMapSurveyIndex()
         sighting = index.ingest_surface(
@@ -173,7 +173,7 @@ class WorldMapSurveyIndexTests(unittest.TestCase):
                 objects=(
                     make_spatial_object(
                         SpatialObjectKind.CASTLE,
-                        name_text="K2875067781632",
+                        name_text="Lizard Dont Play",
                         kingdom="K287",
                         level=30,
                         viewport_offset=(96, 110),
@@ -183,7 +183,6 @@ class WorldMapSurveyIndexTests(unittest.TestCase):
                 ),
             )
         )[0]
-        annotated = index.annotate_castle_player_name(sighting.key, player_name="Lizard Dont Play")
 
         resolved = index.find_castle(
             WorldMapCastleQuery(
@@ -195,7 +194,32 @@ class WorldMapSurveyIndexTests(unittest.TestCase):
         )
 
         self.assertEqual(resolved, index.require_castle(WorldMapCastleQuery(player_name="Lizard Dont Play")))
-        self.assertEqual(resolved, annotated)
+        self.assertEqual(resolved, sighting)
+
+    def test_annotate_castle_player_name_rejects_inconsistent_non_self_profile_names(self) -> None:
+        """Fails fast when a non-self castle profile name disagrees with the visible world-map castle label."""
+
+        index = WorldMapSurveyIndex()
+        sighting = index.ingest_surface(
+            make_spatial_surface(
+                SpatialSurfaceType.WORLD_MAP,
+                x=253,
+                y=447,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.CASTLE,
+                        name_text="VisibleCastle",
+                        kingdom="K287",
+                        viewport_offset=(96, 110),
+                        viewport_offset_ratio=(96 / 900, 110 / 1184),
+                        estimated_world_coordinate=(349, 557),
+                    ),
+                ),
+            )
+        )[0]
+
+        with self.assertRaises(SelectorResolutionError):
+            index.annotate_castle_player_name(sighting.key, player_name="DifferentName")
 
     def test_find_castle_returns_none_when_high_level_constraints_do_not_match(self) -> None:
         """Keeps castle lookup deterministic by requiring every requested castle constraint to match the same sighting."""
@@ -221,6 +245,67 @@ class WorldMapSurveyIndexTests(unittest.TestCase):
         )
 
         self.assertIsNone(index.find_castle(WorldMapCastleQuery(label_text="VisibleCastle", kingdom="K999")))
+
+    def test_find_object_supports_generic_indexed_spatial_queries(self) -> None:
+        """Reuses the canonical index for generic world-map object lookup instead of maintaining a search-only cache."""
+
+        index = WorldMapSurveyIndex()
+        resource = index.ingest_surface(
+            make_spatial_surface(
+                SpatialSurfaceType.WORLD_MAP,
+                x=253,
+                y=447,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.RESOURCE_NODE,
+                        name_text="Food Farm",
+                        metadata={"resource_type": "food"},
+                        viewport_offset=(96, 110),
+                        viewport_offset_ratio=(96 / 900, 110 / 1184),
+                        confirmed_world_coordinate=(349, 557),
+                    ),
+                ),
+            )
+        )[0]
+
+        resolved = index.find_object(
+            SpatialObjectQuery(
+                surface_type=SpatialSurfaceType.WORLD_MAP,
+                kind=SpatialObjectKind.RESOURCE_NODE,
+                name_text="Food Farm",
+            )
+        )
+
+        self.assertEqual(resolved, resource)
+
+    def test_require_object_rejects_missing_generic_world_map_lookup(self) -> None:
+        """Fails fast when a caller requests a generic indexed world-map object absent from the canonical index."""
+
+        index = WorldMapSurveyIndex()
+        index.ingest_surface(
+            make_spatial_surface(
+                SpatialSurfaceType.WORLD_MAP,
+                x=253,
+                y=447,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.MONSTER,
+                        name_text="Lv.5 Fiend",
+                        viewport_offset=(96, 110),
+                        viewport_offset_ratio=(96 / 900, 110 / 1184),
+                    ),
+                ),
+            )
+        )
+
+        with self.assertRaises(SelectorResolutionError):
+            index.require_object(
+                SpatialObjectQuery(
+                    surface_type=SpatialSurfaceType.WORLD_MAP,
+                    kind=SpatialObjectKind.RESOURCE_NODE,
+                    name_text="Food Farm",
+                )
+            )
 
     def test_world_map_castle_query_rejects_empty_constraints(self) -> None:
         """Fails fast when callers ask for a castle without providing any identifying constraint."""
@@ -290,7 +375,7 @@ class WorldMapSurveyIndexTests(unittest.TestCase):
             objects=(
                 make_spatial_object(
                     SpatialObjectKind.CASTLE,
-                    name_text="VisibleCastle",
+                    name_text="LadiesLoveCake",
                     kingdom="K287",
                     viewport_offset=(4, 252),
                     viewport_offset_ratio=(4 / 900, 252 / 1184),
@@ -311,7 +396,7 @@ class WorldMapSurveyIndexTests(unittest.TestCase):
             objects=(
                 make_spatial_object(
                     SpatialObjectKind.CASTLE,
-                    name_text="VisibleCastle",
+                    name_text="LadiesLoveCake",
                     kingdom="K287",
                     viewport_offset=(12, 210),
                     viewport_offset_ratio=(12 / 900, 210 / 1184),

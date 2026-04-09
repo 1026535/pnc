@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from pnc_automation.app.pnc.domain.observation import SpatialSurfaceObservation, SpatialSurfaceType
+from pnc_automation.app.pnc.domain.observation import SpatialObjectQuery, SpatialSurfaceObservation, SpatialSurfaceType
 from pnc_automation.app.pnc.navigation.world_map_index import (
     WorldMapCastleQuery,
     WorldMapObjectKey,
@@ -174,7 +174,17 @@ class WorldMapSurveyRecorder:
 
         return self.index.find_castle(query)
 
+    def find_object(self, query: SpatialObjectQuery) -> WorldMapObjectSighting | None:
+        """Returns one indexed world-map sighting satisfying the requested generic spatial-object query when available."""
+
+        return self.index.find_object(query)
+
     def require_castle(self, query: WorldMapCastleQuery) -> WorldMapObjectSighting:
         """Returns one required indexed castle sighting or fails fast when the query does not resolve."""
 
         return self.index.require_castle(query)
+
+    def require_object(self, query: SpatialObjectQuery) -> WorldMapObjectSighting:
+        """Returns one required indexed world-map sighting or fails fast when the query does not resolve."""
+
+        return self.index.require_object(query)

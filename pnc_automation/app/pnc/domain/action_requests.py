@@ -19,6 +19,13 @@ class ActionTimingProfile(StrEnum):
     CHAT = "chat"
 
 
+class SwipeInputSource(StrEnum):
+    """Identifies which Android input entry point should emit one swipe gesture."""
+
+    DEFAULT = "default"
+    TOUCHSCREEN = "touchscreen"
+
+
 @dataclass(frozen=True, slots=True)
 class ActionRequest:
     """Base metadata shared by all declarative actions."""
@@ -125,6 +132,7 @@ class SwipeAction(ActionRequest):
     direction: str = "up"
     distance_ratio: float = 0.5
     duration_ms: int = 300
+    input_source: SwipeInputSource = SwipeInputSource.TOUCHSCREEN
     start_x_ratio: float | None = None
     start_y_ratio: float | None = None
     end_x_ratio: float | None = None

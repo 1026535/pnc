@@ -43,7 +43,7 @@ from pnc_automation.app.pnc.domain.observation import (
 )
 from pnc_automation.app.pnc.domain.building_catalog import HomeCityMapCoordinate
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
-from pnc_automation.app.pnc.navigation.spatial_navigation import HomeCityNavigator, WorldCoordinate, WorldMapNavigator
+from pnc_automation.app.pnc.navigation.spatial_navigation import HomeCityNavigator, WorldMapNavigator
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.app.pnc.vision.selectors import ClickOutcome
@@ -61,10 +61,28 @@ class ScreenFlowPlanner:
     home_city_navigator: HomeCityNavigator = field(default_factory=HomeCityNavigator)
 
     def recover_unknown_game_screen(self, observation: Observation, *, reason: str) -> list[ActionRequest]:
-        """Returns one conservative in-game recovery increment for an unclassified live screen."""
+        """Returns one conservative in-game recovery increment for an unclassified live screen, preferring safe re-observe when root chrome is still visible."""
 
         if observation.screen_type != ScreenType.UNKNOWN:
             return []
+        if observation.has(UiElementId.PNC_WORLD_HOME_NAV):
+            return [
+                WaitAction(
+                    milliseconds=250,
+                    reason="refresh_unknown_world_map",
+                    observe_after=True,
+                    follow_up_request=ObservationRequest.source_screen_retry(ScreenType.PNC_WORLD_MAP),
+                )
+            ]
+        if observation.has(UiElementId.PNC_HOME_WORLD_SWITCH):
+            return [
+                WaitAction(
+                    milliseconds=250,
+                    reason="refresh_unknown_home_city",
+                    observe_after=True,
+                    follow_up_request=ObservationRequest.source_screen_retry(ScreenType.PNC_HOME_CITY),
+                )
+            ]
         return [KeyEventAction(key_code="KEYCODE_BACK", reason=reason, observe_after=True)]
 
     def ensure_android_home(self, observation: Observation) -> list[ActionRequest]:
@@ -75,15 +93,11 @@ class ScreenFlowPlanner:
         return [KeyEventAction(key_code="KEYCODE_HOME", reason="return_to_android_home", observe_after=True)]
 
     def ensure_pnc_foreground(self, observation: Observation) -> list[ActionRequest]:
-        """Plans a transition that foregrounds P&C from Android or unknown state."""
+        """Plans a transition that foregrounds P&C from verified Android home only."""
 
-        if observation.screen_type not in {ScreenType.ANDROID_HOME, ScreenType.UNKNOWN}:
+        if observation.screen_type != ScreenType.ANDROID_HOME:
             return []
-        actions: list[ActionRequest] = []
-        if observation.screen_type == ScreenType.UNKNOWN:
-            actions.extend(self.ensure_android_home(observation))
-        actions.append(LaunchAppAction(reason="launch_pnc", observe_after=True))
-        return actions
+        return [LaunchAppAction(reason="launch_pnc", observe_after=True)]
 
     def close_blocking_popup(self, observation: Observation) -> list[ActionRequest]:
         """Plans one popup dismissal action."""
@@ -99,6 +113,15 @@ class ScreenFlowPlanner:
 
         if observation.screen_type == ScreenType.PNC_HOME_CITY:
             return []
+        if observation.screen_type == ScreenType.PNC_HOME_CITY_ROOT:
+            return [
+                WaitAction(
+                    milliseconds=250,
+                    reason="prove_home_city_root",
+                    observe_after=True,
+                    follow_up_request=ObservationRequest.source_screen_retry(ScreenType.PNC_HOME_CITY),
+                )
+            ]
         if observation.screen_type == ScreenType.PNC_WORLD_MAP:
             return [
                 TapAction(
@@ -253,8 +276,10 @@ class ScreenFlowPlanner:
                     follow_up_request=ObservationRequest.home_city_follow_up(ScreenType.PNC_WORLD_MAP),
                 )
             ]
-        if observation.screen_type in {ScreenType.ANDROID_HOME, ScreenType.UNKNOWN}:
+        if observation.screen_type == ScreenType.ANDROID_HOME:
             return self.ensure_pnc_foreground(observation)
+        if observation.screen_type == ScreenType.UNKNOWN:
+            return self.recover_unknown_game_screen(observation, reason="recover_unknown_home_city")
         return self.return_to_safe_root_screen(observation)
 
     def open_more_menu(self, observation: Observation) -> list[ActionRequest]:
@@ -388,63 +413,39 @@ class ScreenFlowPlanner:
         )
 
     def open_world_map(self, observation: Observation) -> list[ActionRequest]:
-        """Plans navigation from home city to world map."""
+        """Plans one incremental navigation step from home-adjacent screens to world map."""
 
         if observation.screen_type == ScreenType.PNC_WORLD_MAP:
             return []
-        actions = self.ensure_home_city(observation)
-        actions.append(TapAction(selector_id=UiElementId.PNC_HOME_WORLD_SWITCH, reason="open_world_map", observe_after=True))
-        return actions
+        if observation.screen_type != ScreenType.PNC_HOME_CITY:
+            return self.ensure_home_city(observation)
+        return [TapAction(selector_id=UiElementId.PNC_HOME_WORLD_SWITCH, reason="open_world_map", observe_after=True)]
 
     def ensure_world_map_ready(self, observation: Observation) -> list[ActionRequest]:
-        """Plans entry to world map and fails fast if the resulting world surface lacks a readable viewport."""
+        """Plans entry to world map and refreshes transient parse-miss frames until a readable world-map viewport is proven."""
 
         if observation.screen_type != ScreenType.PNC_WORLD_MAP:
+            if observation.screen_type == ScreenType.PNC_WORLD_MAP_ROOT:
+                return [
+                    WaitAction(
+                        milliseconds=250,
+                        reason="prove_world_map_root",
+                        observe_after=True,
+                        follow_up_request=ObservationRequest.source_screen_retry(ScreenType.PNC_WORLD_MAP),
+                    )
+                ]
             return self.open_world_map(observation)
-        self.world_map_navigator.require_surface(observation)
-        return []
-
-    def focus_world_coordinate(
-        self,
-        observation: Observation,
-        target: WorldCoordinate,
-        *,
-        runtime_state: dict[str, Any] | None = None,
-    ) -> list[ActionRequest]:
-        """Plans one canonical coordinate-driven world-map navigation increment."""
-
-        if observation.screen_type != ScreenType.PNC_WORLD_MAP:
-            return self.open_world_map(observation)
-        return self.world_map_navigator.plan_focus_coordinate(
-            observation,
-            target,
-            runtime_state=runtime_state,
-        )
-
-    def find_visible_world_object(self, observation: Observation, query: SpatialObjectQuery) -> DetectedSpatialObject | None:
-        """Returns one visible world-map spatial object matching the semantic query when present."""
-
-        self.world_map_navigator.require_surface(observation)
-        return observation.find_spatial_object(query)
-
-    def open_visible_world_object(
-        self,
-        observation: Observation,
-        target: DetectedSpatialObject,
-        *,
-        reason: str,
-        observe_after: bool = True,
-    ) -> list[ActionRequest]:
-        """Plans one tap against one exact visible world-map spatial object."""
-
-        if observation.screen_type != ScreenType.PNC_WORLD_MAP:
-            return self.open_world_map(observation)
-        return self.world_map_navigator.tap_visible_object(
-            observation,
-            target,
-            reason=reason,
-            observe_after=observe_after,
-        )
+        if observation.spatial_surface is not None:
+            self.world_map_navigator.require_surface(observation)
+            return []
+        return [
+            WaitAction(
+                milliseconds=250,
+                reason="refresh_world_map_surface",
+                observe_after=True,
+                follow_up_request=ObservationRequest.source_screen_retry(ScreenType.PNC_WORLD_MAP),
+            )
+        ]
 
     def return_home_city_from_world_map(self, observation: Observation) -> list[ActionRequest]:
         """Plans the canonical return path from world map back to home city."""
@@ -454,7 +455,7 @@ class ScreenFlowPlanner:
         return self.ensure_home_city(observation)
 
     def open_chat(self, observation: Observation) -> list[ActionRequest]:
-        """Plans navigation from home- or world-adjacent screens to the shared chat overlay."""
+        """Plans one incremental navigation step from home- or world-adjacent screens to the shared chat overlay."""
 
         if observation.screen_type == ScreenType.PNC_CHAT:
             return []
@@ -469,16 +470,7 @@ class ScreenFlowPlanner:
                     ),
                 )
             ]
-        actions = self.ensure_home_city(observation)
-        actions.append(
-            TapAction(
-                selector_id=UiElementId.PNC_CHAT_SHORTCUT,
-                reason="open_chat",
-                observe_after=True,
-                follow_up_request=ObservationRequest.navigation_follow_up((self._chat_navigation_outcome(),)),
-            )
-        )
-        return actions
+        return self.ensure_home_city(observation)
 
     def ensure_chat_channel(
         self,
@@ -881,6 +873,8 @@ class ScreenFlowPlanner:
 
         if observation.screen_type != ScreenType.PNC_HOME_CITY:
             return self.ensure_home_city(observation)
+        if observation.spatial_surface is None:
+            return self._refresh_home_city_surface()
         return self.home_city_navigator.tap_visible_object(
             observation,
             target,
@@ -900,6 +894,8 @@ class ScreenFlowPlanner:
 
         if observation.screen_type != ScreenType.PNC_HOME_CITY:
             return self.ensure_home_city(observation)
+        if observation.spatial_surface is None:
+            return self._refresh_home_city_surface()
         return self.home_city_navigator.plan_focus_object(
             observation,
             query,
@@ -917,6 +913,8 @@ class ScreenFlowPlanner:
 
         if observation.screen_type != ScreenType.PNC_HOME_CITY:
             return self.ensure_home_city(observation)
+        if observation.spatial_surface is None:
+            return self._refresh_home_city_surface()
         return self.home_city_navigator.plan_focus_coordinate(
             observation,
             target,
@@ -936,13 +934,18 @@ class ScreenFlowPlanner:
 
         if observation.screen_type != ScreenType.PNC_HOME_CITY:
             return self.ensure_home_city(observation)
-        return self.home_city_navigator.plan_open_object(
-            observation,
-            query,
-            reason=reason,
-            runtime_state=runtime_state,
-            observe_after=observe_after,
-        )
+        try:
+            return self.home_city_navigator.plan_open_object(
+                observation,
+                query,
+                reason=reason,
+                runtime_state=runtime_state,
+                observe_after=observe_after,
+            )
+        except SelectorResolutionError:
+            if observation.spatial_surface is None:
+                return self._refresh_home_city_surface()
+            raise
 
     def open_home_city_empty_slot(
         self,
@@ -964,6 +967,18 @@ class ScreenFlowPlanner:
             reason="open_home_city_empty_slot",
             runtime_state=runtime_state,
         )
+
+    def _refresh_home_city_surface(self) -> list[ActionRequest]:
+        """Requests one bounded re-observation when home-city chrome is proven but its spatial surface is still missing."""
+
+        return [
+            WaitAction(
+                milliseconds=250,
+                reason="refresh_home_city_surface",
+                observe_after=True,
+                follow_up_request=ObservationRequest.source_screen_retry(ScreenType.PNC_HOME_CITY),
+            )
+        ]
 
     def ensure_correct_castle_selected(
         self,

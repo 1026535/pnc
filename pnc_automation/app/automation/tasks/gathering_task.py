@@ -9,6 +9,7 @@ from pnc_automation.app.automation.engine.task import (
     BaseAutomationTask,
     CastleTargetPolicy,
     TaskId,
+    TaskPreflight,
     TaskResult,
     choose_priority_candidate,
 )
@@ -29,6 +30,7 @@ class GatheringTask(BaseAutomationTask):
 
     id = TaskId.GATHERING
     castle_target_policy = CastleTargetPolicy.OPTIONAL
+    preflight = TaskPreflight.WORLD_MAP
 
     def parse_params(self, params: Mapping[str, Any]) -> GatheringPolicy:
         """Builds the typed gathering policy."""
@@ -51,9 +53,6 @@ class GatheringTask(BaseAutomationTask):
 
         if observation.available_march_slots is not None and observation.available_march_slots <= 0:
             return []
-        if observation.screen_type != ScreenType.PNC_WORLD_MAP:
-            return context.flows.ensure_world_map_ready(observation)
-        context.flows.ensure_world_map_ready(observation)
         candidates = _visible_resource_nodes(observation)
         target = choose_priority_candidate(
             candidates,
@@ -63,7 +62,7 @@ class GatheringTask(BaseAutomationTask):
         if target is None:
             return []
         return [
-            *context.flows.open_visible_world_object(
+            *context.flows.world_map_navigator.tap_visible_object(
                 observation,
                 target,
                 reason="open_gather_node",

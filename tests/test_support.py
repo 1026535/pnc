@@ -14,6 +14,7 @@ from PIL import Image
 from pnc_automation.core.infra.storage.artifact_store import ArtifactRecord
 from pnc_automation.core.infra.capture.screenshot_service import CapturedScreenshot
 from pnc_automation.app.authoring.config.models import CastleIdentity, PncAccountCastleRosterConfig
+from pnc_automation.app.pnc.domain.action_requests import SwipeInputSource
 from pnc_automation.app.pnc.domain.chat import ChatChannel
 from pnc_automation.app.pnc.domain.mail import MailboxType
 from pnc_automation.app.pnc.domain.observation import (
@@ -262,6 +263,7 @@ class FakeSession:
     key_events: list[str] = field(default_factory=list)
     launches: int = 0
     swipes: list[tuple[int, int, int, int, int]] = field(default_factory=list)
+    swipe_input_sources: list[SwipeInputSource] = field(default_factory=list)
 
     def tap_point(self, x: int, y: int) -> None:
         """Records one tap."""
@@ -283,10 +285,20 @@ class FakeSession:
 
         self.launches += 1
 
-    def swipe(self, start_x: int, start_y: int, end_x: int, end_y: int, *, duration_ms: int = 300) -> None:
+    def swipe(
+        self,
+        start_x: int,
+        start_y: int,
+        end_x: int,
+        end_y: int,
+        *,
+        duration_ms: int = 300,
+        input_source: str = SwipeInputSource.TOUCHSCREEN.value,
+    ) -> None:
         """Records one swipe gesture."""
 
         self.swipes.append((start_x, start_y, end_x, end_y, duration_ms))
+        self.swipe_input_sources.append(SwipeInputSource(input_source))
 
 
 @dataclass

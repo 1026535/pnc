@@ -29,6 +29,7 @@ from pnc_automation.app.pnc.domain.observation import (
     DetectedListEntry,
     DetectedSpatialObject,
     Observation,
+    SpatialSurfaceType,
     list_entry_matches,
 )
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
@@ -64,8 +65,11 @@ class ActionExecutor:
             action_executed = self.execute_action(action, current_observation)
             executed_any_action = executed_any_action or action_executed
             if getattr(action, "observe_after", False) and action_executed:
-                self._sleep_ms(self._observe_delay_ms_for(action))
-                current_observation = observe(f"post_action_{index + 1}", action.follow_up_request)
+                current_observation = self.observe_action_follow_up(
+                    action=action,
+                    label_prefix=f"post_action_{index + 1}",
+                    observe=observe,
+                )
                 if not self.validate_follow_up(action, current_observation):
                     return current_observation
                 observed_after_action = True
@@ -73,6 +77,26 @@ class ActionExecutor:
             self._sleep_ms(self.post_action_observe_delay_ms)
             return observe("post_actions", None)
         return current_observation
+
+    def observe_action_follow_up(
+        self,
+        *,
+        action: ActionRequest,
+        label_prefix: str,
+        observe: Callable[[str, ObservationRequest | None], Observation],
+    ) -> Observation:
+        """Captures one action follow-up and promotes transient narrow-request misses to one broad runtime re-observation."""
+
+        self._sleep_ms(self._observe_delay_ms_for(action))
+        follow_up_request = action.follow_up_request
+        first_after = observe(label_prefix, follow_up_request)
+        if self._should_retry_with_full_runtime_request(
+            action=action,
+            observation=first_after,
+            request=follow_up_request,
+        ):
+            return observe(f"{label_prefix}_runtime_retry", ObservationRequest.full_runtime_default())
+        return first_after
 
     def execute_action(self, action: ActionRequest, observation: Observation) -> bool:
         """Executes one declarative action and returns whether it changed emulator state."""
@@ -149,7 +173,14 @@ class ActionExecutor:
                 height=height,
                 action=action,
             )
-            self.session.swipe(start_x, start_y, end_x, end_y, duration_ms=action.duration_ms)
+            self.session.swipe(
+                start_x,
+                start_y,
+                end_x,
+                end_y,
+                duration_ms=action.duration_ms,
+                input_source=action.input_source.value,
+            )
             self._sleep_ms(self._stable_delay_ms_for(action))
             return True
         raise SelectorResolutionError(f"Unsupported action type '{type(action).__name__}'.", action_type=type(action).__name__)
@@ -291,6 +322,43 @@ class ActionExecutor:
         if not request.candidate_screen_types:
             return True
         return observation.screen_type in request.candidate_screen_types
+
+    def _should_retry_with_full_runtime_request(
+        self,
+        *,
+        action: ActionRequest,
+        observation: Observation,
+        request: ObservationRequest | None,
+    ) -> bool:
+        """Returns whether one narrow follow-up should be retried immediately with the full runtime observation request."""
+
+        del action
+        if request is None or request == ObservationRequest.full_runtime_default():
+            return False
+        if observation.has(UiElementId.PNC_STATUS_BANNER):
+            return False
+        if observation.screen_type == ScreenType.UNKNOWN:
+            return True
+        return self._world_map_surface_retry_required(observation=observation, request=request)
+
+    def _world_map_surface_retry_required(
+        self,
+        *,
+        observation: Observation,
+        request: ObservationRequest,
+    ) -> bool:
+        """Returns whether a world-map follow-up landed on the correct coarse screen but still lacks a usable parsed viewport."""
+
+        if request != ObservationRequest.source_screen_retry(ScreenType.PNC_WORLD_MAP):
+            return False
+        if observation.screen_type != ScreenType.PNC_WORLD_MAP:
+            return False
+        surface = observation.spatial_surface
+        return (
+            surface is None
+            or surface.surface_type != SpatialSurfaceType.WORLD_MAP
+            or surface.viewport.coordinate is None
+        )
 
 
 def _resolve_swipe_points(*, width: int, height: int, direction: str, distance_ratio: float) -> tuple[int, int, int, int]:

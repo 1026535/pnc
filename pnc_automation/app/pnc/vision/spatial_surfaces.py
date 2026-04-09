@@ -28,7 +28,7 @@ from pnc_automation.core.vision.ocr.ocr_lines import merge_ocr_lines
 from pnc_automation.core.vision.ocr.ocr_service import OcrLine
 from pnc_automation.app.pnc.vision.selectors import SelectorRegistry, SurfaceDefinition
 
-_WORLD_X_COORDINATE_PATTERN = re.compile(r"X\s*[:：]\s*(?P<value>\d{1,4})", re.IGNORECASE)
+_WORLD_X_COORDINATE_PATTERN = re.compile(r"X\s*[:：]\s*(?P<value>\d{1,3})", re.IGNORECASE)
 _WORLD_Y_COORDINATE_PATTERN = re.compile(r"Y\s*[:：]\s*(?P<value>\d{1,4})", re.IGNORECASE)
 _WORLD_UI_CHROME_TEXTS = frozenset({"HOME", "HERO", "QUEST", "MAIL", "ALLIANCE", "MORE", "SEARCH"})
 _WORLD_NEUTRAL_OBJECT_TOKENS = frozenset({"DRAGONIA", "ALTAR", "HELLFORTRESS"})

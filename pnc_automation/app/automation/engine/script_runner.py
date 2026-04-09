@@ -31,6 +31,10 @@ from pnc_automation.app.pnc.persistence.world_map_survey_debug_store import Worl
 from pnc_automation.app.authoring.config.models import AccountConfig, AppConfig, CastleIdentity, PncAccountCastleRosterConfig
 from pnc_automation.core.infra.emulator.bluestacks_instance import BlueStacksInstance
 from pnc_automation.core.infra.emulator.bluestacks_instance_resolver import BlueStacksInstanceResolver
+from pnc_automation.app.pnc.navigation.world_map_search import (
+    ObservationBackedWorldMapCastleInspector,
+    WorldMapSearchService,
+)
 from pnc_automation.app.pnc.navigation.world_map_survey_recorder import WorldMapSurveyRecorder
 from pnc_automation.core.infra.emulator.session import BlueStacksSession
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
@@ -43,7 +47,9 @@ class ConnectedAccountRuntime:
 
     session: BlueStacksSession
     observation_service: ObservationService
+    flow_planner: ScreenFlowPlanner
     world_map_survey_recorder: WorldMapSurveyRecorder
+    world_map_search_service: WorldMapSearchService
 
 
 @dataclass(slots=True)
@@ -160,13 +166,49 @@ class ScriptRunner:
 
         session = self.build_connected_session(account=account)
         observation_service = self._build_observation_service(account=account, session=session)
+        flow_planner = ScreenFlowPlanner()
+        world_map_survey_recorder = WorldMapSurveyRecorder(
+            observation_service=observation_service,
+            debug_store=WorldMapSurveyDebugStore(root=self.config.artifact_root),
+        )
+        world_map_search_service = WorldMapSearchService(
+            screen_flows=flow_planner,
+            observation_service=observation_service,
+            survey_recorder=world_map_survey_recorder,
+        )
+        selector_registry = getattr(self.observation_builder, "selector_registry", None)
+        if selector_registry is not None:
+            observed_executor = ObservedActionExecutor(
+                selector_registry=selector_registry,
+                action_executor=ActionExecutor(
+                    session=session,
+                    stable_click_delay_ms=self.config.defaults.stable_click_delay_ms,
+                    post_action_observe_delay_ms=self.config.defaults.post_action_observe_delay_ms,
+                    chat_stable_click_delay_ms=self.config.defaults.chat_stable_click_delay_ms,
+                    chat_post_action_observe_delay_ms=self.config.defaults.chat_post_action_observe_delay_ms,
+                    logger=logging.LoggerAdapter(
+                        self.logger.logger,
+                        extra={**self.logger.extra, **self._build_shared_extra(account=account, instance=session.instance)},
+                    ),
+                ),
+                logger=logging.LoggerAdapter(
+                    self.logger.logger,
+                    extra={**self.logger.extra, **self._build_shared_extra(account=account, instance=session.instance)},
+                ),
+            )
+            world_map_search_service.action_executor = observed_executor
+            world_map_search_service.castle_inspector = ObservationBackedWorldMapCastleInspector(
+                screen_flows=flow_planner,
+                action_executor=observed_executor,
+                observation_service=observation_service,
+                survey_recorder=world_map_survey_recorder,
+            )
         return ConnectedAccountRuntime(
             session=session,
             observation_service=observation_service,
-            world_map_survey_recorder=WorldMapSurveyRecorder(
-                observation_service=observation_service,
-                debug_store=WorldMapSurveyDebugStore(root=self.config.artifact_root),
-            ),
+            flow_planner=flow_planner,
+            world_map_survey_recorder=world_map_survey_recorder,
+            world_map_search_service=world_map_search_service,
         )
 
     def build_connected_automation_runner(self, *, account: AccountConfig) -> AutomationRunner:

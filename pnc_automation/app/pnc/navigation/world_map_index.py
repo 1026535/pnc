@@ -14,6 +14,8 @@ from pnc_automation.app.pnc.domain.observation import (
     DetectedSpatialObject,
     Observation,
     SpatialObjectKind,
+    SpatialObjectQuery,
+    SpatialObjectRelationship,
     SpatialSurfaceObservation,
     SpatialSurfaceType,
 )
@@ -93,10 +95,10 @@ class WorldMapObjectSighting:
         return self.object_.kind == SpatialObjectKind.CASTLE
 
     def matches_player_name(self, player_name: str) -> bool:
-        """Returns whether the sighting exposes the requested exact player name directly or through enrichment."""
+        """Returns whether the visible world-map castle label exposes the requested exact player name."""
 
         normalized_name = player_name.strip()
-        return self.resolved_player_name == normalized_name or self.object_.name_text == normalized_name
+        return self.object_.name_text == normalized_name
 
     def matches_castle_query(self, query: "WorldMapCastleQuery") -> bool:
         """Returns whether the castle sighting satisfies the requested high-level lookup constraints."""
@@ -116,6 +118,13 @@ class WorldMapObjectSighting:
         if query.coordinate is not None and self.key.coordinate != query.coordinate:
             return False
         return True
+
+    def matches_object_query(self, query: SpatialObjectQuery) -> bool:
+        """Returns whether the indexed sighting satisfies the requested generic spatial-object query."""
+
+        if query.surface_type not in {None, SpatialSurfaceType.WORLD_MAP}:
+            return False
+        return self.object_.matches(query)
 
 
 @dataclass(frozen=True, slots=True)
@@ -249,6 +258,17 @@ class WorldMapSurveyIndex:
                 object_kind=sighting.object_.kind,
                 key=key,
             )
+        if (
+            sighting.object_.relationship != SpatialObjectRelationship.SELF
+            and sighting.object_.name_text is not None
+            and sighting.object_.name_text != normalized_name
+        ):
+            raise SelectorResolutionError(
+                "Non-self castle profile names must stay consistent with the visible world-map castle label.",
+                key=key,
+                label_text=sighting.object_.name_text,
+                player_name=normalized_name,
+            )
         updated = replace(
             sighting,
             resolved_player_name=normalized_name,
@@ -275,6 +295,37 @@ class WorldMapSurveyIndex:
 
         return tuple(sighting for sighting in self.castle_sightings() if sighting.resolved_player_name is None)
 
+    def find_object(self, query: SpatialObjectQuery) -> WorldMapObjectSighting | None:
+        """Returns the indexed world-map sighting satisfying the requested generic spatial-object query when available."""
+
+        for sighting in self.sightings:
+            if sighting.matches_object_query(query):
+                return sighting
+        return None
+
+    def find_objects(self, query: SpatialObjectQuery) -> tuple[WorldMapObjectSighting, ...]:
+        """Returns every indexed world-map sighting satisfying the requested generic spatial-object query."""
+
+        return tuple(sighting for sighting in self.sightings if sighting.matches_object_query(query))
+
+    def require_object(self, query: SpatialObjectQuery) -> WorldMapObjectSighting:
+        """Returns one required indexed world-map sighting or fails fast when the query does not resolve."""
+
+        sighting = self.find_object(query)
+        if sighting is not None:
+            return sighting
+        raise SelectorResolutionError(
+            "The requested world-map object sighting is not indexed.",
+            object_kind=None if query.kind is None else query.kind.value,
+            relationship=None if query.relationship is None else query.relationship.value,
+            name_text=query.name_text,
+            alliance_tag=query.alliance_tag,
+            kingdom=query.kingdom,
+            level=query.level,
+            metadata_key=query.metadata_key,
+            metadata_value=query.metadata_value,
+        )
+
     def find_castle(self, query: WorldMapCastleQuery) -> WorldMapObjectSighting | None:
         """Returns the indexed castle sighting satisfying the requested high-level lookup when available."""
 
@@ -300,7 +351,7 @@ class WorldMapSurveyIndex:
         )
 
     def find_castle_by_player_name(self, player_name: str) -> WorldMapObjectSighting | None:
-        """Returns the indexed castle sighting whose direct or resolved player name matches exactly."""
+        """Returns the indexed castle sighting whose visible world-map label matches the requested player name."""
 
         return self.find_castle(WorldMapCastleQuery(player_name=player_name))
 

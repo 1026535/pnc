@@ -64,8 +64,6 @@ class OpenBuildingTask(BaseAutomationTask):
                     observe_after=True,
                 )
             ]
-        if observation.screen_type != ScreenType.PNC_HOME_CITY:
-            return context.flows.ensure_home_city(observation)
         visible_target = find_visible_target_home_city_object(observation, target=target)
         if visible_target is not None:
             _clear_focus_pending(context.runtime_state)

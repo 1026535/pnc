@@ -84,6 +84,56 @@ class BlueStacksSessionTests(unittest.TestCase):
         with self.assertRaises(DeviceConnectionError):
             session.ensure_responsive()
 
+    def test_swipe_uses_explicit_touchscreen_source(self) -> None:
+        """Uses the touchscreen-qualified input command so drag gestures are unambiguous to ADB-backed emulators."""
+
+        adb_client = _FakeAdbClient(
+            connect_result=_command_result(returncode=0, stdout_text="connected"),
+            state_result=_command_result(returncode=0, stdout_text="device"),
+            shell_result=_command_result(returncode=0, stdout_text=""),
+        )
+        session = BlueStacksSession(
+            adb_client=adb_client,
+            instance=BlueStacksInstance(
+                id="bs-main",
+                display_name="serious_stuff",
+                device_id="127.0.0.1:5555",
+                app_package="com.global.tmslg",
+            ),
+        )
+
+        session.swipe(100, 200, 300, 400, duration_ms=750)
+
+        self.assertEqual(
+            adb_client.shell_calls,
+            [("127.0.0.1:5555", ("input", "touchscreen", "swipe", "100", "200", "300", "400", "750"))],
+        )
+
+    def test_swipe_can_use_plain_input_source(self) -> None:
+        """Allows callers to request the plain Android swipe entry point when emulator behavior differs by source."""
+
+        adb_client = _FakeAdbClient(
+            connect_result=_command_result(returncode=0, stdout_text="connected"),
+            state_result=_command_result(returncode=0, stdout_text="device"),
+            shell_result=_command_result(returncode=0, stdout_text=""),
+        )
+        session = BlueStacksSession(
+            adb_client=adb_client,
+            instance=BlueStacksInstance(
+                id="bs-main",
+                display_name="serious_stuff",
+                device_id="127.0.0.1:5555",
+                app_package="com.global.tmslg",
+            ),
+        )
+
+        session.swipe(100, 200, 300, 400, duration_ms=750, input_source="default")
+
+        self.assertEqual(
+            adb_client.shell_calls,
+            [("127.0.0.1:5555", ("input", "swipe", "100", "200", "300", "400", "750"))],
+        )
+
 
 def _command_result(*, returncode: int, stdout_text: str = "", stderr_text: str = "") -> CommandResult:
     """Builds one raw ADB command result for tests."""
