@@ -5,7 +5,14 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from pnc_automation.app.automation.engine.task import BaseAutomationTask, CastleTargetPolicy, TaskId, TaskResult, choose_priority_entry
+from pnc_automation.app.automation.engine.task import (
+    BaseAutomationTask,
+    CastleTargetPolicy,
+    TaskId,
+    TaskPreflight,
+    TaskResult,
+    choose_priority_entry,
+)
 from pnc_automation.app.automation.engine.task_context import TaskContext
 from pnc_automation.core.errors import TaskVerificationError
 from pnc_automation.app.pnc.domain.action_requests import ActionRequest, TapAction, TapListEntryAction
@@ -20,6 +27,7 @@ class ResearchTask(BaseAutomationTask):
 
     id = TaskId.RESEARCH
     castle_target_policy = CastleTargetPolicy.OPTIONAL
+    preflight = TaskPreflight.HOME_CITY
 
     def parse_params(self, params: Mapping[str, Any]) -> ResearchPolicy:
         """Builds the typed research policy."""

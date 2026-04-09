@@ -12,6 +12,7 @@ from pnc_automation.app.pnc.domain.observation import Observation
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 
 _MAX_LAUNCH_WAIT_ATTEMPTS = 12
+_MAX_UNKNOWN_RECOVERY_ATTEMPTS = 2
 
 
 class EnsureGameRunningTask(BaseAutomationTask):
@@ -42,7 +43,12 @@ class EnsureGameRunningTask(BaseAutomationTask):
 
         if observation.screen_type == ScreenType.UNKNOWN and _launch_in_progress(context):
             return [WaitAction(milliseconds=1500, reason="wait_for_pnc_launch", observe_after=True)]
-        if observation.screen_type not in {ScreenType.ANDROID_HOME, ScreenType.UNKNOWN}:
+        if observation.screen_type == ScreenType.UNKNOWN:
+            return context.flows.recover_unknown_game_screen(
+                observation,
+                reason="recover_unknown_before_foreground",
+            )
+        if observation.screen_type != ScreenType.ANDROID_HOME:
             return []
         return context.flows.ensure_pnc_foreground(observation)
 
@@ -51,11 +57,22 @@ class EnsureGameRunningTask(BaseAutomationTask):
 
         if after.screen_type not in {ScreenType.ANDROID_HOME, ScreenType.UNKNOWN}:
             _clear_launch_state(context)
+            _clear_unknown_recovery_state(context)
             return TaskResult.success("Puzzles & Conquest is foregrounded.")
         if after.screen_type == ScreenType.UNKNOWN:
-            if not _launch_in_progress(context):
+            if before.screen_type == ScreenType.ANDROID_HOME and not _launch_in_progress(context):
+                _clear_unknown_recovery_state(context)
                 _mark_launch_started(context)
                 return TaskResult.replan("Puzzles & Conquest launch is in progress.")
+            if not _launch_in_progress(context):
+                recovery_attempts = _increment_unknown_recovery_attempts(context)
+                if recovery_attempts <= _MAX_UNKNOWN_RECOVERY_ATTEMPTS:
+                    return TaskResult.replan("Recovering an unknown foreground state before relaunching.")
+                _clear_unknown_recovery_state(context)
+                return TaskResult.failure(
+                    "Could not recover an unknown foreground state to a provable in-game or Android screen.",
+                    retryable=True,
+                )
             wait_attempts = _increment_launch_wait_attempts(context)
             if wait_attempts <= _MAX_LAUNCH_WAIT_ATTEMPTS:
                 return TaskResult.replan("Puzzles & Conquest launch is still in progress.")
@@ -64,6 +81,7 @@ class EnsureGameRunningTask(BaseAutomationTask):
                 "Puzzles & Conquest did not leave the launch or loading screen.",
                 retryable=True,
             )
+        _clear_unknown_recovery_state(context)
         _clear_launch_state(context)
         return TaskResult.failure("Puzzles & Conquest is not foregrounded yet.", retryable=True)
 
@@ -89,8 +107,22 @@ def _increment_launch_wait_attempts(context: TaskContext) -> int:
     return wait_attempts
 
 
+def _increment_unknown_recovery_attempts(context: TaskContext) -> int:
+    """Advances and returns the bounded count of consecutive unknown-state recovery attempts."""
+
+    recovery_attempts = int(context.runtime_state.get("ensure_game_running_unknown_recovery_attempts", 0)) + 1
+    context.runtime_state["ensure_game_running_unknown_recovery_attempts"] = recovery_attempts
+    return recovery_attempts
+
+
 def _clear_launch_state(context: TaskContext) -> None:
     """Clears the task-local launch-progress bookkeeping after success or a hard failure."""
 
     context.runtime_state.pop("ensure_game_running_launch_started", None)
     context.runtime_state.pop("ensure_game_running_launch_wait_attempts", None)
+
+
+def _clear_unknown_recovery_state(context: TaskContext) -> None:
+    """Clears the task-local unknown-state recovery bookkeeping after recovery or a hard failure."""
+
+    context.runtime_state.pop("ensure_game_running_unknown_recovery_attempts", None)

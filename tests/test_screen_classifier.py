@@ -98,6 +98,36 @@ class ScreenClassifierTests(unittest.TestCase):
 
         self.assertEqual(screen_type, ScreenType.PNC_WORLD_MAP)
 
+    def test_classify_accepts_compatible_world_map_root_evidence_for_exact_world_map_selectors(self) -> None:
+        """Keeps exact world-map selectors authoritative when parser evidence only proved the coarse world-map root."""
+
+        classifier = ScreenClassifier()
+
+        screen_type = classifier.classify(
+            {
+                UiElementId.PNC_WORLD_HOME_NAV: make_visible(UiElementId.PNC_WORLD_HOME_NAV),
+                UiElementId.PNC_WORLD_COORDINATE_BAR: make_visible(UiElementId.PNC_WORLD_COORDINATE_BAR),
+            },
+            evidence=(ScreenEvidence(ScreenType.PNC_WORLD_MAP_ROOT, "ocr_world_map_root"),),
+        )
+
+        self.assertEqual(screen_type, ScreenType.PNC_WORLD_MAP)
+
+    def test_classify_returns_exact_screen_when_exact_and_coarse_root_evidence_agree(self) -> None:
+        """Collapses compatible coarse-plus-exact parser evidence to the exact screen instead of unknown."""
+
+        classifier = ScreenClassifier()
+
+        screen_type = classifier.classify(
+            {},
+            evidence=(
+                ScreenEvidence(ScreenType.PNC_WORLD_MAP_ROOT, "ocr_world_map_root"),
+                ScreenEvidence(ScreenType.PNC_WORLD_MAP, "ocr_world_coordinates_and_bottom_nav"),
+            ),
+        )
+
+        self.assertEqual(screen_type, ScreenType.PNC_WORLD_MAP)
+
 
 if __name__ == "__main__":
     unittest.main()

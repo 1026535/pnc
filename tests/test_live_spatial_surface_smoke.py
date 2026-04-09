@@ -75,7 +75,7 @@ class LiveSpatialSurfaceSmokeTests(unittest.TestCase):
             runner=self.runner,
             start_observation=world_before,
             label_prefix="live_spatial_coordinate_move",
-            planner=lambda observation: self.runner.flow_planner.focus_world_coordinate(
+            planner=lambda observation: self.runner.flow_planner.world_map_navigator.plan_focus_coordinate(
                 observation,
                 target,
                 runtime_state=runtime_state,

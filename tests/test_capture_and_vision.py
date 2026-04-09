@@ -412,6 +412,75 @@ class CaptureAndVisionTests(unittest.TestCase):
                 RelativeBounds(x_ratio=0.1, y_ratio=0.2, width_ratio=0.4, height_ratio=0.18),
             )
 
+    def test_pillow_selector_engine_rejects_non_world_text_for_world_map_ocr_regions(self) -> None:
+        """Does not mark world-map OCR selectors visible when their crop only contains unrelated home-city text."""
+
+        registry = build_default_selector_registry()
+        selector_engine = PillowSelectorEngine(
+            template_matcher=PillowTemplateMatcher(),
+            ocr_service=_FakeOcrService(
+                lines=(
+                    _ocr_line("Build", x=18, y=47, width=46, height=14),
+                    _ocr_line("Hero", x=16, y=920, width=44, height=18),
+                )
+            ),
+        )
+
+        matches = selector_engine.detect(
+            Image.new("RGB", (540, 960), (0, 0, 0)),
+            registry,
+            selector_ids=(UiElementId.PNC_WORLD_COORDINATE_BAR, UiElementId.PNC_WORLD_HOME_NAV),
+        )
+
+        self.assertEqual(matches, [])
+
+    def test_observation_builder_does_not_promote_home_city_to_world_map_from_region_noise(self) -> None:
+        """Keeps home-city classification when world-map OCR regions contain unrelated text instead of real world-map anchors."""
+
+        builder = ObservationBuilder(
+            selector_registry=build_default_selector_registry(),
+            selector_engine=PillowSelectorEngine(
+                template_matcher=PillowTemplateMatcher(),
+                ocr_service=_FakeOcrService(
+                    lines=(
+                        _ocr_line("Build", x=18, y=47, width=46, height=14),
+                        _ocr_line("Hero", x=124, y=938, width=40, height=16),
+                        _ocr_line("Quest", x=198, y=938, width=45, height=16),
+                        _ocr_line("Mail", x=320, y=938, width=35, height=16),
+                        _ocr_line("Alliance", x=401, y=938, width=73, height=16),
+                        _ocr_line("More", x=478, y=938, width=40, height=16),
+                    )
+                ),
+            ),
+            screen_classifier=ScreenClassifier(),
+            enricher=PncObservationEnricher(
+                ocr_service=_FakeOcrService(
+                    lines=(
+                        _ocr_line("Build", x=18, y=47, width=46, height=14),
+                        _ocr_line("Hero", x=124, y=938, width=40, height=16),
+                        _ocr_line("Quest", x=198, y=938, width=45, height=16),
+                        _ocr_line("Mail", x=320, y=938, width=35, height=16),
+                        _ocr_line("Alliance", x=401, y=938, width=73, height=16),
+                        _ocr_line("More", x=478, y=938, width=40, height=16),
+                    )
+                )
+            ),
+        )
+        screenshot = type(
+            "Captured",
+            (),
+            {
+                "image": Image.new("RGB", (540, 960), (0, 0, 0)),
+                "artifact": type("Artifact", (), {"path": Path("synthetic_home_city_noise.png"), "captured_at": None})(),
+            },
+        )()
+
+        observation = builder.build(screenshot)
+
+        self.assertNotEqual(observation.screen_type, ScreenType.PNC_WORLD_MAP)
+        self.assertFalse(observation.has(UiElementId.PNC_WORLD_COORDINATE_BAR))
+        self.assertFalse(observation.has(UiElementId.PNC_WORLD_HOME_NAV))
+
     def test_observation_builder_parses_castle_selection_from_manage_char_ocr(self) -> None:
         """Classifies the Manage Char screen from OCR and extracts castle rows."""
 
@@ -1959,6 +2028,22 @@ class CaptureAndVisionTests(unittest.TestCase):
         assert surface is not None
         self.assertEqual(surface.viewport.coordinate, (246, 450))
 
+    def test_world_map_spatial_surface_trims_spurious_fourth_x_digit_from_live_coordinate_bar(self) -> None:
+        """Keeps the world-map X coordinate in the live three-digit domain when OCR fuses an extra trailing digit."""
+
+        surface = build_world_map_spatial_surface(
+            image=Image.new("RGB", (540, 960), (15, 28, 68)),
+            lines=(
+                _ocr_line("X:3511 Y:587", x=220, y=110, width=140, height=24),
+                _ocr_line("Hell Fortress", x=310, y=270, width=110, height=18),
+            ),
+            selector_registry=build_default_selector_registry(),
+        )
+
+        self.assertIsNotNone(surface)
+        assert surface is not None
+        self.assertEqual(surface.viewport.coordinate, (351, 587))
+
     def test_world_map_spatial_surface_classifies_live_kingdom_labeled_castles(self) -> None:
         """Parses the live kingdom/id world-map castle label into one typed castle sighting."""
 
@@ -2145,6 +2230,48 @@ class CaptureAndVisionTests(unittest.TestCase):
 
             self.assertEqual(observation.screen_type, ScreenType.UNKNOWN)
             self.assertIsNone(observation.spatial_surface)
+
+    def test_observation_builder_classifies_world_map_root_when_coordinate_bar_is_coarse_but_map_labels_are_present(self) -> None:
+        """Surfaces a coarse world-map root instead of unknown when OCR proves map ownership without a strict viewport parse."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                artifact_directory="k230_world_root",
+                label="world_map_root_like",
+            )
+            builder = ObservationBuilder(
+                selector_registry=build_default_selector_registry(),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("X292Y:540", x=346, y=140, width=223, height=39),
+                            _ocr_line("[LFG]Mr_Zero", x=249, y=307, width=126, height=23),
+                            _ocr_line("18km", x=594, y=296, width=77, height=31),
+                            _ocr_line("Home", x=63, y=1563, width=76, height=28),
+                            _ocr_line("Hero", x=213, y=1567, width=62, height=25),
+                            _ocr_line("Quest", x=331, y=1571, width=69, height=20),
+                            _ocr_line("Mail", x=533, y=1568, width=55, height=24),
+                            _ocr_line("Alliance", x=666, y=1567, width=100, height=26),
+                            _ocr_line("More", x=795, y=1568, width=70, height=25),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_WORLD_MAP_ROOT)
+            self.assertIsNone(observation.spatial_surface)
+            self.assertTrue(observation.has(UiElementId.PNC_WORLD_COORDINATE_BAR))
+            self.assertTrue(observation.has(UiElementId.PNC_BOTTOM_NAV_HOME))
 
     def test_observation_builder_builds_home_city_spatial_surface_objects(self) -> None:
         """Parses home-city buildings and empty slots as spatial objects rather than list rows."""

@@ -131,18 +131,32 @@ class BlueStacksSession:
         end_y: int,
         *,
         duration_ms: int = 300,
+        input_source: str = "touchscreen",
     ) -> None:
-        """Sends one swipe gesture."""
+        """Sends one swipe gesture through the requested Android input source."""
 
+        command = ["input"]
+        if input_source == "touchscreen":
+            command.append("touchscreen")
+        elif input_source != "default":
+            raise DeviceConnectionError(
+                "Unsupported swipe input source.",
+                device_id=self.instance.device_id,
+                input_source=input_source,
+            )
+        command.extend(
+            [
+                "swipe",
+                str(start_x),
+                str(start_y),
+                str(end_x),
+                str(end_y),
+                str(duration_ms),
+            ]
+        )
         result = self.adb_client.shell(
             self.instance.device_id,
-            "input",
-            "swipe",
-            str(start_x),
-            str(start_y),
-            str(end_x),
-            str(end_y),
-            str(duration_ms),
+            *command,
         )
         if not result.succeeded:
             raise DeviceConnectionError(

@@ -11,7 +11,7 @@ from pnc_automation.app.automation.engine.observed_action_executor import Observ
 from pnc_automation.app.automation.engine.runner import AutomationRunner, StepExecutionPolicy
 from pnc_automation.app.authoring.scripts.models import RunScript, ScriptStep
 from pnc_automation.app.authoring.scripts.registry import TaskRegistry, build_default_task_registry
-from pnc_automation.app.automation.engine.task import BaseAutomationTask, TaskId, TaskResult
+from pnc_automation.app.automation.engine.task import BaseAutomationTask, TaskId, TaskPreflight, TaskResult
 from pnc_automation.app.automation.engine.task_context import TaskContext
 from pnc_automation.app.automation.tasks.ensure_game_running_task import EnsureGameRunningTask
 from pnc_automation.app.authoring.config.models import AccountConfig, CastleIdentity, CredentialSource, DefaultsConfig, ResolvedCredentials
@@ -23,6 +23,7 @@ from pnc_automation.app.pnc.domain.action_requests import (
     TapAction,
     TapListEntryAction,
     TapSpatialObjectAction,
+    WaitAction,
 )
 from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId, build_home_city_object_metadata
 from pnc_automation.app.pnc.domain.chat import ChatChannel
@@ -209,6 +210,79 @@ class AutomationFrameworkTests(unittest.TestCase):
         self.assertEqual(fake_observer.labels, ["ensure_game_running_before", "ensure_game_running_post_action_1"])
         self.assertEqual(fake_session.taps, [(5, 5)])
 
+    def test_runner_proves_home_city_preflight_before_task_body_starts(self) -> None:
+        """Uses the shared runner preflight to prove home city before the task body executes."""
+
+        registry = TaskRegistry(tasks=(_HomeCityPreflightTask(),))
+        script = registry.prepare_script(
+            RunScript(
+                name="home_city_preflight",
+                path=Path("home_city_preflight.yaml"),
+                steps=(ScriptStep(task=TaskId.ENSURE_GAME_RUNNING),),
+            )
+        )
+        fake_observer = FakeObservationService(
+            observations=[
+                make_observation(ScreenType.PNC_WORLD_MAP, visible_ids=(UiElementId.PNC_WORLD_HOME_NAV,)),
+                make_observation(ScreenType.PNC_HOME_CITY, visible_ids=(UiElementId.PNC_HOME_BUILD_BUTTON,)),
+            ]
+        )
+        fake_session = FakeSession()
+        runner = AutomationRunner(
+            defaults=self.defaults,
+            observation_service=fake_observer,
+            action_executor=_make_observed_action_executor(fake_session),
+            task_registry=registry,
+            flow_planner=ScreenFlowPlanner(),
+            logger=build_logger(),
+        )
+
+        result = runner.run(self.account, script)
+
+        self.assertEqual(result.steps[0].status.value, "success")
+        self.assertEqual(fake_observer.labels, ["ensure_game_running_before", "ensure_game_running_post_action_1"])
+        self.assertEqual(fake_session.taps, [(5, 5)])
+
+    def test_runner_proves_world_map_preflight_from_coarse_world_root_before_task_body_starts(self) -> None:
+        """Uses the shared runner preflight to refine one coarse world-map root into an exact world map."""
+
+        registry = TaskRegistry(tasks=(_WorldMapPreflightTask(),))
+        script = registry.prepare_script(
+            RunScript(
+                name="world_map_preflight",
+                path=Path("world_map_preflight.yaml"),
+                steps=(ScriptStep(task=TaskId.ENSURE_GAME_RUNNING),),
+            )
+        )
+        fake_observer = FakeObservationService(
+            observations=[
+                make_observation(
+                    ScreenType.PNC_WORLD_MAP_ROOT,
+                    visible_ids=(UiElementId.PNC_WORLD_HOME_NAV, UiElementId.PNC_WORLD_COORDINATE_BAR),
+                ),
+                make_observation(
+                    ScreenType.PNC_WORLD_MAP,
+                    spatial_surface=make_spatial_surface(SpatialSurfaceType.WORLD_MAP, x=292, y=540),
+                ),
+            ]
+        )
+        fake_session = FakeSession()
+        runner = AutomationRunner(
+            defaults=self.defaults,
+            observation_service=fake_observer,
+            action_executor=_make_observed_action_executor(fake_session),
+            task_registry=registry,
+            flow_planner=ScreenFlowPlanner(),
+            logger=build_logger(),
+        )
+
+        result = runner.run(self.account, script)
+
+        self.assertEqual(result.steps[0].status.value, "success")
+        self.assertEqual(fake_observer.labels, ["ensure_game_running_before", "ensure_game_running_post_action_1"])
+        self.assertEqual(fake_observer.requests[1], ObservationRequest.source_screen_retry(ScreenType.PNC_WORLD_MAP))
+        self.assertEqual(fake_session.taps, [])
+
     def test_popup_recovery_uses_the_same_retry_loop_as_normal_steps(self) -> None:
         """Routes popup recovery through the shared retry loop before continuing the step."""
 
@@ -299,6 +373,92 @@ class AutomationFrameworkTests(unittest.TestCase):
         self.assertEqual(result.steps[0].status.value, "success")
         self.assertEqual(fake_session.launches, 1)
         self.assertEqual(fake_session.key_events, [])
+
+    def test_action_executor_retries_unknown_narrow_follow_up_with_full_runtime_observation(self) -> None:
+        """Promotes transient unknown results from narrow follow-ups to one broad runtime observation before returning."""
+
+        fake_observer = FakeObservationService(
+            observations=[
+                make_observation(ScreenType.UNKNOWN),
+                make_observation(ScreenType.PNC_WORLD_MAP),
+            ]
+        )
+        executor = ActionExecutor(
+            session=FakeSession(),
+            stable_click_delay_ms=0,
+            post_action_observe_delay_ms=0,
+            chat_stable_click_delay_ms=0,
+            chat_post_action_observe_delay_ms=0,
+            logger=build_logger(),
+            sleep=lambda _: None,
+        )
+
+        result = executor.execute_actions(
+            (
+                WaitAction(
+                    milliseconds=0,
+                    reason="probe_follow_up_retry",
+                    observe_after=True,
+                    follow_up_request=ObservationRequest.source_screen_retry(ScreenType.PNC_WORLD_MAP),
+                ),
+            ),
+            make_observation(ScreenType.PNC_WORLD_MAP),
+            observe=fake_observer.observe,
+        )
+
+        self.assertEqual(result.screen_type, ScreenType.PNC_WORLD_MAP)
+        self.assertEqual(
+            fake_observer.requests,
+            [
+                ObservationRequest.source_screen_retry(ScreenType.PNC_WORLD_MAP),
+                ObservationRequest.full_runtime_default(),
+            ],
+        )
+
+    def test_action_executor_retries_world_map_follow_up_when_surface_parse_is_missing(self) -> None:
+        """Refreshes one coarse world-map follow-up when the parsed world-map viewport is still absent."""
+
+        fake_observer = FakeObservationService(
+            observations=[
+                make_observation(ScreenType.PNC_WORLD_MAP),
+                make_observation(
+                    ScreenType.PNC_WORLD_MAP,
+                    spatial_surface=make_spatial_surface(SpatialSurfaceType.WORLD_MAP, x=274, y=540),
+                ),
+            ]
+        )
+        executor = ActionExecutor(
+            session=FakeSession(),
+            stable_click_delay_ms=0,
+            post_action_observe_delay_ms=0,
+            chat_stable_click_delay_ms=0,
+            chat_post_action_observe_delay_ms=0,
+            logger=build_logger(),
+            sleep=lambda _: None,
+        )
+
+        result = executor.execute_actions(
+            (
+                WaitAction(
+                    milliseconds=0,
+                    reason="probe_world_map_surface_retry",
+                    observe_after=True,
+                    follow_up_request=ObservationRequest.source_screen_retry(ScreenType.PNC_WORLD_MAP),
+                ),
+            ),
+            make_observation(ScreenType.PNC_WORLD_MAP),
+            observe=fake_observer.observe,
+        )
+
+        self.assertEqual(result.screen_type, ScreenType.PNC_WORLD_MAP)
+        self.assertIsNotNone(result.spatial_surface)
+        self.assertEqual(
+            fake_observer.requests,
+            [
+                ObservationRequest.source_screen_retry(ScreenType.PNC_WORLD_MAP),
+                ObservationRequest.full_runtime_default(),
+            ],
+        )
 
     def test_tap_actions_prefer_visible_element_action_points(self) -> None:
         """Uses selector-specific action points when OCR-derived bounds are not the real touch target."""
@@ -1397,6 +1557,72 @@ class _LocalBudgetReplanTask(BaseAutomationTask):
         if attempts >= 6:
             return TaskResult.success("Synthetic local-budget task exhausted its bounded replans cleanly.")
         return TaskResult.replan("Synthetic local-budget task is still exercising its private replan budget.")
+
+
+class _HomeCityPreflightTask(BaseAutomationTask):
+    """Synthetic task that proves runner-owned home-city preflight before task-body planning."""
+
+    id = TaskId.ENSURE_GAME_RUNNING
+    preflight = TaskPreflight.HOME_CITY
+
+    def parse_params(self, params: dict[str, object]) -> None:
+        """Rejects unsupported parameters for the synthetic task."""
+
+        self._require_no_params(params)
+        return None
+
+    def is_applicable(self, context: TaskContext, observation: Observation) -> bool:
+        """Requires the runner to hand the task a proven home-city observation."""
+
+        del context
+        return observation.screen_type == ScreenType.PNC_HOME_CITY
+
+    def plan(self, context: TaskContext, observation: Observation) -> list[ActionRequest]:
+        """Does not emit actions because this test only validates preflight ownership."""
+
+        del context, observation
+        return []
+
+    def verify(self, context: TaskContext, before: Observation, after: Observation) -> TaskResult:
+        """Succeeds only when the runner already proved home city before entering the task body."""
+
+        del context, after
+        if before.screen_type == ScreenType.PNC_HOME_CITY:
+            return TaskResult.success("Runner proved home city before task-body execution.")
+        return TaskResult.failure("Runner did not prove home city before task-body execution.")
+
+
+class _WorldMapPreflightTask(BaseAutomationTask):
+    """Synthetic task that proves runner-owned exact world-map preflight before task-body planning."""
+
+    id = TaskId.ENSURE_GAME_RUNNING
+    preflight = TaskPreflight.WORLD_MAP
+
+    def parse_params(self, params: dict[str, object]) -> None:
+        """Rejects unsupported parameters for the synthetic task."""
+
+        self._require_no_params(params)
+        return None
+
+    def is_applicable(self, context: TaskContext, observation: Observation) -> bool:
+        """Requires the runner to hand the task a proven world-map surface."""
+
+        del context
+        return observation.screen_type == ScreenType.PNC_WORLD_MAP and observation.spatial_surface is not None
+
+    def plan(self, context: TaskContext, observation: Observation) -> list[ActionRequest]:
+        """Does not emit actions because this test only validates preflight ownership."""
+
+        del context, observation
+        return []
+
+    def verify(self, context: TaskContext, before: Observation, after: Observation) -> TaskResult:
+        """Succeeds only when the runner already proved world map before entering the task body."""
+
+        del context, after
+        if before.screen_type == ScreenType.PNC_WORLD_MAP and before.spatial_surface is not None:
+            return TaskResult.success("Runner proved world map before task-body execution.")
+        return TaskResult.failure("Runner did not prove world map before task-body execution.")
 
 
 class _AlwaysReplanTask(BaseAutomationTask):

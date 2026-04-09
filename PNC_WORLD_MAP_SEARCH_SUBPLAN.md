@@ -45,6 +45,262 @@ The live debugging also exposed an architectural boundary that should now be mad
 
 That distinction is fundamental. A single swipe inside `PNC_WORLD_MAP` is spatial traversal, not reusable cross-screen flow.
 
+## 2.1 Implementation Status As Of 2026-04-08
+
+The architecture in this document is now partially implemented.
+
+Implemented so far:
+
+- a runner-owned task preflight contract now exists in the automation engine:
+  - tasks can declare a required entry state through `TaskPreflight`,
+  - the runner now owns the canonical `observe -> popup recovery -> navigate -> prove required screen` loop before the task body starts,
+  - this moved root-entry ownership out of the task body for tasks that truly start from a stable root.
+- the first task migrations to runner-owned preflight are complete:
+  - `ResearchTask` now declares runner-owned `HOME_CITY` preflight,
+  - `GatheringTask` now declares runner-owned `WORLD_MAP` preflight.
+- coarse root-state classifications now exist instead of routing every incomplete root frame through `UNKNOWN`:
+  - `PNC_HOME_CITY_ROOT`
+  - `PNC_WORLD_MAP_ROOT`
+- the screen-classification pipeline now reconciles coarse and exact root evidence correctly:
+  - exact selector proof still wins,
+  - compatible coarse+exact evidence collapses to the exact screen,
+  - incompatible evidence still fails fast to `UNKNOWN`.
+- the recurring live unknown artifact at:
+  - [20260408T172223Z_mega_old_acc_post_prep_world_start.png](/c:/Users/lebel/pnc/artifacts/2026-04-08/mega_old_acc/20260408T172223Z_mega_old_acc_post_prep_world_start.png)
+  is now recognized as world-map-root-like evidence rather than remaining generic `UNKNOWN`.
+- screen flows now explicitly refine coarse roots into exact proofs:
+  - coarse home-city root is re-observed into exact `PNC_HOME_CITY`,
+  - coarse world-map root is re-observed into exact `PNC_WORLD_MAP`.
+- home-city/world-map readiness handling is now more graceful when the root screen is correct but the parsed spatial surface is temporarily missing:
+  - world-map readiness already refreshes transient parse misses,
+  - home-city object-opening flows now also request one bounded surface refresh instead of failing immediately.
+
+Implemented only partially:
+
+- shared runner-owned preflight is in place, but not every task has been migrated to it yet.
+- the migration was intentionally limited to tasks whose body truly starts from a root screen.
+- tasks with meaningful in-progress subflows or resumable non-root screens still retain local ownership of those subflow boundaries.
+
+Intentionally not migrated yet:
+
+- `BuildingUpgradeTask`
+- `OpenBuildingTask`
+
+Reason:
+
+- those tasks do not always begin from a stable root.
+- they can legitimately resume from owned in-progress screens such as building-detail or building-owned screens.
+- forcing unconditional home-city preflight on those tasks caused real end-to-end regressions and was therefore reverted.
+
+Still remaining from the broader workflow simplification direction:
+
+- extend runner-owned preflight coverage to additional tasks whose entry contract is truly root-owned,
+- keep shrinking repeated task-local root-entry logic where the task body does not need to resume from owned subflow screens,
+- continue adding coarse root or popup classifications for repeated live `UNKNOWN` artifacts instead of weakening exact classification.
+
+## 2.2 World-Map Movement Calibration Status As Of 2026-04-08
+
+The low-level world-map swipe path was also refined significantly during live validation.
+
+Implemented so far:
+
+- world-map movement is no longer using one shared generic swipe ratio for every axis.
+- the navigator now supports axis-specific swipe calibration:
+  - horizontal span is calibrated independently,
+  - vertical span is calibrated independently,
+  - diagonal movement uses the horizontal and vertical spans together instead of forcing decomposition through cardinals.
+- the world-map movement planner now carries independent horizontal and vertical ratio state through replans instead of treating every swipe as one scalar distance.
+- movement validation also hardened failure behavior:
+  - tiny OCR jitter is no longer accepted as real map movement,
+  - stagnant-swipe attempts are tracked across replans,
+  - the movement loop fails cleanly instead of pretending the viewport advanced.
+- world-map follow-up observation handling was hardened so narrow post-swipe observations can retry once with broader runtime observation when the frame looks transient or under-classified.
+
+Live calibration findings gathered so far:
+
+- vertical movement became live-stable and repeatable in the probes that were run.
+- horizontal movement was narrowed from a broader `+4` to `+6` band toward a tighter smaller quantum.
+- explicit left-swipe calibration on `mega_old_acc` showed:
+  - ratio `0.08` -> exact `(+4, 0)`
+  - ratio `0.10` -> exact `(+4, 0)`
+  - ratio `0.12` -> exact `(+6, 0)`
+- those live measurements were used to refactor the world-map planner to prefer a smaller horizontal default span.
+- all eight directions were validated as directionally working during live probing:
+  - left
+  - right
+  - up
+  - down
+  - up-left
+  - up-right
+  - down-left
+  - down-right
+
+Current implementation state:
+
+- directional world-map movement is now materially more reliable,
+- diagonal movement is first-class in the navigator,
+- the planner is much closer to deterministic displacement than before,
+- but exact "`same call` always yields the exact same `(a, b)` displacement" is still not fully proven for every direction and distance.
+
+What is proven:
+
+- the movement system now has a canonical calibration model rather than one hard-coded generic swipe profile,
+- the runtime can distinguish real movement from OCR noise,
+- coarse recovery after swipe follow-up misclassification is substantially better than before,
+- vertical motion and several short calibrated horizontal probes behaved deterministically in live testing.
+
+What is not yet fully proven:
+
+- exact deterministic displacement for all horizontal distances,
+- exact deterministic displacement for all diagonals over longer runs,
+- long uninterrupted movement runs on unstable live accounts without popup or state churn interfering.
+
+Practical consequence for the search architecture:
+
+- the search layer now has a much better low-level movement primitive to build on,
+- but full-map sweep correctness still depends on continued live validation of the movement primitive, especially for long row-major traversal and long diagonal repositioning.
+
+## 2.3 Additional Implemented Changes Already Landed
+
+This section records other important world-map-search-related changes that were implemented during debugging and refactoring, but were not yet documented above.
+
+### 2.3.1 World-map detection correctness fixes
+
+The world-map detector was corrected so home-city or unrelated OCR text no longer falsely satisfies world-map selectors.
+
+Implemented fixes:
+
+- OCR-region selector matching was tightened so world-map selectors require the intended text semantics rather than accepting arbitrary OCR text inside the crop.
+- `PNC_WORLD_HOME_NAV` now requires actual `HOME` text semantics.
+- `PNC_WORLD_COORDINATE_BAR` now requires real `X:` and `Y:` coordinate semantics.
+
+Practical consequence:
+
+- frames like Lord Info, player pages, or city-owned overlays that happened to contain unrelated OCR are no longer misclassified as `PNC_WORLD_MAP` just because text existed inside a selector crop.
+
+### 2.3.2 Search ownership correction for world-map entry
+
+The search layer itself no longer owns world-map entry.
+
+Implemented change:
+
+- `execute_search(...)` now requires a caller-provided or freshly captured proven `PNC_WORLD_MAP` observation with a parsed spatial surface.
+- if the caller starts from Home City, popup, or any non-proven state, the search fails fast instead of silently taking over root navigation.
+
+Architectural consequence:
+
+- entering world map remains a higher-level screen-flow or runner-preflight concern,
+- the search engine now assumes it is operating inside an already-proven world-map session.
+
+### 2.3.3 Castle search and matching corrections
+
+The castle-matching model was corrected to align with actual map-label semantics discovered during live debugging.
+
+Implemented fixes:
+
+- castle matching by `player_name` now stays map-label-based rather than treating profile inspection as an independent naming system,
+- self-castle enrichment for remote player-name search was blocked because `My Territory` is a self-only label and must not become a general player-name candidate,
+- non-self profile enrichment is now constrained so it cannot blindly override visible castle-label semantics,
+- a separate profile-validation path was introduced for future profile/gear checks.
+
+Current profile-validation status:
+
+- opening the lord profile for validation is supported as a distinct search path,
+- gear validation itself is still intentionally unimplemented and fails fast once the profile is open.
+
+### 2.3.4 Stop-policy semantics correction
+
+The search stop-policy behavior was corrected during debugging.
+
+Implemented outcome:
+
+- `FIRST_CONFIRMED_MATCH` is still valid,
+- but search correctness now depends on preventing incorrect candidates from ever becoming confirmed matches,
+- the earlier stop-policy precedence experiment was reverted once it became clear that the deeper issue was candidate eligibility and castle-label semantics, not the stop trigger itself.
+
+### 2.3.5 World-map search service and canonical indexing work
+
+The reusable world-map search subsystem itself was implemented as a shared canonical surface.
+
+Implemented components:
+
+- a canonical `world_map_search.py` service layer,
+- request / matcher / stop-policy / traversal-plan modeling,
+- one canonical checkpointed search loop over the shared world-map survey index,
+- canonical world-map survey/index integration rather than feature-local object caches,
+- world-map search integration into the runtime and gathering consumer.
+
+Architectural consequence:
+
+- world-map-local search behavior is now centered in the dedicated search subsystem rather than being split across feature-local loops.
+
+### 2.3.6 Canonical world-map/local-operation boundary cleanup
+
+The boundary between screen flows and map-local operations was tightened.
+
+Implemented direction:
+
+- world-map-local querying and interaction logic was pulled away from the screen-flow surface,
+- screen flows remain responsible for root transitions such as opening world map or returning to home city,
+- map-local traversal and object interaction remain below the search layer.
+
+This remains an active architecture direction, but the key ownership split is now materially better than before.
+
+### 2.3.7 Unknown-state and recovery hardening
+
+The runtime’s error-handling and unknown-state behavior was improved substantially to avoid dangerous churn.
+
+Implemented fixes:
+
+- ambiguous `UNKNOWN` states no longer fall through to Android Home plus relaunch behavior,
+- unknown recovery is now bounded and in-game-first,
+- root chrome on `UNKNOWN` prefers safe re-observe rather than blind back-navigation,
+- popup handling continues to run through the shared popup-recovery loop,
+- world-map and home-city follow-up observations now get one broad-runtime retry when a narrow request returns transient `UNKNOWN` or an under-classified frame.
+
+Practical consequence:
+
+- the runtime is much less likely to spiral into shop / launcher / app-close churn,
+- ambiguous in-game states now fail or re-observe conservatively instead of taking destructive recovery paths.
+
+### 2.3.8 Home-city/world-map readiness refinement
+
+Root-screen readiness now distinguishes:
+
+- exact root classification,
+- coarse root classification,
+- and root classification with missing parsed spatial surface.
+
+Implemented outcome:
+
+- exact root proof remains the goal before root-owned task work begins,
+- coarse root proof now routes into a bounded exact re-proof step,
+- missing root spatial surfaces now request bounded refresh instead of crashing immediate consumers.
+
+### 2.3.9 Search-origin and sweep-direction observations from live review
+
+Live review clarified expectations for broad sweeps:
+
+- full-map sweep should start from a corner,
+- the intended broad traversal is row-major coverage,
+- upper-left is treated as `(0, 0)`,
+- likely world bounds are finite and should ultimately come from the higher-level map rather than blind edge-probing.
+
+Current implementation state:
+
+- the row-major/full-sweep intent is now clearly recognized as the target behavior,
+- but automatic full-bound resolution from the high-level map is still not implemented and remains future work.
+
+### 2.3.10 Known remaining gaps after the implemented work
+
+The following important items are still not fully complete:
+
+- exact overview/high-level-map bounds extraction for full-map sweep,
+- fully proven deterministic displacement for every world-map movement direction and run length,
+- implemented castle gear validation after opening a player profile,
+- full migration of every root-owned task to runner preflight,
+- complete live stabilization on popup-heavy or state-unstable accounts during long search runs.
+
 ## 3. Problem Statement
 
 The project currently risks mixing three different responsibilities:

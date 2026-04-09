@@ -8,7 +8,14 @@ from dataclasses import dataclass
 from typing import Any
 
 from pnc_automation.core.errors import SelectorResolutionError
-from pnc_automation.app.pnc.domain.action_requests import ActionRequest, SwipeAction, TapAction, TapPointAction, TapSpatialObjectAction
+from pnc_automation.app.pnc.domain.action_requests import (
+    ActionRequest,
+    SwipeAction,
+    SwipeInputSource,
+    TapAction,
+    TapPointAction,
+    TapSpatialObjectAction,
+)
 from pnc_automation.app.pnc.domain.building_catalog import (
     HomeCityMapCoordinate,
     HomeCityObjectId,
@@ -35,6 +42,8 @@ _HOME_CITY_ATLAS_HORIZONTAL_SWIPE_Y_RATIO = 0.56
 _HOME_CITY_ATLAS_VERTICAL_SWIPE_X_RATIO = 0.55
 _HOME_CITY_CASTLE_UTILITY_VERTICAL_SWIPE_X_RATIO = 0.69
 _HOME_CITY_RIGHT_VIEW_VERTICAL_SWIPE_X_RATIO = 0.24
+_WORLD_MAP_HORIZONTAL_SWIPE_Y_RATIO = 0.48
+_WORLD_MAP_VERTICAL_SWIPE_X_RATIO = 0.46
 
 
 @dataclass(frozen=True, slots=True)
@@ -614,16 +623,178 @@ class SpatialSurfaceNavigator(ABC):
         return observation.require_spatial_surface(self.surface_type)
 
 
+@dataclass(frozen=True, slots=True)
+class _WorldMapSwipeProfile:
+    """Defines one calibrated world-map swipe lane plus the coordinate-signs it is expected to produce."""
+
+    name: str
+    start_x_ratio: float
+    start_y_ratio: float
+    end_x_ratio: float
+    end_y_ratio: float
+    expected_delta_x_sign: int
+    expected_delta_y_sign: int
+    minimum_effective_delta_x: int
+    minimum_effective_delta_y: int
+    default_duration_ms: int
+    input_source: SwipeInputSource
+    default_horizontal_distance_ratio: float
+    default_vertical_distance_ratio: float
+
+    @property
+    def is_diagonal(self) -> bool:
+        """Returns whether the profile is intended to move both axes at once."""
+
+        return self.expected_delta_x_sign != 0 and self.expected_delta_y_sign != 0
+
+    @property
+    def native_horizontal_distance_ratio(self) -> float:
+        """Returns the reviewed native horizontal lane span encoded by the profile endpoints."""
+
+        return abs(self.start_x_ratio - self.end_x_ratio)
+
+    @property
+    def native_vertical_distance_ratio(self) -> float:
+        """Returns the reviewed native vertical lane span encoded by the profile endpoints."""
+
+        return abs(self.start_y_ratio - self.end_y_ratio)
+
+
+_WORLD_MAP_SWIPE_PROFILES: tuple[_WorldMapSwipeProfile, ...] = (
+    _WorldMapSwipeProfile(
+        name="left",
+        start_x_ratio=0.80,
+        start_y_ratio=0.60,
+        end_x_ratio=0.16,
+        end_y_ratio=0.60,
+        expected_delta_x_sign=1,
+        expected_delta_y_sign=0,
+        minimum_effective_delta_x=2,
+        minimum_effective_delta_y=0,
+        default_duration_ms=700,
+        input_source=SwipeInputSource.TOUCHSCREEN,
+        default_horizontal_distance_ratio=0.40,
+        default_vertical_distance_ratio=0.0,
+    ),
+    _WorldMapSwipeProfile(
+        name="right",
+        start_x_ratio=0.16,
+        start_y_ratio=0.60,
+        end_x_ratio=0.80,
+        end_y_ratio=0.60,
+        expected_delta_x_sign=-1,
+        expected_delta_y_sign=0,
+        minimum_effective_delta_x=2,
+        minimum_effective_delta_y=0,
+        default_duration_ms=700,
+        input_source=SwipeInputSource.DEFAULT,
+        default_horizontal_distance_ratio=0.20,
+        default_vertical_distance_ratio=0.0,
+    ),
+    _WorldMapSwipeProfile(
+        name="up",
+        start_x_ratio=_WORLD_MAP_VERTICAL_SWIPE_X_RATIO,
+        start_y_ratio=0.72,
+        end_x_ratio=_WORLD_MAP_VERTICAL_SWIPE_X_RATIO,
+        end_y_ratio=0.28,
+        expected_delta_x_sign=0,
+        expected_delta_y_sign=1,
+        minimum_effective_delta_x=0,
+        minimum_effective_delta_y=8,
+        default_duration_ms=500,
+        input_source=SwipeInputSource.TOUCHSCREEN,
+        default_horizontal_distance_ratio=0.0,
+        default_vertical_distance_ratio=0.40,
+    ),
+    _WorldMapSwipeProfile(
+        name="down",
+        start_x_ratio=_WORLD_MAP_VERTICAL_SWIPE_X_RATIO,
+        start_y_ratio=0.28,
+        end_x_ratio=_WORLD_MAP_VERTICAL_SWIPE_X_RATIO,
+        end_y_ratio=0.72,
+        expected_delta_x_sign=0,
+        expected_delta_y_sign=-1,
+        minimum_effective_delta_x=0,
+        minimum_effective_delta_y=8,
+        default_duration_ms=500,
+        input_source=SwipeInputSource.TOUCHSCREEN,
+        default_horizontal_distance_ratio=0.0,
+        default_vertical_distance_ratio=0.44,
+    ),
+    _WorldMapSwipeProfile(
+        name="up_left",
+        start_x_ratio=0.80,
+        start_y_ratio=0.72,
+        end_x_ratio=0.16,
+        end_y_ratio=0.28,
+        expected_delta_x_sign=1,
+        expected_delta_y_sign=1,
+        minimum_effective_delta_x=2,
+        minimum_effective_delta_y=8,
+        default_duration_ms=700,
+        input_source=SwipeInputSource.TOUCHSCREEN,
+        default_horizontal_distance_ratio=0.40,
+        default_vertical_distance_ratio=0.44,
+    ),
+    _WorldMapSwipeProfile(
+        name="up_right",
+        start_x_ratio=0.16,
+        start_y_ratio=0.72,
+        end_x_ratio=0.80,
+        end_y_ratio=0.28,
+        expected_delta_x_sign=-1,
+        expected_delta_y_sign=1,
+        minimum_effective_delta_x=2,
+        minimum_effective_delta_y=8,
+        default_duration_ms=700,
+        input_source=SwipeInputSource.DEFAULT,
+        default_horizontal_distance_ratio=0.40,
+        default_vertical_distance_ratio=0.44,
+    ),
+    _WorldMapSwipeProfile(
+        name="down_left",
+        start_x_ratio=0.80,
+        start_y_ratio=0.28,
+        end_x_ratio=0.16,
+        end_y_ratio=0.72,
+        expected_delta_x_sign=1,
+        expected_delta_y_sign=-1,
+        minimum_effective_delta_x=2,
+        minimum_effective_delta_y=8,
+        default_duration_ms=700,
+        input_source=SwipeInputSource.TOUCHSCREEN,
+        default_horizontal_distance_ratio=0.40,
+        default_vertical_distance_ratio=0.40,
+    ),
+    _WorldMapSwipeProfile(
+        name="down_right",
+        start_x_ratio=0.16,
+        start_y_ratio=0.28,
+        end_x_ratio=0.80,
+        end_y_ratio=0.72,
+        expected_delta_x_sign=-1,
+        expected_delta_y_sign=-1,
+        minimum_effective_delta_x=2,
+        minimum_effective_delta_y=8,
+        default_duration_ms=700,
+        input_source=SwipeInputSource.DEFAULT,
+        default_horizontal_distance_ratio=0.40,
+        default_vertical_distance_ratio=0.40,
+    ),
+)
+_WORLD_MAP_SWIPE_PROFILE_BY_NAME = {profile.name: profile for profile in _WORLD_MAP_SWIPE_PROFILES}
+
+
 @dataclass(slots=True)
 class WorldMapNavigator(SpatialSurfaceNavigator):
     """Plans coordinate-driven world-map movement and visible world-object taps."""
 
     surface_type: SpatialSurfaceType = SpatialSurfaceType.WORLD_MAP
-    focus_tolerance: int = 3
-    default_swipe_ratio: float = 0.45
-    min_swipe_ratio: float = 0.18
+    focus_tolerance: int = 1
+    min_swipe_ratio: float = 0.08
     max_swipe_ratio: float = 0.72
-    max_stagnant_attempts: int = 1
+    max_stagnant_attempts: int = 2
+    stagnant_retry_ratio_multiplier: float = 2.0
 
     def plan_focus_coordinate(
         self,
@@ -648,22 +819,28 @@ class WorldMapNavigator(SpatialSurfaceNavigator):
         if abs(delta_x) <= self.focus_tolerance and abs(delta_y) <= self.focus_tolerance:
             state.pop("pending_swipe", None)
             return []
-        axis = "x" if abs(delta_x) >= abs(delta_y) else "y"
-        remaining_delta = delta_x if axis == "x" else delta_y
-        direction = self._resolve_direction(state=state, axis=axis, remaining_delta=remaining_delta)
-        distance_ratio = self._resolve_distance_ratio(state=state, axis=axis, remaining_delta=remaining_delta)
+        profile = self._resolve_profile(state=state, delta_x=delta_x, delta_y=delta_y)
+        horizontal_distance_ratio, vertical_distance_ratio = self._resolve_axis_distance_ratios(
+            state=state,
+            profile=profile,
+            delta_x=delta_x,
+            delta_y=delta_y,
+        )
+        stagnant_attempts = _pending_swipe_stagnant_attempts(state)
         state["pending_swipe"] = {
             "from_coordinate": current_coordinate,
-            "direction": direction,
-            "distance_ratio": distance_ratio,
-            "stagnant_attempts": 0,
+            "profile_name": profile.name,
+            "horizontal_distance_ratio": horizontal_distance_ratio,
+            "vertical_distance_ratio": vertical_distance_ratio,
+            "stagnant_attempts": stagnant_attempts,
         }
         return [
-            SwipeAction(
-                direction=direction,
-                distance_ratio=distance_ratio,
-                duration_ms=350,
-                reason=f"focus_world_coordinate_{axis}",
+            _build_world_map_navigation_swipe_action(
+                profile=profile,
+                horizontal_distance_ratio=horizontal_distance_ratio,
+                vertical_distance_ratio=vertical_distance_ratio,
+                duration_ms=profile.default_duration_ms,
+                reason=f"focus_world_coordinate_{profile.name}",
                 observe_after=True,
                 follow_up_request=ObservationRequest.source_screen_retry(ScreenType.PNC_WORLD_MAP),
             )
@@ -709,59 +886,212 @@ class WorldMapNavigator(SpatialSurfaceNavigator):
         ):
             state.pop("pending_swipe", None)
             return
-        if current_coordinate == from_coordinate:
+        profile_name = pending_swipe.get("profile_name")
+        if not isinstance(profile_name, str):
+            state.pop("pending_swipe", None)
+            return
+        profile = _WORLD_MAP_SWIPE_PROFILE_BY_NAME.get(profile_name)
+        if profile is None:
+            state.pop("pending_swipe", None)
+            return
+        horizontal_distance_ratio = float(
+            pending_swipe.get("horizontal_distance_ratio", profile.default_horizontal_distance_ratio)
+        )
+        vertical_distance_ratio = float(
+            pending_swipe.get("vertical_distance_ratio", profile.default_vertical_distance_ratio)
+        )
+        delta_x = current_coordinate[0] - from_coordinate[0]
+        delta_y = current_coordinate[1] - from_coordinate[1]
+        if not self._is_effective_profile_movement(profile=profile, delta_x=delta_x, delta_y=delta_y):
             stagnant_attempts = int(pending_swipe.get("stagnant_attempts", 0)) + 1
             if stagnant_attempts > self.max_stagnant_attempts:
                 state.pop("pending_swipe", None)
                 raise SelectorResolutionError(
-                    "World-map navigation swipe did not produce any coordinate movement.",
+                    "World-map navigation swipe did not produce meaningful coordinate movement.",
                     from_coordinate=from_coordinate,
                     current_coordinate=current_coordinate,
-                    direction=pending_swipe.get("direction"),
+                    profile_name=profile.name,
+                    delta_x=delta_x,
+                    delta_y=delta_y,
                 )
             pending_swipe["stagnant_attempts"] = stagnant_attempts
+            state["pending_swipe"] = pending_swipe
             return
-        direction = pending_swipe.get("direction")
-        if not isinstance(direction, str):
-            state.pop("pending_swipe", None)
-            return
-        distance_ratio = float(pending_swipe.get("distance_ratio", self.default_swipe_ratio))
-        delta_x = current_coordinate[0] - from_coordinate[0]
-        delta_y = current_coordinate[1] - from_coordinate[1]
-        horizontal_signs = _mapping_of_dict(state, "horizontal_signs")
-        vertical_signs = _mapping_of_dict(state, "vertical_signs")
-        if direction in {"left", "right"} and delta_x != 0:
-            horizontal_signs[direction] = 1 if delta_x > 0 else -1
-            state["horizontal_ratio_unit_delta"] = abs(delta_x) / max(distance_ratio, 0.01)
-        if direction in {"up", "down"} and delta_y != 0:
-            vertical_signs[direction] = 1 if delta_y > 0 else -1
-            state["vertical_ratio_unit_delta"] = abs(delta_y) / max(distance_ratio, 0.01)
+        calibrations = _mutable_profile_calibrations(state)
+        calibration = calibrations.setdefault(profile.name, {})
+        if profile.expected_delta_x_sign != 0 and horizontal_distance_ratio > 0:
+            calibration["delta_x_per_ratio_unit"] = delta_x / max(horizontal_distance_ratio, 0.01)
+        if profile.expected_delta_y_sign != 0 and vertical_distance_ratio > 0:
+            calibration["delta_y_per_ratio_unit"] = delta_y / max(vertical_distance_ratio, 0.01)
         state.pop("pending_swipe", None)
 
-    def _resolve_direction(self, *, state: Mapping[str, Any], axis: str, remaining_delta: int) -> str:
-        """Returns the swipe direction that most likely reduces the remaining coordinate delta."""
+    def _resolve_profile(self, *, state: Mapping[str, Any], delta_x: int, delta_y: int) -> _WorldMapSwipeProfile:
+        """Returns the best swipe profile for the remaining coordinate delta."""
 
-        desired_sign = 1 if remaining_delta > 0 else -1
-        if axis == "x":
-            horizontal_signs = _mapping_of_dict(state, "horizontal_signs")
-            for direction in ("left", "right"):
-                if horizontal_signs.get(direction) == desired_sign:
-                    return direction
-            return "left" if remaining_delta > 0 else "right"
-        vertical_signs = _mapping_of_dict(state, "vertical_signs")
-        for direction in ("up", "down"):
-            if vertical_signs.get(direction) == desired_sign:
-                return direction
-        return "up" if remaining_delta > 0 else "down"
+        want_x = abs(delta_x) > self.focus_tolerance
+        want_y = abs(delta_y) > self.focus_tolerance
+        if want_x and want_y:
+            diagonal_name = _diagonal_profile_name(delta_x=delta_x, delta_y=delta_y)
+            assert diagonal_name is not None
+            return _WORLD_MAP_SWIPE_PROFILE_BY_NAME[diagonal_name]
+        if want_x:
+            horizontal_name = "left" if delta_x > 0 else "right"
+            return _WORLD_MAP_SWIPE_PROFILE_BY_NAME[horizontal_name]
+        if want_y:
+            vertical_name = "up" if delta_y > 0 else "down"
+            return _WORLD_MAP_SWIPE_PROFILE_BY_NAME[vertical_name]
+        raise SelectorResolutionError("World-map profile resolution requires at least one unresolved axis.", delta_x=delta_x, delta_y=delta_y)
 
-    def _resolve_distance_ratio(self, *, state: Mapping[str, Any], axis: str, remaining_delta: int) -> float:
-        """Returns the bounded swipe size calibrated from previous observed coordinate deltas."""
+    def _resolve_axis_distance_ratios(
+        self,
+        *,
+        state: Mapping[str, Any],
+        profile: _WorldMapSwipeProfile,
+        delta_x: int,
+        delta_y: int,
+    ) -> tuple[float, float]:
+        """Returns bounded horizontal and vertical swipe spans calibrated independently for the selected profile."""
 
-        ratio_unit_delta = state.get("horizontal_ratio_unit_delta" if axis == "x" else "vertical_ratio_unit_delta")
-        if not isinstance(ratio_unit_delta, int | float) or ratio_unit_delta <= 0:
-            return self.default_swipe_ratio
-        estimated_ratio = abs(remaining_delta) / float(ratio_unit_delta)
-        return max(self.min_swipe_ratio, min(self.max_swipe_ratio, estimated_ratio))
+        calibration = _profile_calibration(state, profile.name)
+        delta_x_per_ratio = None if calibration is None else calibration.get("delta_x_per_ratio_unit")
+        delta_y_per_ratio = None if calibration is None else calibration.get("delta_y_per_ratio_unit")
+        return (
+            self._resolve_axis_distance_ratio(
+                axis_delta=delta_x,
+                expected_sign=profile.expected_delta_x_sign,
+                default_ratio=profile.default_horizontal_distance_ratio,
+                calibrated_delta_per_ratio=delta_x_per_ratio,
+                pending_swipe=state.get("pending_swipe"),
+                axis_key="horizontal_distance_ratio",
+            ),
+            self._resolve_axis_distance_ratio(
+                axis_delta=delta_y,
+                expected_sign=profile.expected_delta_y_sign,
+                default_ratio=profile.default_vertical_distance_ratio,
+                calibrated_delta_per_ratio=delta_y_per_ratio,
+                pending_swipe=state.get("pending_swipe"),
+                axis_key="vertical_distance_ratio",
+            ),
+        )
+
+    def _resolve_axis_distance_ratio(
+        self,
+        *,
+        axis_delta: int,
+        expected_sign: int,
+        default_ratio: float,
+        calibrated_delta_per_ratio: object,
+        pending_swipe: object,
+        axis_key: str,
+    ) -> float:
+        """Returns one bounded axis-specific swipe span from the latest calibration when that axis is active."""
+
+        if expected_sign == 0:
+            return 0.0
+        if not isinstance(calibrated_delta_per_ratio, int | float) or abs(float(calibrated_delta_per_ratio)) <= 0:
+            return self._apply_stagnant_retry_ratio(
+                default_ratio=default_ratio,
+                pending_swipe=pending_swipe,
+                axis_key=axis_key,
+            )
+        estimated_ratio = abs(axis_delta) / abs(float(calibrated_delta_per_ratio))
+        return self._apply_stagnant_retry_ratio(
+            default_ratio=max(self.min_swipe_ratio, min(self.max_swipe_ratio, estimated_ratio)),
+            pending_swipe=pending_swipe,
+            axis_key=axis_key,
+        )
+
+    def _apply_stagnant_retry_ratio(
+        self,
+        *,
+        default_ratio: float,
+        pending_swipe: object,
+        axis_key: str,
+    ) -> float:
+        """Widens the next swipe span after a stagnant attempt so retries are materially different."""
+
+        if not isinstance(pending_swipe, Mapping):
+            return default_ratio
+        stagnant_attempts = pending_swipe.get("stagnant_attempts")
+        previous_ratio = pending_swipe.get(axis_key)
+        if not isinstance(stagnant_attempts, int) or stagnant_attempts <= 0:
+            return default_ratio
+        if not isinstance(previous_ratio, int | float):
+            return default_ratio
+        widened_ratio = max(float(previous_ratio), default_ratio) * (self.stagnant_retry_ratio_multiplier**stagnant_attempts)
+        return max(self.min_swipe_ratio, min(self.max_swipe_ratio, widened_ratio))
+
+    def _is_effective_profile_movement(
+        self,
+        *,
+        profile: _WorldMapSwipeProfile,
+        delta_x: int,
+        delta_y: int,
+    ) -> bool:
+        """Returns whether the observed delta meaningfully matched the selected profile's expected displacement signs."""
+
+        if profile.expected_delta_x_sign != 0:
+            if delta_x == 0 or (1 if delta_x > 0 else -1) != profile.expected_delta_x_sign:
+                return False
+            if abs(delta_x) < profile.minimum_effective_delta_x:
+                return False
+        if profile.expected_delta_y_sign != 0:
+            if delta_y == 0 or (1 if delta_y > 0 else -1) != profile.expected_delta_y_sign:
+                return False
+            if abs(delta_y) < profile.minimum_effective_delta_y:
+                return False
+        return True
+
+
+def _build_world_map_navigation_swipe_action(
+    *,
+    profile: _WorldMapSwipeProfile,
+    horizontal_distance_ratio: float,
+    vertical_distance_ratio: float,
+    duration_ms: int,
+    reason: str,
+    observe_after: bool,
+    follow_up_request: ObservationRequest | None,
+) -> SwipeAction:
+    """Builds one world-map drag from the selected calibrated profile, scaled around its safe-lane center."""
+
+    start_x_ratio, end_x_ratio = _scaled_ratio_pair(
+        profile.start_x_ratio,
+        profile.end_x_ratio,
+        distance_ratio=horizontal_distance_ratio,
+        native_distance_ratio=profile.native_horizontal_distance_ratio,
+    )
+    start_y_ratio, end_y_ratio = _scaled_ratio_pair(
+        profile.start_y_ratio,
+        profile.end_y_ratio,
+        distance_ratio=vertical_distance_ratio,
+        native_distance_ratio=profile.native_vertical_distance_ratio,
+    )
+    return SwipeAction(
+        direction=profile.name,
+        distance_ratio=max(horizontal_distance_ratio, vertical_distance_ratio),
+        duration_ms=duration_ms,
+        input_source=profile.input_source,
+        reason=reason,
+        observe_after=observe_after,
+        follow_up_request=follow_up_request,
+        start_x_ratio=start_x_ratio,
+        start_y_ratio=start_y_ratio,
+        end_x_ratio=end_x_ratio,
+        end_y_ratio=end_y_ratio,
+    )
+
+
+def _pending_swipe_stagnant_attempts(state: Mapping[str, Any]) -> int:
+    """Returns the carried bounded stagnant-attempt count for the active pending world-map swipe, if any."""
+
+    pending_swipe = state.get("pending_swipe")
+    if not isinstance(pending_swipe, Mapping):
+        return 0
+    stagnant_attempts = pending_swipe.get("stagnant_attempts")
+    if not isinstance(stagnant_attempts, int) or stagnant_attempts < 0:
+        return 0
+    return stagnant_attempts
 
 
 @dataclass(slots=True)
@@ -979,6 +1309,65 @@ def _mapping_of_dict(state: Mapping[str, Any], key: str) -> dict[str, int]:
     if isinstance(state, dict):
         state[key] = new_value
     return new_value
+
+
+def _mutable_profile_calibrations(state: dict[str, Any]) -> dict[str, dict[str, float]]:
+    """Returns one mutable nested calibration mapping keyed by world-map swipe-profile name."""
+
+    value = state.get("profile_calibrations")
+    if isinstance(value, dict):
+        return value
+    new_value: dict[str, dict[str, float]] = {}
+    state["profile_calibrations"] = new_value
+    return new_value
+
+
+def _profile_calibration(state: Mapping[str, Any], profile_name: str) -> Mapping[str, float] | None:
+    """Returns the stored calibration for one swipe profile when available."""
+
+    calibrations = state.get("profile_calibrations")
+    if not isinstance(calibrations, Mapping):
+        return None
+    calibration = calibrations.get(profile_name)
+    if not isinstance(calibration, Mapping):
+        return None
+    return calibration
+
+
+def _diagonal_profile_name(*, delta_x: int, delta_y: int) -> str | None:
+    """Returns the diagonal swipe-profile name matching the remaining coordinate signs, when both axes are active."""
+
+    if delta_x == 0 or delta_y == 0:
+        return None
+    horizontal = "left" if delta_x > 0 else "right"
+    vertical = "up" if delta_y > 0 else "down"
+    return f"{vertical}_{horizontal}"
+
+
+def _scaled_ratio_pair(
+    start_ratio: float,
+    end_ratio: float,
+    *,
+    distance_ratio: float,
+    native_distance_ratio: float,
+) -> tuple[float, float]:
+    """Returns one normalized start/end pair centered on the original lane and scaled to the requested swipe span."""
+
+    if abs(start_ratio - end_ratio) < 1e-9:
+        return start_ratio, end_ratio
+    center_ratio = (start_ratio + end_ratio) / 2
+    native_half_distance = abs(start_ratio - end_ratio) / 2
+    scale = distance_ratio / max(native_distance_ratio, 0.01)
+    half_distance = native_half_distance * scale
+    if start_ratio <= end_ratio:
+        return (
+            max(0.0, center_ratio - half_distance),
+            min(1.0, center_ratio + half_distance),
+        )
+    return (
+        min(1.0, center_ratio + half_distance),
+        max(0.0, center_ratio - half_distance),
+    )
 
 
 def _clear_state(runtime_state: dict[str, Any] | None, key: str) -> None:

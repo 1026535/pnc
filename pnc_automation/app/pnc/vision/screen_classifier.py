@@ -486,11 +486,15 @@ class ScreenClassifier:
         evidence_screen_types = {item.screen_type for item in evidence}
         selector_match = self._classify_from_selectors(selector_ids)
         if selector_match is not None:
-            if evidence_screen_types and selector_match not in evidence_screen_types:
+            if evidence_screen_types and not _evidence_supports_selector_match(
+                selector_match=selector_match,
+                evidence_screen_types=evidence_screen_types,
+            ):
                 return ScreenType.UNKNOWN
             return selector_match
-        if len(evidence_screen_types) == 1:
-            return next(iter(evidence_screen_types))
+        collapsed_evidence = _collapse_evidence_screen_types(evidence_screen_types)
+        if collapsed_evidence is not None:
+            return collapsed_evidence
         return ScreenType.UNKNOWN
 
     def _classify_from_selectors(self, selector_ids: frozenset[UiElementId]) -> ScreenType | None:
@@ -506,3 +510,49 @@ class ScreenClassifier:
                 continue
             return rule.screen_type
         return None
+
+
+_COMPATIBLE_SCREEN_TYPE_FAMILIES = (
+    frozenset({ScreenType.PNC_HOME_CITY_ROOT, ScreenType.PNC_HOME_CITY}),
+    frozenset({ScreenType.PNC_WORLD_MAP_ROOT, ScreenType.PNC_WORLD_MAP}),
+)
+
+
+def _evidence_supports_selector_match(
+    *,
+    selector_match: ScreenType,
+    evidence_screen_types: set[ScreenType],
+) -> bool:
+    """Returns whether parser evidence agrees with one selector-owned exact screen family."""
+
+    if selector_match in evidence_screen_types:
+        return True
+    selector_family = _screen_type_family(selector_match)
+    return any(_screen_type_family(evidence_screen_type) == selector_family for evidence_screen_type in evidence_screen_types)
+
+
+def _collapse_evidence_screen_types(evidence_screen_types: set[ScreenType]) -> ScreenType | None:
+    """Returns one canonical screen type when all parser evidence belongs to the same compatible family."""
+
+    if not evidence_screen_types:
+        return None
+    families = {_screen_type_family(screen_type) for screen_type in evidence_screen_types}
+    if len(families) != 1:
+        return None
+    family = next(iter(families))
+    for candidate in family:
+        if candidate in evidence_screen_types and candidate not in {
+            ScreenType.PNC_HOME_CITY_ROOT,
+            ScreenType.PNC_WORLD_MAP_ROOT,
+        }:
+            return candidate
+    return next(iter(sorted(evidence_screen_types, key=lambda item: item.value)))
+
+
+def _screen_type_family(screen_type: ScreenType) -> frozenset[ScreenType]:
+    """Returns the compatibility family used to reconcile coarse and exact root evidence."""
+
+    for family in _COMPATIBLE_SCREEN_TYPE_FAMILIES:
+        if screen_type in family:
+            return family
+    return frozenset({screen_type})

@@ -11,7 +11,7 @@ from typing import Any
 from pnc_automation.app.automation.engine.observed_action_executor import ObservedActionExecutor
 from pnc_automation.app.authoring.scripts.models import PreparedRunScript, PreparedScriptStep, ScriptStep
 from pnc_automation.app.authoring.scripts.registry import TaskRegistry
-from pnc_automation.app.automation.engine.task import CastleTargetPolicy, TaskId, TaskResult, TaskStatus
+from pnc_automation.app.automation.engine.task import CastleTargetPolicy, TaskId, TaskPreflight, TaskResult, TaskStatus
 from pnc_automation.app.automation.engine.task_context import TaskContext
 from pnc_automation.app.pnc.persistence.chat_archive_store import ChatArchiveStore
 from pnc_automation.app.pnc.persistence.mail_archive_store import MailArchiveStore
@@ -19,7 +19,9 @@ from pnc_automation.app.pnc.persistence.castle_roster_store import CastleRosterS
 from pnc_automation.app.pnc.navigation.world_map_survey_recorder import WorldMapSurveyRecorder
 from pnc_automation.app.authoring.config.models import AccountConfig, CastleIdentity, DefaultsConfig, PncAccountCastleRosterConfig
 from pnc_automation.core.errors import TaskVerificationError
+from pnc_automation.app.pnc.domain.action_requests import ActionRequest, WaitAction
 from pnc_automation.app.pnc.domain.observation import Observation
+from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
 from pnc_automation.app.pnc.vision.observation_builder import ObservationService
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
@@ -223,7 +225,16 @@ class AutomationRunner:
         )
         attempts = 0
         replans = 0
-        current_before = before
+        current_before = self._run_task_preflight(
+            task=task,
+            step=step,
+            context=context,
+            before=before,
+            account=account,
+            castle_roster_store=castle_roster_store,
+            mail_archive_store=mail_archive_store,
+            chat_archive_store=chat_archive_store,
+        )
         while True:
             attempts += 1
             if allow_popup_recovery:
@@ -296,6 +307,104 @@ class AutomationRunner:
                 screen_type=after.screen_type,
                 label=f"{step.task.value}_failure_result",
             )
+
+    def _run_task_preflight(
+        self,
+        *,
+        task: object,
+        step: ScriptStep,
+        context: TaskContext,
+        before: Observation,
+        account: AccountConfig,
+        castle_roster_store: CastleRosterStore | None,
+        mail_archive_store: MailArchiveStore | None,
+        chat_archive_store: ChatArchiveStore | None,
+    ) -> Observation:
+        """Proves the task-declared entry state once before the task body begins executing."""
+
+        requirement = getattr(task, "preflight", TaskPreflight.NONE)
+        if requirement == TaskPreflight.NONE:
+            return before
+        current = before
+        attempts = 0
+        while not self._task_preflight_is_satisfied(requirement, current):
+            attempts += 1
+            if attempts > self.policy.max_replans_per_step:
+                self._raise_task_verification_error(
+                    f"Task '{step.task}' could not prove its required preflight screen '{requirement.value}'.",
+                    task_id=step.task,
+                    observation=current,
+                    screen_type=current.screen_type,
+                    label=f"{step.task.value}_failure_preflight",
+                    preflight=requirement.value,
+                )
+            current = self._ensure_no_blocking_popup(
+                current,
+                account=account,
+                castle_roster_store=castle_roster_store,
+                mail_archive_store=mail_archive_store,
+                chat_archive_store=chat_archive_store,
+            )
+            if self._task_preflight_is_satisfied(requirement, current):
+                return current
+            actions = self._plan_task_preflight(requirement, current)
+            if not actions:
+                self._raise_task_verification_error(
+                    f"Task '{step.task}' could not derive a preflight action for '{requirement.value}'.",
+                    task_id=step.task,
+                    observation=current,
+                    screen_type=current.screen_type,
+                    label=f"{step.task.value}_failure_preflight_plan",
+                    preflight=requirement.value,
+                )
+            execution = self.action_executor.execute_actions(
+                actions,
+                current,
+                observe=lambda label, request=None: self.observation_service.observe(
+                    f"{step.task.value}_{label}",
+                    request=request,
+                ),
+            )
+            current = execution.observation
+        return current
+
+    def _task_preflight_is_satisfied(self, requirement: TaskPreflight, observation: Observation) -> bool:
+        """Returns whether one observation already proves the declared task preflight."""
+
+        if requirement == TaskPreflight.NONE:
+            return True
+        if requirement == TaskPreflight.HOME_CITY:
+            return observation.screen_type == ScreenType.PNC_HOME_CITY
+        if requirement == TaskPreflight.WORLD_MAP:
+            return observation.screen_type == ScreenType.PNC_WORLD_MAP and observation.spatial_surface is not None
+        raise AssertionError(f"Unsupported task preflight '{requirement}'.")
+
+    def _plan_task_preflight(self, requirement: TaskPreflight, observation: Observation) -> list[ActionRequest]:
+        """Returns the next runner-owned action increment needed to prove one task preflight."""
+
+        if requirement == TaskPreflight.HOME_CITY:
+            if observation.screen_type == ScreenType.PNC_HOME_CITY_ROOT:
+                return [
+                    WaitAction(
+                        milliseconds=250,
+                        reason="prove_home_city_root",
+                        observe_after=True,
+                        follow_up_request=ObservationRequest.source_screen_retry(ScreenType.PNC_HOME_CITY),
+                    )
+                ]
+            return self.flow_planner.ensure_home_city(observation)
+        if requirement == TaskPreflight.WORLD_MAP:
+            if observation.screen_type == ScreenType.PNC_WORLD_MAP_ROOT:
+                return [
+                    WaitAction(
+                        milliseconds=250,
+                        reason="prove_world_map_root",
+                        observe_after=True,
+                        follow_up_request=ObservationRequest.source_screen_retry(ScreenType.PNC_WORLD_MAP),
+                    )
+                ]
+            return self.flow_planner.ensure_world_map_ready(observation)
+        raise AssertionError(f"Unsupported task preflight '{requirement}'.")
 
     def _build_context(
         self,

@@ -8,7 +8,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from pnc_automation.app.authoring.scripts.models import ScriptStep
-from pnc_automation.app.automation.engine.task import TaskId, TaskResult, TaskStatus
+from pnc_automation.app.automation.engine.task import TaskId, TaskPreflight, TaskResult, TaskStatus
 from pnc_automation.app.automation.engine.task_context import TaskContext
 from pnc_automation.app.automation.tasks.building_upgrade_task import BuildingUpgradeTask
 from pnc_automation.app.automation.tasks.ensure_game_running_task import EnsureGameRunningTask
@@ -41,6 +41,7 @@ from pnc_automation.app.pnc.domain.action_requests import (
     KeyEventAction,
     SelectChatChannelAction,
     SwipeAction,
+    SwipeInputSource,
     TapAction,
     TapPointAction,
     TapListEntryAction,
@@ -218,6 +219,73 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertIsInstance(actions[0], KeyEventAction)
         self.assertEqual(actions[0].key_code, "KEYCODE_BACK")
 
+    def test_ensure_home_city_from_unknown_uses_in_game_recovery_without_relaunching(self) -> None:
+        """Keeps ambiguous states inside the bounded in-game recovery path instead of bouncing through Android home."""
+
+        actions = self.flows.ensure_home_city(make_observation(ScreenType.UNKNOWN))
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], KeyEventAction)
+        self.assertEqual(actions[0].key_code, "KEYCODE_BACK")
+        self.assertEqual(actions[0].reason, "recover_unknown_home_city")
+
+    def test_ensure_home_city_proves_coarse_home_city_root_before_treating_it_as_ready(self) -> None:
+        """Refreshes a coarse home-city root into an exact home-city proof instead of treating it as already ready."""
+
+        actions = self.flows.ensure_home_city(
+            make_observation(ScreenType.PNC_HOME_CITY_ROOT, visible_ids=(UiElementId.PNC_HOME_WORLD_SWITCH,))
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], WaitAction)
+        self.assertEqual(actions[0].follow_up_request, ObservationRequest.source_screen_retry(ScreenType.PNC_HOME_CITY))
+
+    def test_recover_unknown_game_screen_refreshes_world_map_when_world_home_nav_is_visible(self) -> None:
+        """Uses a safe re-observe instead of backing out when unknown state still exposes world-map chrome."""
+
+        actions = self.flows.recover_unknown_game_screen(
+            make_observation(ScreenType.UNKNOWN, visible_ids=(UiElementId.PNC_WORLD_HOME_NAV,)),
+            reason="recover_unknown_world_map",
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], WaitAction)
+        self.assertEqual(actions[0].milliseconds, 250)
+        self.assertEqual(actions[0].reason, "refresh_unknown_world_map")
+        self.assertEqual(actions[0].follow_up_request, ObservationRequest.source_screen_retry(ScreenType.PNC_WORLD_MAP))
+
+    def test_recover_unknown_game_screen_refreshes_home_city_when_world_switch_is_visible(self) -> None:
+        """Uses a safe re-observe instead of backing out when unknown state still exposes home-city chrome."""
+
+        actions = self.flows.recover_unknown_game_screen(
+            make_observation(ScreenType.UNKNOWN, visible_ids=(UiElementId.PNC_HOME_WORLD_SWITCH,)),
+            reason="recover_unknown_home_city",
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], WaitAction)
+        self.assertEqual(actions[0].milliseconds, 250)
+        self.assertEqual(actions[0].reason, "refresh_unknown_home_city")
+        self.assertEqual(actions[0].follow_up_request, ObservationRequest.source_screen_retry(ScreenType.PNC_HOME_CITY))
+
+    def test_open_world_map_from_unknown_only_recovers_toward_home_city_first(self) -> None:
+        """Plans a single recovery increment from unknown instead of bundling a stale world-switch tail action."""
+
+        actions = self.flows.open_world_map(make_observation(ScreenType.UNKNOWN))
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], KeyEventAction)
+        self.assertEqual(actions[0].key_code, "KEYCODE_BACK")
+
+    def test_open_chat_from_unknown_only_recovers_toward_home_city_first(self) -> None:
+        """Plans a single recovery increment from unknown instead of assuming the chat shortcut is already reachable."""
+
+        actions = self.flows.open_chat(make_observation(ScreenType.UNKNOWN))
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], KeyEventAction)
+        self.assertEqual(actions[0].key_code, "KEYCODE_BACK")
+
     def test_open_chat_from_world_map_uses_shared_shortcut(self) -> None:
         """Uses the shared chat shortcut instead of forcing a return to home city first."""
 
@@ -231,6 +299,32 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertEqual(len(actions), 1)
         self.assertIsInstance(actions[0], TapAction)
         self.assertEqual(actions[0].selector_id, UiElementId.PNC_CHAT_SHORTCUT)
+
+    def test_ensure_world_map_ready_refreshes_when_world_map_surface_parse_is_temporarily_missing(self) -> None:
+        """Requests one bounded re-observation instead of failing when the coarse world-map screen is visible but the parsed viewport is absent."""
+
+        actions = self.flows.ensure_world_map_ready(make_observation(ScreenType.PNC_WORLD_MAP))
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], WaitAction)
+        self.assertEqual(actions[0].milliseconds, 250)
+        self.assertEqual(actions[0].reason, "refresh_world_map_surface")
+        self.assertTrue(actions[0].observe_after)
+        self.assertEqual(actions[0].follow_up_request, ObservationRequest.source_screen_retry(ScreenType.PNC_WORLD_MAP))
+
+    def test_ensure_world_map_ready_proves_coarse_world_map_root_before_treating_it_as_ready(self) -> None:
+        """Refreshes a coarse world-map root into an exact viewport proof instead of treating it as already ready."""
+
+        actions = self.flows.ensure_world_map_ready(
+            make_observation(
+                ScreenType.PNC_WORLD_MAP_ROOT,
+                visible_ids=(UiElementId.PNC_WORLD_HOME_NAV, UiElementId.PNC_WORLD_COORDINATE_BAR),
+            )
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], WaitAction)
+        self.assertEqual(actions[0].follow_up_request, ObservationRequest.source_screen_retry(ScreenType.PNC_WORLD_MAP))
 
     def test_ensure_chat_channel_reuses_open_chat_until_chat_is_visible(self) -> None:
         """Uses the shared open-chat flow before attempting any channel-specific chat action."""
@@ -257,7 +351,23 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertEqual(len(actions), 1)
         self.assertIsInstance(actions[0], SelectChatChannelAction)
         self.assertEqual(actions[0].channel, ChatChannel.WORLD)
-        self.assertEqual(actions[0].follow_up_request, ObservationRequest.source_screen_retry(ScreenType.PNC_CHAT))
+
+    def test_open_home_city_object_refreshes_when_home_city_surface_parse_is_temporarily_missing(self) -> None:
+        """Requests one bounded re-observation instead of crashing when home-city chrome is visible but the parsed surface is absent."""
+
+        actions = self.flows.open_home_city_object(
+            make_observation(ScreenType.PNC_HOME_CITY),
+            SpatialObjectQuery(
+                surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+                kind=SpatialObjectKind.HOME_BUILDING,
+                name_text="Castle",
+            ),
+            reason="open_castle",
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], WaitAction)
+        self.assertEqual(actions[0].follow_up_request, ObservationRequest.source_screen_retry(ScreenType.PNC_HOME_CITY))
 
     def test_open_institute_uses_home_city_spatial_building_when_fixed_button_is_missing(self) -> None:
         """Falls back to the home-city spatial surface instead of a legacy academy selector."""
@@ -1551,8 +1661,8 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertEqual(actions[0].reason, "guide_warehouse_search_from_hall_of_war_and_hero_hall")
         self.assertEqual(actions[0].direction, "left")
 
-    def test_focus_world_coordinate_plans_one_coordinate_driven_swipe(self) -> None:
-        """Uses the shared world-map navigator instead of task-local swipe heuristics."""
+    def test_world_map_navigator_plans_one_coordinate_driven_swipe(self) -> None:
+        """Uses the dedicated world-map navigator instead of screen-flow-owned swipe helpers."""
 
         observation = make_observation(
             ScreenType.PNC_WORLD_MAP,
@@ -1563,7 +1673,7 @@ class FlowAndTaskTests(unittest.TestCase):
             ),
         )
 
-        actions = self.flows.focus_world_coordinate(
+        actions = self.flows.world_map_navigator.plan_focus_coordinate(
             observation,
             WorldCoordinate(x=150, y=120),
             runtime_state={},
@@ -1572,8 +1682,179 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertEqual(len(actions), 1)
         self.assertIsInstance(actions[0], SwipeAction)
         self.assertEqual(actions[0].direction, "left")
+        self.assertEqual(actions[0].duration_ms, 700)
+        self.assertAlmostEqual(actions[0].start_y_ratio, 0.60)
+        self.assertAlmostEqual(actions[0].end_y_ratio, 0.60)
+        self.assertAlmostEqual(actions[0].start_x_ratio, 0.68)
+        self.assertAlmostEqual(actions[0].end_x_ratio, 0.28)
         self.assertTrue(actions[0].observe_after)
         self.assertEqual(actions[0].follow_up_request, ObservationRequest.source_screen_retry(ScreenType.PNC_WORLD_MAP))
+
+    def test_world_map_navigator_prefers_native_diagonal_profile_when_both_axes_are_unresolved(self) -> None:
+        """Uses the reviewed diagonal swipe profile directly instead of decomposing diagonal movement into cardinals."""
+
+        observation = make_observation(
+            ScreenType.PNC_WORLD_MAP,
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.WORLD_MAP,
+                x=100,
+                y=120,
+            ),
+        )
+
+        actions = self.flows.world_map_navigator.plan_focus_coordinate(
+            observation,
+            WorldCoordinate(x=150, y=170),
+            runtime_state={},
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], SwipeAction)
+        self.assertEqual(actions[0].direction, "up_left")
+        self.assertEqual(actions[0].duration_ms, 700)
+        self.assertAlmostEqual(actions[0].start_x_ratio, 0.68)
+        self.assertAlmostEqual(actions[0].start_y_ratio, 0.72)
+        self.assertAlmostEqual(actions[0].end_x_ratio, 0.28)
+        self.assertAlmostEqual(actions[0].end_y_ratio, 0.28)
+        self.assertIsNotNone(actions[0].start_x_ratio)
+        self.assertIsNotNone(actions[0].end_x_ratio)
+        self.assertTrue(actions[0].observe_after)
+        self.assertEqual(actions[0].follow_up_request, ObservationRequest.source_screen_retry(ScreenType.PNC_WORLD_MAP))
+
+    def test_world_map_navigator_uses_live_backed_vertical_swipe_lane(self) -> None:
+        """Keeps vertical world-map swipes on the reviewed X lane that moves reliably in live probing."""
+
+        observation = make_observation(
+            ScreenType.PNC_WORLD_MAP,
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.WORLD_MAP,
+                x=100,
+                y=120,
+            ),
+        )
+
+        actions = self.flows.world_map_navigator.plan_focus_coordinate(
+            observation,
+            WorldCoordinate(x=100, y=170),
+            runtime_state={},
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], SwipeAction)
+        self.assertEqual(actions[0].direction, "up")
+        self.assertAlmostEqual(actions[0].start_x_ratio, 0.46)
+        self.assertAlmostEqual(actions[0].end_x_ratio, 0.46)
+        self.assertAlmostEqual(actions[0].start_y_ratio, 0.70)
+        self.assertAlmostEqual(actions[0].end_y_ratio, 0.30)
+
+    def test_world_map_navigator_rejects_small_coordinate_jitter_as_meaningful_movement(self) -> None:
+        """Carries stagnant movement across replans so tiny OCR drift cannot masquerade as a real world-map pan."""
+
+        runtime_state: dict[str, object] = {}
+        self.flows.world_map_navigator.plan_focus_coordinate(
+            make_observation(
+                ScreenType.PNC_WORLD_MAP,
+                spatial_surface=make_spatial_surface(
+                    SpatialSurfaceType.WORLD_MAP,
+                    x=100,
+                    y=100,
+                ),
+            ),
+            WorldCoordinate(x=150, y=100),
+            runtime_state=runtime_state,
+        )
+
+        actions = self.flows.world_map_navigator.plan_focus_coordinate(
+            make_observation(
+                ScreenType.PNC_WORLD_MAP,
+                spatial_surface=make_spatial_surface(
+                    SpatialSurfaceType.WORLD_MAP,
+                    x=101,
+                    y=100,
+                ),
+            ),
+            WorldCoordinate(x=150, y=100),
+            runtime_state=runtime_state,
+        )
+
+        self.assertEqual(len(actions), 1)
+        navigation_state = runtime_state["world_map_navigation"]
+        assert isinstance(navigation_state, dict)
+        pending_swipe = navigation_state["pending_swipe"]
+        assert isinstance(pending_swipe, dict)
+        self.assertEqual(pending_swipe["stagnant_attempts"], 1)
+        self.assertGreater(pending_swipe["horizontal_distance_ratio"], 0.10)
+
+        actions = self.flows.world_map_navigator.plan_focus_coordinate(
+            make_observation(
+                ScreenType.PNC_WORLD_MAP,
+                spatial_surface=make_spatial_surface(
+                    SpatialSurfaceType.WORLD_MAP,
+                    x=101,
+                    y=100,
+                ),
+            ),
+            WorldCoordinate(x=150, y=100),
+            runtime_state=runtime_state,
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], SwipeAction)
+
+        with self.assertRaises(SelectorResolutionError):
+            self.flows.world_map_navigator.plan_focus_coordinate(
+                make_observation(
+                    ScreenType.PNC_WORLD_MAP,
+                    spatial_surface=make_spatial_surface(
+                        SpatialSurfaceType.WORLD_MAP,
+                        x=101,
+                        y=100,
+                    ),
+                ),
+                WorldCoordinate(x=150, y=100),
+                runtime_state=runtime_state,
+            )
+
+    def test_world_map_navigator_keeps_correcting_when_horizontal_error_is_still_two_units(self) -> None:
+        """Does not stop early on a residual two-unit horizontal miss, so exact-focus can issue a correction swipe."""
+
+        actions = self.flows.world_map_navigator.plan_focus_coordinate(
+            make_observation(
+                ScreenType.PNC_WORLD_MAP,
+                spatial_surface=make_spatial_surface(
+                    SpatialSurfaceType.WORLD_MAP,
+                    x=108,
+                    y=100,
+                ),
+            ),
+            WorldCoordinate(x=106, y=100),
+            runtime_state={},
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], SwipeAction)
+        self.assertEqual(actions[0].direction, "right")
+
+    def test_world_map_navigator_uses_plain_input_source_for_reverse_horizontal_corrections(self) -> None:
+        """Uses the reviewed plain-input right lane because live probing showed the small reverse quantum is asymmetric."""
+
+        actions = self.flows.world_map_navigator.plan_focus_coordinate(
+            make_observation(
+                ScreenType.PNC_WORLD_MAP,
+                spatial_surface=make_spatial_surface(
+                    SpatialSurfaceType.WORLD_MAP,
+                    x=108,
+                    y=100,
+                ),
+            ),
+            WorldCoordinate(x=100, y=100),
+            runtime_state={},
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], SwipeAction)
+        self.assertEqual(actions[0].direction, "right")
+        self.assertEqual(actions[0].input_source, SwipeInputSource.DEFAULT)
 
     def test_recover_unknown_game_screen_uses_back_without_relaunching(self) -> None:
         """Uses one in-game back increment for unknown endpoint states instead of restarting the app."""
@@ -1602,6 +1883,19 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertIsInstance(actions[0], WaitAction)
         self.assertEqual(actions[0].reason, "wait_for_pnc_launch")
 
+    def test_ensure_game_running_recovers_unknown_in_game_state_before_any_relaunch(self) -> None:
+        """Uses one bounded in-game recovery increment before the bootstrap task is allowed to relaunch anything."""
+
+        task = EnsureGameRunningTask()
+        context = self._make_context(params=None)
+
+        actions = task.plan(context, make_observation(ScreenType.UNKNOWN))
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], KeyEventAction)
+        self.assertEqual(actions[0].key_code, "KEYCODE_BACK")
+        self.assertEqual(actions[0].reason, "recover_unknown_before_foreground")
+
     def test_ensure_game_running_replans_when_launch_lands_on_unknown_splash(self) -> None:
         """Treats an unknown post-launch splash as in-progress foregrounding instead of immediate failure."""
 
@@ -1616,6 +1910,33 @@ class FlowAndTaskTests(unittest.TestCase):
 
         self.assertEqual(result.status, TaskStatus.REPLAN)
         self.assertTrue(context.runtime_state["ensure_game_running_launch_started"])
+
+    def test_ensure_game_running_replans_bounded_unknown_recovery_before_failing(self) -> None:
+        """Uses a small unknown-state recovery budget and then fails cleanly instead of looping through relaunchs."""
+
+        task = EnsureGameRunningTask()
+        context = self._make_context(params=None)
+
+        first = task.verify(
+            context,
+            make_observation(ScreenType.UNKNOWN),
+            make_observation(ScreenType.UNKNOWN),
+        )
+        second = task.verify(
+            context,
+            make_observation(ScreenType.UNKNOWN),
+            make_observation(ScreenType.UNKNOWN),
+        )
+        third = task.verify(
+            context,
+            make_observation(ScreenType.UNKNOWN),
+            make_observation(ScreenType.UNKNOWN),
+        )
+
+        self.assertEqual(first.status, TaskStatus.REPLAN)
+        self.assertEqual(second.status, TaskStatus.REPLAN)
+        self.assertEqual(third.status, TaskStatus.FAILED)
+        self.assertTrue(third.retryable)
 
     def test_ensure_game_running_keeps_waiting_after_four_unknown_launch_observations(self) -> None:
         """Allows slower live launch/login handoffs instead of hard-failing after only a few splash observations."""
@@ -3770,6 +4091,16 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertIsInstance(actions[0], TapAction)
         self.assertEqual(actions[0].selector_id, UiElementId.PNC_INSTITUTE_ECONOMY_BUTTON)
 
+    def test_home_city_entry_tasks_declare_runner_owned_home_city_preflight(self) -> None:
+        """Declares one shared runner-owned home-city preflight for tasks whose bodies truly start from home city."""
+
+        self.assertEqual(ResearchTask.preflight, TaskPreflight.HOME_CITY)
+
+    def test_gathering_task_declares_runner_owned_world_map_preflight(self) -> None:
+        """Declares one shared runner-owned world-map preflight before the gathering body runs."""
+
+        self.assertEqual(GatheringTask.preflight, TaskPreflight.WORLD_MAP)
+
     def test_gathering_task_chooses_highest_priority_visible_resource_node(self) -> None:
         """Chooses visible world-map resource nodes from the spatial surface instead of list entries."""
 
@@ -3807,7 +4138,7 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertEqual(actions[0].query.metadata_value, "food")
         self.assertEqual(actions[0].target_point, (68, 52))
 
-    def test_open_visible_world_object_preserves_selected_duplicate_resource_identity(self) -> None:
+    def test_world_map_navigator_preserves_selected_duplicate_resource_identity(self) -> None:
         """Keeps the chosen world-map duplicate target instead of retargeting by a broad semantic query."""
 
         first = make_spatial_object(
@@ -3832,7 +4163,7 @@ class FlowAndTaskTests(unittest.TestCase):
             ),
         )
 
-        actions = self.flows.open_visible_world_object(observation, second, reason="open_duplicate_food")
+        actions = self.flows.world_map_navigator.tap_visible_object(observation, second, reason="open_duplicate_food")
 
         self.assertEqual(len(actions), 1)
         self.assertIsInstance(actions[0], TapSpatialObjectAction)
