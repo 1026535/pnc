@@ -450,8 +450,6 @@ class ScreenFlowPlanner:
     def return_home_city_from_world_map(self, observation: Observation) -> list[ActionRequest]:
         """Plans the canonical return path from world map back to home city."""
 
-        if observation.screen_type != ScreenType.PNC_WORLD_MAP:
-            return self.ensure_home_city(observation)
         return self.ensure_home_city(observation)
 
     def open_chat(self, observation: Observation) -> list[ActionRequest]:

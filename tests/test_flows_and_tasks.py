@@ -1955,12 +1955,12 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertEqual(result.status, TaskStatus.REPLAN)
 
     def test_ensure_game_running_uses_task_local_replan_budget_for_launch_waiting(self) -> None:
-        """Keeps the launch-splash budget owned by the task instead of the smaller generic runner default."""
+        """Keeps one task-local budget covering unknown recovery, launch handoff, and splash waiting."""
 
         task = EnsureGameRunningTask()
         context = self._make_context(params=None)
 
-        self.assertEqual(task.max_replans_per_step(context), 13)
+        self.assertEqual(task.max_replans_per_step(context), 15)
 
     def test_send_chat_message_from_home_city_opens_chat_selects_channel_and_sends(self) -> None:
         """Uses one chat-opening increment from home so the chat origin is observed before sending."""

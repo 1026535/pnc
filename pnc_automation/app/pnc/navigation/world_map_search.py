@@ -931,6 +931,7 @@ class WorldMapTraversalPlanner:
                     spacing=spacing,
                     edges=boundary.edges,
                     band_width_units=boundary.band_width_units or 0,
+                    origin_coordinate=origin_coordinate,
                 )
             )
         else:
@@ -1058,7 +1059,12 @@ class ObservationBackedWorldMapCastleInspector:
                 runtime_state=movement_state,
             )
             if not actions:
-                return current
+                if _candidate_is_visible_on_surface(observation=current, candidate=candidate):
+                    return current
+                raise SelectorResolutionError(
+                    "Castle candidate focus could not derive a movement action before the target became visible.",
+                    coordinate=candidate.key.coordinate,
+                )
             current = self._execute_actions(actions, current, label_prefix=f"{label_prefix}_{step_index}")
         raise SelectorResolutionError(
             "Castle candidate inspection exhausted its bounded coordinate-focus budget.",
@@ -1227,10 +1233,10 @@ class WorldMapSearchService:
                 label_prefix=f"{label_prefix}_move_{checkpoint.route_index}",
                 runtime_state=runtime_state,
             )
-            checkpoint_capture = self.survey_recorder.capture_checkpoint(
-                f"{label_prefix}_checkpoint_{checkpoint.route_index}"
+            current_observation = self._ingest_checkpoint_observation(
+                current_observation,
+                label=f"{label_prefix}_checkpoint_{checkpoint.route_index}",
             )
-            current_observation = checkpoint_capture.capture.observation
             visited_checkpoints.append(checkpoint)
             self._collect_checkpoint_matches(
                 request=request,
@@ -1347,6 +1353,7 @@ class WorldMapSearchService:
             return self._move_with_coordinate_jump(observation, checkpoint=checkpoint, label_prefix=label_prefix)
         if movement_tool == WorldMapMovementToolKind.OVERVIEW_SEED:
             return self._move_with_overview_seed(observation, checkpoint=checkpoint, label_prefix=label_prefix)
+        navigator = self.screen_flows.world_map_navigator
         current = _require_proven_world_map_observation(
             observation_service=self.observation_service,
             observation=observation,
@@ -1354,13 +1361,32 @@ class WorldMapSearchService:
         )
         movement_state = _mutable_runtime_state(runtime_state, "world_map_search_swipe_navigation")
         for step_index in range(self.movement_step_budget):
-            actions = self.screen_flows.world_map_navigator.plan_focus_coordinate(
+            leg_target = _resolve_cardinal_sweep_leg_target(
+                current=current,
+                target_coordinate=checkpoint.coordinate,
+                focus_tolerance=navigator.focus_tolerance,
+            )
+            if leg_target is None:
+                return current
+            actions = navigator.plan_focus_coordinate(
                 current,
-                WorldCoordinate(x=checkpoint.coordinate[0], y=checkpoint.coordinate[1]),
+                leg_target,
                 runtime_state=movement_state,
             )
             if not actions:
-                return current
+                current_coordinate = _require_world_map_viewport_coordinate(current)
+                if _coordinate_within_tolerance(
+                    current_coordinate,
+                    (leg_target.x, leg_target.y),
+                    tolerance=navigator.focus_tolerance,
+                ):
+                    continue
+                raise SelectorResolutionError(
+                    "World-map search could not derive a cardinal checkpoint move while the checkpoint leg remained unresolved.",
+                    coordinate=checkpoint.coordinate,
+                    current_coordinate=current_coordinate,
+                    leg_target=(leg_target.x, leg_target.y),
+                )
             current = _require_proven_world_map_observation(
                 observation_service=self.observation_service,
                 observation=self._execute_actions(actions, current, label_prefix=f"{label_prefix}_{step_index}"),
@@ -1418,6 +1444,27 @@ class WorldMapSearchService:
             observation,
             observe=lambda label, request=None: self.observation_service.observe(f"{label_prefix}_{label}", request=request),
         ).observation
+
+    def _ingest_checkpoint_observation(
+        self,
+        observation: Observation,
+        *,
+        label: str,
+    ) -> Observation:
+        """Indexes the already-proven checkpoint observation and only falls back to recapture when the surface is still missing."""
+
+        assert self.survey_recorder is not None
+        if observation.screen_type == ScreenType.PNC_WORLD_MAP:
+            try:
+                observation.require_spatial_surface(SpatialSurfaceType.WORLD_MAP)
+            except SelectorResolutionError:
+                pass
+            else:
+                self.survey_recorder.ingest_checkpoint_observation(label, observation)
+                return observation
+        checkpoint_capture = self.survey_recorder.capture_checkpoint(label)
+        assert checkpoint_capture.capture is not None
+        return checkpoint_capture.capture.observation
 
     def _resolve_origin_coordinate(
         self,
@@ -1566,13 +1613,12 @@ def _resolve_self_territory_origin(surface: SpatialSurfaceObservation) -> tuple[
         if object_.kind != SpatialObjectKind.CASTLE or object_.relationship != SpatialObjectRelationship.SELF:
             continue
         coordinate = _object_coordinate(object_)
-        if coordinate is not None:
-            return coordinate
-    viewport_coordinate = surface.viewport.coordinate
-    if viewport_coordinate is not None:
-        for object_ in surface.objects:
-            if object_.kind == SpatialObjectKind.CASTLE and object_.relationship == SpatialObjectRelationship.SELF:
-                return viewport_coordinate
+        if coordinate is None:
+            raise SelectorResolutionError(
+                "World-map search requires the visible self territory to expose its own world coordinate.",
+                surface_type=surface.surface_type.value,
+            )
+        return coordinate
     raise SelectorResolutionError(
         "World-map search could not resolve the self-territory origin from the active surface.",
         surface_type=surface.surface_type.value,
@@ -1748,16 +1794,16 @@ def _edge_band_coordinates(
     spacing: int,
     edges: Sequence[WorldMapEdge],
     band_width_units: int,
+    origin_coordinate: tuple[int, int],
 ) -> Iterable[tuple[int, int]]:
-    """Yields deterministic row-major coordinates constrained to the configured edge band."""
+    """Yields deterministic edge-band coordinates ordered from the resolved request origin."""
 
-    yielded: set[tuple[int, int]] = set()
-    for coordinate in _row_major_coordinates(bounds=map_bounds, spacing=spacing):
-        if coordinate in yielded:
-            continue
-        if _coordinate_in_edge_band(coordinate, map_bounds=map_bounds, edges=edges, band_width_units=band_width_units):
-            yielded.add(coordinate)
-            yield coordinate
+    coordinates = [
+        coordinate
+        for coordinate in _row_major_coordinates(bounds=map_bounds, spacing=spacing)
+        if _coordinate_in_edge_band(coordinate, map_bounds=map_bounds, edges=edges, band_width_units=band_width_units)
+    ]
+    yield from sorted(coordinates, key=lambda coordinate: _edge_band_coordinate_order_key(coordinate, origin_coordinate))
 
 
 def _coordinate_in_edge_band(
@@ -1789,10 +1835,70 @@ def _object_coordinate(object_: DetectedSpatialObject) -> tuple[int, int] | None
     return object_.estimated_world_coordinate
 
 
+def _require_world_map_viewport_coordinate(observation: Observation) -> tuple[int, int]:
+    """Returns the active world-map viewport coordinate or fails fast when the observation is not addressable."""
+
+    surface = observation.require_spatial_surface(SpatialSurfaceType.WORLD_MAP)
+    coordinate = surface.viewport.coordinate
+    if coordinate is None:
+        raise SelectorResolutionError(
+            "World-map search movement requires a coordinate-addressable viewport.",
+            screen_type=observation.screen_type,
+        )
+    return coordinate
+
+
+def _resolve_cardinal_sweep_leg_target(
+    *,
+    current: Observation,
+    target_coordinate: tuple[int, int],
+    focus_tolerance: int,
+) -> WorldCoordinate | None:
+    """Returns the next canonical cardinal leg toward one checkpoint, finishing horizontal drift before vertical drift."""
+
+    current_coordinate = _require_world_map_viewport_coordinate(current)
+    delta_x = target_coordinate[0] - current_coordinate[0]
+    if abs(delta_x) > focus_tolerance:
+        return WorldCoordinate(x=target_coordinate[0], y=current_coordinate[1])
+    delta_y = target_coordinate[1] - current_coordinate[1]
+    if abs(delta_y) > focus_tolerance:
+        return WorldCoordinate(x=current_coordinate[0], y=target_coordinate[1])
+    return None
+
+
+def _coordinate_within_tolerance(
+    current_coordinate: tuple[int, int],
+    target_coordinate: tuple[int, int],
+    *,
+    tolerance: int,
+) -> bool:
+    """Returns whether both axes are already inside the requested movement tolerance."""
+
+    return (
+        abs(current_coordinate[0] - target_coordinate[0]) <= tolerance
+        and abs(current_coordinate[1] - target_coordinate[1]) <= tolerance
+    )
+
+
 def _chebyshev_distance(start: tuple[int, int], end: tuple[int, int]) -> int:
     """Returns the Chebyshev distance between two world coordinates."""
 
     return max(abs(start[0] - end[0]), abs(start[1] - end[1]))
+
+
+def _manhattan_distance(start: tuple[int, int], end: tuple[int, int]) -> int:
+    """Returns the Manhattan distance between two world coordinates."""
+
+    return abs(start[0] - end[0]) + abs(start[1] - end[1])
+
+
+def _edge_band_coordinate_order_key(
+    coordinate: tuple[int, int],
+    origin_coordinate: tuple[int, int],
+) -> tuple[int, int, int]:
+    """Returns the deterministic origin-aware ordering key for one edge-band checkpoint."""
+
+    return _manhattan_distance(origin_coordinate, coordinate), coordinate[1], coordinate[0]
 
 
 def _is_integer_pair(value: object) -> bool:

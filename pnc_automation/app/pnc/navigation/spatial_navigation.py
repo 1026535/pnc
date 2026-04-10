@@ -42,7 +42,6 @@ _HOME_CITY_ATLAS_HORIZONTAL_SWIPE_Y_RATIO = 0.56
 _HOME_CITY_ATLAS_VERTICAL_SWIPE_X_RATIO = 0.55
 _HOME_CITY_CASTLE_UTILITY_VERTICAL_SWIPE_X_RATIO = 0.69
 _HOME_CITY_RIGHT_VIEW_VERTICAL_SWIPE_X_RATIO = 0.24
-_WORLD_MAP_HORIZONTAL_SWIPE_Y_RATIO = 0.48
 _WORLD_MAP_VERTICAL_SWIPE_X_RATIO = 0.46
 
 
@@ -819,7 +818,7 @@ class WorldMapNavigator(SpatialSurfaceNavigator):
         if abs(delta_x) <= self.focus_tolerance and abs(delta_y) <= self.focus_tolerance:
             state.pop("pending_swipe", None)
             return []
-        profile = self._resolve_profile(state=state, delta_x=delta_x, delta_y=delta_y)
+        profile = self._resolve_profile(delta_x=delta_x, delta_y=delta_y)
         horizontal_distance_ratio, vertical_distance_ratio = self._resolve_axis_distance_ratios(
             state=state,
             profile=profile,
@@ -925,7 +924,7 @@ class WorldMapNavigator(SpatialSurfaceNavigator):
             calibration["delta_y_per_ratio_unit"] = delta_y / max(vertical_distance_ratio, 0.01)
         state.pop("pending_swipe", None)
 
-    def _resolve_profile(self, *, state: Mapping[str, Any], delta_x: int, delta_y: int) -> _WorldMapSwipeProfile:
+    def _resolve_profile(self, *, delta_x: int, delta_y: int) -> _WorldMapSwipeProfile:
         """Returns the best swipe profile for the remaining coordinate delta."""
 
         want_x = abs(delta_x) > self.focus_tolerance
