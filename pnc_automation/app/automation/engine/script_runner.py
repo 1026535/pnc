@@ -27,10 +27,12 @@ from pnc_automation.app.pnc.persistence.chat_archive_store import ChatArchiveSto
 from pnc_automation.app.pnc.persistence.mail_archive_store import MailArchiveStore
 from pnc_automation.core.infra.capture.screenshot_service import ScreenshotService
 from pnc_automation.app.pnc.persistence.castle_roster_store import CastleRosterStore
+from pnc_automation.app.pnc.persistence.world_map_movement_calibration_store import WorldMapMovementCalibrationStore
 from pnc_automation.app.pnc.persistence.world_map_survey_debug_store import WorldMapSurveyDebugStore
 from pnc_automation.app.authoring.config.models import AccountConfig, AppConfig, CastleIdentity, PncAccountCastleRosterConfig
 from pnc_automation.core.infra.emulator.bluestacks_instance import BlueStacksInstance
 from pnc_automation.core.infra.emulator.bluestacks_instance_resolver import BlueStacksInstanceResolver
+from pnc_automation.app.pnc.navigation.world_map_movement_calibration import WorldMapMovementCalibrationService
 from pnc_automation.app.pnc.navigation.world_map_search import (
     ObservationBackedWorldMapCastleInspector,
     WorldMapSearchService,
@@ -50,6 +52,8 @@ class ConnectedAccountRuntime:
     flow_planner: ScreenFlowPlanner
     world_map_survey_recorder: WorldMapSurveyRecorder
     world_map_search_service: WorldMapSearchService
+    world_map_movement_calibration_service: WorldMapMovementCalibrationService
+    world_map_movement_calibration_store: WorldMapMovementCalibrationStore
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +65,8 @@ class _ConnectedRuntimeServices:
     flow_planner: ScreenFlowPlanner
     world_map_survey_recorder: WorldMapSurveyRecorder
     world_map_search_service: WorldMapSearchService
+    world_map_movement_calibration_service: WorldMapMovementCalibrationService
+    world_map_movement_calibration_store: WorldMapMovementCalibrationStore
     observed_action_executor: ObservedActionExecutor | None
 
 
@@ -183,6 +189,8 @@ class ScriptRunner:
             flow_planner=services.flow_planner,
             world_map_survey_recorder=services.world_map_survey_recorder,
             world_map_search_service=services.world_map_search_service,
+            world_map_movement_calibration_service=services.world_map_movement_calibration_service,
+            world_map_movement_calibration_store=services.world_map_movement_calibration_store,
         )
 
     def _build_connected_runtime_services(self, *, account: AccountConfig) -> _ConnectedRuntimeServices:
@@ -195,10 +203,17 @@ class ScriptRunner:
             observation_service=observation_service,
             debug_store=WorldMapSurveyDebugStore(root=self.config.artifact_root),
         )
+        world_map_movement_calibration_store = WorldMapMovementCalibrationStore(root=self.config.artifact_root)
         world_map_search_service = WorldMapSearchService(
             screen_flows=flow_planner,
             observation_service=observation_service,
             survey_recorder=world_map_survey_recorder,
+        )
+        world_map_movement_calibration_service = WorldMapMovementCalibrationService(
+            screen_flows=flow_planner,
+            observation_service=observation_service,
+            survey_recorder=world_map_survey_recorder,
+            search_service=world_map_search_service,
         )
         observed_executor = self._build_observed_action_executor(account=account, session=session)
         if observed_executor is not None:
@@ -209,12 +224,15 @@ class ScriptRunner:
                 observation_service=observation_service,
                 survey_recorder=world_map_survey_recorder,
             )
+            world_map_movement_calibration_service.action_executor = observed_executor
         return _ConnectedRuntimeServices(
             session=session,
             observation_service=observation_service,
             flow_planner=flow_planner,
             world_map_survey_recorder=world_map_survey_recorder,
             world_map_search_service=world_map_search_service,
+            world_map_movement_calibration_service=world_map_movement_calibration_service,
+            world_map_movement_calibration_store=world_map_movement_calibration_store,
             observed_action_executor=observed_executor,
         )
 

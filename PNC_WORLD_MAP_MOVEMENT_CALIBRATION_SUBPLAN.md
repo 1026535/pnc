@@ -89,6 +89,18 @@ So the status is:
 - useful and already integrated
 - not yet exhaustive or formally documented as a final calibration matrix
 
+### 3.4 Coordinate-bar OCR should be improved at the source
+
+Recent live evidence shows that world-map entry can fail even when the on-screen coordinate bar is visibly correct, because OCR for the coordinate bar region is being polluted by overlapping world labels behind it.
+
+The coordinate text is rendered in a stable blue/cyan treatment. That means the preferred fix is:
+
+- use the dedicated coordinate-bar crop
+- isolate the blue/cyan text before OCR
+- prefer that filtered OCR result for world-map coordinate proof
+
+This is better than expanding parser tolerance indefinitely. Parser tolerance may still be needed for minor punctuation loss, but the canonical fix for this specific issue is better OCR isolation, not broader acceptance of contaminated text.
+
 ## 4. Design Principles
 
 ### 4.1 Movement calibration is primary, search is downstream
@@ -118,6 +130,12 @@ Gesture validation and observation validation must therefore be coupled.
 ### 4.4 No interior-stall normalization
 
 We must not normalize away or excuse interior no-motion cases as "lag" or "acceptable variance." Those are exactly the cases the calibration plan must eliminate or explain.
+
+### 4.5 Prefer OCR-source fixes over parser broadening
+
+When live evidence shows that the displayed UI text is correct but OCR is polluted by surrounding scene content, we should first improve OCR targeting or image preprocessing.
+
+Only after the OCR source is as isolated as practical should we consider widening parser acceptance.
 
 ## 5. Target End State
 
@@ -211,6 +229,10 @@ We must detect and distinguish:
 - swipe emitted but map did not move
 - map moved but parser did not update correctly
 - parser updated but OCR fused or corrupted coordinates
+
+Implementation note:
+
+- coordinate-bar OCR should use the dedicated bar crop and a blue/cyan text isolation pass before broader parser fallback is considered
 
 Success condition:
 

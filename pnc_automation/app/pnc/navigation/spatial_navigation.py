@@ -5,6 +5,7 @@ from __future__ import annotations
 from abc import ABC
 from collections.abc import Mapping
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Any
 
 from pnc_automation.core.errors import SelectorResolutionError
@@ -73,6 +74,15 @@ class WorldCoordinate:
 
         if self.x < 0 or self.y < 0:
             raise SelectorResolutionError("World coordinates must be non-negative integers.", x=self.x, y=self.y)
+
+
+class WorldMapCardinalDirection(StrEnum):
+    """Defines the canonical four-direction world-map swipe set used by sweep traversal and calibration."""
+
+    LEFT = "left"
+    RIGHT = "right"
+    UP = "up"
+    DOWN = "down"
 
 
 @dataclass(frozen=True, slots=True)
@@ -844,6 +854,58 @@ class WorldMapNavigator(SpatialSurfaceNavigator):
                 follow_up_request=ObservationRequest.source_screen_retry(ScreenType.PNC_WORLD_MAP),
             )
         ]
+
+    def build_cardinal_probe_action(
+        self,
+        direction: WorldMapCardinalDirection,
+        *,
+        distance_ratio: float,
+        lane_center_ratio: float | None = None,
+        reason: str,
+        observe_after: bool = True,
+        follow_up_request: ObservationRequest | None = None,
+    ) -> SwipeAction:
+        """Builds one exact cardinal world-map swipe probe on the requested lane without involving target-coordinate planning."""
+
+        profile = _WORLD_MAP_SWIPE_PROFILE_BY_NAME[direction.value]
+        if profile.is_diagonal:
+            raise SelectorResolutionError(
+                "World-map probe actions only support canonical cardinal directions.",
+                direction=direction.value,
+            )
+        if direction in {WorldMapCardinalDirection.LEFT, WorldMapCardinalDirection.RIGHT}:
+            resolved_lane_ratio = profile.start_y_ratio if lane_center_ratio is None else lane_center_ratio
+            start_x_ratio, end_x_ratio = _scaled_ratio_pair(
+                profile.start_x_ratio,
+                profile.end_x_ratio,
+                distance_ratio=distance_ratio,
+                native_distance_ratio=profile.native_horizontal_distance_ratio,
+            )
+            start_y_ratio = resolved_lane_ratio
+            end_y_ratio = resolved_lane_ratio
+        else:
+            resolved_lane_ratio = profile.start_x_ratio if lane_center_ratio is None else lane_center_ratio
+            start_y_ratio, end_y_ratio = _scaled_ratio_pair(
+                profile.start_y_ratio,
+                profile.end_y_ratio,
+                distance_ratio=distance_ratio,
+                native_distance_ratio=profile.native_vertical_distance_ratio,
+            )
+            start_x_ratio = resolved_lane_ratio
+            end_x_ratio = resolved_lane_ratio
+        return SwipeAction(
+            direction=direction.value,
+            distance_ratio=distance_ratio,
+            duration_ms=profile.default_duration_ms,
+            input_source=profile.input_source,
+            reason=reason,
+            observe_after=observe_after,
+            follow_up_request=follow_up_request,
+            start_x_ratio=start_x_ratio,
+            start_y_ratio=start_y_ratio,
+            end_x_ratio=end_x_ratio,
+            end_y_ratio=end_y_ratio,
+        )
 
     def tap_visible_object(
         self,

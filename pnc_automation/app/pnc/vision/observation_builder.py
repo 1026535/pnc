@@ -45,10 +45,14 @@ from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.core.vision.ocr.ocr_service import OcrLine, OcrService
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier, ScreenEvidence
 from pnc_automation.app.pnc.vision.selectors import DetectionKind, SelectorRegistry
+from pnc_automation.app.pnc.vision.spatial_surfaces import is_world_map_blue_family_pixel
 from pnc_automation.core.vision.template.template_matcher import PillowTemplateMatcher
 
 _WORLD_X_COORDINATE_TEXT_PATTERN = re.compile(r"X\s*[:ï¼š]\s*\d{1,4}", re.IGNORECASE)
 _WORLD_Y_COORDINATE_TEXT_PATTERN = re.compile(r"Y\s*[:ï¼š]\s*\d{1,4}", re.IGNORECASE)
+
+_WORLD_COORDINATE_BAR_FILTER_SCALE = 3
+_WORLD_COORDINATE_BAR_MIN_BLUE_PIXELS = 12
 
 
 class ObservationEnricher(Protocol):
@@ -221,7 +225,12 @@ class PillowSelectorEngine:
                     continue
                 bounds = selector.relative_bounds.materialize_region(image_size=image.size)
                 try:
-                    text = self.ocr_service.read_text(image, bounds).strip()
+                    text = _read_ocr_region_text(
+                        image=image,
+                        bounds=bounds,
+                        selector_id=selector.id,
+                        ocr_service=self.ocr_service,
+                    ).strip()
                 except ScreenClassificationError:
                     continue
                 if not _ocr_region_text_matches_selector(selector_id=selector.id, text=text):
@@ -594,6 +603,67 @@ def _ocr_region_text_matches_selector(*, selector_id: UiElementId, text: str) ->
     if selector_id == UiElementId.PNC_WORLD_COORDINATE_BAR:
         return _WORLD_X_COORDINATE_TEXT_PATTERN.search(text) is not None and _WORLD_Y_COORDINATE_TEXT_PATTERN.search(text) is not None
     return True
+
+
+def _read_ocr_region_text(
+    *,
+    image: Image.Image,
+    bounds: object,
+    selector_id: UiElementId,
+    ocr_service: OcrService,
+) -> str:
+    """Returns OCR text for one selector region, preferring selector-specific preprocessing when it improves recognition."""
+
+    if selector_id == UiElementId.PNC_WORLD_COORDINATE_BAR:
+        filtered_text = _read_world_coordinate_bar_text(image=image, bounds=bounds, ocr_service=ocr_service)
+        if _ocr_region_text_matches_selector(selector_id=selector_id, text=filtered_text):
+            return filtered_text
+    return ocr_service.read_text(image, bounds)
+
+
+def _read_world_coordinate_bar_text(
+    *,
+    image: Image.Image,
+    bounds: object,
+    ocr_service: OcrService,
+) -> str:
+    """Returns OCR text from a blue-text-isolated coordinate-bar crop so world labels behind the bar do not pollute recognition."""
+
+    filtered = _build_world_coordinate_bar_ocr_image(image=image, bounds=bounds)
+    if filtered is None:
+        return ""
+    region_type = type(bounds)
+    return ocr_service.read_text(
+        filtered,
+        region_type(x=0, y=0, width=filtered.width, height=filtered.height),
+    )
+
+
+def _build_world_coordinate_bar_ocr_image(*, image: Image.Image, bounds: object) -> Image.Image | None:
+    """Builds a scaled black-on-white OCR crop that keeps only the coordinate bar's blue/cyan glyphs."""
+
+    crop = image.crop((bounds.x, bounds.y, bounds.x + bounds.width, bounds.y + bounds.height)).convert("RGB")
+    filtered = Image.new("L", crop.size, 255)
+    filtered_pixels = filtered.load()
+    source_pixels = crop.load()
+    blue_pixel_count = 0
+    for y in range(crop.height):
+        for x in range(crop.width):
+            red, green, blue = source_pixels[x, y]
+            if not is_world_map_blue_family_pixel(red=red, green=green, blue=blue):
+                continue
+            blue_pixel_count += 1
+            filtered_pixels[x, y] = 0
+            if x > 0:
+                filtered_pixels[x - 1, y] = 0
+            if x + 1 < crop.width:
+                filtered_pixels[x + 1, y] = 0
+    if blue_pixel_count < _WORLD_COORDINATE_BAR_MIN_BLUE_PIXELS:
+        return None
+    return filtered.resize(
+        (max(1, filtered.width * _WORLD_COORDINATE_BAR_FILTER_SCALE), max(1, filtered.height * _WORLD_COORDINATE_BAR_FILTER_SCALE)),
+        resample=Image.Resampling.NEAREST,
+    )
 
 
 def _trusted_observed_account_id(observation: Observation) -> str | None:

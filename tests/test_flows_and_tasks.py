@@ -268,6 +268,23 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertEqual(actions[0].reason, "refresh_unknown_home_city")
         self.assertEqual(actions[0].follow_up_request, ObservationRequest.source_screen_retry(ScreenType.PNC_HOME_CITY))
 
+    def test_recover_unknown_game_screen_refreshes_game_root_when_shared_bottom_nav_is_visible(self) -> None:
+        """Uses a generic re-observe instead of backing out when the shared in-game root chrome is already visible."""
+
+        actions = self.flows.recover_unknown_game_screen(
+            make_observation(
+                ScreenType.UNKNOWN,
+                visible_ids=(UiElementId.PNC_BOTTOM_NAV_HOME, UiElementId.PNC_BOTTOM_NAV_MORE),
+            ),
+            reason="recover_unknown_root",
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], WaitAction)
+        self.assertEqual(actions[0].milliseconds, 250)
+        self.assertEqual(actions[0].reason, "refresh_unknown_game_root")
+        self.assertIsNone(actions[0].follow_up_request)
+
     def test_open_world_map_from_unknown_only_recovers_toward_home_city_first(self) -> None:
         """Plans a single recovery increment from unknown instead of bundling a stale world-switch tail action."""
 

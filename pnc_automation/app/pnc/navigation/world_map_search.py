@@ -844,6 +844,86 @@ class WorldMapSearchResult:
 
 
 @dataclass(slots=True)
+class WorldMapCoordinateMover:
+    """Moves an already-open world-map viewport to one target coordinate using the canonical cardinal-only swipe model."""
+
+    observation_service: "ObservationService | None"
+    action_executor: WorldMapObservedActionExecutor | None
+    navigator: WorldMapNavigator
+    movement_step_budget: int = 8
+
+    def move_to_coordinate(
+        self,
+        observation: Observation,
+        *,
+        target_coordinate: tuple[int, int],
+        label_prefix: str,
+        runtime_state: dict[str, Any] | None = None,
+    ) -> Observation:
+        """Moves toward the requested coordinate using bounded cardinal legs and returns the freshest proven world-map observation."""
+
+        current = _require_proven_world_map_observation(
+            observation_service=self.observation_service,
+            observation=observation,
+            label_prefix=f"{label_prefix}_start",
+        )
+        movement_state = _mutable_runtime_state(runtime_state, "world_map_search_swipe_navigation")
+        for step_index in range(self.movement_step_budget):
+            leg_target = _resolve_cardinal_sweep_leg_target(
+                current=current,
+                target_coordinate=target_coordinate,
+                focus_tolerance=self.navigator.focus_tolerance,
+            )
+            if leg_target is None:
+                return current
+            actions = self.navigator.plan_focus_coordinate(
+                current,
+                leg_target,
+                runtime_state=movement_state,
+            )
+            if not actions:
+                current_coordinate = _require_world_map_viewport_coordinate(current)
+                if _coordinate_within_tolerance(
+                    current_coordinate,
+                    target_coordinate,
+                    tolerance=self.navigator.focus_tolerance,
+                ):
+                    continue
+                raise SelectorResolutionError(
+                    "World-map movement could not derive a cardinal swipe while the requested coordinate remained unresolved.",
+                    target_coordinate=target_coordinate,
+                    current_coordinate=current_coordinate,
+                    leg_target=(leg_target.x, leg_target.y),
+                )
+            current = _require_proven_world_map_observation(
+                observation_service=self.observation_service,
+                observation=self._execute_actions(actions, current, label_prefix=f"{label_prefix}_{step_index}"),
+                label_prefix=f"{label_prefix}_refresh_{step_index}",
+            )
+        raise SelectorResolutionError(
+            "World-map movement exhausted its bounded coordinate-focus budget.",
+            target_coordinate=target_coordinate,
+        )
+
+    def _execute_actions(
+        self,
+        actions: Sequence[ActionRequest],
+        observation: Observation,
+        *,
+        label_prefix: str,
+    ) -> Observation:
+        """Executes one movement increment and returns the freshest observed result."""
+
+        if self.action_executor is None or self.observation_service is None:
+            raise SelectorResolutionError("World-map coordinate movement requires observation_service and action_executor.")
+        return self.action_executor.execute_actions(
+            actions,
+            observation,
+            observe=lambda label, request=None: self.observation_service.observe(f"{label_prefix}_{label}", request=request),
+        ).observation
+
+
+@dataclass(slots=True)
 class WorldMapCoordinateNavigator:
     """Optional owner for coordinate-dialog world-map repositioning once selector support exists."""
 
@@ -1167,6 +1247,7 @@ class WorldMapSearchService:
     action_executor: WorldMapObservedActionExecutor | None = None
     survey_recorder: WorldMapSurveyRecorder | None = None
     castle_inspector: WorldMapCastleInspector | None = None
+    coordinate_mover: WorldMapCoordinateMover | None = None
     world_map_entry_step_budget: int = 6
     movement_step_budget: int = 8
 
@@ -1353,49 +1434,11 @@ class WorldMapSearchService:
             return self._move_with_coordinate_jump(observation, checkpoint=checkpoint, label_prefix=label_prefix)
         if movement_tool == WorldMapMovementToolKind.OVERVIEW_SEED:
             return self._move_with_overview_seed(observation, checkpoint=checkpoint, label_prefix=label_prefix)
-        navigator = self.screen_flows.world_map_navigator
-        current = _require_proven_world_map_observation(
-            observation_service=self.observation_service,
-            observation=observation,
-            label_prefix=f"{label_prefix}_start",
-        )
-        movement_state = _mutable_runtime_state(runtime_state, "world_map_search_swipe_navigation")
-        for step_index in range(self.movement_step_budget):
-            leg_target = _resolve_cardinal_sweep_leg_target(
-                current=current,
-                target_coordinate=checkpoint.coordinate,
-                focus_tolerance=navigator.focus_tolerance,
-            )
-            if leg_target is None:
-                return current
-            actions = navigator.plan_focus_coordinate(
-                current,
-                leg_target,
-                runtime_state=movement_state,
-            )
-            if not actions:
-                current_coordinate = _require_world_map_viewport_coordinate(current)
-                if _coordinate_within_tolerance(
-                    current_coordinate,
-                    (leg_target.x, leg_target.y),
-                    tolerance=navigator.focus_tolerance,
-                ):
-                    continue
-                raise SelectorResolutionError(
-                    "World-map search could not derive a cardinal checkpoint move while the checkpoint leg remained unresolved.",
-                    coordinate=checkpoint.coordinate,
-                    current_coordinate=current_coordinate,
-                    leg_target=(leg_target.x, leg_target.y),
-                )
-            current = _require_proven_world_map_observation(
-                observation_service=self.observation_service,
-                observation=self._execute_actions(actions, current, label_prefix=f"{label_prefix}_{step_index}"),
-                label_prefix=f"{label_prefix}_refresh_{step_index}",
-            )
-        raise SelectorResolutionError(
-            "World-map search exhausted its bounded checkpoint movement budget.",
-            coordinate=checkpoint.coordinate,
-            movement_tool=movement_tool.value,
+        return self._coordinate_mover().move_to_coordinate(
+            observation,
+            target_coordinate=checkpoint.coordinate,
+            label_prefix=label_prefix,
+            runtime_state=runtime_state,
         )
 
     def _move_with_coordinate_jump(
@@ -1454,17 +1497,20 @@ class WorldMapSearchService:
         """Indexes the already-proven checkpoint observation and only falls back to recapture when the surface is still missing."""
 
         assert self.survey_recorder is not None
-        if observation.screen_type == ScreenType.PNC_WORLD_MAP:
-            try:
-                observation.require_spatial_surface(SpatialSurfaceType.WORLD_MAP)
-            except SelectorResolutionError:
-                pass
-            else:
-                self.survey_recorder.ingest_checkpoint_observation(label, observation)
-                return observation
-        checkpoint_capture = self.survey_recorder.capture_checkpoint(label)
-        assert checkpoint_capture.capture is not None
-        return checkpoint_capture.capture.observation
+        checkpoint_capture = self.survey_recorder.record_checkpoint(label, observation)
+        return observation if checkpoint_capture.capture is None else checkpoint_capture.capture.observation
+
+    def _coordinate_mover(self) -> WorldMapCoordinateMover:
+        """Returns the canonical coordinate mover shared by sweep traversal and calibration helpers."""
+
+        if self.coordinate_mover is not None:
+            return self.coordinate_mover
+        return WorldMapCoordinateMover(
+            observation_service=self.observation_service,
+            action_executor=self.action_executor,
+            navigator=self.screen_flows.world_map_navigator,
+            movement_step_budget=self.movement_step_budget,
+        )
 
     def _resolve_origin_coordinate(
         self,
@@ -1710,25 +1756,30 @@ def _require_proven_world_map_observation(
     label_prefix: str,
     refresh_budget: int = 2,
 ) -> Observation:
-    """Returns one proven world-map observation, allowing bounded refresh when the screen is world map but the surface parse is transiently absent."""
+    """Returns one proven world-map observation, allowing bounded refresh across strict, coarse, and transient unknown post-action frames."""
 
     current = observation
     for refresh_index in range(refresh_budget + 1):
-        if current.screen_type != ScreenType.PNC_WORLD_MAP:
+        if current.spatial_surface is not None and current.spatial_surface.surface_type == SpatialSurfaceType.WORLD_MAP:
+            return current
+        if current.screen_type not in {ScreenType.PNC_WORLD_MAP, ScreenType.PNC_WORLD_MAP_ROOT, ScreenType.UNKNOWN}:
             raise SelectorResolutionError(
                 "World-map operations require an already-proven world-map observation.",
                 screen_type=current.screen_type,
             )
-        if current.spatial_surface is not None and current.spatial_surface.surface_type == SpatialSurfaceType.WORLD_MAP:
-            return current
         if observation_service is None or refresh_index >= refresh_budget:
             raise SelectorResolutionError(
                 "World-map operations require a parsed world-map surface, but the latest observation did not expose one.",
                 screen_type=current.screen_type,
             )
+        request = (
+            ObservationRequest.full_runtime_default()
+            if current.screen_type == ScreenType.UNKNOWN
+            else ObservationRequest.source_screen_retry(ScreenType.PNC_WORLD_MAP)
+        )
         current = observation_service.observe(
             f"{label_prefix}_{refresh_index}",
-            request=ObservationRequest.full_runtime_default(),
+            request=request,
         )
     raise AssertionError("Unreachable world-map surface refresh fallthrough.")
 

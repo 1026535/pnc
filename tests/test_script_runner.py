@@ -177,6 +177,9 @@ class ScriptRunnerTests(unittest.TestCase):
             self.assertEqual(runtime.world_map_survey_recorder.debug_store.root, root / "artifacts")
             self.assertIs(runtime.world_map_search_service.screen_flows, runtime.flow_planner)
             self.assertIs(runtime.world_map_search_service.survey_recorder, runtime.world_map_survey_recorder)
+            self.assertIs(runtime.world_map_movement_calibration_service.screen_flows, runtime.flow_planner)
+            self.assertIs(runtime.world_map_movement_calibration_service.survey_recorder, runtime.world_map_survey_recorder)
+            self.assertEqual(runtime.world_map_movement_calibration_store.root, root / "artifacts")
 
     def test_build_connected_runtime_wires_world_map_survey_recorder_through_real_runtime_capture(self) -> None:
         """Builds the recorder through ScriptRunner and persists one real runtime checkpoint dump under artifacts."""

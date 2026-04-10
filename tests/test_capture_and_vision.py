@@ -134,6 +134,37 @@ class _RecordingOcrService(_FakeOcrService):
         return _FakeOcrService.read_text(self, image, region)
 
 
+@dataclass(slots=True)
+class _CoordinateBarFilteringOcrService:
+    """Returns different OCR text for raw versus blue-text-filtered coordinate-bar crops."""
+
+    raw_text: str
+    filtered_text: str
+
+    def read_result(self, image: Image.Image, region: Region | None = None) -> OcrResult:
+        """Builds one synthetic OCR result from the requested region text."""
+
+        lines = self.read_lines(image, region)
+        return OcrResult(lines=lines, words=tuple(word for line in lines for word in line.words))
+
+    def read_lines(self, image: Image.Image, region: Region | None = None) -> tuple[OcrLine, ...]:
+        """Returns one synthetic OCR line that reflects whether the crop was prefiltered."""
+
+        if region is None:
+            raise AssertionError("Coordinate-bar filtering OCR tests require an explicit region.")
+        text = self.read_text(image, region)
+        return (_ocr_line(text, x=region.x, y=region.y, width=max(1, region.width), height=max(1, region.height)),)
+
+    def read_text(self, image: Image.Image, region: Region) -> str:
+        """Returns the filtered OCR text only when the image was reduced to a black-on-white mask."""
+
+        crop = image.crop((region.x, region.y, region.x + region.width, region.y + region.height)).convert("L")
+        colors = {value for count, value in (crop.getcolors(maxcolors=8) or []) if count > 0}
+        if colors and colors.issubset({0, 255}):
+            return self.filtered_text
+        return self.raw_text
+
+
 def _materialize_chat_region(
     registry: SelectorRegistry,
     selector_id: UiElementId,
@@ -433,6 +464,35 @@ class CaptureAndVisionTests(unittest.TestCase):
         )
 
         self.assertEqual(matches, [])
+
+    def test_pillow_selector_engine_prefers_blue_filtered_world_coordinate_bar_ocr(self) -> None:
+        """Uses the coordinate bar's blue-text-isolated OCR path so background castle labels do not block world-map proof."""
+
+        registry = build_default_selector_registry()
+        selector_engine = PillowSelectorEngine(
+            template_matcher=PillowTemplateMatcher(),
+            ocr_service=_CoordinateBarFilteringOcrService(
+                raw_text="X:272-kV.498",
+                filtered_text="X:272 Y:498",
+            ),
+        )
+        image = Image.new("RGB", (540, 960), (18, 24, 40))
+        coordinate_region = registry.require(UiElementId.PNC_WORLD_COORDINATE_BAR).relative_bounds
+        assert coordinate_region is not None
+        bounds = coordinate_region.materialize_region(image_size=image.size)
+        for x in range(bounds.x + 8, bounds.x + bounds.width - 8):
+            for y in range(bounds.y + 8, bounds.y + bounds.height - 8):
+                image.putpixel((x, y), (42, 198, 224))
+
+        matches = selector_engine.detect(
+            image,
+            registry,
+            selector_ids=(UiElementId.PNC_WORLD_COORDINATE_BAR,),
+        )
+
+        self.assertEqual(len(matches), 1)
+        self.assertEqual(matches[0].selector_id, UiElementId.PNC_WORLD_COORDINATE_BAR)
+        self.assertEqual(matches[0].extracted_text, "X:272 Y:498")
 
     def test_observation_builder_does_not_promote_home_city_to_world_map_from_region_noise(self) -> None:
         """Keeps home-city classification when world-map OCR regions contain unrelated text instead of real world-map anchors."""
@@ -2028,6 +2088,23 @@ class CaptureAndVisionTests(unittest.TestCase):
         assert surface is not None
         self.assertEqual(surface.viewport.coordinate, (246, 450))
 
+    def test_world_map_spatial_surface_accepts_split_noisy_x_coordinate_without_colon(self) -> None:
+        """Parses the live coordinate bar when OCR drops the X-colon but still leaves split X/Y lines in the HUD."""
+
+        surface = build_world_map_spatial_surface(
+            image=Image.new("RGB", (900, 1600), (15, 28, 68)),
+            lines=(
+                _ocr_line("KX272", x=355, y=141, width=106, height=36),
+                _ocr_line("Y:498", x=483, y=148, width=86, height=28),
+                _ocr_line("43km", x=596, y=297, width=76, height=29),
+            ),
+            selector_registry=build_default_selector_registry(),
+        )
+
+        self.assertIsNotNone(surface)
+        assert surface is not None
+        self.assertEqual(surface.viewport.coordinate, (272, 498))
+
     def test_world_map_spatial_surface_trims_spurious_fourth_x_digit_from_live_coordinate_bar(self) -> None:
         """Keeps the world-map X coordinate in the live three-digit domain when OCR fuses an extra trailing digit."""
 
@@ -2231,8 +2308,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertEqual(observation.screen_type, ScreenType.UNKNOWN)
             self.assertIsNone(observation.spatial_surface)
 
-    def test_observation_builder_classifies_world_map_root_when_coordinate_bar_is_coarse_but_map_labels_are_present(self) -> None:
-        """Surfaces a coarse world-map root instead of unknown when OCR proves map ownership without a strict viewport parse."""
+    def test_observation_builder_classifies_world_map_when_coordinate_bar_omits_the_x_colon(self) -> None:
+        """Builds the exact world-map surface when OCR keeps both axes even if the X token loses its colon."""
 
         with tempfile.TemporaryDirectory() as temp_directory:
             root = Path(temp_directory)
@@ -2268,8 +2345,8 @@ class CaptureAndVisionTests(unittest.TestCase):
 
             observation = builder.build(screenshot)
 
-            self.assertEqual(observation.screen_type, ScreenType.PNC_WORLD_MAP_ROOT)
-            self.assertIsNone(observation.spatial_surface)
+            self.assertEqual(observation.screen_type, ScreenType.PNC_WORLD_MAP)
+            self.assertIsNotNone(observation.spatial_surface)
             self.assertTrue(observation.has(UiElementId.PNC_WORLD_COORDINATE_BAR))
             self.assertTrue(observation.has(UiElementId.PNC_BOTTOM_NAV_HOME))
 
