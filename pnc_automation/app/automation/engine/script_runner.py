@@ -52,6 +52,18 @@ class ConnectedAccountRuntime:
     world_map_search_service: WorldMapSearchService
 
 
+@dataclass(frozen=True, slots=True)
+class _ConnectedRuntimeServices:
+    """Carries the canonical connected runtime services reused by both tooling and automation execution."""
+
+    session: BlueStacksSession
+    observation_service: ObservationService
+    flow_planner: ScreenFlowPlanner
+    world_map_survey_recorder: WorldMapSurveyRecorder
+    world_map_search_service: WorldMapSearchService
+    observed_action_executor: ObservedActionExecutor | None
+
+
 @dataclass(slots=True)
 class ScriptRunner:
     """Creates the per-run runtime and executes one automation script."""
@@ -164,6 +176,18 @@ class ScriptRunner:
     def build_connected_runtime(self, *, account: AccountConfig) -> ConnectedAccountRuntime:
         """Builds the canonical connected session plus observation-owned runtime helpers for one configured account."""
 
+        services = self._build_connected_runtime_services(account=account)
+        return ConnectedAccountRuntime(
+            session=services.session,
+            observation_service=services.observation_service,
+            flow_planner=services.flow_planner,
+            world_map_survey_recorder=services.world_map_survey_recorder,
+            world_map_search_service=services.world_map_search_service,
+        )
+
+    def _build_connected_runtime_services(self, *, account: AccountConfig) -> _ConnectedRuntimeServices:
+        """Builds the canonical connected runtime service graph shared by tooling and automation runs."""
+
         session = self.build_connected_session(account=account)
         observation_service = self._build_observation_service(account=account, session=session)
         flow_planner = ScreenFlowPlanner()
@@ -176,26 +200,8 @@ class ScriptRunner:
             observation_service=observation_service,
             survey_recorder=world_map_survey_recorder,
         )
-        selector_registry = getattr(self.observation_builder, "selector_registry", None)
-        if selector_registry is not None:
-            observed_executor = ObservedActionExecutor(
-                selector_registry=selector_registry,
-                action_executor=ActionExecutor(
-                    session=session,
-                    stable_click_delay_ms=self.config.defaults.stable_click_delay_ms,
-                    post_action_observe_delay_ms=self.config.defaults.post_action_observe_delay_ms,
-                    chat_stable_click_delay_ms=self.config.defaults.chat_stable_click_delay_ms,
-                    chat_post_action_observe_delay_ms=self.config.defaults.chat_post_action_observe_delay_ms,
-                    logger=logging.LoggerAdapter(
-                        self.logger.logger,
-                        extra={**self.logger.extra, **self._build_shared_extra(account=account, instance=session.instance)},
-                    ),
-                ),
-                logger=logging.LoggerAdapter(
-                    self.logger.logger,
-                    extra={**self.logger.extra, **self._build_shared_extra(account=account, instance=session.instance)},
-                ),
-            )
+        observed_executor = self._build_observed_action_executor(account=account, session=session)
+        if observed_executor is not None:
             world_map_search_service.action_executor = observed_executor
             world_map_search_service.castle_inspector = ObservationBackedWorldMapCastleInspector(
                 screen_flows=flow_planner,
@@ -203,12 +209,13 @@ class ScriptRunner:
                 observation_service=observation_service,
                 survey_recorder=world_map_survey_recorder,
             )
-        return ConnectedAccountRuntime(
+        return _ConnectedRuntimeServices(
             session=session,
             observation_service=observation_service,
             flow_planner=flow_planner,
             world_map_survey_recorder=world_map_survey_recorder,
             world_map_search_service=world_map_search_service,
+            observed_action_executor=observed_executor,
         )
 
     def build_connected_automation_runner(self, *, account: AccountConfig) -> AutomationRunner:
@@ -230,32 +237,18 @@ class ScriptRunner:
                 return self.castle_roster_store.get(account.pnc_account_id)
             return self.config.find_castle_roster(account.pnc_account_id)
 
-        connected_runtime = self.build_connected_runtime(account=account)
-        session = connected_runtime.session
-        instance = session.instance
-
-        flow_planner = ScreenFlowPlanner()
-        shared_extra = self._build_shared_extra(account=account, instance=instance)
-        action_executor = ActionExecutor(
-            session=session,
-            stable_click_delay_ms=self.config.defaults.stable_click_delay_ms,
-            post_action_observe_delay_ms=self.config.defaults.post_action_observe_delay_ms,
-            chat_stable_click_delay_ms=self.config.defaults.chat_stable_click_delay_ms,
-            chat_post_action_observe_delay_ms=self.config.defaults.chat_post_action_observe_delay_ms,
-            logger=logging.LoggerAdapter(self.logger.logger, extra={**self.logger.extra, **shared_extra}),
-        )
+        connected_runtime = self._build_connected_runtime_services(account=account)
+        if connected_runtime.observed_action_executor is None:
+            raise AttributeError("Automation runner requires an observation builder exposing selector_registry.")
+        shared_extra = self._build_shared_extra(account=account, instance=connected_runtime.session.instance)
         return (
             AutomationRunner(
                 defaults=self.config.defaults,
                 observation_service=connected_runtime.observation_service,
                 world_map_survey_recorder=connected_runtime.world_map_survey_recorder,
-                action_executor=ObservedActionExecutor(
-                    selector_registry=self.observation_builder.selector_registry,
-                    action_executor=action_executor,
-                    logger=logging.LoggerAdapter(self.logger.logger, extra={**self.logger.extra, **shared_extra}),
-                ),
+                action_executor=connected_runtime.observed_action_executor,
                 task_registry=self.task_registry,
-                flow_planner=flow_planner,
+                flow_planner=connected_runtime.flow_planner,
                 logger=logging.LoggerAdapter(self.logger.logger, extra={**self.logger.extra, **shared_extra}),
             ),
             castle_roster_provider,
@@ -313,6 +306,31 @@ class ScriptRunner:
             "instance_id": instance.id,
             "pnc_account_id": account.pnc_account_id,
         }
+
+    def _build_observed_action_executor(
+        self,
+        *,
+        account: AccountConfig,
+        session: BlueStacksSession,
+    ) -> ObservedActionExecutor | None:
+        """Builds the canonical observed-action executor when the observation builder exposes selector metadata."""
+
+        selector_registry = getattr(self.observation_builder, "selector_registry", None)
+        if selector_registry is None:
+            return None
+        shared_extra = self._build_shared_extra(account=account, instance=session.instance)
+        return ObservedActionExecutor(
+            selector_registry=selector_registry,
+            action_executor=ActionExecutor(
+                session=session,
+                stable_click_delay_ms=self.config.defaults.stable_click_delay_ms,
+                post_action_observe_delay_ms=self.config.defaults.post_action_observe_delay_ms,
+                chat_stable_click_delay_ms=self.config.defaults.chat_stable_click_delay_ms,
+                chat_post_action_observe_delay_ms=self.config.defaults.chat_post_action_observe_delay_ms,
+                logger=logging.LoggerAdapter(self.logger.logger, extra={**self.logger.extra, **shared_extra}),
+            ),
+            logger=logging.LoggerAdapter(self.logger.logger, extra={**self.logger.extra, **shared_extra}),
+        )
 
 
 def _prepare_account_session_steps(castle: CastleIdentity | None) -> tuple[ScriptStep, ...]:

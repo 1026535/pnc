@@ -374,6 +374,64 @@ class AutomationFrameworkTests(unittest.TestCase):
         self.assertEqual(fake_session.launches, 1)
         self.assertEqual(fake_session.key_events, [])
 
+    def test_ensure_game_running_allows_the_full_unknown_recovery_then_launch_wait_path(self) -> None:
+        """Allows the longest intended unknown-recovery plus launch-wait sequence without tripping the replan limit."""
+
+        registry = build_default_task_registry()
+        script = registry.prepare_script(
+            RunScript(
+                name="ensure_game_running_long_recovery",
+                path=Path("ensure_game_running_long_recovery.yaml"),
+                steps=(ScriptStep(task=TaskId.ENSURE_GAME_RUNNING),),
+            )
+        )
+        fake_observer = FakeObservationService(
+            observations=[
+                make_observation(ScreenType.UNKNOWN),
+                make_observation(ScreenType.UNKNOWN),
+                make_observation(ScreenType.UNKNOWN),
+                make_observation(ScreenType.ANDROID_HOME, visible_ids=(UiElementId.ANDROID_HOME_PNC_ICON,)),
+                make_observation(ScreenType.ANDROID_HOME, visible_ids=(UiElementId.ANDROID_HOME_PNC_ICON,)),
+                make_observation(ScreenType.UNKNOWN),
+                make_observation(ScreenType.UNKNOWN),
+                make_observation(ScreenType.UNKNOWN),
+                make_observation(ScreenType.UNKNOWN),
+                make_observation(ScreenType.UNKNOWN),
+                make_observation(ScreenType.UNKNOWN),
+                make_observation(ScreenType.UNKNOWN),
+                make_observation(ScreenType.UNKNOWN),
+                make_observation(ScreenType.UNKNOWN),
+                make_observation(ScreenType.UNKNOWN),
+                make_observation(ScreenType.UNKNOWN),
+                make_observation(ScreenType.UNKNOWN),
+                make_observation(ScreenType.UNKNOWN),
+                make_observation(
+                    ScreenType.PNC_LOGIN,
+                    visible_ids=(
+                        UiElementId.PNC_LOGIN_USERNAME_FIELD,
+                        UiElementId.PNC_LOGIN_PASSWORD_FIELD,
+                        UiElementId.PNC_LOGIN_SUBMIT_BUTTON,
+                    ),
+                ),
+            ]
+        )
+        fake_session = FakeSession()
+        runner = AutomationRunner(
+            defaults=self.defaults,
+            observation_service=fake_observer,
+            action_executor=_make_observed_action_executor(fake_session),
+            task_registry=registry,
+            flow_planner=ScreenFlowPlanner(),
+            logger=build_logger(),
+            policy=StepExecutionPolicy(max_retries_per_step=3),
+        )
+
+        result = runner.run(self.account, script)
+
+        self.assertEqual(result.steps[0].status.value, "success")
+        self.assertEqual(fake_session.launches, 1)
+        self.assertEqual(fake_session.key_events, ["KEYCODE_BACK", "KEYCODE_BACK", "KEYCODE_BACK"])
+
     def test_action_executor_retries_unknown_narrow_follow_up_with_full_runtime_observation(self) -> None:
         """Promotes transient unknown results from narrow follow-ups to one broad runtime observation before returning."""
 

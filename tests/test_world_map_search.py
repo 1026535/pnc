@@ -134,7 +134,7 @@ class WorldMapSearchTests(unittest.TestCase):
         )
 
     def test_resolve_plan_builds_edge_band_route_from_full_map_bounds(self) -> None:
-        """Restricts edge-band sweeps to the requested map edges while keeping deterministic row-major visitation."""
+        """Restricts edge-band sweeps to the requested map edges while ordering checkpoints from the resolved origin."""
 
         service = WorldMapSearchService(screen_flows=self.flows)
         observation = _make_world_map_observation(0, 0)
@@ -156,7 +156,7 @@ class WorldMapSearchTests(unittest.TestCase):
 
         self.assertEqual(
             [checkpoint.coordinate for checkpoint in plan.route],
-            [(0, 0), (10, 0), (20, 0), (0, 10), (0, 20)],
+            [(0, 10), (0, 0), (0, 20), (10, 0), (20, 0)],
         )
 
     def test_resolve_plan_fails_when_self_territory_origin_cannot_be_resolved(self) -> None:
@@ -173,6 +173,32 @@ class WorldMapSearchTests(unittest.TestCase):
                     checkpoint_spacing=10,
                 ),
                 _make_world_map_observation(100, 100),
+            )
+
+    def test_resolve_plan_fails_when_visible_self_territory_lacks_coordinate(self) -> None:
+        """Fails fast when the visible self castle cannot provide the canonical self-territory origin coordinate."""
+
+        service = WorldMapSearchService(screen_flows=self.flows)
+
+        with self.assertRaises(SelectorResolutionError):
+            service.resolve_plan(
+                _search_request(
+                    matcher=SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.CASTLE),
+                    pattern=WorldMapSearchPattern.row_major_sweep(),
+                    boundary=WorldMapSearchBoundary.radius_from_origin(10),
+                    checkpoint_spacing=10,
+                ),
+                _make_world_map_observation(
+                    100,
+                    100,
+                    objects=(
+                        make_spatial_object(
+                            SpatialObjectKind.CASTLE,
+                            name_text="My Territory",
+                            relationship=SpatialObjectRelationship.SELF,
+                        ),
+                    ),
+                ),
             )
 
     def test_resolve_plan_fails_when_requested_movement_tool_is_not_supported(self) -> None:
@@ -198,19 +224,6 @@ class WorldMapSearchTests(unittest.TestCase):
 
         service, _observer = self._build_runtime_service(
             observations=[
-                _make_world_map_observation(
-                    0,
-                    0,
-                    objects=(
-                        make_spatial_object(
-                            SpatialObjectKind.RESOURCE_NODE,
-                            name_text="Food Farm A",
-                            metadata={"resource_type": "food"},
-                            confirmed_world_coordinate=(0, 0),
-                        ),
-                    ),
-                ),
-                _make_world_map_observation(10, 0),
                 _make_world_map_observation(
                     10,
                     0,
@@ -241,33 +254,30 @@ class WorldMapSearchTests(unittest.TestCase):
                 stop_policy=WorldMapSearchStopPolicy(max_matches=2),
             ),
             label_prefix="resource_search",
-            start_observation=_make_world_map_observation(0, 0),
+            start_observation=_make_world_map_observation(
+                0,
+                0,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.RESOURCE_NODE,
+                        name_text="Food Farm A",
+                        metadata={"resource_type": "food"},
+                        confirmed_world_coordinate=(0, 0),
+                    ),
+                ),
+            ),
         )
 
         self.assertEqual(result.stop_reason, WorldMapSearchStopReason.MATCH_LIMIT_REACHED)
         self.assertEqual([match.key.coordinate for match in result.matches], [(0, 0), (10, 0)])
         self.assertEqual(len(result.visited_checkpoints), 2)
         self.assertEqual(len(result.survey_index.sightings), 2)
+        self.assertEqual(len(_observer.labels), 1)
 
     def test_execute_search_matches_player_name_from_visible_castle_label_without_profile_inspection(self) -> None:
         """Uses the visible map-side castle label directly instead of opening lord profile for player-name matching."""
 
-        service, observer = self._build_runtime_service(
-            observations=[
-                _make_world_map_observation(
-                    0,
-                    0,
-                    objects=(
-                        make_spatial_object(
-                            SpatialObjectKind.CASTLE,
-                            name_text="Alice",
-                            kingdom="K1",
-                            confirmed_world_coordinate=(0, 0),
-                        ),
-                    ),
-                ),
-            ]
-        )
+        service, observer = self._build_runtime_service(observations=[])
 
         result = service.execute_search(
             _search_request(
@@ -278,7 +288,18 @@ class WorldMapSearchTests(unittest.TestCase):
                 stop_policy=WorldMapSearchStopPolicy(stop_on_first_confirmed_match=True),
             ),
             label_prefix="castle_search_label",
-            start_observation=_make_world_map_observation(0, 0),
+            start_observation=_make_world_map_observation(
+                0,
+                0,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.CASTLE,
+                        name_text="Alice",
+                        kingdom="K1",
+                        confirmed_world_coordinate=(0, 0),
+                    ),
+                ),
+            ),
         )
 
         self.assertEqual(result.stop_reason, WorldMapSearchStopReason.FIRST_CONFIRMED_MATCH)
@@ -293,7 +314,6 @@ class WorldMapSearchTests(unittest.TestCase):
         service, _observer = self._build_runtime_service(
             observations=[
                 make_observation(ScreenType.PNC_WORLD_MAP),
-                _make_world_map_observation(10, 0),
                 _make_world_map_observation(
                     10,
                     0,
@@ -329,6 +349,32 @@ class WorldMapSearchTests(unittest.TestCase):
 
         self.assertEqual(result.stop_reason, WorldMapSearchStopReason.FIRST_CONFIRMED_MATCH)
         self.assertEqual([match.key.coordinate for match in result.matches], [(10, 0)])
+
+    def test_execute_search_uses_cardinal_sweep_movement_for_diagonal_checkpoint_travel(self) -> None:
+        """Decomposes search checkpoint travel into cardinal legs instead of relying on diagonal world-map swipes."""
+
+        service, observer, session = self._build_runtime_service_bundle(
+            observations=[
+                _make_world_map_observation(10, 0),
+                _make_world_map_observation(10, 10),
+            ]
+        )
+
+        result = service.execute_search(
+            _search_request(
+                matcher=SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.RESOURCE_NODE),
+                pattern=WorldMapSearchPattern.row_major_sweep(),
+                origin=WorldMapSearchOrigin.current_viewport(),
+                boundary=WorldMapSearchBoundary.rectangle(min_coordinate=(10, 10), max_coordinate=(10, 10)),
+                checkpoint_spacing=10,
+            ),
+            label_prefix="cardinal_checkpoint_move",
+            start_observation=_make_world_map_observation(0, 0),
+        )
+
+        self.assertEqual(result.stop_reason, WorldMapSearchStopReason.BOUNDARY_EXHAUSTED)
+        self.assertEqual(len(session.swipes), 2)
+        self.assertEqual(len(observer.labels), 2)
 
     def test_execute_search_fails_fast_when_start_observation_is_not_proven_world_map(self) -> None:
         """Requires callers to enter and prove world map before invoking the reusable search engine."""
@@ -408,22 +454,7 @@ class WorldMapSearchTests(unittest.TestCase):
     def test_stop_policy_prioritizes_first_confirmed_match_when_enabled(self) -> None:
         """Stops on the first confirmed match before consulting later match-count limits."""
 
-        service, _observer = self._build_runtime_service(
-            observations=[
-                _make_world_map_observation(
-                    0,
-                    0,
-                    objects=(
-                        make_spatial_object(
-                            SpatialObjectKind.RESOURCE_NODE,
-                            name_text="Food Farm A",
-                            metadata={"resource_type": "food"},
-                            confirmed_world_coordinate=(0, 0),
-                        ),
-                    ),
-                ),
-            ]
-        )
+        service, _observer = self._build_runtime_service(observations=[])
 
         result = service.execute_search(
             _search_request(
@@ -439,10 +470,61 @@ class WorldMapSearchTests(unittest.TestCase):
                 stop_policy=WorldMapSearchStopPolicy(max_matches=1, stop_on_first_confirmed_match=True),
             ),
             label_prefix="resource_search_match_limit_precedence",
-            start_observation=_make_world_map_observation(0, 0),
+            start_observation=_make_world_map_observation(
+                0,
+                0,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.RESOURCE_NODE,
+                        name_text="Food Farm A",
+                        metadata={"resource_type": "food"},
+                        confirmed_world_coordinate=(0, 0),
+                    ),
+                ),
+            ),
         )
 
         self.assertEqual(result.stop_reason, WorldMapSearchStopReason.FIRST_CONFIRMED_MATCH)
+
+    def test_castle_inspector_fails_fast_when_no_focus_move_is_planned_before_target_is_visible(self) -> None:
+        """Surfaces a focus-planning mismatch instead of silently skipping a still-hidden castle candidate."""
+
+        service, _observer = self._build_runtime_service(observations=[])
+        candidate = service.survey_recorder.ingest_capture(
+            type(
+                "Capture",
+                (),
+                {
+                    "observation": _make_world_map_observation(
+                        11,
+                        10,
+                        objects=(
+                            make_spatial_object(
+                                SpatialObjectKind.CASTLE,
+                                name_text="Candidate",
+                                confirmed_world_coordinate=(11, 10),
+                            ),
+                        ),
+                    )
+                },
+            )()
+        )[0]
+        inspector = ObservationBackedWorldMapCastleInspector(
+            screen_flows=self.flows,
+            action_executor=service.action_executor,
+            observation_service=service.observation_service,
+            survey_recorder=service.survey_recorder,
+            movement_step_budget=1,
+        )
+
+        with self.assertRaises(SelectorResolutionError):
+            inspector._focus_candidate(
+                _make_world_map_observation(10, 10),
+                candidate,
+                navigator=self.flows.world_map_navigator,
+                label_prefix="hidden_candidate_focus",
+                runtime_state={},
+            )
 
     def test_castle_profile_validation_query_opens_lord_profile_then_fails_fast_as_unimplemented(self) -> None:
         """Reaches lord profile for the dedicated profile-validation path before failing with the intentional unimplemented error."""
@@ -557,7 +639,18 @@ class WorldMapSearchTests(unittest.TestCase):
     def _build_runtime_service(self, *, observations: list[object]) -> tuple[WorldMapSearchService, FakeObservationService]:
         """Builds one fully wired search service backed by fake observation and action services."""
 
+        service, observer, _session = self._build_runtime_service_bundle(observations=observations)
+        return service, observer
+
+    def _build_runtime_service_bundle(
+        self,
+        *,
+        observations: list[object],
+    ) -> tuple[WorldMapSearchService, FakeObservationService, FakeSession]:
+        """Builds one fully wired search service plus the fake session used to execute its actions."""
+
         observer = FakeObservationService(observations=observations)
+        session = FakeSession()
         recorder = WorldMapSurveyRecorder(
             observation_service=observer,
             debug_store=WorldMapSurveyDebugStore(root=Path(self.temp_directory.name)),
@@ -568,7 +661,7 @@ class WorldMapSearchTests(unittest.TestCase):
             action_executor=ObservedActionExecutor(
                 selector_registry=build_default_selector_registry(),
                 action_executor=ActionExecutor(
-                    session=FakeSession(),
+                    session=session,
                     stable_click_delay_ms=0,
                     post_action_observe_delay_ms=0,
                     chat_stable_click_delay_ms=0,
@@ -581,7 +674,7 @@ class WorldMapSearchTests(unittest.TestCase):
             ),
             survey_recorder=recorder,
         )
-        return service, observer
+        return service, observer, session
 
 
 def _search_request(

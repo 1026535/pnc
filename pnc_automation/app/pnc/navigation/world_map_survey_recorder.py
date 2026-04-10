@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from pnc_automation.app.pnc.domain.observation import SpatialObjectQuery, SpatialSurfaceObservation, SpatialSurfaceType
+from pnc_automation.app.pnc.domain.observation import Observation, SpatialObjectQuery, SpatialSurfaceObservation, SpatialSurfaceType
 from pnc_automation.app.pnc.navigation.world_map_index import (
     WorldMapCastleQuery,
     WorldMapObjectKey,
@@ -33,7 +33,7 @@ from pnc_automation.core.errors import SelectorResolutionError
 class WorldMapSurveyCheckpointResult:
     """Summarizes one survey checkpoint capture and optional persisted debug dump."""
 
-    capture: CapturedObservation
+    capture: CapturedObservation | None
     updated_sightings: tuple[WorldMapObjectSighting, ...]
     artifact_selection: ObservationArtifactSelection
     debug_dump: StoredWorldMapSurveyDebugDump | None
@@ -89,13 +89,43 @@ class WorldMapSurveyRecorder:
     def ingest_capture(self, capture: CapturedObservation) -> tuple[WorldMapObjectSighting, ...]:
         """Indexes one already-captured world-map observation and remembers its checkpoint context for later dumps."""
 
-        surface = capture.observation.require_spatial_surface(SpatialSurfaceType.WORLD_MAP)
+        return self.ingest_observation(capture.observation)
+
+    def ingest_observation(self, observation: Observation) -> tuple[WorldMapObjectSighting, ...]:
+        """Indexes one already-observed world-map checkpoint and remembers its context for later dumps."""
+
+        surface = observation.require_spatial_surface(SpatialSurfaceType.WORLD_MAP)
         self._latest_checkpoint_context = _LatestWorldMapCheckpointContext(
-            captured_at=capture.observation.captured_at,
-            artifact_path=capture.observation.artifact_path,
+            captured_at=observation.captured_at,
+            artifact_path=observation.artifact_path,
             surface=surface,
         )
-        return self.index.ingest_observation(capture.observation)
+        return self.index.ingest_observation(observation)
+
+    def ingest_checkpoint_observation(
+        self,
+        label: str,
+        observation: Observation,
+        request: ObservationRequest | None = None,
+        *,
+        artifact_selection: ObservationArtifactSelection | None = None,
+    ) -> WorldMapSurveyCheckpointResult:
+        """Indexes one already-proven checkpoint observation and persists debug state without forcing a second capture."""
+
+        artifact_policy = self._resolve_artifact_policy(
+            request=request,
+            artifact_selection=artifact_selection,
+        )
+        updated_sightings = self.ingest_observation(observation)
+        return WorldMapSurveyCheckpointResult(
+            capture=None,
+            updated_sightings=updated_sightings,
+            artifact_selection=artifact_policy.selection,
+            debug_dump=self._persist_checkpoint(
+                label,
+                artifact_policy=artifact_policy,
+            ),
+        )
 
     def persist_checkpoint(
         self,

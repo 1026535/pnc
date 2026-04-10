@@ -13,6 +13,7 @@ from pnc_automation.app.pnc.enums.screen_type import ScreenType
 
 _MAX_LAUNCH_WAIT_ATTEMPTS = 12
 _MAX_UNKNOWN_RECOVERY_ATTEMPTS = 2
+_MAX_REPLANS_PER_STEP = _MAX_UNKNOWN_RECOVERY_ATTEMPTS + 1 + _MAX_LAUNCH_WAIT_ATTEMPTS
 
 
 class EnsureGameRunningTask(BaseAutomationTask):
@@ -33,10 +34,10 @@ class EnsureGameRunningTask(BaseAutomationTask):
         return True
 
     def max_replans_per_step(self, context: TaskContext) -> int | None:
-        """Uses the task-local splash wait budget instead of the smaller generic runner replan limit."""
+        """Uses one task-local budget covering unknown recovery, launch start, and bounded splash waiting."""
 
         del context
-        return _MAX_LAUNCH_WAIT_ATTEMPTS + 1
+        return _MAX_REPLANS_PER_STEP
 
     def plan(self, context: TaskContext, observation: Observation) -> list[ActionRequest]:
         """Foregrounds P&C only when the observation is not already inside the game."""
