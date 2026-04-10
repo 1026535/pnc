@@ -24,6 +24,7 @@ from pnc_automation.app.pnc.domain.action_requests import (
     TapPointAction,
     TapSpatialObjectAction,
     WaitAction,
+    resolve_swipe_points_for_action,
 )
 from pnc_automation.app.pnc.domain.observation import (
     DetectedListEntry,
@@ -168,7 +169,7 @@ class ActionExecutor:
             if observation.image_size is None:
                 raise SelectorResolutionError("Swipe actions require the current screenshot dimensions.")
             width, height = observation.image_size
-            start_x, start_y, end_x, end_y = _resolve_swipe_points_for_action(
+            start_x, start_y, end_x, end_y = resolve_swipe_points_for_action(
                 width=width,
                 height=height,
                 action=action,
@@ -359,71 +360,6 @@ class ActionExecutor:
             or surface.surface_type != SpatialSurfaceType.WORLD_MAP
             or surface.viewport.coordinate is None
         )
-
-
-def _resolve_swipe_points(*, width: int, height: int, direction: str, distance_ratio: float) -> tuple[int, int, int, int]:
-    """Converts a directional swipe into screen-relative coordinates."""
-
-    if not 0 < distance_ratio <= 1:
-        raise SelectorResolutionError("Swipe distance_ratio must be within (0, 1].", distance_ratio=distance_ratio)
-    center_x = width // 2
-    center_y = height // 2
-    horizontal_distance = int((width * distance_ratio) / 2)
-    vertical_distance = int((height * distance_ratio) / 2)
-    if direction == "up":
-        return center_x, center_y + vertical_distance, center_x, center_y - vertical_distance
-    if direction == "down":
-        return center_x, center_y - vertical_distance, center_x, center_y + vertical_distance
-    if direction == "left":
-        return center_x + horizontal_distance, center_y, center_x - horizontal_distance, center_y
-    if direction == "right":
-        return center_x - horizontal_distance, center_y, center_x + horizontal_distance, center_y
-    raise SelectorResolutionError("Unsupported swipe direction.", direction=direction)
-
-
-def _resolve_swipe_points_for_action(*, width: int, height: int, action: SwipeAction) -> tuple[int, int, int, int]:
-    """Returns explicit swipe coordinates when provided, otherwise uses directional screen-relative swipes."""
-
-    explicit_ratios = (
-        action.start_x_ratio,
-        action.start_y_ratio,
-        action.end_x_ratio,
-        action.end_y_ratio,
-    )
-    if all(ratio is None for ratio in explicit_ratios):
-        return _resolve_swipe_points(
-            width=width,
-            height=height,
-            direction=action.direction,
-            distance_ratio=action.distance_ratio,
-        )
-    if any(ratio is None for ratio in explicit_ratios):
-        raise SelectorResolutionError("Explicit swipe ratios require all start/end ratios to be provided together.")
-    start_x_ratio, start_y_ratio, end_x_ratio, end_y_ratio = explicit_ratios
-    assert start_x_ratio is not None and start_y_ratio is not None and end_x_ratio is not None and end_y_ratio is not None
-    _validate_swipe_ratio(start_x_ratio, field_name="start_x_ratio")
-    _validate_swipe_ratio(start_y_ratio, field_name="start_y_ratio")
-    _validate_swipe_ratio(end_x_ratio, field_name="end_x_ratio")
-    _validate_swipe_ratio(end_y_ratio, field_name="end_y_ratio")
-    return (
-        int(width * start_x_ratio),
-        int(height * start_y_ratio),
-        int(width * end_x_ratio),
-        int(height * end_y_ratio),
-    )
-
-
-def _validate_swipe_ratio(ratio: float, *, field_name: str) -> None:
-    """Rejects explicit swipe ratios that fall outside normalized screen bounds."""
-
-    if not 0 <= ratio <= 1:
-        raise SelectorResolutionError(
-            "Explicit swipe ratios must be within [0, 1].",
-            field_name=field_name,
-            ratio=ratio,
-        )
-
-
 def _delete_budget(draft_text: str | None) -> int:
     """Returns a conservative delete count for one observed reusable text field."""
 

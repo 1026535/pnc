@@ -28,8 +28,8 @@ from pnc_automation.core.vision.ocr.ocr_lines import merge_ocr_lines
 from pnc_automation.core.vision.ocr.ocr_service import OcrLine
 from pnc_automation.app.pnc.vision.selectors import SelectorRegistry, SurfaceDefinition
 
-_WORLD_X_COORDINATE_PATTERN = re.compile(r"X\s*[:：]\s*(?P<value>\d{1,3})", re.IGNORECASE)
-_WORLD_Y_COORDINATE_PATTERN = re.compile(r"Y\s*[:：]\s*(?P<value>\d{1,4})", re.IGNORECASE)
+_WORLD_X_COORDINATE_PATTERN = re.compile(r"X\s*[:：]?\s*(?P<value>\d{1,3})", re.IGNORECASE)
+_WORLD_Y_COORDINATE_PATTERN = re.compile(r"Y\s*[:：]?\s*(?P<value>\d{1,4})", re.IGNORECASE)
 _WORLD_UI_CHROME_TEXTS = frozenset({"HOME", "HERO", "QUEST", "MAIL", "ALLIANCE", "MORE", "SEARCH"})
 _WORLD_NEUTRAL_OBJECT_TOKENS = frozenset({"DRAGONIA", "ALTAR", "HELLFORTRESS"})
 _WORLD_ALLIANCE_BUILDING_TOKENS = frozenset({"FORTRESS", "TOWER", "HIVE", "MINE", "CAMP"})
@@ -715,13 +715,19 @@ def _classify_color_family(*, image: Image.Image, bounds: object) -> str | None:
     red = red_total / pixel_count
     green = green_total / pixel_count
     blue = blue_total / pixel_count
-    if blue >= 110 and blue >= red + 30 and blue >= green + 5:
+    if is_world_map_blue_family_pixel(red=red, green=green, blue=blue):
         if green >= 90 and green >= red:
             return "light_blue"
         return "deep_blue"
     if red >= 120 and green >= 120 and blue <= 140:
         return "yellow"
     return None
+
+
+def is_world_map_blue_family_pixel(*, red: int, green: int, blue: int) -> bool:
+    """Returns whether one RGB pixel belongs to the live blue/cyan text family used by world-map chrome."""
+
+    return blue >= 110 and blue >= red + 30 and blue >= green + 5
 
 
 def _resolve_world_map_scan_bounds(*, image: Image.Image, requested_bounds: Bounds | None) -> Bounds:

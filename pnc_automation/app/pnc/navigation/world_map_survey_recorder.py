@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 from pnc_automation.app.pnc.domain.observation import Observation, SpatialObjectQuery, SpatialSurfaceObservation, SpatialSurfaceType
+from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.navigation.world_map_index import (
     WorldMapCastleQuery,
     WorldMapObjectKey,
@@ -84,6 +85,34 @@ class WorldMapSurveyRecorder:
                 label,
                 artifact_policy=artifact_policy,
             ),
+        )
+
+    def record_checkpoint(
+        self,
+        label: str,
+        observation: Observation | None = None,
+        request: ObservationRequest | None = None,
+        *,
+        artifact_selection: ObservationArtifactSelection | None = None,
+    ) -> WorldMapSurveyCheckpointResult:
+        """Indexes one provided world-map observation when it is already usable, otherwise captures a fresh checkpoint."""
+
+        if observation is not None and observation.screen_type == ScreenType.PNC_WORLD_MAP:
+            try:
+                observation.require_spatial_surface(SpatialSurfaceType.WORLD_MAP)
+            except SelectorResolutionError:
+                pass
+            else:
+                return self.ingest_checkpoint_observation(
+                    label,
+                    observation,
+                    request=request,
+                    artifact_selection=artifact_selection,
+                )
+        return self.capture_checkpoint(
+            label,
+            request=request,
+            artifact_selection=artifact_selection,
         )
 
     def ingest_capture(self, capture: CapturedObservation) -> tuple[WorldMapObjectSighting, ...]:

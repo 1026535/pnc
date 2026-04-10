@@ -18,7 +18,7 @@ from pnc_automation.app.pnc.persistence.mail_archive_store import MailArchiveSto
 from pnc_automation.app.pnc.persistence.castle_roster_store import CastleRosterStore
 from pnc_automation.app.pnc.navigation.world_map_survey_recorder import WorldMapSurveyRecorder
 from pnc_automation.app.authoring.config.models import AccountConfig, CastleIdentity, DefaultsConfig, PncAccountCastleRosterConfig
-from pnc_automation.core.errors import TaskVerificationError
+from pnc_automation.core.errors import SelectorResolutionError, TaskVerificationError
 from pnc_automation.app.pnc.domain.action_requests import ActionRequest, WaitAction
 from pnc_automation.app.pnc.domain.observation import Observation
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
@@ -88,6 +88,79 @@ class AutomationRunner:
     logger: logging.LoggerAdapter
     world_map_survey_recorder: WorldMapSurveyRecorder | None = None
     policy: StepExecutionPolicy = field(default_factory=StepExecutionPolicy)
+
+    def execute_flow_until(
+        self,
+        *,
+        label_prefix: str,
+        planner: Callable[[Observation], list[ActionRequest]],
+        done: Callable[[Observation], bool],
+        start_observation: Observation | None = None,
+        max_steps: int | None = None,
+    ) -> Observation:
+        """Executes one bounded external navigation loop through the canonical observe-plan-act seam."""
+
+        current = start_observation or self.observation_service.observe(f"{label_prefix}_start")
+        step_budget = self.policy.max_replans_per_step if max_steps is None else max_steps
+        if step_budget < 0:
+            raise ValueError("AutomationRunner.execute_flow_until max_steps cannot be negative.")
+        for step_index in range(step_budget + 1):
+            if done(current):
+                return current
+            if current.blocking_popup or current.screen_type == ScreenType.PNC_POPUP:
+                actions = self.flow_planner.close_blocking_popup(current)
+            elif current.screen_type == ScreenType.UNKNOWN:
+                actions = self.flow_planner.recover_unknown_game_screen(
+                    current,
+                    reason=f"{label_prefix}_recover_unknown",
+                )
+            else:
+                actions = planner(current)
+            if not actions:
+                raise SelectorResolutionError(
+                    "Automation runner could not derive an action for the requested flow state.",
+                    screen_type=current.screen_type.value,
+                    label_prefix=label_prefix,
+                )
+            current = self.action_executor.execute_actions(
+                actions,
+                current,
+                observe=lambda label, request=None: self.observation_service.observe(
+                    f"{label_prefix}_step_{step_index}_{label}",
+                    request=request,
+                ),
+            ).observation
+        raise SelectorResolutionError(
+            "Automation runner could not prove the requested flow state within the configured budget.",
+            screen_type=current.screen_type.value,
+            label_prefix=label_prefix,
+        )
+
+    def prove_preflight_state(
+        self,
+        account: AccountConfig,
+        requirement: TaskPreflight,
+        *,
+        label_prefix: str,
+        start_observation: Observation | None = None,
+        max_steps: int | None = None,
+        castle_roster_store: CastleRosterStore | None = None,
+        mail_archive_store: MailArchiveStore | None = None,
+        chat_archive_store: ChatArchiveStore | None = None,
+    ) -> Observation:
+        """Proves one shared runner-owned preflight state for external callers such as live tools and smoke helpers."""
+
+        current = start_observation or self.observation_service.observe(f"{label_prefix}_start")
+        if requirement == TaskPreflight.NONE:
+            return current
+        del account, castle_roster_store, mail_archive_store, chat_archive_store
+        return self.execute_flow_until(
+            label_prefix=label_prefix,
+            planner=lambda observation: self._plan_task_preflight(requirement, observation),
+            done=lambda observation: self._task_preflight_is_satisfied(requirement, observation),
+            start_observation=current,
+            max_steps=max_steps,
+        )
 
     def run(
         self,

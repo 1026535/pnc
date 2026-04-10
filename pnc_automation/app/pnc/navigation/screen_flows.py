@@ -83,6 +83,16 @@ class ScreenFlowPlanner:
                     follow_up_request=ObservationRequest.source_screen_retry(ScreenType.PNC_HOME_CITY),
                 )
             ]
+        if observation.has(UiElementId.PNC_BOTTOM_NAV_HOME) and (
+            observation.has(UiElementId.PNC_BOTTOM_NAV_MORE) or observation.has(UiElementId.PNC_BOTTOM_NAV_ALLIANCE)
+        ):
+            return [
+                WaitAction(
+                    milliseconds=250,
+                    reason="refresh_unknown_game_root",
+                    observe_after=True,
+                )
+            ]
         return [KeyEventAction(key_code="KEYCODE_BACK", reason=reason, observe_after=True)]
 
     def ensure_android_home(self, observation: Observation) -> list[ActionRequest]:
