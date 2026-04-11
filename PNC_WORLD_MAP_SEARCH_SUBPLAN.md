@@ -296,10 +296,50 @@ Current implementation state:
 The following important items are still not fully complete:
 
 - exact overview/high-level-map bounds extraction for full-map sweep,
+- movement-efficient broad sweep ordering for full-map search:
+  - current row-major planning is deterministic, but broad live player search should use an explicit serpentine row sweep,
+  - desired full-map behavior is now tracked in [PNC_WORLD_MAP_SEARCH_PATTERN_DEBUG_PLAN.md](/c:/Users/lebel/pnc/PNC_WORLD_MAP_SEARCH_PATTERN_DEBUG_PLAN.md),
 - fully proven deterministic displacement for every world-map movement direction and run length,
 - implemented castle gear validation after opening a player profile,
 - full migration of every root-owned task to runner preflight,
 - complete live stabilization on popup-heavy or state-unstable accounts during long search runs.
+
+### 2.3.11 Coordinate-domain and coordinate-OCR consolidation
+
+Live search validation on 2026-04-11 clarified two important correctness boundaries.
+
+Implemented fixes:
+
+- world-map coordinate OCR now has one canonical owner for the cyan/blue coordinate bar,
+- selector proof and spatial-surface viewport enrichment reuse the same coordinate-bar parsing path,
+- unrelated top-HUD/resource text is no longer allowed to pair with the real coordinate-bar `Y` value,
+- the search layer now has a canonical `WorldMapCoordinateDomain` beside `WorldMapBounds`,
+- `WorldMapBounds` owns only inclusive kingdom extents,
+- `WorldMapCoordinateDomain` owns live addressable coordinate-pair semantics and magnifier-style snapping.
+
+Live coordinate-domain findings:
+
+- min X is `0`,
+- max X is `511`,
+- min Y is `0`,
+- max Y is `1023`,
+- `(0, 1023)` is not addressable; the lower-left corner is `(0, 1022)`,
+- `(511, 0)` is not addressable; the upper-right corner is `(511, 1)`,
+- individual integer axis values are not invalid by themselves,
+- valid tiles follow an addressable coordinate-pair rule:
+  - `(506, 1020)` exists,
+  - `(508, 1020)` exists,
+  - `(507, 1019)` exists,
+  - `(509, 1019)` exists,
+  - `(508, 1019)` does not exist,
+  - entering `(507, 1020)` in the magnifier corrects to `(506, 1020)`.
+
+Practical consequence:
+
+- movement and search should compare against the normalized addressable target, not the raw typed coordinate,
+- route planning must not emit impossible coordinate pairs,
+- explicit rectangles that contain no addressable coordinate pair should fail fast,
+- broad traversal pattern work should build on the coordinate domain instead of re-describing coordinate validity.
 
 ## 3. Problem Statement
 
@@ -671,6 +711,7 @@ Traversal shape should be explicit and reusable.
 Recommended patterns:
 
 - `ROW_MAJOR_SWEEP`
+- `SERPENTINE_ROW_SWEEP`
 - `EXPANDING_RING`
 - `EDGE_BAND_SWEEP`
 
@@ -681,11 +722,15 @@ Examples:
 - outward search from my territory:
   - `EXPANDING_RING` around a self-territory origin,
 - full-map search:
-  - `ROW_MAJOR_SWEEP` with a full-map boundary and an upper-left start coordinate,
+  - `SERPENTINE_ROW_SWEEP` with a full-map boundary and an upper-left start coordinate,
+  - alternate row direction to avoid long horizontal reset moves after each row,
+  - keep `ROW_MAJOR_SWEEP` available as a deterministic logical order for small/debug routes,
 - center sweep around `(0, 0)`:
   - `EXPANDING_RING` or `ROW_MAJOR_SWEEP` with explicit origin `(0, 0)`,
 - edge search:
   - `EDGE_BAND_SWEEP` with an edge-band boundary.
+
+The detailed traversal-pattern debugging and implementation plan lives in [PNC_WORLD_MAP_SEARCH_PATTERN_DEBUG_PLAN.md](/c:/Users/lebel/pnc/PNC_WORLD_MAP_SEARCH_PATTERN_DEBUG_PLAN.md).
 
 ### 9.5 `WorldMapSearchOrigin`
 
@@ -809,11 +854,14 @@ Examples:
 - expanding local search:
   - `EXPANDING_RING` plus `RADIUS_FROM_ORIGIN`,
 - full survey:
-  - `ROW_MAJOR_SWEEP` plus `FULL_MAP`, starting from `MAP_CORNER(upper_left)`,
+  - `SERPENTINE_ROW_SWEEP` plus `FULL_MAP`, starting from `MAP_CORNER(upper_left)`,
+  - normalize row endpoints through `WorldMapCoordinateDomain`,
 - center sweep:
   - `EXPANDING_RING` around `EXPLICIT_COORDINATE(0, 0)`,
 - edge sweep:
   - `EDGE_BAND_SWEEP` plus `EDGE_BAND` boundary.
+
+The detailed traversal-pattern debugging and implementation plan lives in [PNC_WORLD_MAP_SEARCH_PATTERN_DEBUG_PLAN.md](/c:/Users/lebel/pnc/PNC_WORLD_MAP_SEARCH_PATTERN_DEBUG_PLAN.md).
 
 ## 12. Search Loop
 
@@ -1068,8 +1116,10 @@ Required unit-test coverage:
 - search-request validation,
 - matcher and stop-policy invalid input rejection,
 - origin-relative and explicit-origin route generation,
-- row-major, expanding-ring, and edge-band route generation,
+- row-major, serpentine-row, expanding-ring, and edge-band route generation,
+- full-map serpentine route generation from normalized upper-left through normalized row endpoints,
 - fail-fast behavior when origin resolution is required but unavailable,
+- fail-fast behavior when requested bounds contain no addressable coordinate pair,
 - coordinate-navigation request planning and validation,
 - overview-helper request planning when supported,
 - index lookup for generic spatial objects,
@@ -1090,6 +1140,7 @@ Required live validation:
 
 - one local self-territory search using a non-zero radius boundary,
 - one search proving that repeated checkpoint movement actually covers the requested row-major route,
+- one bounded serpentine search proving alternating row direction and row-transition movement,
 - one expanding search proving the engine can grow outward from its origin correctly,
 - one broad search proving the engine can continue past the local neighborhood,
 - one castle-search flow that can index candidates and stop cleanly when no match is found within the requested boundary and stop policy.
@@ -1116,6 +1167,7 @@ This sub-plan is successful when the codebase has one clean answer to each of th
 - how do we express what to match without inventing a new API for each use case?
 - how do we express when to stop after `N` matches or after a radius is exhausted?
 - how do we choose row-major, expanding, center, or edge traversal without changing the engine?
+- how do we choose movement-efficient serpentine traversal for broad full-map search without changing the engine?
 - where is the origin for a local scan defined and validated?
 - who owns one world-map swipe?
 - who owns checkpoint routing?

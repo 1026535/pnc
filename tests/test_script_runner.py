@@ -24,6 +24,7 @@ from pnc_automation.core.infra.storage.artifact_store import ArtifactStore
 from pnc_automation.app.pnc.domain.observation import SpatialObjectKind, SpatialSurfaceType
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
+from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
 from tests.test_support import build_logger
 from tests.test_support import build_png_bytes, make_observation, make_spatial_object, make_spatial_surface
 
@@ -151,7 +152,11 @@ class ScriptRunnerTests(unittest.TestCase):
             )
             adb_client = _FakeAdbClient()
             screenshot_service = object()
-            observation_builder = object()
+            observation_builder = type(
+                "FakeObservationBuilder",
+                (),
+                {"selector_registry": build_default_selector_registry()},
+            )()
             script_runner = ScriptRunner(
                 config=_make_app_config(root=root, instance=authored_instance, account=account),
                 task_registry=object(),
@@ -180,6 +185,8 @@ class ScriptRunnerTests(unittest.TestCase):
             self.assertIs(runtime.world_map_movement_calibration_service.screen_flows, runtime.flow_planner)
             self.assertIs(runtime.world_map_movement_calibration_service.survey_recorder, runtime.world_map_survey_recorder)
             self.assertEqual(runtime.world_map_movement_calibration_store.root, root / "artifacts")
+            runner = script_runner.build_connected_automation_runner(account=account)
+            self.assertIs(runner.world_map_search_service.survey_recorder, runner.world_map_survey_recorder)
 
     def test_build_connected_runtime_wires_world_map_survey_recorder_through_real_runtime_capture(self) -> None:
         """Builds the recorder through ScriptRunner and persists one real runtime checkpoint dump under artifacts."""

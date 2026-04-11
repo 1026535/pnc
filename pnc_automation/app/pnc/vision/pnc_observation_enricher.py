@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 
 from PIL import Image
@@ -36,12 +36,16 @@ from pnc_automation.app.pnc.vision.selectors import Region, SelectorRegistry
 from pnc_automation.app.pnc.vision.spatial_surfaces import (
     build_home_city_spatial_surface,
     build_world_map_spatial_surface,
-    parse_world_viewport,
 )
 from pnc_automation.app.pnc.vision.text_anchors import (
     DetectedTextAnchor,
     TextAnchorDetector,
     TextAnchorId,
+)
+from pnc_automation.app.pnc.vision.world_map_coordinates import (
+    ParsedWorldViewport,
+    parse_world_viewport,
+    read_world_coordinate_bar_viewport,
 )
 
 _HOME_NAV_SELECTOR_BY_TEXT_ANCHOR = {
@@ -143,6 +147,10 @@ _WORLD_ROOT_COORDINATE_PAIR_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _WORLD_ROOT_DISTANCE_PATTERN = re.compile(r"\b\d{1,4}\s*KM\b", re.IGNORECASE)
+_WORLD_MAP_INVALID_COORDINATE_STATUS_REQUIRED_TEXT = "COORDINATE"
+_WORLD_MAP_INVALID_COORDINATE_STATUS_REJECTION_TEXTS = frozenset({"INCORRECT", "INVALID", "WRONG"})
+_WORLD_MAP_INVALID_COORDINATE_STATUS_PROMPT_TEXTS = frozenset({"PLEASEENTER", "ENTER", "INPUT"})
+_WORLD_MAP_INVALID_COORDINATE_STATUS_PROMPT_QUALIFIERS = frozenset({"CORRECT", "VALID"})
 _POPUP_PRIMARY_ACTION_ANCHOR_IDS = frozenset(
     {
         TextAnchorId.LABEL_CONFIRM,
@@ -1566,7 +1574,7 @@ class PncObservationEnricher:
         ocr_result = self.ocr_service.read_result(image)
         lines = tuple(sorted(ocr_result.lines, key=lambda line: (line.bounds.y, line.bounds.x)))
         anchors = self.text_anchor_detector.detect(ocr_result)
-        alliance_status_banner = _build_alliance_home_status_banner_additions(
+        status_banner = _build_status_banner_additions(
             image=image,
             lines=lines,
             request=request,
@@ -1676,16 +1684,17 @@ class PncObservationEnricher:
                 lines=lines,
                 anchors=anchors,
                 selector_registry=self.selector_registry,
+                ocr_service=self.ocr_service,
             )
             if world_map is not None:
-                return world_map
+                return _with_status_banner(world_map, status_banner)
             world_map_root = _build_world_map_root_additions(
                 image=image,
                 lines=lines,
                 anchors=anchors,
             )
             if world_map_root is not None:
-                return world_map_root
+                return _with_status_banner(world_map_root, status_banner)
         if request.allows_screen(ScreenType.PNC_HOME_CITY) and can_attempt_screen_family_ocr(
             request_screen=ScreenType.PNC_HOME_CITY,
             observed_screen=screen_type,
@@ -1816,10 +1825,10 @@ class PncObservationEnricher:
             request_screen=ScreenType.PNC_CASTLE_SELECTION,
             observed_screen=screen_type,
         ):
-            return ObservationAdditions() if alliance_status_banner is None else alliance_status_banner
+            return ObservationAdditions() if status_banner is None else status_banner
         entries = _extract_castle_entries(image=image, lines=lines, anchors=anchors)
         if not _looks_like_castle_selection(anchors, entries):
-            return ObservationAdditions() if alliance_status_banner is None else alliance_status_banner
+            return ObservationAdditions() if status_banner is None else status_banner
 
         visible_elements_by_id: dict[UiElementId, VisibleElement] = {}
         if entries:
@@ -2256,36 +2265,67 @@ def _build_alliance_home_additions(
         return None
     status_banner = _find_alliance_home_status_banner_line(image=image, lines=lines)
     if status_banner is not None:
-        visible_elements[UiElementId.PNC_STATUS_BANNER] = _make_visible_from_line(
-            selector_id=UiElementId.PNC_STATUS_BANNER,
-            line=status_banner,
-        )
+        visible_elements[UiElementId.PNC_STATUS_BANNER] = _make_status_banner_visible_element(status_banner)
     return ObservationAdditions(
         visible_elements=visible_elements,
         screen_evidence=(ScreenEvidence(ScreenType.PNC_ALLIANCE_HOME, "ocr_alliance_home"),),
     )
 
 
-def _build_alliance_home_status_banner_additions(
+def _build_status_banner_additions(
     *,
     image: Image.Image,
     lines: tuple[OcrLine, ...],
     request: ObservationRequest,
 ) -> ObservationAdditions | None:
-    """Returns the transient alliance-home status banner even when the rest of the screen is not classifiable."""
+    """Returns transient in-game status banners that task follow-up handling must preserve."""
 
-    if not request.allows_screen(ScreenType.PNC_ALLIANCE_HOME):
-        return None
-    status_banner = _find_alliance_home_status_banner_line(image=image, lines=lines)
+    if request.allows_screen(ScreenType.PNC_ALLIANCE_HOME):
+        alliance_status_banner = _find_alliance_home_status_banner_line(image=image, lines=lines)
+        if alliance_status_banner is not None:
+            return _build_status_banner_additions_from_line(alliance_status_banner)
+    if request.allows_screen(ScreenType.PNC_WORLD_MAP):
+        world_map_status_banner = _find_world_map_invalid_coordinate_status_banner_line(image=image, lines=lines)
+        if world_map_status_banner is not None:
+            return _build_status_banner_additions_from_line(world_map_status_banner)
+    return None
+
+
+def _build_status_banner_additions_from_line(status_banner: OcrLine | None) -> ObservationAdditions | None:
+    """Builds the canonical visible status-banner addition from one OCR line when present."""
+
     if status_banner is None:
         return None
     return ObservationAdditions(
         visible_elements={
-            UiElementId.PNC_STATUS_BANNER: _make_visible_from_line(
-                selector_id=UiElementId.PNC_STATUS_BANNER,
-                line=status_banner,
-            )
+            UiElementId.PNC_STATUS_BANNER: _make_status_banner_visible_element(status_banner)
         }
+    )
+
+
+def _make_status_banner_visible_element(status_banner: OcrLine) -> VisibleElement:
+    """Builds the canonical visible selector for one transient in-game status banner."""
+
+    return _make_visible_from_line(
+        selector_id=UiElementId.PNC_STATUS_BANNER,
+        line=status_banner,
+    )
+
+
+def _with_status_banner(
+    additions: ObservationAdditions,
+    status_banner: ObservationAdditions | None,
+) -> ObservationAdditions:
+    """Carries transient status-banner OCR alongside a stronger screen-specific enrichment result."""
+
+    if status_banner is None:
+        return additions
+    return replace(
+        additions,
+        visible_elements={
+            **additions.visible_elements,
+            **status_banner.visible_elements,
+        },
     )
 
 
@@ -2545,6 +2585,29 @@ def _find_alliance_home_status_banner_line(*, image: Image.Image, lines: tuple[O
         predicate=lambda line: "PLEASECLEAR" in normalize_ocr_text(line.text) and "FIRST" in normalize_ocr_text(line.text),
         min_y=int(image.height * 0.2),
         max_y=int(image.height * 0.38),
+    )
+
+
+def _find_world_map_invalid_coordinate_status_banner_line(*, image: Image.Image, lines: tuple[OcrLine, ...]) -> OcrLine | None:
+    """Returns the transient world-map coordinate-jump rejection banner after an invalid magnifier search."""
+
+    return _find_line_matching(
+        lines=lines,
+        predicate=lambda line: _matches_world_map_invalid_coordinate_status_text(normalize_ocr_text(line.text)),
+        max_y=int(image.height * 0.45),
+    )
+
+
+def _matches_world_map_invalid_coordinate_status_text(normalized_text: str) -> bool:
+    """Returns whether normalized OCR text describes the world-map invalid-coordinate rejection."""
+
+    if _WORLD_MAP_INVALID_COORDINATE_STATUS_REQUIRED_TEXT not in normalized_text:
+        return False
+    if any(text in normalized_text for text in _WORLD_MAP_INVALID_COORDINATE_STATUS_REJECTION_TEXTS):
+        return True
+    return (
+        any(text in normalized_text for text in _WORLD_MAP_INVALID_COORDINATE_STATUS_PROMPT_QUALIFIERS)
+        and any(text in normalized_text for text in _WORLD_MAP_INVALID_COORDINATE_STATUS_PROMPT_TEXTS)
     )
 
 
@@ -4092,11 +4155,17 @@ def _build_world_map_additions(
     lines: tuple[OcrLine, ...],
     anchors: tuple[DetectedTextAnchor, ...],
     selector_registry: SelectorRegistry | None,
+    ocr_service: OcrService,
 ) -> ObservationAdditions | None:
     """Returns world-map additions once OCR proves the coordinate bar, optionally enriching fixed footer chrome."""
 
     visible_nav_elements, nav_anchors = _extract_bottom_nav_additions(image=image, anchors=anchors)
-    parsed_viewport = parse_world_viewport(image=image, lines=lines)
+    parsed_viewport = _read_world_map_coordinate_viewport(
+        image=image,
+        lines=lines,
+        selector_registry=selector_registry,
+        ocr_service=ocr_service,
+    )
     if parsed_viewport is None:
         return None
     visible_elements = dict(visible_nav_elements)
@@ -4121,9 +4190,32 @@ def _build_world_map_additions(
             image=image,
             lines=lines,
             selector_registry=selector_registry,
+            parsed_viewport=parsed_viewport,
         ),
         screen_evidence=(ScreenEvidence(ScreenType.PNC_WORLD_MAP, "ocr_world_coordinates_and_bottom_nav"),),
     )
+
+
+def _read_world_map_coordinate_viewport(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+    selector_registry: SelectorRegistry | None,
+    ocr_service: OcrService,
+) -> ParsedWorldViewport | None:
+    """Returns the canonical coordinate-bar viewport, preferring blue/cyan filtered selector OCR."""
+
+    if selector_registry is not None:
+        selector = selector_registry.require(UiElementId.PNC_WORLD_COORDINATE_BAR)
+        if selector.relative_bounds is not None:
+            parsed = read_world_coordinate_bar_viewport(
+                image=image,
+                bounds=selector.relative_bounds.materialize_region(image_size=image.size),
+                ocr_service=ocr_service,
+            )
+            if parsed is not None:
+                return parsed
+    return parse_world_viewport(image=image, lines=lines)
 
 
 def _build_world_map_root_additions(

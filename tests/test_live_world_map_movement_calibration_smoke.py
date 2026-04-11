@@ -164,7 +164,6 @@ class LiveWorldMapMovementCalibrationSmokeTests(unittest.TestCase):
             and observation.spatial_surface.viewport.coordinate is not None
         )
 
-    @staticmethod
     def _move_to_coordinate(
         self,
         observation: Observation,

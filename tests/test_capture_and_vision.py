@@ -165,6 +165,20 @@ class _CoordinateBarFilteringOcrService:
         return self.raw_text
 
 
+@dataclass(slots=True)
+class _CoordinateBarFilteringFullOcrService(_CoordinateBarFilteringOcrService):
+    """Returns full-screen OCR lines while preserving selector-crop filtered coordinate text."""
+
+    full_lines: tuple[OcrLine, ...] = ()
+
+    def read_lines(self, image: Image.Image, region: Region | None = None) -> tuple[OcrLine, ...]:
+        """Returns full-screen lines or one synthetic region line for the requested coordinate crop."""
+
+        if region is None:
+            return self.full_lines
+        return _CoordinateBarFilteringOcrService.read_lines(self, image, region)
+
+
 def _materialize_chat_region(
     registry: SelectorRegistry,
     selector_id: UiElementId,
@@ -1835,6 +1849,50 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertEqual(observation.spatial_surface.surface_type, SpatialSurfaceType.WORLD_MAP)
             self.assertEqual(observation.spatial_surface.viewport.coordinate, (253, 447))
 
+    def test_observation_builder_preserves_world_map_invalid_coordinate_status_banner(self) -> None:
+        """Carries the magnifier invalid-coordinate banner with the proven world-map observation."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                artifact_directory="k230_world_map_invalid_coordinate",
+                label="world_map_invalid_coordinate",
+            )
+            registry = build_default_selector_registry()
+            ocr_service = _FakeOcrService(
+                lines=(
+                    _ocr_line("Invalid coordinates", x=288, y=180, width=326, height=38),
+                    _ocr_line("X:253", x=73, y=67, width=71, height=24),
+                    _ocr_line("Y:447", x=177, y=67, width=69, height=24),
+                    _ocr_line("Home", x=63, y=1563, width=76, height=28),
+                    _ocr_line("Hero", x=213, y=1567, width=62, height=25),
+                    _ocr_line("Quest", x=331, y=1571, width=69, height=20),
+                    _ocr_line("Mail", x=533, y=1568, width=55, height=24),
+                    _ocr_line("Alliance", x=666, y=1567, width=100, height=26),
+                    _ocr_line("More", x=795, y=1568, width=70, height=25),
+                )
+            )
+            builder = ObservationBuilder(
+                selector_registry=registry,
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=ocr_service,
+                    selector_registry=registry,
+                ),
+            )
+
+            observation = builder.build(screenshot, request=ObservationRequest.source_screen_retry(ScreenType.PNC_WORLD_MAP))
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_WORLD_MAP)
+            self.assertEqual(observation.require(UiElementId.PNC_STATUS_BANNER).extracted_text, "Invalid coordinates")
+            self.assertEqual(observation.spatial_surface.viewport.coordinate, (253, 447))
+
     def test_observation_builder_classifies_world_map_from_coordinates_and_bottom_nav_ocr_at_alternate_resolution(self) -> None:
         """Recognizes the world map from OCR at the smaller supported live resolution too."""
 
@@ -1878,6 +1936,61 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertIsNotNone(observation.spatial_surface)
             self.assertEqual(observation.spatial_surface.surface_type, SpatialSurfaceType.WORLD_MAP)
             self.assertEqual(observation.spatial_surface.viewport.coordinate, (253, 447))
+
+    def test_observation_builder_uses_filtered_coordinate_bar_for_world_map_spatial_surface(self) -> None:
+        """Uses the same blue-filtered coordinate OCR for both world-map proof and viewport coordinates."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            image = Image.new("RGB", (540, 960), (15, 28, 68))
+            registry = build_default_selector_registry()
+            coordinate_region = registry.require(UiElementId.PNC_WORLD_COORDINATE_BAR).relative_bounds
+            assert coordinate_region is not None
+            bounds = coordinate_region.materialize_region(image_size=image.size)
+            for x in range(bounds.x + 8, bounds.x + bounds.width - 8):
+                for y in range(bounds.y + 8, bounds.y + bounds.height - 8):
+                    image.putpixel((x, y), (42, 198, 224))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(image)),
+                artifact_directory="k230_world_map_filtered_coordinate",
+                label="world_map_filtered_coordinate",
+            )
+            ocr_service = _CoordinateBarFilteringFullOcrService(
+                raw_text="X:230-kV.958",
+                filtered_text="X:230 Y:958",
+                full_lines=(
+                    _ocr_line("X: 2,736,039", x=185, y=42, width=123, height=30),
+                    _ocr_line("Y:958", x=286, y=89, width=55, height=18),
+                    _ocr_line("Home", x=38, y=937, width=46, height=17),
+                    _ocr_line("Hero", x=126, y=938, width=38, height=17),
+                    _ocr_line("Quest", x=200, y=939, width=45, height=15),
+                    _ocr_line("Mail", x=321, y=939, width=35, height=16),
+                    _ocr_line("Alliance", x=402, y=938, width=74, height=17),
+                    _ocr_line("More", x=479, y=938, width=41, height=17),
+                ),
+            )
+            builder = ObservationBuilder(
+                selector_registry=registry,
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=ocr_service,
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=ocr_service,
+                    selector_registry=registry,
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_WORLD_MAP)
+            self.assertIsNotNone(observation.spatial_surface)
+            assert observation.spatial_surface is not None
+            self.assertEqual(observation.require(UiElementId.PNC_WORLD_COORDINATE_BAR).extracted_text, "X:230 Y:958")
+            self.assertEqual(observation.spatial_surface.viewport.coordinate, (230, 958))
+            self.assertEqual(observation.spatial_surface.metadata["coordinate_text"], "X:230 Y:958")
 
     def test_observation_builder_builds_world_map_spatial_surface_with_typed_objects(self) -> None:
         """Parses typed world-map scene objects with relationships instead of forcing them into selectors."""
@@ -2104,6 +2217,24 @@ class CaptureAndVisionTests(unittest.TestCase):
         self.assertIsNotNone(surface)
         assert surface is not None
         self.assertEqual(surface.viewport.coordinate, (272, 498))
+
+    def test_world_map_spatial_surface_ignores_resource_text_that_looks_like_x_coordinate(self) -> None:
+        """Requires a coherent coordinate-bar X/Y pair instead of mixing top-HUD resource text with the map Y coordinate."""
+
+        surface = build_world_map_spatial_surface(
+            image=Image.new("RGB", (540, 960), (15, 28, 68)),
+            lines=(
+                _ocr_line("X: 2,736,039", x=185, y=42, width=123, height=30),
+                _ocr_line("X:230", x=223, y=87, width=56, height=21),
+                _ocr_line("Y:958", x=286, y=89, width=55, height=18),
+                _ocr_line("HellFortress 22", x=145, y=255, width=110, height=18),
+            ),
+            selector_registry=build_default_selector_registry(),
+        )
+
+        self.assertIsNotNone(surface)
+        assert surface is not None
+        self.assertEqual(surface.viewport.coordinate, (230, 958))
 
     def test_world_map_spatial_surface_trims_spurious_fourth_x_digit_from_live_coordinate_bar(self) -> None:
         """Keeps the world-map X coordinate in the live three-digit domain when OCR fuses an extra trailing digit."""

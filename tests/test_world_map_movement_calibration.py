@@ -338,10 +338,11 @@ class _RecordingCoordinateMover:
         label_prefix: str,
         runtime_state: dict[str, object] | None = None,
         boundary_bounds: object = None,
+        coordinate_domain: object = None,
     ) -> object:
         """Records the requested movement and returns a world-map observation at the target."""
 
-        del observation, label_prefix, boundary_bounds
+        del observation, label_prefix, boundary_bounds, coordinate_domain
         self.target_coordinates.append(target_coordinate)
         self.runtime_states.append(runtime_state)
         return _make_world_map_observation(*target_coordinate)
