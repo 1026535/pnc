@@ -264,6 +264,7 @@ class ScriptRunner:
                 defaults=self.config.defaults,
                 observation_service=connected_runtime.observation_service,
                 world_map_survey_recorder=connected_runtime.world_map_survey_recorder,
+                world_map_search_service=connected_runtime.world_map_search_service,
                 action_executor=connected_runtime.observed_action_executor,
                 task_registry=self.task_registry,
                 flow_planner=connected_runtime.flow_planner,

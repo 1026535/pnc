@@ -8,7 +8,9 @@ from pathlib import Path
 
 from pnc_automation.app.automation.engine.action_executor import ActionExecutor
 from pnc_automation.app.automation.engine.observed_action_executor import ObservedActionExecutor
+from pnc_automation.app.pnc.domain.action_requests import ActionRequest, KeyEventAction
 from pnc_automation.app.pnc.domain.observation import (
+    Observation,
     SpatialObjectKind,
     SpatialObjectQuery,
     SpatialObjectRelationship,
@@ -17,12 +19,17 @@ from pnc_automation.app.pnc.domain.observation import (
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
+from pnc_automation.app.pnc.navigation.spatial_navigation import WorldMapNavigator
 from pnc_automation.app.pnc.navigation.world_map_index import WorldMapCastleQuery
 from pnc_automation.app.pnc.navigation.world_map_search import (
     ObservationBackedWorldMapCastleInspector,
     WorldMapBounds,
     WorldMapCastleProfileQuery,
+    WorldMapCoordinateDomain,
+    WorldMapCoordinateMover,
+    WorldMapCoordinateNavigator,
     WorldMapEdge,
+    WorldMapMapCorner,
     WorldMapMovementPreferences,
     WorldMapMovementToolKind,
     WorldMapSearchBoundary,
@@ -159,6 +166,99 @@ class WorldMapSearchTests(unittest.TestCase):
             [(0, 10), (0, 0), (0, 20), (10, 0), (20, 0)],
         )
 
+    def test_coordinate_domain_models_addressable_coordinate_pairs_not_axes(self) -> None:
+        """Treats every integer axis value as usable while rejecting impossible x/y pair parity."""
+
+        domain = WorldMapCoordinateDomain.puzzles_and_conquest()
+
+        self.assertTrue(domain.is_addressable((506, 1020)))
+        self.assertTrue(domain.is_addressable((508, 1020)))
+        self.assertTrue(domain.is_addressable((507, 1019)))
+        self.assertTrue(domain.is_addressable((509, 1019)))
+        self.assertFalse(domain.is_addressable((508, 1019)))
+        self.assertEqual(domain.nearest_addressable((507, 1020)), (506, 1020))
+        self.assertEqual(domain.nearest_addressable((0, 1023)), (0, 1022))
+        self.assertEqual(domain.nearest_addressable((511, 0)), (511, 1))
+
+    def test_row_major_route_uses_addressable_neighbors_on_one_world_map_row(self) -> None:
+        """Skips impossible coordinate pairs while preserving valid same-row integer neighbors."""
+
+        service = WorldMapSearchService(screen_flows=self.flows)
+        observation = _make_world_map_observation(507, 1019)
+
+        plan = service.resolve_plan(
+            _search_request(
+                matcher=SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.RESOURCE_NODE),
+                pattern=WorldMapSearchPattern.row_major_sweep(),
+                origin=WorldMapSearchOrigin.current_viewport(),
+                boundary=WorldMapSearchBoundary.rectangle(min_coordinate=(507, 1019), max_coordinate=(511, 1019)),
+                checkpoint_spacing=1,
+            ),
+            observation,
+        )
+
+        self.assertEqual(
+            [checkpoint.coordinate for checkpoint in plan.route],
+            [(507, 1019), (509, 1019), (511, 1019)],
+        )
+
+    def test_row_major_route_fails_when_rectangle_contains_no_addressable_pair(self) -> None:
+        """Fails fast instead of snapping a no-tile rectangle outside its requested boundary."""
+
+        service = WorldMapSearchService(screen_flows=self.flows)
+
+        with self.assertRaises(SelectorResolutionError):
+            service.resolve_plan(
+                _search_request(
+                    matcher=SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.RESOURCE_NODE),
+                    pattern=WorldMapSearchPattern.row_major_sweep(),
+                    origin=WorldMapSearchOrigin.explicit_coordinate((508, 1019)),
+                    boundary=WorldMapSearchBoundary.rectangle(min_coordinate=(508, 1019), max_coordinate=(508, 1019)),
+                    checkpoint_spacing=1,
+                ),
+                _make_world_map_observation(508, 1018),
+            )
+
+    def test_full_map_corner_origin_snaps_to_addressable_coordinate_pair(self) -> None:
+        """Resolves impossible map-corner pairs to the closest real world-map coordinate pair."""
+
+        service = WorldMapSearchService(screen_flows=self.flows)
+        domain = WorldMapCoordinateDomain.puzzles_and_conquest()
+
+        plan = service.resolve_plan(
+            _search_request(
+                matcher=SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.RESOURCE_NODE),
+                pattern=WorldMapSearchPattern.row_major_sweep(),
+                origin=WorldMapSearchOrigin.map_corner(WorldMapMapCorner.UPPER_RIGHT),
+                boundary=WorldMapSearchBoundary.full_map(domain.bounds),
+                checkpoint_spacing=1024,
+            ),
+            _make_world_map_observation(0, 0),
+        )
+
+        self.assertEqual(plan.origin_coordinate, (511, 1))
+        self.assertIn((511, 1), [checkpoint.coordinate for checkpoint in plan.route])
+        self.assertIn((0, 1022), [checkpoint.coordinate for checkpoint in plan.route])
+        self.assertTrue(all(domain.is_addressable(checkpoint.coordinate) for checkpoint in plan.route))
+
+    def test_coordinate_mover_normalizes_unaddressable_target_before_planning(self) -> None:
+        """Lets direct movement callers target raw magnifier coordinates while planning against the corrected tile."""
+
+        mover = WorldMapCoordinateMover(
+            observation_service=None,
+            action_executor=None,
+            navigator=WorldMapNavigator(focus_tolerance=0),
+        )
+        observation = _make_world_map_observation(506, 1020)
+
+        result = mover.move_to_coordinate(
+            observation,
+            target_coordinate=(507, 1020),
+            label_prefix="normalized_direct_move",
+        )
+
+        self.assertIs(result, observation)
+
     def test_resolve_plan_fails_when_self_territory_origin_cannot_be_resolved(self) -> None:
         """Fails fast when a self-territory-relative search is requested from a surface that lacks self evidence."""
 
@@ -218,6 +318,38 @@ class WorldMapSearchTests(unittest.TestCase):
                 ),
                 _make_world_map_observation(0, 0),
             )
+
+    def test_execute_search_fails_coordinate_jump_with_live_status_banner(self) -> None:
+        """Surfaces the magnifier invalid-coordinate banner instead of retrying into a generic world-map parse error."""
+
+        service, observer = self._build_runtime_service(
+            observations=[
+                make_observation(
+                    ScreenType.UNKNOWN,
+                    visible_ids=(UiElementId.PNC_STATUS_BANNER,),
+                    visible_texts={UiElementId.PNC_STATUS_BANNER: "Invalid coordinates"},
+                ),
+            ]
+        )
+        service.coordinate_navigator = _FakeCoordinateJumpNavigator()
+
+        with self.assertRaises(SelectorResolutionError) as error:
+            service.execute_search(
+                _search_request(
+                    matcher=SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.RESOURCE_NODE),
+                    pattern=WorldMapSearchPattern.row_major_sweep(),
+                    origin=WorldMapSearchOrigin.current_viewport(),
+                    boundary=WorldMapSearchBoundary.rectangle(min_coordinate=(10, 0), max_coordinate=(10, 0)),
+                    checkpoint_spacing=10,
+                    movement_preferences=WorldMapMovementPreferences((WorldMapMovementToolKind.COORDINATE_JUMP,)),
+                ),
+                label_prefix="coordinate_jump_invalid",
+                start_observation=_make_world_map_observation(0, 0),
+            )
+
+        self.assertEqual(error.exception.details["target_coordinate"], (10, 0))
+        self.assertEqual(error.exception.details["status_banner"], "Invalid coordinates")
+        self.assertEqual(observer.requests, [ObservationRequest.source_screen_retry(ScreenType.PNC_WORLD_MAP)])
 
     def test_execute_search_accumulates_indexed_matches_across_checkpoints(self) -> None:
         """Uses one canonical checkpointed search loop that resolves matches from accumulated indexed survey state."""
@@ -842,6 +974,27 @@ class _CountingScreenFlowPlanner(ScreenFlowPlanner):
 
         self.ensure_world_map_ready_calls += 1
         return super().ensure_world_map_ready(observation)
+
+
+class _FakeCoordinateJumpNavigator(WorldMapCoordinateNavigator):
+    """Plans one synthetic coordinate jump action for search error-handling tests."""
+
+    def is_supported(self) -> bool:
+        """Returns that the fake coordinate-jump primitive is available."""
+
+        return True
+
+    def plan_jump(self, *, target: tuple[int, int], current_observation: Observation) -> list[ActionRequest]:
+        """Returns one observed action that requests a narrow world-map follow-up."""
+
+        del target, current_observation
+        return [
+            KeyEventAction(
+                key_code="KEYCODE_ENTER",
+                observe_after=True,
+                follow_up_request=ObservationRequest.source_screen_retry(ScreenType.PNC_WORLD_MAP),
+            )
+        ]
 
 
 def _search_request(

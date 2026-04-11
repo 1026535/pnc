@@ -16,6 +16,7 @@ from pnc_automation.app.automation.engine.task_context import TaskContext
 from pnc_automation.app.pnc.persistence.chat_archive_store import ChatArchiveStore
 from pnc_automation.app.pnc.persistence.mail_archive_store import MailArchiveStore
 from pnc_automation.app.pnc.persistence.castle_roster_store import CastleRosterStore
+from pnc_automation.app.pnc.navigation.world_map_search import WorldMapSearchService
 from pnc_automation.app.pnc.navigation.world_map_survey_recorder import WorldMapSurveyRecorder
 from pnc_automation.app.authoring.config.models import AccountConfig, CastleIdentity, DefaultsConfig, PncAccountCastleRosterConfig
 from pnc_automation.core.errors import SelectorResolutionError, TaskVerificationError
@@ -87,6 +88,7 @@ class AutomationRunner:
     flow_planner: ScreenFlowPlanner
     logger: logging.LoggerAdapter
     world_map_survey_recorder: WorldMapSurveyRecorder | None = None
+    world_map_search_service: WorldMapSearchService | None = None
     policy: StepExecutionPolicy = field(default_factory=StepExecutionPolicy)
 
     def execute_flow_until(
@@ -516,6 +518,7 @@ class AutomationRunner:
             chat_archive_store=chat_archive_store,
             observation_service=self.observation_service,
             world_map_survey_recorder=self.world_map_survey_recorder,
+            world_map_search_service=self.world_map_search_service,
         )
 
     def _ensure_no_blocking_popup(

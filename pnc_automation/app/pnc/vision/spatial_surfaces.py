@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, replace
+from dataclasses import replace
 
 from PIL import Image
 
@@ -27,9 +27,12 @@ from pnc_automation.core.text.normalization import normalize_ocr_text
 from pnc_automation.core.vision.ocr.ocr_lines import merge_ocr_lines
 from pnc_automation.core.vision.ocr.ocr_service import OcrLine
 from pnc_automation.app.pnc.vision.selectors import SelectorRegistry, SurfaceDefinition
+from pnc_automation.app.pnc.vision.world_map_coordinates import (
+    ParsedWorldViewport,
+    is_world_map_blue_family_pixel,
+    parse_world_viewport,
+)
 
-_WORLD_X_COORDINATE_PATTERN = re.compile(r"X\s*[:：]?\s*(?P<value>\d{1,3})", re.IGNORECASE)
-_WORLD_Y_COORDINATE_PATTERN = re.compile(r"Y\s*[:：]?\s*(?P<value>\d{1,4})", re.IGNORECASE)
 _WORLD_UI_CHROME_TEXTS = frozenset({"HOME", "HERO", "QUEST", "MAIL", "ALLIANCE", "MORE", "SEARCH"})
 _WORLD_NEUTRAL_OBJECT_TOKENS = frozenset({"DRAGONIA", "ALTAR", "HELLFORTRESS"})
 _WORLD_ALLIANCE_BUILDING_TOKENS = frozenset({"FORTRESS", "TOWER", "HIVE", "MINE", "CAMP"})
@@ -52,54 +55,6 @@ _WORLD_MAP_ESTIMATED_VIEWPORT_HEIGHT_UNITS = 1184
 _HOME_EMPTY_SLOT_TEXTS = frozenset({"BUILD", "EMPTY"})
 
 
-@dataclass(frozen=True, slots=True)
-class ParsedWorldViewport:
-    """Carries the parsed world-map viewport plus the OCR region used to prove it."""
-
-    viewport: SpatialViewport
-    coordinate_bounds: Bounds
-    coordinate_text: str
-
-
-def parse_world_viewport(
-    *,
-    image: Image.Image,
-    lines: tuple[OcrLine, ...],
-) -> ParsedWorldViewport | None:
-    """Returns the strict world-map coordinate viewport when OCR proves both X and Y values."""
-
-    candidate_lines = tuple(
-        line
-        for line in lines
-        if line.bounds.y <= int(image.height * 0.18) and line.bounds.x <= int(image.width * 0.7)
-    )
-    if not candidate_lines:
-        return None
-    x = _extract_coordinate_value(candidate_lines, pattern=_WORLD_X_COORDINATE_PATTERN)
-    y = _extract_coordinate_value(candidate_lines, pattern=_WORLD_Y_COORDINATE_PATTERN)
-    if x is None or y is None:
-        return None
-    coordinate_lines = tuple(
-        line
-        for line in candidate_lines
-        if "X" in normalize_ocr_text(line.text) or "Y" in normalize_ocr_text(line.text)
-    )
-    bounds_source = coordinate_lines or candidate_lines
-    left = min(line.bounds.x for line in bounds_source)
-    top = min(line.bounds.y for line in bounds_source)
-    right = max(line.bounds.x + line.bounds.width for line in bounds_source)
-    bottom = max(line.bounds.y + line.bounds.height for line in bounds_source)
-    return ParsedWorldViewport(
-        viewport=SpatialViewport(
-            addressing_kind=SpatialViewportAddressingKind.COORDINATE_BAR,
-            x=x,
-            y=y,
-        ),
-        coordinate_bounds=Bounds(x=left, y=top, width=max(1, right - left), height=max(1, bottom - top)),
-        coordinate_text=f"X:{x} Y:{y}",
-    )
-
-
 def build_world_map_surface_observation(
     *,
     image: Image.Image,
@@ -118,11 +73,12 @@ def build_world_map_spatial_surface(
     lines: tuple[OcrLine, ...],
     selector_registry: SelectorRegistry | None,
     object_scan_bounds: Bounds | None = None,
+    parsed_viewport: ParsedWorldViewport | None = None,
 ) -> SpatialSurfaceObservation | None:
     """Builds the canonical world-map spatial surface from the full viewport or one requested subsection."""
 
-    parsed_viewport = parse_world_viewport(image=image, lines=lines)
-    if parsed_viewport is None:
+    viewport = parsed_viewport if parsed_viewport is not None else parse_world_viewport(image=image, lines=lines)
+    if viewport is None:
         return None
     surface_definition = None if selector_registry is None else selector_registry.surface_for_screen(ScreenType.PNC_WORLD_MAP)
     viewport_bounds = _resolve_world_map_scan_bounds(image=image, requested_bounds=None)
@@ -133,14 +89,14 @@ def build_world_map_spatial_surface(
         surface_definition=surface_definition,
         scan_bounds=scan_bounds,
         viewport_bounds=viewport_bounds,
-        viewport_coordinate=parsed_viewport.viewport.coordinate,
+        viewport_coordinate=viewport.viewport.coordinate,
     )
     return SpatialSurfaceObservation(
         surface_type=SpatialSurfaceType.WORLD_MAP,
-        viewport=parsed_viewport.viewport,
+        viewport=viewport.viewport,
         objects=objects,
         metadata={
-            "coordinate_text": parsed_viewport.coordinate_text,
+            "coordinate_text": viewport.coordinate_text,
             "scan_bounds": scan_bounds,
             "scan_scope": "section" if object_scan_bounds is not None else "full_viewport",
             **({} if surface_definition is None else {"surface_id": surface_definition.id}),
@@ -640,21 +596,6 @@ def _extract_level_and_name(raw_text: str, *, fallback_name: str | None) -> tupl
     return int(match.group("level")), match.group("name").strip()
 
 
-def _extract_coordinate_value(lines: tuple[OcrLine, ...], *, pattern: re.Pattern[str]) -> int | None:
-    """Returns one OCR-proven coordinate value regardless of whether X and Y land on separate lines."""
-
-    ordered_lines = tuple(sorted(lines, key=lambda item: (item.bounds.y, item.bounds.x)))
-    for line in ordered_lines:
-        match = pattern.search(line.text.strip())
-        if match is not None:
-            return int(match.group("value"))
-    combined_text = " ".join(line.text.strip() for line in ordered_lines)
-    match = pattern.search(combined_text)
-    if match is None:
-        return None
-    return int(match.group("value"))
-
-
 def _looks_like_world_castle_label(normalized_text: str) -> bool:
     """Returns whether one OCR label matches the live kingdom/castle label form shown on the world map."""
 
@@ -722,12 +663,6 @@ def _classify_color_family(*, image: Image.Image, bounds: object) -> str | None:
     if red >= 120 and green >= 120 and blue <= 140:
         return "yellow"
     return None
-
-
-def is_world_map_blue_family_pixel(*, red: int, green: int, blue: int) -> bool:
-    """Returns whether one RGB pixel belongs to the live blue/cyan text family used by world-map chrome."""
-
-    return blue >= 110 and blue >= red + 30 and blue >= green + 5
 
 
 def _resolve_world_map_scan_bounds(*, image: Image.Image, requested_bounds: Bounds | None) -> Bounds:
