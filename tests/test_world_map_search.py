@@ -376,6 +376,157 @@ class WorldMapSearchTests(unittest.TestCase):
         self.assertEqual(len(session.swipes), 2)
         self.assertEqual(len(observer.labels), 2)
 
+    def test_execute_search_corrects_horizontal_orthogonal_drift_with_vertical_leg(self) -> None:
+        """Corrects vertical drift after a successful horizontal cardinal move before finishing the checkpoint."""
+
+        service, _observer, session = self._build_runtime_service_bundle(
+            observations=[
+                _make_world_map_observation(6, 9),
+                _make_world_map_observation(6, 0),
+                _make_world_map_observation(10, 0),
+            ]
+        )
+
+        service.execute_search(
+            _search_request(
+                matcher=SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.RESOURCE_NODE),
+                pattern=WorldMapSearchPattern.row_major_sweep(),
+                origin=WorldMapSearchOrigin.current_viewport(),
+                boundary=WorldMapSearchBoundary.rectangle(min_coordinate=(10, 0), max_coordinate=(10, 0)),
+                checkpoint_spacing=10,
+            ),
+            label_prefix="horizontal_drift_correction",
+            start_observation=_make_world_map_observation(0, 0),
+        )
+
+        self.assertEqual(len(session.swipes), 3)
+        self.assertNotEqual(session.swipes[0][0], session.swipes[0][2])
+        self.assertEqual(session.swipes[1][0], session.swipes[1][2])
+
+    def test_execute_search_corrects_vertical_orthogonal_drift_with_horizontal_leg(self) -> None:
+        """Corrects horizontal drift after a successful vertical cardinal move before finishing the checkpoint."""
+
+        service, _observer, session = self._build_runtime_service_bundle(
+            observations=[
+                _make_world_map_observation(6, 9),
+                _make_world_map_observation(0, 9),
+                _make_world_map_observation(0, 20),
+            ]
+        )
+
+        service.execute_search(
+            _search_request(
+                matcher=SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.RESOURCE_NODE),
+                pattern=WorldMapSearchPattern.row_major_sweep(),
+                origin=WorldMapSearchOrigin.current_viewport(),
+                boundary=WorldMapSearchBoundary.rectangle(min_coordinate=(0, 20), max_coordinate=(0, 20)),
+                checkpoint_spacing=20,
+            ),
+            label_prefix="vertical_drift_correction",
+            start_observation=_make_world_map_observation(0, 0),
+        )
+
+        self.assertEqual(len(session.swipes), 3)
+        self.assertEqual(session.swipes[0][0], session.swipes[0][2])
+        self.assertNotEqual(session.swipes[1][0], session.swipes[1][2])
+
+    def test_execute_search_fails_fast_on_wrong_sign_primary_axis_movement(self) -> None:
+        """Fails the shared production movement path when a cardinal swipe moves the primary axis backward."""
+
+        service, _observer = self._build_runtime_service(
+            observations=[
+                _make_world_map_observation(-4, 0),
+            ]
+        )
+
+        with self.assertRaises(SelectorResolutionError) as error:
+            service.execute_search(
+                _search_request(
+                    matcher=SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.RESOURCE_NODE),
+                    pattern=WorldMapSearchPattern.row_major_sweep(),
+                    origin=WorldMapSearchOrigin.current_viewport(),
+                    boundary=WorldMapSearchBoundary.rectangle(min_coordinate=(10, 0), max_coordinate=(10, 0)),
+                    checkpoint_spacing=10,
+                ),
+                label_prefix="wrong_sign_primary",
+                start_observation=_make_world_map_observation(0, 0),
+            )
+
+        self.assertEqual(error.exception.details["classification"], "unexpected_delta")
+
+    def test_execute_search_classifies_zero_delta_reactively_after_swipe(self) -> None:
+        """Classifies an interior stall only after the attempted swipe reports no coordinate movement."""
+
+        service, observer = self._build_runtime_service(
+            observations=[
+                _make_world_map_observation(0, 0),
+            ]
+        )
+
+        with self.assertRaises(SelectorResolutionError) as error:
+            service.execute_search(
+                _search_request(
+                    matcher=SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.RESOURCE_NODE),
+                    pattern=WorldMapSearchPattern.row_major_sweep(),
+                    origin=WorldMapSearchOrigin.current_viewport(),
+                    boundary=WorldMapSearchBoundary.rectangle(min_coordinate=(10, 0), max_coordinate=(10, 0)),
+                    checkpoint_spacing=10,
+                ),
+                label_prefix="zero_delta_reactive",
+                start_observation=_make_world_map_observation(0, 0),
+            )
+
+        self.assertEqual(error.exception.details["classification"], "interior_stall")
+        self.assertEqual(observer.labels, ["zero_delta_reactive_move_0_0_post_action_1"])
+
+    def test_execute_search_does_not_run_screen_flow_world_map_readiness_per_checkpoint(self) -> None:
+        """Keeps checkpoint traversal inside the world-map surface after the caller supplies the entry proof."""
+
+        flows = _CountingScreenFlowPlanner()
+        observer = FakeObservationService(
+            observations=[
+                _make_world_map_observation(10, 0),
+            ]
+        )
+        session = FakeSession()
+        recorder = WorldMapSurveyRecorder(
+            observation_service=observer,
+            debug_store=WorldMapSurveyDebugStore(root=Path(self.temp_directory.name)),
+        )
+        service = WorldMapSearchService(
+            screen_flows=flows,
+            observation_service=observer,
+            action_executor=ObservedActionExecutor(
+                selector_registry=build_default_selector_registry(),
+                action_executor=ActionExecutor(
+                    session=session,
+                    stable_click_delay_ms=0,
+                    post_action_observe_delay_ms=0,
+                    chat_stable_click_delay_ms=0,
+                    chat_post_action_observe_delay_ms=0,
+                    logger=build_logger(),
+                    sleep=lambda _: None,
+                ),
+                logger=build_logger(),
+                sleep=lambda _: None,
+            ),
+            survey_recorder=recorder,
+        )
+
+        service.execute_search(
+            _search_request(
+                matcher=SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.RESOURCE_NODE),
+                pattern=WorldMapSearchPattern.row_major_sweep(),
+                origin=WorldMapSearchOrigin.current_viewport(),
+                boundary=WorldMapSearchBoundary.rectangle(min_coordinate=(0, 0), max_coordinate=(10, 0)),
+                checkpoint_spacing=10,
+            ),
+            label_prefix="no_checkpoint_readiness",
+            start_observation=_make_world_map_observation(0, 0),
+        )
+
+        self.assertEqual(flows.ensure_world_map_ready_calls, 0)
+
     def test_execute_search_fails_fast_when_start_observation_is_not_proven_world_map(self) -> None:
         """Requires callers to enter and prove world map before invoking the reusable search engine."""
 
@@ -675,6 +826,22 @@ class WorldMapSearchTests(unittest.TestCase):
             survey_recorder=recorder,
         )
         return service, observer, session
+
+
+class _CountingScreenFlowPlanner(ScreenFlowPlanner):
+    """Tracks root world-map readiness calls while preserving normal screen-flow behavior."""
+
+    def __init__(self) -> None:
+        """Initializes the counter and base planner dependencies."""
+
+        super().__init__()
+        self.ensure_world_map_ready_calls = 0
+
+    def ensure_world_map_ready(self, observation: object) -> list[object]:
+        """Counts calls to the root readiness seam."""
+
+        self.ensure_world_map_ready_calls += 1
+        return super().ensure_world_map_ready(observation)
 
 
 def _search_request(

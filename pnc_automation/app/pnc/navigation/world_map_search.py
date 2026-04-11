@@ -22,7 +22,11 @@ from pnc_automation.app.pnc.domain.observation import (
 from pnc_automation.app.pnc.enums.mail import PlayerProfileRouteKind
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
-from pnc_automation.app.pnc.navigation.spatial_navigation import WorldCoordinate, WorldMapNavigator
+from pnc_automation.app.pnc.navigation.spatial_navigation import (
+    WorldCoordinate,
+    WorldMapCardinalDirection,
+    WorldMapNavigator,
+)
 from pnc_automation.app.pnc.navigation.world_map_index import (
     WorldMapCastleQuery,
     WorldMapObjectKey,
@@ -102,6 +106,17 @@ class WorldMapMovementToolKind(StrEnum):
     SWIPE = "swipe"
     COORDINATE_JUMP = "coordinate_jump"
     OVERVIEW_SEED = "overview_seed"
+
+
+class WorldMapCardinalMovementClassification(StrEnum):
+    """Classifies one observed cardinal world-map movement increment."""
+
+    MOVED = "moved"
+    MOVED_WITH_DRIFT = "moved_with_drift"
+    EXPECTED_BOUNDARY_STOP = "expected_boundary_stop"
+    INTERIOR_STALL = "interior_stall"
+    PARSER_UNCERTAIN = "parser_uncertain"
+    UNEXPECTED_DELTA = "unexpected_delta"
 
 
 class WorldMapCastleEnrichmentPolicyKind(StrEnum):
@@ -851,6 +866,7 @@ class WorldMapCoordinateMover:
     action_executor: WorldMapObservedActionExecutor | None
     navigator: WorldMapNavigator
     movement_step_budget: int = 8
+    orthogonal_drift_tolerance: int = 1
 
     def move_to_coordinate(
         self,
@@ -859,6 +875,7 @@ class WorldMapCoordinateMover:
         target_coordinate: tuple[int, int],
         label_prefix: str,
         runtime_state: dict[str, Any] | None = None,
+        boundary_bounds: WorldMapBounds | None = None,
     ) -> Observation:
         """Moves toward the requested coordinate using bounded cardinal legs and returns the freshest proven world-map observation."""
 
@@ -869,13 +886,16 @@ class WorldMapCoordinateMover:
         )
         movement_state = _mutable_runtime_state(runtime_state, "world_map_search_swipe_navigation")
         for step_index in range(self.movement_step_budget):
+            preferred_axis = _consume_preferred_cardinal_axis(movement_state)
             leg_target = _resolve_cardinal_sweep_leg_target(
                 current=current,
                 target_coordinate=target_coordinate,
                 focus_tolerance=self.navigator.focus_tolerance,
+                preferred_axis=preferred_axis,
             )
             if leg_target is None:
                 return current
+            before_coordinate = _require_world_map_viewport_coordinate(current)
             actions = self.navigator.plan_focus_coordinate(
                 current,
                 leg_target,
@@ -895,11 +915,45 @@ class WorldMapCoordinateMover:
                     current_coordinate=current_coordinate,
                     leg_target=(leg_target.x, leg_target.y),
                 )
-            current = _require_proven_world_map_observation(
+            after = _require_proven_world_map_observation(
                 observation_service=self.observation_service,
                 observation=self._execute_actions(actions, current, label_prefix=f"{label_prefix}_{step_index}"),
                 label_prefix=f"{label_prefix}_refresh_{step_index}",
             )
+            after_coordinate = _require_world_map_viewport_coordinate(after)
+            direction = _direction_for_cardinal_leg(from_coordinate=before_coordinate, leg_target=leg_target)
+            delta = after_coordinate[0] - before_coordinate[0], after_coordinate[1] - before_coordinate[1]
+            classification = classify_world_map_cardinal_delta(
+                direction=direction,
+                before_coordinate=before_coordinate,
+                delta=delta,
+                boundary_bounds=boundary_bounds,
+                orthogonal_drift_tolerance=self.orthogonal_drift_tolerance,
+            )
+            if classification in {
+                WorldMapCardinalMovementClassification.PARSER_UNCERTAIN,
+                WorldMapCardinalMovementClassification.UNEXPECTED_DELTA,
+                WorldMapCardinalMovementClassification.INTERIOR_STALL,
+                WorldMapCardinalMovementClassification.EXPECTED_BOUNDARY_STOP,
+            }:
+                raise SelectorResolutionError(
+                    "World-map movement produced an unusable cardinal swipe delta.",
+                    target_coordinate=target_coordinate,
+                    before_coordinate=before_coordinate,
+                    after_coordinate=after_coordinate,
+                    delta=delta,
+                    direction=direction.value,
+                    classification=classification.value,
+                )
+            if classification == WorldMapCardinalMovementClassification.MOVED_WITH_DRIFT:
+                _remember_orthogonal_drift_correction(
+                    movement_state=movement_state,
+                    direction=direction,
+                    current_coordinate=after_coordinate,
+                    target_coordinate=target_coordinate,
+                    focus_tolerance=self.navigator.focus_tolerance,
+                )
+            current = after
         raise SelectorResolutionError(
             "World-map movement exhausted its bounded coordinate-focus budget.",
             target_coordinate=target_coordinate,
@@ -1307,10 +1361,10 @@ class WorldMapSearchService:
                     plan=plan,
                     castle_enrichment_used=castle_enrichment_used,
                 )
-            current_observation = self._move_to_checkpoint(
+            current_observation = self.move_to_checkpoint(
                 current_observation,
+                plan=plan,
                 checkpoint=checkpoint,
-                movement_tool=plan.movement_tool,
                 label_prefix=f"{label_prefix}_move_{checkpoint.route_index}",
                 runtime_state=runtime_state,
             )
@@ -1419,26 +1473,27 @@ class WorldMapSearchService:
             survey_index=self.survey_recorder.index,
         )
 
-    def _move_to_checkpoint(
+    def move_to_checkpoint(
         self,
         observation: Observation,
         *,
+        plan: WorldMapResolvedSearchPlan,
         checkpoint: WorldMapTraversalCheckpoint,
-        movement_tool: WorldMapMovementToolKind,
         label_prefix: str,
-        runtime_state: dict[str, Any] | None,
+        runtime_state: dict[str, Any] | None = None,
     ) -> Observation:
         """Moves toward the requested checkpoint using the selected low-level movement primitive."""
 
-        if movement_tool == WorldMapMovementToolKind.COORDINATE_JUMP:
+        if plan.movement_tool == WorldMapMovementToolKind.COORDINATE_JUMP:
             return self._move_with_coordinate_jump(observation, checkpoint=checkpoint, label_prefix=label_prefix)
-        if movement_tool == WorldMapMovementToolKind.OVERVIEW_SEED:
+        if plan.movement_tool == WorldMapMovementToolKind.OVERVIEW_SEED:
             return self._move_with_overview_seed(observation, checkpoint=checkpoint, label_prefix=label_prefix)
-        return self._coordinate_mover().move_to_coordinate(
+        return self.coordinate_mover_for_runtime().move_to_coordinate(
             observation,
             target_coordinate=checkpoint.coordinate,
             label_prefix=label_prefix,
             runtime_state=runtime_state,
+            boundary_bounds=_known_world_map_bounds(plan.request),
         )
 
     def _move_with_coordinate_jump(
@@ -1500,7 +1555,7 @@ class WorldMapSearchService:
         checkpoint_capture = self.survey_recorder.record_checkpoint(label, observation)
         return observation if checkpoint_capture.capture is None else checkpoint_capture.capture.observation
 
-    def _coordinate_mover(self) -> WorldMapCoordinateMover:
+    def coordinate_mover_for_runtime(self) -> WorldMapCoordinateMover:
         """Returns the canonical coordinate mover shared by sweep traversal and calibration helpers."""
 
         if self.coordinate_mover is not None:
@@ -1511,6 +1566,11 @@ class WorldMapSearchService:
             navigator=self.screen_flows.world_map_navigator,
             movement_step_budget=self.movement_step_budget,
         )
+
+    def _coordinate_mover(self) -> WorldMapCoordinateMover:
+        """Returns the canonical coordinate mover for legacy private call sites."""
+
+        return self.coordinate_mover_for_runtime()
 
     def _resolve_origin_coordinate(
         self,
@@ -1784,6 +1844,72 @@ def _require_proven_world_map_observation(
     raise AssertionError("Unreachable world-map surface refresh fallthrough.")
 
 
+def classify_world_map_cardinal_delta(
+    *,
+    direction: WorldMapCardinalDirection,
+    before_coordinate: tuple[int, int] | None,
+    delta: tuple[int, int] | None,
+    boundary_bounds: WorldMapBounds | None,
+    orthogonal_drift_tolerance: int = 1,
+) -> WorldMapCardinalMovementClassification:
+    """Classifies one observed cardinal movement delta using the shared runtime/calibration semantics."""
+
+    if before_coordinate is None or delta is None:
+        return WorldMapCardinalMovementClassification.PARSER_UNCERTAIN
+    if delta == (0, 0):
+        if is_world_map_coordinate_near_boundary(
+            direction=direction,
+            coordinate=before_coordinate,
+            bounds=boundary_bounds,
+        ):
+            return WorldMapCardinalMovementClassification.EXPECTED_BOUNDARY_STOP
+        return WorldMapCardinalMovementClassification.INTERIOR_STALL
+    expected_delta = expected_world_map_cardinal_delta(direction)
+    if expected_delta[0] != 0:
+        if delta[0] == 0 or (1 if delta[0] > 0 else -1) != expected_delta[0]:
+            return WorldMapCardinalMovementClassification.UNEXPECTED_DELTA
+        if abs(delta[1]) > orthogonal_drift_tolerance:
+            return WorldMapCardinalMovementClassification.MOVED_WITH_DRIFT
+        return WorldMapCardinalMovementClassification.MOVED
+    if delta[1] == 0 or (1 if delta[1] > 0 else -1) != expected_delta[1]:
+        return WorldMapCardinalMovementClassification.UNEXPECTED_DELTA
+    if abs(delta[0]) > orthogonal_drift_tolerance:
+        return WorldMapCardinalMovementClassification.MOVED_WITH_DRIFT
+    return WorldMapCardinalMovementClassification.MOVED
+
+
+def is_world_map_coordinate_near_boundary(
+    *,
+    direction: WorldMapCardinalDirection,
+    coordinate: tuple[int, int] | None,
+    bounds: WorldMapBounds | None,
+) -> bool:
+    """Returns whether a coordinate lies on the known world-map edge that can legitimately stop the direction."""
+
+    if coordinate is None or bounds is None:
+        return False
+    expected_delta = expected_world_map_cardinal_delta(direction)
+    if expected_delta[0] > 0:
+        return coordinate[0] >= bounds.max_x
+    if expected_delta[0] < 0:
+        return coordinate[0] <= bounds.min_x
+    if expected_delta[1] > 0:
+        return coordinate[1] >= bounds.max_y
+    return coordinate[1] <= bounds.min_y
+
+
+def expected_world_map_cardinal_delta(direction: WorldMapCardinalDirection) -> tuple[int, int]:
+    """Returns the expected signed coordinate delta for one canonical finger-swipe direction."""
+
+    if direction == WorldMapCardinalDirection.LEFT:
+        return 1, 0
+    if direction == WorldMapCardinalDirection.RIGHT:
+        return -1, 0
+    if direction == WorldMapCardinalDirection.UP:
+        return 0, 1
+    return 0, -1
+
+
 def _row_major_coordinates(*, bounds: WorldMapBounds, spacing: int) -> Iterable[tuple[int, int]]:
     """Yields coordinates in deterministic row-major order across the inclusive bounds."""
 
@@ -1904,10 +2030,15 @@ def _resolve_cardinal_sweep_leg_target(
     current: Observation,
     target_coordinate: tuple[int, int],
     focus_tolerance: int,
+    preferred_axis: str | None = None,
 ) -> WorldCoordinate | None:
-    """Returns the next canonical cardinal leg toward one checkpoint, finishing horizontal drift before vertical drift."""
+    """Returns the next canonical cardinal leg, honoring one-shot drift correction before normal axis order."""
 
     current_coordinate = _require_world_map_viewport_coordinate(current)
+    if preferred_axis == "x" and abs(target_coordinate[0] - current_coordinate[0]) > focus_tolerance:
+        return WorldCoordinate(x=target_coordinate[0], y=current_coordinate[1])
+    if preferred_axis == "y" and abs(target_coordinate[1] - current_coordinate[1]) > focus_tolerance:
+        return WorldCoordinate(x=current_coordinate[0], y=target_coordinate[1])
     delta_x = target_coordinate[0] - current_coordinate[0]
     if abs(delta_x) > focus_tolerance:
         return WorldCoordinate(x=target_coordinate[0], y=current_coordinate[1])
@@ -1929,6 +2060,74 @@ def _coordinate_within_tolerance(
         abs(current_coordinate[0] - target_coordinate[0]) <= tolerance
         and abs(current_coordinate[1] - target_coordinate[1]) <= tolerance
     )
+
+
+def _direction_for_cardinal_leg(
+    *,
+    from_coordinate: tuple[int, int],
+    leg_target: WorldCoordinate,
+) -> WorldMapCardinalDirection:
+    """Returns the canonical swipe direction implied by one single-axis coordinate leg."""
+
+    delta_x = leg_target.x - from_coordinate[0]
+    delta_y = leg_target.y - from_coordinate[1]
+    if delta_x != 0 and delta_y != 0:
+        raise SelectorResolutionError(
+            "Cardinal world-map movement legs must resolve exactly one axis.",
+            from_coordinate=from_coordinate,
+            leg_target=(leg_target.x, leg_target.y),
+        )
+    if delta_x > 0:
+        return WorldMapCardinalDirection.LEFT
+    if delta_x < 0:
+        return WorldMapCardinalDirection.RIGHT
+    if delta_y > 0:
+        return WorldMapCardinalDirection.UP
+    if delta_y < 0:
+        return WorldMapCardinalDirection.DOWN
+    raise SelectorResolutionError(
+        "Cardinal world-map movement legs require a non-zero target delta.",
+        from_coordinate=from_coordinate,
+        leg_target=(leg_target.x, leg_target.y),
+    )
+
+
+def _remember_orthogonal_drift_correction(
+    *,
+    movement_state: dict[str, Any],
+    direction: WorldMapCardinalDirection,
+    current_coordinate: tuple[int, int],
+    target_coordinate: tuple[int, int],
+    focus_tolerance: int,
+) -> None:
+    """Prioritizes the next leg on the axis opposite the successful but drifting cardinal move."""
+
+    axis = "y" if direction in {WorldMapCardinalDirection.LEFT, WorldMapCardinalDirection.RIGHT} else "x"
+    target_axis_value = target_coordinate[1] if axis == "y" else target_coordinate[0]
+    current_axis_value = current_coordinate[1] if axis == "y" else current_coordinate[0]
+    if abs(target_axis_value - current_axis_value) > focus_tolerance:
+        movement_state["preferred_cardinal_axis"] = axis
+
+
+def _consume_preferred_cardinal_axis(movement_state: dict[str, Any]) -> str | None:
+    """Returns and clears the one-shot axis preference produced by orthogonal-drift correction."""
+
+    value = movement_state.pop("preferred_cardinal_axis", None)
+    if value in {"x", "y"}:
+        return str(value)
+    if value is not None:
+        raise SelectorResolutionError("Unexpected world-map movement correction axis.", preferred_axis=value)
+    return None
+
+
+def _known_world_map_bounds(request: WorldMapSearchRequest) -> WorldMapBounds | None:
+    """Returns true map bounds when the request carries them, avoiding local search bounds as edge evidence."""
+
+    if request.boundary is None:
+        return None
+    if request.boundary.kind in {WorldMapSearchBoundaryKind.FULL_MAP, WorldMapSearchBoundaryKind.EDGE_BAND}:
+        return request.boundary.map_bounds
+    return None
 
 
 def _chebyshev_distance(start: tuple[int, int], end: tuple[int, int]) -> int:

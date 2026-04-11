@@ -51,131 +51,148 @@ def main() -> None:
     runtime = application.script_runner.build_connected_runtime(account=account)
     runner = application.script_runner.build_connected_automation_runner(account=account)
     runtime.world_map_movement_calibration_service.movement_step_budget = 12
+    runtime.world_map_search_service.movement_step_budget = 12
+    errors: list[str] = []
+    calibration_matrix = None
+    dead_zone_report = None
+    sweep_results: list[object] = []
+    current: Observation | None = None
     try:
-        world_map = _ensure_world_map(runner=runner, account=account, label_prefix=f"{arguments.label}_ensure_world_map")
+        current = _ensure_world_map(runner=runner, account=account, label_prefix=f"{arguments.label}_ensure_world_map")
+        start_coordinate = current.require_spatial_surface(SpatialSurfaceType.WORLD_MAP).viewport.coordinate
+        if start_coordinate is None:
+            raise AssertionError("World-map calibration requires a coordinate-addressable viewport.")
+        local_bounds = WorldMapBounds(
+            min_x=max(0, start_coordinate[0] - arguments.local_radius),
+            min_y=max(0, start_coordinate[1] - arguments.local_radius),
+            max_x=start_coordinate[0] + arguments.local_radius,
+            max_y=start_coordinate[1] + arguments.local_radius,
+        )
+        probe_coordinates = (
+            (local_bounds.min_x, local_bounds.min_y),
+            (start_coordinate[0], start_coordinate[1]),
+            (local_bounds.max_x, local_bounds.max_y),
+        )
+        ratios = tuple(float(segment.strip()) for segment in arguments.ratios.split(",") if segment.strip() != "")
+        lane_candidates = _canonical_lane_candidates(runtime)
+        try:
+            calibration_matrix, current = runtime.world_map_movement_calibration_service.run_cardinal_calibration(
+                current,
+                label_prefix=f"{arguments.label}_cardinal",
+                repeats_per_combination=arguments.repeats,
+                ratios=ratios,
+                lane_candidates=lane_candidates,
+            )
+        except Exception as error:  # pragma: no cover - live-only fallback
+            errors.append(f"cardinal_calibration: {error}")
+            current = _recover_world_map(
+                runner=runner,
+                account=account,
+                label_prefix=f"{arguments.label}_recover_after_cardinal",
+                start_observation=current,
+                errors=errors,
+            )
+        if current is not None:
+            try:
+                dead_zone_report, current = runtime.world_map_movement_calibration_service.run_dead_zone_verification(
+                    current,
+                    label_prefix=f"{arguments.label}_dead_zone",
+                    probe_coordinates=probe_coordinates,
+                    distance_ratio=ratios[0],
+                    bounds=local_bounds,
+                    lane_center_ratios={direction: candidates[0] for direction, candidates in lane_candidates.items()},
+                )
+            except Exception as error:  # pragma: no cover - live-only fallback
+                errors.append(f"dead_zone_verification: {error}")
+                current = _recover_world_map(
+                    runner=runner,
+                    account=account,
+                    label_prefix=f"{arguments.label}_recover_after_dead_zone",
+                    start_observation=current,
+                    errors=errors,
+                )
+        for name, pattern, origin, boundary in (
+            (
+                "row_major",
+                WorldMapSearchPattern.row_major_sweep(),
+                WorldMapSearchOrigin.explicit_coordinate(start_coordinate),
+                WorldMapSearchBoundary.rectangle(
+                    min_coordinate=(local_bounds.min_x, local_bounds.min_y),
+                    max_coordinate=(local_bounds.max_x, local_bounds.max_y),
+                ),
+            ),
+            (
+                "expanding_ring",
+                WorldMapSearchPattern.expanding_ring(),
+                WorldMapSearchOrigin.explicit_coordinate(start_coordinate),
+                WorldMapSearchBoundary.radius_from_origin(arguments.local_radius),
+            ),
+            (
+                "edge_band",
+                WorldMapSearchPattern.edge_band_sweep(),
+                WorldMapSearchOrigin.map_edge_reference(WorldMapEdge.LEFT),
+                WorldMapSearchBoundary.edge_band(
+                    map_bounds=local_bounds,
+                    band_width_units=arguments.checkpoint_spacing,
+                    edges=(WorldMapEdge.LEFT, WorldMapEdge.TOP),
+                ),
+            ),
+        ):
+            if current is None:
+                break
+            try:
+                current = _recover_world_map(
+                    runner=runner,
+                    account=account,
+                    label_prefix=f"{arguments.label}_recover_before_{name}",
+                    start_observation=current,
+                    errors=errors,
+                )
+                if current is None:
+                    break
+                current = runtime.world_map_search_service.coordinate_mover_for_runtime().move_to_coordinate(
+                    current,
+                    target_coordinate=start_coordinate,
+                    label_prefix=f"{arguments.label}_recenter_before_{name}",
+                    runtime_state={},
+                )
+                sweep_result, current = runtime.world_map_movement_calibration_service.validate_sweep(
+                    current,
+                    request=WorldMapSweepValidationRequest(
+                        name=name,
+                        pattern=pattern,
+                        origin=origin,
+                        boundary=boundary,
+                        checkpoint_spacing=arguments.checkpoint_spacing,
+                        max_checkpoints=3,
+                    ),
+                    label_prefix=f"{arguments.label}_{name}",
+                )
+                sweep_results.append(sweep_result)
+            except Exception as error:  # pragma: no cover - live-only fallback
+                errors.append(f"{name}: {error}")
+                current = _recover_world_map(
+                    runner=runner,
+                    account=account,
+                    label_prefix=f"{arguments.label}_recover_after_{name}",
+                    start_observation=current,
+                    errors=errors,
+                )
     except Exception as error:  # pragma: no cover - live-only fallback
-        document = {"calibration_matrix": None, "dead_zone_report": None, "sweep_results": [], "errors": [f"ensure_world_map: {error}"]}
+        errors.append(f"fatal: {error}")
+    finally:
+        document = _build_report_document(
+            calibration_matrix=calibration_matrix,
+            dead_zone_report=dead_zone_report,
+            sweep_results=sweep_results,
+            errors=errors,
+        )
         stored = runtime.world_map_movement_calibration_store.persist(
             artifact_directory=runtime.observation_service.artifact_directory,
             label=arguments.label,
             captured_at=datetime.now(tz=UTC),
             document=document,
         )
-        print(stored.path)
-        raise SystemExit(1)
-    viewport_coordinate = world_map.require_spatial_surface(SpatialSurfaceType.WORLD_MAP).viewport.coordinate
-    if viewport_coordinate is None:
-        raise AssertionError("World-map calibration requires a coordinate-addressable viewport.")
-    local_bounds = WorldMapBounds(
-        min_x=max(0, viewport_coordinate[0] - arguments.local_radius),
-        min_y=max(0, viewport_coordinate[1] - arguments.local_radius),
-        max_x=viewport_coordinate[0] + arguments.local_radius,
-        max_y=viewport_coordinate[1] + arguments.local_radius,
-    )
-    probe_coordinates = (
-        (local_bounds.min_x, local_bounds.min_y),
-        (viewport_coordinate[0], viewport_coordinate[1]),
-        (local_bounds.max_x, local_bounds.max_y),
-    )
-    ratios = tuple(float(segment.strip()) for segment in arguments.ratios.split(",") if segment.strip() != "")
-    lane_candidates = _canonical_lane_candidates(runtime)
-    errors: list[str] = []
-    calibration_matrix = None
-    dead_zone_report = None
-    sweep_results: list[object] = []
-    current = world_map
-    try:
-        calibration_matrix, current = runtime.world_map_movement_calibration_service.run_cardinal_calibration(
-            current,
-            label_prefix=f"{arguments.label}_cardinal",
-            repeats_per_combination=arguments.repeats,
-            ratios=ratios,
-            lane_candidates=lane_candidates,
-        )
-    except Exception as error:  # pragma: no cover - live-only fallback
-        errors.append(f"cardinal_calibration: {error}")
-        current = _ensure_world_map(runner=runner, account=account, label_prefix=f"{arguments.label}_recover_after_cardinal")
-    try:
-        dead_zone_report, current = runtime.world_map_movement_calibration_service.run_dead_zone_verification(
-            current,
-            label_prefix=f"{arguments.label}_dead_zone",
-            probe_coordinates=probe_coordinates,
-            distance_ratio=ratios[0],
-            bounds=local_bounds,
-            lane_center_ratios={direction: candidates[0] for direction, candidates in lane_candidates.items()},
-        )
-    except Exception as error:  # pragma: no cover - live-only fallback
-        errors.append(f"dead_zone_verification: {error}")
-        current = _ensure_world_map(runner=runner, account=account, label_prefix=f"{arguments.label}_recover_after_dead_zone")
-    for name, pattern, origin, boundary in (
-        (
-            "row_major",
-            WorldMapSearchPattern.row_major_sweep(),
-            WorldMapSearchOrigin.current_viewport(),
-            WorldMapSearchBoundary.rectangle(
-                min_coordinate=(local_bounds.min_x, local_bounds.min_y),
-                max_coordinate=(local_bounds.max_x, local_bounds.max_y),
-            ),
-        ),
-        (
-            "expanding_ring",
-            WorldMapSearchPattern.expanding_ring(),
-            WorldMapSearchOrigin.current_viewport(),
-            WorldMapSearchBoundary.radius_from_origin(arguments.local_radius),
-        ),
-        (
-            "edge_band",
-            WorldMapSearchPattern.edge_band_sweep(),
-            WorldMapSearchOrigin.map_edge_reference(WorldMapEdge.LEFT),
-            WorldMapSearchBoundary.edge_band(
-                map_bounds=local_bounds,
-                band_width_units=arguments.checkpoint_spacing,
-                edges=(WorldMapEdge.LEFT, WorldMapEdge.TOP),
-            ),
-        ),
-    ):
-        try:
-            current = _ensure_world_map(
-                runner=runner,
-                account=account,
-                label_prefix=f"{arguments.label}_recover_before_{name}",
-                start_observation=current,
-            )
-            sweep_result, current = runtime.world_map_movement_calibration_service.validate_sweep(
-                current,
-                request=WorldMapSweepValidationRequest(
-                    name=name,
-                    pattern=pattern,
-                    origin=origin,
-                    boundary=boundary,
-                    checkpoint_spacing=arguments.checkpoint_spacing,
-                    max_checkpoints=3,
-                ),
-                label_prefix=f"{arguments.label}_{name}",
-            )
-            sweep_results.append(sweep_result)
-        except Exception as error:  # pragma: no cover - live-only fallback
-            errors.append(f"{name}: {error}")
-            current = _ensure_world_map(runner=runner, account=account, label_prefix=f"{arguments.label}_recover_after_{name}")
-    if calibration_matrix is not None and dead_zone_report is not None and len(sweep_results) == 3 and not errors:
-        document = WorldMapMovementCalibrationReport(
-            calibration_matrix=calibration_matrix,
-            dead_zone_report=dead_zone_report,
-            sweep_results=tuple(sweep_results),
-        ).to_document()
-    else:
-        document = {
-            "calibration_matrix": None if calibration_matrix is None else calibration_matrix.to_document(),
-            "dead_zone_report": None if dead_zone_report is None else dead_zone_report.to_document(),
-            "sweep_results": [result.to_document() for result in sweep_results],
-            "errors": errors,
-        }
-    stored = runtime.world_map_movement_calibration_store.persist(
-        artifact_directory=runtime.observation_service.artifact_directory,
-        label=arguments.label,
-        captured_at=datetime.now(tz=UTC),
-        document=document,
-    )
     print(stored.path)
     if errors:
         raise SystemExit(1)
@@ -195,6 +212,51 @@ def _canonical_lane_candidates(runtime: object) -> dict[WorldMapCardinalDirectio
         lane_ratio = float(action.start_y_ratio) if direction in {WorldMapCardinalDirection.LEFT, WorldMapCardinalDirection.RIGHT} else float(action.start_x_ratio)
         lanes[direction] = (lane_ratio,)
     return lanes
+
+
+def _build_report_document(
+    *,
+    calibration_matrix: object,
+    dead_zone_report: object,
+    sweep_results: list[object],
+    errors: list[str],
+) -> dict[str, object]:
+    """Builds the persisted report document, preserving partial phase artifacts when errors occurred."""
+
+    if calibration_matrix is not None and dead_zone_report is not None and len(sweep_results) == 3 and not errors:
+        return WorldMapMovementCalibrationReport(
+            calibration_matrix=calibration_matrix,
+            dead_zone_report=dead_zone_report,
+            sweep_results=tuple(sweep_results),
+        ).to_document()
+    return {
+        "calibration_matrix": None if calibration_matrix is None else calibration_matrix.to_document(),
+        "dead_zone_report": None if dead_zone_report is None else dead_zone_report.to_document(),
+        "sweep_results": [result.to_document() for result in sweep_results],
+        "errors": errors,
+    }
+
+
+def _recover_world_map(
+    *,
+    runner: AutomationRunner,
+    account: object,
+    label_prefix: str,
+    start_observation: Observation | None,
+    errors: list[str],
+) -> Observation | None:
+    """Attempts to re-prove world map after a failed phase, recording recovery failure instead of aborting."""
+
+    try:
+        return _ensure_world_map(
+            runner=runner,
+            account=account,
+            label_prefix=label_prefix,
+            start_observation=start_observation,
+        )
+    except Exception as error:  # pragma: no cover - live-only fallback
+        errors.append(f"{label_prefix}: {error}")
+        return start_observation
 
 
 def _ensure_world_map(

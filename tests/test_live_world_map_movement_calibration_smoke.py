@@ -65,6 +65,10 @@ class LiveWorldMapMovementCalibrationSmokeTests(unittest.TestCase):
         """Executes one live probe plus bounded row-major, expanding-ring, and edge-band sweeps without parser collapse."""
 
         world_map = self._ensure_world_map("live_world_map_movement_start")
+        start_coordinate = world_map.require_spatial_surface(SpatialSurfaceType.WORLD_MAP).viewport.coordinate
+        self.assertIsNotNone(start_coordinate)
+        assert start_coordinate is not None
+        local_bounds = self._local_bounds_from_coordinate(start_coordinate, radius=12)
         probe_results: list[object] = []
         current = world_map
         for ratio in (0.10, 0.20):
@@ -85,30 +89,36 @@ class LiveWorldMapMovementCalibrationSmokeTests(unittest.TestCase):
                 for result in probe_results
             )
         )
+        current = self._move_to_coordinate(current, start_coordinate, label_prefix="live_row_major_recenter")
         row_major, current = self.runtime.world_map_movement_calibration_service.validate_sweep(
             current,
             request=WorldMapSweepValidationRequest(
                 name="live_row_major",
                 pattern=WorldMapSearchPattern.row_major_sweep(),
-                origin=WorldMapSearchOrigin.current_viewport(),
-                boundary=WorldMapSearchBoundary.radius_from_origin(12),
+                origin=WorldMapSearchOrigin.explicit_coordinate(start_coordinate),
+                boundary=WorldMapSearchBoundary.rectangle(
+                    min_coordinate=(local_bounds.min_x, local_bounds.min_y),
+                    max_coordinate=(local_bounds.max_x, local_bounds.max_y),
+                ),
                 checkpoint_spacing=6,
                 max_checkpoints=4,
             ),
             label_prefix="live_row_major",
         )
+        current = self._move_to_coordinate(current, start_coordinate, label_prefix="live_ring_recenter")
         ring, current = self.runtime.world_map_movement_calibration_service.validate_sweep(
             current,
             request=WorldMapSweepValidationRequest(
                 name="live_ring",
                 pattern=WorldMapSearchPattern.expanding_ring(),
-                origin=WorldMapSearchOrigin.current_viewport(),
+                origin=WorldMapSearchOrigin.explicit_coordinate(start_coordinate),
                 boundary=WorldMapSearchBoundary.radius_from_origin(12),
                 checkpoint_spacing=6,
                 max_checkpoints=4,
             ),
             label_prefix="live_ring",
         )
+        current = self._move_to_coordinate(current, start_coordinate, label_prefix="live_edge_recenter")
         edge, _current = self.runtime.world_map_movement_calibration_service.validate_sweep(
             current,
             request=WorldMapSweepValidationRequest(
@@ -116,7 +126,7 @@ class LiveWorldMapMovementCalibrationSmokeTests(unittest.TestCase):
                 pattern=WorldMapSearchPattern.edge_band_sweep(),
                 origin=WorldMapSearchOrigin.map_edge_reference(WorldMapEdge.LEFT),
                 boundary=WorldMapSearchBoundary.edge_band(
-                    map_bounds=self._local_bounds(current, radius=12),
+                    map_bounds=local_bounds,
                     band_width_units=6,
                     edges=(WorldMapEdge.LEFT, WorldMapEdge.TOP),
                 ),
@@ -129,6 +139,9 @@ class LiveWorldMapMovementCalibrationSmokeTests(unittest.TestCase):
         self.assertTrue(all(result.usable_observation for result in row_major.checkpoint_results))
         self.assertTrue(all(result.usable_observation for result in ring.checkpoint_results))
         self.assertTrue(all(result.usable_observation for result in edge.checkpoint_results))
+        self.assertTrue(all(result.within_tolerance for result in row_major.checkpoint_results))
+        self.assertTrue(all(result.within_tolerance for result in ring.checkpoint_results))
+        self.assertTrue(all(result.within_tolerance for result in edge.checkpoint_results))
 
     def _ensure_world_map(self, label_prefix: str) -> Observation:
         """Returns a fresh world-map observation whose spatial viewport parsed successfully."""
@@ -152,11 +165,26 @@ class LiveWorldMapMovementCalibrationSmokeTests(unittest.TestCase):
         )
 
     @staticmethod
-    def _local_bounds(observation: Observation, *, radius: int) -> object:
-        """Builds one local rectangle around the current viewport for bounded edge-band validation."""
+    def _move_to_coordinate(
+        self,
+        observation: Observation,
+        coordinate: tuple[int, int],
+        *,
+        label_prefix: str,
+    ) -> Observation:
+        """Moves back to the canonical local test origin before starting the next sweep phase."""
 
-        coordinate = observation.require_spatial_surface(SpatialSurfaceType.WORLD_MAP).viewport.coordinate
-        assert coordinate is not None
+        return self.runtime.world_map_search_service.coordinate_mover_for_runtime().move_to_coordinate(
+            observation,
+            target_coordinate=coordinate,
+            label_prefix=label_prefix,
+            runtime_state={},
+        )
+
+    @staticmethod
+    def _local_bounds_from_coordinate(coordinate: tuple[int, int], *, radius: int) -> object:
+        """Builds one local rectangle around the original viewport for bounded sweep validation."""
+
         from pnc_automation.app.pnc.navigation.world_map_search import WorldMapBounds
 
         return WorldMapBounds(
