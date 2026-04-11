@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -15,6 +14,7 @@ from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
 from pnc_automation.app.pnc.navigation.spatial_navigation import WorldMapCardinalDirection
 from pnc_automation.app.pnc.navigation.world_map_search import (
     WorldMapBounds,
+    WorldMapCardinalMovementClassification,
     WorldMapCoordinateMover,
     WorldMapObservedActionExecutor,
     WorldMapSearchBoundary,
@@ -24,6 +24,9 @@ from pnc_automation.app.pnc.navigation.world_map_search import (
     WorldMapSearchService,
     WorldMapSearchStopPolicy,
     WorldMapTraversalCheckpoint,
+    classify_world_map_cardinal_delta,
+    is_world_map_coordinate_near_boundary,
+    _coordinate_within_tolerance,
     _require_proven_world_map_observation,
 )
 from pnc_automation.app.pnc.navigation.world_map_survey_recorder import WorldMapSurveyRecorder
@@ -33,14 +36,7 @@ if TYPE_CHECKING:
     from pnc_automation.app.pnc.vision.observation_builder import ObservationService
 
 
-class WorldMapSwipeProbeClassification(StrEnum):
-    """Classifies one cardinal swipe probe outcome for calibration and dead-zone reporting."""
-
-    MOVED = "moved"
-    EXPECTED_BOUNDARY_STOP = "expected_boundary_stop"
-    INTERIOR_STALL = "interior_stall"
-    PARSER_UNCERTAIN = "parser_uncertain"
-    UNEXPECTED_DELTA = "unexpected_delta"
+WorldMapSwipeProbeClassification = WorldMapCardinalMovementClassification
 
 
 @dataclass(frozen=True, slots=True)
@@ -228,6 +224,8 @@ class WorldMapSweepCheckpointResult:
     checkpoint: WorldMapTraversalCheckpoint
     evidence: WorldMapObservedCoordinateEvidence
     usable_observation: bool
+    delta_from_checkpoint: tuple[int, int] | None
+    within_tolerance: bool
 
     def to_document(self) -> dict[str, object]:
         """Exports the checkpoint result as a JSON-ready document."""
@@ -239,6 +237,18 @@ class WorldMapSweepCheckpointResult:
                 "route_index": self.checkpoint.route_index,
             },
             "usable_observation": self.usable_observation,
+            "requested_coordinate": [self.checkpoint.coordinate[0], self.checkpoint.coordinate[1]],
+            "observed_coordinate": (
+                None
+                if self.evidence.coordinate is None
+                else [self.evidence.coordinate[0], self.evidence.coordinate[1]]
+            ),
+            "delta_from_checkpoint": (
+                None
+                if self.delta_from_checkpoint is None
+                else [self.delta_from_checkpoint[0], self.delta_from_checkpoint[1]]
+            ),
+            "within_tolerance": self.within_tolerance,
             "evidence": self.evidence.to_document(),
         }
 
@@ -402,12 +412,12 @@ class WorldMapMovementCalibrationService:
         )
         probe_results: list[WorldMapSwipeProbeResult] = []
         for coordinate_index, probe_coordinate in enumerate(probe_coordinates):
-            current = self._coordinate_mover().move_to_coordinate(
-                current,
-                target_coordinate=probe_coordinate,
-                label_prefix=f"{label_prefix}_probe_start_{coordinate_index}",
-            )
-            for direction in WorldMapCardinalDirection:
+            for direction_index, direction in enumerate(WorldMapCardinalDirection):
+                current = self._coordinate_mover().move_to_coordinate(
+                    current,
+                    target_coordinate=probe_coordinate,
+                    label_prefix=f"{label_prefix}_probe_start_{coordinate_index}_{direction_index}",
+                )
                 lane_center_ratio = None if lane_center_ratios is None else lane_center_ratios.get(direction)
                 probe, current = self._probe_swipe(
                     current,
@@ -442,28 +452,47 @@ class WorldMapMovementCalibrationService:
             origin=request.origin,
             boundary=request.boundary,
         )
-        plan = self._search_service().resolve_plan(search_request, current)
+        search_service = self._search_service()
+        plan = search_service.resolve_plan(search_request, current)
+        runtime_state: dict[str, object] = {}
         checkpoint_results: list[WorldMapSweepCheckpointResult] = []
         stop_reason = "route_exhausted"
         for checkpoint in plan.route:
             if request.max_checkpoints is not None and len(checkpoint_results) >= request.max_checkpoints:
                 stop_reason = "checkpoint_budget_exhausted"
                 break
-            current = self._coordinate_mover().move_to_coordinate(
+            current = search_service.move_to_checkpoint(
                 current,
-                target_coordinate=checkpoint.coordinate,
+                plan=plan,
+                checkpoint=checkpoint,
                 label_prefix=f"{label_prefix}_move_{checkpoint.route_index}",
+                runtime_state=runtime_state,
             )
             recorded_observation = self._record_checkpoint(
                 label=f"{label_prefix}_checkpoint_{checkpoint.route_index}",
                 observation=current,
             )
             evidence = _coordinate_evidence(recorded_observation)
+            delta_from_checkpoint = _checkpoint_delta(
+                requested_coordinate=checkpoint.coordinate,
+                observed_coordinate=evidence.coordinate,
+            )
+            within_tolerance = (
+                False
+                if evidence.coordinate is None
+                else _coordinate_within_tolerance(
+                    evidence.coordinate,
+                    checkpoint.coordinate,
+                    tolerance=search_service.coordinate_mover_for_runtime().navigator.focus_tolerance,
+                )
+            )
             checkpoint_results.append(
                 WorldMapSweepCheckpointResult(
                     checkpoint=checkpoint,
                     evidence=evidence,
                     usable_observation=evidence.coordinate is not None,
+                    delta_from_checkpoint=delta_from_checkpoint,
+                    within_tolerance=within_tolerance,
                 )
             )
             current = recorded_observation
@@ -573,13 +602,13 @@ class WorldMapMovementCalibrationService:
                 before=before_evidence,
                 after=after_evidence,
                 delta=delta,
-                classification=_classify_probe(
+                classification=classify_world_map_cardinal_delta(
                     direction=direction,
                     before_coordinate=before_evidence.coordinate,
                     delta=delta,
                     boundary_bounds=boundary_bounds,
                 ),
-                near_boundary=_is_near_boundary(
+                near_boundary=is_world_map_coordinate_near_boundary(
                     direction=direction,
                     coordinate=before_evidence.coordinate,
                     bounds=boundary_bounds,
@@ -619,19 +648,19 @@ class WorldMapMovementCalibrationService:
         return observation if recorded.capture is None else recorded.capture.observation
 
     def _coordinate_mover(self) -> WorldMapCoordinateMover:
-        """Builds the canonical coordinate mover shared with the reusable search engine."""
+        """Returns the canonical coordinate mover shared with the reusable search engine."""
 
-        return WorldMapCoordinateMover(
-            observation_service=self.observation_service,
-            action_executor=self.action_executor,
-            navigator=self.screen_flows.world_map_navigator,
-            movement_step_budget=self.movement_step_budget,
-        )
+        search_service = self._search_service()
+        if search_service.coordinate_mover is None:
+            search_service.movement_step_budget = self.movement_step_budget
+        return search_service.coordinate_mover_for_runtime()
 
     def _search_service(self) -> WorldMapSearchService:
         """Returns the wired search service or one temporary search service sharing the same runtime dependencies."""
 
         if self.search_service is not None:
+            if self.search_service.coordinate_mover is None:
+                self.search_service.movement_step_budget = self.movement_step_budget
             return self.search_service
         if self.survey_recorder is None:
             raise SelectorResolutionError("World-map movement calibration requires a survey recorder for sweep planning.")
@@ -710,59 +739,16 @@ def _delta(
     return after_coordinate[0] - before_coordinate[0], after_coordinate[1] - before_coordinate[1]
 
 
-def _classify_probe(
+def _checkpoint_delta(
     *,
-    direction: WorldMapCardinalDirection,
-    before_coordinate: tuple[int, int] | None,
-    delta: tuple[int, int] | None,
-    boundary_bounds: WorldMapBounds | None,
-) -> WorldMapSwipeProbeClassification:
-    """Classifies one swipe probe outcome from the parsed coordinate evidence and optional expected bounds."""
+    requested_coordinate: tuple[int, int],
+    observed_coordinate: tuple[int, int] | None,
+) -> tuple[int, int] | None:
+    """Returns the observed-minus-requested checkpoint delta when parser evidence is available."""
 
-    if before_coordinate is None or delta is None:
-        return WorldMapSwipeProbeClassification.PARSER_UNCERTAIN
-    if delta == (0, 0):
-        if _is_near_boundary(direction=direction, coordinate=before_coordinate, bounds=boundary_bounds):
-            return WorldMapSwipeProbeClassification.EXPECTED_BOUNDARY_STOP
-        return WorldMapSwipeProbeClassification.INTERIOR_STALL
-    expected_delta = _expected_direction_delta(direction)
-    if expected_delta[0] != 0 and (delta[0] == 0 or (1 if delta[0] > 0 else -1) != expected_delta[0]):
-        return WorldMapSwipeProbeClassification.UNEXPECTED_DELTA
-    if expected_delta[1] != 0 and (delta[1] == 0 or (1 if delta[1] > 0 else -1) != expected_delta[1]):
-        return WorldMapSwipeProbeClassification.UNEXPECTED_DELTA
-    return WorldMapSwipeProbeClassification.MOVED
-
-
-def _is_near_boundary(
-    *,
-    direction: WorldMapCardinalDirection,
-    coordinate: tuple[int, int] | None,
-    bounds: WorldMapBounds | None,
-) -> bool:
-    """Returns whether one parsed viewport coordinate already lies on the expected stop boundary for the requested direction."""
-
-    if coordinate is None or bounds is None:
-        return False
-    expected_delta = _expected_direction_delta(direction)
-    if expected_delta[0] > 0:
-        return coordinate[0] >= bounds.max_x
-    if expected_delta[0] < 0:
-        return coordinate[0] <= bounds.min_x
-    if expected_delta[1] > 0:
-        return coordinate[1] >= bounds.max_y
-    return coordinate[1] <= bounds.min_y
-
-
-def _expected_direction_delta(direction: WorldMapCardinalDirection) -> tuple[int, int]:
-    """Returns the expected signed viewport delta for one canonical finger-swipe direction."""
-
-    if direction == WorldMapCardinalDirection.LEFT:
-        return 1, 0
-    if direction == WorldMapCardinalDirection.RIGHT:
-        return -1, 0
-    if direction == WorldMapCardinalDirection.UP:
-        return 0, 1
-    return 0, -1
+    if observed_coordinate is None:
+        return None
+    return observed_coordinate[0] - requested_coordinate[0], observed_coordinate[1] - requested_coordinate[1]
 
 
 def _resolved_lane_center_ratio(*, direction: WorldMapCardinalDirection, action: object) -> float:

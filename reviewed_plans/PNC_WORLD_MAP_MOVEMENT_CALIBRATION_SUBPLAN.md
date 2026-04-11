@@ -149,6 +149,9 @@ We want a sweep-ready movement subsystem with these properties:
    - invalid interior stall
 4. The sweep loop can move from checkpoint to checkpoint and re-observe without collapsing into parser churn or repeated no-motion failures.
 5. Full-map traversal can be attempted with confidence because movement and observation are both already validated.
+6. The production world-map search loop consumes the calibrated movement workflow directly rather than preserving a separate search-only movement path.
+7. Orthogonal drift during a successful cardinal move is corrected through bounded opposite-axis movement instead of being treated as a terminal unexpected delta.
+8. Zero-delta dead-zone classification is reactive in production search: it runs only after a swipe fails to move, not as proactive per-checkpoint probing.
 
 ## 6. Work Plan
 
@@ -194,11 +197,11 @@ Deliverables:
 
 Goal:
 
-- prove that no-motion cases only occur at true map bounds
+- prove diagnostically that no-motion cases only occur at true map bounds, while keeping production search dead-zone handling reactive
 
 Method:
 
-- probe the canonical lane from multiple interior viewport locations
+- probe the canonical lane from multiple interior viewport locations in an explicit calibration/diagnostic workflow
 - compare with behavior near each edge
 - classify each no-motion result
 
@@ -207,6 +210,14 @@ Required classification:
 - `expected_boundary_stop`
 - `interior_stall`
 - `parser_uncertain`
+
+Production rule:
+
+- normal search/sweep runtime should not proactively probe for dead zones
+- if a production swipe yields zero coordinate movement, classify it immediately:
+  - boundary stop if the current coordinate is near the expected map edge
+  - interior stall if the current coordinate is not near the expected edge
+  - parser uncertain if before/after coordinate evidence is not trustworthy
 
 Success condition:
 
@@ -229,10 +240,12 @@ We must detect and distinguish:
 - swipe emitted but map did not move
 - map moved but parser did not update correctly
 - parser updated but OCR fused or corrupted coordinates
+- intended-axis movement succeeded but the orthogonal axis drifted
 
 Implementation note:
 
 - coordinate-bar OCR should use the dedicated bar crop and a blue/cyan text isolation pass before broader parser fallback is considered
+- orthogonal drift should be reported and corrected through bounded opposite-axis movement, not treated as the same class of failure as wrong-sign intended-axis movement
 
 Success condition:
 
@@ -250,21 +263,25 @@ Method:
 - run bounded edge sweep segments
 - run bounded concentric / expanding-ring segments
 - verify that each movement step is followed by a usable observation
+- ensure the validation path uses the same checkpoint movement seam that production world-map search uses
 
 Focus:
 
 - not "did we find the target"
 - but "did movement and observation remain reliable over repeated checkpoints"
+- not "can a diagnostic helper move"
+- but "does the production search traversal path consume the calibrated movement workflow"
 
 Success condition:
 
 - sweep traversal can cover multiple checkpoints without no-motion churn, parser collapse, or dangerous recovery loops
+- `WorldMapMovementCalibrationService.validate_sweep(...)` and `WorldMapSearchService.execute_search(...)` share the same canonical checkpoint movement implementation or delegated movement seam
 
 ### Phase 5. Search Re-entry
 
 Goal:
 
-- resume the broader search feature only after the sweep loop is proven
+- update and resume the broader search feature only after the sweep loop is proven
 
 Entry condition:
 
@@ -272,6 +289,11 @@ Entry condition:
 
 Only then should we continue:
 
+- refactor the search checkpoint loop to consume the calibrated movement workflow directly
+- ensure search uses one-time world-map entry/preflight before traversal, then in-surface movement plus bounded post-action world-map surface refresh
+- add reactive zero-delta classification to the production movement path
+- add orthogonal-drift correction to the production movement path
+- remove or collapse any duplicate search-only movement loop that can drift from calibration behavior
 - full-map player search
 - castle targeting through sweep traversal
 - broad search feature closeout
@@ -324,7 +346,10 @@ This subplan is complete only when all of the following are true:
 2. Interior dead zones are not observed, or each remaining case is concretely explained and fixed.
 3. The movement detector and coordinate parser are stable enough to support calibration decisions.
 4. The sweep-observation loop works across multiple checkpoints using only the calibrated 4-direction model.
-5. We can resume full-map search work without movement being the dominant blocker.
+5. The production world-map search loop uses the same calibrated checkpoint movement seam as sweep validation.
+6. Production search performs reactive zero-delta classification only after a failed swipe, not proactive dead-zone probing.
+7. Production search corrects orthogonal drift with bounded opposite-axis movement when the intended axis moved correctly.
+8. We can resume full-map search work without movement being the dominant blocker.
 
 ## 9. Relationship To Existing World-Map Search Plan
 

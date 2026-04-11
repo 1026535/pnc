@@ -90,6 +90,70 @@ class WorldMapMovementCalibrationTests(unittest.TestCase):
         self.assertEqual(result.classification, WorldMapSwipeProbeClassification.EXPECTED_BOUNDARY_STOP)
         self.assertTrue(result.near_boundary)
 
+    def test_probe_swipe_reports_moved_with_drift_when_primary_axis_succeeds(self) -> None:
+        """Reports orthogonal drift separately from wrong-sign primary movement."""
+
+        service, _observer, _session = self._build_service(
+            observations=[
+                _make_world_map_observation(6, 9),
+            ]
+        )
+
+        result, _after = service.probe_swipe(
+            _make_world_map_observation(0, 0),
+            direction=WorldMapCardinalDirection.LEFT,
+            distance_ratio=0.20,
+            label_prefix="probe_left_drift",
+        )
+
+        self.assertEqual(result.classification, WorldMapSwipeProbeClassification.MOVED_WITH_DRIFT)
+        self.assertEqual(result.delta, (6, 9))
+
+    def test_probe_swipe_reports_wrong_sign_primary_axis_as_unexpected_delta(self) -> None:
+        """Still fails the probe when the intended primary axis moves in the wrong direction."""
+
+        service, _observer, _session = self._build_service(
+            observations=[
+                _make_world_map_observation(-4, 0),
+            ]
+        )
+
+        result, _after = service.probe_swipe(
+            _make_world_map_observation(0, 0),
+            direction=WorldMapCardinalDirection.LEFT,
+            distance_ratio=0.20,
+            label_prefix="probe_left_wrong_sign",
+        )
+
+        self.assertEqual(result.classification, WorldMapSwipeProbeClassification.UNEXPECTED_DELTA)
+        self.assertEqual(result.delta, (-4, 0))
+
+    def test_run_dead_zone_verification_refocuses_anchor_before_every_direction(self) -> None:
+        """Starts every directional dead-zone probe from the requested anchor instead of the prior probe result."""
+
+        anchor = (50, 50)
+        service, _observer, _session = self._build_service(
+            observations=[
+                _make_world_map_observation(60, 50),
+                _make_world_map_observation(50, 50),
+                _make_world_map_observation(40, 50),
+                _make_world_map_observation(50, 50),
+                _make_world_map_observation(50, 60),
+                _make_world_map_observation(50, 50),
+                _make_world_map_observation(50, 40),
+            ]
+        )
+
+        report, _current = service.run_dead_zone_verification(
+            _make_world_map_observation(*anchor),
+            label_prefix="dead_zone_anchor",
+            probe_coordinates=(anchor,),
+            distance_ratio=0.20,
+            bounds=WorldMapBounds(min_x=0, min_y=0, max_x=100, max_y=100),
+        )
+
+        self.assertEqual([result.before.coordinate for result in report.probe_results], [anchor, anchor, anchor, anchor])
+
     def test_probe_swipe_recovers_transient_unknown_follow_up_into_a_proven_world_map(self) -> None:
         """Re-proves the world-map surface when a live swipe follow-up briefly lands on an unknown OCR frame."""
 
@@ -170,7 +234,49 @@ class WorldMapMovementCalibrationTests(unittest.TestCase):
         self.assertEqual(result.stop_reason, "route_exhausted")
         self.assertEqual(len(result.checkpoint_results), 2)
         self.assertTrue(all(checkpoint.usable_observation for checkpoint in result.checkpoint_results))
+        self.assertTrue(all(checkpoint.within_tolerance for checkpoint in result.checkpoint_results))
+        self.assertEqual([checkpoint.delta_from_checkpoint for checkpoint in result.checkpoint_results], [(0, 0), (0, 0)])
         self.assertEqual(len(observer.labels), 2)
+
+    def test_validate_sweep_uses_shared_search_checkpoint_mover_runtime_state(self) -> None:
+        """Routes sweep validation through the search service mover with one shared runtime state across checkpoints."""
+
+        observer = FakeObservationService(observations=[])
+        recorder = WorldMapSurveyRecorder(
+            observation_service=observer,
+            debug_store=WorldMapSurveyDebugStore(root=Path(self.temp_directory.name)),
+        )
+        mover = _RecordingCoordinateMover()
+        search_service = WorldMapSearchService(
+            screen_flows=self.flows,
+            observation_service=observer,
+            action_executor=None,
+            survey_recorder=recorder,
+            coordinate_mover=mover,
+        )
+        service = WorldMapMovementCalibrationService(
+            screen_flows=self.flows,
+            observation_service=observer,
+            action_executor=None,
+            survey_recorder=recorder,
+            search_service=search_service,
+        )
+
+        result, _current = service.validate_sweep(
+            _make_world_map_observation(0, 0),
+            request=WorldMapSweepValidationRequest(
+                name="shared_mover",
+                pattern=WorldMapSearchPattern.row_major_sweep(),
+                origin=WorldMapSearchOrigin.current_viewport(),
+                boundary=WorldMapSearchBoundary.rectangle(min_coordinate=(10, 0), max_coordinate=(20, 0)),
+                checkpoint_spacing=10,
+            ),
+            label_prefix="shared_mover",
+        )
+
+        self.assertEqual([checkpoint.checkpoint.coordinate for checkpoint in result.checkpoint_results], [(10, 0), (20, 0)])
+        self.assertEqual(mover.target_coordinates, [(10, 0), (20, 0)])
+        self.assertEqual(len({id(runtime_state) for runtime_state in mover.runtime_states}), 1)
 
     def _build_service(
         self,
@@ -212,6 +318,33 @@ class WorldMapMovementCalibrationTests(unittest.TestCase):
             search_service=search_service,
         )
         return service, observer, session
+
+
+class _RecordingCoordinateMover:
+    """Records coordinate-mover calls while returning exact target-coordinate observations."""
+
+    def __init__(self) -> None:
+        """Initializes the call log and exposes a navigator-like focus tolerance."""
+
+        self.navigator = type("Navigator", (), {"focus_tolerance": 1})()
+        self.target_coordinates: list[tuple[int, int]] = []
+        self.runtime_states: list[object] = []
+
+    def move_to_coordinate(
+        self,
+        observation: object,
+        *,
+        target_coordinate: tuple[int, int],
+        label_prefix: str,
+        runtime_state: dict[str, object] | None = None,
+        boundary_bounds: object = None,
+    ) -> object:
+        """Records the requested movement and returns a world-map observation at the target."""
+
+        del observation, label_prefix, boundary_bounds
+        self.target_coordinates.append(target_coordinate)
+        self.runtime_states.append(runtime_state)
+        return _make_world_map_observation(*target_coordinate)
 
 
 def _make_world_map_observation(x: int, y: int) -> object:
