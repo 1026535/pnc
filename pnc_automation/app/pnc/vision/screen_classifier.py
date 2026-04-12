@@ -447,7 +447,7 @@ class ScreenClassifier:
                 required_all=frozenset({UiElementId.PNC_MARCH_CONFIRM_BUTTON}),
             ),
             ClassificationRule(
-                screen_type=ScreenType.PNC_CAMPAIGN,
+                screen_type=ScreenType.PNC_CAMPAIGN_MAP,
                 required_all=frozenset({UiElementId.PNC_CAMPAIGN_ENTRY_BUTTON}),
             ),
             ClassificationRule(

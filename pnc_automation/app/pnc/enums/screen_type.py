@@ -92,7 +92,6 @@ class ScreenType(StrEnum):
     PNC_MARCH_CONFIRM = "pnc_march_confirm"
     PNC_MIGHT_RANK = "pnc_might_rank"
     PNC_CAMPAIGN_MAP = "pnc_campaign_map"
-    PNC_CAMPAIGN = "pnc_campaign_map"
     PNC_CAMPAIGN_STAGE = "pnc_campaign_stage"
     PNC_VERSUS_CENTER = "pnc_versus_center"
     PNC_BATTLE_PREP = "pnc_battle_prep"

@@ -1421,7 +1421,7 @@ selectors:
   detection_kind: planned
 - id: PNC_CAMPAIGN_ENTRY_BUTTON
   screens:
-  - PNC_CAMPAIGN
+  - PNC_CAMPAIGN_MAP
   status: planned
   detection_kind: planned
 - id: PNC_CAMPAIGN_BATTLE_BUTTON

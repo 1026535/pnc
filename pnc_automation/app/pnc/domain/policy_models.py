@@ -53,6 +53,7 @@ class ResearchCategory(StrEnum):
     ECONOMY = "economy"
     DEVELOPMENT = "development"
     MILITARY = "military"
+    FORTIFICATION = "fortification"
 
 
 class ResourceType(StrEnum):
@@ -141,6 +142,7 @@ class ResearchPolicy:
         ResearchCategory.ECONOMY,
         ResearchCategory.DEVELOPMENT,
         ResearchCategory.MILITARY,
+        ResearchCategory.FORTIFICATION,
     )
 
     @classmethod
