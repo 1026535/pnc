@@ -119,6 +119,50 @@ class ObservationRequest:
         )
 
     @classmethod
+    def campaign_map_follow_up(cls) -> "ObservationRequest":
+        """Returns the narrow OCR scope used after opening the Campaign entry from Home City."""
+
+        return cls(
+            candidate_screen_types=frozenset({ScreenType.PNC_CAMPAIGN_MAP, ScreenType.PNC_CAMPAIGN_STAGE}),
+            ocr_screen_types=frozenset({ScreenType.PNC_CAMPAIGN_MAP, ScreenType.PNC_CAMPAIGN_STAGE}),
+            include_popup_guard=True,
+            include_loading_guard=True,
+        )
+
+    @classmethod
+    def gather_node_follow_up(cls) -> "ObservationRequest":
+        """Returns the narrow OCR scope used after selecting one world-map resource node."""
+
+        return cls(
+            candidate_screen_types=frozenset({ScreenType.PNC_GATHER_NODE, ScreenType.PNC_WORLD_MAP}),
+            ocr_screen_types=frozenset({ScreenType.PNC_GATHER_NODE, ScreenType.PNC_WORLD_MAP}),
+            include_popup_guard=True,
+            include_loading_guard=True,
+        )
+
+    @classmethod
+    def march_confirm_follow_up(cls) -> "ObservationRequest":
+        """Returns the narrow OCR scope used while handing target acquisition to march dispatch."""
+
+        return cls(
+            candidate_screen_types=frozenset({ScreenType.PNC_MARCH_CONFIRM, ScreenType.PNC_GATHER_NODE}),
+            ocr_screen_types=frozenset({ScreenType.PNC_MARCH_CONFIRM, ScreenType.PNC_GATHER_NODE}),
+            include_popup_guard=True,
+            include_loading_guard=True,
+        )
+
+    @classmethod
+    def post_march_dispatch_follow_up(cls) -> "ObservationRequest":
+        """Returns the narrow OCR scope used after confirming a march dispatch."""
+
+        return cls(
+            candidate_screen_types=frozenset({ScreenType.PNC_WORLD_MAP, ScreenType.PNC_MARCH_CONFIRM}),
+            ocr_screen_types=frozenset({ScreenType.PNC_WORLD_MAP, ScreenType.PNC_MARCH_CONFIRM}),
+            include_popup_guard=True,
+            include_loading_guard=True,
+        )
+
+    @classmethod
     def chat_transcript_observation(cls) -> "ObservationRequest":
         """Returns the narrow OCR scope used for Kingdom Chat transcript polling."""
 

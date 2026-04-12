@@ -48,14 +48,8 @@ class CampaignTask(BaseAutomationTask):
     def plan(self, context: TaskContext, observation: Observation) -> list[ActionRequest]:
         """Plans one campaign increment from the current screen."""
 
-        if observation.screen_type not in {ScreenType.PNC_CAMPAIGN, ScreenType.PNC_CAMPAIGN_STAGE, ScreenType.PNC_BATTLE_PREP}:
-            return [
-                TapAction(
-                    selector_id=UiElementId.PNC_HOME_CAMPAIGN_ENTRY,
-                    reason="open_campaign",
-                    observe_after=True,
-                )
-            ]
+        if observation.screen_type not in {ScreenType.PNC_CAMPAIGN_MAP, ScreenType.PNC_CAMPAIGN_STAGE, ScreenType.PNC_BATTLE_PREP}:
+            return context.flows.open_campaign_map(observation, runtime_state=context.runtime_state)
         if observation.screen_type == ScreenType.PNC_BATTLE_PREP:
             return []
         if observation.screen_type == ScreenType.PNC_CAMPAIGN_STAGE:
@@ -87,17 +81,17 @@ class CampaignTask(BaseAutomationTask):
     def verify(self, context: TaskContext, before: Observation, after: Observation) -> TaskResult:
         """Verifies either navigation to campaign or a prepared battle."""
 
-        if before.screen_type not in {ScreenType.PNC_CAMPAIGN, ScreenType.PNC_CAMPAIGN_STAGE, ScreenType.PNC_BATTLE_PREP}:
-            if after.screen_type in {ScreenType.PNC_CAMPAIGN, ScreenType.PNC_CAMPAIGN_STAGE}:
+        if before.screen_type not in {ScreenType.PNC_CAMPAIGN_MAP, ScreenType.PNC_CAMPAIGN_STAGE, ScreenType.PNC_BATTLE_PREP}:
+            if after.screen_type in {ScreenType.PNC_CAMPAIGN_MAP, ScreenType.PNC_CAMPAIGN_STAGE}:
                 return TaskResult.replan("Reached campaign flow for stage planning.")
             return TaskResult.failure("Campaign task could not reach the campaign flow.", retryable=True)
         if before.screen_type == ScreenType.PNC_BATTLE_PREP:
             return TaskResult.skipped("Campaign battle preparation was already open.")
-        if before.screen_type == ScreenType.PNC_CAMPAIGN and not before.entries(ListEntryKind.CAMPAIGN_STAGE):
+        if before.screen_type == ScreenType.PNC_CAMPAIGN_MAP and not before.entries(ListEntryKind.CAMPAIGN_STAGE):
             return TaskResult.skipped("No eligible campaign stages were visible.")
         if after.screen_type == ScreenType.PNC_BATTLE_PREP:
             return TaskResult.success("Campaign advanced to battle preparation.")
-        if before.screen_type == ScreenType.PNC_CAMPAIGN and after.screen_type == ScreenType.PNC_CAMPAIGN_STAGE:
+        if before.screen_type == ScreenType.PNC_CAMPAIGN_MAP and after.screen_type == ScreenType.PNC_CAMPAIGN_STAGE:
             return TaskResult.replan("Opened campaign stage details.")
         return TaskResult.failure("Campaign did not produce a verified state change.", retryable=True)
 

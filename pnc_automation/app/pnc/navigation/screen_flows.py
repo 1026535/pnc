@@ -41,7 +41,7 @@ from pnc_automation.app.pnc.domain.observation import (
     castle_entry_identity_matches,
     castle_identities_match,
 )
-from pnc_automation.app.pnc.domain.building_catalog import HomeCityMapCoordinate
+from pnc_automation.app.pnc.domain.building_catalog import HomeCityMapCoordinate, HomeCityObjectId
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.navigation.spatial_navigation import HomeCityNavigator, WorldMapNavigator
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
@@ -867,6 +867,38 @@ class ScreenFlowPlanner:
             metadata_value="institute",
         )
         return self.open_home_city_object(observation, institute_query, reason="open_institute")
+
+    def open_campaign_map(
+        self,
+        observation: Observation,
+        *,
+        runtime_state: dict[str, Any] | None = None,
+    ) -> list[ActionRequest]:
+        """Plans one shared Home City target-opening increment for the Campaign map endpoint."""
+
+        if observation.screen_type in {ScreenType.PNC_CAMPAIGN_MAP, ScreenType.PNC_CAMPAIGN_STAGE, ScreenType.PNC_BATTLE_PREP}:
+            return []
+        if observation.screen_type == ScreenType.PNC_HOME_CITY and observation.has(UiElementId.PNC_HOME_CAMPAIGN_ENTRY):
+            return [
+                TapAction(
+                    selector_id=UiElementId.PNC_HOME_CAMPAIGN_ENTRY,
+                    reason="open_campaign_map",
+                    observe_after=True,
+                    follow_up_request=ObservationRequest.campaign_map_follow_up(),
+                )
+            ]
+        campaign_query = SpatialObjectQuery(
+            surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+            kind=SpatialObjectKind.HOME_BUILDING,
+            metadata_key="home_city_object_id",
+            metadata_value=HomeCityObjectId.CAMPAIGN.value,
+        )
+        return self.open_home_city_object(
+            observation,
+            campaign_query,
+            reason="open_campaign_map",
+            runtime_state=runtime_state,
+        )
 
     def open_visible_home_city_object(
         self,

@@ -247,7 +247,7 @@ class RunnerEndToEndTests(unittest.TestCase):
                 current_castle_name="Main",
             ),
             make_observation(
-                ScreenType.PNC_CAMPAIGN,
+                ScreenType.PNC_CAMPAIGN_MAP,
                 list_entries=(make_entry(ListEntryKind.CAMPAIGN_STAGE, title="Stage 1", metadata={"mode": "standard"}),),
             ),
             make_observation(

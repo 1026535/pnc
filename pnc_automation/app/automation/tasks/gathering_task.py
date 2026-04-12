@@ -23,6 +23,7 @@ from pnc_automation.app.pnc.domain.observation import (
 from pnc_automation.app.pnc.domain.policy_models import GatheringPolicy, ResourceType
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
+from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 
 
 class GatheringTask(BaseAutomationTask):
@@ -66,12 +67,19 @@ class GatheringTask(BaseAutomationTask):
                 observation,
                 target,
                 reason="open_gather_node",
+                follow_up_request=ObservationRequest.gather_node_follow_up(),
             ),
-            TapAction(selector_id=UiElementId.PNC_GATHER_BUTTON, reason="open_gather_march", observe_after=True),
+            TapAction(
+                selector_id=UiElementId.PNC_GATHER_BUTTON,
+                reason="open_gather_march",
+                observe_after=True,
+                follow_up_request=ObservationRequest.march_confirm_follow_up(),
+            ),
             TapAction(
                 selector_id=UiElementId.PNC_MARCH_CONFIRM_BUTTON,
                 reason="confirm_gather_march",
                 observe_after=True,
+                follow_up_request=ObservationRequest.post_march_dispatch_follow_up(),
             ),
         ]
 

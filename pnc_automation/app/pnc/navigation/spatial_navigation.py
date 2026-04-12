@@ -914,6 +914,7 @@ class WorldMapNavigator(SpatialSurfaceNavigator):
         *,
         reason: str,
         observe_after: bool = True,
+        follow_up_request: ObservationRequest | None = None,
     ) -> list[ActionRequest]:
         """Returns one canonical tap against one exact visible world-map spatial object."""
 
@@ -924,6 +925,7 @@ class WorldMapNavigator(SpatialSurfaceNavigator):
                 target_point=_resolve_target_point(target=target, use_action_point=True),
                 reason=reason,
                 observe_after=observe_after,
+                follow_up_request=follow_up_request,
             )
         ]
 

@@ -11,6 +11,7 @@ from pnc_automation.app.authoring.scripts.models import ScriptStep
 from pnc_automation.app.automation.engine.task import TaskId, TaskPreflight, TaskResult, TaskStatus
 from pnc_automation.app.automation.engine.task_context import TaskContext
 from pnc_automation.app.automation.tasks.building_upgrade_task import BuildingUpgradeTask
+from pnc_automation.app.automation.tasks.campaign_task import CampaignTask
 from pnc_automation.app.automation.tasks.ensure_game_running_task import EnsureGameRunningTask
 from pnc_automation.app.automation.tasks.gathering_task import GatheringTask
 from pnc_automation.app.automation.tasks.login_task import LoginTask
@@ -4108,6 +4109,24 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertIsInstance(actions[0], TapAction)
         self.assertEqual(actions[0].selector_id, UiElementId.PNC_INSTITUTE_ECONOMY_BUTTON)
 
+    def test_research_task_supports_fortification_category_as_first_class_institute_route(self) -> None:
+        """Uses the Fortification Institute button when the policy requests that visible category."""
+
+        task = ResearchTask()
+        context = self._make_context(task_id=TaskId.RESEARCH, params=task.parse_params({"priority": ["fortification"]}))
+
+        actions = task.plan(
+            context,
+            make_observation(
+                ScreenType.PNC_INSTITUTE,
+                visible_ids=(UiElementId.PNC_INSTITUTE_FORTIFICATION_BUTTON,),
+            ),
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], TapAction)
+        self.assertEqual(actions[0].selector_id, UiElementId.PNC_INSTITUTE_FORTIFICATION_BUTTON)
+
     def test_home_city_entry_tasks_declare_runner_owned_home_city_preflight(self) -> None:
         """Declares one shared runner-owned home-city preflight for tasks whose bodies truly start from home city."""
 
@@ -4154,6 +4173,53 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertEqual(actions[0].query.metadata_key, "resource_type")
         self.assertEqual(actions[0].query.metadata_value, "food")
         self.assertEqual(actions[0].target_point, (68, 52))
+        self.assertEqual(actions[0].follow_up_request, ObservationRequest.gather_node_follow_up())
+        self.assertEqual(actions[1].follow_up_request, ObservationRequest.march_confirm_follow_up())
+        self.assertEqual(actions[2].follow_up_request, ObservationRequest.post_march_dispatch_follow_up())
+
+    def test_campaign_task_uses_shared_home_city_target_opening_with_campaign_map_proof(self) -> None:
+        """Opens Campaign through the shared Home City target helper with an action-scoped Campaign-map proof."""
+
+        task = CampaignTask()
+        context = self._make_context(params=task.parse_params({"enabled_modes": ["standard"]}), task_id=TaskId.CAMPAIGN)
+        observation = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            visible_ids=(UiElementId.PNC_HOME_CAMPAIGN_ENTRY,),
+        )
+
+        actions = task.plan(context, observation)
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], TapAction)
+        self.assertEqual(actions[0].selector_id, UiElementId.PNC_HOME_CAMPAIGN_ENTRY)
+        self.assertEqual(actions[0].reason, "open_campaign_map")
+        self.assertEqual(actions[0].follow_up_request, ObservationRequest.campaign_map_follow_up())
+
+    def test_campaign_task_can_open_campaign_from_spatial_home_city_target_without_private_search_logic(self) -> None:
+        """Falls through to the shared home-city spatial opener when no Campaign shortcut selector is visible."""
+
+        task = CampaignTask()
+        context = self._make_context(params=task.parse_params({"enabled_modes": ["standard"]}), task_id=TaskId.CAMPAIGN)
+        observation = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.HOME_CITY_SURFACE,
+                objects=(
+                    make_spatial_object(
+                        SpatialObjectKind.HOME_BUILDING,
+                        name_text="Campaign",
+                        metadata=build_home_city_object_metadata(HomeCityObjectId.CAMPAIGN),
+                    ),
+                ),
+            ),
+        )
+
+        actions = task.plan(context, observation)
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], TapSpatialObjectAction)
+        self.assertEqual(actions[0].query.metadata_key, "home_city_object_id")
+        self.assertEqual(actions[0].query.metadata_value, "campaign")
 
     def test_world_map_navigator_preserves_selected_duplicate_resource_identity(self) -> None:
         """Keeps the chosen world-map duplicate target instead of retargeting by a broad semantic query."""
