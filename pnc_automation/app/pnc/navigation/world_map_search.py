@@ -1,9 +1,9 @@
-"""Canonical world-map search contracts, traversal planning, and runtime orchestration."""
+"""Canonical world-map search contracts and runtime orchestration."""
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Protocol
@@ -35,7 +35,20 @@ from pnc_automation.app.pnc.navigation.world_map_index import (
     WorldMapSurveyIndex,
     build_world_map_object_key,
 )
+from pnc_automation.app.pnc.navigation.world_map_coordinate_domain import (
+    WorldMapBounds,
+    WorldMapCoordinateDomain,
+    is_integer_pair,
+)
 from pnc_automation.app.pnc.navigation.world_map_survey_recorder import WorldMapSurveyRecorder
+from pnc_automation.app.pnc.navigation.world_map_traversal import (
+    WorldMapEdge,
+    WorldMapSearchBoundaryKind,
+    WorldMapSearchPatternKind,
+    WorldMapTraversalCheckpoint,
+    WorldMapTraversalEdgeBand,
+    WorldMapTraversalPlanner,
+)
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.core.errors import SelectorResolutionError
 
@@ -56,14 +69,6 @@ class WorldMapObservedActionExecutor(Protocol):
         """Executes actions and returns an object exposing the freshest observation."""
 
 
-class WorldMapSearchPatternKind(StrEnum):
-    """Defines the canonical checkpoint visitation order families for world-map search."""
-
-    ROW_MAJOR_SWEEP = "row_major_sweep"
-    EXPANDING_RING = "expanding_ring"
-    EDGE_BAND_SWEEP = "edge_band_sweep"
-
-
 class WorldMapSearchOriginKind(StrEnum):
     """Defines the supported origin-resolution modes for one search request."""
 
@@ -81,24 +86,6 @@ class WorldMapMapCorner(StrEnum):
     UPPER_RIGHT = "upper_right"
     LOWER_LEFT = "lower_left"
     LOWER_RIGHT = "lower_right"
-
-
-class WorldMapEdge(StrEnum):
-    """Defines one exact world-map edge."""
-
-    LEFT = "left"
-    RIGHT = "right"
-    TOP = "top"
-    BOTTOM = "bottom"
-
-
-class WorldMapSearchBoundaryKind(StrEnum):
-    """Defines the allowed coverage region for one search request."""
-
-    FULL_MAP = "full_map"
-    RADIUS_FROM_ORIGIN = "radius_from_origin"
-    RECTANGLE = "rectangle"
-    EDGE_BAND = "edge_band"
 
 
 class WorldMapMovementToolKind(StrEnum):
@@ -139,265 +126,6 @@ class WorldMapSearchStopReason(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
-class WorldMapBounds:
-    """Defines one inclusive rectangular world-coordinate boundary."""
-
-    min_x: int
-    min_y: int
-    max_x: int
-    max_y: int
-
-    def __post_init__(self) -> None:
-        """Rejects invalid bounds before traversal planning consumes them."""
-
-        if min(self.min_x, self.min_y, self.max_x, self.max_y) < 0:
-            raise SelectorResolutionError(
-                "World-map bounds must use non-negative coordinates.",
-                min_x=self.min_x,
-                min_y=self.min_y,
-                max_x=self.max_x,
-                max_y=self.max_y,
-            )
-        if self.max_x < self.min_x or self.max_y < self.min_y:
-            raise SelectorResolutionError(
-                "World-map bounds must use max coordinates greater than or equal to min coordinates.",
-                min_x=self.min_x,
-                min_y=self.min_y,
-                max_x=self.max_x,
-                max_y=self.max_y,
-            )
-
-    def contains(self, coordinate: tuple[int, int]) -> bool:
-        """Returns whether the provided world coordinate lies inside the inclusive bounds."""
-
-        return self.min_x <= coordinate[0] <= self.max_x and self.min_y <= coordinate[1] <= self.max_y
-
-    def clamp(self, coordinate: tuple[int, int]) -> tuple[int, int]:
-        """Clamps one coordinate into the inclusive bounds."""
-
-        return (
-            min(max(coordinate[0], self.min_x), self.max_x),
-            min(max(coordinate[1], self.min_y), self.max_y),
-        )
-
-    def contains_bounds(self, bounds: "WorldMapBounds") -> bool:
-        """Returns whether another inclusive bounds lies fully inside this bounds."""
-
-        return (
-            self.min_x <= bounds.min_x
-            and self.min_y <= bounds.min_y
-            and bounds.max_x <= self.max_x
-            and bounds.max_y <= self.max_y
-        )
-
-    def clamp_bounds(self, bounds: "WorldMapBounds") -> "WorldMapBounds":
-        """Clamps another inclusive bounds into this bounds."""
-
-        return WorldMapBounds(
-            min_x=min(max(bounds.min_x, self.min_x), self.max_x),
-            min_y=min(max(bounds.min_y, self.min_y), self.max_y),
-            max_x=min(max(bounds.max_x, self.min_x), self.max_x),
-            max_y=min(max(bounds.max_y, self.min_y), self.max_y),
-        )
-
-
-@dataclass(frozen=True, slots=True)
-class WorldMapCoordinateDomain:
-    """Defines the canonical addressable coordinate model for world-map search and magnifier movement."""
-
-    bounds: WorldMapBounds
-    addressable_sum_parity: int | None = None
-
-    def __post_init__(self) -> None:
-        """Rejects invalid coordinate-domain configuration before traversal planning consumes it."""
-
-        if self.addressable_sum_parity is not None and self.addressable_sum_parity not in {0, 1}:
-            raise SelectorResolutionError(
-                "World-map coordinate domains require addressable_sum_parity to be 0, 1, or None.",
-                addressable_sum_parity=self.addressable_sum_parity,
-            )
-
-    @classmethod
-    def puzzles_and_conquest(cls) -> "WorldMapCoordinateDomain":
-        """Returns the live Puzzles & Conquest kingdom coordinate domain."""
-
-        return cls(
-            bounds=WorldMapBounds(min_x=0, min_y=0, max_x=511, max_y=1023),
-            addressable_sum_parity=0,
-        )
-
-    def contains(self, coordinate: tuple[int, int]) -> bool:
-        """Returns whether one coordinate lies inside the known kingdom bounds."""
-
-        return self.bounds.contains(coordinate)
-
-    def contains_bounds(self, bounds: WorldMapBounds) -> bool:
-        """Returns whether one search bounds lies inside the coordinate domain."""
-
-        return self.bounds.contains_bounds(bounds)
-
-    def clamp_bounds(self, bounds: WorldMapBounds) -> WorldMapBounds:
-        """Clamps one search bounds into the known coordinate domain."""
-
-        return self.bounds.clamp_bounds(bounds)
-
-    def is_addressable(self, coordinate: tuple[int, int]) -> bool:
-        """Returns whether one coordinate can be targeted directly by world-map search/magnifier tools."""
-
-        if not self.bounds.contains(coordinate):
-            return False
-        if self.addressable_sum_parity is None:
-            return True
-        return (coordinate[0] + coordinate[1]) % 2 == self.addressable_sum_parity
-
-    def nearest_addressable(self, coordinate: tuple[int, int]) -> tuple[int, int]:
-        """Returns the deterministic nearest addressable coordinate after applying map-bound and parity rules."""
-
-        if not _is_integer_pair(coordinate):
-            raise SelectorResolutionError(
-                "World-map coordinate normalization requires one integer coordinate pair.",
-                coordinate=coordinate,
-            )
-        clamped = self.bounds.clamp(coordinate)
-        if self.is_addressable(clamped):
-            return clamped
-        for radius in range(1, 3):
-            candidates = [
-                candidate
-                for candidate in _coordinates_within_chebyshev_radius(clamped, radius=radius)
-                if self.is_addressable(candidate)
-            ]
-            if candidates:
-                return min(candidates, key=lambda candidate: self._addressable_snap_order_key(clamped, candidate))
-        raise SelectorResolutionError(
-            "World-map coordinate domain could not resolve a nearby addressable coordinate.",
-            coordinate=coordinate,
-            clamped_coordinate=clamped,
-            bounds=self.bounds,
-        )
-
-    def row_major_coordinates(self, *, bounds: WorldMapBounds, spacing: int) -> tuple[tuple[int, int], ...]:
-        """Returns row-major checkpoints aligned to the domain's addressable coordinate grid."""
-
-        self.require_bounds_inside(bounds)
-        coordinates: set[tuple[int, int]] = set()
-        x_step = self._same_row_spacing(spacing)
-        for y in _axis_samples(bounds.min_y, bounds.max_y, spacing):
-            first_x = self._first_addressable_x(bounds=bounds, y=y)
-            if first_x is None:
-                continue
-            last_x = self._last_addressable_x(bounds=bounds, y=y)
-            assert last_x is not None
-            xs = list(range(first_x, last_x + 1, x_step))
-            if xs[-1] != last_x:
-                xs.append(last_x)
-            for x in xs:
-                coordinate = (x, y)
-                if self.is_addressable(coordinate):
-                    coordinates.add(coordinate)
-        for corner in (
-            (bounds.min_x, bounds.min_y),
-            (bounds.max_x, bounds.min_y),
-            (bounds.min_x, bounds.max_y),
-            (bounds.max_x, bounds.max_y),
-        ):
-            addressable_corner = self.nearest_addressable(corner)
-            if bounds.contains(addressable_corner):
-                coordinates.add(addressable_corner)
-        if not coordinates:
-            raise SelectorResolutionError(
-                "World-map search bounds do not contain any addressable coordinate pair.",
-                bounds=bounds,
-                domain_bounds=self.bounds,
-            )
-        return tuple(sorted(coordinates, key=lambda coordinate: (coordinate[1], coordinate[0])))
-
-    def normalize_route_coordinates(
-        self,
-        coordinates: Iterable[tuple[int, int]],
-        *,
-        bounds: WorldMapBounds | None = None,
-    ) -> tuple[tuple[int, int], ...]:
-        """Normalizes generated route coordinates to addressable checkpoints while preserving first-seen order."""
-
-        normalized: list[tuple[int, int]] = []
-        seen: set[tuple[int, int]] = set()
-        for coordinate in coordinates:
-            addressable = self.nearest_addressable(coordinate)
-            if bounds is not None and not bounds.contains(addressable):
-                continue
-            if addressable in seen:
-                continue
-            seen.add(addressable)
-            normalized.append(addressable)
-        return tuple(normalized)
-
-    def require_bounds_inside(self, bounds: WorldMapBounds) -> None:
-        """Fails fast when a caller asks search to leave the known coordinate domain."""
-
-        if self.contains_bounds(bounds):
-            return
-        raise SelectorResolutionError(
-            "World-map search bounds must lie inside the configured coordinate domain.",
-            bounds=bounds,
-            domain_bounds=self.bounds,
-        )
-
-    def _same_row_spacing(self, spacing: int) -> int:
-        """Returns a spacing value that can advance across addressable coordinates on one map row."""
-
-        if self.addressable_sum_parity is None:
-            return spacing
-        if spacing == 1:
-            return 2
-        return spacing if spacing % 2 == 0 else spacing + 1
-
-    def _first_addressable_x(self, *, bounds: WorldMapBounds, y: int) -> int | None:
-        """Returns the first addressable x-coordinate on one y row inside the bounds."""
-
-        for x in range(bounds.min_x, bounds.max_x + 1):
-            if self.is_addressable((x, y)):
-                return x
-        return None
-
-    def _last_addressable_x(self, *, bounds: WorldMapBounds, y: int) -> int | None:
-        """Returns the last addressable x-coordinate on one y row inside the bounds."""
-
-        for x in range(bounds.max_x, bounds.min_x - 1, -1):
-            if self.is_addressable((x, y)):
-                return x
-        return None
-
-    def _addressable_snap_order_key(
-        self,
-        requested: tuple[int, int],
-        candidate: tuple[int, int],
-    ) -> tuple[int, int, int, int, int, int, int]:
-        """Returns the deterministic tie-breaker that mirrors observed magnifier coordinate correction."""
-
-        preserve_x_for_edge = requested[0] in {self.bounds.min_x, self.bounds.max_x}
-        if preserve_x_for_edge:
-            return (
-                _chebyshev_distance(requested, candidate),
-                _manhattan_distance(requested, candidate),
-                0 if candidate[0] == requested[0] else 1,
-                abs(candidate[1] - requested[1]),
-                abs(candidate[0] - requested[0]),
-                candidate[1],
-                candidate[0],
-            )
-        return (
-            _chebyshev_distance(requested, candidate),
-            _manhattan_distance(requested, candidate),
-            0 if candidate[1] == requested[1] else 1,
-            0 if candidate[0] <= requested[0] else 1,
-            abs(candidate[0] - requested[0]),
-            abs(candidate[1] - requested[1]),
-            candidate[0],
-        )
-
-
-@dataclass(frozen=True, slots=True)
 class WorldMapSearchPattern:
     """Defines one canonical world-map traversal pattern."""
 
@@ -434,7 +162,7 @@ class WorldMapSearchOrigin:
     def __post_init__(self) -> None:
         """Rejects inconsistent origin payloads before planning begins."""
 
-        if self.coordinate is not None and not _is_integer_pair(self.coordinate):
+        if self.coordinate is not None and not is_integer_pair(self.coordinate):
             raise SelectorResolutionError(
                 "World-map search origins require one integer coordinate pair when coordinate is present.",
                 coordinate=self.coordinate,
@@ -865,6 +593,53 @@ class AllOfWorldMapSearchMatcher(WorldMapSearchMatcher):
 
         return all(matcher.matches_sighting(sighting) for matcher in self.matchers)
 
+    def supports_castle_enrichment(self) -> bool:
+        """Returns whether any conjunct needs castle inspection after all map-side constraints are eligible."""
+
+        return any(matcher.supports_castle_enrichment() for matcher in self.matchers)
+
+    def rank_castle_candidate(self, sighting: WorldMapObjectSighting) -> int:
+        """Ranks candidates that satisfy every map-side child and every enrichment child's candidate policy."""
+
+        if not self.supports_castle_enrichment():
+            return -1
+        score = 0
+        for matcher in self.matchers:
+            if matcher.supports_castle_enrichment():
+                child_score = matcher.rank_castle_candidate(sighting)
+                if child_score < 0:
+                    return -1
+                score += child_score
+                continue
+            if not matcher.matches_sighting(sighting):
+                return -1
+            child_score = matcher.rank_castle_candidate(sighting)
+            if child_score > 0:
+                score += child_score
+        return score
+
+    def supports_castle_profile_validation(self) -> bool:
+        """Returns whether any child requires a lord-profile validation step."""
+
+        return any(matcher.supports_castle_profile_validation() for matcher in self.matchers)
+
+    def validate_castle_profile(
+        self,
+        *,
+        sighting: WorldMapObjectSighting,
+        observation: Observation,
+    ) -> bool:
+        """Validates every profile-aware child while preserving map-side conjunct constraints."""
+
+        for matcher in self.matchers:
+            if matcher.supports_castle_profile_validation():
+                if not matcher.validate_castle_profile(sighting=sighting, observation=observation):
+                    return False
+                continue
+            if not matcher.matches_sighting(sighting):
+                return False
+        return True
+
 
 @dataclass(frozen=True, slots=True)
 class AnyOfWorldMapSearchMatcher(WorldMapSearchMatcher):
@@ -887,6 +662,42 @@ class AnyOfWorldMapSearchMatcher(WorldMapSearchMatcher):
         """Returns whether at least one child matcher accepts the indexed sighting."""
 
         return any(matcher.matches_sighting(sighting) for matcher in self.matchers)
+
+    def supports_castle_enrichment(self) -> bool:
+        """Returns whether any disjunct can benefit from castle inspection."""
+
+        return any(matcher.supports_castle_enrichment() for matcher in self.matchers)
+
+    def rank_castle_candidate(self, sighting: WorldMapObjectSighting) -> int:
+        """Returns the best eligible castle-inspection score among child matchers."""
+
+        scores = [
+            matcher.rank_castle_candidate(sighting)
+            for matcher in self.matchers
+            if matcher.supports_castle_enrichment()
+        ]
+        return max(scores, default=-1)
+
+    def supports_castle_profile_validation(self) -> bool:
+        """Returns whether any child requires a lord-profile validation step."""
+
+        return any(matcher.supports_castle_profile_validation() for matcher in self.matchers)
+
+    def validate_castle_profile(
+        self,
+        *,
+        sighting: WorldMapObjectSighting,
+        observation: Observation,
+    ) -> bool:
+        """Accepts a profile when any profile-aware child validates it."""
+
+        for matcher in self.matchers:
+            if matcher.supports_castle_profile_validation() and matcher.validate_castle_profile(
+                sighting=sighting,
+                observation=observation,
+            ):
+                return True
+        return False
 
 
 @dataclass(frozen=True, slots=True)
@@ -1028,34 +839,6 @@ class WorldMapSearchRequest:
 
 
 @dataclass(frozen=True, slots=True)
-class WorldMapTraversalCheckpoint:
-    """Defines one deterministic checkpoint coordinate in the planned world-map traversal route."""
-
-    coordinate: tuple[int, int]
-    distance_from_origin: int
-    route_index: int
-
-    def __post_init__(self) -> None:
-        """Rejects malformed checkpoints before runtime execution consumes them."""
-
-        if not _is_integer_pair(self.coordinate):
-            raise SelectorResolutionError(
-                "World-map traversal checkpoints require one integer coordinate pair.",
-                coordinate=self.coordinate,
-            )
-        if self.distance_from_origin < 0:
-            raise SelectorResolutionError(
-                "World-map traversal checkpoints must use non-negative distance_from_origin values.",
-                distance_from_origin=self.distance_from_origin,
-            )
-        if self.route_index < 0:
-            raise SelectorResolutionError(
-                "World-map traversal checkpoints must use non-negative route_index values.",
-                route_index=self.route_index,
-            )
-
-
-@dataclass(frozen=True, slots=True)
 class WorldMapResolvedSearchPlan:
     """Carries the fully resolved planning inputs for one world-map search request."""
 
@@ -1103,7 +886,7 @@ class WorldMapCoordinateMover:
         """Moves toward the requested coordinate using bounded cardinal legs and returns the freshest proven world-map observation."""
 
         active_coordinate_domain = self.coordinate_domain if coordinate_domain is None else coordinate_domain
-        addressable_target_coordinate = active_coordinate_domain.nearest_addressable(target_coordinate)
+        addressable_target_coordinate = active_coordinate_domain.nearest_addressable_in_bounds(target_coordinate)
         current = _require_proven_world_map_observation(
             observation_service=self.observation_service,
             observation=observation,
@@ -1259,64 +1042,6 @@ class WorldMapCastleInspector(Protocol):
         runtime_state: dict[str, Any] | None = None,
     ) -> tuple[Observation, tuple[WorldMapObjectSighting, ...]]:
         """Inspects the candidates and returns the latest observation plus any updated sightings."""
-
-
-@dataclass(slots=True)
-class WorldMapTraversalPlanner:
-    """Converts one resolved search request into a deterministic ordered checkpoint route."""
-
-    def build_route(
-        self,
-        *,
-        request: WorldMapSearchRequest,
-        origin_coordinate: tuple[int, int],
-        coverage_bounds: WorldMapBounds,
-    ) -> tuple[WorldMapTraversalCheckpoint, ...]:
-        """Returns the deterministic route implied by the request, origin, and resolved coverage bounds."""
-
-        spacing = request.checkpoint_spacing
-        coordinates: tuple[tuple[int, int], ...]
-        if request.pattern.kind == WorldMapSearchPatternKind.ROW_MAJOR_SWEEP:
-            coordinates = request.coordinate_domain.row_major_coordinates(bounds=coverage_bounds, spacing=spacing)
-        elif request.pattern.kind == WorldMapSearchPatternKind.EXPANDING_RING:
-            coordinates = request.coordinate_domain.normalize_route_coordinates(
-                _expanding_ring_coordinates(bounds=coverage_bounds, origin=origin_coordinate, spacing=spacing),
-                bounds=coverage_bounds,
-            )
-        elif request.pattern.kind == WorldMapSearchPatternKind.EDGE_BAND_SWEEP:
-            boundary = request.boundary
-            if boundary is None or boundary.kind != WorldMapSearchBoundaryKind.EDGE_BAND:
-                raise SelectorResolutionError(
-                    "Edge-band sweep route generation requires one edge-band boundary.",
-                    pattern=request.pattern.kind.value,
-                )
-            coordinates = request.coordinate_domain.normalize_route_coordinates(
-                _edge_band_coordinates(
-                    map_bounds=coverage_bounds,
-                    spacing=spacing,
-                    edges=boundary.edges,
-                    band_width_units=boundary.band_width_units or 0,
-                    origin_coordinate=origin_coordinate,
-                    coordinate_domain=request.coordinate_domain,
-                ),
-                bounds=coverage_bounds,
-            )
-        else:
-            raise SelectorResolutionError("Unsupported world-map search pattern.", pattern=request.pattern.kind.value)
-        if not coordinates:
-            raise SelectorResolutionError(
-                "World-map traversal planning produced no addressable checkpoints.",
-                pattern=request.pattern.kind.value,
-                coverage_bounds=coverage_bounds,
-            )
-        return tuple(
-            WorldMapTraversalCheckpoint(
-                coordinate=coordinate,
-                distance_from_origin=_chebyshev_distance(origin_coordinate, coordinate),
-                route_index=index,
-            )
-            for index, coordinate in enumerate(coordinates)
-        )
 
 
 @dataclass(slots=True)
@@ -1552,9 +1277,12 @@ class WorldMapSearchService:
         coverage_bounds = self._resolve_coverage_bounds(request=request, origin_coordinate=origin)
         movement_tool = self._select_movement_tool(request=request)
         route = self.traversal_planner.build_route(
-            request=request,
+            pattern_kind=request.pattern.kind,
+            coordinate_domain=request.coordinate_domain,
             origin_coordinate=origin,
             coverage_bounds=coverage_bounds,
+            spacing=request.checkpoint_spacing,
+            edge_band=_traversal_edge_band(request),
         )
         return WorldMapResolvedSearchPlan(
             request=request,
@@ -1747,10 +1475,51 @@ class WorldMapSearchService:
 
         actions = self.coordinate_navigator.plan_jump(target=checkpoint.coordinate, current_observation=observation)
         if not actions:
-            return observation
+            proven = _require_proven_world_map_observation(
+                observation_service=self.observation_service,
+                observation=observation,
+                label_prefix=f"{label_prefix}_already_at_target",
+            )
+            self._require_checkpoint_landing(
+                proven,
+                checkpoint=checkpoint,
+                requested_coordinate=checkpoint.coordinate,
+            )
+            return proven
         after = self._execute_actions(actions, observation, label_prefix=label_prefix)
         _raise_if_world_map_coordinate_jump_status_banner(after, target_coordinate=checkpoint.coordinate)
-        return after
+        proven = _require_proven_world_map_observation(
+            observation_service=self.observation_service,
+            observation=after,
+            label_prefix=f"{label_prefix}_verify_landing",
+        )
+        self._require_checkpoint_landing(
+            proven,
+            checkpoint=checkpoint,
+            requested_coordinate=checkpoint.coordinate,
+        )
+        return proven
+
+    def _require_checkpoint_landing(
+        self,
+        observation: Observation,
+        *,
+        checkpoint: WorldMapTraversalCheckpoint,
+        requested_coordinate: tuple[int, int],
+    ) -> None:
+        """Fails fast unless the proven world-map viewport is focused on the requested checkpoint."""
+
+        current_coordinate = _require_world_map_viewport_coordinate(observation)
+        tolerance = self.screen_flows.world_map_navigator.focus_tolerance
+        if _coordinate_within_tolerance(current_coordinate, checkpoint.coordinate, tolerance=tolerance):
+            return
+        raise SelectorResolutionError(
+            "World-map coordinate jump did not land at the requested checkpoint.",
+            target_coordinate=checkpoint.coordinate,
+            requested_coordinate=requested_coordinate,
+            current_coordinate=current_coordinate,
+            focus_tolerance=tolerance,
+        )
 
     def _move_with_overview_seed(
         self,
@@ -1831,20 +1600,20 @@ class WorldMapSearchService:
                     "Current-viewport origin resolution requires a coordinate-addressable world-map viewport.",
                     surface_type=surface.surface_type.value,
                 )
-            return request.coordinate_domain.nearest_addressable(coordinate)
+            return request.coordinate_domain.nearest_addressable_in_bounds(coordinate)
         if origin.kind == WorldMapSearchOriginKind.EXPLICIT_COORDINATE:
             assert origin.coordinate is not None
-            return request.coordinate_domain.nearest_addressable(origin.coordinate)
+            return request.coordinate_domain.nearest_addressable_in_bounds(origin.coordinate)
         if origin.kind == WorldMapSearchOriginKind.SELF_TERRITORY:
-            return request.coordinate_domain.nearest_addressable(_resolve_self_territory_origin(surface))
+            return request.coordinate_domain.nearest_addressable_in_bounds(_resolve_self_territory_origin(surface))
         if origin.kind == WorldMapSearchOriginKind.MAP_CORNER:
             bounds = _require_map_bounds(request)
             assert origin.corner is not None
-            return request.coordinate_domain.nearest_addressable(_coordinate_for_corner(bounds, origin.corner))
+            return request.coordinate_domain.nearest_addressable_in_bounds(_coordinate_for_corner(bounds, origin.corner))
         if origin.kind == WorldMapSearchOriginKind.MAP_EDGE_REFERENCE:
             bounds = _require_map_bounds(request)
             assert origin.edge is not None
-            return request.coordinate_domain.nearest_addressable(_coordinate_for_edge(bounds, origin.edge))
+            return request.coordinate_domain.nearest_addressable_in_bounds(_coordinate_for_edge(bounds, origin.edge))
         raise SelectorResolutionError("Unsupported world-map search origin.", origin_kind=origin.kind.value)
 
     def _resolve_coverage_bounds(
@@ -2176,87 +1945,6 @@ def expected_world_map_cardinal_delta(direction: WorldMapCardinalDirection) -> t
     return 0, -1
 
 
-def _expanding_ring_coordinates(
-    *,
-    bounds: WorldMapBounds,
-    origin: tuple[int, int],
-    spacing: int,
-) -> Iterable[tuple[int, int]]:
-    """Yields coordinates in deterministic expanding-ring order while staying inside the inclusive bounds."""
-
-    yielded: set[tuple[int, int]] = set()
-    clamped_origin = bounds.clamp(origin)
-    yielded.add(clamped_origin)
-    yield clamped_origin
-    max_radius = max(
-        abs(bounds.min_x - clamped_origin[0]),
-        abs(bounds.max_x - clamped_origin[0]),
-        abs(bounds.min_y - clamped_origin[1]),
-        abs(bounds.max_y - clamped_origin[1]),
-    )
-    ring = spacing
-    while ring <= max_radius:
-        min_x = clamped_origin[0] - ring
-        max_x = clamped_origin[0] + ring
-        min_y = clamped_origin[1] - ring
-        max_y = clamped_origin[1] + ring
-        top_xs = range(min_x, max_x + 1, spacing)
-        right_ys = range(min_y + spacing, max_y + 1, spacing)
-        bottom_xs = range(max_x - spacing, min_x - 1, -spacing)
-        left_ys = range(max_y - spacing, min_y, -spacing)
-        for coordinate in (
-            *((x, min_y) for x in top_xs),
-            *((max_x, y) for y in right_ys),
-            *((x, max_y) for x in bottom_xs),
-            *((min_x, y) for y in left_ys),
-        ):
-            if not bounds.contains(coordinate) or coordinate in yielded:
-                continue
-            yielded.add(coordinate)
-            yield coordinate
-        ring += spacing
-
-
-def _edge_band_coordinates(
-    *,
-    map_bounds: WorldMapBounds,
-    spacing: int,
-    edges: Sequence[WorldMapEdge],
-    band_width_units: int,
-    origin_coordinate: tuple[int, int],
-    coordinate_domain: WorldMapCoordinateDomain,
-) -> Iterable[tuple[int, int]]:
-    """Yields deterministic edge-band coordinates ordered from the resolved request origin."""
-
-    coordinates = [
-        coordinate
-        for coordinate in coordinate_domain.row_major_coordinates(bounds=map_bounds, spacing=spacing)
-        if _coordinate_in_edge_band(coordinate, map_bounds=map_bounds, edges=edges, band_width_units=band_width_units)
-    ]
-    yield from sorted(coordinates, key=lambda coordinate: _edge_band_coordinate_order_key(coordinate, origin_coordinate))
-
-
-def _coordinate_in_edge_band(
-    coordinate: tuple[int, int],
-    *,
-    map_bounds: WorldMapBounds,
-    edges: Sequence[WorldMapEdge],
-    band_width_units: int,
-) -> bool:
-    """Returns whether the coordinate lies inside the configured edge band."""
-
-    for edge in edges:
-        if edge == WorldMapEdge.LEFT and coordinate[0] <= map_bounds.min_x + band_width_units:
-            return True
-        if edge == WorldMapEdge.RIGHT and coordinate[0] >= map_bounds.max_x - band_width_units:
-            return True
-        if edge == WorldMapEdge.TOP and coordinate[1] <= map_bounds.min_y + band_width_units:
-            return True
-        if edge == WorldMapEdge.BOTTOM and coordinate[1] >= map_bounds.max_y - band_width_units:
-            return True
-    return False
-
-
 def _object_coordinate(object_: DetectedSpatialObject) -> tuple[int, int] | None:
     """Returns the strongest available world coordinate for one visible object."""
 
@@ -2383,25 +2071,16 @@ def _known_world_map_bounds(request: WorldMapSearchRequest) -> WorldMapBounds | 
     return request.coordinate_domain.bounds
 
 
-def _chebyshev_distance(start: tuple[int, int], end: tuple[int, int]) -> int:
-    """Returns the Chebyshev distance between two world coordinates."""
+def _traversal_edge_band(request: WorldMapSearchRequest) -> WorldMapTraversalEdgeBand | None:
+    """Adapts an edge-band search boundary to the traversal module's request-independent payload."""
 
-    return max(abs(start[0] - end[0]), abs(start[1] - end[1]))
-
-
-def _manhattan_distance(start: tuple[int, int], end: tuple[int, int]) -> int:
-    """Returns the Manhattan distance between two world coordinates."""
-
-    return abs(start[0] - end[0]) + abs(start[1] - end[1])
-
-
-def _edge_band_coordinate_order_key(
-    coordinate: tuple[int, int],
-    origin_coordinate: tuple[int, int],
-) -> tuple[int, int, int]:
-    """Returns the deterministic origin-aware ordering key for one edge-band checkpoint."""
-
-    return _manhattan_distance(origin_coordinate, coordinate), coordinate[1], coordinate[0]
+    boundary = request.boundary
+    if boundary is None or boundary.kind != WorldMapSearchBoundaryKind.EDGE_BAND:
+        return None
+    return WorldMapTraversalEdgeBand(
+        edges=boundary.edges,
+        band_width_units=boundary.band_width_units or 0,
+    )
 
 
 def _validate_boundary_within_coordinate_domain(
@@ -2416,35 +2095,6 @@ def _validate_boundary_within_coordinate_domain(
     if bounds is None:
         return
     coordinate_domain.require_bounds_inside(bounds)
-
-
-def _axis_samples(min_value: int, max_value: int, spacing: int) -> tuple[int, ...]:
-    """Returns inclusive axis samples with the maximum endpoint represented."""
-
-    values = list(range(min_value, max_value + 1, spacing))
-    if not values:
-        return (max_value,)
-    if values[-1] != max_value:
-        values.append(max_value)
-    return tuple(values)
-
-
-def _coordinates_within_chebyshev_radius(
-    center: tuple[int, int],
-    *,
-    radius: int,
-) -> Iterable[tuple[int, int]]:
-    """Yields coordinates around one center within a Chebyshev radius."""
-
-    for y in range(center[1] - radius, center[1] + radius + 1):
-        for x in range(center[0] - radius, center[0] + radius + 1):
-            yield x, y
-
-
-def _is_integer_pair(value: object) -> bool:
-    """Returns whether the provided value is one two-item integer tuple."""
-
-    return isinstance(value, tuple) and len(value) == 2 and isinstance(value[0], int) and isinstance(value[1], int)
 
 
 def _mutable_runtime_state(runtime_state: dict[str, Any] | None, key: str) -> dict[str, Any]:

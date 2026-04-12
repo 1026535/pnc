@@ -46,6 +46,7 @@ from pnc_automation.app.pnc.vision.world_map_coordinates import (
     ParsedWorldViewport,
     parse_world_viewport,
     read_world_coordinate_bar_viewport,
+    world_coordinate_text_matches,
 )
 
 _HOME_NAV_SELECTOR_BY_TEXT_ANCHOR = {
@@ -141,10 +142,6 @@ _HOME_CITY_EVIDENCE_SELECTOR_IDS = frozenset(
         UiElementId.PNC_HOME_TOP_RESOURCE_WOOD,
         UiElementId.PNC_HOME_TOP_RESOURCE_DIAMOND,
     }
-)
-_WORLD_ROOT_COORDINATE_PAIR_PATTERN = re.compile(
-    r"X\s*[:ï¼š]?\s*(?P<x>\d{1,4})\s*Y\s*[:ï¼š]?\s*(?P<y>\d{1,4})",
-    re.IGNORECASE,
 )
 _WORLD_ROOT_DISTANCE_PATTERN = re.compile(r"\b\d{1,4}\s*KM\b", re.IGNORECASE)
 _WORLD_MAP_INVALID_COORDINATE_STATUS_REQUIRED_TEXT = "COORDINATE"
@@ -4315,7 +4312,7 @@ def _find_world_map_root_coordinate_line(
         if line.bounds.y <= int(image.height * 0.18) and line.bounds.x <= int(image.width * 0.72)
     )
     for line in candidate_lines:
-        if _WORLD_ROOT_COORDINATE_PAIR_PATTERN.search(line.text) is not None:
+        if world_coordinate_text_matches(line.text):
             return line
     return None
 
