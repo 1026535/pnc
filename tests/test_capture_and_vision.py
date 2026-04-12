@@ -42,7 +42,8 @@ from pnc_automation.app.pnc.vision.observation_builder import (
 from pnc_automation.app.pnc.vision.image_models import SelectorMatch
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.core.vision.ocr.ocr_service import OcrLine, OcrResult, UnavailableOcrService
-from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservationEnricher
+from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservationEnricher, _find_world_map_root_coordinate_line
+from pnc_automation.app.pnc.vision.world_map_coordinates import parse_world_coordinate_text
 from pnc_automation.app.pnc.vision.selector_catalog import (
     SelectorCatalogDocument,
     SelectorCatalogEntry,
@@ -2480,6 +2481,25 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertIsNotNone(observation.spatial_surface)
             self.assertTrue(observation.has(UiElementId.PNC_WORLD_COORDINATE_BAR))
             self.assertTrue(observation.has(UiElementId.PNC_BOTTOM_NAV_HOME))
+
+    def test_world_coordinate_parser_accepts_fullwidth_colons_for_exact_world_map_proof(self) -> None:
+        """Keeps fullwidth-colon OCR variants on the canonical coordinate parser path."""
+
+        self.assertEqual(parse_world_coordinate_text("X\uff1a253 Y\uff1a987"), (253, 987))
+
+    def test_world_map_root_coordinate_detection_uses_canonical_coordinate_parser(self) -> None:
+        """Uses the same coordinate grammar for coarse root evidence, including omitted X colons."""
+
+        image = Image.new("RGB", (900, 1600), (15, 28, 68))
+        coordinate_line = _ocr_line("X253 Y\uff1a987", x=73, y=67, width=160, height=24)
+
+        self.assertIs(
+            _find_world_map_root_coordinate_line(
+                image=image,
+                lines=(coordinate_line,),
+            ),
+            coordinate_line,
+        )
 
     def test_observation_builder_builds_home_city_spatial_surface_objects(self) -> None:
         """Parses home-city buildings and empty slots as spatial objects rather than list rows."""

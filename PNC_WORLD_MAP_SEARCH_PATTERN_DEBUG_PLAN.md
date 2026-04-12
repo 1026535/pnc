@@ -31,6 +31,19 @@ Problems:
 - route logs are harder to visually compare with the intended map coverage,
 - full-map player search should not depend on unnecessary far-distance repositioning when an alternating row sweep can cover the same area more naturally.
 
+## Review Finding Moved Here
+
+Implementation review of commit `04f00b16ec91cf868ecb7232a6f9b60ed9008d56` initially called out that serpentine row sweep is still not implemented:
+
+- `WorldMapSearchPatternKind` currently exposes only:
+  - `ROW_MAJOR_SWEEP`
+  - `EXPANDING_RING`
+  - `EDGE_BAND_SWEEP`
+- there is no `SERPENTINE_ROW_SWEEP` enum value or factory yet,
+- full-map broad search therefore still cannot express the intended alternating-row traversal directly in code.
+
+This is intentionally tracked here, not in the implementation-review document, because this plan already owns traversal-pattern design and validation. Work on this item should happen when this plan resumes.
+
 ## Related Completed Work
 
 The following work is already complete and should be treated as a dependency, not reimplemented here:

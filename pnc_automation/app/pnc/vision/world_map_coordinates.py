@@ -10,8 +10,8 @@ from PIL import Image
 from pnc_automation.app.pnc.domain.observation import Bounds, SpatialViewport, SpatialViewportAddressingKind
 from pnc_automation.core.vision.ocr.ocr_service import OcrLine, OcrService
 
-_WORLD_X_COORDINATE_PATTERN = re.compile(r"X\s*[:：]?\s*(?P<value>\d{1,3})", re.IGNORECASE)
-_WORLD_Y_COORDINATE_PATTERN = re.compile(r"Y\s*[:：]?\s*(?P<value>\d{1,4})", re.IGNORECASE)
+_WORLD_X_COORDINATE_PATTERN = re.compile(r"X\s*[:\uff1a]?\s*(?P<value>\d{1,3})", re.IGNORECASE)
+_WORLD_Y_COORDINATE_PATTERN = re.compile(r"Y\s*[:\uff1a]?\s*(?P<value>\d{1,4})", re.IGNORECASE)
 _WORLD_COORDINATE_BAR_FILTER_SCALE = 3
 _WORLD_COORDINATE_BAR_MIN_BLUE_PIXELS = 12
 

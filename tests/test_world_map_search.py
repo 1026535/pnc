@@ -39,6 +39,8 @@ from pnc_automation.app.pnc.navigation.world_map_search import (
     WorldMapSearchStopPolicy,
     WorldMapSearchStopReason,
     adapt_world_map_search_matcher,
+    all_of_world_map_search,
+    any_of_world_map_search,
 )
 from pnc_automation.app.pnc.navigation.world_map_survey_recorder import WorldMapSurveyRecorder
 from pnc_automation.app.pnc.persistence.world_map_survey_debug_store import WorldMapSurveyDebugStore
@@ -176,9 +178,61 @@ class WorldMapSearchTests(unittest.TestCase):
         self.assertTrue(domain.is_addressable((507, 1019)))
         self.assertTrue(domain.is_addressable((509, 1019)))
         self.assertFalse(domain.is_addressable((508, 1019)))
-        self.assertEqual(domain.nearest_addressable((507, 1020)), (506, 1020))
-        self.assertEqual(domain.nearest_addressable((0, 1023)), (0, 1022))
-        self.assertEqual(domain.nearest_addressable((511, 0)), (511, 1))
+        self.assertEqual(domain.nearest_addressable_in_bounds((507, 1020)), (506, 1020))
+        self.assertEqual(domain.nearest_addressable_in_bounds((0, 1023)), (0, 1022))
+        self.assertEqual(domain.nearest_addressable_in_bounds((511, 0)), (511, 1))
+        for coordinate in ((-5, 0), (999, 999), (0, 5000)):
+            with self.subTest(coordinate=coordinate):
+                with self.assertRaises(SelectorResolutionError):
+                    domain.nearest_addressable_in_bounds(coordinate)
+
+    def test_resolve_plan_fails_when_current_viewport_origin_is_outside_domain(self) -> None:
+        """Rejects impossible viewport OCR coordinates instead of clamping them to a plausible kingdom edge."""
+
+        service = WorldMapSearchService(screen_flows=self.flows)
+
+        with self.assertRaises(SelectorResolutionError):
+            service.resolve_plan(
+                _search_request(
+                    matcher=SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.RESOURCE_NODE),
+                    pattern=WorldMapSearchPattern.row_major_sweep(),
+                    origin=WorldMapSearchOrigin.current_viewport(),
+                    checkpoint_spacing=10,
+                ),
+                _make_world_map_observation(999, 999),
+            )
+
+    def test_resolve_plan_fails_when_explicit_origin_is_outside_domain(self) -> None:
+        """Rejects invalid caller coordinates instead of silently routing from the nearest map edge."""
+
+        service = WorldMapSearchService(screen_flows=self.flows)
+
+        with self.assertRaises(SelectorResolutionError):
+            service.resolve_plan(
+                _search_request(
+                    matcher=SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.RESOURCE_NODE),
+                    pattern=WorldMapSearchPattern.row_major_sweep(),
+                    origin=WorldMapSearchOrigin.explicit_coordinate((512, 0)),
+                    checkpoint_spacing=10,
+                ),
+                _make_world_map_observation(0, 0),
+            )
+
+    def test_coordinate_mover_fails_when_direct_target_is_outside_domain(self) -> None:
+        """Rejects direct movement targets outside the kingdom coordinate domain."""
+
+        mover = WorldMapCoordinateMover(
+            observation_service=None,
+            action_executor=None,
+            navigator=WorldMapNavigator(focus_tolerance=0),
+        )
+
+        with self.assertRaises(SelectorResolutionError):
+            mover.move_to_coordinate(
+                _make_world_map_observation(0, 0),
+                target_coordinate=(0, 5000),
+                label_prefix="invalid_direct_move",
+            )
 
     def test_row_major_route_uses_addressable_neighbors_on_one_world_map_row(self) -> None:
         """Skips impossible coordinate pairs while preserving valid same-row integer neighbors."""
@@ -302,22 +356,27 @@ class WorldMapSearchTests(unittest.TestCase):
             )
 
     def test_resolve_plan_fails_when_requested_movement_tool_is_not_supported(self) -> None:
-        """Fails fast when a request requires coordinate-jump movement in a runtime that only supports swipes."""
+        """Fails fast when a request requires a placeholder movement primitive in a swipe-only runtime."""
 
         service = WorldMapSearchService(screen_flows=self.flows)
 
-        with self.assertRaises(SelectorResolutionError):
-            service.resolve_plan(
-                _search_request(
-                    matcher=SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.RESOURCE_NODE),
-                    pattern=WorldMapSearchPattern.row_major_sweep(),
-                    origin=WorldMapSearchOrigin.current_viewport(),
-                    boundary=WorldMapSearchBoundary.rectangle(min_coordinate=(0, 0), max_coordinate=(10, 0)),
-                    checkpoint_spacing=10,
-                    movement_preferences=WorldMapMovementPreferences((WorldMapMovementToolKind.COORDINATE_JUMP,)),
-                ),
-                _make_world_map_observation(0, 0),
-            )
+        for movement_tool in (WorldMapMovementToolKind.COORDINATE_JUMP, WorldMapMovementToolKind.OVERVIEW_SEED):
+            with self.subTest(movement_tool=movement_tool):
+                with self.assertRaises(SelectorResolutionError):
+                    service.resolve_plan(
+                        _search_request(
+                            matcher=SpatialObjectQuery(
+                                surface_type=SpatialSurfaceType.WORLD_MAP,
+                                kind=SpatialObjectKind.RESOURCE_NODE,
+                            ),
+                            pattern=WorldMapSearchPattern.row_major_sweep(),
+                            origin=WorldMapSearchOrigin.current_viewport(),
+                            boundary=WorldMapSearchBoundary.rectangle(min_coordinate=(0, 0), max_coordinate=(10, 0)),
+                            checkpoint_spacing=10,
+                            movement_preferences=WorldMapMovementPreferences((movement_tool,)),
+                        ),
+                        _make_world_map_observation(0, 0),
+                    )
 
     def test_execute_search_fails_coordinate_jump_with_live_status_banner(self) -> None:
         """Surfaces the magnifier invalid-coordinate banner instead of retrying into a generic world-map parse error."""
@@ -350,6 +409,108 @@ class WorldMapSearchTests(unittest.TestCase):
         self.assertEqual(error.exception.details["target_coordinate"], (10, 0))
         self.assertEqual(error.exception.details["status_banner"], "Invalid coordinates")
         self.assertEqual(observer.requests, [ObservationRequest.source_screen_retry(ScreenType.PNC_WORLD_MAP)])
+
+    def test_execute_search_fails_no_action_coordinate_jump_when_not_at_target(self) -> None:
+        """Verifies a no-op coordinate jump before treating the current viewport as the checkpoint."""
+
+        service, _observer = self._build_runtime_service(observations=[])
+        service.coordinate_navigator = _NoActionCoordinateJumpNavigator()
+
+        with self.assertRaises(SelectorResolutionError) as error:
+            service.execute_search(
+                _search_request(
+                    matcher=SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.RESOURCE_NODE),
+                    pattern=WorldMapSearchPattern.row_major_sweep(),
+                    origin=WorldMapSearchOrigin.current_viewport(),
+                    boundary=WorldMapSearchBoundary.rectangle(min_coordinate=(10, 0), max_coordinate=(10, 0)),
+                    checkpoint_spacing=10,
+                    movement_preferences=WorldMapMovementPreferences((WorldMapMovementToolKind.COORDINATE_JUMP,)),
+                ),
+                label_prefix="coordinate_jump_no_action_wrong",
+                start_observation=_make_world_map_observation(0, 0),
+            )
+
+        self.assertEqual(error.exception.details["target_coordinate"], (10, 0))
+        self.assertEqual(error.exception.details["current_coordinate"], (0, 0))
+
+    def test_execute_search_fails_coordinate_jump_that_lands_at_wrong_coordinate(self) -> None:
+        """Rejects coordinate-dialog movement when the resulting viewport proves a different coordinate."""
+
+        service, _observer = self._build_runtime_service(
+            observations=[
+                _make_world_map_observation(8, 0),
+            ]
+        )
+        service.coordinate_navigator = _FakeCoordinateJumpNavigator()
+
+        with self.assertRaises(SelectorResolutionError) as error:
+            service.execute_search(
+                _search_request(
+                    matcher=SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.RESOURCE_NODE),
+                    pattern=WorldMapSearchPattern.row_major_sweep(),
+                    origin=WorldMapSearchOrigin.current_viewport(),
+                    boundary=WorldMapSearchBoundary.rectangle(min_coordinate=(10, 0), max_coordinate=(10, 0)),
+                    checkpoint_spacing=10,
+                    movement_preferences=WorldMapMovementPreferences((WorldMapMovementToolKind.COORDINATE_JUMP,)),
+                ),
+                label_prefix="coordinate_jump_wrong_landing",
+                start_observation=_make_world_map_observation(0, 0),
+            )
+
+        self.assertEqual(error.exception.details["target_coordinate"], (10, 0))
+        self.assertEqual(error.exception.details["current_coordinate"], (8, 0))
+
+    def test_execute_search_fails_coordinate_jump_when_landing_lacks_world_map_surface(self) -> None:
+        """Requires a proven world-map surface before checkpoint ingestion after coordinate-dialog movement."""
+
+        service, _observer = self._build_runtime_service(
+            observations=[
+                make_observation(ScreenType.PNC_WORLD_MAP),
+                make_observation(ScreenType.PNC_WORLD_MAP),
+                make_observation(ScreenType.PNC_WORLD_MAP),
+                make_observation(ScreenType.PNC_WORLD_MAP),
+                make_observation(ScreenType.PNC_WORLD_MAP),
+            ]
+        )
+        service.coordinate_navigator = _FakeCoordinateJumpNavigator()
+
+        with self.assertRaises(SelectorResolutionError):
+            service.execute_search(
+                _search_request(
+                    matcher=SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.RESOURCE_NODE),
+                    pattern=WorldMapSearchPattern.row_major_sweep(),
+                    origin=WorldMapSearchOrigin.current_viewport(),
+                    boundary=WorldMapSearchBoundary.rectangle(min_coordinate=(10, 0), max_coordinate=(10, 0)),
+                    checkpoint_spacing=10,
+                    movement_preferences=WorldMapMovementPreferences((WorldMapMovementToolKind.COORDINATE_JUMP,)),
+                ),
+                label_prefix="coordinate_jump_missing_surface",
+                start_observation=_make_world_map_observation(0, 0),
+            )
+
+    def test_execute_search_accepts_coordinate_jump_landing_at_normalized_target(self) -> None:
+        """Verifies coordinate-jump landings against the normalized in-domain checkpoint coordinate."""
+
+        service, _observer = self._build_runtime_service(
+            observations=[
+                _make_world_map_observation(511, 1),
+            ]
+        )
+        service.coordinate_navigator = _FakeCoordinateJumpNavigator()
+
+        result = service.execute_search(
+            _search_request(
+                matcher=SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.RESOURCE_NODE),
+                pattern=WorldMapSearchPattern.row_major_sweep(),
+                origin=WorldMapSearchOrigin.explicit_coordinate((511, 0)),
+                checkpoint_spacing=10,
+                movement_preferences=WorldMapMovementPreferences((WorldMapMovementToolKind.COORDINATE_JUMP,)),
+            ),
+            label_prefix="coordinate_jump_normalized_landing",
+            start_observation=_make_world_map_observation(0, 0),
+        )
+
+        self.assertEqual(result.visited_checkpoints[0].coordinate, (511, 1))
 
     def test_execute_search_accumulates_indexed_matches_across_checkpoints(self) -> None:
         """Uses one canonical checkpointed search loop that resolves matches from accumulated indexed survey state."""
@@ -878,6 +1039,110 @@ class WorldMapSearchTests(unittest.TestCase):
         self.assertIn("gear validation is not implemented", str(error.exception).lower())
         self.assertEqual(observer.observations, [])
 
+    def test_all_of_profile_validation_matcher_inspects_eligible_castle_candidates(self) -> None:
+        """Preserves castle-inspection behavior when profile validation is composed with map-side constraints."""
+
+        service, observer = self._build_runtime_service(
+            observations=[
+                make_observation(
+                    ScreenType.PNC_PLAYER_TERRITORY,
+                    visible_ids=(
+                        UiElementId.PNC_PLAYER_TERRITORY_HEADER,
+                        UiElementId.PNC_PLAYER_TERRITORY_PLAYER_INFO_BUTTON,
+                    ),
+                ),
+                make_observation(
+                    ScreenType.PNC_PLAYER_PROFILE,
+                    profile_player_name="Alice",
+                    visible_ids=(
+                        UiElementId.PNC_PLAYER_PROFILE_HEADER,
+                        UiElementId.PNC_PLAYER_PROFILE_NAME_LABEL,
+                    ),
+                ),
+                make_observation(
+                    ScreenType.PNC_PLAYER_TERRITORY,
+                    visible_ids=(
+                        UiElementId.PNC_PLAYER_TERRITORY_HEADER,
+                        UiElementId.PNC_PLAYER_TERRITORY_PLAYER_INFO_BUTTON,
+                    ),
+                ),
+                _make_world_map_observation(0, 0),
+            ]
+        )
+        service.castle_inspector = ObservationBackedWorldMapCastleInspector(
+            screen_flows=self.flows,
+            action_executor=service.action_executor,
+            observation_service=service.observation_service,
+            survey_recorder=service.survey_recorder,
+            movement_step_budget=1,
+        )
+
+        with self.assertRaises(SelectorResolutionError) as error:
+            service.execute_search(
+                _search_request(
+                    matcher=all_of_world_map_search(
+                        WorldMapCastleQuery(kingdom="K1"),
+                        WorldMapCastleProfileQuery(
+                            castle=WorldMapCastleQuery(player_name="Alice", kingdom="K1"),
+                        ),
+                    ),
+                    pattern=WorldMapSearchPattern.row_major_sweep(),
+                    origin=WorldMapSearchOrigin.current_viewport(),
+                    checkpoint_spacing=10,
+                ),
+                label_prefix="composed_profile_validation",
+                start_observation=_make_world_map_observation(
+                    0,
+                    0,
+                    objects=(
+                        make_spatial_object(
+                            SpatialObjectKind.CASTLE,
+                            name_text="UnknownCastle",
+                            kingdom="K1",
+                            confirmed_world_coordinate=(0, 0),
+                            action_point=(77, 88),
+                        ),
+                    ),
+                ),
+            )
+
+        self.assertIn("gear validation is not implemented", str(error.exception).lower())
+        self.assertEqual(observer.observations, [])
+
+    def test_any_of_profile_validation_matcher_ranks_candidates_from_profile_child(self) -> None:
+        """Lets disjunctive profile-validation matchers advertise and rank castle candidates."""
+
+        service, _observer = self._build_runtime_service(observations=[])
+        capture = service.survey_recorder.ingest_capture(
+            type(
+                "Capture",
+                (),
+                {
+                    "observation": _make_world_map_observation(
+                        0,
+                        0,
+                        objects=(
+                            make_spatial_object(
+                                SpatialObjectKind.CASTLE,
+                                name_text="UnknownCastle",
+                                kingdom="K1",
+                                confirmed_world_coordinate=(0, 0),
+                            ),
+                        ),
+                    )
+                },
+            )()
+        )
+        matcher = any_of_world_map_search(
+            SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.MONSTER),
+            WorldMapCastleProfileQuery(
+                castle=WorldMapCastleQuery(player_name="Alice", kingdom="K1"),
+            ),
+        )
+
+        self.assertTrue(matcher.supports_castle_enrichment())
+        self.assertGreaterEqual(matcher.rank_castle_candidate(capture[0]), 0)
+
     def test_player_name_castle_enrichment_ranking_excludes_self_castles(self) -> None:
         """Does not inspect self-territory castles when resolving a remote player-name search."""
         service, _observer = self._build_runtime_service(observations=[])
@@ -995,6 +1260,21 @@ class _FakeCoordinateJumpNavigator(WorldMapCoordinateNavigator):
                 follow_up_request=ObservationRequest.source_screen_retry(ScreenType.PNC_WORLD_MAP),
             )
         ]
+
+
+class _NoActionCoordinateJumpNavigator(WorldMapCoordinateNavigator):
+    """Models a supported coordinate-jump runtime that reports the target is already focused."""
+
+    def is_supported(self) -> bool:
+        """Returns that the fake coordinate-jump primitive is available."""
+
+        return True
+
+    def plan_jump(self, *, target: tuple[int, int], current_observation: Observation) -> list[ActionRequest]:
+        """Returns no actions so the search service must verify the current viewport."""
+
+        del target, current_observation
+        return []
 
 
 def _search_request(
