@@ -25,6 +25,7 @@ From the current user guidance and screenshots already referenced by [PNC_BUILDI
 - total march capacity ranges from one to five marches,
 - additional march slots unlock through VIP level 8 and Institute technology upgrades,
 - each march can build an alliance building, occupy an empty map spot, gather a node, attack, rally, reinforce, or transport,
+- gathering can enter shared march dispatch after either viewport/manual target selection or built-in world-map resource search,
 - Alliance Hall reinforce currently shows a result popup/modal such as `Send reinforcements to defend an ally's territory` with a bottom `Dispatch` button,
 - a follow-up `Reinforce` troop-selection screen exists for reinforcement,
 - the user clarified that the Market transport flow also reaches the reinforce-style troop-selection screen after the transport setup surface.
@@ -78,3 +79,35 @@ Additional screenshot examples that will be especially useful once the first que
 - at least one occupied march after reinforce or transport dispatch,
 - any UI that exposes march-slot unlock progression beyond the first slot,
 - future march-entry screenshots for alliance building, empty-map occupation, gathering, attack, and rally.
+
+## 7. Gathering handoff notes
+
+Gathering target acquisition belongs to the operation workflow plan, but the march once a resource node is selected belongs here.
+
+Known gathering entry paths:
+
+- visible-node path: a matching resource tile is already visible in the world-map viewport, the task opens it, then taps `Gather`;
+- world-map traversal path: the task searches world-map viewports until a matching resource node is visible, then follows the visible-node path;
+- built-in search path: the task opens the lower-left world-map search/magnifier, selects resource type and level, confirms, and either lands on a highlighted matching resource or receives a no-target status banner.
+
+Shared march-management should begin after target acquisition proves the resource-node/gather surface and the user taps or can tap the gather action.
+
+Gathering-specific acquisition selectors should remain outside this plan except as handoff context:
+
+- `PNC_WORLD_BUILTIN_SEARCH_BUTTON`
+- `PNC_WORLD_SEARCH_RESOURCE_TYPE_TAB`
+- `PNC_WORLD_SEARCH_LEVEL_SLIDER`
+- `PNC_WORLD_SEARCH_CONFIRM_BUTTON`
+- `PNC_WORLD_SEARCH_HIGHLIGHT_ARROW`
+- `PNC_GATHER_NODE_TITLE`
+- `PNC_GATHER_BUTTON`
+
+March-management should own the common dispatch side after `PNC_GATHER_BUTTON`:
+
+- march/troop-selection surface classification,
+- free/occupied/locked march-slot proof,
+- no-free-march terminal proof,
+- dispatch/confirm selector ownership,
+- post-dispatch proof that the march became active or the action failed.
+
+Gathering no-target proof such as `Can't find resources at the target level in the vicinity of your territory.` is not a march-management failure because no march handoff occurred. It should remain a gathering target-acquisition terminal outcome.
