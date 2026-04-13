@@ -18,6 +18,7 @@ from pnc_automation.core.errors import TaskVerificationError
 from pnc_automation.app.pnc.domain.action_requests import ActionRequest, TapAction, TapListEntryAction
 from pnc_automation.app.pnc.domain.observation import ListEntryKind, Observation
 from pnc_automation.app.pnc.domain.policy_models import CampaignMode, CampaignPolicy
+from pnc_automation.app.pnc.domain.screen_contracts import campaign_flow_screen_types
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 
@@ -48,7 +49,7 @@ class CampaignTask(BaseAutomationTask):
     def plan(self, context: TaskContext, observation: Observation) -> list[ActionRequest]:
         """Plans one campaign increment from the current screen."""
 
-        if observation.screen_type not in {ScreenType.PNC_CAMPAIGN_MAP, ScreenType.PNC_CAMPAIGN_STAGE, ScreenType.PNC_BATTLE_PREP}:
+        if observation.screen_type not in campaign_flow_screen_types():
             return context.flows.open_campaign_map(observation, runtime_state=context.runtime_state)
         if observation.screen_type == ScreenType.PNC_BATTLE_PREP:
             return []
@@ -81,8 +82,10 @@ class CampaignTask(BaseAutomationTask):
     def verify(self, context: TaskContext, before: Observation, after: Observation) -> TaskResult:
         """Verifies either navigation to campaign or a prepared battle."""
 
-        if before.screen_type not in {ScreenType.PNC_CAMPAIGN_MAP, ScreenType.PNC_CAMPAIGN_STAGE, ScreenType.PNC_BATTLE_PREP}:
-            if after.screen_type in {ScreenType.PNC_CAMPAIGN_MAP, ScreenType.PNC_CAMPAIGN_STAGE}:
+        if before.screen_type not in campaign_flow_screen_types():
+            if after.screen_type == ScreenType.PNC_BATTLE_PREP:
+                return TaskResult.success("Campaign battle preparation was already open after entry.")
+            if after.screen_type in campaign_flow_screen_types():
                 return TaskResult.replan("Reached campaign flow for stage planning.")
             return TaskResult.failure("Campaign task could not reach the campaign flow.", retryable=True)
         if before.screen_type == ScreenType.PNC_BATTLE_PREP:

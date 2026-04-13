@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from pnc_automation.app.pnc.domain.mail import MailboxType, compose_text_field_selector_ids
+from pnc_automation.app.pnc.domain.screen_contracts import campaign_flow_screen_types
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.pnc_ocr_capabilities import runtime_screen_family_ocr_types
@@ -122,9 +123,10 @@ class ObservationRequest:
     def campaign_map_follow_up(cls) -> "ObservationRequest":
         """Returns the narrow OCR scope used after opening the Campaign entry from Home City."""
 
+        target_screens = campaign_flow_screen_types()
         return cls(
-            candidate_screen_types=frozenset({ScreenType.PNC_CAMPAIGN_MAP, ScreenType.PNC_CAMPAIGN_STAGE}),
-            ocr_screen_types=frozenset({ScreenType.PNC_CAMPAIGN_MAP, ScreenType.PNC_CAMPAIGN_STAGE}),
+            candidate_screen_types=target_screens,
+            ocr_screen_types=target_screens,
             include_popup_guard=True,
             include_loading_guard=True,
         )
@@ -134,8 +136,8 @@ class ObservationRequest:
         """Returns the narrow OCR scope used after selecting one world-map resource node."""
 
         return cls(
-            candidate_screen_types=frozenset({ScreenType.PNC_GATHER_NODE, ScreenType.PNC_WORLD_MAP}),
-            ocr_screen_types=frozenset({ScreenType.PNC_GATHER_NODE, ScreenType.PNC_WORLD_MAP}),
+            candidate_screen_types=frozenset({ScreenType.PNC_GATHER_NODE}),
+            ocr_screen_types=frozenset({ScreenType.PNC_GATHER_NODE}),
             include_popup_guard=True,
             include_loading_guard=True,
         )
@@ -145,8 +147,8 @@ class ObservationRequest:
         """Returns the narrow OCR scope used while handing target acquisition to march dispatch."""
 
         return cls(
-            candidate_screen_types=frozenset({ScreenType.PNC_MARCH_CONFIRM, ScreenType.PNC_GATHER_NODE}),
-            ocr_screen_types=frozenset({ScreenType.PNC_MARCH_CONFIRM, ScreenType.PNC_GATHER_NODE}),
+            candidate_screen_types=frozenset({ScreenType.PNC_MARCH_CONFIRM}),
+            ocr_screen_types=frozenset({ScreenType.PNC_MARCH_CONFIRM}),
             include_popup_guard=True,
             include_loading_guard=True,
         )
@@ -156,8 +158,8 @@ class ObservationRequest:
         """Returns the narrow OCR scope used after confirming a march dispatch."""
 
         return cls(
-            candidate_screen_types=frozenset({ScreenType.PNC_WORLD_MAP, ScreenType.PNC_MARCH_CONFIRM}),
-            ocr_screen_types=frozenset({ScreenType.PNC_WORLD_MAP, ScreenType.PNC_MARCH_CONFIRM}),
+            candidate_screen_types=frozenset({ScreenType.PNC_WORLD_MAP}),
+            ocr_screen_types=frozenset({ScreenType.PNC_WORLD_MAP}),
             include_popup_guard=True,
             include_loading_guard=True,
         )

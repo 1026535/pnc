@@ -52,8 +52,30 @@ class GatheringTask(BaseAutomationTask):
     def plan(self, context: TaskContext, observation: Observation) -> list[ActionRequest]:
         """Plans one gathering increment from the current screen."""
 
-        if observation.available_march_slots is not None and observation.available_march_slots <= 0:
+        if observation.screen_type == ScreenType.PNC_WORLD_MAP and (
+            observation.available_march_slots is not None and observation.available_march_slots <= 0
+        ):
             return []
+        if observation.screen_type == ScreenType.PNC_GATHER_NODE:
+            return [
+                TapAction(
+                    selector_id=UiElementId.PNC_GATHER_BUTTON,
+                    reason="open_gather_march",
+                    observe_after=True,
+                    follow_up_request=ObservationRequest.march_confirm_follow_up(),
+                )
+            ]
+        if observation.screen_type == ScreenType.PNC_MARCH_CONFIRM:
+            return [
+                TapAction(
+                    selector_id=UiElementId.PNC_MARCH_CONFIRM_BUTTON,
+                    reason="confirm_gather_march",
+                    observe_after=True,
+                    follow_up_request=ObservationRequest.post_march_dispatch_follow_up(),
+                )
+            ]
+        if observation.screen_type != ScreenType.PNC_WORLD_MAP:
+            return context.flows.ensure_world_map(observation)
         candidates = _visible_resource_nodes(observation)
         target = choose_priority_candidate(
             candidates,
@@ -69,40 +91,36 @@ class GatheringTask(BaseAutomationTask):
                 reason="open_gather_node",
                 follow_up_request=ObservationRequest.gather_node_follow_up(),
             ),
-            TapAction(
-                selector_id=UiElementId.PNC_GATHER_BUTTON,
-                reason="open_gather_march",
-                observe_after=True,
-                follow_up_request=ObservationRequest.march_confirm_follow_up(),
-            ),
-            TapAction(
-                selector_id=UiElementId.PNC_MARCH_CONFIRM_BUTTON,
-                reason="confirm_gather_march",
-                observe_after=True,
-                follow_up_request=ObservationRequest.post_march_dispatch_follow_up(),
-            ),
         ]
 
     def verify(self, context: TaskContext, before: Observation, after: Observation) -> TaskResult:
-        """Verifies either navigation to world map or a dispatched gathering march."""
+        """Verifies the currently active gathering phase without inferring skipped phases."""
 
-        if before.available_march_slots is not None and before.available_march_slots <= 0:
-            return TaskResult.skipped("No march slots are available for gathering.")
         if before.screen_type != ScreenType.PNC_WORLD_MAP:
+            if before.screen_type == ScreenType.PNC_GATHER_NODE:
+                if after.screen_type == ScreenType.PNC_MARCH_CONFIRM:
+                    return TaskResult.replan("Opened gathering march confirmation.")
+                return TaskResult.failure("Gathering node did not open march confirmation.", retryable=True)
+            if before.screen_type == ScreenType.PNC_MARCH_CONFIRM:
+                if (
+                    before.available_march_slots is not None
+                    and after.available_march_slots is not None
+                    and after.available_march_slots < before.available_march_slots
+                ):
+                    return TaskResult.success("Gathering march dispatched and march slots decreased.")
+                if after.screen_type == ScreenType.PNC_WORLD_MAP:
+                    return TaskResult.success("Gathering march dispatched and returned to the world map.")
+                return TaskResult.failure("Gathering march confirmation did not dispatch.", retryable=True)
             if after.screen_type == ScreenType.PNC_WORLD_MAP:
                 return TaskResult.replan("Reached world map for gathering planning.")
             return TaskResult.failure("Gathering task could not reach the world map.", retryable=True)
+        if before.available_march_slots is not None and before.available_march_slots <= 0:
+            return TaskResult.skipped("No march slots are available for gathering.")
         if not _visible_resource_nodes(before):
             return TaskResult.skipped("No gatherable resource nodes were visible.")
-        if (
-            before.available_march_slots is not None
-            and after.available_march_slots is not None
-            and after.available_march_slots < before.available_march_slots
-        ):
-            return TaskResult.success("Gathering march dispatched and march slots decreased.")
-        if after.screen_type == ScreenType.PNC_WORLD_MAP and before.available_march_slots is None:
-            return TaskResult.success("Gathering flow returned to the world map.")
-        return TaskResult.failure("Gathering did not produce a verified state change.", retryable=True)
+        if after.screen_type == ScreenType.PNC_GATHER_NODE:
+            return TaskResult.replan("Opened gathering resource node.")
+        return TaskResult.failure("Gathering resource-node tap did not open the node detail.", retryable=True)
 
 
 def _visible_resource_nodes(observation: Observation) -> tuple[DetectedSpatialObject, ...]:

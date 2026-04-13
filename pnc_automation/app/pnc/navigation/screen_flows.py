@@ -41,6 +41,7 @@ from pnc_automation.app.pnc.domain.observation import (
     castle_entry_identity_matches,
     castle_identities_match,
 )
+from pnc_automation.app.pnc.domain.screen_contracts import campaign_flow_screen_types
 from pnc_automation.app.pnc.domain.building_catalog import HomeCityMapCoordinate, HomeCityObjectId
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.navigation.spatial_navigation import HomeCityNavigator, WorldMapNavigator
@@ -876,17 +877,8 @@ class ScreenFlowPlanner:
     ) -> list[ActionRequest]:
         """Plans one shared Home City target-opening increment for the Campaign map endpoint."""
 
-        if observation.screen_type in {ScreenType.PNC_CAMPAIGN_MAP, ScreenType.PNC_CAMPAIGN_STAGE, ScreenType.PNC_BATTLE_PREP}:
+        if observation.screen_type in campaign_flow_screen_types():
             return []
-        if observation.screen_type == ScreenType.PNC_HOME_CITY and observation.has(UiElementId.PNC_HOME_CAMPAIGN_ENTRY):
-            return [
-                TapAction(
-                    selector_id=UiElementId.PNC_HOME_CAMPAIGN_ENTRY,
-                    reason="open_campaign_map",
-                    observe_after=True,
-                    follow_up_request=ObservationRequest.campaign_map_follow_up(),
-                )
-            ]
         campaign_query = SpatialObjectQuery(
             surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
             kind=SpatialObjectKind.HOME_BUILDING,
@@ -898,6 +890,7 @@ class ScreenFlowPlanner:
             campaign_query,
             reason="open_campaign_map",
             runtime_state=runtime_state,
+            final_follow_up_request=ObservationRequest.campaign_map_follow_up(),
         )
 
     def open_visible_home_city_object(
@@ -908,6 +901,7 @@ class ScreenFlowPlanner:
         reason: str,
         runtime_state: dict[str, Any] | None = None,
         observe_after: bool = True,
+        final_follow_up_request: ObservationRequest | None = None,
     ) -> list[ActionRequest]:
         """Plans one tap against one exact visible home-city spatial object."""
 
@@ -921,6 +915,7 @@ class ScreenFlowPlanner:
             reason=reason,
             runtime_state=runtime_state,
             observe_after=observe_after,
+            final_follow_up_request=final_follow_up_request,
         )
 
     def focus_home_city_object(
@@ -969,6 +964,7 @@ class ScreenFlowPlanner:
         reason: str,
         runtime_state: dict[str, Any] | None = None,
         observe_after: bool = True,
+        final_follow_up_request: ObservationRequest | None = None,
     ) -> list[ActionRequest]:
         """Plans one home-city camera step or a tap when the requested object is already visible."""
 
@@ -981,6 +977,7 @@ class ScreenFlowPlanner:
                 reason=reason,
                 runtime_state=runtime_state,
                 observe_after=observe_after,
+                final_follow_up_request=final_follow_up_request,
             )
         except SelectorResolutionError:
             if observation.spatial_surface is None:

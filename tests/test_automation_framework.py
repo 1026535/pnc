@@ -638,6 +638,85 @@ class AutomationFrameworkTests(unittest.TestCase):
             ],
         )
 
+    def test_action_executor_stops_gathering_chain_when_resource_tap_stays_on_world_map(self) -> None:
+        """Does not continue to the gather-node selector when the node tap did not prove the node screen."""
+
+        fake_session = FakeSession()
+        fake_observer = FakeObservationService(observations=[make_observation(ScreenType.PNC_WORLD_MAP)])
+        executor = ActionExecutor(
+            session=fake_session,
+            stable_click_delay_ms=0,
+            post_action_observe_delay_ms=0,
+            chat_stable_click_delay_ms=0,
+            chat_post_action_observe_delay_ms=0,
+            logger=build_logger(),
+            sleep=lambda _: None,
+        )
+        resource_node = make_spatial_object(
+            SpatialObjectKind.RESOURCE_NODE,
+            name_text="Food Farm",
+            metadata={"resource_type": "food"},
+            action_point=(44, 55),
+        )
+
+        result = executor.execute_actions(
+            (
+                TapSpatialObjectAction(
+                    query=SpatialObjectQuery(
+                        surface_type=SpatialSurfaceType.WORLD_MAP,
+                        kind=SpatialObjectKind.RESOURCE_NODE,
+                        metadata_key="resource_type",
+                        metadata_value="food",
+                    ),
+                    target_point=(44, 55),
+                    reason="open_gather_node",
+                    observe_after=True,
+                    follow_up_request=ObservationRequest.gather_node_follow_up(),
+                ),
+                TapAction(selector_id=UiElementId.PNC_GATHER_BUTTON, reason="open_gather_march"),
+            ),
+            make_observation(
+                ScreenType.PNC_WORLD_MAP,
+                spatial_surface=make_spatial_surface(SpatialSurfaceType.WORLD_MAP, objects=(resource_node,)),
+            ),
+            observe=fake_observer.observe,
+        )
+
+        self.assertEqual(result.screen_type, ScreenType.PNC_WORLD_MAP)
+        self.assertEqual(fake_session.taps, [(44, 55)])
+
+    def test_action_executor_stops_gathering_chain_when_gather_tap_stays_on_node_screen(self) -> None:
+        """Does not continue to the march-confirm selector when gather did not prove the confirm screen."""
+
+        fake_session = FakeSession()
+        fake_observer = FakeObservationService(observations=[make_observation(ScreenType.PNC_GATHER_NODE)])
+        executor = ActionExecutor(
+            session=fake_session,
+            stable_click_delay_ms=0,
+            post_action_observe_delay_ms=0,
+            chat_stable_click_delay_ms=0,
+            chat_post_action_observe_delay_ms=0,
+            logger=build_logger(),
+            sleep=lambda _: None,
+        )
+
+        result = executor.execute_actions(
+            (
+                TapAction(
+                    selector_id=UiElementId.PNC_GATHER_BUTTON,
+                    reason="open_gather_march",
+                    observe_after=True,
+                    follow_up_request=ObservationRequest.march_confirm_follow_up(),
+                ),
+                TapAction(selector_id=UiElementId.PNC_MARCH_CONFIRM_BUTTON, reason="confirm_gather_march"),
+            ),
+            make_observation(ScreenType.PNC_GATHER_NODE, visible_ids=(UiElementId.PNC_GATHER_BUTTON,)),
+            observe=fake_observer.observe,
+        )
+
+        self.assertEqual(result.screen_type, ScreenType.PNC_GATHER_NODE)
+        self.assertEqual(fake_session.taps, [(5, 5)])
+
     def test_tap_actions_prefer_visible_element_action_points(self) -> None:
         """Uses selector-specific action points when OCR-derived bounds are not the real touch target."""
 
