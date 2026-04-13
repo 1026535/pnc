@@ -48,8 +48,9 @@ def main() -> None:
     if not all(step.status.value == "success" for step in prepare_result.steps):
         raise AssertionError(f"Preparation failed: {prepare_result.steps}")
     account = application.script_runner.config.require_account(arguments.account)
-    runtime = application.script_runner.build_connected_runtime(account=account)
-    runner = application.script_runner.build_connected_automation_runner(account=account)
+    connected = application.script_runner.build_connected_runtime_bundle(account=account)
+    runtime = connected.runtime
+    runner = connected.runner
     runtime.world_map_movement_calibration_service.movement_step_budget = 12
     runtime.world_map_search_service.movement_step_budget = 12
     errors: list[str] = []

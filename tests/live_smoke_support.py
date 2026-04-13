@@ -5,7 +5,11 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from pnc_automation.app.automation.engine.runner import AutomationRunner
-from pnc_automation.app.automation.engine.script_runner import ConnectedAccountRuntime, ScriptRunner
+from pnc_automation.app.automation.engine.script_runner import (
+    ConnectedAccountRuntime,
+    ConnectedAutomationRuntime,
+    ScriptRunner,
+)
 from pnc_automation.app.pnc.domain.action_requests import ActionRequest
 from pnc_automation.app.pnc.domain.observation import Observation
 from pnc_automation.app.authoring.config.models import AccountConfig
@@ -21,6 +25,16 @@ def build_live_automation_runner(*, config_account: AccountConfig, script_runner
     """Builds one connected automation runner from the authoritative script-runner wiring."""
 
     return script_runner.build_connected_automation_runner(account=config_account)
+
+
+def build_live_runtime_bundle(
+    *,
+    config_account: AccountConfig,
+    script_runner: ScriptRunner,
+) -> ConnectedAutomationRuntime:
+    """Builds one shared live runtime plus runner graph for smoke tests that pass observations between them."""
+
+    return script_runner.build_connected_runtime_bundle(account=config_account)
 
 
 def execute_live_flow_until(

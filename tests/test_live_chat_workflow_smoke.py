@@ -9,14 +9,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from pnc_automation.app import build_application_runner
-from pnc_automation.app.automation.engine.action_executor import ActionExecutor
-from pnc_automation.app.automation.engine.observed_action_executor import ObservedActionExecutor
+from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.app.pnc.domain.chat import ChatChannel
 from pnc_automation.app.pnc.domain.observation import Observation
-from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from tests.live_smoke_support import build_live_runtime
-from tests.test_support import build_logger
 
 
 def _live_chat_smoke_enabled() -> bool:
@@ -55,20 +52,10 @@ class LiveChatWorkflowSmokeTests(unittest.TestCase):
         )
         cls.session = runtime.session
         cls.observation_service = runtime.observation_service
-        cls.flows = ScreenFlowPlanner()
-        defaults = cls.script_runner.config.defaults
-        cls.action_executor = ObservedActionExecutor(
-            selector_registry=cls.script_runner.observation_builder.selector_registry,
-            action_executor=ActionExecutor(
-                session=cls.session,
-                stable_click_delay_ms=defaults.stable_click_delay_ms,
-                post_action_observe_delay_ms=defaults.post_action_observe_delay_ms,
-                chat_stable_click_delay_ms=defaults.chat_stable_click_delay_ms,
-                chat_post_action_observe_delay_ms=defaults.chat_post_action_observe_delay_ms,
-                logger=build_logger(),
-            ),
-            logger=build_logger(),
-        )
+        cls.flows = runtime.flow_planner
+        if runtime.observed_action_executor is None:
+            raise SelectorResolutionError("Live chat smoke requires a connected observed-action executor.")
+        cls.action_executor = runtime.observed_action_executor
         cls.alliance_result = cls._run_live_send(ChatChannel.ALLIANCE)
         cls.world_result = cls._run_live_send(ChatChannel.WORLD)
 

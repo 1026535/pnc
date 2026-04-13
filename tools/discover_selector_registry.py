@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -14,7 +13,6 @@ from _script_bootstrap import ensure_repo_root_on_path
 root = ensure_repo_root_on_path()
 
 from pnc_automation.app import ApplicationRunner, build_application_runner
-from pnc_automation.app.automation.engine.action_executor import ActionExecutor
 from pnc_automation.app.automation.engine.observed_action_executor import ObservedActionExecutor
 from pnc_automation.app.pnc.domain.action_requests import ActionRequest, KeyEventAction, TapAction
 from pnc_automation.app.pnc.domain.observation import Observation
@@ -192,18 +190,10 @@ def _run_live_discovery(
     connected_runtime = script_runner.build_connected_runtime(account=account)
     session = connected_runtime.session
     observation_service = connected_runtime.observation_service
-    low_level_action_executor = ActionExecutor(
-        session=session,
-        stable_click_delay_ms=script_runner.config.defaults.stable_click_delay_ms,
-        post_action_observe_delay_ms=script_runner.config.defaults.post_action_observe_delay_ms,
-        logger=logging.LoggerAdapter(script_runner.logger.logger, extra={}),
-    )
-    action_executor = ObservedActionExecutor(
-        selector_registry=script_runner.observation_builder.selector_registry,
-        action_executor=low_level_action_executor,
-        logger=logging.LoggerAdapter(script_runner.logger.logger, extra={}),
-    )
-    flows = ScreenFlowPlanner()
+    action_executor = connected_runtime.observed_action_executor
+    if action_executor is None:
+        raise SelectorResolutionError("Live selector discovery requires a connected observed-action executor.")
+    flows = connected_runtime.flow_planner
 
     snapshots = []
     probes: list[SelectorDiscoveryProbe] = []

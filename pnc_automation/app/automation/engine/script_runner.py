@@ -54,6 +54,15 @@ class ConnectedAccountRuntime:
     world_map_search_service: WorldMapSearchService
     world_map_movement_calibration_service: WorldMapMovementCalibrationService
     world_map_movement_calibration_store: WorldMapMovementCalibrationStore
+    observed_action_executor: ObservedActionExecutor | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ConnectedAutomationRuntime:
+    """Exposes feature services and runner execution from one shared connected object graph."""
+
+    runtime: ConnectedAccountRuntime
+    runner: AutomationRunner
 
 
 @dataclass(frozen=True, slots=True)
@@ -183,15 +192,7 @@ class ScriptRunner:
         """Builds the canonical connected session plus observation-owned runtime helpers for one configured account."""
 
         services = self._build_connected_runtime_services(account=account)
-        return ConnectedAccountRuntime(
-            session=services.session,
-            observation_service=services.observation_service,
-            flow_planner=services.flow_planner,
-            world_map_survey_recorder=services.world_map_survey_recorder,
-            world_map_search_service=services.world_map_search_service,
-            world_map_movement_calibration_service=services.world_map_movement_calibration_service,
-            world_map_movement_calibration_store=services.world_map_movement_calibration_store,
-        )
+        return _connected_account_runtime_from_services(services)
 
     def _build_connected_runtime_services(self, *, account: AccountConfig) -> _ConnectedRuntimeServices:
         """Builds the canonical connected runtime service graph shared by tooling and automation runs."""
@@ -242,6 +243,18 @@ class ScriptRunner:
         runner, _ = self._build_runner(account)
         return runner
 
+    def build_connected_runtime_bundle(self, *, account: AccountConfig) -> ConnectedAutomationRuntime:
+        """Builds feature services and an automation runner that share one connected service graph."""
+
+        connected_runtime = self._build_connected_runtime_services(account=account)
+        return ConnectedAutomationRuntime(
+            runtime=_connected_account_runtime_from_services(connected_runtime),
+            runner=self._build_automation_runner_from_services(
+                account=account,
+                connected_runtime=connected_runtime,
+            ),
+        )
+
     def _build_runner(
         self,
         account: AccountConfig,
@@ -256,21 +269,34 @@ class ScriptRunner:
             return self.config.find_castle_roster(account.pnc_account_id)
 
         connected_runtime = self._build_connected_runtime_services(account=account)
+        return (
+            self._build_automation_runner_from_services(
+                account=account,
+                connected_runtime=connected_runtime,
+            ),
+            castle_roster_provider,
+        )
+
+    def _build_automation_runner_from_services(
+        self,
+        *,
+        account: AccountConfig,
+        connected_runtime: _ConnectedRuntimeServices,
+    ) -> AutomationRunner:
+        """Builds a runner over an already-created connected service graph."""
+
         if connected_runtime.observed_action_executor is None:
             raise AttributeError("Automation runner requires an observation builder exposing selector_registry.")
         shared_extra = self._build_shared_extra(account=account, instance=connected_runtime.session.instance)
-        return (
-            AutomationRunner(
-                defaults=self.config.defaults,
-                observation_service=connected_runtime.observation_service,
-                world_map_survey_recorder=connected_runtime.world_map_survey_recorder,
-                world_map_search_service=connected_runtime.world_map_search_service,
-                action_executor=connected_runtime.observed_action_executor,
-                task_registry=self.task_registry,
-                flow_planner=connected_runtime.flow_planner,
-                logger=logging.LoggerAdapter(self.logger.logger, extra={**self.logger.extra, **shared_extra}),
-            ),
-            castle_roster_provider,
+        return AutomationRunner(
+            defaults=self.config.defaults,
+            observation_service=connected_runtime.observation_service,
+            world_map_survey_recorder=connected_runtime.world_map_survey_recorder,
+            world_map_search_service=connected_runtime.world_map_search_service,
+            action_executor=connected_runtime.observed_action_executor,
+            task_registry=self.task_registry,
+            flow_planner=connected_runtime.flow_planner,
+            logger=logging.LoggerAdapter(self.logger.logger, extra={**self.logger.extra, **shared_extra}),
         )
 
     def build_connected_session(self, *, account: AccountConfig) -> BlueStacksSession:
@@ -350,6 +376,21 @@ class ScriptRunner:
             ),
             logger=logging.LoggerAdapter(self.logger.logger, extra={**self.logger.extra, **shared_extra}),
         )
+
+
+def _connected_account_runtime_from_services(services: _ConnectedRuntimeServices) -> ConnectedAccountRuntime:
+    """Projects the internal connected service graph into the public feature-runtime bundle."""
+
+    return ConnectedAccountRuntime(
+        session=services.session,
+        observation_service=services.observation_service,
+        flow_planner=services.flow_planner,
+        world_map_survey_recorder=services.world_map_survey_recorder,
+        world_map_search_service=services.world_map_search_service,
+        world_map_movement_calibration_service=services.world_map_movement_calibration_service,
+        world_map_movement_calibration_store=services.world_map_movement_calibration_store,
+        observed_action_executor=services.observed_action_executor,
+    )
 
 
 def _prepare_account_session_steps(castle: CastleIdentity | None) -> tuple[ScriptStep, ...]:
