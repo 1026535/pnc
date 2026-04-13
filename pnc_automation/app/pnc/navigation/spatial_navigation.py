@@ -1268,6 +1268,7 @@ class HomeCityNavigator(SpatialSurfaceNavigator):
         reason: str,
         runtime_state: dict[str, Any] | None = None,
         observe_after: bool = True,
+        final_follow_up_request: ObservationRequest | None = None,
     ) -> list[ActionRequest]:
         """Plans one home-city open attempt using shortcuts, trusted fixed-view actions, atlas moves, then fallback scan."""
 
@@ -1276,6 +1277,7 @@ class HomeCityNavigator(SpatialSurfaceNavigator):
             query=query,
             reason=reason,
             observe_after=observe_after,
+            final_follow_up_request=final_follow_up_request,
         )
         if shortcut_action is not None:
             return [shortcut_action]
@@ -1288,6 +1290,7 @@ class HomeCityNavigator(SpatialSurfaceNavigator):
                 reason=reason,
                 runtime_state=runtime_state,
                 observe_after=observe_after,
+                final_follow_up_request=final_follow_up_request,
             )
         state = _mutable_state(runtime_state, _HOME_CITY_NAVIGATION_STATE_KEY)
         _initialize_home_city_query_state(state=state, query=query)
@@ -1297,6 +1300,7 @@ class HomeCityNavigator(SpatialSurfaceNavigator):
             query=query,
             state=state,
             observe_after=observe_after,
+            final_follow_up_request=final_follow_up_request,
         )
         if guided_action is not None:
             return [guided_action]
@@ -1307,6 +1311,7 @@ class HomeCityNavigator(SpatialSurfaceNavigator):
             query=query,
             state=state,
             observe_after=observe_after,
+            final_follow_up_request=final_follow_up_request,
         )
         if map_tap_action is not None:
             return [map_tap_action]
@@ -1317,6 +1322,7 @@ class HomeCityNavigator(SpatialSurfaceNavigator):
             query=query,
             state=state,
             observe_after=observe_after,
+            final_follow_up_request=final_follow_up_request,
         )
         if map_actions is not None:
             return map_actions
@@ -1334,6 +1340,7 @@ class HomeCityNavigator(SpatialSurfaceNavigator):
         reason: str,
         runtime_state: dict[str, Any] | None = None,
         observe_after: bool = True,
+        final_follow_up_request: ObservationRequest | None = None,
     ) -> list[ActionRequest]:
         """Returns one canonical tap against one exact visible home-city spatial object."""
 
@@ -1345,6 +1352,7 @@ class HomeCityNavigator(SpatialSurfaceNavigator):
                 target_point=_resolve_target_point(target=target, use_action_point=True),
                 reason=reason,
                 observe_after=observe_after,
+                follow_up_request=final_follow_up_request,
             )
         ]
 
@@ -1481,17 +1489,24 @@ def _plan_home_city_shortcut_action(
     query: SpatialObjectQuery,
     reason: str,
     observe_after: bool,
+    final_follow_up_request: ObservationRequest | None,
 ) -> TapAction | None:
     """Returns one trusted home-city shortcut tap when the target building has an authoritative direct affordance."""
 
-    if (
-        _query_home_city_object_id(query) == HomeCityObjectId.INSTITUTE
-        and observation.has(UiElementId.PNC_HOME_RESEARCH_BUTTON)
-    ):
+    target_object_id = _query_home_city_object_id(query)
+    if target_object_id == HomeCityObjectId.INSTITUTE and observation.has(UiElementId.PNC_HOME_RESEARCH_BUTTON):
         return TapAction(
             selector_id=UiElementId.PNC_HOME_RESEARCH_BUTTON,
             reason=reason,
             observe_after=observe_after,
+            follow_up_request=final_follow_up_request,
+        )
+    if target_object_id == HomeCityObjectId.CAMPAIGN and observation.has(UiElementId.PNC_HOME_CAMPAIGN_ENTRY):
+        return TapAction(
+            selector_id=UiElementId.PNC_HOME_CAMPAIGN_ENTRY,
+            reason=reason,
+            observe_after=observe_after,
+            follow_up_request=final_follow_up_request,
         )
     return None
 
@@ -1504,6 +1519,7 @@ def _plan_home_city_map_tap_action(
     query: SpatialObjectQuery,
     state: dict[str, Any],
     observe_after: bool,
+    final_follow_up_request: ObservationRequest | None,
 ) -> TapPointAction | None:
     """Returns one atlas-guided direct tap when the recorded target should already be inside the current viewport."""
 
@@ -1534,6 +1550,7 @@ def _plan_home_city_map_tap_action(
             y=tap_point[1],
             reason=f"open_{target_object_id.value}_from_home_city_atlas",
             observe_after=observe_after,
+            follow_up_request=final_follow_up_request,
         )
     return None
 
@@ -1546,6 +1563,7 @@ def _plan_home_city_map_open_route_actions(
     query: SpatialObjectQuery,
     state: dict[str, Any],
     observe_after: bool,
+    final_follow_up_request: ObservationRequest | None,
 ) -> list[ActionRequest] | None:
     """Returns one precomputed atlas-guided swipe series plus final tap for one offscreen recorded home-city object."""
 
@@ -1616,6 +1634,7 @@ def _plan_home_city_map_open_route_actions(
             y=tap_point[1],
             reason=f"open_{target_object_id.value}_from_home_city_atlas",
             observe_after=observe_after,
+            follow_up_request=final_follow_up_request,
         ),
     ]
 
@@ -1627,6 +1646,7 @@ def _plan_guided_home_city_open_action(
     query: SpatialObjectQuery,
     state: dict[str, Any],
     observe_after: bool,
+    final_follow_up_request: ObservationRequest | None,
 ) -> ActionRequest | None:
     """Returns one anchor-guarded direct tap or deterministic transition toward the requested home-city target."""
 
@@ -1640,7 +1660,12 @@ def _plan_guided_home_city_open_action(
     for tap_spec in _known_view_tap_specs(visible_object_ids=visible_object_ids, target_object_id=target_object_id):
         if not _remember_guided_view_attempt(state=state, attempt_id=tap_spec.reason, view_signature=view_signature):
             continue
-        return _materialize_guided_tap_action(observation=observation, tap_spec=tap_spec, observe_after=observe_after)
+        return _materialize_guided_tap_action(
+            observation=observation,
+            tap_spec=tap_spec,
+            observe_after=observe_after,
+            final_follow_up_request=final_follow_up_request,
+        )
     for route in _HOME_CITY_GUIDED_ROUTE_SPECS:
         if target_object_id not in route.target_object_ids:
             continue
@@ -2081,6 +2106,7 @@ def _materialize_guided_tap_action(
     observation: Observation,
     tap_spec: _HomeCityKnownViewTapSpec,
     observe_after: bool,
+    final_follow_up_request: ObservationRequest | None,
 ) -> TapPointAction:
     """Builds one direct tap request from one anchor-guarded normalized tap spec."""
 
@@ -2090,6 +2116,7 @@ def _materialize_guided_tap_action(
         y=int(round(height * tap_spec.tap_y_ratio)),
         reason=tap_spec.reason,
         observe_after=observe_after,
+        follow_up_request=final_follow_up_request,
     )
 
 
