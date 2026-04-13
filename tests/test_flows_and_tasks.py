@@ -4137,6 +4137,17 @@ class FlowAndTaskTests(unittest.TestCase):
 
         self.assertEqual(GatheringTask.preflight, TaskPreflight.WORLD_MAP)
 
+    def test_gathering_task_uses_canonical_world_map_readiness_when_reentered_off_root(self) -> None:
+        """Reuses the shared world-map readiness flow if a gathering replan observes an off-root screen."""
+
+        task = GatheringTask()
+        context = self._make_context(params=GatheringPolicy(), task_id=TaskId.GATHERING)
+        observation = make_observation(ScreenType.PNC_HOME_CITY, visible_ids=(UiElementId.PNC_HOME_WORLD_SWITCH,))
+
+        actions = task.plan(context, observation)
+
+        self.assertEqual(actions, self.flows.ensure_world_map_ready(observation))
+
     def test_gathering_task_chooses_highest_priority_visible_resource_node(self) -> None:
         """Chooses visible world-map resource nodes from the spatial surface instead of list entries."""
 

@@ -8,7 +8,7 @@ It is intentionally separate from:
 
 - [PNC_AUTOMATION_IMPLEMENTATION.md](/c:/Users/lebel/pnc/PNC_AUTOMATION_IMPLEMENTATION.md), which remains focused on the primary platform architecture,
 - [PNC_ACCOUNT_NAVIGATION_SUBPLAN.md](/c:/Users/lebel/pnc/reviewed_plans/PNC_ACCOUNT_NAVIGATION_SUBPLAN.md), which continues to own bootstrap, login, popup recovery, and castle targeting,
-- [PNC_SCREEN_FLOW_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SCREEN_FLOW_SUBPLAN.md), which owns canonical reusable navigation,
+- [PNC_SCREEN_FLOW_ARCHITECTURE.md](/c:/Users/lebel/pnc/PNC_SCREEN_FLOW_ARCHITECTURE.md), which owns canonical reusable navigation,
 - [PNC_SELECTOR_REFINEMENT_SUBPLAN.md](/c:/Users/lebel/pnc/reviewed_plans/PNC_SELECTOR_REFINEMENT_SUBPLAN.md), which owns selector maturity.
 
 This file is no longer the place to fully design every future task in one horizontal backlog. It now defines the planning model, migration rules, and active backlog shape for feature-scoped post-navigation work.
@@ -78,7 +78,7 @@ Each feature plan should follow these rules:
 - choose one bounded outcome with clear entry and exit states,
 - refine only the selectors required for that feature's current slice,
 - consume existing canonical flows before inventing new navigation,
-- promote genuinely reusable navigation into [PNC_SCREEN_FLOW_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SCREEN_FLOW_SUBPLAN.md),
+- promote genuinely reusable navigation into [PNC_SCREEN_FLOW_ARCHITECTURE.md](/c:/Users/lebel/pnc/PNC_SCREEN_FLOW_ARCHITECTURE.md),
 - keep provisional or one-off click paths inside the active feature plan until reuse is proven,
 - fail fast on unsupported screens, selectors, or observations,
 - define the smallest required validation gate before considering the slice complete,
@@ -113,7 +113,7 @@ Each feature plan should follow one canonical template:
 
 ### Shared flows consumed
 
-- canonical flows required from [PNC_SCREEN_FLOW_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SCREEN_FLOW_SUBPLAN.md),
+- canonical flows required from [PNC_SCREEN_FLOW_ARCHITECTURE.md](/c:/Users/lebel/pnc/PNC_SCREEN_FLOW_ARCHITECTURE.md),
 - any candidate navigation that may need promotion later.
 
 ### Feature-local actions and decisions
@@ -151,7 +151,7 @@ Before a feature is considered integrated into the framework, confirm all of the
 
 - the feature still has exactly one owning plan file,
 - the feature plan references selectors canonically instead of defining its own selector list format,
-- reusable navigation has been promoted into [PNC_SCREEN_FLOW_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SCREEN_FLOW_SUBPLAN.md),
+- reusable navigation has been promoted into [PNC_SCREEN_FLOW_ARCHITECTURE.md](/c:/Users/lebel/pnc/PNC_SCREEN_FLOW_ARCHITECTURE.md),
 - any remaining feature-local navigation is explicitly marked non-reusable or still under evaluation,
 - the runtime task ownership is clear and non-duplicated,
 - validation evidence is recorded at the feature-plan level,
@@ -199,7 +199,7 @@ If a feature needs a new selector:
 
 ## 12. Relationship to screen flows
 
-This sub-plan should consume shared navigation from [PNC_SCREEN_FLOW_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SCREEN_FLOW_SUBPLAN.md). It must not duplicate reusable navigation logic across feature plans.
+This sub-plan should consume shared navigation from [PNC_SCREEN_FLOW_ARCHITECTURE.md](/c:/Users/lebel/pnc/PNC_SCREEN_FLOW_ARCHITECTURE.md). It must not duplicate reusable navigation logic across feature plans.
 
 If a feature needs a new reusable path:
 
