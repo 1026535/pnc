@@ -1,4 +1,4 @@
-# BotBattle AGENTS Guidelines
+# PNC Automation AGENTS Guidelines
 
 ## Coding
 - Make minimal, well-reasoned changes. Avoid duplicating existing code or logic.
@@ -18,9 +18,9 @@
 6. Strong types are preferred
 
 ## Documentation Requirements
-- Add XML documentation for every class and function we add or modify, including private helpers when they contain meaningful logic.
+- Add concise Python docstrings for every class and function we add or modify, including private helpers when they contain meaningful logic.
 - Keep documentation high value and concise: explain responsibility, important interactions/ownership, non-obvious behavior, invariants, and relevant limitations.
-- Add brief in-code comments for complex logic when the intent or constraint would not be obvious from the code and XML docs alone.
+- Add brief in-code comments for complex logic when the intent or constraint would not be obvious from the code and docstrings alone.
 - Do not write comments that only restate the signature.
 
 ## Non-negotiables (MUST)
@@ -28,70 +28,59 @@
 - MUST refactor when requirements shift responsibilities (ownership changes).
 - MUST delete obsolete code after refactors; do not keep parallel APIs.
 - MUST fail fast on unexpected conditions; do not silently swallow invalid states.
-- MUST prefer porting everything to the current format and never add support for old legacy code/serializations; update scenes/assets as needed so all data uses the latest schema.
+- MUST prefer porting everything to the current format and never add support for old legacy code/serializations; update authored config, scripts, and persisted data as needed so all data uses the latest schema.
 
 ## Project Overview
-- Work happens in **BotBattleV2** only.
-	- The legacy project at `E:\Thomas\Prog\Games\BotBattle\BotBattle` (old TBS framework) exists for **read-only reference** when comparing behaviors or older tooling.
-- Unity project using Turn-Based Strategy (TBS) Framework
-	- TBS docs: https://github.com/mzetkowski/tbsf-unity-docs
-- Core framework scripts under `Assets/TBSFramework/Scripts`. Avoid modifying framework code; it may be overwritten on framework upgrades.
-- Game-specific code lives under `Assets/BotBattle` and is structured by asset type (Art/Scripts/Prefabs/etc) then by feature (Units/Tiles/etc.)
+- Work happens in **pnc** only.
 
 ## Coding Style
-- C# code uses 4 spaces indentation and UTF-8 BOM encoding as per `.editorconfig`
-- Non-public instance fields use `m_` prefix (see `.editorconfig`)
-- Place `using` directives at the top and sort System first
-- Favour `var` for built-in and apparent types
-- Keep methods concise and document with XML comments when appropriate
-- Prefer concise expression style across the codebase (for example, use short single-line `if`/`return` and compact expressions when clear), favoring readability and brevity.
-- Prefer compact conditional blocks for simple cases: `if (cond) return;`, `if (cond) throw ...;`, `if (cond) DoThing(); else DoOther();` (keep braces for multi-line blocks).
-- Prefer enums over hard-coded strings for identifiers (abilities, behaviour trees, etc.) whenever practical.
-- Do not implement heuristics that guess or probe for multiple field/property names. Always determine and use the precise, intended symbol name or a well-defined interface. Avoid adding code that attempts multiple possible names - this increases complexity and hides intent.
-- Avoid the null-forgiving operator (`!`) in Core code. If a value can be null, guard it explicitly (e.g., `if (AssertUtil.AssertIfNull(value)) return;`) or assert+throw; never silently continue without at least an assert.
-- Prefer using established libraries over reimplementing low-level logic, but always verify the APIs exist in Unity's .NET compatibility level.
-- Do not edit `.csproj` files under `Assets/` (Unity-owned). Editing external test projects like `Tests/CoreTests/CoreTests.csproj` is OK.
+- Python code targets Python 3.13+ and should follow PEP 8 with 4 spaces, type hints, and clear module boundaries.
+- Keep imports at the top of the file, grouped standard library first, then third-party packages, then local `pnc_automation` imports.
+- Favor idiomatic Python and the standard library first; introduce third-party dependencies only when they provide clear value and are compatible with `pyproject.toml`.
+- Prefer dataclasses, enums, and typed domain models over ad hoc dictionaries, tuples, or hard-coded strings when representing stable concepts.
+- Keep functions and methods concise, focused, and readable; prefer early returns and compact conditional logic for simple cases.
+- Favor comprehensions, decorators, lambdas, functional tools, assignment expressions, and structural pattern matching when they keep the code readable; avoid them when they obscure intent.
+- Handle `None` explicitly with guard clauses, early returns, or exceptions.
+- Do not implement heuristics that guess or probe for multiple field, attribute, or key names. Use the precise intended symbol name or a well-defined interface.
+- Use `pathlib.Path` for filesystem paths and the existing storage/artifact helpers when they already model the concept.
 
 ## Development Tips
-- Prefabs and assets live under `Assets` and use `.meta` files tracked by Git
-- Scripts compile dotnet build; Unity DLL references come from Directory.Build.props.
-- We do not indent code inside namespace declarations. Always keep namespace braces at column 0 (e.g., files end with } on its own line).  CODEX often assumes indented namespaces and will omit a } if this style isn’t followed.
-- Unity test/editor runs can auto-generate workspace changes (`BotBattle.Core.csproj`, `BotBattle.Simulation.csproj`, `BotBattleV2.sln`, and folder `.meta` files under `Assets/...`). Treat these as expected generated changes, not blockers.
+- Runtime package code lives under `pnc_automation/`; tests live under `tests/`; live/manual tools live under `tools/`; authored automation YAML lives under `scripts/`; user configuration examples live under `config/`.
+- Treat `config/*.example.yaml` as documented templates. Do not overwrite real local config files such as `config/accounts.yaml` or `config/castle_targets.yaml` unless the task explicitly asks for it.
+- Screenshot, OCR, navigation, and live-run evidence is generated under `artifacts/` and temporary test directories. Use it for debugging, but do not treat fresh generated output as source code.
+- Reuse the existing application runner, script runner, observation, selector, navigation, and storage abstractions instead of adding parallel entry points.
+- BlueStacks/ADB behavior belongs behind the existing emulator/session/client interfaces so offline tests can keep using fakes.
 - If unrelated workspace changes already exist, continue the requested task and do not stop for those changes; never revert unrelated files unless the user explicitly asks.
 
 ## Testing
-- Automated tests exist, CoreTests must be runnable headless (no Unity dependencies).
-- Standard Unity test execution (use this by default):
-  - Always use `Tools/run-unity-editmode-tests.ps1` unless you are explicitly debugging the runner script itself.
-  - This runner is the canonical path for Unity EditMode tests in this repository.
-  - To avoid focus-stealing console flashes, invoke scripts in the current PowerShell session with the call operator (`& Tools/run-unity-editmode-tests.ps1 ...`) instead of spawning a nested host via `pwsh Tools/...`.
-- Unity runner commands:
-  - Full suite: `pwsh Tools/run-unity-editmode-tests.ps1`
-  - Targeted test (fast): `pwsh Tools/run-unity-editmode-tests.ps1 -TestFilter "BotBattle.Tests.Unity.PerformanceDiagnosticsUnityTests.GigaBattle_PerformanceDiagnostics_HeroesWinWithoutLosses" -RunTimeoutSeconds 30`
-- Use targeted runs when explicitly debugging one test; use full-suite runs for final validation.
-- `-SkipWarmup` is only for repeat runs after a successful warm-up in the same environment. If no XML is produced, rerun without `-SkipWarmup`.
-- If `$Env:UNITY_EDITOR` contains a placeholder path (for example `<version>`), resolve the executable from `ProjectSettings/ProjectVersion.txt` and run that exact editor version.
+- Tests live under `tests/` and use Python's standard `unittest` runner. Keep normal tests offline/headless: they must not require BlueStacks, ADB, live game state, network access, or credentials unless they are explicitly opt-in live smoke tests.
+- Run the full offline suite with `python -m unittest discover -s tests`.
+- Run targeted tests with module or class paths, for example `python -m unittest tests.test_world_map_search` or `python -m unittest tests.test_flows_and_tasks.SomeTestClass.test_specific_case`.
+- The package requires Python 3.13+ per `pyproject.toml`. If imports fail in a fresh environment, install the package dependencies before testing.
+- `tests/__init__.py` redirects temporary files into `.tmp_test_workspace`; treat `.tmp_test_workspace/`, `.tmp_test_artifacts/`, and `artifacts/` as generated test/runtime output unless the task specifically concerns persisted evidence.
+- Prefer adding focused unit coverage beside the related behavior in the existing `tests/test_*.py` module. Reuse shared builders and fakes from `tests/test_support.py` instead of inventing parallel fixtures.
+- Keep integration-style coverage deterministic by using saved screenshots, authored YAML, fake sessions, and explicit fixtures. Do not make ordinary tests depend on live emulator timing or the current account state.
 
-### Unity test failure handling (required)
-- Treat the runner output (`RESULT: ...`) and `TestResults/editmode.xml` as the authoritative pass/fail source.
-- For test failures, read per-test message + stack trace + output from `TestResults/editmode.xml`, then use `TestResults/editmode.log` for surrounding context.
-- If no XML is produced, treat it as compile/runner failure and use compiler errors extracted from `TestResults/editmode.log` (the runner script already does this).
-- If a run exits too quickly or looks stale, verify no background `Unity.exe` is still attached to this project, then rerun without `-SkipWarmup`.
+### Live smoke tests
+- Live smoke tests are opt-in `unittest` modules named `tests/test_live_*_smoke.py`; they are skipped unless their environment flag is set.
+- The shared account-navigation and spatial-surface smoke tests use `PNC_RUN_LIVE_SMOKE=1`, with optional `PNC_LIVE_SMOKE_CONFIG`, `PNC_LIVE_SMOKE_ACCOUNT`, and `PNC_LIVE_SMOKE_SCRIPT`.
+- The chat workflow smoke test uses `PNC_RUN_LIVE_CHAT_SMOKE=1`, with optional `PNC_LIVE_CHAT_CONFIG`, `PNC_LIVE_CHAT_ACCOUNT`, and `PNC_LIVE_CHAT_BASELINE_SECONDS`.
+- The home-city atlas smoke test uses `PNC_RUN_LIVE_HOME_CITY_MAP_SMOKE=1`, with optional `PNC_LIVE_SMOKE_CONFIG`, `PNC_LIVE_HOME_CITY_MAP_SMOKE_ACCOUNTS`, `PNC_LIVE_HOME_CITY_MAP_SMOKE_SEED`, and `PNC_LIVE_HOME_CITY_MAP_SMOKE_TARGETS`.
+- The world-map movement calibration smoke test uses `PNC_RUN_LIVE_WORLD_MAP_MOVEMENT_CALIBRATION=1`, with optional `PNC_LIVE_WORLD_MAP_MOVEMENT_CONFIG` and `PNC_LIVE_WORLD_MAP_MOVEMENT_ACCOUNT`.
+- If no other live target is proposed, use the BlueStacks instance/account configured for `testing` with the PNC account/castle `pine cobaye 1`.
+- Before running any live smoke test, verify BlueStacks is running, ADB can reach the configured instance, and the requested account/castle configuration exists under `config/`.
 
 ### Validation workflow (required)
-- **Fast structural check (Unity assemblies):** run `pwsh Tools/validate-asmdefs.ps1`.
-	- This catches missing/invalid `.asmdef` references (a common source of Unity compile errors) that VS Code / Roslyn error lists may not surface reliably.
-- **Pure C# headless tests (no Unity editor):** run `dotnet test Tests/CoreTests/CoreTests.csproj`.
-	- This compiles the *same* simulation + framework-common source files (linked, not copied) and runs NUnit tests directly.
-- **Core build check:** run `dotnet build BotBattle.Core.csproj` to mirror Rider/Unity project compilation and catch missing assembly references.
-- **Core dependency sanity check:** when touching `Assets/BotBattle/Scripts/Core`, ensure no Unity-only namespaces or APIs are referenced and run the CoreTests to catch missing assemblies early.
-- **Unity API compatibility:** Core targets Unity's .NET Standard profile; avoid APIs that only exist in newer .NET runtimes (e.g., `System.Text.Json`, `Convert.ToHexString`) unless verified as available in Unity.
-- **Adding external libs (Core):** import the plugin DLL into Unity by placing it under `Assets/Plugins/` (Unity creates a `PluginImporter` `.meta`), reference it via `overrideReferences` + `precompiledReferences` in the Core `.asmdef`, add the matching NuGet package in `Tests/CoreTests/CoreTests.csproj`, then run CoreTests. Example: for Newtonsoft.Json, place `Assets/Plugins/Newtonsoft.Json.dll` and add `Newtonsoft.Json` to CoreTests.
+- For pure code changes, run `python -m unittest discover -s tests` before finishing.
+- For narrow changes, run the most relevant targeted test first, then run the full offline suite once the focused failure is fixed.
+- For changes touching live runtime boundaries, selectors, screen classification, navigation, or ADB/emulator integration, run the full offline suite and call out which live smoke flag should be used for optional manual validation.
+- For selector-registry or navigation-selector changes, include the relevant offline tests and consider the live tools only when real-device evidence is needed: `python tools/validate_navigation_selectors.py`, `python tools/update_selector_registry.py`, `python tools/discover_selector_registry.py`, or `tools/run_selector_discovery_workflow.bat`.
+- For world-map movement calibration changes, run the relevant offline tests first, then use `python tools/run_world_map_movement_calibration.py` or the live calibration smoke flag when a live account is available.
 
-### Notes
-- The VS Code Problems view (and the `get_errors` tool) can miss Unity-specific issues (e.g., `.asmdef` reference graph problems) because Unity’s compilation pipeline isn’t the same as the .NET SDK pipeline.
-- Unity EditMode tests can still be run in batchmode if needed, but our default goal is: **tests run via `dotnet test` without launching Unity**.
-  For Unity runs, use `pwsh Tools/run-unity-editmode-tests.ps1` and inspect both editmode.log and editmode.xml; editmode.xml remains authoritative for pass/fail.
+### Test failure handling
+- Read the failing assertion and traceback first; most tests are ordinary `unittest` failures and should not need a custom log parser.
+- If a live smoke test fails, inspect the generated observation artifacts and screenshots under `artifacts/` for the run label before changing code.
+- If a test writes stale generated evidence or temporary files, clean only the generated output needed for the rerun. Never remove authored config, scripts, reviewed plans, or user changes as part of test cleanup.
 
 ## DRY enforcement checklist (required)
 
