@@ -21,7 +21,7 @@ from pnc_automation.app.pnc.navigation.world_map_search import (
     WorldMapSearchPattern,
 )
 from pnc_automation.app.pnc.navigation.spatial_navigation import WorldMapCardinalDirection
-from tests.live_smoke_support import build_live_automation_runner
+from tests.live_smoke_support import build_live_runtime_bundle
 
 _WORLD_MAP_PREFLIGHT_MAX_STEPS = 20
 
@@ -49,12 +49,13 @@ class LiveWorldMapMovementCalibrationSmokeTests(unittest.TestCase):
         cls.script_runner = cls.application.script_runner
         cls.account = cls.script_runner.config.require_account(cls.account_id)
         cls.prepare_result = cls.script_runner.prepare_account_session(account_id=cls.account_id)
-        cls.runtime = cls.script_runner.build_connected_runtime(account=cls.account)
-        cls.runtime.world_map_movement_calibration_service.movement_step_budget = 12
-        cls.runner = build_live_automation_runner(
+        connected = build_live_runtime_bundle(
             config_account=cls.account,
             script_runner=cls.script_runner,
         )
+        cls.runtime = connected.runtime
+        cls.runtime.world_map_movement_calibration_service.movement_step_budget = 12
+        cls.runner = connected.runner
 
     def test_live_world_map_movement_preparation_reports_success(self) -> None:
         """Verifies the shared preparation flow succeeded before calibration smoke begins."""

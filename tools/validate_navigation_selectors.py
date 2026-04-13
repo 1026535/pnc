@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import logging
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -12,10 +11,7 @@ from _script_bootstrap import ensure_repo_root_on_path
 root = ensure_repo_root_on_path()
 
 from pnc_automation.app import build_application_runner
-from pnc_automation.app.automation.engine.action_executor import ActionExecutor
-from pnc_automation.app.automation.engine.observed_action_executor import ObservedActionExecutor
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
-from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
 from pnc_automation.app.pnc.vision.navigation_selector_validator import (
     NavigationSelectorValidator,
     write_navigation_selector_validation_report,
@@ -58,22 +54,14 @@ def main() -> int:
     script_runner = application.script_runner
     account = script_runner.config.require_account(arguments.account)
     runtime = script_runner.build_connected_runtime(account=account)
-    raw_action_executor = ActionExecutor(
-        session=runtime.session,
-        stable_click_delay_ms=script_runner.config.defaults.stable_click_delay_ms,
-        post_action_observe_delay_ms=script_runner.config.defaults.post_action_observe_delay_ms,
-        logger=logging.LoggerAdapter(script_runner.logger.logger, extra={}),
-    )
+    if runtime.observed_action_executor is None:
+        raise SelectorResolutionError("Navigation-selector validation requires a connected observed-action executor.")
     validator = NavigationSelectorValidator(
         selector_registry=script_runner.observation_builder.selector_registry,
         observation_service=runtime.observation_service,
-        action_executor=ObservedActionExecutor(
-            selector_registry=script_runner.observation_builder.selector_registry,
-            action_executor=raw_action_executor,
-            logger=logging.LoggerAdapter(script_runner.logger.logger, extra={}),
-        ),
-        screen_flows=ScreenFlowPlanner(),
-        logger=logging.LoggerAdapter(script_runner.logger.logger, extra={}),
+        action_executor=runtime.observed_action_executor,
+        screen_flows=runtime.flow_planner,
+        logger=script_runner.logger,
     )
     report = validator.validate(
         selector_ids=None if not arguments.selector else tuple(_require_ui_element_id(item) for item in arguments.selector)

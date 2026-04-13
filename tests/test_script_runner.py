@@ -184,9 +184,70 @@ class ScriptRunnerTests(unittest.TestCase):
             self.assertIs(runtime.world_map_search_service.survey_recorder, runtime.world_map_survey_recorder)
             self.assertIs(runtime.world_map_movement_calibration_service.screen_flows, runtime.flow_planner)
             self.assertIs(runtime.world_map_movement_calibration_service.survey_recorder, runtime.world_map_survey_recorder)
+            self.assertIsNotNone(runtime.observed_action_executor)
+            assert runtime.observed_action_executor is not None
+            self.assertIs(runtime.observed_action_executor.action_executor.session, runtime.session)
+            self.assertIs(runtime.world_map_search_service.action_executor, runtime.observed_action_executor)
+            self.assertIs(runtime.world_map_movement_calibration_service.action_executor, runtime.observed_action_executor)
             self.assertEqual(runtime.world_map_movement_calibration_store.root, root / "artifacts")
             runner = script_runner.build_connected_automation_runner(account=account)
             self.assertIs(runner.world_map_search_service.survey_recorder, runner.world_map_survey_recorder)
+
+    def test_build_connected_runtime_bundle_shares_runtime_services_with_runner(self) -> None:
+        """Builds one runtime-plus-runner graph when a live tool needs shared mutable service identity."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            authored_instance = BlueStacksInstanceConfig(
+                id="bs-main",
+                display_name="serious_stuff",
+                app_package="com.global.tmslg",
+            )
+            account = AccountConfig(
+                id="account_a",
+                instance_id="bs-main",
+                pnc_account_id="inline_user",
+            )
+            resolver = _FakeInstanceResolver(
+                resolved_instance=BlueStacksInstance(
+                    id="bs-main",
+                    display_name="serious_stuff",
+                    device_id="127.0.0.1:5566",
+                    app_package="com.global.tmslg",
+                )
+            )
+            adb_client = _FakeAdbClient()
+            observation_builder = type(
+                "FakeObservationBuilder",
+                (),
+                {"selector_registry": build_default_selector_registry()},
+            )()
+            script_runner = ScriptRunner(
+                config=_make_app_config(root=root, instance=authored_instance, account=account),
+                task_registry=object(),
+                screenshot_service=object(),
+                observation_builder=observation_builder,
+                castle_roster_store=None,
+                mail_archive_store=None,
+                chat_archive_store=None,
+                adb_client=adb_client,
+                instance_resolver=resolver,
+                logger=build_logger(),
+            )
+
+            connected = script_runner.build_connected_runtime_bundle(account=account)
+
+            self.assertEqual(resolver.requested_configs, [authored_instance])
+            self.assertEqual(adb_client.connect_calls, ["127.0.0.1:5566"])
+            self.assertIs(connected.runner.observation_service, connected.runtime.observation_service)
+            self.assertIs(connected.runner.action_executor, connected.runtime.observed_action_executor)
+            self.assertIs(connected.runner.flow_planner, connected.runtime.flow_planner)
+            self.assertIs(connected.runner.world_map_survey_recorder, connected.runtime.world_map_survey_recorder)
+            self.assertIs(connected.runner.world_map_search_service, connected.runtime.world_map_search_service)
+            self.assertIs(
+                connected.runtime.world_map_movement_calibration_service.search_service,
+                connected.runtime.world_map_search_service,
+            )
 
     def test_build_connected_runtime_wires_world_map_survey_recorder_through_real_runtime_capture(self) -> None:
         """Builds the recorder through ScriptRunner and persists one real runtime checkpoint dump under artifacts."""

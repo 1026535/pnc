@@ -20,6 +20,7 @@ from pnc_automation.app.authoring.config.models import (
     ResolvedCredentials,
 )
 from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId, build_home_city_object_metadata
+from pnc_automation.app.pnc.domain.chat import ChatChannel
 from pnc_automation.app.pnc.domain.observation import ListEntryKind, SpatialObjectKind, SpatialSurfaceType
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
@@ -260,26 +261,11 @@ class RunnerEndToEndTests(unittest.TestCase):
         fake_observer = FakeObservationService(observations=observations)
         fake_session = FakeSession()
         registry = build_default_task_registry()
-        runner = AutomationRunner(
+        runner = _make_runner(
             defaults=defaults,
             observation_service=fake_observer,
-            action_executor=ObservedActionExecutor(
-                selector_registry=build_default_selector_registry(),
-                action_executor=ActionExecutor(
-                    session=fake_session,
-                    stable_click_delay_ms=0,
-                    post_action_observe_delay_ms=0,
-                    chat_stable_click_delay_ms=0,
-                    chat_post_action_observe_delay_ms=0,
-                    logger=build_logger(),
-                    sleep=lambda _: None,
-                ),
-                logger=build_logger(),
-                sleep=lambda _: None,
-            ),
-            task_registry=registry,
-            flow_planner=ScreenFlowPlanner(),
-            logger=build_logger(),
+            session=fake_session,
+            registry=registry,
         )
 
         result = runner.run(
@@ -297,6 +283,97 @@ class RunnerEndToEndTests(unittest.TestCase):
         self.assertIn("user@example.com", fake_session.texts)
         self.assertIn("secret", fake_session.texts)
         self.assertGreaterEqual(len(fake_session.taps), 8)
+
+    def test_runner_executes_world_chat_task_through_registered_task_loop(self) -> None:
+        """Runs a direct chat-send task through runner replans and the shared observed-action executor."""
+
+        message = "runner parity chat"
+        defaults = DefaultsConfig(stable_click_delay_ms=0, post_action_observe_delay_ms=0)
+        account = AccountConfig(
+            id="account_a",
+            instance_id="bs-main",
+            pnc_account_id="user@example.com",
+        )
+        script = RunScript(
+            name="chat_send",
+            path=Path("chat.yaml"),
+            steps=(ScriptStep(task=TaskId.SEND_WORLD_CHAT_MESSAGE, params={"message": message}),),
+        )
+        chat_controls = (
+            UiElementId.PNC_CHAT_TAB_KINGDOM,
+            UiElementId.PNC_CHAT_TAB_ALLIANCE,
+            UiElementId.PNC_CHAT_INPUT_FIELD,
+            UiElementId.PNC_CHAT_SEND_BUTTON,
+        )
+        observations = [
+            make_observation(ScreenType.PNC_HOME_CITY, visible_ids=(UiElementId.PNC_CHAT_SHORTCUT,)),
+            make_observation(
+                ScreenType.PNC_CHAT,
+                visible_ids=chat_controls,
+                active_chat_channel=ChatChannel.ALLIANCE,
+                chat_draft_empty=True,
+            ),
+            make_observation(
+                ScreenType.PNC_CHAT,
+                visible_ids=chat_controls,
+                active_chat_channel=ChatChannel.WORLD,
+                chat_draft_empty=True,
+            ),
+            make_observation(
+                ScreenType.PNC_CHAT,
+                visible_ids=chat_controls,
+                active_chat_channel=ChatChannel.WORLD,
+                chat_draft_empty=True,
+            ),
+        ]
+        fake_observer = FakeObservationService(observations=observations)
+        fake_session = FakeSession()
+        registry = build_default_task_registry()
+        runner = _make_runner(
+            defaults=defaults,
+            observation_service=fake_observer,
+            session=fake_session,
+            registry=registry,
+        )
+
+        result = runner.run(account, registry.prepare_script(script))
+
+        self.assertEqual(len(result.steps), 1)
+        self.assertEqual(result.steps[0].status.value, "success")
+        self.assertEqual(result.steps[0].attempts, 3)
+        self.assertIn(message, fake_session.texts)
+
+
+def _make_runner(
+    *,
+    defaults: DefaultsConfig,
+    observation_service: FakeObservationService,
+    session: FakeSession,
+    registry: object,
+) -> AutomationRunner:
+    """Builds the fake-device production runner used by end-to-end parity scenarios."""
+
+    return AutomationRunner(
+        defaults=defaults,
+        observation_service=observation_service,
+        action_executor=ObservedActionExecutor(
+            selector_registry=build_default_selector_registry(),
+            action_executor=ActionExecutor(
+                session=session,
+                stable_click_delay_ms=0,
+                post_action_observe_delay_ms=0,
+                chat_stable_click_delay_ms=0,
+                chat_post_action_observe_delay_ms=0,
+                logger=build_logger(),
+                sleep=lambda _: None,
+            ),
+            logger=build_logger(),
+            sleep=lambda _: None,
+        ),
+        task_registry=registry,
+        flow_planner=ScreenFlowPlanner(),
+        logger=build_logger(),
+    )
 
 
 if __name__ == "__main__":
