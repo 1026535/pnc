@@ -7,7 +7,7 @@ This document owns the shared march-management shell that is beginning to emerge
 It is intentionally separate from:
 
 - [PNC_BUILDING_ACTIONS_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_BUILDING_ACTIONS_SUBPLAN.md), which owns buildings such as `alliance_hall`, `market`, `hall_of_war`, and `pit`, plus the existence of their building-owned entry screens,
-- [PNC_SCREEN_FLOW_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SCREEN_FLOW_SUBPLAN.md), which owns reusable navigation patterns,
+- [PNC_SCREEN_FLOW_ARCHITECTURE.md](/c:/Users/lebel/pnc/PNC_SCREEN_FLOW_ARCHITECTURE.md), which owns reusable navigation patterns,
 - [PNC_TASK_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_TASK_SUBPLAN.md), which owns broader feature-task planning,
 - [PNC_AUTOMATION_IMPLEMENTATION.md](/c:/Users/lebel/pnc/PNC_AUTOMATION_IMPLEMENTATION.md), which owns the primary platform architecture.
 

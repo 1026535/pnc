@@ -75,7 +75,7 @@ class GatheringTask(BaseAutomationTask):
                 )
             ]
         if observation.screen_type != ScreenType.PNC_WORLD_MAP:
-            return context.flows.ensure_world_map(observation)
+            return context.flows.ensure_world_map_ready(observation)
         candidates = _visible_resource_nodes(observation)
         target = choose_priority_candidate(
             candidates,

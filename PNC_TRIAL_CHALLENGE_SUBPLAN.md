@@ -7,7 +7,7 @@ This document owns the Trial Challenge subtree that was split out of the main bu
 It is intentionally separate from:
 
 - [PNC_BUILDING_ACTIONS_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_BUILDING_ACTIONS_SUBPLAN.md), which owns `tower_of_trial` as a building and the existence of the `trial_challenge` linked screen,
-- [PNC_SCREEN_FLOW_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_SCREEN_FLOW_SUBPLAN.md), which owns reusable screen-navigation patterns,
+- [PNC_SCREEN_FLOW_ARCHITECTURE.md](/c:/Users/lebel/pnc/PNC_SCREEN_FLOW_ARCHITECTURE.md), which owns reusable screen-navigation patterns,
 - [PNC_TASK_SUBPLAN.md](/c:/Users/lebel/pnc/PNC_TASK_SUBPLAN.md), which owns broader feature-task planning.
 
 This file should answer one class of questions only:
