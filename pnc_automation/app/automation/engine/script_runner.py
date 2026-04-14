@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.core.infra.adb.client import AdbClient
 from pnc_automation.app.automation.engine.action_executor import ActionExecutor
 from pnc_automation.app.automation.engine.observed_action_executor import ObservedActionExecutor
@@ -54,7 +55,14 @@ class ConnectedAccountRuntime:
     world_map_search_service: WorldMapSearchService
     world_map_movement_calibration_service: WorldMapMovementCalibrationService
     world_map_movement_calibration_store: WorldMapMovementCalibrationStore
-    observed_action_executor: ObservedActionExecutor | None = None
+    observed_action_executor: ObservedActionExecutor | None
+
+    def require_observed_action_executor(self, reason: str) -> ObservedActionExecutor:
+        """Returns the selector-backed executor required by live connected-runtime operations."""
+
+        if self.observed_action_executor is None:
+            raise SelectorResolutionError(reason)
+        return self.observed_action_executor
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,20 +71,6 @@ class ConnectedAutomationRuntime:
 
     runtime: ConnectedAccountRuntime
     runner: AutomationRunner
-
-
-@dataclass(frozen=True, slots=True)
-class _ConnectedRuntimeServices:
-    """Carries the canonical connected runtime services reused by both tooling and automation execution."""
-
-    session: BlueStacksSession
-    observation_service: ObservationService
-    flow_planner: ScreenFlowPlanner
-    world_map_survey_recorder: WorldMapSurveyRecorder
-    world_map_search_service: WorldMapSearchService
-    world_map_movement_calibration_service: WorldMapMovementCalibrationService
-    world_map_movement_calibration_store: WorldMapMovementCalibrationStore
-    observed_action_executor: ObservedActionExecutor | None
 
 
 @dataclass(slots=True)
@@ -191,10 +185,9 @@ class ScriptRunner:
     def build_connected_runtime(self, *, account: AccountConfig) -> ConnectedAccountRuntime:
         """Builds the canonical connected session plus observation-owned runtime helpers for one configured account."""
 
-        services = self._build_connected_runtime_services(account=account)
-        return _connected_account_runtime_from_services(services)
+        return self._build_connected_runtime_services(account=account)
 
-    def _build_connected_runtime_services(self, *, account: AccountConfig) -> _ConnectedRuntimeServices:
+    def _build_connected_runtime_services(self, *, account: AccountConfig) -> ConnectedAccountRuntime:
         """Builds the canonical connected runtime service graph shared by tooling and automation runs."""
 
         session = self.build_connected_session(account=account)
@@ -226,7 +219,7 @@ class ScriptRunner:
                 survey_recorder=world_map_survey_recorder,
             )
             world_map_movement_calibration_service.action_executor = observed_executor
-        return _ConnectedRuntimeServices(
+        return ConnectedAccountRuntime(
             session=session,
             observation_service=observation_service,
             flow_planner=flow_planner,
@@ -248,7 +241,7 @@ class ScriptRunner:
 
         connected_runtime = self._build_connected_runtime_services(account=account)
         return ConnectedAutomationRuntime(
-            runtime=_connected_account_runtime_from_services(connected_runtime),
+            runtime=connected_runtime,
             runner=self._build_automation_runner_from_services(
                 account=account,
                 connected_runtime=connected_runtime,
@@ -281,19 +274,20 @@ class ScriptRunner:
         self,
         *,
         account: AccountConfig,
-        connected_runtime: _ConnectedRuntimeServices,
+        connected_runtime: ConnectedAccountRuntime,
     ) -> AutomationRunner:
         """Builds a runner over an already-created connected service graph."""
 
-        if connected_runtime.observed_action_executor is None:
-            raise AttributeError("Automation runner requires an observation builder exposing selector_registry.")
+        observed_action_executor = connected_runtime.require_observed_action_executor(
+            "Automation runner requires an observation builder exposing selector_registry."
+        )
         shared_extra = self._build_shared_extra(account=account, instance=connected_runtime.session.instance)
         return AutomationRunner(
             defaults=self.config.defaults,
             observation_service=connected_runtime.observation_service,
             world_map_survey_recorder=connected_runtime.world_map_survey_recorder,
             world_map_search_service=connected_runtime.world_map_search_service,
-            action_executor=connected_runtime.observed_action_executor,
+            action_executor=observed_action_executor,
             task_registry=self.task_registry,
             flow_planner=connected_runtime.flow_planner,
             logger=logging.LoggerAdapter(self.logger.logger, extra={**self.logger.extra, **shared_extra}),
@@ -378,19 +372,13 @@ class ScriptRunner:
         )
 
 
-def _connected_account_runtime_from_services(services: _ConnectedRuntimeServices) -> ConnectedAccountRuntime:
-    """Projects the internal connected service graph into the public feature-runtime bundle."""
+def configure_world_map_movement_budget(runtime: ConnectedAccountRuntime, movement_step_budget: int) -> None:
+    """Applies one live world-map movement step budget to every runtime service that performs coordinate moves."""
 
-    return ConnectedAccountRuntime(
-        session=services.session,
-        observation_service=services.observation_service,
-        flow_planner=services.flow_planner,
-        world_map_survey_recorder=services.world_map_survey_recorder,
-        world_map_search_service=services.world_map_search_service,
-        world_map_movement_calibration_service=services.world_map_movement_calibration_service,
-        world_map_movement_calibration_store=services.world_map_movement_calibration_store,
-        observed_action_executor=services.observed_action_executor,
-    )
+    if movement_step_budget <= 0:
+        raise ValueError("World-map movement step budget must be positive.")
+    runtime.world_map_movement_calibration_service.movement_step_budget = movement_step_budget
+    runtime.world_map_search_service.movement_step_budget = movement_step_budget
 
 
 def _prepare_account_session_steps(castle: CastleIdentity | None) -> tuple[ScriptStep, ...]:

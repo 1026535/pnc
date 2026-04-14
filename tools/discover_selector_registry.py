@@ -182,7 +182,7 @@ def _run_live_discovery(
     settle_home_city: bool,
     probe_selectors: tuple[str, ...],
     stage_visible_selectors: tuple[UiElementId, ...],
- ) -> SelectorDiscoverySession:
+) -> SelectorDiscoverySession:
     """Runs one live connected discovery session and returns the gathered evidence."""
 
     script_runner = runtime.application.script_runner
@@ -190,9 +190,9 @@ def _run_live_discovery(
     connected_runtime = script_runner.build_connected_runtime(account=account)
     session = connected_runtime.session
     observation_service = connected_runtime.observation_service
-    action_executor = connected_runtime.observed_action_executor
-    if action_executor is None:
-        raise SelectorResolutionError("Live selector discovery requires a connected observed-action executor.")
+    action_executor = connected_runtime.require_observed_action_executor(
+        "Live selector discovery requires a connected observed-action executor."
+    )
     flows = connected_runtime.flow_planner
 
     snapshots = []

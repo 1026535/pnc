@@ -11,6 +11,7 @@ from _script_bootstrap import ensure_repo_root_on_path
 root = ensure_repo_root_on_path()
 
 from pnc_automation.app import build_application_runner
+from pnc_automation.app.automation.engine.script_runner import configure_world_map_movement_budget
 from pnc_automation.app.automation.engine.runner import AutomationRunner
 from pnc_automation.app.automation.engine.task import TaskPreflight
 from pnc_automation.app.pnc.domain.observation import Observation, SpatialSurfaceType
@@ -51,8 +52,7 @@ def main() -> None:
     connected = application.script_runner.build_connected_runtime_bundle(account=account)
     runtime = connected.runtime
     runner = connected.runner
-    runtime.world_map_movement_calibration_service.movement_step_budget = 12
-    runtime.world_map_search_service.movement_step_budget = 12
+    configure_world_map_movement_budget(runtime, movement_step_budget=12)
     errors: list[str] = []
     calibration_matrix = None
     dead_zone_report = None

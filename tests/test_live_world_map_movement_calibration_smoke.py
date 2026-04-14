@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 
 from pnc_automation.app import build_application_runner
+from pnc_automation.app.automation.engine.script_runner import configure_world_map_movement_budget
 from pnc_automation.app.pnc.domain.observation import Observation, SpatialSurfaceType
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.automation.engine.task import TaskPreflight
@@ -54,7 +55,7 @@ class LiveWorldMapMovementCalibrationSmokeTests(unittest.TestCase):
             script_runner=cls.script_runner,
         )
         cls.runtime = connected.runtime
-        cls.runtime.world_map_movement_calibration_service.movement_step_budget = 12
+        configure_world_map_movement_budget(cls.runtime, movement_step_budget=12)
         cls.runner = connected.runner
 
     def test_live_world_map_movement_preparation_reports_success(self) -> None:

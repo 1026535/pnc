@@ -11,6 +11,7 @@ from _script_bootstrap import ensure_repo_root_on_path
 root = ensure_repo_root_on_path()
 
 from pnc_automation.app import build_application_runner
+from pnc_automation.app.automation.engine.script_runner import ConnectedAccountRuntime, ScriptRunner
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.navigation_selector_validator import (
     NavigationSelectorValidator,
@@ -54,15 +55,7 @@ def main() -> int:
     script_runner = application.script_runner
     account = script_runner.config.require_account(arguments.account)
     runtime = script_runner.build_connected_runtime(account=account)
-    if runtime.observed_action_executor is None:
-        raise SelectorResolutionError("Navigation-selector validation requires a connected observed-action executor.")
-    validator = NavigationSelectorValidator(
-        selector_registry=script_runner.observation_builder.selector_registry,
-        observation_service=runtime.observation_service,
-        action_executor=runtime.observed_action_executor,
-        screen_flows=runtime.flow_planner,
-        logger=script_runner.logger,
-    )
+    validator = _build_navigation_selector_validator(script_runner=script_runner, runtime=runtime)
     report = validator.validate(
         selector_ids=None if not arguments.selector else tuple(_require_ui_element_id(item) for item in arguments.selector)
     )
@@ -83,6 +76,25 @@ def main() -> int:
             f"{result.status.value}:{result.selector_id.value}:{result.source_screen.name}:{result.reason}",
         )
     return 0 if report.failed_count == 0 else 1
+
+
+def _build_navigation_selector_validator(
+    *,
+    script_runner: ScriptRunner,
+    runtime: ConnectedAccountRuntime,
+) -> NavigationSelectorValidator:
+    """Builds the live validator from the canonical connected runtime graph."""
+
+    action_executor = runtime.require_observed_action_executor(
+        "Navigation-selector validation requires a connected observed-action executor."
+    )
+    return NavigationSelectorValidator(
+        selector_registry=script_runner.observation_builder.selector_registry,
+        observation_service=runtime.observation_service,
+        action_executor=action_executor,
+        screen_flows=runtime.flow_planner,
+        logger=script_runner.logger,
+    )
 
 
 def _require_ui_element_id(raw_value: str) -> UiElementId:
