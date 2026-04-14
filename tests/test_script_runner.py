@@ -152,13 +152,20 @@ class ScriptRunnerTests(unittest.TestCase):
             )
             adb_client = _FakeAdbClient()
             screenshot_service = object()
+            defaults = DefaultsConfig(
+                bluestacks_config_path=root / "bluestacks.conf",
+                stable_click_delay_ms=111,
+                post_action_observe_delay_ms=222,
+                chat_stable_click_delay_ms=333,
+                chat_post_action_observe_delay_ms=444,
+            )
             observation_builder = type(
                 "FakeObservationBuilder",
                 (),
                 {"selector_registry": build_default_selector_registry()},
             )()
             script_runner = ScriptRunner(
-                config=_make_app_config(root=root, instance=authored_instance, account=account),
+                config=_make_app_config(root=root, instance=authored_instance, account=account, defaults=defaults),
                 task_registry=object(),
                 screenshot_service=screenshot_service,
                 observation_builder=observation_builder,
@@ -186,7 +193,12 @@ class ScriptRunnerTests(unittest.TestCase):
             self.assertIs(runtime.world_map_movement_calibration_service.survey_recorder, runtime.world_map_survey_recorder)
             self.assertIsNotNone(runtime.observed_action_executor)
             assert runtime.observed_action_executor is not None
-            self.assertIs(runtime.observed_action_executor.action_executor.session, runtime.session)
+            action_executor = runtime.observed_action_executor.action_executor
+            self.assertIs(action_executor.session, runtime.session)
+            self.assertEqual(action_executor.stable_click_delay_ms, 111)
+            self.assertEqual(action_executor.post_action_observe_delay_ms, 222)
+            self.assertEqual(action_executor.chat_stable_click_delay_ms, 333)
+            self.assertEqual(action_executor.chat_post_action_observe_delay_ms, 444)
             self.assertIs(runtime.world_map_search_service.action_executor, runtime.observed_action_executor)
             self.assertIs(runtime.world_map_movement_calibration_service.action_executor, runtime.observed_action_executor)
             self.assertEqual(runtime.world_map_movement_calibration_store.root, root / "artifacts")
@@ -351,6 +363,7 @@ def _make_app_config(
     root: Path,
     instance: BlueStacksInstanceConfig,
     account: AccountConfig,
+    defaults: DefaultsConfig | None = None,
     observation_mode: ObservationMode = ObservationMode.DEBUG,
 ) -> AppConfig:
     """Builds one minimal validated-looking app config for script-runner session tests."""
@@ -367,7 +380,7 @@ def _make_app_config(
         mail_schedules_path=root / "mail_schedules.yaml",
         artifact_root=artifact_root,
         archive_root=archive_root,
-        defaults=DefaultsConfig(bluestacks_config_path=root / "bluestacks.conf"),
+        defaults=defaults or DefaultsConfig(bluestacks_config_path=root / "bluestacks.conf"),
         runtime=RuntimeConfig(observation_mode=observation_mode),
         instances=(instance,),
         accounts=(account,),
