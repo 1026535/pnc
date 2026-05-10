@@ -56,6 +56,20 @@ class ScreenClassifierTests(unittest.TestCase):
 
         self.assertEqual(screen_type, ScreenType.PNC_POPUP)
 
+    def test_classify_vip_daily_reset_from_header_and_close_button(self) -> None:
+        """Recognizes the VIP daily-reset modal from its dedicated header and Close button selectors."""
+
+        classifier = ScreenClassifier()
+
+        screen_type = classifier.classify(
+            {
+                UiElementId.PNC_VIP_DAILY_RESET_HEADER: make_visible(UiElementId.PNC_VIP_DAILY_RESET_HEADER),
+                UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON: make_visible(UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON),
+            }
+        )
+
+        self.assertEqual(screen_type, ScreenType.PNC_VIP_DAILY_RESET)
+
     def test_classify_daily_to_do_from_header_selector(self) -> None:
         """Recognizes the Daily To-Do overlay from its canonical header anchor."""
 
@@ -97,6 +111,38 @@ class ScreenClassifierTests(unittest.TestCase):
         )
 
         self.assertEqual(screen_type, ScreenType.PNC_WORLD_MAP)
+
+    def test_classify_world_coordinate_dialog_from_fields_and_go(self) -> None:
+        """Recognizes the coordinate dialog from its committed fields and submit controls."""
+
+        classifier = ScreenClassifier()
+
+        screen_type = classifier.classify(
+            {
+                UiElementId.PNC_WORLD_COORDINATE_DIALOG_K_FIELD: make_visible(UiElementId.PNC_WORLD_COORDINATE_DIALOG_K_FIELD),
+                UiElementId.PNC_WORLD_COORDINATE_DIALOG_X_FIELD: make_visible(UiElementId.PNC_WORLD_COORDINATE_DIALOG_X_FIELD),
+                UiElementId.PNC_WORLD_COORDINATE_DIALOG_GO_BUTTON: make_visible(UiElementId.PNC_WORLD_COORDINATE_DIALOG_GO_BUTTON),
+                UiElementId.PNC_WORLD_COORDINATE_DIALOG_CLOSE_BUTTON: make_visible(UiElementId.PNC_WORLD_COORDINATE_DIALOG_CLOSE_BUTTON),
+            }
+        )
+
+        self.assertEqual(screen_type, ScreenType.PNC_WORLD_COORDINATE_DIALOG)
+
+    def test_classify_world_map_overview_from_header_close_and_map_region(self) -> None:
+        """Recognizes the overview screen from its fixed chrome and overview map region."""
+
+        classifier = ScreenClassifier()
+
+        screen_type = classifier.classify(
+            {
+                UiElementId.PNC_WORLD_OVERVIEW_HEADER: make_visible(UiElementId.PNC_WORLD_OVERVIEW_HEADER),
+                UiElementId.PNC_WORLD_OVERVIEW_CLOSE_BUTTON: make_visible(UiElementId.PNC_WORLD_OVERVIEW_CLOSE_BUTTON),
+                UiElementId.PNC_WORLD_OVERVIEW_MAP_REGION: make_visible(UiElementId.PNC_WORLD_OVERVIEW_MAP_REGION),
+                UiElementId.PNC_WORLD_OVERVIEW_WORLD_ICON: make_visible(UiElementId.PNC_WORLD_OVERVIEW_WORLD_ICON),
+            }
+        )
+
+        self.assertEqual(screen_type, ScreenType.PNC_WORLD_MAP_OVERVIEW)
 
     def test_classify_accepts_compatible_world_map_root_evidence_for_exact_world_map_selectors(self) -> None:
         """Keeps exact world-map selectors authoritative when parser evidence only proved the coarse world-map root."""

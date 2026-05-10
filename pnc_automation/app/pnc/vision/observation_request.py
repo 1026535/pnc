@@ -30,6 +30,7 @@ class ObservationRequest:
     include_chat_entries: bool = False
     text_field_selectors: frozenset[UiElementId] = frozenset()
     expected_mailbox: MailboxType | None = None
+    expected_world_coordinate: tuple[int, int] | None = None
     artifact_selection: ObservationArtifactSelection | None = None
 
     @classmethod
@@ -93,7 +94,63 @@ class ObservationRequest:
                 if screen_type == ScreenType.PNC_CHAT
                 else frozenset(compose_text_field_selector_ids())
                 if screen_type == ScreenType.PNC_MAIL_COMPOSE_POPUP
+                else frozenset(world_map_coordinate_dialog_text_field_selector_ids())
+                if screen_type == ScreenType.PNC_WORLD_COORDINATE_DIALOG
                 else frozenset()
+            ),
+        )
+
+    @classmethod
+    def world_map_coordinate_dialog_follow_up(cls) -> "ObservationRequest":
+        """Returns the narrow OCR scope used while opening or editing the world-map coordinate dialog."""
+
+        return cls(
+            candidate_screen_types=frozenset({ScreenType.PNC_WORLD_COORDINATE_DIALOG}),
+            ocr_screen_types=frozenset({ScreenType.PNC_WORLD_COORDINATE_DIALOG}),
+            text_field_selectors=frozenset(world_map_coordinate_dialog_text_field_selector_ids()),
+        )
+
+    @classmethod
+    def world_map_coordinate_jump_follow_up(cls) -> "ObservationRequest":
+        """Returns the OCR scope used after submitting one world-map coordinate jump."""
+
+        return cls(
+            candidate_screen_types=frozenset({ScreenType.PNC_WORLD_MAP, ScreenType.PNC_WORLD_COORDINATE_DIALOG}),
+            ocr_screen_types=frozenset({ScreenType.PNC_WORLD_MAP, ScreenType.PNC_WORLD_COORDINATE_DIALOG}),
+            text_field_selectors=frozenset(world_map_coordinate_dialog_text_field_selector_ids()),
+        )
+
+    @classmethod
+    def world_map_overview_follow_up(
+        cls,
+        expected_coordinate: tuple[int, int] | None = None,
+    ) -> "ObservationRequest":
+        """Returns the OCR scope used while opening or interacting with the world-map overview."""
+
+        return cls(
+            candidate_screen_types=frozenset({ScreenType.PNC_WORLD_MAP_OVERVIEW}),
+            ocr_screen_types=frozenset({ScreenType.PNC_WORLD_MAP_OVERVIEW}),
+            expected_world_coordinate=expected_coordinate,
+        )
+
+    @classmethod
+    def world_map_overview_exit_follow_up(cls) -> "ObservationRequest":
+        """Returns the OCR scope used when exiting the world-map overview."""
+
+        return cls(
+            candidate_screen_types=frozenset(
+                {
+                    ScreenType.PNC_WORLD_MAP,
+                    ScreenType.PNC_WORLD_KINGDOM_LIST,
+                    ScreenType.PNC_WORLD_MAP_OVERVIEW,
+                }
+            ),
+            ocr_screen_types=frozenset(
+                {
+                    ScreenType.PNC_WORLD_MAP,
+                    ScreenType.PNC_WORLD_KINGDOM_LIST,
+                    ScreenType.PNC_WORLD_MAP_OVERVIEW,
+                }
             ),
         )
 
@@ -286,3 +343,13 @@ class ObservationRequest:
         """Returns whether the request allows cheap candidate-screen validators for one screen family."""
 
         return screen_type in self.candidate_screen_types
+
+
+def world_map_coordinate_dialog_text_field_selector_ids() -> tuple[UiElementId, ...]:
+    """Returns the canonical editable field selectors used by the world-map coordinate dialog."""
+
+    return (
+        UiElementId.PNC_WORLD_COORDINATE_DIALOG_K_FIELD,
+        UiElementId.PNC_WORLD_COORDINATE_DIALOG_X_FIELD,
+        UiElementId.PNC_WORLD_COORDINATE_DIALOG_Y_FIELD,
+    )

@@ -80,6 +80,15 @@ class ScreenClassifier:
                 required_all=frozenset({UiElementId.PNC_VIP_HEADER}),
             ),
             ClassificationRule(
+                screen_type=ScreenType.PNC_VIP_DAILY_RESET,
+                required_all=frozenset(
+                    {
+                        UiElementId.PNC_VIP_DAILY_RESET_HEADER,
+                        UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON,
+                    }
+                ),
+            ),
+            ClassificationRule(
                 screen_type=ScreenType.PNC_IMPROVE_MIGHT,
                 required_all=frozenset({UiElementId.PNC_IMPROVE_MIGHT_HEADER}),
             ),
@@ -92,6 +101,43 @@ class ScreenClassifier:
                         UiElementId.PNC_WORLD_SEARCH_BUTTON,
                     }
                 ),
+            ),
+            ClassificationRule(
+                screen_type=ScreenType.PNC_WORLD_COORDINATE_DIALOG,
+                required_all=frozenset(
+                    {
+                        UiElementId.PNC_WORLD_COORDINATE_DIALOG_GO_BUTTON,
+                        UiElementId.PNC_WORLD_COORDINATE_DIALOG_CLOSE_BUTTON,
+                    }
+                ),
+                required_any=frozenset(
+                    {
+                        UiElementId.PNC_WORLD_COORDINATE_DIALOG_K_FIELD,
+                        UiElementId.PNC_WORLD_COORDINATE_DIALOG_X_FIELD,
+                        UiElementId.PNC_WORLD_COORDINATE_DIALOG_Y_FIELD,
+                    }
+                ),
+            ),
+            ClassificationRule(
+                screen_type=ScreenType.PNC_WORLD_MAP_OVERVIEW,
+                required_all=frozenset(
+                    {
+                        UiElementId.PNC_WORLD_OVERVIEW_HEADER,
+                        UiElementId.PNC_WORLD_OVERVIEW_CLOSE_BUTTON,
+                        UiElementId.PNC_WORLD_OVERVIEW_MAP_REGION,
+                    }
+                ),
+                required_any=frozenset(
+                    {
+                        UiElementId.PNC_WORLD_OVERVIEW_WORLD_ICON,
+                        UiElementId.PNC_WORLD_OVERVIEW_LEGEND_BUTTON,
+                        UiElementId.PNC_WORLD_OVERVIEW_VISIBILITY_BUTTON,
+                    }
+                ),
+            ),
+            ClassificationRule(
+                screen_type=ScreenType.PNC_WORLD_KINGDOM_LIST,
+                required_all=frozenset({UiElementId.PNC_WORLD_KINGDOM_LIST_HEADER}),
             ),
             ClassificationRule(
                 screen_type=ScreenType.PNC_HOME_CITY,

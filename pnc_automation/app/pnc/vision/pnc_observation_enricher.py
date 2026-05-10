@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections import deque
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
@@ -25,9 +26,16 @@ from pnc_automation.app.pnc.domain.observation import (
 )
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
+from pnc_automation.app.pnc.navigation.world_map_coordinate_domain import WorldMapCoordinateDomain
+from pnc_automation.app.pnc.navigation.world_map_overview_projection import (
+    project_world_coordinate_to_overview_point,
+)
 from pnc_automation.core.text.normalization import normalize_ocr_text
 from pnc_automation.app.pnc.vision.observation_builder import ObservationAdditions
-from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
+from pnc_automation.app.pnc.vision.observation_request import (
+    ObservationRequest,
+    world_map_coordinate_dialog_text_field_selector_ids,
+)
 from pnc_automation.core.vision.ocr.ocr_lines import merge_ocr_lines
 from pnc_automation.core.vision.ocr.ocr_service import OcrLine, OcrService
 from pnc_automation.app.pnc.vision.pnc_ocr_capabilities import can_attempt_screen_family_ocr
@@ -131,6 +139,15 @@ _VIP_SUPPORT_TEXTS = frozenset(
         "VIP2",
     }
 )
+_VIP_DAILY_RESET_SUPPORT_TEXTS = frozenset(
+    {
+        "LOGINEVERYDAYTOGETVIPPTS",
+        "GAINVIPPTS",
+        "CONSECLOGINDAYS",
+        "PTSTOGAINTOMORROW",
+        "CLOSE",
+    }
+)
 _HOME_CITY_EVIDENCE_SELECTOR_IDS = frozenset(
     {
         UiElementId.PNC_HOME_BUILD_BUTTON,
@@ -148,6 +165,12 @@ _WORLD_MAP_INVALID_COORDINATE_STATUS_REQUIRED_TEXT = "COORDINATE"
 _WORLD_MAP_INVALID_COORDINATE_STATUS_REJECTION_TEXTS = frozenset({"INCORRECT", "INVALID", "WRONG"})
 _WORLD_MAP_INVALID_COORDINATE_STATUS_PROMPT_TEXTS = frozenset({"PLEASEENTER", "ENTER", "INPUT"})
 _WORLD_MAP_INVALID_COORDINATE_STATUS_PROMPT_QUALIFIERS = frozenset({"CORRECT", "VALID"})
+_WORLD_OVERVIEW_MARKER_COMPONENT_GAP_PX = 18
+_WORLD_OVERVIEW_MARKER_EDGE_MARGIN_PX = 18
+_WORLD_OVERVIEW_MARKER_HINT_MIN_CLUSTER_PIXELS = 40
+_WORLD_OVERVIEW_MARKER_EDGE_MIN_CLUSTER_PIXELS = 120
+_WORLD_OVERVIEW_MARKER_INTERIOR_MIN_CLUSTER_PIXELS = 220
+_WORLD_OVERVIEW_COORDINATE_DOMAIN = WorldMapCoordinateDomain.puzzles_and_conquest()
 _POPUP_PRIMARY_ACTION_ANCHOR_IDS = frozenset(
     {
         TextAnchorId.LABEL_CONFIRM,
@@ -407,6 +430,19 @@ class _TextScreenDefinition:
     controls: tuple[_TextScreenControlSpec, ...] = ()
     minimum_control_matches: int = 0
     add_back_button: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class _WarmPixelCluster:
+    """Stores one warm-color cluster candidate used by overview-marker detection."""
+
+    bounds: Bounds
+    pixel_count: int
+
+    def center(self) -> tuple[int, int]:
+        """Returns the integer center point of the cluster bounds."""
+
+        return self.bounds.center()
 
 
 _TEXT_SCREEN_DEFINITIONS = (
@@ -1584,6 +1620,34 @@ class PncObservationEnricher:
             loading = _build_loading_additions(image=image, lines=lines)
             if loading is not None:
                 return loading
+        if request.allows_screen(ScreenType.PNC_WORLD_COORDINATE_DIALOG) and can_attempt_screen_family_ocr(
+            request_screen=ScreenType.PNC_WORLD_COORDINATE_DIALOG,
+            observed_screen=screen_type,
+        ):
+            coordinate_dialog = self._build_world_map_coordinate_dialog_additions(
+                image=image,
+                lines=lines,
+            )
+            if coordinate_dialog is not None:
+                return _with_status_banner(coordinate_dialog, status_banner)
+        if request.allows_screen(ScreenType.PNC_WORLD_MAP_OVERVIEW) and can_attempt_screen_family_ocr(
+            request_screen=ScreenType.PNC_WORLD_MAP_OVERVIEW,
+            observed_screen=screen_type,
+        ):
+            overview = self._build_world_map_overview_additions(
+                image=image,
+                lines=lines,
+                request=request,
+            )
+            if overview is not None:
+                return overview
+        if request.allows_screen(ScreenType.PNC_WORLD_KINGDOM_LIST) and can_attempt_screen_family_ocr(
+            request_screen=ScreenType.PNC_WORLD_KINGDOM_LIST,
+            observed_screen=screen_type,
+        ):
+            kingdom_list = _build_world_kingdom_list_additions(image=image, lines=lines)
+            if kingdom_list is not None:
+                return kingdom_list
         if request.allows_screen(ScreenType.PNC_LOGIN) and can_attempt_screen_family_ocr(
             request_screen=ScreenType.PNC_LOGIN,
             observed_screen=screen_type,
@@ -2104,6 +2168,105 @@ class PncObservationEnricher:
             )
         return selector.relative_bounds.materialize_region(image_size=image.size)
 
+    def _build_world_map_coordinate_dialog_additions(
+        self,
+        *,
+        image: Image.Image,
+        lines: tuple[OcrLine, ...],
+    ) -> ObservationAdditions | None:
+        """Returns OCR-backed coordinate-dialog evidence plus committed field state."""
+
+        if self.selector_registry is None:
+            return None
+        label_min_y = int(image.height * 0.32)
+        label_max_y = int(image.height * 0.55)
+        if (
+            _find_line_with_normalized_text(lines=lines, normalized_text="K", min_y=label_min_y, max_y=label_max_y) is None
+            or _find_line_with_normalized_text(lines=lines, normalized_text="X", min_y=label_min_y, max_y=label_max_y) is None
+            or _find_line_with_normalized_text(lines=lines, normalized_text="Y", min_y=label_min_y, max_y=label_max_y) is None
+        ):
+            return None
+        go_line = _find_line_with_normalized_text(
+            lines=lines,
+            normalized_text="GO",
+            min_y=int(image.height * 0.45),
+            max_y=int(image.height * 0.7),
+        )
+        if go_line is None:
+            return None
+        visible_elements: dict[UiElementId, VisibleElement] = {}
+        text_field_states: dict[UiElementId, ObservedTextFieldState] = {}
+        parsed_fields: dict[UiElementId, int] = {}
+        for selector_id in world_map_coordinate_dialog_text_field_selector_ids():
+            state = self._build_observed_text_field_state(image=image, selector_id=selector_id)
+            parsed_value = _parse_world_coordinate_dialog_field_text(selector_id=selector_id, text=state.text)
+            if parsed_value is None:
+                return None
+            parsed_fields[selector_id] = parsed_value
+            text_field_states[selector_id] = state
+            visible_elements[selector_id] = self._materialize_selector_visible(selector_id=selector_id, image=image)
+        if parsed_fields[UiElementId.PNC_WORLD_COORDINATE_DIALOG_K_FIELD] <= 0:
+            return None
+        for selector_id in (
+            UiElementId.PNC_WORLD_COORDINATE_DIALOG_CLOSE_BUTTON,
+            UiElementId.PNC_WORLD_COORDINATE_DIALOG_KEYBOARD_OK_BUTTON,
+        ):
+            visible_elements[selector_id] = self._materialize_selector_visible(selector_id=selector_id, image=image)
+        visible_elements[UiElementId.PNC_WORLD_COORDINATE_DIALOG_GO_BUTTON] = _make_visible_from_line(
+            selector_id=UiElementId.PNC_WORLD_COORDINATE_DIALOG_GO_BUTTON,
+            line=go_line,
+        )
+        return ObservationAdditions(
+            visible_elements=visible_elements,
+            screen_evidence=(ScreenEvidence(ScreenType.PNC_WORLD_COORDINATE_DIALOG, "ocr_world_coordinate_dialog"),),
+            text_field_states=text_field_states,
+        )
+
+    def _build_world_map_overview_additions(
+        self,
+        *,
+        image: Image.Image,
+        lines: tuple[OcrLine, ...],
+        request: ObservationRequest,
+    ) -> ObservationAdditions | None:
+        """Returns OCR-backed world-map overview chrome plus fixed control geometry."""
+
+        if self.selector_registry is None:
+            return None
+        header_line = _find_world_map_overview_header_line(image=image, lines=lines)
+        if header_line is None:
+            return None
+        visible_elements: dict[UiElementId, VisibleElement] = {
+            UiElementId.PNC_WORLD_OVERVIEW_HEADER: _make_visible_from_line(
+                selector_id=UiElementId.PNC_WORLD_OVERVIEW_HEADER,
+                line=header_line,
+            ),
+        }
+        map_region_element = self._materialize_selector_visible(
+            selector_id=UiElementId.PNC_WORLD_OVERVIEW_MAP_REGION,
+            image=image,
+        )
+        visible_elements[UiElementId.PNC_WORLD_OVERVIEW_MAP_REGION] = map_region_element
+        for selector_id in (
+            UiElementId.PNC_WORLD_OVERVIEW_CLOSE_BUTTON,
+            UiElementId.PNC_WORLD_OVERVIEW_WORLD_ICON,
+            UiElementId.PNC_WORLD_OVERVIEW_LEGEND_BUTTON,
+            UiElementId.PNC_WORLD_OVERVIEW_VISIBILITY_BUTTON,
+            UiElementId.PNC_WORLD_OVERVIEW_RECENTER_REGION,
+        ):
+            visible_elements[selector_id] = self._materialize_selector_visible(selector_id=selector_id, image=image)
+        marker_element = _build_world_map_overview_viewport_marker(
+            image=image,
+            map_region_bounds=map_region_element.bounds,
+            expected_coordinate=request.expected_world_coordinate,
+        )
+        if marker_element is not None:
+            visible_elements[UiElementId.PNC_WORLD_OVERVIEW_VIEWPORT_MARKER] = marker_element
+        return ObservationAdditions(
+            visible_elements=visible_elements,
+            screen_evidence=(ScreenEvidence(ScreenType.PNC_WORLD_MAP_OVERVIEW, "ocr_world_map_overview"),),
+        )
+
 
 def _build_player_territory_additions(
     *,
@@ -2540,6 +2703,331 @@ def _empty_text_placeholders(selector_id: UiElementId) -> frozenset[str]:
     if selector_id == UiElementId.PNC_MAIL_COMPOSE_BODY_FIELD:
         return _MAIL_COMPOSE_BODY_PLACEHOLDERS
     return frozenset()
+
+
+def _parse_world_coordinate_dialog_field_text(*, selector_id: UiElementId, text: str | None) -> int | None:
+    """Returns one committed coordinate-dialog field value from OCR text when it is parseable."""
+
+    if text is None:
+        return None
+    stripped = text.strip()
+    if stripped == "":
+        return None
+    match = re.search(r"\d+", stripped)
+    if match is None:
+        return None
+    value = int(match.group(0))
+    if selector_id == UiElementId.PNC_WORLD_COORDINATE_DIALOG_K_FIELD and value <= 0:
+        return None
+    return value
+
+
+def _find_world_map_overview_header_line(*, image: Image.Image, lines: tuple[OcrLine, ...]) -> OcrLine | None:
+    """Returns the overview header line that names the current kingdom when it is visible."""
+
+    max_y = int(image.height * 0.2)
+    for line in lines:
+        if line.bounds.y > max_y:
+            continue
+        normalized_text = normalize_ocr_text(line.text)
+        if re.search(r"K[:：]?\d+", normalized_text) is None:
+            continue
+        return line
+    return None
+
+
+def _build_world_map_overview_viewport_marker(
+    *,
+    image: Image.Image,
+    map_region_bounds: Bounds,
+    expected_coordinate: tuple[int, int] | None,
+) -> VisibleElement | None:
+    """Returns the current overview viewport marker when one warm marker cluster is visible inside the calibrated map region."""
+
+    local_map_region = Bounds(x=0, y=0, width=map_region_bounds.width, height=map_region_bounds.height)
+    crop = image.crop(
+        (
+            map_region_bounds.x,
+            map_region_bounds.y,
+            map_region_bounds.x + map_region_bounds.width,
+            map_region_bounds.y + map_region_bounds.height,
+        )
+    ).convert("RGB")
+    clusters = _merge_world_map_overview_marker_clusters(_find_world_map_overview_marker_components(crop))
+    if not clusters:
+        return None
+    expected_local_point = (
+        project_world_coordinate_to_overview_point(
+            coordinate=expected_coordinate,
+            bounds=_WORLD_OVERVIEW_COORDINATE_DOMAIN.bounds,
+            map_region_bounds=local_map_region,
+        )
+        if expected_coordinate is not None
+        else None
+    )
+    candidate = _select_world_map_overview_marker_cluster(
+        clusters=clusters,
+        local_map_region=local_map_region,
+        expected_local_point=expected_local_point,
+    )
+    if candidate is None:
+        return None
+    candidate_bounds = Bounds(
+        x=map_region_bounds.x + candidate.bounds.x,
+        y=map_region_bounds.y + candidate.bounds.y,
+        width=candidate.bounds.width,
+        height=candidate.bounds.height,
+    )
+    local_action_point = _resolve_world_map_overview_marker_action_point(
+        cluster_bounds=candidate.bounds,
+        local_map_region=local_map_region,
+    )
+    if expected_local_point is not None and _bounds_contains_point_with_padding(
+        candidate.bounds,
+        expected_local_point,
+        padding=max(8, _WORLD_OVERVIEW_MARKER_EDGE_MARGIN_PX // 2),
+    ):
+        local_action_point = expected_local_point
+    action_point = (
+        map_region_bounds.x + local_action_point[0],
+        map_region_bounds.y + local_action_point[1],
+    )
+    return VisibleElement(
+        selector_id=UiElementId.PNC_WORLD_OVERVIEW_VIEWPORT_MARKER,
+        bounds=candidate_bounds,
+        confidence=1.0,
+        source_kind=VisibleElementSourceKind.GEOMETRY,
+        action_point=action_point,
+    )
+
+
+def _select_world_map_overview_marker_cluster(
+    *,
+    clusters: tuple[_WarmPixelCluster, ...],
+    local_map_region: Bounds,
+    expected_local_point: tuple[int, int] | None,
+) -> _WarmPixelCluster | None:
+    """Returns the best warm marker cluster using the expected-point hint when available, otherwise one conservative live heuristic."""
+
+    if expected_local_point is not None:
+        hinted_clusters = tuple(
+            cluster for cluster in clusters if cluster.pixel_count >= _WORLD_OVERVIEW_MARKER_HINT_MIN_CLUSTER_PIXELS
+        )
+        if not hinted_clusters:
+            return None
+        return min(hinted_clusters, key=lambda cluster: _distance_squared(cluster.center(), expected_local_point))
+    edge_clusters = tuple(
+        cluster
+        for cluster in clusters
+        if cluster.pixel_count >= _WORLD_OVERVIEW_MARKER_EDGE_MIN_CLUSTER_PIXELS
+        and _cluster_touches_map_edge(cluster.bounds, local_map_region, margin=_WORLD_OVERVIEW_MARKER_EDGE_MARGIN_PX)
+    )
+    if edge_clusters:
+        return max(edge_clusters, key=lambda cluster: cluster.pixel_count)
+    interior_clusters = tuple(
+        cluster for cluster in clusters if cluster.pixel_count >= _WORLD_OVERVIEW_MARKER_INTERIOR_MIN_CLUSTER_PIXELS
+    )
+    if not interior_clusters:
+        return None
+    return max(interior_clusters, key=lambda cluster: cluster.pixel_count)
+
+
+def _find_world_map_overview_marker_components(image: Image.Image) -> tuple[_WarmPixelCluster, ...]:
+    """Returns contiguous warm-color components inside one overview-map crop."""
+
+    pixels = image.load()
+    width = image.width
+    height = image.height
+    warm_mask = [[False] * width for _ in range(height)]
+    for y in range(height):
+        for x in range(width):
+            warm_mask[y][x] = _is_world_map_overview_marker_pixel(pixels[x, y])
+    visited = [[False] * width for _ in range(height)]
+    components: list[_WarmPixelCluster] = []
+    for y in range(height):
+        for x in range(width):
+            if not warm_mask[y][x] or visited[y][x]:
+                continue
+            queue: deque[tuple[int, int]] = deque(((x, y),))
+            visited[y][x] = True
+            left = right = x
+            top = bottom = y
+            pixel_count = 0
+            while queue:
+                current_x, current_y = queue.popleft()
+                pixel_count += 1
+                left = min(left, current_x)
+                right = max(right, current_x)
+                top = min(top, current_y)
+                bottom = max(bottom, current_y)
+                for next_x, next_y in (
+                    (current_x + 1, current_y),
+                    (current_x - 1, current_y),
+                    (current_x, current_y + 1),
+                    (current_x, current_y - 1),
+                ):
+                    if not (0 <= next_x < width and 0 <= next_y < height):
+                        continue
+                    if not warm_mask[next_y][next_x] or visited[next_y][next_x]:
+                        continue
+                    visited[next_y][next_x] = True
+                    queue.append((next_x, next_y))
+            if pixel_count < 6:
+                continue
+            components.append(
+                _WarmPixelCluster(
+                    bounds=Bounds(
+                        x=left,
+                        y=top,
+                        width=(right - left) + 1,
+                        height=(bottom - top) + 1,
+                    ),
+                    pixel_count=pixel_count,
+                )
+            )
+    return tuple(components)
+
+
+def _merge_world_map_overview_marker_clusters(
+    clusters: tuple[_WarmPixelCluster, ...],
+) -> tuple[_WarmPixelCluster, ...]:
+    """Returns warm-color clusters after merging nearby fragments from the same live marker glow."""
+
+    merged: list[_WarmPixelCluster] = []
+    for cluster in sorted(clusters, key=lambda current: current.pixel_count, reverse=True):
+        for index, current in enumerate(merged):
+            if _bounds_overlap_with_gap(current.bounds, cluster.bounds, gap=_WORLD_OVERVIEW_MARKER_COMPONENT_GAP_PX):
+                merged[index] = _WarmPixelCluster(
+                    bounds=_union_bounds(current.bounds, cluster.bounds),
+                    pixel_count=current.pixel_count + cluster.pixel_count,
+                )
+                break
+        else:
+            merged.append(cluster)
+    return tuple(sorted(merged, key=lambda cluster: cluster.pixel_count, reverse=True))
+
+
+def _is_world_map_overview_marker_pixel(rgb: tuple[int, int, int]) -> bool:
+    """Returns whether one RGB pixel belongs to the warm orange viewport-marker family seen in live overview captures."""
+
+    red, green, blue = rgb
+    return red >= 175 and 45 <= green <= 220 and blue <= 125 and red - blue >= 105
+
+
+def _cluster_touches_map_edge(bounds: Bounds, map_region_bounds: Bounds, *, margin: int) -> bool:
+    """Returns whether one candidate cluster hugs a calibrated overview-map edge within the requested margin."""
+
+    right = bounds.x + bounds.width
+    bottom = bounds.y + bounds.height
+    map_right = map_region_bounds.x + map_region_bounds.width
+    map_bottom = map_region_bounds.y + map_region_bounds.height
+    return (
+        bounds.x <= map_region_bounds.x + margin
+        or bounds.y <= map_region_bounds.y + margin
+        or right >= map_right - margin
+        or bottom >= map_bottom - margin
+    )
+
+
+def _resolve_world_map_overview_marker_action_point(
+    *,
+    cluster_bounds: Bounds,
+    local_map_region: Bounds,
+) -> tuple[int, int]:
+    """Returns the best marker action point from one selected cluster, compensating for the clipped edge-marker shape when needed."""
+
+    left_touched = cluster_bounds.x <= local_map_region.x + _WORLD_OVERVIEW_MARKER_EDGE_MARGIN_PX
+    top_touched = cluster_bounds.y <= local_map_region.y + _WORLD_OVERVIEW_MARKER_EDGE_MARGIN_PX
+    right_touched = (
+        cluster_bounds.x + cluster_bounds.width
+        >= local_map_region.x + local_map_region.width - _WORLD_OVERVIEW_MARKER_EDGE_MARGIN_PX
+    )
+    bottom_touched = (
+        cluster_bounds.y + cluster_bounds.height
+        >= local_map_region.y + local_map_region.height - _WORLD_OVERVIEW_MARKER_EDGE_MARGIN_PX
+    )
+    if not any((left_touched, top_touched, right_touched, bottom_touched)):
+        return cluster_bounds.center()
+    if left_touched and not right_touched:
+        action_x = min(
+            cluster_bounds.x + cluster_bounds.width - 1,
+            cluster_bounds.x + max(8, int(round(cluster_bounds.width * 0.4))),
+        )
+    elif right_touched and not left_touched:
+        action_x = cluster_bounds.x + cluster_bounds.width - 1
+    else:
+        action_x = cluster_bounds.center()[0]
+    if top_touched and not bottom_touched:
+        action_y = min(
+            cluster_bounds.y + cluster_bounds.height - 1,
+            cluster_bounds.y + max(6, int(round(cluster_bounds.height * 0.38))),
+        )
+    elif bottom_touched and not top_touched:
+        action_y = cluster_bounds.y + cluster_bounds.height - 1
+    else:
+        action_y = cluster_bounds.center()[1]
+    return (action_x, action_y)
+
+
+def _bounds_contains_point_with_padding(bounds: Bounds, point: tuple[int, int], *, padding: int) -> bool:
+    """Returns whether one point lies inside or immediately adjacent to the provided bounds."""
+
+    return (
+        bounds.x - padding <= point[0] <= bounds.x + bounds.width + padding
+        and bounds.y - padding <= point[1] <= bounds.y + bounds.height + padding
+    )
+
+
+def _bounds_overlap_with_gap(first: Bounds, second: Bounds, *, gap: int) -> bool:
+    """Returns whether two bounds overlap or nearly touch once the requested gap margin is applied."""
+
+    return not (
+        second.x + second.width < first.x - gap
+        or second.x > first.x + first.width + gap
+        or second.y + second.height < first.y - gap
+        or second.y > first.y + first.height + gap
+    )
+
+
+def _union_bounds(first: Bounds, second: Bounds) -> Bounds:
+    """Returns one bounding box that spans both input bounds."""
+
+    left = min(first.x, second.x)
+    top = min(first.y, second.y)
+    right = max(first.x + first.width, second.x + second.width)
+    bottom = max(first.y + first.height, second.y + second.height)
+    return Bounds(x=left, y=top, width=right - left, height=bottom - top)
+
+
+def _distance_squared(first: tuple[int, int], second: tuple[int, int]) -> int:
+    """Returns one squared pixel distance used to compare expected-point proximity without float overhead."""
+
+    delta_x = first[0] - second[0]
+    delta_y = first[1] - second[1]
+    return (delta_x * delta_x) + (delta_y * delta_y)
+
+
+def _build_world_kingdom_list_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Returns OCR-backed evidence for the kingdom-list screen opened from overview."""
+
+    del image
+    for line in lines:
+        if normalize_ocr_text(line.text) != "KINGDOMLIST":
+            continue
+        return ObservationAdditions(
+            visible_elements={
+                UiElementId.PNC_WORLD_KINGDOM_LIST_HEADER: _make_visible_from_line(
+                    selector_id=UiElementId.PNC_WORLD_KINGDOM_LIST_HEADER,
+                    line=line,
+                ),
+            },
+            screen_evidence=(ScreenEvidence(ScreenType.PNC_WORLD_KINGDOM_LIST, "ocr_world_kingdom_list"),),
+        )
+    return None
 
 
 def _mail_hub_selector_id(normalized_text: str) -> UiElementId | None:
@@ -3481,6 +3969,9 @@ def _build_popup_additions(
 ) -> ObservationAdditions | None:
     """Returns popup dismissal controls when OCR matches a blocking modal footer."""
 
+    vip_daily_reset = _build_vip_daily_reset_popup_additions(image=image, lines=lines)
+    if vip_daily_reset is not None:
+        return vip_daily_reset
     dismiss_anchor = _find_popup_dismiss_anchor(image=image, anchors=anchors)
     if dismiss_anchor is not None:
         return ObservationAdditions(
@@ -3493,6 +3984,61 @@ def _build_popup_additions(
             screen_evidence=(ScreenEvidence(ScreenType.PNC_POPUP, "ocr_popup_cancel_button"),),
         )
     return _build_promotional_popup_additions(image=image, lines=lines)
+
+
+def _build_vip_daily_reset_popup_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Returns the VIP daily-reset modal and its Close button when OCR matches the observed midnight-reset layout."""
+
+    vip_line = _find_line_with_normalized_text(
+        lines=lines,
+        normalized_text="VIP",
+        min_y=int(image.height * 0.18),
+        max_y=int(image.height * 0.5),
+    )
+    close_line = _find_line_with_normalized_text(
+        lines=lines,
+        normalized_text="CLOSE",
+        min_y=int(image.height * 0.48),
+        max_y=int(image.height * 0.72),
+    )
+    if vip_line is None or close_line is None:
+        return None
+    support_texts = {
+        support_text
+        for line in lines
+        for support_text in _VIP_DAILY_RESET_SUPPORT_TEXTS
+        if normalize_ocr_text(line.text).startswith(support_text)
+    }
+    if len(support_texts) < 4:
+        return None
+    close_width_padding = max(30, close_line.bounds.width // 3)
+    close_height_padding = max(18, close_line.bounds.height // 2)
+    close_left = max(0, close_line.bounds.x - close_width_padding)
+    close_top = max(0, close_line.bounds.y - close_height_padding)
+    close_width = min(image.width - close_left, close_line.bounds.width + (close_width_padding * 2))
+    close_height = min(image.height - close_top, close_line.bounds.height + (close_height_padding * 2))
+    return ObservationAdditions(
+        visible_elements={
+            UiElementId.PNC_VIP_DAILY_RESET_HEADER: _make_visible_from_line(
+                selector_id=UiElementId.PNC_VIP_DAILY_RESET_HEADER,
+                line=vip_line,
+            ),
+            UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON: _make_visible(
+                selector_id=UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON,
+                x=close_left,
+                y=close_top,
+                width=close_width,
+                height=close_height,
+                action_point=(close_line.bounds.x + (close_line.bounds.width // 2), close_line.bounds.y + (close_line.bounds.height // 2)),
+                extracted_text=close_line.text,
+            ),
+        },
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_VIP_DAILY_RESET, "ocr_vip_daily_reset_popup"),),
+    )
 
 
 def _build_promotional_popup_additions(
@@ -3958,8 +4504,12 @@ def _build_more_menu_additions(
             selector_id=UiElementId.PNC_BOTTOM_NAV_MORE,
             anchor=more_anchor,
         )
-    support_count = sum(1 for line in lines if normalize_ocr_text(line.text) in _MORE_MENU_SUPPORT_TEXTS)
-    if support_count + len(visible_elements) < 3:
+    support_texts = {
+        normalize_ocr_text(line.text)
+        for line in lines
+        if normalize_ocr_text(line.text) in _MORE_MENU_SUPPORT_TEXTS
+    }
+    if len(support_texts) + len(visible_elements) < 3:
         return None
     return ObservationAdditions(
         visible_elements=visible_elements,
@@ -4174,6 +4724,10 @@ def _build_world_map_additions(
         height=parsed_viewport.coordinate_bounds.height,
         extracted_text=parsed_viewport.coordinate_text,
     )
+    visible_elements[UiElementId.PNC_WORLD_SEARCH_BUTTON] = _build_world_map_search_button_element(
+        image=image,
+        coordinate_bounds=parsed_viewport.coordinate_bounds,
+    )
     home_anchor = nav_anchors.get(TextAnchorId.LABEL_HOME)
     if home_anchor is not None:
         visible_elements[UiElementId.PNC_WORLD_HOME_NAV] = _make_visible_from_bottom_nav_anchor(
@@ -4213,6 +4767,31 @@ def _read_world_map_coordinate_viewport(
             if parsed is not None:
                 return parsed
     return parse_world_viewport(image=image, lines=lines)
+
+
+def _build_world_map_search_button_element(
+    *,
+    image: Image.Image,
+    coordinate_bounds: Bounds,
+) -> VisibleElement:
+    """Builds the world-map search tap target from the proven coordinate-bar HUD instead of a separate freehand screen region."""
+
+    button_size = max(28, int(round(coordinate_bounds.height * 1.6)))
+    horizontal_gap = max(8, int(round(coordinate_bounds.height * 0.5)))
+    action_x = max(0, coordinate_bounds.x - horizontal_gap - (button_size // 2))
+    action_y = max(0, min(image.height - 1, coordinate_bounds.y + (coordinate_bounds.height // 2)))
+    left = max(0, action_x - (button_size // 2))
+    top = max(0, action_y - (button_size // 2))
+    width = min(button_size, image.width - left)
+    height = min(button_size, image.height - top)
+    return _make_visible(
+        selector_id=UiElementId.PNC_WORLD_SEARCH_BUTTON,
+        x=left,
+        y=top,
+        width=width,
+        height=height,
+        action_point=(action_x, action_y),
+    )
 
 
 def _build_world_map_root_additions(

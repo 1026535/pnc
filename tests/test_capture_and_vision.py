@@ -10,7 +10,7 @@ import unittest
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from pnc_automation.app.runtime.observation_mode import ObservationMode
 from pnc_automation.core.infra.storage.artifact_store import ArtifactStore
@@ -21,6 +21,11 @@ from pnc_automation.app.automation.engine.action_executor import ActionExecutor
 from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.app.pnc.domain.chat import ChatChannel
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
+from pnc_automation.app.pnc.navigation.world_map_coordinate_domain import WorldMapCoordinateDomain
+from pnc_automation.app.pnc.navigation.world_map_overview_projection import (
+    project_world_coordinate_to_overview_point,
+)
+from pnc_automation.app.pnc.navigation.world_map_search import WorldMapOverviewNavigator
 from pnc_automation.app.pnc.domain.observation import (
     Bounds,
     ListEntryKind,
@@ -1270,6 +1275,52 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertTrue(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
             self.assertTrue(observation.has(UiElementId.PNC_MORE_MANAGE_CHAR))
 
+    def test_observation_builder_does_not_misclassify_trial_challenge_as_more_menu(self) -> None:
+        """Requires distinct More-menu support text so repeated event-page Rank buttons do not spoof the overlay."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                artifact_directory="trial_challenge_live_like",
+                label="trial_challenge_live_like",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Trial Challenge", x=184, y=18, width=340, height=55),
+                            _ocr_line("Exchange", x=227, y=147, width=158, height=45),
+                            _ocr_line("Progress", x=477, y=149, width=148, height=42),
+                            _ocr_line("Total Rank", x=695, y=151, width=170, height=33),
+                            _ocr_line("Hero Trial", x=252, y=282, width=172, height=34),
+                            _ocr_line("Rank", x=263, y=422, width=60, height=24),
+                            _ocr_line("Curio Trial", x=253, y=507, width=178, height=34),
+                            _ocr_line("Rank", x=265, y=647, width=57, height=25),
+                            _ocr_line("Gear Trial", x=253, y=955, width=168, height=37),
+                            _ocr_line("Trial", x=716, y=1066, width=75, height=37),
+                            _ocr_line("Rune Trial", x=213, y=1178, width=214, height=37),
+                            _ocr_line("Rank", x=263, y=1321, width=63, height=24),
+                            _ocr_line("Sauroi Trial", x=254, y=1406, width=192, height=34),
+                            _ocr_line("Rank", x=263, y=1545, width=61, height=28),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_TRIAL_CHALLENGE)
+            self.assertTrue(observation.has(UiElementId.PNC_TRIAL_CHALLENGE_HEADER))
+            self.assertFalse(observation.has(UiElementId.PNC_MORE_MANAGE_CHAR))
+
     def test_observation_builder_classifies_vip_from_live_like_ocr(self) -> None:
         """Recognizes the VIP benefits screen from its header and support text."""
 
@@ -1843,12 +1894,17 @@ class CaptureAndVisionTests(unittest.TestCase):
 
             self.assertEqual(observation.screen_type, ScreenType.PNC_WORLD_MAP)
             self.assertTrue(observation.has(UiElementId.PNC_WORLD_COORDINATE_BAR))
+            self.assertTrue(observation.has(UiElementId.PNC_WORLD_SEARCH_BUTTON))
             self.assertTrue(observation.has(UiElementId.PNC_WORLD_HOME_NAV))
             self.assertTrue(observation.has(UiElementId.PNC_BOTTOM_NAV_ALLIANCE))
             self.assertTrue(observation.has(UiElementId.PNC_CHAT_SHORTCUT))
             self.assertIsNotNone(observation.spatial_surface)
             self.assertEqual(observation.spatial_surface.surface_type, SpatialSurfaceType.WORLD_MAP)
             self.assertEqual(observation.spatial_surface.viewport.coordinate, (253, 447))
+            self.assertLess(
+                observation.require(UiElementId.PNC_WORLD_SEARCH_BUTTON).action_point[0],
+                observation.require(UiElementId.PNC_WORLD_COORDINATE_BAR).bounds.x,
+            )
 
     def test_observation_builder_preserves_world_map_invalid_coordinate_status_banner(self) -> None:
         """Carries the magnifier invalid-coordinate banner with the proven world-map observation."""
@@ -1893,6 +1949,189 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertEqual(observation.screen_type, ScreenType.PNC_WORLD_MAP)
             self.assertEqual(observation.require(UiElementId.PNC_STATUS_BANNER).extracted_text, "Invalid coordinates")
             self.assertEqual(observation.spatial_surface.viewport.coordinate, (253, 447))
+
+    def test_observation_builder_classifies_live_like_world_coordinate_dialog(self) -> None:
+        """Recognizes the inline K/X/Y world-coordinate dialog layout and parses committed field values."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (540, 960), (15, 28, 68)))),
+                artifact_directory="live_like_world_coordinate_dialog",
+                label="world_coordinate_dialog_live_like",
+            )
+            registry = build_default_selector_registry()
+            builder = ObservationBuilder(
+                selector_registry=registry,
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("K:", x=76, y=398, width=26, height=26),
+                            _ocr_line("226", x=132, y=400, width=38, height=24),
+                            _ocr_line("X:", x=202, y=398, width=31, height=28),
+                            _ocr_line("262", x=257, y=400, width=41, height=24),
+                            _ocr_line("Y:", x=334, y=400, width=24, height=23),
+                            _ocr_line("436", x=384, y=400, width=42, height=24),
+                            _ocr_line("Go", x=253, y=532, width=36, height=26),
+                        )
+                    ),
+                    selector_registry=registry,
+                ),
+            )
+
+            observation = builder.build(
+                screenshot,
+                request=ObservationRequest.world_map_coordinate_dialog_follow_up(),
+            )
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_WORLD_COORDINATE_DIALOG)
+            self.assertTrue(observation.has(UiElementId.PNC_WORLD_COORDINATE_DIALOG_K_FIELD))
+            self.assertTrue(observation.has(UiElementId.PNC_WORLD_COORDINATE_DIALOG_X_FIELD))
+            self.assertTrue(observation.has(UiElementId.PNC_WORLD_COORDINATE_DIALOG_Y_FIELD))
+            self.assertTrue(observation.has(UiElementId.PNC_WORLD_COORDINATE_DIALOG_GO_BUTTON))
+            self.assertTrue(observation.has(UiElementId.PNC_WORLD_COORDINATE_DIALOG_CLOSE_BUTTON))
+            self.assertEqual(observation.require_text_field_state(UiElementId.PNC_WORLD_COORDINATE_DIALOG_K_FIELD).text, "226")
+            self.assertEqual(observation.require_text_field_state(UiElementId.PNC_WORLD_COORDINATE_DIALOG_X_FIELD).text, "262")
+            self.assertEqual(observation.require_text_field_state(UiElementId.PNC_WORLD_COORDINATE_DIALOG_Y_FIELD).text, "436")
+
+    def test_observation_builder_detects_world_overview_marker_without_hint_near_map_edge(self) -> None:
+        """Falls back to the border-touching warm cluster when overview opens without a prior coordinate hint."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            registry = build_default_selector_registry()
+            image = Image.new("RGB", (540, 960), (15, 28, 68))
+            map_region = registry.require(UiElementId.PNC_WORLD_OVERVIEW_MAP_REGION).relative_bounds
+            assert map_region is not None
+            map_region_bounds = map_region.materialize_region(image_size=image.size)
+            _paint_synthetic_world_overview_map(image, map_region_bounds=map_region_bounds)
+            _paint_overview_false_positive_blob(
+                image,
+                bounds=Bounds(
+                    x=map_region_bounds.x + 84,
+                    y=map_region_bounds.y + 57,
+                    width=47,
+                    height=41,
+                ),
+            )
+            marker_point = project_world_coordinate_to_overview_point(
+                coordinate=(20, 20),
+                bounds=WorldMapCoordinateDomain.puzzles_and_conquest().bounds,
+                map_region_bounds=Bounds(
+                    x=map_region_bounds.x,
+                    y=map_region_bounds.y,
+                    width=map_region_bounds.width,
+                    height=map_region_bounds.height,
+                ),
+            )
+            _paint_overview_viewport_marker(image, marker_point=marker_point)
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(image)),
+                artifact_directory="synthetic_world_overview_edge_marker",
+                label="synthetic_world_overview_edge_marker",
+            )
+            builder = ObservationBuilder(
+                selector_registry=registry,
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("K:226 Reset", x=228, y=22, width=144, height=32),
+                        )
+                    ),
+                    selector_registry=registry,
+                ),
+            )
+
+            observation = builder.build(
+                screenshot,
+                request=ObservationRequest.world_map_overview_follow_up(),
+            )
+            context = WorldMapOverviewNavigator().parse_context(observation)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_WORLD_MAP_OVERVIEW)
+            self.assertTrue(observation.has(UiElementId.PNC_WORLD_OVERVIEW_VIEWPORT_MARKER))
+            self.assertEqual(
+                observation.require(UiElementId.PNC_WORLD_OVERVIEW_VIEWPORT_MARKER).source_kind,
+                VisibleElementSourceKind.GEOMETRY,
+            )
+            self.assertLessEqual(abs(context.current_viewport_coordinate[0] - 20), 4)
+            self.assertLessEqual(abs(context.current_viewport_coordinate[1] - 20), 4)
+
+    def test_observation_builder_detects_world_overview_marker_with_coordinate_hint(self) -> None:
+        """Uses the expected-coordinate hint to prefer the correct interior marker over a larger unrelated warm blob."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            registry = build_default_selector_registry()
+            image = Image.new("RGB", (540, 960), (15, 28, 68))
+            map_region = registry.require(UiElementId.PNC_WORLD_OVERVIEW_MAP_REGION).relative_bounds
+            assert map_region is not None
+            map_region_bounds = map_region.materialize_region(image_size=image.size)
+            _paint_synthetic_world_overview_map(image, map_region_bounds=map_region_bounds)
+            _paint_overview_false_positive_blob(
+                image,
+                bounds=Bounds(
+                    x=map_region_bounds.x + 83,
+                    y=map_region_bounds.y + 57,
+                    width=47,
+                    height=41,
+                ),
+            )
+            marker_point = project_world_coordinate_to_overview_point(
+                coordinate=(256, 512),
+                bounds=WorldMapCoordinateDomain.puzzles_and_conquest().bounds,
+                map_region_bounds=Bounds(
+                    x=map_region_bounds.x,
+                    y=map_region_bounds.y,
+                    width=map_region_bounds.width,
+                    height=map_region_bounds.height,
+                ),
+            )
+            _paint_overview_viewport_marker(image, marker_point=marker_point)
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(image)),
+                artifact_directory="synthetic_world_overview_hinted_marker",
+                label="synthetic_world_overview_hinted_marker",
+            )
+            builder = ObservationBuilder(
+                selector_registry=registry,
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("K:226 Reset", x=228, y=22, width=144, height=32),
+                        )
+                    ),
+                    selector_registry=registry,
+                ),
+            )
+
+            observation = builder.build(
+                screenshot,
+                request=ObservationRequest.world_map_overview_follow_up(expected_coordinate=(256, 512)),
+            )
+            context = WorldMapOverviewNavigator().parse_context(observation)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_WORLD_MAP_OVERVIEW)
+            self.assertTrue(observation.has(UiElementId.PNC_WORLD_OVERVIEW_VIEWPORT_MARKER))
+            self.assertEqual(context.current_viewport_coordinate, (256, 512))
 
     def test_observation_builder_classifies_world_map_from_coordinates_and_bottom_nav_ocr_at_alternate_resolution(self) -> None:
         """Recognizes the world map from OCR at the smaller supported live resolution too."""
@@ -2828,6 +3067,46 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertEqual(observation.screen_type, ScreenType.PNC_POPUP)
             self.assertTrue(observation.blocking_popup)
             self.assertTrue(observation.has(UiElementId.PNC_POPUP_CLOSE_BUTTON))
+
+    def test_observation_builder_classifies_vip_daily_reset_popup_from_ocr(self) -> None:
+        """Recognizes the VIP daily-reset popup as a dedicated blocking screen with a tappable Close button."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (384, 633), (15, 28, 68)))),
+                artifact_directory="vip_daily_reset_popup",
+                label="vip_daily_reset_popup",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("VIP", x=176, y=222, width=43, height=24),
+                            _ocr_line("Log in every day to get VIP pts.", x=98, y=246, width=208, height=22),
+                            _ocr_line("Gain VIP pts: 96", x=113, y=278, width=160, height=24),
+                            _ocr_line("Consec. login days: 2", x=93, y=312, width=190, height=22),
+                            _ocr_line("Pts to gain tomorrow: 112", x=90, y=339, width=205, height=20),
+                            _ocr_line("Close", x=155, y=407, width=75, height=28),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_VIP_DAILY_RESET)
+            self.assertTrue(observation.blocking_popup)
+            self.assertTrue(observation.has(UiElementId.PNC_VIP_DAILY_RESET_HEADER))
+            self.assertTrue(observation.has(UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON))
+            self.assertFalse(observation.has(UiElementId.PNC_POPUP_CLOSE_BUTTON))
 
     def test_observation_builder_rejects_hero_offer_near_match_without_price_and_one_time(self) -> None:
         """Keeps the screen unknown when the hero-offer popup evidence is incomplete."""
@@ -3954,6 +4233,80 @@ def _spatial_query(
         level=level,
         metadata_key=metadata_key,
         metadata_value=metadata_value,
+    )
+
+
+def _paint_synthetic_world_overview_map(image: Image.Image, *, map_region_bounds: Bounds) -> None:
+    """Paints one simple parchment-like overview map body inside the calibrated selector bounds."""
+
+    draw = ImageDraw.Draw(image)
+    draw.rectangle(
+        (
+            map_region_bounds.x,
+            map_region_bounds.y,
+            map_region_bounds.x + map_region_bounds.width,
+            map_region_bounds.y + map_region_bounds.height,
+        ),
+        fill=(156, 138, 101),
+    )
+    draw.rectangle(
+        (
+            map_region_bounds.x + 2,
+            map_region_bounds.y + 2,
+            map_region_bounds.x + map_region_bounds.width - 2,
+            map_region_bounds.y + map_region_bounds.height - 2,
+        ),
+        outline=(86, 74, 56),
+        width=2,
+    )
+
+
+def _paint_overview_false_positive_blob(image: Image.Image, *, bounds: Bounds) -> None:
+    """Paints one unrelated warm blob that the detector must ignore when a better marker candidate exists."""
+
+    draw = ImageDraw.Draw(image)
+    draw.ellipse(
+        (
+            bounds.x,
+            bounds.y,
+            bounds.x + bounds.width,
+            bounds.y + bounds.height,
+        ),
+        fill=(198, 115, 34),
+    )
+
+
+def _paint_overview_viewport_marker(image: Image.Image, *, marker_point: tuple[int, int]) -> None:
+    """Paints one stylized orange overview viewport marker around the requested point."""
+
+    draw = ImageDraw.Draw(image)
+    warm = (255, 170, 52)
+    glow = (218, 118, 30)
+    half_width = 18
+    half_height = 14
+    arm = 10
+    thickness = 3
+    left = marker_point[0] - half_width
+    right = marker_point[0] + half_width
+    top = marker_point[1] - half_height
+    bottom = marker_point[1] + half_height
+    for offset in range(thickness):
+        draw.line((left, top + offset, left + arm, top + offset), fill=warm, width=1)
+        draw.line((left + offset, top, left + offset, top + arm), fill=warm, width=1)
+        draw.line((right - arm, top + offset, right, top + offset), fill=warm, width=1)
+        draw.line((right - offset, top, right - offset, top + arm), fill=warm, width=1)
+        draw.line((left, bottom - offset, left + arm, bottom - offset), fill=warm, width=1)
+        draw.line((left + offset, bottom - arm, left + offset, bottom), fill=warm, width=1)
+        draw.line((right - arm, bottom - offset, right, bottom - offset), fill=warm, width=1)
+        draw.line((right - offset, bottom - arm, right - offset, bottom), fill=warm, width=1)
+    draw.rectangle(
+        (
+            marker_point[0] - 3,
+            marker_point[1] - 3,
+            marker_point[0] + 3,
+            marker_point[1] + 3,
+        ),
+        fill=glow,
     )
 
 

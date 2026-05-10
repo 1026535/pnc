@@ -255,25 +255,15 @@ class WorldMapCoordinateDomain:
     ) -> tuple[int, int, int, int, int, int, int]:
         """Returns the deterministic tie-breaker that mirrors observed magnifier coordinate correction."""
 
-        preserve_x_for_edge = requested[0] in {self.bounds.min_x, self.bounds.max_x}
-        if preserve_x_for_edge:
-            return (
-                coordinate_chebyshev_distance(requested, candidate),
-                coordinate_manhattan_distance(requested, candidate),
-                0 if candidate[0] == requested[0] else 1,
-                abs(candidate[1] - requested[1]),
-                abs(candidate[0] - requested[0]),
-                candidate[1],
-                candidate[0],
-            )
         return (
             coordinate_chebyshev_distance(requested, candidate),
             coordinate_manhattan_distance(requested, candidate),
-            0 if candidate[1] == requested[1] else 1,
-            0 if candidate[0] <= requested[0] else 1,
+            0 if candidate[1] == requested[1] and candidate[0] <= requested[0] else 1,
+            0 if candidate[0] == requested[0] and candidate[1] <= requested[1] else 1,
             abs(candidate[0] - requested[0]),
             abs(candidate[1] - requested[1]),
             candidate[0],
+            candidate[1],
         )
 
 

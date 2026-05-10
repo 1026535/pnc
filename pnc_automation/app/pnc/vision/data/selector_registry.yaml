@@ -534,6 +534,18 @@ selectors:
   status: screenshot_seeded
   detection_kind: planned
   interaction_kind: label
+- id: PNC_VIP_DAILY_RESET_HEADER
+  screens:
+  - PNC_VIP_DAILY_RESET
+  status: planned
+  detection_kind: planned
+  interaction_kind: label
+- id: PNC_VIP_DAILY_RESET_CLOSE_BUTTON
+  screens:
+  - PNC_VIP_DAILY_RESET
+  status: planned
+  detection_kind: planned
+  interaction_kind: action
 - id: PNC_IMPROVE_MIGHT_HEADER
   screens:
   - PNC_IMPROVE_MIGHT
@@ -1274,13 +1286,6 @@ selectors:
   status: screenshot_seeded
   detection_kind: planned
   interaction_kind: action
-  relative_bounds:
-    x_ratio: 0.82
-    y_ratio: 0.025
-    width_ratio: 0.14
-    height_ratio: 0.085
-    action_x_ratio: 0.89
-    action_y_ratio: 0.0675
 - id: PNC_WORLD_EXPAND_BUTTON
   screens:
   - PNC_WORLD_MAP
@@ -1288,12 +1293,188 @@ selectors:
   detection_kind: planned
   interaction_kind: action
   relative_bounds:
-    x_ratio: 0.84
-    y_ratio: 0.72
-    width_ratio: 0.13
+    x_ratio: 0.0
+    y_ratio: 0.685
+    width_ratio: 0.14
     height_ratio: 0.11
-    action_x_ratio: 0.905
-    action_y_ratio: 0.775
+    action_x_ratio: 0.065
+    action_y_ratio: 0.74
+- id: PNC_WORLD_COORDINATE_DIALOG_HEADER
+  screens:
+  - PNC_WORLD_COORDINATE_DIALOG
+  status: planned
+  detection_kind: planned
+  interaction_kind: label
+- id: PNC_WORLD_COORDINATE_DIALOG_K_FIELD
+  screens:
+  - PNC_WORLD_COORDINATE_DIALOG
+  status: planned
+  detection_kind: planned
+  interaction_kind: action
+  relative_bounds:
+    x_ratio: 0.19
+    y_ratio: 0.405
+    width_ratio: 0.175
+    height_ratio: 0.05
+    action_x_ratio: 0.28
+    action_y_ratio: 0.43
+- id: PNC_WORLD_COORDINATE_DIALOG_X_FIELD
+  screens:
+  - PNC_WORLD_COORDINATE_DIALOG
+  status: planned
+  detection_kind: planned
+  interaction_kind: action
+  relative_bounds:
+    x_ratio: 0.435
+    y_ratio: 0.405
+    width_ratio: 0.175
+    height_ratio: 0.05
+    action_x_ratio: 0.525
+    action_y_ratio: 0.43
+- id: PNC_WORLD_COORDINATE_DIALOG_Y_FIELD
+  screens:
+  - PNC_WORLD_COORDINATE_DIALOG
+  status: planned
+  detection_kind: planned
+  interaction_kind: action
+  relative_bounds:
+    x_ratio: 0.665
+    y_ratio: 0.405
+    width_ratio: 0.175
+    height_ratio: 0.05
+    action_x_ratio: 0.755
+    action_y_ratio: 0.43
+- id: PNC_WORLD_COORDINATE_DIALOG_GO_BUTTON
+  screens:
+  - PNC_WORLD_COORDINATE_DIALOG
+  status: planned
+  detection_kind: planned
+  interaction_kind: action
+  relative_bounds:
+    x_ratio: 0.325
+    y_ratio: 0.505
+    width_ratio: 0.35
+    height_ratio: 0.07
+    action_x_ratio: 0.5
+    action_y_ratio: 0.54
+- id: PNC_WORLD_COORDINATE_DIALOG_CLOSE_BUTTON
+  screens:
+  - PNC_WORLD_COORDINATE_DIALOG
+  status: planned
+  detection_kind: planned
+  interaction_kind: action
+  relative_bounds:
+    x_ratio: 0.86
+    y_ratio: 0.315
+    width_ratio: 0.09
+    height_ratio: 0.06
+    action_x_ratio: 0.91
+    action_y_ratio: 0.35
+- id: PNC_WORLD_COORDINATE_DIALOG_KEYBOARD_OK_BUTTON
+  screens:
+  - PNC_WORLD_COORDINATE_DIALOG
+  status: planned
+  detection_kind: planned
+  interaction_kind: action
+  relative_bounds:
+    x_ratio: 0.73
+    y_ratio: 0.61
+    width_ratio: 0.22
+    height_ratio: 0.08
+    action_x_ratio: 0.84
+    action_y_ratio: 0.65
+- id: PNC_WORLD_OVERVIEW_HEADER
+  screens:
+  - PNC_WORLD_MAP_OVERVIEW
+  status: planned
+  detection_kind: planned
+  interaction_kind: label
+- id: PNC_WORLD_OVERVIEW_CLOSE_BUTTON
+  screens:
+  - PNC_WORLD_MAP_OVERVIEW
+  status: planned
+  detection_kind: planned
+  interaction_kind: action
+  relative_bounds:
+    x_ratio: 0.83
+    y_ratio: 0.0
+    width_ratio: 0.14
+    height_ratio: 0.08
+    action_x_ratio: 0.925
+    action_y_ratio: 0.035
+- id: PNC_WORLD_OVERVIEW_WORLD_ICON
+  screens:
+  - PNC_WORLD_MAP_OVERVIEW
+  status: planned
+  detection_kind: planned
+  interaction_kind: action
+  relative_bounds:
+    x_ratio: 0.06
+    y_ratio: 0.88
+    width_ratio: 0.14
+    height_ratio: 0.09
+    action_x_ratio: 0.13
+    action_y_ratio: 0.925
+- id: PNC_WORLD_OVERVIEW_LEGEND_BUTTON
+  screens:
+  - PNC_WORLD_MAP_OVERVIEW
+  status: planned
+  detection_kind: planned
+  interaction_kind: action
+  relative_bounds:
+    x_ratio: 0.41
+    y_ratio: 0.885
+    width_ratio: 0.18
+    height_ratio: 0.085
+    action_x_ratio: 0.5
+    action_y_ratio: 0.925
+- id: PNC_WORLD_OVERVIEW_VISIBILITY_BUTTON
+  screens:
+  - PNC_WORLD_MAP_OVERVIEW
+  status: planned
+  detection_kind: planned
+  interaction_kind: action
+  relative_bounds:
+    x_ratio: 0.74
+    y_ratio: 0.885
+    width_ratio: 0.18
+    height_ratio: 0.085
+    action_x_ratio: 0.83
+    action_y_ratio: 0.925
+- id: PNC_WORLD_OVERVIEW_MAP_REGION
+  screens:
+  - PNC_WORLD_MAP_OVERVIEW
+  status: planned
+  detection_kind: planned
+  interaction_kind: action
+  relative_bounds:
+    x_ratio: 0.017
+    y_ratio: 0.191
+    width_ratio: 0.948
+    height_ratio: 0.542
+- id: PNC_WORLD_OVERVIEW_RECENTER_REGION
+  screens:
+  - PNC_WORLD_MAP_OVERVIEW
+  status: planned
+  detection_kind: planned
+  interaction_kind: action
+  relative_bounds:
+    x_ratio: 0.0
+    y_ratio: 0.185
+    width_ratio: 1.0
+    height_ratio: 0.589
+- id: PNC_WORLD_OVERVIEW_VIEWPORT_MARKER
+  screens:
+  - PNC_WORLD_MAP_OVERVIEW
+  status: planned
+  detection_kind: planned
+  interaction_kind: label
+- id: PNC_WORLD_KINGDOM_LIST_HEADER
+  screens:
+  - PNC_WORLD_KINGDOM_LIST
+  status: planned
+  detection_kind: planned
+  interaction_kind: label
 - id: ANDROID_HOME_PNC_ICON
   screens:
   - ANDROID_HOME
