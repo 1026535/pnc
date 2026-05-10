@@ -191,7 +191,7 @@ The findings below focus on issues still present after this commit.
 3. Delete the duplicate coarse-root coordinate parser and route it through `world_map_coordinates.py`.
 4. Implement matcher composition for enrichment before encouraging composed castle/profile queries.
 5. Use `PNC_WORLD_MAP_SEARCH_PATTERN_DEBUG_PLAN.md` for `SERPENTINE_ROW_SWEEP`; do not duplicate that work in this review.
-6. Use `PNC_WORLD_MAP_NAVIGATION_PRIMITIVES_PLAN.md` for coordinate-dialog and overview-map support.
+6. Use `reviewed_plans/PNC_WORLD_MAP_NAVIGATION_PRIMITIVES_PLAN.md` for coordinate-dialog and overview-map support.
 7. Extract domain/traversal modules when touching the pattern code, so the next change reduces complexity instead of adding another layer to `world_map_search.py`.
 
 ## DRY Checklist

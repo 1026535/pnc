@@ -100,7 +100,43 @@ class SelectorRegistryTests(unittest.TestCase):
             (SpatialObjectKind.HOME_BUILDING, SpatialObjectKind.HOME_EMPTY_SLOT),
         )
         self.assertIsNotNone(registry.require(UiElementId.PNC_WORLD_COORDINATE_BAR).relative_bounds)
-        self.assertIsNotNone(registry.require(UiElementId.PNC_WORLD_SEARCH_BUTTON).relative_bounds)
+        self.assertIsNone(registry.require(UiElementId.PNC_WORLD_SEARCH_BUTTON).relative_bounds)
+        world_expand = registry.require(UiElementId.PNC_WORLD_EXPAND_BUTTON)
+        self.assertIsNotNone(world_expand.relative_bounds)
+        self.assertLess(world_expand.relative_bounds.action_x_ratio, 0.15)
+        self.assertGreater(world_expand.relative_bounds.action_y_ratio, 0.7)
+        self.assertIsNotNone(registry.require(UiElementId.PNC_WORLD_COORDINATE_DIALOG_X_FIELD).relative_bounds)
+        self.assertEqual(
+            registry.require(UiElementId.PNC_WORLD_COORDINATE_DIALOG_X_FIELD).screens,
+            (ScreenType.PNC_WORLD_COORDINATE_DIALOG,),
+        )
+        self.assertIsNotNone(registry.require(UiElementId.PNC_WORLD_OVERVIEW_MAP_REGION).relative_bounds)
+        self.assertEqual(
+            registry.require(UiElementId.PNC_WORLD_OVERVIEW_MAP_REGION).screens,
+            (ScreenType.PNC_WORLD_MAP_OVERVIEW,),
+        )
+        overview_map_region = registry.require(UiElementId.PNC_WORLD_OVERVIEW_MAP_REGION).relative_bounds
+        assert overview_map_region is not None
+        self.assertLess(overview_map_region.x_ratio, 0.03)
+        self.assertGreater(overview_map_region.width_ratio, 0.9)
+        self.assertGreater(overview_map_region.height_ratio, 0.5)
+        overview_recenter_region = registry.require(UiElementId.PNC_WORLD_OVERVIEW_RECENTER_REGION).relative_bounds
+        assert overview_recenter_region is not None
+        self.assertEqual(overview_recenter_region.x_ratio, 0.0)
+        self.assertEqual(overview_recenter_region.width_ratio, 1.0)
+        self.assertGreater(overview_recenter_region.height_ratio, overview_map_region.height_ratio)
+        overview_close = registry.require(UiElementId.PNC_WORLD_OVERVIEW_CLOSE_BUTTON)
+        self.assertIsNotNone(overview_close.relative_bounds)
+        self.assertGreater(overview_close.relative_bounds.action_x_ratio, 0.9)
+        self.assertLess(overview_close.relative_bounds.action_y_ratio, 0.06)
+        self.assertEqual(
+            registry.require(UiElementId.PNC_VIP_DAILY_RESET_HEADER).screens,
+            (ScreenType.PNC_VIP_DAILY_RESET,),
+        )
+        self.assertEqual(
+            registry.require(UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON).screens,
+            (ScreenType.PNC_VIP_DAILY_RESET,),
+        )
 
     def test_default_selector_template_root_stays_package_root_relative(self) -> None:
         """Keeps the default selector template root anchored at the package root after package moves."""

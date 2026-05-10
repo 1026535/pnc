@@ -2,15 +2,23 @@
 
 from __future__ import annotations
 
+import re
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Protocol
 
-from pnc_automation.app.pnc.domain.action_requests import ActionRequest, KeyEventAction
+from pnc_automation.app.pnc.domain.action_requests import (
+    ActionRequest,
+    InputTextAction,
+    KeyEventAction,
+    TapAction,
+    TapPointAction,
+)
 from pnc_automation.app.pnc.domain.mail import PlayerProfileRoute
 from pnc_automation.app.pnc.domain.observation import (
+    Bounds,
     DetectedSpatialObject,
     Observation,
     SpatialObjectKind,
@@ -39,6 +47,10 @@ from pnc_automation.app.pnc.navigation.world_map_coordinate_domain import (
     WorldMapBounds,
     WorldMapCoordinateDomain,
     is_integer_pair,
+)
+from pnc_automation.app.pnc.navigation.world_map_overview_projection import (
+    project_overview_marker_to_world_coordinate,
+    project_world_coordinate_to_overview_point,
 )
 from pnc_automation.app.pnc.navigation.world_map_survey_recorder import WorldMapSurveyRecorder
 from pnc_automation.app.pnc.navigation.world_map_traversal import (
@@ -989,43 +1001,307 @@ class WorldMapCoordinateMover:
 
 
 @dataclass(slots=True)
-class WorldMapCoordinateNavigator:
-    """Optional owner for coordinate-dialog world-map repositioning once selector support exists."""
+class WorldMapCoordinateDialogState:
+    """Captures the committed kingdom/X/Y values visible in the world-map coordinate dialog."""
 
-    supported: bool = False
+    kingdom: int
+    coordinate: tuple[int, int]
+
+
+@dataclass(frozen=True, slots=True)
+class WorldMapCoordinateJumpPlan:
+    """Carries one staged coordinate-dialog jump plan plus the normalized landing target."""
+
+    normalized_target_coordinate: tuple[int, int]
+    open_action: ActionRequest | None = None
+    fill_actions: tuple[ActionRequest, ...] = ()
+    submit_action: ActionRequest | None = None
+
+    def __post_init__(self) -> None:
+        """Rejects partially specified jump plans before runtime execution begins."""
+
+        if self.open_action is None and (self.fill_actions or self.submit_action is not None):
+            raise SelectorResolutionError("Coordinate-jump plans must open the dialog before editing or submitting.")
+        if self.open_action is not None and self.submit_action is None:
+            raise SelectorResolutionError("Coordinate-jump plans must include one submit action when they open the dialog.")
+
+    @property
+    def requires_execution(self) -> bool:
+        """Returns whether the jump still needs dialog execution instead of simple landing verification."""
+
+        return self.open_action is not None
+
+
+@dataclass(frozen=True, slots=True)
+class WorldMapOverviewContext:
+    """Carries parsed overview-map evidence needed for bounds/context validation."""
+
+    map_bounds: WorldMapBounds
+    current_viewport_coordinate: tuple[int, int]
+    map_region_bounds: Bounds
+    viewport_marker_point: tuple[int, int]
+    kingdom: int | None = None
+    kingdom_name: str | None = None
+
+
+@dataclass(slots=True)
+class WorldMapCoordinateNavigator:
+    """Owns coordinate-dialog world-map repositioning and committed-field proof."""
+
+    supported: bool = True
+    coordinate_domain: WorldMapCoordinateDomain = field(default_factory=WorldMapCoordinateDomain.puzzles_and_conquest)
 
     def is_supported(self) -> bool:
         """Returns whether coordinate-dialog movement is available in this runtime."""
 
         return self.supported
 
-    def plan_jump(self, *, target: tuple[int, int], current_observation: Observation) -> list[ActionRequest]:
-        """Plans one coordinate jump or fails fast when the runtime lacks the required selectors."""
+    def plan_jump(self, *, target: tuple[int, int], current_observation: Observation) -> WorldMapCoordinateJumpPlan:
+        """Plans one staged coordinate jump and exposes the normalized landing target."""
 
-        raise SelectorResolutionError(
-            "Coordinate-dialog world-map navigation is not configured in this runtime yet.",
-            target=target,
-            screen_type=current_observation.screen_type,
+        if not self.is_supported():
+            raise SelectorResolutionError(
+                "Coordinate-dialog world-map navigation is not configured in this runtime yet.",
+                target=target,
+                screen_type=current_observation.screen_type,
+            )
+        current_observation.require_spatial_surface(SpatialSurfaceType.WORLD_MAP)
+        normalized_target = self.coordinate_domain.nearest_addressable_in_bounds(target)
+        current_coordinate = _require_world_map_viewport_coordinate(current_observation)
+        if current_coordinate == normalized_target:
+            return WorldMapCoordinateJumpPlan(normalized_target_coordinate=normalized_target)
+        return WorldMapCoordinateJumpPlan(
+            normalized_target_coordinate=normalized_target,
+            open_action=TapAction(
+                selector_id=UiElementId.PNC_WORLD_SEARCH_BUTTON,
+                reason="open_world_coordinate_dialog",
+                observe_after=True,
+                follow_up_request=ObservationRequest.world_map_coordinate_dialog_follow_up(),
+            ),
+            fill_actions=(
+                InputTextAction(
+                    selector_id=UiElementId.PNC_WORLD_COORDINATE_DIALOG_X_FIELD,
+                    text=str(normalized_target[0]),
+                    replace_existing=True,
+                    reason="set_world_coordinate_x",
+                ),
+                KeyEventAction(
+                    key_code="KEYCODE_ENTER",
+                    reason="commit_world_coordinate_x",
+                ),
+                InputTextAction(
+                    selector_id=UiElementId.PNC_WORLD_COORDINATE_DIALOG_Y_FIELD,
+                    text=str(normalized_target[1]),
+                    replace_existing=True,
+                    reason="set_world_coordinate_y",
+                ),
+                KeyEventAction(
+                    key_code="KEYCODE_ENTER",
+                    reason="commit_world_coordinate_y",
+                    observe_after=True,
+                    follow_up_request=ObservationRequest.world_map_coordinate_dialog_follow_up(),
+                ),
+            ),
+            submit_action=TapAction(
+                selector_id=UiElementId.PNC_WORLD_COORDINATE_DIALOG_GO_BUTTON,
+                reason="submit_world_coordinate_jump",
+                observe_after=True,
+                follow_up_request=ObservationRequest.world_map_coordinate_jump_follow_up(),
+            ),
         )
+
+    def require_dialog_state(self, observation: Observation) -> WorldMapCoordinateDialogState:
+        """Returns the committed dialog values from one proven coordinate-dialog observation."""
+
+        if observation.screen_type != ScreenType.PNC_WORLD_COORDINATE_DIALOG:
+            raise SelectorResolutionError(
+                "Coordinate-jump dialog proof requires the coordinate dialog observation.",
+                screen_type=observation.screen_type,
+            )
+        kingdom = _parse_required_dialog_field(
+            observation,
+            selector_id=UiElementId.PNC_WORLD_COORDINATE_DIALOG_K_FIELD,
+        )
+        x = _parse_required_dialog_field(
+            observation,
+            selector_id=UiElementId.PNC_WORLD_COORDINATE_DIALOG_X_FIELD,
+        )
+        y = _parse_required_dialog_field(
+            observation,
+            selector_id=UiElementId.PNC_WORLD_COORDINATE_DIALOG_Y_FIELD,
+        )
+        return WorldMapCoordinateDialogState(kingdom=kingdom, coordinate=(x, y))
+
+    def require_pre_submit_state(
+        self,
+        observation: Observation,
+        *,
+        plan: WorldMapCoordinateJumpPlan,
+        initial_state: WorldMapCoordinateDialogState,
+    ) -> WorldMapCoordinateDialogState:
+        """Fails fast unless the filled dialog still preserves kingdom and shows the normalized target."""
+
+        current_state = self.require_dialog_state(observation)
+        if current_state.kingdom != initial_state.kingdom:
+            raise SelectorResolutionError(
+                "World-map coordinate jump unexpectedly changed kingdoms before submit.",
+                initial_kingdom=initial_state.kingdom,
+                current_kingdom=current_state.kingdom,
+            )
+        if current_state.coordinate != plan.normalized_target_coordinate:
+            raise SelectorResolutionError(
+                "World-map coordinate jump did not commit the intended X/Y values before submit.",
+                expected_coordinate=plan.normalized_target_coordinate,
+                current_coordinate=current_state.coordinate,
+                kingdom=current_state.kingdom,
+            )
+        return current_state
 
 
 @dataclass(slots=True)
 class WorldMapOverviewNavigator:
-    """Optional owner for full-map overview parsing and movement seeding once selector support exists."""
+    """Owns overview parsing plus close/recenter choreography without enabling search seeding prematurely."""
 
-    supported: bool = False
+    bounds_parsing_supported: bool = True
+    movement_supported: bool = False
+    coordinate_domain: WorldMapCoordinateDomain = field(default_factory=WorldMapCoordinateDomain.puzzles_and_conquest)
 
     def is_supported(self) -> bool:
-        """Returns whether overview-based world-map assistance is available in this runtime."""
+        """Returns whether overview-based movement seeding is available in this runtime."""
 
-        return self.supported
+        return self.movement_supported
+
+    def supports_bounds_parsing(self) -> bool:
+        """Returns whether parse-only overview bounds/context extraction is available."""
+
+        return self.bounds_parsing_supported
+
+    def plan_open(self, current_observation: Observation) -> tuple[ActionRequest, ...]:
+        """Plans opening the overview from one proven world-map observation and carries the current viewport coordinate as detector context."""
+
+        current_observation.require_spatial_surface(SpatialSurfaceType.WORLD_MAP)
+        return (
+            TapAction(
+                selector_id=UiElementId.PNC_WORLD_EXPAND_BUTTON,
+                reason="open_world_map_overview",
+                observe_after=True,
+                follow_up_request=ObservationRequest.world_map_overview_follow_up(
+                    expected_coordinate=_require_world_map_viewport_coordinate(current_observation)
+                ),
+            ),
+        )
+
+    def plan_close_in_place(self, observation: Observation) -> tuple[ActionRequest, ...]:
+        """Plans closing the overview through the top-right close control."""
+
+        self._require_overview_control(observation, UiElementId.PNC_WORLD_OVERVIEW_CLOSE_BUTTON)
+        return (
+            TapAction(
+                selector_id=UiElementId.PNC_WORLD_OVERVIEW_CLOSE_BUTTON,
+                reason="close_world_map_overview",
+                observe_after=True,
+                follow_up_request=ObservationRequest.world_map_overview_exit_follow_up(),
+            ),
+        )
+
+    def plan_recenter(self, observation: Observation, *, target_coordinate: tuple[int, int]) -> tuple[ActionRequest, ...]:
+        """Plans clicking the overview map so it closes and recenters onto the requested target."""
+
+        context = self.parse_context(observation)
+        normalized_target = self.coordinate_domain.nearest_addressable_in_bounds(target_coordinate)
+        recenter_region = observation.require(UiElementId.PNC_WORLD_OVERVIEW_RECENTER_REGION).bounds
+        tap_point = project_world_coordinate_to_overview_point(
+            coordinate=normalized_target,
+            bounds=context.map_bounds,
+            map_region_bounds=recenter_region,
+        )
+        return (
+            TapPointAction(
+                x=tap_point[0],
+                y=tap_point[1],
+                reason="recenter_world_map_from_overview",
+                observe_after=True,
+                follow_up_request=ObservationRequest.world_map_overview_exit_follow_up(),
+            ),
+        )
+
+    def plan_open_kingdom_list(self, observation: Observation) -> tuple[ActionRequest, ...]:
+        """Plans opening the kingdom-list screen from overview through the left world icon."""
+
+        self._require_overview_control(observation, UiElementId.PNC_WORLD_OVERVIEW_WORLD_ICON)
+        return (
+            TapAction(
+                selector_id=UiElementId.PNC_WORLD_OVERVIEW_WORLD_ICON,
+                reason="open_world_kingdom_list",
+                observe_after=True,
+                follow_up_request=ObservationRequest.world_map_overview_exit_follow_up(),
+            ),
+        )
 
     def resolve_world_bounds(self, observation: Observation) -> WorldMapBounds:
-        """Returns the parsed world bounds or fails fast when overview support is unavailable."""
+        """Returns the parsed world bounds or fails fast when parse-only overview support is unavailable."""
 
-        raise SelectorResolutionError(
-            "World-map overview support is not configured in this runtime yet.",
-            screen_type=observation.screen_type,
+        return self.parse_context(observation).map_bounds
+
+    def _require_overview_control(self, observation: Observation, selector_id: UiElementId) -> None:
+        """Fails fast unless the requested overview control is visible on one proven overview observation."""
+
+        if observation.screen_type != ScreenType.PNC_WORLD_MAP_OVERVIEW:
+            raise SelectorResolutionError(
+                "Overview action planning requires a proven world-map overview observation.",
+                screen_type=observation.screen_type,
+                selector_id=selector_id,
+            )
+        observation.require(selector_id)
+
+    def parse_context(self, observation: Observation) -> WorldMapOverviewContext:
+        """Returns the parsed overview bounds and current viewport marker context."""
+
+        if not self.supports_bounds_parsing():
+            raise SelectorResolutionError(
+                "World-map overview support is not configured in this runtime yet.",
+                screen_type=observation.screen_type,
+            )
+        if observation.screen_type != ScreenType.PNC_WORLD_MAP_OVERVIEW:
+            raise SelectorResolutionError(
+                "Overview parsing requires a proven world-map overview observation.",
+                screen_type=observation.screen_type,
+            )
+        map_region = observation.require(UiElementId.PNC_WORLD_OVERVIEW_MAP_REGION).bounds
+        marker_element = observation.get(UiElementId.PNC_WORLD_OVERVIEW_VIEWPORT_MARKER)
+        if marker_element is None:
+            raise SelectorResolutionError(
+                "Overview parsing requires the current viewport marker to be visible.",
+                screen_type=observation.screen_type,
+            )
+        marker_point = marker_element.action_point if marker_element.action_point is not None else marker_element.bounds.center()
+        if not _bounds_contains_point(map_region, marker_point):
+            raise SelectorResolutionError(
+                "Overview parsing requires the viewport marker to remain inside the overview map region.",
+                marker_point=marker_point,
+                map_region_bounds=map_region,
+            )
+        header_text = None
+        kingdom: int | None = None
+        kingdom_name: str | None = None
+        header_element = observation.get(UiElementId.PNC_WORLD_OVERVIEW_HEADER)
+        if header_element is not None:
+            header_text = header_element.extracted_text
+            parsed_header = _parse_world_overview_header_text(header_text)
+            if parsed_header is not None:
+                kingdom, kingdom_name = parsed_header
+        coordinate = project_overview_marker_to_world_coordinate(
+            marker_point=marker_point,
+            map_region_bounds=map_region,
+            bounds=self.coordinate_domain.bounds,
+        )
+        return WorldMapOverviewContext(
+            map_bounds=self.coordinate_domain.bounds,
+            current_viewport_coordinate=coordinate,
+            map_region_bounds=map_region,
+            viewport_marker_point=marker_point,
+            kingdom=kingdom,
+            kingdom_name=kingdom_name,
         )
 
 
@@ -1473,8 +1749,8 @@ class WorldMapSearchService:
     ) -> Observation:
         """Executes one coordinate-jump move or fails fast when the runtime lacks the required primitive."""
 
-        actions = self.coordinate_navigator.plan_jump(target=checkpoint.coordinate, current_observation=observation)
-        if not actions:
+        plan = self.coordinate_navigator.plan_jump(target=checkpoint.coordinate, current_observation=observation)
+        if not plan.requires_execution:
             proven = _require_proven_world_map_observation(
                 observation_service=self.observation_service,
                 observation=observation,
@@ -1483,10 +1759,21 @@ class WorldMapSearchService:
             self._require_checkpoint_landing(
                 proven,
                 checkpoint=checkpoint,
-                requested_coordinate=checkpoint.coordinate,
+                requested_coordinate=plan.normalized_target_coordinate,
             )
             return proven
-        after = self._execute_actions(actions, observation, label_prefix=label_prefix)
+        assert plan.open_action is not None and plan.submit_action is not None
+        opened = self._execute_actions([plan.open_action], observation, label_prefix=f"{label_prefix}_open")
+        initial_dialog_state = self.coordinate_navigator.require_dialog_state(opened)
+        filled = opened
+        if plan.fill_actions:
+            filled = self._execute_actions(plan.fill_actions, opened, label_prefix=f"{label_prefix}_fill")
+        self.coordinate_navigator.require_pre_submit_state(
+            filled,
+            plan=plan,
+            initial_state=initial_dialog_state,
+        )
+        after = self._execute_actions([plan.submit_action], filled, label_prefix=f"{label_prefix}_submit")
         _raise_if_world_map_coordinate_jump_status_banner(after, target_coordinate=checkpoint.coordinate)
         proven = _require_proven_world_map_observation(
             observation_service=self.observation_service,
@@ -1496,7 +1783,7 @@ class WorldMapSearchService:
         self._require_checkpoint_landing(
             proven,
             checkpoint=checkpoint,
-            requested_coordinate=checkpoint.coordinate,
+            requested_coordinate=plan.normalized_target_coordinate,
         )
         return proven
 
@@ -1877,6 +2164,48 @@ def _raise_if_world_map_coordinate_jump_status_banner(
         status_banner=status_banner.extracted_text,
         screen_type=observation.screen_type,
     )
+
+
+def _parse_required_dialog_field(observation: Observation, *, selector_id: UiElementId) -> int:
+    """Returns one required committed numeric coordinate-dialog field value."""
+
+    state = observation.require_text_field_state(selector_id)
+    if state.text is None:
+        raise SelectorResolutionError(
+            "World-map coordinate dialog proof requires committed numeric field text.",
+            selector_id=selector_id,
+            screen_type=observation.screen_type,
+        )
+    match = re.search(r"\d+", state.text)
+    if match is None:
+        raise SelectorResolutionError(
+            "World-map coordinate dialog proof requires parseable numeric field text.",
+            selector_id=selector_id,
+            field_text=state.text,
+            screen_type=observation.screen_type,
+        )
+    return int(match.group(0))
+
+
+def _bounds_contains_point(bounds: Bounds, point: tuple[int, int]) -> bool:
+    """Returns whether one point lies inside the inclusive rectangle bounds."""
+
+    return (
+        bounds.x <= point[0] <= bounds.x + bounds.width
+        and bounds.y <= point[1] <= bounds.y + bounds.height
+    )
+
+
+def _parse_world_overview_header_text(text: str | None) -> tuple[int, str | None] | None:
+    """Returns the parsed overview kingdom id/name when the header exposes them."""
+
+    if text is None:
+        return None
+    match = re.search(r"K\s*[:\uff1a]?\s*(\d+)(?:\s+(.*))?", text.strip(), re.IGNORECASE)
+    if match is None:
+        return None
+    kingdom_name = match.group(2).strip() if match.group(2) is not None and match.group(2).strip() != "" else None
+    return int(match.group(1)), kingdom_name
 
 
 def classify_world_map_cardinal_delta(

@@ -32,8 +32,31 @@ _SCREEN_FAMILY_OBSERVED_SCREENS = {
         }
     ),
     ScreenType.PNC_VIP: frozenset({ScreenType.UNKNOWN, ScreenType.PNC_VIP}),
+    ScreenType.PNC_VIP_DAILY_RESET: _HOME_CITY_QUEUE_SCREENS | frozenset({ScreenType.PNC_VIP_DAILY_RESET}),
     ScreenType.PNC_IMPROVE_MIGHT: frozenset({ScreenType.UNKNOWN, ScreenType.PNC_IMPROVE_MIGHT}),
     ScreenType.PNC_WORLD_MAP: frozenset({ScreenType.UNKNOWN, ScreenType.PNC_WORLD_MAP_ROOT, ScreenType.PNC_WORLD_MAP}),
+    ScreenType.PNC_WORLD_COORDINATE_DIALOG: frozenset(
+        {
+            ScreenType.UNKNOWN,
+            ScreenType.PNC_WORLD_MAP,
+            ScreenType.PNC_WORLD_COORDINATE_DIALOG,
+        }
+    ),
+    ScreenType.PNC_WORLD_MAP_OVERVIEW: frozenset(
+        {
+            ScreenType.UNKNOWN,
+            ScreenType.PNC_WORLD_MAP,
+            ScreenType.PNC_WORLD_MAP_OVERVIEW,
+            ScreenType.PNC_WORLD_KINGDOM_LIST,
+        }
+    ),
+    ScreenType.PNC_WORLD_KINGDOM_LIST: frozenset(
+        {
+            ScreenType.UNKNOWN,
+            ScreenType.PNC_WORLD_MAP_OVERVIEW,
+            ScreenType.PNC_WORLD_KINGDOM_LIST,
+        }
+    ),
     ScreenType.PNC_MAIL_HUB: frozenset({ScreenType.UNKNOWN, ScreenType.PNC_MAIL_HUB, ScreenType.PNC_HOME_CITY}),
     ScreenType.PNC_MAILBOX_LIST: frozenset(
         {

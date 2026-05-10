@@ -295,7 +295,9 @@ class ObservationBuilder:
             artifact_path=_screenshot_artifact_path(screenshot),
             image_size=screenshot.image.size,
             captured_at=_screenshot_captured_at(screenshot),
-            blocking_popup=screen_type == ScreenType.PNC_POPUP or UiElementId.PNC_POPUP_CLOSE_BUTTON in visible_elements,
+            blocking_popup=screen_type in {ScreenType.PNC_POPUP, ScreenType.PNC_VIP_DAILY_RESET}
+            or UiElementId.PNC_POPUP_CLOSE_BUTTON in visible_elements
+            or UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON in visible_elements,
             current_castle=additions.current_castle,
             current_castle_evidence=additions.current_castle_evidence,
             current_pnc_account_id=additions.current_pnc_account_id,

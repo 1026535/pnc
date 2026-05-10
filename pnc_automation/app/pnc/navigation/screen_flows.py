@@ -115,9 +115,58 @@ class ScreenFlowPlanner:
 
         if not observation.blocking_popup and observation.screen_type != ScreenType.PNC_POPUP:
             return []
+        if observation.has(UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON):
+            return [
+                TapAction(
+                    selector_id=UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON,
+                    reason="close_vip_daily_reset",
+                    observe_after=True,
+                )
+            ]
         if observation.has(UiElementId.PNC_POPUP_CLOSE_BUTTON):
             return [TapAction(selector_id=UiElementId.PNC_POPUP_CLOSE_BUTTON, reason="close_popup", observe_after=True)]
         return [KeyEventAction(key_code="KEYCODE_BACK", reason="dismiss_popup_with_back", observe_after=True)]
+
+    def _return_to_world_map(self, observation: Observation) -> list[ActionRequest] | None:
+        """Returns one canonical unwind step for transient world-map overlays, or `None` when the current screen is not world-map-adjacent."""
+
+        if observation.screen_type == ScreenType.PNC_WORLD_COORDINATE_DIALOG:
+            return [
+                TapAction(
+                    selector_id=UiElementId.PNC_WORLD_COORDINATE_DIALOG_CLOSE_BUTTON,
+                    reason="close_world_coordinate_dialog",
+                    observe_after=True,
+                    follow_up_request=ObservationRequest.world_map_coordinate_jump_follow_up(),
+                )
+            ]
+        if observation.screen_type == ScreenType.PNC_WORLD_MAP_OVERVIEW:
+            return [
+                TapAction(
+                    selector_id=UiElementId.PNC_WORLD_OVERVIEW_CLOSE_BUTTON,
+                    reason="close_world_map_overview",
+                    observe_after=True,
+                    follow_up_request=ObservationRequest.world_map_overview_exit_follow_up(),
+                )
+            ]
+        if observation.screen_type == ScreenType.PNC_WORLD_KINGDOM_LIST:
+            if observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT):
+                return [
+                    TapAction(
+                        selector_id=UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+                        reason="leave_world_kingdom_list",
+                        observe_after=True,
+                        follow_up_request=ObservationRequest.world_map_overview_exit_follow_up(),
+                    )
+                ]
+            return [
+                KeyEventAction(
+                    key_code="KEYCODE_BACK",
+                    reason="leave_world_kingdom_list",
+                    observe_after=True,
+                    follow_up_request=ObservationRequest.world_map_overview_exit_follow_up(),
+                )
+            ]
+        return None
 
     def return_to_safe_root_screen(self, observation: Observation) -> list[ActionRequest]:
         """Plans a conservative return path to a stable non-popup game root."""
@@ -142,6 +191,9 @@ class ScreenFlowPlanner:
                     follow_up_request=ObservationRequest.home_city_follow_up(ScreenType.PNC_WORLD_MAP),
                 )
             ]
+        world_map_unwind = self._return_to_world_map(observation)
+        if world_map_unwind is not None:
+            return world_map_unwind
         if observation.screen_type == ScreenType.PNC_POPUP or observation.blocking_popup:
             return self.close_blocking_popup(observation)
         if observation.screen_type == ScreenType.PNC_MORE_MENU:
@@ -428,6 +480,9 @@ class ScreenFlowPlanner:
 
         if observation.screen_type == ScreenType.PNC_WORLD_MAP:
             return []
+        world_map_unwind = self._return_to_world_map(observation)
+        if world_map_unwind is not None:
+            return world_map_unwind
         if observation.screen_type != ScreenType.PNC_HOME_CITY:
             return self.ensure_home_city(observation)
         return [TapAction(selector_id=UiElementId.PNC_HOME_WORLD_SWITCH, reason="open_world_map", observe_after=True)]
@@ -445,6 +500,9 @@ class ScreenFlowPlanner:
                         follow_up_request=ObservationRequest.source_screen_retry(ScreenType.PNC_WORLD_MAP),
                     )
                 ]
+            world_map_unwind = self._return_to_world_map(observation)
+            if world_map_unwind is not None:
+                return world_map_unwind
             return self.open_world_map(observation)
         if observation.spatial_surface is not None:
             self.world_map_navigator.require_surface(observation)

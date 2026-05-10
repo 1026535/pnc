@@ -28,6 +28,8 @@ Canonical ownership should stay as follows:
 - `WorldMapSearchService` owns movement-tool selection, action execution, post-action observation, checkpoint verification, checkpoint ingestion, matching, and stop-policy evaluation.
 - `WorldMapTraversalPlanner` owns checkpoint route generation and must remain the only owner of traversal order.
 
+The new world-map-adjacent transient screens introduced by these primitives, such as the coordinate dialog, overview, and kingdom list, still need one canonical unwind path through `ScreenFlowPlanner`. Primitive ownership does not remove the requirement that shared home/world-map readiness flows can recover cleanly when a live session starts from one of those screens.
+
 The primitive navigators should produce declarative action plans and typed parsed evidence. They should not introduce a second observe-execute loop, a second search loop, or task-local navigation shortcuts. If the classes later move to a `world_map_navigation_primitives.py` module, the implementation should be moved, not copied, so there remains one canonical implementation per concept.
 
 Fixed overlay and dialog controls belong in the existing selector/catalog system. World-map scene objects remain spatial objects. The plan must not add selector ids for castles, resources, or other scrollable map content.
@@ -158,6 +160,10 @@ On open, alliance-member and artifact visibility are enabled by default, while r
 
 Live overview calibration evidence from the map corners and one interior point shows that the yellow viewport marker simply moves within the overview map as the world-map viewport changes. That marker motion is the primary evidence for overview-to-world correspondence.
 
+The live runtime should treat the overview marker-projection region as one calibrated projection region rather than the entire decorative map artwork. Live recenter validation now shows the orange marker projection region and the map-click recenter region are related but not identical. The reviewed implementation therefore keeps one calibrated overview marker-projection region for marker parsing and one broader click region for recenter taps, rather than forcing both behaviors through one inaccurate geometry box.
+
+Live marker extraction also needs one image-based detector. The reviewed direction is to detect the orange/warm viewport-marker cluster inside that calibrated map region. When overview is opened from one proven world-map observation, the follow-up request may carry the current world coordinate as a detector hint so the enricher can prefer the expected marker cluster and pin the action point to the projected coordinate. Standalone overview observations still need a conservative no-hint fallback based on edge/interior warm-cluster heuristics.
+
 The earlier assumption about the left bottom control was wrong: it does not return to the world map. It opens the `Kingdom List` screen.
 
 Live close-path evidence now shows three distinct overview interactions:
@@ -173,7 +179,7 @@ Live follow-up evidence indicates the overview does not expose a separate movabl
 `WorldMapOverviewNavigator` should:
 
 1. require a proven world-map observation,
-2. produce the declarative actions that open the overview,
+2. produce the declarative actions that open the overview, including the current viewport coordinate as follow-up detector context when available,
 3. parse map bounds and current viewport context from overview evidence,
 4. distinguish between the three overview exits:
    - top-right `X` close,
@@ -221,11 +227,15 @@ Required unit coverage:
 - parse-only overview bounds support does not enable `OVERVIEW_SEED`,
 - overview bounds parsing succeeds from a synthetic proven overview fixture once selectors exist,
 - overview marker calibration uses known-corner and interior fixtures,
+- overview open follow-up carries the current viewport coordinate as marker-detection context,
+- overview marker detection resolves a hinted interior marker over larger unrelated warm blobs and falls back to a conservative edge/interior heuristic without hints,
+- overview recenter uses its dedicated click region instead of reusing the tighter marker-projection region,
 - overview `X` close returns to the original viewport,
 - overview map-click closes and recenters to the clicked coordinate,
 - overview left world icon opens kingdom list and must not be treated as return-to-map,
 - overview does not expose a distinct movable drag/seed viewport interaction beyond click-to-recenter based on current live evidence,
-- screen-flow tests continue to prove that world-map entry/readiness/exit stay in `ScreenFlowPlanner`, not in these primitives.
+- screen-flow tests continue to prove that world-map entry/readiness/exit stay in `ScreenFlowPlanner`, not in these primitives,
+- screen-flow coverage explicitly proves that the coordinate dialog, overview, and kingdom list unwind back toward world map through one canonical shared path.
 
 Required live validation:
 
@@ -234,6 +244,7 @@ Required live validation:
 - enter known unaddressable but in-domain pairs and verify the normalized result,
 - attempt one out-of-domain coordinate and verify fail-fast handling,
 - open overview and record the parsed current viewport marker/bounds,
+- recenter through overview to one known coordinate and verify the landing world-map coordinate,
 - close overview and prove the world-map surface again.
 
 ## Recommendation

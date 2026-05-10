@@ -175,6 +175,21 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertEqual(actions[0].selector_id, UiElementId.PNC_WORLD_HOME_NAV)
         self.assertEqual(actions[0].follow_up_request, ObservationRequest.home_city_follow_up(ScreenType.PNC_WORLD_MAP))
 
+    def test_ensure_home_city_from_world_coordinate_dialog_closes_dialog_first(self) -> None:
+        """Unwinds the coordinate dialog back to world map before any later city-return step."""
+
+        observation = make_observation(
+            ScreenType.PNC_WORLD_COORDINATE_DIALOG,
+            visible_ids=(UiElementId.PNC_WORLD_COORDINATE_DIALOG_CLOSE_BUTTON,),
+        )
+
+        actions = self.flows.ensure_home_city(observation)
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], TapAction)
+        self.assertEqual(actions[0].selector_id, UiElementId.PNC_WORLD_COORDINATE_DIALOG_CLOSE_BUTTON)
+        self.assertEqual(actions[0].follow_up_request, ObservationRequest.world_map_coordinate_jump_follow_up())
+
     def test_ensure_home_city_from_alliance_join_uses_back_navigation(self) -> None:
         """Treats the join-alliance landing as a back-navigable root-adjacent screen."""
 
@@ -343,6 +358,48 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertEqual(len(actions), 1)
         self.assertIsInstance(actions[0], WaitAction)
         self.assertEqual(actions[0].follow_up_request, ObservationRequest.source_screen_retry(ScreenType.PNC_WORLD_MAP))
+
+    def test_ensure_world_map_ready_closes_coordinate_dialog_before_retrying_entry(self) -> None:
+        """Returns to the map from the live coordinate dialog instead of bouncing through home-city recovery."""
+
+        observation = make_observation(
+            ScreenType.PNC_WORLD_COORDINATE_DIALOG,
+            visible_ids=(UiElementId.PNC_WORLD_COORDINATE_DIALOG_CLOSE_BUTTON,),
+        )
+
+        actions = self.flows.ensure_world_map_ready(observation)
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], TapAction)
+        self.assertEqual(actions[0].selector_id, UiElementId.PNC_WORLD_COORDINATE_DIALOG_CLOSE_BUTTON)
+        self.assertEqual(actions[0].follow_up_request, ObservationRequest.world_map_coordinate_jump_follow_up())
+
+    def test_ensure_world_map_ready_closes_overview_before_retrying_entry(self) -> None:
+        """Treats world-map overview as a transient overlay on the way back to a proven map surface."""
+
+        observation = make_observation(
+            ScreenType.PNC_WORLD_MAP_OVERVIEW,
+            visible_ids=(UiElementId.PNC_WORLD_OVERVIEW_CLOSE_BUTTON,),
+        )
+
+        actions = self.flows.ensure_world_map_ready(observation)
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], TapAction)
+        self.assertEqual(actions[0].selector_id, UiElementId.PNC_WORLD_OVERVIEW_CLOSE_BUTTON)
+        self.assertEqual(actions[0].follow_up_request, ObservationRequest.world_map_overview_exit_follow_up())
+
+    def test_ensure_world_map_ready_leaves_kingdom_list_with_back_before_retrying_entry(self) -> None:
+        """Treats kingdom list as an overview child state that must unwind back toward world map first."""
+
+        observation = make_observation(ScreenType.PNC_WORLD_KINGDOM_LIST)
+
+        actions = self.flows.ensure_world_map_ready(observation)
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], KeyEventAction)
+        self.assertEqual(actions[0].key_code, "KEYCODE_BACK")
+        self.assertEqual(actions[0].follow_up_request, ObservationRequest.world_map_overview_exit_follow_up())
 
     def test_ensure_chat_channel_reuses_open_chat_until_chat_is_visible(self) -> None:
         """Uses the shared open-chat flow before attempting any channel-specific chat action."""
@@ -2930,6 +2987,22 @@ class FlowAndTaskTests(unittest.TestCase):
         )
 
         self.assertEqual(result.status.value, "replan")
+
+    def test_close_blocking_popup_uses_vip_daily_reset_close_button(self) -> None:
+        """Dismisses the VIP daily-reset screen through its observed Close button instead of falling back to Back."""
+
+        planner = ScreenFlowPlanner()
+        observation = make_observation(
+            ScreenType.PNC_VIP_DAILY_RESET,
+            visible_ids=(UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON,),
+            blocking_popup=True,
+        )
+
+        actions = planner.close_blocking_popup(observation)
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], TapAction)
+        self.assertEqual(actions[0].selector_id, UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON)
 
     def test_refresh_castle_roster_replaces_stale_cache_membership_with_observed_full_scan(self) -> None:
         """Drops obsolete cached castles instead of upgrading stale membership to `full_scan`."""
