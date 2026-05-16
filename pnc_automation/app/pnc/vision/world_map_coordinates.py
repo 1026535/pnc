@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from PIL import Image
 
 from pnc_automation.app.pnc.domain.observation import Bounds, SpatialViewport, SpatialViewportAddressingKind
+from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.core.vision.ocr.ocr_service import OcrLine, OcrService
 
 _WORLD_X_COORDINATE_PATTERN = re.compile(r"X\s*[:\uff1a]?\s*(?P<value>\d{1,3})", re.IGNORECASE)
@@ -141,6 +142,23 @@ def parse_world_coordinate_text(text: str) -> tuple[int, int] | None:
     if x_match is None or y_match is None or x_match.start() > y_match.start():
         return None
     return int(x_match.group("value")), int(y_match.group("value"))
+
+
+def parse_world_coordinate_dialog_field_text(*, selector_id: UiElementId, text: str | None) -> int | None:
+    """Returns one committed coordinate-dialog field value from OCR text when it is parseable."""
+
+    if text is None:
+        return None
+    stripped = text.strip()
+    if stripped == "":
+        return None
+    match = re.search(r"\d+", stripped)
+    if match is None:
+        return None
+    value = int(match.group(0))
+    if selector_id == UiElementId.PNC_WORLD_COORDINATE_DIALOG_K_FIELD and value <= 0:
+        return None
+    return value
 
 
 def is_world_map_blue_family_pixel(*, red: int, green: int, blue: int) -> bool:

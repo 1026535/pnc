@@ -62,6 +62,7 @@ from pnc_automation.app.pnc.navigation.world_map_traversal import (
     WorldMapTraversalPlanner,
 )
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
+from pnc_automation.app.pnc.vision.world_map_coordinates import parse_world_coordinate_dialog_field_text
 from pnc_automation.core.errors import SelectorResolutionError
 
 if TYPE_CHECKING:
@@ -1044,6 +1045,16 @@ class WorldMapOverviewContext:
     kingdom_name: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class _ParsedWorldMapOverviewBounds:
+    """Carries marker-independent overview evidence shared by bounds and context parsing."""
+
+    map_bounds: WorldMapBounds
+    map_region_bounds: Bounds
+    kingdom: int | None = None
+    kingdom_name: str | None = None
+
+
 @dataclass(slots=True)
 class WorldMapCoordinateNavigator:
     """Owns coordinate-dialog world-map repositioning and committed-field proof."""
@@ -1067,7 +1078,7 @@ class WorldMapCoordinateNavigator:
             )
         current_observation.require_spatial_surface(SpatialSurfaceType.WORLD_MAP)
         normalized_target = self.coordinate_domain.nearest_addressable_in_bounds(target)
-        current_coordinate = _require_world_map_viewport_coordinate(current_observation)
+        current_coordinate = _world_map_viewport_coordinate_or_none(current_observation)
         if current_coordinate == normalized_target:
             return WorldMapCoordinateJumpPlan(normalized_target_coordinate=normalized_target)
         return WorldMapCoordinateJumpPlan(
@@ -1163,13 +1174,13 @@ class WorldMapOverviewNavigator:
     """Owns overview parsing plus close/recenter choreography without enabling search seeding prematurely."""
 
     bounds_parsing_supported: bool = True
-    movement_supported: bool = False
+    movement_supported: bool = True
     coordinate_domain: WorldMapCoordinateDomain = field(default_factory=WorldMapCoordinateDomain.puzzles_and_conquest)
 
     def is_supported(self) -> bool:
         """Returns whether overview-based movement seeding is available in this runtime."""
 
-        return self.movement_supported
+        return self.bounds_parsing_supported and self.movement_supported
 
     def supports_bounds_parsing(self) -> bool:
         """Returns whether parse-only overview bounds/context extraction is available."""
@@ -1186,7 +1197,7 @@ class WorldMapOverviewNavigator:
                 reason="open_world_map_overview",
                 observe_after=True,
                 follow_up_request=ObservationRequest.world_map_overview_follow_up(
-                    expected_coordinate=_require_world_map_viewport_coordinate(current_observation)
+                    expected_coordinate=_world_map_viewport_coordinate_or_none(current_observation)
                 ),
             ),
         )
@@ -1208,7 +1219,7 @@ class WorldMapOverviewNavigator:
         """Plans clicking the overview map so it closes and recenters onto the requested target."""
 
         context = self.parse_context(observation)
-        normalized_target = self.coordinate_domain.nearest_addressable_in_bounds(target_coordinate)
+        normalized_target = self.normalize_target_coordinate(target_coordinate)
         recenter_region = observation.require(UiElementId.PNC_WORLD_OVERVIEW_RECENTER_REGION).bounds
         tap_point = project_world_coordinate_to_overview_point(
             coordinate=normalized_target,
@@ -1224,6 +1235,11 @@ class WorldMapOverviewNavigator:
                 follow_up_request=ObservationRequest.world_map_overview_exit_follow_up(),
             ),
         )
+
+    def normalize_target_coordinate(self, target_coordinate: tuple[int, int]) -> tuple[int, int]:
+        """Returns the in-bounds addressable coordinate the overview recenter action should verify."""
+
+        return self.coordinate_domain.nearest_addressable_in_bounds(target_coordinate)
 
     def plan_open_kingdom_list(self, observation: Observation) -> tuple[ActionRequest, ...]:
         """Plans opening the kingdom-list screen from overview through the left world icon."""
@@ -1241,7 +1257,7 @@ class WorldMapOverviewNavigator:
     def resolve_world_bounds(self, observation: Observation) -> WorldMapBounds:
         """Returns the parsed world bounds or fails fast when parse-only overview support is unavailable."""
 
-        return self.parse_context(observation).map_bounds
+        return self._parse_bounds(observation).map_bounds
 
     def _require_overview_control(self, observation: Observation, selector_id: UiElementId) -> None:
         """Fails fast unless the requested overview control is visible on one proven overview observation."""
@@ -1257,6 +1273,37 @@ class WorldMapOverviewNavigator:
     def parse_context(self, observation: Observation) -> WorldMapOverviewContext:
         """Returns the parsed overview bounds and current viewport marker context."""
 
+        parsed_bounds = self._parse_bounds(observation)
+        marker_element = observation.get(UiElementId.PNC_WORLD_OVERVIEW_VIEWPORT_MARKER)
+        if marker_element is None:
+            raise SelectorResolutionError(
+                "Overview viewport-context parsing requires the current viewport marker to be visible.",
+                screen_type=observation.screen_type,
+            )
+        marker_point = marker_element.action_point if marker_element.action_point is not None else marker_element.bounds.center()
+        if not _bounds_contains_point(parsed_bounds.map_region_bounds, marker_point):
+            raise SelectorResolutionError(
+                "Overview viewport-context parsing requires the viewport marker to remain inside the overview map region.",
+                marker_point=marker_point,
+                map_region_bounds=parsed_bounds.map_region_bounds,
+            )
+        coordinate = project_overview_marker_to_world_coordinate(
+            marker_point=marker_point,
+            map_region_bounds=parsed_bounds.map_region_bounds,
+            bounds=parsed_bounds.map_bounds,
+        )
+        return WorldMapOverviewContext(
+            map_bounds=parsed_bounds.map_bounds,
+            current_viewport_coordinate=coordinate,
+            map_region_bounds=parsed_bounds.map_region_bounds,
+            viewport_marker_point=marker_point,
+            kingdom=parsed_bounds.kingdom,
+            kingdom_name=parsed_bounds.kingdom_name,
+        )
+
+    def _parse_bounds(self, observation: Observation) -> _ParsedWorldMapOverviewBounds:
+        """Returns marker-independent overview bounds and header evidence from one proven overview observation."""
+
         if not self.supports_bounds_parsing():
             raise SelectorResolutionError(
                 "World-map overview support is not configured in this runtime yet.",
@@ -1268,38 +1315,16 @@ class WorldMapOverviewNavigator:
                 screen_type=observation.screen_type,
             )
         map_region = observation.require(UiElementId.PNC_WORLD_OVERVIEW_MAP_REGION).bounds
-        marker_element = observation.get(UiElementId.PNC_WORLD_OVERVIEW_VIEWPORT_MARKER)
-        if marker_element is None:
-            raise SelectorResolutionError(
-                "Overview parsing requires the current viewport marker to be visible.",
-                screen_type=observation.screen_type,
-            )
-        marker_point = marker_element.action_point if marker_element.action_point is not None else marker_element.bounds.center()
-        if not _bounds_contains_point(map_region, marker_point):
-            raise SelectorResolutionError(
-                "Overview parsing requires the viewport marker to remain inside the overview map region.",
-                marker_point=marker_point,
-                map_region_bounds=map_region,
-            )
-        header_text = None
         kingdom: int | None = None
         kingdom_name: str | None = None
         header_element = observation.get(UiElementId.PNC_WORLD_OVERVIEW_HEADER)
         if header_element is not None:
-            header_text = header_element.extracted_text
-            parsed_header = _parse_world_overview_header_text(header_text)
+            parsed_header = _parse_world_overview_header_text(header_element.extracted_text)
             if parsed_header is not None:
                 kingdom, kingdom_name = parsed_header
-        coordinate = project_overview_marker_to_world_coordinate(
-            marker_point=marker_point,
-            map_region_bounds=map_region,
-            bounds=self.coordinate_domain.bounds,
-        )
-        return WorldMapOverviewContext(
+        return _ParsedWorldMapOverviewBounds(
             map_bounds=self.coordinate_domain.bounds,
-            current_viewport_coordinate=coordinate,
             map_region_bounds=map_region,
-            viewport_marker_point=marker_point,
             kingdom=kingdom,
             kingdom_name=kingdom_name,
         )
@@ -1817,12 +1842,34 @@ class WorldMapSearchService:
     ) -> Observation:
         """Executes one overview-assisted move or fails fast when the runtime lacks the required primitive."""
 
-        del checkpoint
-        raise SelectorResolutionError(
-            "Overview-assisted world-map movement is not configured in this runtime yet.",
-            screen_type=observation.screen_type,
-            label_prefix=label_prefix,
+        if not self.overview_navigator.is_supported():
+            raise SelectorResolutionError(
+                "Overview-assisted world-map movement is not configured in this runtime yet.",
+                screen_type=observation.screen_type,
+                label_prefix=label_prefix,
+            )
+        normalized_target = self.overview_navigator.normalize_target_coordinate(checkpoint.coordinate)
+        opened = self._execute_actions(
+            self.overview_navigator.plan_open(observation),
+            observation,
+            label_prefix=f"{label_prefix}_overview_open",
         )
+        after = self._execute_actions(
+            self.overview_navigator.plan_recenter(opened, target_coordinate=checkpoint.coordinate),
+            opened,
+            label_prefix=f"{label_prefix}_overview_recenter",
+        )
+        proven = _require_proven_world_map_observation(
+            observation_service=self.observation_service,
+            observation=after,
+            label_prefix=f"{label_prefix}_verify_landing",
+        )
+        self._require_checkpoint_landing(
+            proven,
+            checkpoint=checkpoint,
+            requested_coordinate=normalized_target,
+        )
+        return proven
 
     def _execute_actions(
         self,
@@ -2170,21 +2217,15 @@ def _parse_required_dialog_field(observation: Observation, *, selector_id: UiEle
     """Returns one required committed numeric coordinate-dialog field value."""
 
     state = observation.require_text_field_state(selector_id)
-    if state.text is None:
-        raise SelectorResolutionError(
-            "World-map coordinate dialog proof requires committed numeric field text.",
-            selector_id=selector_id,
-            screen_type=observation.screen_type,
-        )
-    match = re.search(r"\d+", state.text)
-    if match is None:
+    value = parse_world_coordinate_dialog_field_text(selector_id=selector_id, text=state.text)
+    if value is None:
         raise SelectorResolutionError(
             "World-map coordinate dialog proof requires parseable numeric field text.",
             selector_id=selector_id,
             field_text=state.text,
             screen_type=observation.screen_type,
         )
-    return int(match.group(0))
+    return value
 
 
 def _bounds_contains_point(bounds: Bounds, point: tuple[int, int]) -> bool:
@@ -2285,14 +2326,19 @@ def _object_coordinate(object_: DetectedSpatialObject) -> tuple[int, int] | None
 def _require_world_map_viewport_coordinate(observation: Observation) -> tuple[int, int]:
     """Returns the active world-map viewport coordinate or fails fast when the observation is not addressable."""
 
-    surface = observation.require_spatial_surface(SpatialSurfaceType.WORLD_MAP)
-    coordinate = surface.viewport.coordinate
+    coordinate = _world_map_viewport_coordinate_or_none(observation)
     if coordinate is None:
         raise SelectorResolutionError(
             "World-map search movement requires a coordinate-addressable viewport.",
             screen_type=observation.screen_type,
         )
     return coordinate
+
+
+def _world_map_viewport_coordinate_or_none(observation: Observation) -> tuple[int, int] | None:
+    """Returns the active world-map viewport coordinate when the proven surface exposes one."""
+
+    return observation.require_spatial_surface(SpatialSurfaceType.WORLD_MAP).viewport.coordinate
 
 
 def _resolve_cardinal_sweep_leg_target(

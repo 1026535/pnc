@@ -15,16 +15,22 @@ def project_overview_marker_to_world_coordinate(
 ) -> tuple[int, int]:
     """Projects one overview marker point back into inclusive world coordinates."""
 
-    width = max(1, map_region_bounds.width)
-    height = max(1, map_region_bounds.height)
-    relative_x = (marker_point[0] - map_region_bounds.x) / width
-    relative_y = (marker_point[1] - map_region_bounds.y) / height
-    if not 0 <= relative_x <= 1 or not 0 <= relative_y <= 1:
+    if not _bounds_contains_point(map_region_bounds, marker_point):
         raise SelectorResolutionError(
             "Overview marker calibration requires one marker inside the overview map region.",
             marker_point=marker_point,
             map_region_bounds=map_region_bounds,
         )
+    relative_x = _relative_point_within_span(
+        point=marker_point[0],
+        origin=map_region_bounds.x,
+        span=map_region_bounds.width,
+    )
+    relative_y = _relative_point_within_span(
+        point=marker_point[1],
+        origin=map_region_bounds.y,
+        span=map_region_bounds.height,
+    )
     return (
         bounds.min_x + round(relative_x * (bounds.max_x - bounds.min_x)),
         bounds.min_y + round(relative_y * (bounds.max_y - bounds.min_y)),
@@ -48,6 +54,44 @@ def project_world_coordinate_to_overview_point(
             bounds=bounds,
         )
     return (
-        map_region_bounds.x + round(relative_x * map_region_bounds.width),
-        map_region_bounds.y + round(relative_y * map_region_bounds.height),
+        _point_within_span(
+            origin=map_region_bounds.x,
+            span=map_region_bounds.width,
+            relative=relative_x,
+        ),
+        _point_within_span(
+            origin=map_region_bounds.y,
+            span=map_region_bounds.height,
+            relative=relative_y,
+        ),
     )
+
+
+def _bounds_contains_point(bounds: Bounds, point: tuple[int, int]) -> bool:
+    """Returns whether one point lies inside the bounds' pixel span."""
+
+    return (
+        bounds.x <= point[0] < bounds.x + max(1, bounds.width)
+        and bounds.y <= point[1] < bounds.y + max(1, bounds.height)
+    )
+
+
+def _relative_point_within_span(*, point: int, origin: int, span: int) -> float:
+    """Returns the normalized relative position for one point inside a span-sized pixel interval."""
+
+    pixel_span = _inclusive_pixel_span(span)
+    if pixel_span == 0:
+        return 0.0
+    return (point - origin) / pixel_span
+
+
+def _point_within_span(*, origin: int, span: int, relative: float) -> int:
+    """Returns one in-bounds pixel position for a normalized relative coordinate."""
+
+    return origin + round(relative * _inclusive_pixel_span(span))
+
+
+def _inclusive_pixel_span(span: int) -> int:
+    """Returns the distance between the first and last valid pixel in one span-sized interval."""
+
+    return max(0, max(1, span) - 1)
