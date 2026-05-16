@@ -13,8 +13,10 @@ from pnc_automation.app.pnc.domain.action_requests import (
     ActionRequest,
     InputTextAction,
     KeyEventAction,
+    SwipeAction,
     TapAction,
     TapPointAction,
+    resolve_swipe_points_for_action,
 )
 from pnc_automation.app.pnc.domain.mail import PlayerProfileRoute
 from pnc_automation.app.pnc.domain.observation import (
@@ -917,11 +919,22 @@ class WorldMapCoordinateMover:
             if leg_target is None:
                 return current
             before_coordinate = _require_world_map_viewport_coordinate(current)
-            actions = self.navigator.plan_focus_coordinate(
-                current,
-                leg_target,
-                runtime_state=movement_state,
-            )
+            try:
+                actions = self.navigator.plan_focus_coordinate(
+                    current,
+                    leg_target,
+                    runtime_state=movement_state,
+                )
+            except SelectorResolutionError as error:
+                exhausted = _build_stagnant_retry_exhausted_error(
+                    error=error,
+                    movement_state=movement_state,
+                    target_coordinate=addressable_target_coordinate,
+                    requested_coordinate=target_coordinate,
+                )
+                if exhausted is not None:
+                    raise exhausted from error
+                raise
             if not actions:
                 current_coordinate = _require_world_map_viewport_coordinate(current)
                 if _coordinate_within_tolerance(
@@ -945,6 +958,18 @@ class WorldMapCoordinateMover:
             after_coordinate = _require_world_map_viewport_coordinate(after)
             direction = _direction_for_cardinal_leg(from_coordinate=before_coordinate, leg_target=leg_target)
             delta = after_coordinate[0] - before_coordinate[0], after_coordinate[1] - before_coordinate[1]
+            attempt_details = _build_cardinal_move_attempt_details(
+                action=actions[0],
+                before_observation=current,
+                after_observation=after,
+                before_coordinate=before_coordinate,
+                after_coordinate=after_coordinate,
+                target_coordinate=addressable_target_coordinate,
+                requested_coordinate=target_coordinate,
+                leg_target=(leg_target.x, leg_target.y),
+                delta=delta,
+                direction=direction.value,
+            )
             classification = classify_world_map_cardinal_delta(
                 direction=direction,
                 before_coordinate=before_coordinate,
@@ -952,22 +977,24 @@ class WorldMapCoordinateMover:
                 boundary_bounds=boundary_bounds,
                 orthogonal_drift_tolerance=self.orthogonal_drift_tolerance,
             )
+            _remember_last_cardinal_move_attempt(
+                movement_state=movement_state,
+                attempt_details=attempt_details,
+                classification=classification,
+            )
             if classification in {
                 WorldMapCardinalMovementClassification.PARSER_UNCERTAIN,
                 WorldMapCardinalMovementClassification.UNEXPECTED_DELTA,
-                WorldMapCardinalMovementClassification.INTERIOR_STALL,
                 WorldMapCardinalMovementClassification.EXPECTED_BOUNDARY_STOP,
             }:
                 raise SelectorResolutionError(
                     "World-map movement produced an unusable cardinal swipe delta.",
-                    target_coordinate=addressable_target_coordinate,
-                    requested_coordinate=target_coordinate,
-                    before_coordinate=before_coordinate,
-                    after_coordinate=after_coordinate,
-                    delta=delta,
-                    direction=direction.value,
+                    **attempt_details,
                     classification=classification.value,
                 )
+            if classification == WorldMapCardinalMovementClassification.INTERIOR_STALL:
+                current = after
+                continue
             if classification == WorldMapCardinalMovementClassification.MOVED_WITH_DRIFT:
                 _remember_orthogonal_drift_correction(
                     movement_state=movement_state,
@@ -2483,3 +2510,88 @@ def _mutable_runtime_state(runtime_state: dict[str, Any] | None, key: str) -> di
     nested = {}
     runtime_state[key] = nested
     return nested
+
+
+def _build_cardinal_move_attempt_details(
+    *,
+    action: ActionRequest,
+    before_observation: Observation,
+    after_observation: Observation,
+    before_coordinate: tuple[int, int],
+    after_coordinate: tuple[int, int],
+    target_coordinate: tuple[int, int],
+    requested_coordinate: tuple[int, int],
+    leg_target: tuple[int, int],
+    delta: tuple[int, int],
+    direction: str,
+) -> dict[str, Any]:
+    """Builds one canonical movement-error payload from the latest cardinal swipe attempt."""
+
+    details: dict[str, Any] = {
+        "target_coordinate": target_coordinate,
+        "requested_coordinate": requested_coordinate,
+        "before_coordinate": before_coordinate,
+        "after_coordinate": after_coordinate,
+        "delta": delta,
+        "direction": direction,
+        "leg_target": leg_target,
+        "artifact_path": None if after_observation.artifact_path is None else str(after_observation.artifact_path),
+        "coordinate_text": _world_map_coordinate_text_or_none(after_observation),
+    }
+    if isinstance(action, SwipeAction) and before_observation.image_size is not None:
+        details["swipe_points"] = resolve_swipe_points_for_action(
+            width=before_observation.image_size[0],
+            height=before_observation.image_size[1],
+            action=action,
+        )
+    return details
+
+
+def _remember_last_cardinal_move_attempt(
+    *,
+    movement_state: dict[str, Any],
+    attempt_details: Mapping[str, Any],
+    classification: WorldMapCardinalMovementClassification,
+) -> None:
+    """Stores the latest classified cardinal swipe attempt so retry exhaustion can raise with full evidence."""
+
+    movement_state["last_cardinal_move_attempt"] = {
+        **attempt_details,
+        "classification": classification.value,
+    }
+
+
+def _build_stagnant_retry_exhausted_error(
+    *,
+    error: SelectorResolutionError,
+    movement_state: Mapping[str, Any],
+    target_coordinate: tuple[int, int],
+    requested_coordinate: tuple[int, int],
+) -> SelectorResolutionError | None:
+    """Re-wraps navigator stagnant-retry exhaustion with the last concrete swipe evidence when available."""
+
+    if error.message != "World-map navigation swipe did not produce meaningful coordinate movement.":
+        return None
+    attempt_details = movement_state.get("last_cardinal_move_attempt")
+    if not isinstance(attempt_details, Mapping):
+        return None
+    details = dict(attempt_details)
+    details.setdefault("target_coordinate", target_coordinate)
+    details.setdefault("requested_coordinate", requested_coordinate)
+    details["stagnant_retry_failure"] = dict(error.details)
+    return SelectorResolutionError(
+        "World-map movement exhausted its bounded stagnant-swipe retry budget.",
+        **details,
+    )
+
+
+def _world_map_coordinate_text_or_none(observation: Observation) -> str | None:
+    """Returns the parsed coordinate-bar text from a proven world-map observation when the metadata exposed it."""
+
+    surface = observation.spatial_surface
+    if surface is None or surface.surface_type != SpatialSurfaceType.WORLD_MAP:
+        return None
+    coordinate_text = surface.metadata.get("coordinate_text")
+    if coordinate_text is None:
+        return None
+    return str(coordinate_text)

@@ -1020,12 +1020,45 @@ class WorldMapSearchTests(unittest.TestCase):
 
         self.assertEqual(error.exception.details["classification"], "unexpected_delta")
 
-    def test_execute_search_classifies_zero_delta_reactively_after_swipe(self) -> None:
-        """Classifies an interior stall only after the attempted swipe reports no coordinate movement."""
+    def test_execute_search_recovers_from_one_interior_stall_before_reaching_the_checkpoint(self) -> None:
+        """Lets the shared mover widen one stagnant swipe attempt instead of aborting before the next calibrated retry."""
 
         service, observer = self._build_runtime_service(
             observations=[
                 _make_world_map_observation(0, 0),
+                _make_world_map_observation(10, 0),
+            ]
+        )
+
+        result = service.execute_search(
+            _search_request(
+                matcher=SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.RESOURCE_NODE),
+                pattern=WorldMapSearchPattern.row_major_sweep(),
+                origin=WorldMapSearchOrigin.current_viewport(),
+                boundary=WorldMapSearchBoundary.rectangle(min_coordinate=(10, 0), max_coordinate=(10, 0)),
+                checkpoint_spacing=10,
+            ),
+            label_prefix="one_stall_then_success",
+            start_observation=_make_world_map_observation(0, 0),
+        )
+
+        self.assertEqual([checkpoint.coordinate for checkpoint in result.visited_checkpoints], [(10, 0)])
+        self.assertEqual(
+            observer.labels,
+            [
+                "one_stall_then_success_move_0_0_post_action_1",
+                "one_stall_then_success_move_0_1_post_action_1",
+            ],
+        )
+
+    def test_execute_search_reports_bounded_interior_stall_retry_exhaustion_with_swipe_diagnostics(self) -> None:
+        """Fails once the shared mover exhausts stagnant retries and preserves the exact swipe evidence for live diagnosis."""
+
+        service, observer = self._build_runtime_service(
+            observations=[
+                _make_world_map_observation(0, 0, artifact_path=Path("artifacts/stall_1.png")),
+                _make_world_map_observation(0, 0, artifact_path=Path("artifacts/stall_2.png")),
+                _make_world_map_observation(0, 0, artifact_path=Path("artifacts/stall_3.png")),
             ]
         )
 
@@ -1043,7 +1076,17 @@ class WorldMapSearchTests(unittest.TestCase):
             )
 
         self.assertEqual(error.exception.details["classification"], "interior_stall")
-        self.assertEqual(observer.labels, ["zero_delta_reactive_move_0_0_post_action_1"])
+        self.assertEqual(error.exception.details["artifact_path"], str(Path("artifacts/stall_3.png")))
+        self.assertEqual(len(error.exception.details["swipe_points"]), 4)
+        self.assertIn("stagnant_retry_failure", error.exception.details)
+        self.assertEqual(
+            observer.labels,
+            [
+                "zero_delta_reactive_move_0_0_post_action_1",
+                "zero_delta_reactive_move_0_1_post_action_1",
+                "zero_delta_reactive_move_0_2_post_action_1",
+            ],
+        )
 
     def test_execute_search_does_not_run_screen_flow_world_map_readiness_per_checkpoint(self) -> None:
         """Keeps checkpoint traversal inside the world-map surface after the caller supplies the entry proof."""
@@ -1594,6 +1637,7 @@ def _make_world_map_observation(
     *,
     objects: tuple[object, ...] = (),
     coordinate_addressable: bool = True,
+    artifact_path: Path | None = None,
 ) -> object:
     """Builds one synthetic world-map observation with the requested viewport and objects."""
 
@@ -1603,6 +1647,7 @@ def _make_world_map_observation(
             x=x,
             y=y,
             objects=objects,
+            metadata={"coordinate_text": f"X:{x} Y:{y}"},
         )
     else:
         spatial_surface = SpatialSurfaceObservation(
@@ -1618,6 +1663,7 @@ def _make_world_map_observation(
             UiElementId.PNC_WORLD_EXPAND_BUTTON,
         ),
         spatial_surface=spatial_surface,
+        artifact_path=artifact_path,
     )
 
 

@@ -11,10 +11,12 @@ from pnc_automation.app.pnc.domain.observation import Bounds, SpatialViewport, S
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.core.vision.ocr.ocr_service import OcrLine, OcrService
 
-_WORLD_X_COORDINATE_PATTERN = re.compile(r"X\s*[:\uff1a]?\s*(?P<value>\d{1,3})", re.IGNORECASE)
-_WORLD_Y_COORDINATE_PATTERN = re.compile(r"Y\s*[:\uff1a]?\s*(?P<value>\d{1,4})", re.IGNORECASE)
+_WORLD_X_COORDINATE_LABEL_PATTERN = re.compile(r"X\s*[:\uff1a]?", re.IGNORECASE)
+_WORLD_Y_COORDINATE_LABEL_PATTERN = re.compile(r"Y\s*[:\uff1a]?", re.IGNORECASE)
 _WORLD_COORDINATE_BAR_FILTER_SCALE = 3
 _WORLD_COORDINATE_BAR_MIN_BLUE_PIXELS = 12
+_WORLD_COORDINATE_MAX_X = 511
+_WORLD_COORDINATE_MAX_Y = 1023
 
 
 @dataclass(frozen=True, slots=True)
@@ -137,11 +139,22 @@ def world_coordinate_text_matches(text: str) -> bool:
 def parse_world_coordinate_text(text: str) -> tuple[int, int] | None:
     """Returns one coordinate pair from text-only OCR output when X appears before Y."""
 
-    x_match = _WORLD_X_COORDINATE_PATTERN.search(text.strip())
-    y_match = _WORLD_Y_COORDINATE_PATTERN.search(text.strip())
+    stripped = text.strip()
+    x_match = _WORLD_X_COORDINATE_LABEL_PATTERN.search(stripped)
+    y_match = _WORLD_Y_COORDINATE_LABEL_PATTERN.search(stripped)
     if x_match is None or y_match is None or x_match.start() > y_match.start():
         return None
-    return int(x_match.group("value")), int(y_match.group("value"))
+    x_value = _parse_world_coordinate_component_fragment(
+        fragment=stripped[x_match.end() : y_match.start()],
+        max_value=_WORLD_COORDINATE_MAX_X,
+    )
+    y_value = _parse_world_coordinate_component_fragment(
+        fragment=stripped[y_match.end() :],
+        max_value=_WORLD_COORDINATE_MAX_Y,
+    )
+    if x_value is None or y_value is None:
+        return None
+    return x_value, y_value
 
 
 def parse_world_coordinate_dialog_field_text(*, selector_id: UiElementId, text: str | None) -> int | None:
@@ -207,12 +220,22 @@ def _extract_split_line_world_coordinate_pair(lines: tuple[OcrLine, ...]) -> _Pa
 
     best_pair: tuple[tuple[int, int, int], _ParsedWorldCoordinatePair] | None = None
     for x_line in lines:
-        x_match = _WORLD_X_COORDINATE_PATTERN.search(x_line.text.strip())
-        if x_match is None:
+        x_value = _parse_labeled_world_coordinate_component(
+            text=x_line.text,
+            label_pattern=_WORLD_X_COORDINATE_LABEL_PATTERN,
+            max_value=_WORLD_COORDINATE_MAX_X,
+        )
+        if x_value is None:
             continue
         for y_line in lines:
-            y_match = _WORLD_Y_COORDINATE_PATTERN.search(y_line.text.strip())
-            if y_match is None or x_line is y_line:
+            if x_line is y_line:
+                continue
+            y_value = _parse_labeled_world_coordinate_component(
+                text=y_line.text,
+                label_pattern=_WORLD_Y_COORDINATE_LABEL_PATTERN,
+                max_value=_WORLD_COORDINATE_MAX_Y,
+            )
+            if y_value is None:
                 continue
             if not _world_coordinate_lines_are_pair(x_line=x_line, y_line=y_line):
                 continue
@@ -223,13 +246,87 @@ def _extract_split_line_world_coordinate_pair(lines: tuple[OcrLine, ...]) -> _Pa
                 max(x_line.bounds.x, y_line.bounds.x),
             )
             pair = _ParsedWorldCoordinatePair(
-                x=int(x_match.group("value")),
-                y=int(y_match.group("value")),
+                x=x_value,
+                y=y_value,
                 lines=(x_line, y_line),
             )
             if best_pair is None or score < best_pair[0]:
                 best_pair = (score, pair)
     return None if best_pair is None else best_pair[1]
+
+
+def _parse_labeled_world_coordinate_component(
+    *,
+    text: str,
+    label_pattern: re.Pattern[str],
+    max_value: int,
+) -> int | None:
+    """Returns one bounded coordinate component from a single labeled OCR line."""
+
+    match = label_pattern.search(text.strip())
+    if match is None:
+        return None
+    return _parse_world_coordinate_component_fragment(fragment=text[match.end() :], max_value=max_value)
+
+
+def _parse_world_coordinate_component_fragment(*, fragment: str, max_value: int) -> int | None:
+    """Returns one bounded coordinate value from a noisy OCR fragment after one axis label."""
+
+    digit_matches = tuple(re.finditer(r"\d+", fragment))
+    if not digit_matches:
+        return None
+    if len(digit_matches) == 1:
+        return _parse_world_coordinate_component_value(raw_value=digit_matches[0].group(0), max_value=max_value)
+    coalesced_value = _coalesce_world_coordinate_digit_runs(fragment=fragment, digit_matches=digit_matches)
+    if coalesced_value is None:
+        return None
+    return _parse_world_coordinate_component_value(raw_value=coalesced_value, max_value=max_value)
+
+
+def _coalesce_world_coordinate_digit_runs(
+    *,
+    fragment: str,
+    digit_matches: tuple[re.Match[str], ...],
+) -> str | None:
+    """Returns one coalesced digit run when OCR only split a coordinate with whitespace gaps."""
+
+    for previous, current in zip(digit_matches, digit_matches[1:], strict=False):
+        separator = fragment[previous.end() : current.start()]
+        if separator.strip() != "":
+            return None
+    return "".join(match.group(0) for match in digit_matches)
+
+
+def _parse_world_coordinate_component_value(*, raw_value: str, max_value: int) -> int | None:
+    """Returns one bounded coordinate value from one OCR digit run, recovering the best in-range slice when needed."""
+
+    value = int(raw_value)
+    if value <= max_value:
+        return value
+    max_digits = len(str(max_value))
+    bounded_value = _best_bounded_digit_slice(raw_value=raw_value, max_value=max_value, max_digits=max_digits)
+    if bounded_value is not None:
+        return bounded_value
+    if len(raw_value) < 2:
+        return None
+    trimmed_value = int(raw_value[:-1])
+    if trimmed_value <= max_value:
+        return trimmed_value
+    return None
+
+
+def _best_bounded_digit_slice(*, raw_value: str, max_value: int, max_digits: int) -> int | None:
+    """Returns the longest leftmost in-range digit slice from one OCR run when the full number exceeds map bounds."""
+
+    for length in range(min(len(raw_value), max_digits), 0, -1):
+        for start in range(0, len(raw_value) - length + 1):
+            candidate = raw_value[start : start + length]
+            if len(candidate) > 1 and candidate.startswith("0"):
+                continue
+            value = int(candidate)
+            if value <= max_value:
+                return value
+    return None
 
 
 def _world_coordinate_lines_are_pair(*, x_line: OcrLine, y_line: OcrLine) -> bool:

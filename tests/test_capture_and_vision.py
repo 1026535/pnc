@@ -2541,6 +2541,54 @@ class CaptureAndVisionTests(unittest.TestCase):
         assert surface is not None
         self.assertEqual(surface.viewport.coordinate, (351, 587))
 
+    def test_world_map_spatial_surface_trims_spurious_fourth_y_digit_from_live_coordinate_bar(self) -> None:
+        """Keeps the live Y coordinate stable when OCR absorbs one unrelated trailing digit beside the bar."""
+
+        surface = build_world_map_spatial_surface(
+            image=Image.new("RGB", (540, 960), (15, 28, 68)),
+            lines=(
+                _ocr_line("X:104 Y:7268", x=220, y=110, width=150, height=24),
+                _ocr_line("Hell Fortress", x=310, y=270, width=110, height=18),
+            ),
+            selector_registry=build_default_selector_registry(),
+        )
+
+        self.assertIsNotNone(surface)
+        assert surface is not None
+        self.assertEqual(surface.viewport.coordinate, (104, 726))
+
+    def test_world_map_spatial_surface_recovers_noisy_merged_coordinate_bar_digits(self) -> None:
+        """Recovers a real viewport coordinate when OCR prefixes the X digits and appends extra Y digits on one line."""
+
+        surface = build_world_map_spatial_surface(
+            image=Image.new("RGB", (900, 1600), (15, 28, 68)),
+            lines=(
+                _ocr_line("X:99287Y:707414", x=371, y=141, width=222, height=38),
+                _ocr_line("Venom Spider", x=447, y=379, width=135, height=25),
+            ),
+            selector_registry=build_default_selector_registry(),
+        )
+
+        self.assertIsNotNone(surface)
+        assert surface is not None
+        self.assertEqual(surface.viewport.coordinate, (287, 707))
+
+    def test_world_map_spatial_surface_recovers_whitespace_split_live_coordinate_fragment(self) -> None:
+        """Recovers the live coordinate bar when OCR inserts a whitespace-split stray digit inside the X fragment."""
+
+        surface = build_world_map_spatial_surface(
+            image=Image.new("RGB", (900, 1600), (15, 28, 68)),
+            lines=(
+                _ocr_line("X:101 4Y:695", x=371, y=146, width=197, height=30),
+                _ocr_line("Enchanted Reptilian", x=194, y=582, width=192, height=25),
+            ),
+            selector_registry=build_default_selector_registry(),
+        )
+
+        self.assertIsNotNone(surface)
+        assert surface is not None
+        self.assertEqual(surface.viewport.coordinate, (101, 695))
+
     def test_world_map_spatial_surface_classifies_live_kingdom_labeled_castles(self) -> None:
         """Parses the live kingdom/id world-map castle label into one typed castle sighting."""
 
@@ -2770,10 +2818,99 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertTrue(observation.has(UiElementId.PNC_WORLD_COORDINATE_BAR))
             self.assertTrue(observation.has(UiElementId.PNC_BOTTOM_NAV_HOME))
 
+    def test_observation_builder_classifies_world_map_from_noisy_merged_coordinate_line(self) -> None:
+        """Keeps exact world-map proof when the coordinate bar OCR fuses extra digits into both axes on one line."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                artifact_directory="k287_world_map_noisy_merged_coordinate",
+                label="world_map_noisy_merged_coordinate",
+            )
+            builder = ObservationBuilder(
+                selector_registry=build_default_selector_registry(),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("X:99287Y:707414", x=371, y=141, width=222, height=38),
+                            _ocr_line("Venom Spider", x=447, y=379, width=135, height=25),
+                            _ocr_line("Home", x=63, y=1563, width=76, height=28),
+                            _ocr_line("Hero", x=213, y=1567, width=62, height=25),
+                            _ocr_line("Quest", x=331, y=1571, width=69, height=20),
+                            _ocr_line("Mail", x=533, y=1568, width=55, height=24),
+                            _ocr_line("Alliance", x=666, y=1567, width=100, height=26),
+                            _ocr_line("More", x=795, y=1568, width=70, height=25),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_WORLD_MAP)
+            self.assertIsNotNone(observation.spatial_surface)
+            assert observation.spatial_surface is not None
+            self.assertEqual(observation.spatial_surface.viewport.coordinate, (287, 707))
+
+    def test_observation_builder_classifies_world_map_from_whitespace_split_coordinate_fragment(self) -> None:
+        """Keeps exact world-map proof when OCR splits one X fragment across whitespace before the Y label."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                artifact_directory="k287_world_map_split_coordinate",
+                label="world_map_split_coordinate",
+            )
+            builder = ObservationBuilder(
+                selector_registry=build_default_selector_registry(),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("X:101 4Y:695", x=371, y=146, width=197, height=30),
+                            _ocr_line("Enchanted Reptilian", x=194, y=582, width=192, height=25),
+                            _ocr_line("Home", x=63, y=1563, width=76, height=28),
+                            _ocr_line("Hero", x=213, y=1567, width=62, height=25),
+                            _ocr_line("Quest", x=331, y=1571, width=69, height=20),
+                            _ocr_line("Mail", x=533, y=1568, width=55, height=24),
+                            _ocr_line("Alliance", x=666, y=1567, width=100, height=26),
+                            _ocr_line("More", x=795, y=1568, width=70, height=25),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_WORLD_MAP)
+            self.assertIsNotNone(observation.spatial_surface)
+            assert observation.spatial_surface is not None
+            self.assertEqual(observation.spatial_surface.viewport.coordinate, (101, 695))
+
     def test_world_coordinate_parser_accepts_fullwidth_colons_for_exact_world_map_proof(self) -> None:
         """Keeps fullwidth-colon OCR variants on the canonical coordinate parser path."""
 
         self.assertEqual(parse_world_coordinate_text("X\uff1a253 Y\uff1a987"), (253, 987))
+
+    def test_world_coordinate_parser_recovers_live_noisy_merged_digits_and_rejects_resource_style_groups(self) -> None:
+        """Parses bounded noisy coordinate fragments while still rejecting comma-grouped top-HUD resource numbers."""
+
+        self.assertEqual(parse_world_coordinate_text("X:99287Y:707414"), (287, 707))
+        self.assertEqual(parse_world_coordinate_text("X:101 4Y:695"), (101, 695))
+        self.assertIsNone(parse_world_coordinate_text("X: 2,736,039 Y:958"))
 
     def test_world_coordinate_dialog_field_parser_handles_blank_labeled_and_invalid_kingdom_values(self) -> None:
         """Uses one shared numeric-field parser for dialog OCR enrichment and navigation proof."""
