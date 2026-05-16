@@ -6,6 +6,23 @@ Track bugs found while live-validating world-map search on the `serious_stuff` B
 
 This file is intentionally narrow: it records live validation defects and follow-up fixes discovered while trying to find the players `Toast.` / `Toast` and `Barcode`.
 
+## Relationship To The Pattern Plan
+
+This plan should be applied after the non-live shaping work in `PNC_WORLD_MAP_SEARCH_PATTERN_DEBUG_PLAN.md` is explicit enough to validate cleanly.
+
+Recommended sequence:
+
+1. finish traversal semantics, row helpers, unit coverage, and route-preview tooling in the pattern plan,
+2. use this live-bugs plan to validate that bounded live movement and observation actually follow that route,
+3. feed any runtime defects discovered here back into canonical movement/vision/search owners,
+4. resume broader serpentine/full-map validation only after the blocking live defect is fixed or tightly bounded.
+
+This keeps responsibilities clean:
+
+- traversal design belongs to the pattern plan,
+- live instability belongs here,
+- recognition gaps discovered during live runs should be classified explicitly instead of being mixed into generic "search failed" notes.
+
 ## Validation Context
 
 - BlueStacks display name: `serious_stuff`
@@ -131,6 +148,45 @@ Conclusion:
   - add a focused live calibration/recovery slice for the right-swipe lane near the current kingdom/viewport geometry,
   - preserve fail-fast behavior for unexpected stalls,
   - record the exact swipe points and artifact path in the movement error so live diagnosis does not require re-running with ad hoc scripts.
+- Additional validation on 2026-05-16:
+  - bounded live movement-calibration smoke was re-run against the `testing` BlueStacks instance/account,
+  - ADB resolved the active instance to `127.0.0.1:5565`,
+  - the smoke reached proven `PNC_WORLD_MAP`, completed the bounded left-swipe probes, then failed during the first bounded row-major sweep move,
+  - failure surfaced from the shared production checkpoint mover:
+    - `SelectorResolutionError: World-map movement produced an unusable cardinal swipe delta.`
+  - fresh failure artifact:
+    - `artifacts/2026-05-16/testing/20260516T191915Z_live_row_major_move_0_0_post_action_1.png`
+  - the post-failure screenshot still parsed as:
+    - `screen_type=PNC_WORLD_MAP`
+    - viewport coordinate `X:113 Y:739`
+  - practical interpretation:
+    - the coordinate parser remained usable,
+    - the failure moved past the historical top-HUD OCR bug,
+    - the remaining blocker is still in live movement behavior on the shared cardinal-swipe path.
+- Focused live repro on 2026-05-16:
+  - a fresh direct first-checkpoint move from a proven world-map start did succeed:
+    - start coordinate `(113, 739)`
+    - first checkpoint `(101, 727)`
+    - final coordinate `(100, 726)` within the shared movement tolerance
+  - this means the failure is not a simple deterministic "first row-major move always fails" bug.
+  - replaying the exact smoke-style left-probe sequence on the active `testing` state reproduced unstable lane behavior near `(102, 726)`:
+    - probe `LEFT 0.10`:
+      - `before=(102, 726)`
+      - `after=(102, 726)`
+      - `delta=(0, 0)`
+      - `classification=interior_stall`
+      - swipe points `(477, 960) -> (387, 960)`
+      - artifact:
+        - `artifacts/2026-05-16/testing/20260516T193559Z_focused_live_repro_recenter_probe_0_1_post_action_1.png`
+    - probe `LEFT 0.20`:
+      - one replay produced the same `interior_stall`
+      - swipe points `(522, 960) -> (342, 960)`
+      - artifact:
+        - `artifacts/2026-05-16/testing/20260516T193606Z_focused_live_repro_recenter_probe_0_2_post_action_1.png`
+  - practical interpretation:
+    - the remaining movement blocker is still reproducible,
+    - it appears state-sensitive and lane-sensitive rather than route-shape-specific,
+    - broad search should stay blocked until the shared cardinal mover is stable on this lane.
 
 ### 3. Coordinate-bar OCR mixed unrelated top-HUD resource text with the real Y coordinate
 
@@ -186,6 +242,22 @@ Conclusion:
   - validation artifacts:
     - `artifacts/2026-04-11/serious_stuff/20260411T145921Z_live_coord_parser_fix_repro_preflight_start.png`
     - `artifacts/2026-04-11/serious_stuff/20260411T145939Z_live_coord_parser_fix_230_to_232_1_post_action_1.png`
+- Residual risk found on 2026-05-16:
+  - Status: Partially fixed; residual variant open
+  - focused live repro on `testing` produced one suspicious parsed post-probe coordinate:
+    - `before=(102, 726)`
+    - `after=(104, 7268)`
+    - `delta=(2, 6542)`
+    - classification surfaced as `moved_with_drift` because the parsed Y value kept the expected sign but was obviously implausible
+  - artifact:
+    - `artifacts/2026-05-16/testing/20260516T193704Z_focused_live_repro_after_stalls_probe_0_2_post_action_1.png`
+  - screenshot review of that artifact still visibly shows `X:104 Y:726`, not `Y:7268`.
+  - likely interpretation:
+    - the earlier top-HUD mixing bug was fixed,
+    - but the parser can still absorb one adjacent trailing digit near the coordinate bar in some live layouts or overlap states.
+  - required follow-up:
+    - add one regression fixture for the visible `X:104 Y:726` screenshot pattern once the artifact is promoted into a deterministic test asset,
+    - tighten coordinate-bar parsing so a trailing nearby badge/overlay digit cannot extend the coordinate value.
 
 ### 4. Search bounds modeled every integer pair as addressable, but the map uses a checkerboard coordinate-pair domain
 
@@ -234,9 +306,24 @@ Conclusion:
 
 ## Follow-Up Checklist
 
+- Apply the pattern plan's explicit-route and dry-run phases before doing broader live sweeps here.
 - Re-run the targeted unit suite after any bug fixes.
 - Re-run the bounded live Toast/Barcode search.
+- During each bounded live run, classify failures under exactly one primary bucket:
+  - movement
+  - coordinate proof
+  - traversal planning
+  - recognition/indexing
 - If movement or parser failures occur, capture the exact stop reason, checkpoint count, latest coordinate, and artifact paths.
+- When reproducing movement failures, test both:
+  - a fresh-start first-checkpoint move,
+  - and the same move after the bounded live probe sequence,
+  because the current failure appears state-sensitive.
+- If recognition misses occur, capture:
+  - the screenshot artifact,
+  - the expected visible object,
+  - the indexed/visible object list actually produced,
+  - whether the miss is castle-specific or a broader surface-classification gap.
 - Keep fixes in canonical world-map search/movement owners; do not add task-local duplicate search loops.
 - Add more unit tests for radius/rectangle planning near known map bounds as live edge behavior is refined.
 - Add live-safe diagnostics that can probe one horizontal lane without starting a broad search.
