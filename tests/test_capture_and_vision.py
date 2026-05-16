@@ -23,6 +23,7 @@ from pnc_automation.app.pnc.domain.chat import ChatChannel
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
 from pnc_automation.app.pnc.navigation.world_map_coordinate_domain import WorldMapCoordinateDomain
 from pnc_automation.app.pnc.navigation.world_map_overview_projection import (
+    project_overview_marker_to_world_coordinate,
     project_world_coordinate_to_overview_point,
 )
 from pnc_automation.app.pnc.navigation.world_map_search import WorldMapOverviewNavigator
@@ -48,7 +49,10 @@ from pnc_automation.app.pnc.vision.image_models import SelectorMatch
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.core.vision.ocr.ocr_service import OcrLine, OcrResult, UnavailableOcrService
 from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservationEnricher, _find_world_map_root_coordinate_line
-from pnc_automation.app.pnc.vision.world_map_coordinates import parse_world_coordinate_text
+from pnc_automation.app.pnc.vision.world_map_coordinates import (
+    parse_world_coordinate_dialog_field_text,
+    parse_world_coordinate_text,
+)
 from pnc_automation.app.pnc.vision.selector_catalog import (
     SelectorCatalogDocument,
     SelectorCatalogEntry,
@@ -1274,6 +1278,51 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertEqual(observation.screen_type, ScreenType.PNC_MORE_MENU)
             self.assertTrue(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
             self.assertTrue(observation.has(UiElementId.PNC_MORE_MANAGE_CHAR))
+
+    def test_world_map_overview_exit_follow_up_classifies_manage_char_instead_of_overview(self) -> None:
+        """Keeps overview-exit follow-ups on Manage Char when that screen appears unexpectedly."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (540, 960), (15, 28, 68)))),
+                artifact_directory="overview_exit_manage_char",
+                label="overview_exit_manage_char",
+            )
+            builder = ObservationBuilder(
+                selector_registry=build_default_selector_registry(),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Manage Char.", x=304, y=94, width=134, height=24),
+                            _ocr_line("K304 Kingdom", x=214, y=194, width=127, height=18),
+                            _ocr_line("K304caf8305606", x=214, y=222, width=148, height=18),
+                            _ocr_line("Castle Level 4", x=214, y=250, width=125, height=18),
+                            _ocr_line("K230 Kingdom", x=214, y=592, width=128, height=18),
+                            _ocr_line("Lv.5 Hellhound", x=214, y=620, width=139, height=19),
+                            _ocr_line("Castle Level 9", x=214, y=648, width=126, height=18),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(
+                screenshot,
+                request=ObservationRequest.world_map_overview_exit_follow_up(),
+            )
+            castle_entries = observation.entries(ListEntryKind.CASTLE)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_CASTLE_SELECTION)
+            self.assertFalse(observation.has(UiElementId.PNC_WORLD_OVERVIEW_HEADER))
+            self.assertEqual(len(castle_entries), 2)
+            self.assertEqual(castle_entries[0].metadata["kingdom"], "K304")
+            self.assertEqual(castle_entries[1].title_text, "Lv.5 Hellhound")
 
     def test_observation_builder_does_not_misclassify_trial_challenge_as_more_menu(self) -> None:
         """Requires distinct More-menu support text so repeated event-page Rank buttons do not spoof the overlay."""
@@ -2725,6 +2774,57 @@ class CaptureAndVisionTests(unittest.TestCase):
         """Keeps fullwidth-colon OCR variants on the canonical coordinate parser path."""
 
         self.assertEqual(parse_world_coordinate_text("X\uff1a253 Y\uff1a987"), (253, 987))
+
+    def test_world_coordinate_dialog_field_parser_handles_blank_labeled_and_invalid_kingdom_values(self) -> None:
+        """Uses one shared numeric-field parser for dialog OCR enrichment and navigation proof."""
+
+        self.assertIsNone(
+            parse_world_coordinate_dialog_field_text(
+                selector_id=UiElementId.PNC_WORLD_COORDINATE_DIALOG_X_FIELD,
+                text="",
+            )
+        )
+        self.assertEqual(
+            parse_world_coordinate_dialog_field_text(
+                selector_id=UiElementId.PNC_WORLD_COORDINATE_DIALOG_Y_FIELD,
+                text="Y: 436",
+            ),
+            436,
+        )
+        self.assertIsNone(
+            parse_world_coordinate_dialog_field_text(
+                selector_id=UiElementId.PNC_WORLD_COORDINATE_DIALOG_K_FIELD,
+                text="K: 0",
+            )
+        )
+
+    def test_overview_projection_keeps_bottom_right_edge_inside_click_region(self) -> None:
+        """Maps inclusive world edges to the final in-bounds overview pixel and rejects the next pixel outside it."""
+
+        bounds = WorldMapCoordinateDomain.puzzles_and_conquest().bounds
+        map_region_bounds = Bounds(x=0, y=0, width=200, height=200)
+
+        marker_point = project_world_coordinate_to_overview_point(
+            coordinate=(511, 1023),
+            bounds=bounds,
+            map_region_bounds=map_region_bounds,
+        )
+
+        self.assertEqual(marker_point, (199, 199))
+        self.assertEqual(
+            project_overview_marker_to_world_coordinate(
+                marker_point=marker_point,
+                map_region_bounds=map_region_bounds,
+                bounds=bounds,
+            ),
+            (511, 1023),
+        )
+        with self.assertRaises(SelectorResolutionError):
+            project_overview_marker_to_world_coordinate(
+                marker_point=(200, 200),
+                map_region_bounds=map_region_bounds,
+                bounds=bounds,
+            )
 
     def test_world_map_root_coordinate_detection_uses_canonical_coordinate_parser(self) -> None:
         """Uses the same coordinate grammar for coarse root evidence, including omitted X colons."""

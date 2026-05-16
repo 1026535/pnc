@@ -135,11 +135,16 @@ class ObservationRequest:
 
     @classmethod
     def world_map_overview_exit_follow_up(cls) -> "ObservationRequest":
-        """Returns the OCR scope used when exiting the world-map overview."""
+        """Returns the OCR scope used when exiting the world-map overview.
+
+        Unexpected recovery screens stay in scope so screen-flow recovery can
+        unwind from the actual screen instead of forcing an overview match.
+        """
 
         return cls(
             candidate_screen_types=frozenset(
                 {
+                    ScreenType.PNC_CASTLE_SELECTION,
                     ScreenType.PNC_WORLD_MAP,
                     ScreenType.PNC_WORLD_KINGDOM_LIST,
                     ScreenType.PNC_WORLD_MAP_OVERVIEW,
@@ -147,6 +152,7 @@ class ObservationRequest:
             ),
             ocr_screen_types=frozenset(
                 {
+                    ScreenType.PNC_CASTLE_SELECTION,
                     ScreenType.PNC_WORLD_MAP,
                     ScreenType.PNC_WORLD_KINGDOM_LIST,
                     ScreenType.PNC_WORLD_MAP_OVERVIEW,

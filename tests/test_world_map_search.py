@@ -15,12 +15,16 @@ from pnc_automation.app.pnc.domain.observation import (
     SpatialObjectKind,
     SpatialObjectQuery,
     SpatialObjectRelationship,
+    SpatialSurfaceObservation,
     SpatialSurfaceType,
+    SpatialViewport,
+    SpatialViewportAddressingKind,
 )
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
 from pnc_automation.app.pnc.navigation.spatial_navigation import WorldMapNavigator
+from pnc_automation.app.pnc.navigation.world_map_overview_projection import project_world_coordinate_to_overview_point
 from pnc_automation.app.pnc.navigation.world_map_index import WorldMapCastleQuery
 from pnc_automation.app.pnc.navigation.world_map_search import (
     ObservationBackedWorldMapCastleInspector,
@@ -365,6 +369,7 @@ class WorldMapSearchTests(unittest.TestCase):
 
         service = WorldMapSearchService(screen_flows=self.flows)
         service.coordinate_navigator.supported = False
+        service.overview_navigator.movement_supported = False
 
         for movement_tool in (WorldMapMovementToolKind.COORDINATE_JUMP, WorldMapMovementToolKind.OVERVIEW_SEED):
             with self.subTest(movement_tool=movement_tool):
@@ -441,6 +446,7 @@ class WorldMapSearchTests(unittest.TestCase):
         """Keeps parse-only overview support separate from overview-seed movement selection."""
 
         service = WorldMapSearchService(screen_flows=self.flows)
+        service.overview_navigator = WorldMapOverviewNavigator(bounds_parsing_supported=True, movement_supported=False)
 
         with self.assertRaises(SelectorResolutionError):
             service.resolve_plan(
@@ -460,7 +466,7 @@ class WorldMapSearchTests(unittest.TestCase):
         navigator = WorldMapOverviewNavigator()
 
         upper_left = navigator.parse_context(_make_world_map_overview_observation(marker_point=(20, 40)))
-        lower_right = navigator.parse_context(_make_world_map_overview_observation(marker_point=(180, 160)))
+        lower_right = navigator.parse_context(_make_world_map_overview_observation(marker_point=(179, 159)))
 
         self.assertEqual(navigator.resolve_world_bounds(_make_world_map_overview_observation(marker_point=(100, 100))), WorldMapBounds(min_x=0, min_y=0, max_x=511, max_y=1023))
         self.assertEqual(upper_left.current_viewport_coordinate, (0, 0))
@@ -479,17 +485,42 @@ class WorldMapSearchTests(unittest.TestCase):
             ObservationRequest.world_map_overview_follow_up(expected_coordinate=(256, 512)),
         )
 
+    def test_overview_navigator_open_follow_up_keeps_coordinate_hint_optional(self) -> None:
+        """Keeps overview opening usable when the map surface is proven but its coordinate bar is temporarily unreadable."""
+
+        navigator = WorldMapOverviewNavigator()
+        observation = _make_world_map_observation(0, 0, coordinate_addressable=False)
+
+        actions = navigator.plan_open(observation)
+
+        self.assertEqual(actions[0].follow_up_request, ObservationRequest.world_map_overview_follow_up())
+
+    def test_coordinate_jump_plan_does_not_require_current_coordinate_for_non_noop_move(self) -> None:
+        """Keeps coordinate-dialog planning available when the world map is proven but the viewport coordinate is unavailable."""
+
+        navigator = WorldMapCoordinateNavigator()
+
+        plan = navigator.plan_jump(
+            target=(10, 0),
+            current_observation=_make_world_map_observation(0, 0, coordinate_addressable=False),
+        )
+
+        self.assertTrue(plan.requires_execution)
+        self.assertIsNotNone(plan.open_action)
+
     def test_overview_navigator_projects_interior_marker_and_recenter_click(self) -> None:
         """Uses the same marker calibration for interior parse evidence and click-to-recenter planning."""
 
         navigator = WorldMapOverviewNavigator()
-        context = navigator.parse_context(_make_world_map_overview_observation(marker_point=(100, 100)))
+        marker_point = _overview_marker_point_for_coordinate((256, 512))
+        context = navigator.parse_context(_make_world_map_overview_observation(marker_point=marker_point))
         actions = navigator.plan_recenter(
-            _make_world_map_overview_observation(marker_point=(100, 100)),
+            _make_world_map_overview_observation(marker_point=marker_point),
             target_coordinate=(256, 512),
         )
 
-        self.assertEqual(context.current_viewport_coordinate, (256, 512))
+        self.assertLessEqual(abs(context.current_viewport_coordinate[0] - 256), 1)
+        self.assertLessEqual(abs(context.current_viewport_coordinate[1] - 512), 4)
         self.assertIsInstance(actions[0], TapPointAction)
 
     def test_overview_navigator_recenter_uses_dedicated_click_region(self) -> None:
@@ -503,7 +534,24 @@ class WorldMapSearchTests(unittest.TestCase):
 
         actions = navigator.plan_recenter(observation, target_coordinate=(511, 0))
 
-        self.assertEqual((actions[0].x, actions[0].y), (200, 0))
+        self.assertEqual((actions[0].x, actions[0].y), (199, 0))
+
+    def test_overview_navigator_resolves_bounds_without_marker(self) -> None:
+        """Keeps parse-only overview bounds support independent from temporary marker-detection failures."""
+
+        navigator = WorldMapOverviewNavigator()
+
+        bounds = navigator.resolve_world_bounds(_make_world_map_overview_observation(marker_point=None))
+
+        self.assertEqual(bounds, WorldMapBounds(min_x=0, min_y=0, max_x=511, max_y=1023))
+
+    def test_overview_navigator_context_requires_marker(self) -> None:
+        """Fails marker-aware context parsing when the viewport marker is absent from the overview evidence."""
+
+        navigator = WorldMapOverviewNavigator()
+
+        with self.assertRaises(SelectorResolutionError):
+            navigator.parse_context(_make_world_map_overview_observation(marker_point=None))
 
     def test_overview_navigator_distinguishes_close_recenter_and_kingdom_list_exit_paths(self) -> None:
         """Keeps the three reviewed overview exits on distinct declarative plans."""
@@ -677,6 +725,65 @@ class WorldMapSearchTests(unittest.TestCase):
         )
 
         self.assertEqual(result.visited_checkpoints[0].coordinate, (510, 0))
+
+    def test_execute_search_moves_with_overview_seed_and_verifies_landing(self) -> None:
+        """Executes the full overview open-plus-recenter flow and proves the landed world-map coordinate."""
+
+        service, observer = self._build_runtime_service(
+            observations=[
+                _make_world_map_overview_observation(marker_point=_overview_marker_point_for_coordinate((0, 0))),
+                _make_world_map_observation(10, 0),
+            ]
+        )
+
+        result = service.execute_search(
+            _search_request(
+                matcher=SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.RESOURCE_NODE),
+                pattern=WorldMapSearchPattern.row_major_sweep(),
+                origin=WorldMapSearchOrigin.current_viewport(),
+                boundary=WorldMapSearchBoundary.rectangle(min_coordinate=(10, 0), max_coordinate=(10, 0)),
+                checkpoint_spacing=10,
+                movement_preferences=WorldMapMovementPreferences((WorldMapMovementToolKind.OVERVIEW_SEED,)),
+            ),
+            label_prefix="overview_seed_move",
+            start_observation=_make_world_map_observation(0, 0),
+        )
+
+        self.assertEqual(result.visited_checkpoints[0].coordinate, (10, 0))
+        self.assertEqual(
+            observer.requests,
+            [
+                ObservationRequest.world_map_overview_follow_up(expected_coordinate=(0, 0)),
+                ObservationRequest.world_map_overview_exit_follow_up(),
+            ],
+        )
+
+    def test_execute_search_rejects_overview_seed_when_landing_is_wrong(self) -> None:
+        """Fails overview-assisted movement when the returned world-map viewport proves the wrong landing coordinate."""
+
+        service, _observer = self._build_runtime_service(
+            observations=[
+                _make_world_map_overview_observation(marker_point=_overview_marker_point_for_coordinate((0, 0))),
+                _make_world_map_observation(8, 0),
+            ]
+        )
+
+        with self.assertRaises(SelectorResolutionError) as error:
+            service.execute_search(
+                _search_request(
+                    matcher=SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.RESOURCE_NODE),
+                    pattern=WorldMapSearchPattern.row_major_sweep(),
+                    origin=WorldMapSearchOrigin.current_viewport(),
+                    boundary=WorldMapSearchBoundary.rectangle(min_coordinate=(10, 0), max_coordinate=(10, 0)),
+                    checkpoint_spacing=10,
+                    movement_preferences=WorldMapMovementPreferences((WorldMapMovementToolKind.OVERVIEW_SEED,)),
+                ),
+                label_prefix="overview_seed_wrong_landing",
+                start_observation=_make_world_map_observation(0, 0),
+            )
+
+        self.assertEqual(error.exception.details["target_coordinate"], (10, 0))
+        self.assertEqual(error.exception.details["current_coordinate"], (8, 0))
 
     def test_execute_search_accumulates_indexed_matches_across_checkpoints(self) -> None:
         """Uses one canonical checkpointed search loop that resolves matches from accumulated indexed survey state."""
@@ -1486,18 +1593,31 @@ def _make_world_map_observation(
     y: int,
     *,
     objects: tuple[object, ...] = (),
+    coordinate_addressable: bool = True,
 ) -> object:
     """Builds one synthetic world-map observation with the requested viewport and objects."""
 
-    return make_observation(
-        ScreenType.PNC_WORLD_MAP,
-        visible_ids=(UiElementId.PNC_WORLD_HOME_NAV, UiElementId.PNC_WORLD_SEARCH_BUTTON),
-        spatial_surface=make_spatial_surface(
+    if coordinate_addressable:
+        spatial_surface = make_spatial_surface(
             SpatialSurfaceType.WORLD_MAP,
             x=x,
             y=y,
             objects=objects,
+        )
+    else:
+        spatial_surface = SpatialSurfaceObservation(
+            surface_type=SpatialSurfaceType.WORLD_MAP,
+            viewport=SpatialViewport(addressing_kind=SpatialViewportAddressingKind.CAMERA_RELATIVE),
+            objects=objects,
+        )
+    return make_observation(
+        ScreenType.PNC_WORLD_MAP,
+        visible_ids=(
+            UiElementId.PNC_WORLD_HOME_NAV,
+            UiElementId.PNC_WORLD_SEARCH_BUTTON,
+            UiElementId.PNC_WORLD_EXPAND_BUTTON,
         ),
+        spatial_surface=spatial_surface,
     )
 
 
@@ -1547,67 +1667,85 @@ def _make_coordinate_dialog_observation(
 
 def _make_world_map_overview_observation(
     *,
-    marker_point: tuple[int, int],
+    marker_point: tuple[int, int] | None,
     header_text: str = "K:157 Shadow Realm",
     recenter_region_bounds: tuple[int, int, int, int] = (10, 30, 180, 140),
 ) -> Observation:
     """Builds one synthetic overview observation with a map region and viewport marker."""
 
+    visible_elements = {
+        UiElementId.PNC_WORLD_OVERVIEW_HEADER: make_visible(
+            UiElementId.PNC_WORLD_OVERVIEW_HEADER,
+            x=20,
+            y=10,
+            width=120,
+            height=20,
+            extracted_text=header_text,
+        ),
+        UiElementId.PNC_WORLD_OVERVIEW_CLOSE_BUTTON: make_visible(
+            UiElementId.PNC_WORLD_OVERVIEW_CLOSE_BUTTON,
+            x=180,
+            y=10,
+        ),
+        UiElementId.PNC_WORLD_OVERVIEW_WORLD_ICON: make_visible(
+            UiElementId.PNC_WORLD_OVERVIEW_WORLD_ICON,
+            x=20,
+            y=180,
+        ),
+        UiElementId.PNC_WORLD_OVERVIEW_LEGEND_BUTTON: make_visible(
+            UiElementId.PNC_WORLD_OVERVIEW_LEGEND_BUTTON,
+            x=90,
+            y=180,
+        ),
+        UiElementId.PNC_WORLD_OVERVIEW_VISIBILITY_BUTTON: make_visible(
+            UiElementId.PNC_WORLD_OVERVIEW_VISIBILITY_BUTTON,
+            x=150,
+            y=180,
+        ),
+        UiElementId.PNC_WORLD_OVERVIEW_MAP_REGION: make_visible(
+            UiElementId.PNC_WORLD_OVERVIEW_MAP_REGION,
+            x=20,
+            y=40,
+            width=160,
+            height=120,
+        ),
+        UiElementId.PNC_WORLD_OVERVIEW_RECENTER_REGION: make_visible(
+            UiElementId.PNC_WORLD_OVERVIEW_RECENTER_REGION,
+            x=recenter_region_bounds[0],
+            y=recenter_region_bounds[1],
+            width=recenter_region_bounds[2],
+            height=recenter_region_bounds[3],
+        ),
+    }
+    if marker_point is not None:
+        visible_elements[UiElementId.PNC_WORLD_OVERVIEW_VIEWPORT_MARKER] = make_visible(
+            UiElementId.PNC_WORLD_OVERVIEW_VIEWPORT_MARKER,
+            x=marker_point[0],
+            y=marker_point[1],
+            width=6,
+            height=6,
+            action_point=marker_point,
+        )
     return Observation(
         screen_type=ScreenType.PNC_WORLD_MAP_OVERVIEW,
-        visible_elements={
-            UiElementId.PNC_WORLD_OVERVIEW_HEADER: make_visible(
-                UiElementId.PNC_WORLD_OVERVIEW_HEADER,
-                x=20,
-                y=10,
-                width=120,
-                height=20,
-                extracted_text=header_text,
-            ),
-            UiElementId.PNC_WORLD_OVERVIEW_CLOSE_BUTTON: make_visible(
-                UiElementId.PNC_WORLD_OVERVIEW_CLOSE_BUTTON,
-                x=180,
-                y=10,
-            ),
-            UiElementId.PNC_WORLD_OVERVIEW_WORLD_ICON: make_visible(
-                UiElementId.PNC_WORLD_OVERVIEW_WORLD_ICON,
-                x=20,
-                y=180,
-            ),
-            UiElementId.PNC_WORLD_OVERVIEW_LEGEND_BUTTON: make_visible(
-                UiElementId.PNC_WORLD_OVERVIEW_LEGEND_BUTTON,
-                x=90,
-                y=180,
-            ),
-            UiElementId.PNC_WORLD_OVERVIEW_VISIBILITY_BUTTON: make_visible(
-                UiElementId.PNC_WORLD_OVERVIEW_VISIBILITY_BUTTON,
-                x=150,
-                y=180,
-            ),
-            UiElementId.PNC_WORLD_OVERVIEW_MAP_REGION: make_visible(
-                UiElementId.PNC_WORLD_OVERVIEW_MAP_REGION,
-                x=20,
-                y=40,
-                width=160,
-                height=120,
-            ),
-            UiElementId.PNC_WORLD_OVERVIEW_RECENTER_REGION: make_visible(
-                UiElementId.PNC_WORLD_OVERVIEW_RECENTER_REGION,
-                x=recenter_region_bounds[0],
-                y=recenter_region_bounds[1],
-                width=recenter_region_bounds[2],
-                height=recenter_region_bounds[3],
-            ),
-            UiElementId.PNC_WORLD_OVERVIEW_VIEWPORT_MARKER: make_visible(
-                UiElementId.PNC_WORLD_OVERVIEW_VIEWPORT_MARKER,
-                x=marker_point[0],
-                y=marker_point[1],
-                width=6,
-                height=6,
-                action_point=marker_point,
-            ),
-        },
+        visible_elements=visible_elements,
         image_size=(200, 200),
+    )
+
+
+def _overview_marker_point_for_coordinate(coordinate: tuple[int, int]) -> tuple[int, int]:
+    """Returns the synthetic overview marker point for one world coordinate in the shared test fixture."""
+
+    return project_world_coordinate_to_overview_point(
+        coordinate=coordinate,
+        bounds=WorldMapCoordinateDomain.puzzles_and_conquest().bounds,
+        map_region_bounds=make_visible(
+            UiElementId.PNC_WORLD_OVERVIEW_MAP_REGION,
+            x=20,
+            y=40,
+            width=160,
+            height=120,
+        ).bounds,
     )
 
 

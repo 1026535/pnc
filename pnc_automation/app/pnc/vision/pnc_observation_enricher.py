@@ -52,6 +52,7 @@ from pnc_automation.app.pnc.vision.text_anchors import (
 )
 from pnc_automation.app.pnc.vision.world_map_coordinates import (
     ParsedWorldViewport,
+    parse_world_coordinate_dialog_field_text,
     parse_world_viewport,
     read_world_coordinate_bar_viewport,
     world_coordinate_text_matches,
@@ -165,6 +166,7 @@ _WORLD_MAP_INVALID_COORDINATE_STATUS_REQUIRED_TEXT = "COORDINATE"
 _WORLD_MAP_INVALID_COORDINATE_STATUS_REJECTION_TEXTS = frozenset({"INCORRECT", "INVALID", "WRONG"})
 _WORLD_MAP_INVALID_COORDINATE_STATUS_PROMPT_TEXTS = frozenset({"PLEASEENTER", "ENTER", "INPUT"})
 _WORLD_MAP_INVALID_COORDINATE_STATUS_PROMPT_QUALIFIERS = frozenset({"CORRECT", "VALID"})
+_WORLD_MAP_OVERVIEW_HEADER_PATTERN = re.compile(r"\bK\s*[:：]\s*\d+\b", re.IGNORECASE)
 _WORLD_OVERVIEW_MARKER_COMPONENT_GAP_PX = 18
 _WORLD_OVERVIEW_MARKER_EDGE_MARGIN_PX = 18
 _WORLD_OVERVIEW_MARKER_HINT_MIN_CLUSTER_PIXELS = 40
@@ -2199,7 +2201,7 @@ class PncObservationEnricher:
         parsed_fields: dict[UiElementId, int] = {}
         for selector_id in world_map_coordinate_dialog_text_field_selector_ids():
             state = self._build_observed_text_field_state(image=image, selector_id=selector_id)
-            parsed_value = _parse_world_coordinate_dialog_field_text(selector_id=selector_id, text=state.text)
+            parsed_value = parse_world_coordinate_dialog_field_text(selector_id=selector_id, text=state.text)
             if parsed_value is None:
                 return None
             parsed_fields[selector_id] = parsed_value
@@ -2703,34 +2705,19 @@ def _empty_text_placeholders(selector_id: UiElementId) -> frozenset[str]:
     if selector_id == UiElementId.PNC_MAIL_COMPOSE_BODY_FIELD:
         return _MAIL_COMPOSE_BODY_PLACEHOLDERS
     return frozenset()
-
-
-def _parse_world_coordinate_dialog_field_text(*, selector_id: UiElementId, text: str | None) -> int | None:
-    """Returns one committed coordinate-dialog field value from OCR text when it is parseable."""
-
-    if text is None:
-        return None
-    stripped = text.strip()
-    if stripped == "":
-        return None
-    match = re.search(r"\d+", stripped)
-    if match is None:
-        return None
-    value = int(match.group(0))
-    if selector_id == UiElementId.PNC_WORLD_COORDINATE_DIALOG_K_FIELD and value <= 0:
-        return None
-    return value
-
-
 def _find_world_map_overview_header_line(*, image: Image.Image, lines: tuple[OcrLine, ...]) -> OcrLine | None:
-    """Returns the overview header line that names the current kingdom when it is visible."""
+    """Returns the overview header line when the live `K:###` kingdom chrome is visible.
+
+    Manage Char rows use `K### Kingdom` labels without the overview colon, so
+    this matcher stays strict and inspects the raw OCR text to preserve the
+    punctuation that distinguishes the overview header from roster rows.
+    """
 
     max_y = int(image.height * 0.2)
     for line in lines:
         if line.bounds.y > max_y:
             continue
-        normalized_text = normalize_ocr_text(line.text)
-        if re.search(r"K[:：]?\d+", normalized_text) is None:
+        if _WORLD_MAP_OVERVIEW_HEADER_PATTERN.search(line.text) is None:
             continue
         return line
     return None
