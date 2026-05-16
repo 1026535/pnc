@@ -12,14 +12,19 @@ from pnc_automation.app.pnc.domain.observation import Observation, SpatialSurfac
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.automation.engine.task import TaskPreflight
 from pnc_automation.app.pnc.navigation.world_map_movement_calibration import (
+    WorldMapLaneProbeRequest,
     WorldMapSwipeProbeClassification,
     WorldMapSweepValidationRequest,
 )
 from pnc_automation.app.pnc.navigation.world_map_search import (
+    WorldMapBounds,
+    WorldMapCoordinateDomain,
     WorldMapEdge,
     WorldMapSearchBoundary,
     WorldMapSearchOrigin,
     WorldMapSearchPattern,
+    WorldMapSearchRequest,
+    WorldMapSearchStopPolicy,
 )
 from pnc_automation.app.pnc.navigation.spatial_navigation import WorldMapCardinalDirection
 from tests.live_smoke_support import build_live_runtime_bundle
@@ -71,16 +76,26 @@ class LiveWorldMapMovementCalibrationSmokeTests(unittest.TestCase):
         self.assertIsNotNone(start_coordinate)
         assert start_coordinate is not None
         local_bounds = self._local_bounds_from_coordinate(start_coordinate, radius=12)
-        probe_results: list[object] = []
+        first_checkpoint = self._first_row_major_checkpoint(
+            observation=world_map,
+            start_coordinate=start_coordinate,
+            local_bounds=local_bounds,
+        )
         current = world_map
-        for ratio in (0.10, 0.20):
-            probe_result, current = self.runtime.world_map_movement_calibration_service.probe_swipe(
-                current,
-                direction=WorldMapCardinalDirection.LEFT,
-                distance_ratio=ratio,
-                label_prefix=f"live_world_map_probe_left_{str(ratio).replace('.', '_')}",
-            )
-            probe_results.append(probe_result)
+        current = self._move_to_coordinate(current, first_checkpoint, label_prefix="live_fresh_first_checkpoint")
+        current = self._move_to_coordinate(current, start_coordinate, label_prefix="live_fresh_first_checkpoint_recenter")
+        lane_probe_report, current = self.runtime.world_map_movement_calibration_service.run_lane_probe_sequence(
+            current,
+            request=WorldMapLaneProbeRequest(
+                name="live_horizontal_lane",
+                anchor_coordinate=start_coordinate,
+                probe_directions=(WorldMapCardinalDirection.LEFT, WorldMapCardinalDirection.RIGHT),
+                distance_ratios=(0.10, 0.20),
+                boundary_bounds=local_bounds,
+            ),
+            label_prefix="live_horizontal_lane",
+        )
+        probe_results = list(lane_probe_report.probe_results)
         self.assertTrue(
             all(
                 result.classification
@@ -91,6 +106,7 @@ class LiveWorldMapMovementCalibrationSmokeTests(unittest.TestCase):
                 for result in probe_results
             )
         )
+        current = self._move_to_coordinate(current, first_checkpoint, label_prefix="live_post_probe_first_checkpoint")
         current = self._move_to_coordinate(current, start_coordinate, label_prefix="live_row_major_recenter")
         row_major, current = self.runtime.world_map_movement_calibration_service.validate_sweep(
             current,
@@ -183,17 +199,42 @@ class LiveWorldMapMovementCalibrationSmokeTests(unittest.TestCase):
         )
 
     @staticmethod
-    def _local_bounds_from_coordinate(coordinate: tuple[int, int], *, radius: int) -> object:
+    def _local_bounds_from_coordinate(coordinate: tuple[int, int], *, radius: int) -> WorldMapBounds:
         """Builds one local rectangle around the original viewport for bounded sweep validation."""
 
-        from pnc_automation.app.pnc.navigation.world_map_search import WorldMapBounds
-
-        return WorldMapBounds(
-            min_x=max(0, coordinate[0] - radius),
-            min_y=max(0, coordinate[1] - radius),
-            max_x=coordinate[0] + radius,
-            max_y=coordinate[1] + radius,
+        return WorldMapCoordinateDomain.puzzles_and_conquest().clamp_bounds(
+            WorldMapBounds(
+                min_x=max(0, coordinate[0] - radius),
+                min_y=max(0, coordinate[1] - radius),
+                max_x=coordinate[0] + radius,
+                max_y=coordinate[1] + radius,
+            )
         )
+
+    def _first_row_major_checkpoint(
+        self,
+        *,
+        observation: Observation,
+        start_coordinate: tuple[int, int],
+        local_bounds: WorldMapBounds,
+    ) -> tuple[int, int]:
+        """Returns the first bounded row-major checkpoint used for the state-sensitive live movement repro."""
+
+        plan = self.runtime.world_map_search_service.resolve_plan(
+            WorldMapSearchRequest(
+                matcher=lambda _object: False,
+                stop_policy=WorldMapSearchStopPolicy(max_checkpoints=4),
+                pattern=WorldMapSearchPattern.row_major_sweep(),
+                checkpoint_spacing=6,
+                origin=WorldMapSearchOrigin.explicit_coordinate(start_coordinate),
+                boundary=WorldMapSearchBoundary.rectangle(
+                    min_coordinate=(local_bounds.min_x, local_bounds.min_y),
+                    max_coordinate=(local_bounds.max_x, local_bounds.max_y),
+                ),
+            ),
+            observation,
+        )
+        return plan.route[0].coordinate
 
 
 if __name__ == "__main__":

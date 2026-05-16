@@ -14,6 +14,7 @@ from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
 from pnc_automation.app.pnc.navigation.spatial_navigation import WorldMapCardinalDirection
 from pnc_automation.app.pnc.navigation.world_map_movement_calibration import (
+    WorldMapLaneProbeRequest,
     WorldMapMovementCalibrationService,
     WorldMapSwipeProbeClassification,
     WorldMapSweepValidationRequest,
@@ -175,6 +176,38 @@ class WorldMapMovementCalibrationTests(unittest.TestCase):
         self.assertEqual(result.delta, (10, 0))
         self.assertEqual(after.require_spatial_surface(SpatialSurfaceType.WORLD_MAP).viewport.coordinate, (10, 0))
         self.assertEqual(len(observer.labels), 2)
+
+    def test_run_lane_probe_sequence_recenters_before_every_probe_on_the_requested_lane(self) -> None:
+        """Keeps focused lane diagnostics anchored to one coordinate instead of chaining probe drift into later samples."""
+
+        anchor = (50, 50)
+        service, _observer, _session = self._build_service(
+            observations=[
+                _make_world_map_observation(60, 50),
+                _make_world_map_observation(50, 50),
+                _make_world_map_observation(40, 50),
+            ]
+        )
+
+        report, _current = service.run_lane_probe_sequence(
+            _make_world_map_observation(*anchor),
+            request=WorldMapLaneProbeRequest(
+                name="horizontal_lane",
+                anchor_coordinate=anchor,
+                probe_directions=(WorldMapCardinalDirection.LEFT, WorldMapCardinalDirection.RIGHT),
+                distance_ratios=(0.20,),
+                lane_center_ratios={
+                    WorldMapCardinalDirection.LEFT: 0.72,
+                    WorldMapCardinalDirection.RIGHT: 0.72,
+                },
+                boundary_bounds=WorldMapBounds(min_x=0, min_y=0, max_x=100, max_y=100),
+            ),
+            label_prefix="horizontal_lane",
+        )
+
+        self.assertEqual(report.anchor_coordinate, anchor)
+        self.assertEqual([result.before.coordinate for result in report.probe_results], [anchor, anchor])
+        self.assertTrue(all(result.lane_center_ratio == 0.72 for result in report.probe_results))
 
     def test_run_cardinal_calibration_builds_matrix_entries_and_returns_to_origin(self) -> None:
         """Runs the formal calibration matrix from one stable origin and resets the viewport between trials."""

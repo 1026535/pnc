@@ -190,6 +190,61 @@ class WorldMapDeadZoneReport:
 
 
 @dataclass(frozen=True, slots=True)
+class WorldMapLaneProbeRequest:
+    """Defines one focused lane-safe probe sequence anchored to a single coordinate without starting a broad sweep."""
+
+    name: str
+    anchor_coordinate: tuple[int, int]
+    probe_directions: tuple[WorldMapCardinalDirection, ...]
+    distance_ratios: tuple[float, ...]
+    lane_center_ratios: Mapping[WorldMapCardinalDirection, float] | None = None
+    boundary_bounds: WorldMapBounds | None = None
+
+    def __post_init__(self) -> None:
+        """Rejects malformed lane-probe requests before live diagnostics begin."""
+
+        if self.name.strip() == "":
+            raise SelectorResolutionError("World-map lane probe requests require a non-empty name.")
+        if not (
+            isinstance(self.anchor_coordinate, tuple)
+            and len(self.anchor_coordinate) == 2
+            and all(isinstance(value, int) for value in self.anchor_coordinate)
+        ):
+            raise SelectorResolutionError(
+                "World-map lane probe requests require one integer anchor_coordinate pair.",
+                anchor_coordinate=self.anchor_coordinate,
+            )
+        if not self.probe_directions:
+            raise SelectorResolutionError("World-map lane probe requests require at least one probe direction.")
+        if not self.distance_ratios:
+            raise SelectorResolutionError("World-map lane probe requests require at least one distance ratio.")
+        for ratio in self.distance_ratios:
+            if ratio <= 0:
+                raise SelectorResolutionError(
+                    "World-map lane probe requests require positive distance ratios.",
+                    distance_ratio=ratio,
+                )
+
+
+@dataclass(frozen=True, slots=True)
+class WorldMapLaneProbeReport:
+    """Summarizes one focused anchored lane-probe sequence for live movement diagnosis."""
+
+    name: str
+    anchor_coordinate: tuple[int, int]
+    probe_results: tuple[WorldMapSwipeProbeResult, ...]
+
+    def to_document(self) -> dict[str, object]:
+        """Exports the lane-probe report as a JSON-ready document."""
+
+        return {
+            "name": self.name,
+            "anchor_coordinate": [self.anchor_coordinate[0], self.anchor_coordinate[1]],
+            "probe_results": [result.to_document() for result in self.probe_results],
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class WorldMapSweepValidationRequest:
     """Defines one bounded sweep-validation run used to prove movement-plus-observation stability."""
 
@@ -281,6 +336,7 @@ class WorldMapMovementCalibrationReport:
 
     calibration_matrix: WorldMapCalibrationMatrixReport
     dead_zone_report: WorldMapDeadZoneReport | None = None
+    lane_probe_reports: tuple[WorldMapLaneProbeReport, ...] = ()
     sweep_results: tuple[WorldMapSweepValidationResult, ...] = ()
 
     def to_document(self) -> dict[str, object]:
@@ -289,6 +345,7 @@ class WorldMapMovementCalibrationReport:
         return {
             "calibration_matrix": self.calibration_matrix.to_document(),
             "dead_zone_report": None if self.dead_zone_report is None else self.dead_zone_report.to_document(),
+            "lane_probe_reports": [report.to_document() for report in self.lane_probe_reports],
             "sweep_results": [result.to_document() for result in self.sweep_results],
         }
 
@@ -430,6 +487,50 @@ class WorldMapMovementCalibrationService:
                 probe_results.append(probe)
         return WorldMapDeadZoneReport(bounds=bounds, probe_results=tuple(probe_results)), current
 
+    def run_lane_probe_sequence(
+        self,
+        observation: Observation,
+        *,
+        request: WorldMapLaneProbeRequest,
+        label_prefix: str,
+    ) -> tuple[WorldMapLaneProbeReport, Observation]:
+        """Runs one anchored lane probe sequence by recentring before every probe to isolate lane-specific movement behavior."""
+
+        current = _require_proven_world_map_observation(
+            observation_service=self.observation_service,
+            observation=observation,
+            label_prefix=f"{label_prefix}_start",
+        )
+        probe_results: list[WorldMapSwipeProbeResult] = []
+        for direction_index, direction in enumerate(request.probe_directions):
+            for ratio_index, ratio in enumerate(request.distance_ratios):
+                current = self._coordinate_mover().move_to_coordinate(
+                    current,
+                    target_coordinate=request.anchor_coordinate,
+                    label_prefix=f"{label_prefix}_anchor_{direction_index}_{ratio_index}",
+                    boundary_bounds=request.boundary_bounds,
+                )
+                lane_center_ratio = None
+                if request.lane_center_ratios is not None:
+                    lane_center_ratio = request.lane_center_ratios.get(direction)
+                probe, current = self._probe_swipe(
+                    current,
+                    direction=direction,
+                    distance_ratio=ratio,
+                    lane_center_ratio=lane_center_ratio,
+                    boundary_bounds=request.boundary_bounds,
+                    label_prefix=f"{label_prefix}_{direction.value}_{ratio_index}",
+                )
+                probe_results.append(probe)
+        return (
+            WorldMapLaneProbeReport(
+                name=request.name,
+                anchor_coordinate=request.anchor_coordinate,
+                probe_results=tuple(probe_results),
+            ),
+            current,
+        )
+
     def validate_sweep(
         self,
         observation: Observation,
@@ -512,6 +613,7 @@ class WorldMapMovementCalibrationService:
         dead_zone_probe_coordinates: Sequence[tuple[int, int]] = (),
         dead_zone_bounds: WorldMapBounds | None = None,
         dead_zone_distance_ratio: float = 0.20,
+        lane_probe_requests: Sequence[WorldMapLaneProbeRequest] = (),
         sweep_requests: Sequence[WorldMapSweepValidationRequest] = (),
     ) -> tuple[WorldMapMovementCalibrationReport, Observation]:
         """Runs the implemented movement-calibration phases and returns one combined report plus the freshest observation."""
@@ -521,6 +623,7 @@ class WorldMapMovementCalibrationService:
             label_prefix=f"{label_prefix}_cardinal",
         )
         dead_zone_report: WorldMapDeadZoneReport | None = None
+        lane_probe_reports: list[WorldMapLaneProbeReport] = []
         if dead_zone_probe_coordinates:
             if dead_zone_bounds is None:
                 raise SelectorResolutionError(
@@ -533,6 +636,13 @@ class WorldMapMovementCalibrationService:
                 distance_ratio=dead_zone_distance_ratio,
                 bounds=dead_zone_bounds,
             )
+        for lane_probe_index, lane_probe_request in enumerate(lane_probe_requests):
+            lane_probe_report, current = self.run_lane_probe_sequence(
+                current,
+                request=lane_probe_request,
+                label_prefix=f"{label_prefix}_lane_probe_{lane_probe_index}_{lane_probe_request.name}",
+            )
+            lane_probe_reports.append(lane_probe_report)
         sweep_results: list[WorldMapSweepValidationResult] = []
         for sweep_index, sweep_request in enumerate(sweep_requests):
             sweep_result, current = self.validate_sweep(
@@ -544,6 +654,7 @@ class WorldMapMovementCalibrationService:
         return WorldMapMovementCalibrationReport(
             calibration_matrix=calibration_matrix,
             dead_zone_report=dead_zone_report,
+            lane_probe_reports=tuple(lane_probe_reports),
             sweep_results=tuple(sweep_results),
         ), current
 

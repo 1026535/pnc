@@ -17,11 +17,13 @@ from pnc_automation.app.automation.engine.task import TaskPreflight
 from pnc_automation.app.pnc.domain.observation import Observation, SpatialSurfaceType
 from pnc_automation.app.pnc.navigation.spatial_navigation import WorldMapCardinalDirection
 from pnc_automation.app.pnc.navigation.world_map_movement_calibration import (
+    WorldMapLaneProbeRequest,
     WorldMapMovementCalibrationReport,
     WorldMapSweepValidationRequest,
 )
 from pnc_automation.app.pnc.navigation.world_map_search import (
     WorldMapBounds,
+    WorldMapCoordinateDomain,
     WorldMapEdge,
     WorldMapSearchBoundary,
     WorldMapSearchOrigin,
@@ -56,6 +58,7 @@ def main() -> None:
     errors: list[str] = []
     calibration_matrix = None
     dead_zone_report = None
+    lane_probe_reports: list[object] = []
     sweep_results: list[object] = []
     current: Observation | None = None
     try:
@@ -63,12 +66,7 @@ def main() -> None:
         start_coordinate = current.require_spatial_surface(SpatialSurfaceType.WORLD_MAP).viewport.coordinate
         if start_coordinate is None:
             raise AssertionError("World-map calibration requires a coordinate-addressable viewport.")
-        local_bounds = WorldMapBounds(
-            min_x=max(0, start_coordinate[0] - arguments.local_radius),
-            min_y=max(0, start_coordinate[1] - arguments.local_radius),
-            max_x=start_coordinate[0] + arguments.local_radius,
-            max_y=start_coordinate[1] + arguments.local_radius,
-        )
+        local_bounds = _local_bounds_from_coordinate(start_coordinate, radius=arguments.local_radius)
         probe_coordinates = (
             (local_bounds.min_x, local_bounds.min_y),
             (start_coordinate[0], start_coordinate[1]),
@@ -93,6 +91,33 @@ def main() -> None:
                 start_observation=current,
                 errors=errors,
             )
+        if current is not None:
+            try:
+                lane_probe_report, current = runtime.world_map_movement_calibration_service.run_lane_probe_sequence(
+                    current,
+                    request=WorldMapLaneProbeRequest(
+                        name="horizontal_lane",
+                        anchor_coordinate=start_coordinate,
+                        probe_directions=(WorldMapCardinalDirection.LEFT, WorldMapCardinalDirection.RIGHT),
+                        distance_ratios=ratios,
+                        lane_center_ratios={
+                            WorldMapCardinalDirection.LEFT: lane_candidates[WorldMapCardinalDirection.LEFT][0],
+                            WorldMapCardinalDirection.RIGHT: lane_candidates[WorldMapCardinalDirection.RIGHT][0],
+                        },
+                        boundary_bounds=local_bounds,
+                    ),
+                    label_prefix=f"{arguments.label}_horizontal_lane",
+                )
+                lane_probe_reports.append(lane_probe_report)
+            except Exception as error:  # pragma: no cover - live-only fallback
+                errors.append(f"horizontal_lane: {error}")
+                current = _recover_world_map(
+                    runner=runner,
+                    account=account,
+                    label_prefix=f"{arguments.label}_recover_after_horizontal_lane",
+                    start_observation=current,
+                    errors=errors,
+                )
         if current is not None:
             try:
                 dead_zone_report, current = runtime.world_map_movement_calibration_service.run_dead_zone_verification(
@@ -185,6 +210,7 @@ def main() -> None:
         document = _build_report_document(
             calibration_matrix=calibration_matrix,
             dead_zone_report=dead_zone_report,
+            lane_probe_reports=lane_probe_reports,
             sweep_results=sweep_results,
             errors=errors,
         )
@@ -219,6 +245,7 @@ def _build_report_document(
     *,
     calibration_matrix: object,
     dead_zone_report: object,
+    lane_probe_reports: list[object],
     sweep_results: list[object],
     errors: list[str],
 ) -> dict[str, object]:
@@ -228,11 +255,13 @@ def _build_report_document(
         return WorldMapMovementCalibrationReport(
             calibration_matrix=calibration_matrix,
             dead_zone_report=dead_zone_report,
+            lane_probe_reports=tuple(lane_probe_reports),
             sweep_results=tuple(sweep_results),
         ).to_document()
     return {
         "calibration_matrix": None if calibration_matrix is None else calibration_matrix.to_document(),
         "dead_zone_report": None if dead_zone_report is None else dead_zone_report.to_document(),
+        "lane_probe_reports": [report.to_document() for report in lane_probe_reports],
         "sweep_results": [result.to_document() for result in sweep_results],
         "errors": errors,
     }
@@ -276,5 +305,20 @@ def _ensure_world_map(
         start_observation=start_observation,
         max_steps=_WORLD_MAP_PREFLIGHT_MAX_STEPS,
     )
+
+
+def _local_bounds_from_coordinate(coordinate: tuple[int, int], *, radius: int) -> WorldMapBounds:
+    """Builds one local bounds window and clamps it to the canonical live PNC coordinate domain."""
+
+    return WorldMapCoordinateDomain.puzzles_and_conquest().clamp_bounds(
+        WorldMapBounds(
+            min_x=max(0, coordinate[0] - radius),
+            min_y=max(0, coordinate[1] - radius),
+            max_x=coordinate[0] + radius,
+            max_y=coordinate[1] + radius,
+        )
+    )
+
+
 if __name__ == "__main__":
     main()
