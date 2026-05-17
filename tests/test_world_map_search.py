@@ -195,6 +195,18 @@ class WorldMapSearchTests(unittest.TestCase):
                 with self.assertRaises(SelectorResolutionError):
                     domain.nearest_addressable_in_bounds(coordinate)
 
+    def test_coordinate_domain_local_bounds_clamp_to_edges(self) -> None:
+        """Builds one canonical local bounds window without duplicating live-tool edge clamping logic."""
+
+        domain = WorldMapCoordinateDomain.puzzles_and_conquest()
+
+        self.assertEqual(
+            domain.local_bounds_around((2, 1022), radius=6),
+            WorldMapBounds(min_x=0, min_y=1016, max_x=8, max_y=1023),
+        )
+        with self.assertRaises(SelectorResolutionError):
+            domain.local_bounds_around((2, 1022), radius=-1)
+
     def test_resolve_plan_fails_when_current_viewport_origin_is_outside_domain(self) -> None:
         """Rejects impossible viewport OCR coordinates instead of clamping them to a plausible kingdom edge."""
 

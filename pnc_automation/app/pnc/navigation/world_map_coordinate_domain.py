@@ -111,6 +111,22 @@ class WorldMapCoordinateDomain:
 
         return self.bounds.clamp_bounds(bounds)
 
+    def local_bounds_around(self, coordinate: tuple[int, int], *, radius: int) -> WorldMapBounds:
+        """Returns one radius-based local bounds window clamped to the coordinate domain edges."""
+
+        if radius < 0:
+            raise SelectorResolutionError(
+                "World-map local bounds require a non-negative radius.",
+                radius=radius,
+            )
+        center = self.require_inside_bounds(coordinate)
+        return WorldMapBounds(
+            min_x=max(self.bounds.min_x, center[0] - radius),
+            min_y=max(self.bounds.min_y, center[1] - radius),
+            max_x=min(self.bounds.max_x, center[0] + radius),
+            max_y=min(self.bounds.max_y, center[1] + radius),
+        )
+
     def is_addressable(self, coordinate: tuple[int, int]) -> bool:
         """Returns whether one coordinate can be targeted directly by world-map search/magnifier tools."""
 
