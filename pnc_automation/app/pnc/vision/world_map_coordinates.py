@@ -9,14 +9,14 @@ from PIL import Image
 
 from pnc_automation.app.pnc.domain.observation import Bounds, SpatialViewport, SpatialViewportAddressingKind
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
+from pnc_automation.app.pnc.navigation.world_map_coordinate_domain import WorldMapCoordinateDomain
 from pnc_automation.core.vision.ocr.ocr_service import OcrLine, OcrService
 
 _WORLD_X_COORDINATE_LABEL_PATTERN = re.compile(r"X\s*[:\uff1a]?", re.IGNORECASE)
 _WORLD_Y_COORDINATE_LABEL_PATTERN = re.compile(r"Y\s*[:\uff1a]?", re.IGNORECASE)
 _WORLD_COORDINATE_BAR_FILTER_SCALE = 3
 _WORLD_COORDINATE_BAR_MIN_BLUE_PIXELS = 12
-_WORLD_COORDINATE_MAX_X = 511
-_WORLD_COORDINATE_MAX_Y = 1023
+_WORLD_COORDINATE_BOUNDS = WorldMapCoordinateDomain.puzzles_and_conquest().bounds
 
 
 @dataclass(frozen=True, slots=True)
@@ -146,11 +146,11 @@ def parse_world_coordinate_text(text: str) -> tuple[int, int] | None:
         return None
     x_value = _parse_world_coordinate_component_fragment(
         fragment=stripped[x_match.end() : y_match.start()],
-        max_value=_WORLD_COORDINATE_MAX_X,
+        max_value=_WORLD_COORDINATE_BOUNDS.max_x,
     )
     y_value = _parse_world_coordinate_component_fragment(
         fragment=stripped[y_match.end() :],
-        max_value=_WORLD_COORDINATE_MAX_Y,
+        max_value=_WORLD_COORDINATE_BOUNDS.max_y,
     )
     if x_value is None or y_value is None:
         return None
@@ -223,7 +223,7 @@ def _extract_split_line_world_coordinate_pair(lines: tuple[OcrLine, ...]) -> _Pa
         x_value = _parse_labeled_world_coordinate_component(
             text=x_line.text,
             label_pattern=_WORLD_X_COORDINATE_LABEL_PATTERN,
-            max_value=_WORLD_COORDINATE_MAX_X,
+            max_value=_WORLD_COORDINATE_BOUNDS.max_x,
         )
         if x_value is None:
             continue
@@ -233,7 +233,7 @@ def _extract_split_line_world_coordinate_pair(lines: tuple[OcrLine, ...]) -> _Pa
             y_value = _parse_labeled_world_coordinate_component(
                 text=y_line.text,
                 label_pattern=_WORLD_Y_COORDINATE_LABEL_PATTERN,
-                max_value=_WORLD_COORDINATE_MAX_Y,
+                max_value=_WORLD_COORDINATE_BOUNDS.max_y,
             )
             if y_value is None:
                 continue
@@ -280,7 +280,14 @@ def _parse_world_coordinate_component_fragment(*, fragment: str, max_value: int)
     coalesced_value = _coalesce_world_coordinate_digit_runs(fragment=fragment, digit_matches=digit_matches)
     if coalesced_value is None:
         return None
-    return _parse_world_coordinate_component_value(raw_value=coalesced_value, max_value=max_value)
+    parsed_value = _parse_world_coordinate_component_value(raw_value=coalesced_value, max_value=max_value)
+    if parsed_value is not None:
+        return parsed_value
+    return _recover_reviewed_whitespace_split_trailing_digit(
+        coalesced_value=coalesced_value,
+        digit_matches=digit_matches,
+        max_value=max_value,
+    )
 
 
 def _coalesce_world_coordinate_digit_runs(
@@ -298,35 +305,67 @@ def _coalesce_world_coordinate_digit_runs(
 
 
 def _parse_world_coordinate_component_value(*, raw_value: str, max_value: int) -> int | None:
-    """Returns one bounded coordinate value from one OCR digit run, recovering the best in-range slice when needed."""
+    """Returns one bounded coordinate value from one OCR digit run using only reviewed live recoveries."""
 
     value = int(raw_value)
     if value <= max_value:
         return value
-    max_digits = len(str(max_value))
-    bounded_value = _best_bounded_digit_slice(raw_value=raw_value, max_value=max_value, max_digits=max_digits)
-    if bounded_value is not None:
-        return bounded_value
+    for recovery in (
+        _recover_reviewed_prefixed_x_noise(raw_value=raw_value, max_value=max_value),
+        _recover_reviewed_concatenated_y_triplets(raw_value=raw_value, max_value=max_value),
+        _recover_reviewed_trailing_digit_noise(raw_value=raw_value, max_value=max_value),
+    ):
+        if recovery is not None:
+            return recovery
+    return None
+
+
+def _recover_reviewed_prefixed_x_noise(*, raw_value: str, max_value: int) -> int | None:
+    """Recovers the reviewed live X-bar defect where OCR prefixed ``99`` ahead of one valid three-digit X value."""
+
+    if len(str(max_value)) != 3 or len(raw_value) != 5 or not raw_value.startswith("99"):
+        return None
+    candidate = int(raw_value[2:])
+    return candidate if candidate <= max_value else None
+
+
+def _recover_reviewed_concatenated_y_triplets(*, raw_value: str, max_value: int) -> int | None:
+    """Recovers the reviewed live Y-bar defect where OCR concatenated two three-digit groups without separators."""
+
+    if len(str(max_value)) != 4 or len(raw_value) != 6:
+        return None
+    candidate = int(raw_value[:3])
+    trailing_group = int(raw_value[3:])
+    if candidate > max_value or trailing_group > max_value:
+        return None
+    return candidate
+
+
+def _recover_reviewed_trailing_digit_noise(*, raw_value: str, max_value: int) -> int | None:
+    """Recovers one reviewed extra trailing digit only when the full overflow is far beyond the domain ceiling."""
+
     if len(raw_value) < 2:
         return None
-    trimmed_value = int(raw_value[:-1])
-    if trimmed_value <= max_value:
-        return trimmed_value
-    return None
+    candidate = int(raw_value[:-1])
+    if candidate > max_value or int(raw_value) <= max_value * 2:
+        return None
+    return candidate
 
 
-def _best_bounded_digit_slice(*, raw_value: str, max_value: int, max_digits: int) -> int | None:
-    """Returns the longest leftmost in-range digit slice from one OCR run when the full number exceeds map bounds."""
+def _recover_reviewed_whitespace_split_trailing_digit(
+    *,
+    coalesced_value: str,
+    digit_matches: tuple[re.Match[str], ...],
+    max_value: int,
+) -> int | None:
+    """Recovers the reviewed whitespace-split stray trailing digit seen in one live X-bar OCR variant."""
 
-    for length in range(min(len(raw_value), max_digits), 0, -1):
-        for start in range(0, len(raw_value) - length + 1):
-            candidate = raw_value[start : start + length]
-            if len(candidate) > 1 and candidate.startswith("0"):
-                continue
-            value = int(candidate)
-            if value <= max_value:
-                return value
-    return None
+    if len(digit_matches) != 2 or len(digit_matches[1].group(0)) != 1:
+        return None
+    if len(coalesced_value) < 2:
+        return None
+    candidate = int(coalesced_value[:-1])
+    return candidate if candidate <= max_value else None
 
 
 def _world_coordinate_lines_are_pair(*, x_line: OcrLine, y_line: OcrLine) -> bool:

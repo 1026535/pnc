@@ -2912,6 +2912,18 @@ class CaptureAndVisionTests(unittest.TestCase):
         self.assertEqual(parse_world_coordinate_text("X:101 4Y:695"), (101, 695))
         self.assertIsNone(parse_world_coordinate_text("X: 2,736,039 Y:958"))
 
+    def test_world_coordinate_parser_rejects_one_off_overflows_instead_of_interior_substring_recovery(self) -> None:
+        """Rejects plausible-looking overflow values instead of manufacturing nearby in-range coordinates."""
+
+        for text in (
+            "X:512 Y:200",
+            "X:0 Y:1024",
+            "X:999 Y:1023",
+            "X:2736039 Y:958",
+        ):
+            with self.subTest(text=text):
+                self.assertIsNone(parse_world_coordinate_text(text))
+
     def test_world_coordinate_dialog_field_parser_handles_blank_labeled_and_invalid_kingdom_values(self) -> None:
         """Uses one shared numeric-field parser for dialog OCR enrichment and navigation proof."""
 

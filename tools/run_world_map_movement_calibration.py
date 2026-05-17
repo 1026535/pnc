@@ -310,14 +310,7 @@ def _ensure_world_map(
 def _local_bounds_from_coordinate(coordinate: tuple[int, int], *, radius: int) -> WorldMapBounds:
     """Builds one local bounds window and clamps it to the canonical live PNC coordinate domain."""
 
-    return WorldMapCoordinateDomain.puzzles_and_conquest().clamp_bounds(
-        WorldMapBounds(
-            min_x=max(0, coordinate[0] - radius),
-            min_y=max(0, coordinate[1] - radius),
-            max_x=coordinate[0] + radius,
-            max_y=coordinate[1] + radius,
-        )
-    )
+    return WorldMapCoordinateDomain.puzzles_and_conquest().local_bounds_around(coordinate, radius=radius)
 
 
 if __name__ == "__main__":

@@ -202,14 +202,7 @@ class LiveWorldMapMovementCalibrationSmokeTests(unittest.TestCase):
     def _local_bounds_from_coordinate(coordinate: tuple[int, int], *, radius: int) -> WorldMapBounds:
         """Builds one local rectangle around the original viewport for bounded sweep validation."""
 
-        return WorldMapCoordinateDomain.puzzles_and_conquest().clamp_bounds(
-            WorldMapBounds(
-                min_x=max(0, coordinate[0] - radius),
-                min_y=max(0, coordinate[1] - radius),
-                max_x=coordinate[0] + radius,
-                max_y=coordinate[1] + radius,
-            )
-        )
+        return WorldMapCoordinateDomain.puzzles_and_conquest().local_bounds_around(coordinate, radius=radius)
 
     def _first_row_major_checkpoint(
         self,
