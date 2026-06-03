@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 import re
+import time
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -877,6 +879,51 @@ class WorldMapSearchResult:
     survey_index: WorldMapSurveyIndex
 
 
+@dataclass(frozen=True, slots=True)
+class WorldMapMovementStepTrace:
+    """Captures one observed direct-movement leg plus its timing and coordinate proof details."""
+
+    step_index: int
+    before_coordinate: tuple[int, int]
+    leg_target: tuple[int, int]
+    after_coordinate: tuple[int, int]
+    requested_coordinate: tuple[int, int]
+    normalized_target_coordinate: tuple[int, int]
+    max_axis_delta_per_leg: int | None
+    gesture_primitive: str
+    plan_elapsed_ms: float
+    action_elapsed_ms: float
+    prove_elapsed_ms: float
+    total_elapsed_ms: float
+    classification: str
+    before_artifact_path: str | None
+    after_artifact_path: str | None
+
+    def to_document(self) -> dict[str, object]:
+        """Exports the movement leg as a JSON-ready trace document."""
+
+        return {
+            "step_index": self.step_index,
+            "before_coordinate": [self.before_coordinate[0], self.before_coordinate[1]],
+            "leg_target": [self.leg_target[0], self.leg_target[1]],
+            "after_coordinate": [self.after_coordinate[0], self.after_coordinate[1]],
+            "requested_coordinate": [self.requested_coordinate[0], self.requested_coordinate[1]],
+            "normalized_target_coordinate": [
+                self.normalized_target_coordinate[0],
+                self.normalized_target_coordinate[1],
+            ],
+            "max_axis_delta_per_leg": self.max_axis_delta_per_leg,
+            "gesture_primitive": self.gesture_primitive,
+            "plan_elapsed_ms": round(self.plan_elapsed_ms, 2),
+            "action_elapsed_ms": round(self.action_elapsed_ms, 2),
+            "prove_elapsed_ms": round(self.prove_elapsed_ms, 2),
+            "total_elapsed_ms": round(self.total_elapsed_ms, 2),
+            "classification": self.classification,
+            "before_artifact_path": self.before_artifact_path,
+            "after_artifact_path": self.after_artifact_path,
+        }
+
+
 @dataclass(slots=True)
 class WorldMapCoordinateMover:
     """Moves an already-open world-map viewport to one target coordinate using the canonical cardinal-only swipe model."""
@@ -887,6 +934,26 @@ class WorldMapCoordinateMover:
     coordinate_domain: WorldMapCoordinateDomain = field(default_factory=WorldMapCoordinateDomain.puzzles_and_conquest)
     movement_step_budget: int = 8
     orthogonal_drift_tolerance: int = 1
+    max_axis_delta_per_leg: int | None = None
+    logger: logging.LoggerAdapter | None = None
+
+    def __post_init__(self) -> None:
+        """Rejects invalid movement granularity before runtime execution begins."""
+
+        if self.max_axis_delta_per_leg is not None and self.max_axis_delta_per_leg <= 0:
+            raise SelectorResolutionError(
+                "World-map movement granularity requires a positive max_axis_delta_per_leg when configured.",
+                max_axis_delta_per_leg=self.max_axis_delta_per_leg,
+            )
+        if (
+            self.max_axis_delta_per_leg is not None
+            and self.max_axis_delta_per_leg <= self.navigator.focus_tolerance
+        ):
+            raise SelectorResolutionError(
+                "World-map movement granularity must be greater than the navigator focus_tolerance, otherwise capped legs are treated as already in tolerance and no swipe can be planned.",
+                max_axis_delta_per_leg=self.max_axis_delta_per_leg,
+                focus_tolerance=self.navigator.focus_tolerance,
+            )
 
     def move_to_coordinate(
         self,
@@ -909,13 +976,17 @@ class WorldMapCoordinateMover:
         )
         movement_state = _mutable_runtime_state(runtime_state, "world_map_search_swipe_navigation")
         for step_index in range(self.movement_step_budget):
+            step_started_at = time.perf_counter()
             preferred_axis = _consume_preferred_cardinal_axis(movement_state)
+            plan_started_at = time.perf_counter()
             leg_target = _resolve_cardinal_sweep_leg_target(
                 current=current,
                 target_coordinate=addressable_target_coordinate,
                 focus_tolerance=self.navigator.focus_tolerance,
                 preferred_axis=preferred_axis,
+                max_axis_delta_per_leg=self.max_axis_delta_per_leg,
             )
+            plan_elapsed_ms = (time.perf_counter() - plan_started_at) * 1000.0
             if leg_target is None:
                 return current
             before_coordinate = _require_world_map_viewport_coordinate(current)
@@ -950,11 +1021,16 @@ class WorldMapCoordinateMover:
                     current_coordinate=current_coordinate,
                     leg_target=(leg_target.x, leg_target.y),
                 )
+            action_started_at = time.perf_counter()
+            intermediate_after = self._execute_actions(actions, current, label_prefix=f"{label_prefix}_{step_index}")
+            action_elapsed_ms = (time.perf_counter() - action_started_at) * 1000.0
+            prove_started_at = time.perf_counter()
             after = _require_proven_world_map_observation(
                 observation_service=self.observation_service,
-                observation=self._execute_actions(actions, current, label_prefix=f"{label_prefix}_{step_index}"),
+                observation=intermediate_after,
                 label_prefix=f"{label_prefix}_refresh_{step_index}",
             )
+            prove_elapsed_ms = (time.perf_counter() - prove_started_at) * 1000.0
             after_coordinate = _require_world_map_viewport_coordinate(after)
             direction = _direction_for_cardinal_leg(from_coordinate=before_coordinate, leg_target=leg_target)
             delta = after_coordinate[0] - before_coordinate[0], after_coordinate[1] - before_coordinate[1]
@@ -976,6 +1052,39 @@ class WorldMapCoordinateMover:
                 delta=delta,
                 boundary_bounds=boundary_bounds,
                 orthogonal_drift_tolerance=self.orthogonal_drift_tolerance,
+            )
+            self._log_step_timing(
+                step_index=step_index,
+                before_coordinate=before_coordinate,
+                leg_target=(leg_target.x, leg_target.y),
+                after_coordinate=after_coordinate,
+                requested_coordinate=target_coordinate,
+                normalized_target_coordinate=addressable_target_coordinate,
+                plan_elapsed_ms=plan_elapsed_ms,
+                action_elapsed_ms=action_elapsed_ms,
+                prove_elapsed_ms=prove_elapsed_ms,
+                total_elapsed_ms=(time.perf_counter() - step_started_at) * 1000.0,
+                classification=classification,
+            )
+            _record_movement_step_trace(
+                movement_state=movement_state,
+                trace=WorldMapMovementStepTrace(
+                    step_index=step_index,
+                    before_coordinate=before_coordinate,
+                    leg_target=(leg_target.x, leg_target.y),
+                    after_coordinate=after_coordinate,
+                    requested_coordinate=target_coordinate,
+                    normalized_target_coordinate=addressable_target_coordinate,
+                    max_axis_delta_per_leg=self.max_axis_delta_per_leg,
+                    gesture_primitive=actions[0].gesture_primitive.value if isinstance(actions[0], SwipeAction) else "unknown",
+                    plan_elapsed_ms=plan_elapsed_ms,
+                    action_elapsed_ms=action_elapsed_ms,
+                    prove_elapsed_ms=prove_elapsed_ms,
+                    total_elapsed_ms=(time.perf_counter() - step_started_at) * 1000.0,
+                    classification=classification.value,
+                    before_artifact_path=None if current.artifact_path is None else str(current.artifact_path),
+                    after_artifact_path=None if after.artifact_path is None else str(after.artifact_path),
+                ),
             )
             _remember_last_cardinal_move_attempt(
                 movement_state=movement_state,
@@ -1010,6 +1119,44 @@ class WorldMapCoordinateMover:
             requested_coordinate=target_coordinate,
         )
 
+    def _log_step_timing(
+        self,
+        *,
+        step_index: int,
+        before_coordinate: tuple[int, int],
+        leg_target: tuple[int, int],
+        after_coordinate: tuple[int, int],
+        requested_coordinate: tuple[int, int],
+        normalized_target_coordinate: tuple[int, int],
+        plan_elapsed_ms: float,
+        action_elapsed_ms: float,
+        prove_elapsed_ms: float,
+        total_elapsed_ms: float,
+        classification: "WorldMapCardinalMovementClassification",
+    ) -> None:
+        """Logs one timing breakdown for the completed movement leg when a runtime logger is available."""
+
+        if self.logger is None:
+            return
+        self.logger.info(
+            "World-map movement step completed.",
+            extra={
+                "step_index": step_index,
+                "before_coordinate": before_coordinate,
+                "leg_target": leg_target,
+                "after_coordinate": after_coordinate,
+                "requested_coordinate": requested_coordinate,
+                "normalized_target_coordinate": normalized_target_coordinate,
+                "max_axis_delta_per_leg": self.max_axis_delta_per_leg,
+                "gesture_primitive": self.navigator.gesture_primitive.value,
+                "plan_elapsed_ms": round(plan_elapsed_ms, 2),
+                "action_elapsed_ms": round(action_elapsed_ms, 2),
+                "prove_elapsed_ms": round(prove_elapsed_ms, 2),
+                "total_elapsed_ms": round(total_elapsed_ms, 2),
+                "classification": classification.value,
+            },
+        )
+
     def _execute_actions(
         self,
         actions: Sequence[ActionRequest],
@@ -1026,6 +1173,20 @@ class WorldMapCoordinateMover:
             observation,
             observe=lambda label, request=None: self.observation_service.observe(f"{label_prefix}_{label}", request=request),
         ).observation
+
+
+def world_map_movement_trace_document(runtime_state: dict[str, Any] | None) -> dict[str, object]:
+    """Exports any recorded direct-movement traces from runtime state as one JSON-ready document."""
+
+    if runtime_state is None:
+        return {"step_traces": []}
+    movement_state = _mutable_runtime_state(runtime_state, "world_map_search_swipe_navigation")
+    return {
+        "step_traces": [
+            trace.to_document()
+            for trace in _movement_step_traces(movement_state)
+        ]
+    }
 
 
 @dataclass(slots=True)
@@ -1931,14 +2092,17 @@ class WorldMapSearchService:
         """Returns the canonical coordinate mover shared by sweep traversal and calibration helpers."""
 
         if self.coordinate_mover is not None:
+            self.coordinate_mover.movement_step_budget = self.movement_step_budget
             return self.coordinate_mover
-        return WorldMapCoordinateMover(
+        self.coordinate_mover = WorldMapCoordinateMover(
             observation_service=self.observation_service,
             action_executor=self.action_executor,
             navigator=self.screen_flows.world_map_navigator,
             coordinate_domain=WorldMapCoordinateDomain.puzzles_and_conquest(),
             movement_step_budget=self.movement_step_budget,
+            logger=None if self.action_executor is None else getattr(self.action_executor, "logger", None),
         )
+        return self.coordinate_mover
 
     def _coordinate_mover(self) -> WorldMapCoordinateMover:
         """Returns the canonical coordinate mover for legacy private call sites."""
@@ -2374,21 +2538,61 @@ def _resolve_cardinal_sweep_leg_target(
     target_coordinate: tuple[int, int],
     focus_tolerance: int,
     preferred_axis: str | None = None,
+    max_axis_delta_per_leg: int | None = None,
 ) -> WorldCoordinate | None:
     """Returns the next canonical cardinal leg, honoring one-shot drift correction before normal axis order."""
 
     current_coordinate = _require_world_map_viewport_coordinate(current)
     if preferred_axis == "x" and abs(target_coordinate[0] - current_coordinate[0]) > focus_tolerance:
-        return WorldCoordinate(x=target_coordinate[0], y=current_coordinate[1])
+        return _bounded_axis_leg_target(
+            current_coordinate=current_coordinate,
+            target_coordinate=target_coordinate,
+            axis="x",
+            max_axis_delta_per_leg=max_axis_delta_per_leg,
+        )
     if preferred_axis == "y" and abs(target_coordinate[1] - current_coordinate[1]) > focus_tolerance:
-        return WorldCoordinate(x=current_coordinate[0], y=target_coordinate[1])
+        return _bounded_axis_leg_target(
+            current_coordinate=current_coordinate,
+            target_coordinate=target_coordinate,
+            axis="y",
+            max_axis_delta_per_leg=max_axis_delta_per_leg,
+        )
     delta_x = target_coordinate[0] - current_coordinate[0]
     if abs(delta_x) > focus_tolerance:
-        return WorldCoordinate(x=target_coordinate[0], y=current_coordinate[1])
+        return _bounded_axis_leg_target(
+            current_coordinate=current_coordinate,
+            target_coordinate=target_coordinate,
+            axis="x",
+            max_axis_delta_per_leg=max_axis_delta_per_leg,
+        )
     delta_y = target_coordinate[1] - current_coordinate[1]
     if abs(delta_y) > focus_tolerance:
-        return WorldCoordinate(x=current_coordinate[0], y=target_coordinate[1])
+        return _bounded_axis_leg_target(
+            current_coordinate=current_coordinate,
+            target_coordinate=target_coordinate,
+            axis="y",
+            max_axis_delta_per_leg=max_axis_delta_per_leg,
+        )
     return None
+
+
+def _bounded_axis_leg_target(
+    *,
+    current_coordinate: tuple[int, int],
+    target_coordinate: tuple[int, int],
+    axis: str,
+    max_axis_delta_per_leg: int | None,
+) -> WorldCoordinate:
+    """Returns one single-axis leg target, capped when movement granularity is configured."""
+
+    current_axis_value = current_coordinate[0] if axis == "x" else current_coordinate[1]
+    target_axis_value = target_coordinate[0] if axis == "x" else target_coordinate[1]
+    delta = target_axis_value - current_axis_value
+    if max_axis_delta_per_leg is not None and abs(delta) > max_axis_delta_per_leg:
+        target_axis_value = current_axis_value + (max_axis_delta_per_leg if delta > 0 else -max_axis_delta_per_leg)
+    if axis == "x":
+        return WorldCoordinate(x=target_axis_value, y=current_coordinate[1])
+    return WorldCoordinate(x=current_coordinate[0], y=target_axis_value)
 
 
 def _coordinate_within_tolerance(
@@ -2510,6 +2714,23 @@ def _mutable_runtime_state(runtime_state: dict[str, Any] | None, key: str) -> di
     nested = {}
     runtime_state[key] = nested
     return nested
+
+
+def _movement_step_traces(movement_state: dict[str, Any]) -> list[WorldMapMovementStepTrace]:
+    """Returns the mutable list that stores recorded direct-movement traces on runtime state."""
+
+    traces = movement_state.get("step_traces")
+    if isinstance(traces, list) and all(isinstance(trace, WorldMapMovementStepTrace) for trace in traces):
+        return traces
+    traces = []
+    movement_state["step_traces"] = traces
+    return traces
+
+
+def _record_movement_step_trace(*, movement_state: dict[str, Any], trace: WorldMapMovementStepTrace) -> None:
+    """Appends one recorded direct-movement trace to the shared runtime state."""
+
+    _movement_step_traces(movement_state).append(trace)
 
 
 def _build_cardinal_move_attempt_details(

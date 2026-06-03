@@ -41,6 +41,7 @@ from pnc_automation.app.pnc.domain.action_requests import (
     InputTextAction,
     KeyEventAction,
     SelectChatChannelAction,
+    SwipeGesturePrimitive,
     SwipeAction,
     SwipeInputSource,
     TapAction,
@@ -1763,7 +1764,7 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertAlmostEqual(actions[0].start_x_ratio, 0.68)
         self.assertAlmostEqual(actions[0].end_x_ratio, 0.28)
         self.assertTrue(actions[0].observe_after)
-        self.assertEqual(actions[0].follow_up_request, ObservationRequest.source_screen_retry(ScreenType.PNC_WORLD_MAP))
+        self.assertEqual(actions[0].follow_up_request, ObservationRequest.world_map_movement_follow_up())
 
     def test_world_map_navigator_prefers_native_diagonal_profile_when_both_axes_are_unresolved(self) -> None:
         """Uses the reviewed diagonal swipe profile directly instead of decomposing diagonal movement into cardinals."""
@@ -1794,7 +1795,7 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertIsNotNone(actions[0].start_x_ratio)
         self.assertIsNotNone(actions[0].end_x_ratio)
         self.assertTrue(actions[0].observe_after)
-        self.assertEqual(actions[0].follow_up_request, ObservationRequest.source_screen_retry(ScreenType.PNC_WORLD_MAP))
+        self.assertEqual(actions[0].follow_up_request, ObservationRequest.world_map_movement_follow_up())
 
     def test_world_map_navigator_uses_live_backed_vertical_swipe_lane(self) -> None:
         """Keeps vertical world-map swipes on the reviewed X lane that moves reliably in live probing."""
@@ -1930,6 +1931,29 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertIsInstance(actions[0], SwipeAction)
         self.assertEqual(actions[0].direction, "right")
         self.assertEqual(actions[0].input_source, SwipeInputSource.DEFAULT)
+
+    def test_world_map_navigator_can_emit_press_move_release_gestures(self) -> None:
+        """Lets world-map movement opt into a desktop-like press-drag-release primitive without changing other flows."""
+
+        planner = ScreenFlowPlanner()
+        planner.world_map_navigator.gesture_primitive = SwipeGesturePrimitive.PRESS_MOVE_RELEASE
+
+        actions = planner.world_map_navigator.plan_focus_coordinate(
+            make_observation(
+                ScreenType.PNC_WORLD_MAP,
+                spatial_surface=make_spatial_surface(
+                    SpatialSurfaceType.WORLD_MAP,
+                    x=100,
+                    y=100,
+                ),
+            ),
+            WorldCoordinate(x=110, y=100),
+            runtime_state={},
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], SwipeAction)
+        self.assertEqual(actions[0].gesture_primitive, SwipeGesturePrimitive.PRESS_MOVE_RELEASE)
 
     def test_recover_unknown_game_screen_uses_back_without_relaunching(self) -> None:
         """Uses one in-game back increment for unknown endpoint states instead of restarting the app."""

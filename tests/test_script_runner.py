@@ -158,6 +158,8 @@ class ScriptRunnerTests(unittest.TestCase):
                 post_action_observe_delay_ms=222,
                 chat_stable_click_delay_ms=333,
                 chat_post_action_observe_delay_ms=444,
+                world_map_movement_stable_click_delay_ms=555,
+                world_map_movement_post_action_observe_delay_ms=666,
             )
             observation_builder = type(
                 "FakeObservationBuilder",
@@ -199,6 +201,8 @@ class ScriptRunnerTests(unittest.TestCase):
             self.assertEqual(action_executor.post_action_observe_delay_ms, 222)
             self.assertEqual(action_executor.chat_stable_click_delay_ms, 333)
             self.assertEqual(action_executor.chat_post_action_observe_delay_ms, 444)
+            self.assertEqual(action_executor.world_map_movement_stable_click_delay_ms, 555)
+            self.assertEqual(action_executor.world_map_movement_post_action_observe_delay_ms, 666)
             self.assertIs(runtime.world_map_search_service.action_executor, runtime.observed_action_executor)
             self.assertIs(runtime.world_map_movement_calibration_service.action_executor, runtime.observed_action_executor)
             self.assertEqual(runtime.world_map_movement_calibration_store.root, root / "artifacts")

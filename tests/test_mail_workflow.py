@@ -23,6 +23,7 @@ from pnc_automation.core.errors import ScriptValidationError, SelectorResolution
 from pnc_automation.app.pnc.domain.action_requests import (
     InputTextAction,
     KeyEventAction,
+    SwipeGesturePrimitive,
     SwipeAction,
     SwipeInputSource,
     TapAction,
@@ -1177,6 +1178,37 @@ class MailWorkflowTests(unittest.TestCase):
         )
 
         self.assertEqual(executor.session.swipe_input_sources, [SwipeInputSource.DEFAULT])
+
+    def test_action_executor_preserves_swipe_gesture_primitive(self) -> None:
+        """Forwards the requested drag primitive so callers can opt into motion-event gestures."""
+
+        executor = ActionExecutor(
+            session=FakeSession(),
+            stable_click_delay_ms=0,
+            post_action_observe_delay_ms=0,
+            chat_stable_click_delay_ms=0,
+            chat_post_action_observe_delay_ms=0,
+            logger=self.logger,
+            sleep=lambda _: None,
+        )
+
+        executor.execute_action(
+            SwipeAction(
+                direction="right",
+                gesture_primitive=SwipeGesturePrimitive.PRESS_MOVE_RELEASE,
+                start_x_ratio=0.4,
+                start_y_ratio=0.5,
+                end_x_ratio=0.6,
+                end_y_ratio=0.5,
+                duration_ms=500,
+            ),
+            make_observation(ScreenType.PNC_ALLIANCE_MEMBER_LIST),
+        )
+
+        self.assertEqual(
+            executor.session.swipe_gesture_primitives,
+            [SwipeGesturePrimitive.PRESS_MOVE_RELEASE],
+        )
 
     def test_action_executor_stops_mail_sequence_after_unexpected_follow_up_screen(self) -> None:
         """Stops a multi-step mail action sequence when the previous observed follow-up missed its expected screen."""

@@ -35,6 +35,8 @@ class ConfigLoaderTests(unittest.TestCase):
                       post_action_observe_delay_ms: 222
                       chat_stable_click_delay_ms: 33
                       chat_post_action_observe_delay_ms: 44
+                      world_map_movement_stable_click_delay_ms: 55
+                      world_map_movement_post_action_observe_delay_ms: 66
                     instances:
                       - id: bs-main
                         display_name: serious_stuff
@@ -55,6 +57,8 @@ class ConfigLoaderTests(unittest.TestCase):
             self.assertEqual(config.defaults.stable_click_delay_ms, 111)
             self.assertEqual(config.defaults.chat_stable_click_delay_ms, 33)
             self.assertEqual(config.defaults.chat_post_action_observe_delay_ms, 44)
+            self.assertEqual(config.defaults.world_map_movement_stable_click_delay_ms, 55)
+            self.assertEqual(config.defaults.world_map_movement_post_action_observe_delay_ms, 66)
             self.assertTrue(config.artifact_root.is_dir())
             self.assertTrue(config.archive_root.is_dir())
             self.assertEqual(config.artifact_root, (root / "artifacts").resolve())

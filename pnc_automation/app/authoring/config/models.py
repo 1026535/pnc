@@ -30,6 +30,8 @@ class DefaultsConfig:
     post_action_observe_delay_ms: int = 800
     chat_stable_click_delay_ms: int = 120
     chat_post_action_observe_delay_ms: int = 250
+    world_map_movement_stable_click_delay_ms: int = 180
+    world_map_movement_post_action_observe_delay_ms: int = 450
 
 
 @dataclass(frozen=True, slots=True)

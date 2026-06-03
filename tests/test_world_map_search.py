@@ -8,7 +8,7 @@ from pathlib import Path
 
 from pnc_automation.app.automation.engine.action_executor import ActionExecutor
 from pnc_automation.app.automation.engine.observed_action_executor import ObservedActionExecutor
-from pnc_automation.app.pnc.domain.action_requests import ActionRequest, KeyEventAction, TapPointAction
+from pnc_automation.app.pnc.domain.action_requests import ActionRequest, ActionTimingProfile, KeyEventAction, TapPointAction
 from pnc_automation.app.pnc.domain.observation import (
     Observation,
     ObservedTextFieldState,
@@ -23,7 +23,7 @@ from pnc_automation.app.pnc.domain.observation import (
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
-from pnc_automation.app.pnc.navigation.spatial_navigation import WorldMapNavigator
+from pnc_automation.app.pnc.navigation.spatial_navigation import WorldCoordinate, WorldMapNavigator
 from pnc_automation.app.pnc.navigation.world_map_overview_projection import project_world_coordinate_to_overview_point
 from pnc_automation.app.pnc.navigation.world_map_index import WorldMapCastleQuery
 from pnc_automation.app.pnc.navigation.world_map_search import (
@@ -46,9 +46,11 @@ from pnc_automation.app.pnc.navigation.world_map_search import (
     WorldMapSearchService,
     WorldMapSearchStopPolicy,
     WorldMapSearchStopReason,
+    _resolve_cardinal_sweep_leg_target,
     adapt_world_map_search_matcher,
     all_of_world_map_search,
     any_of_world_map_search,
+    world_map_movement_trace_document,
 )
 from pnc_automation.app.pnc.navigation.world_map_survey_recorder import WorldMapSurveyRecorder
 from pnc_automation.app.pnc.persistence.world_map_survey_debug_store import WorldMapSurveyDebugStore
@@ -333,6 +335,95 @@ class WorldMapSearchTests(unittest.TestCase):
         )
 
         self.assertIs(result, observation)
+
+    def test_coordinate_mover_can_cap_one_axis_delta_per_observed_leg(self) -> None:
+        """Lets callers configure coordinate granularity instead of always targeting the full remaining axis delta."""
+
+        leg_target = _resolve_cardinal_sweep_leg_target(
+            current=_make_world_map_observation(100, 200),
+            target_coordinate=(109, 200),
+            focus_tolerance=1,
+            max_axis_delta_per_leg=4,
+        )
+
+        self.assertIsNotNone(leg_target)
+        assert leg_target is not None
+        self.assertEqual((leg_target.x, leg_target.y), (104, 200))
+
+    def test_coordinate_mover_rejects_granularity_that_is_not_above_focus_tolerance(self) -> None:
+        """Fails fast when granularity would collapse capped legs into the navigator's in-tolerance no-op band."""
+
+        with self.assertRaises(SelectorResolutionError) as error:
+            WorldMapCoordinateMover(
+                observation_service=None,
+                action_executor=None,
+                navigator=WorldMapNavigator(focus_tolerance=1),
+                max_axis_delta_per_leg=1,
+            )
+
+        self.assertIn("must be greater than the navigator focus_tolerance", str(error.exception))
+        self.assertEqual(error.exception.details["max_axis_delta_per_leg"], 1)
+        self.assertEqual(error.exception.details["focus_tolerance"], 1)
+
+    def test_world_map_navigation_swipes_use_dedicated_movement_follow_up_and_timing(self) -> None:
+        """Uses the dedicated movement pacing/follow-up contract so world-map swipes can be tuned independently."""
+
+        actions = self.flows.world_map_navigator.plan_focus_coordinate(
+            _make_world_map_observation(100, 100),
+            WorldCoordinate(x=110, y=100),
+            runtime_state={},
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertEqual(actions[0].timing_profile, ActionTimingProfile.WORLD_MAP_MOVEMENT)
+        self.assertEqual(actions[0].follow_up_request, ObservationRequest.world_map_movement_follow_up())
+
+    def test_coordinate_mover_records_json_ready_step_traces_in_runtime_state(self) -> None:
+        """Persists direct-movement timing and coordinate details in shared runtime state for live comparison tools."""
+
+        service, observer, _session = self._build_runtime_service_bundle(
+            observations=[
+                _make_world_map_observation(10, 0),
+            ]
+        )
+        mover = service.coordinate_mover_for_runtime()
+        mover.max_axis_delta_per_leg = 10
+        runtime_state: dict[str, object] = {}
+
+        end = mover.move_to_coordinate(
+            _make_world_map_observation(0, 0),
+            target_coordinate=(10, 0),
+            label_prefix="trace_capture",
+            runtime_state=runtime_state,
+        )
+
+        document = world_map_movement_trace_document(runtime_state)
+        self.assertEqual(end.require_spatial_surface(SpatialSurfaceType.WORLD_MAP).viewport.coordinate, (10, 0))
+        self.assertEqual(len(document["step_traces"]), 1)
+        trace = document["step_traces"][0]
+        self.assertEqual(trace["before_coordinate"], [0, 0])
+        self.assertEqual(trace["leg_target"], [10, 0])
+        self.assertEqual(trace["after_coordinate"], [10, 0])
+        self.assertEqual(trace["requested_coordinate"], [10, 0])
+        self.assertEqual(trace["normalized_target_coordinate"], [10, 0])
+        self.assertEqual(trace["max_axis_delta_per_leg"], 10)
+        self.assertEqual(trace["gesture_primitive"], "swipe")
+        self.assertEqual(trace["classification"], "moved")
+        self.assertGreaterEqual(trace["action_elapsed_ms"], 0.0)
+        self.assertGreaterEqual(trace["prove_elapsed_ms"], 0.0)
+        self.assertEqual(observer.requests, [ObservationRequest.world_map_movement_follow_up()])
+
+    def test_search_service_caches_runtime_coordinate_mover_for_live_tuning(self) -> None:
+        """Reuses one runtime coordinate mover so live helpers can tune granularity on the shared instance."""
+
+        service, _observer = self._build_runtime_service(observations=[])
+
+        first = service.coordinate_mover_for_runtime()
+        first.max_axis_delta_per_leg = 5
+        second = service.coordinate_mover_for_runtime()
+
+        self.assertIs(first, second)
+        self.assertEqual(second.max_axis_delta_per_leg, 5)
 
     def test_resolve_plan_fails_when_self_territory_origin_cannot_be_resolved(self) -> None:
         """Fails fast when a self-territory-relative search is requested from a surface that lacks self evidence."""

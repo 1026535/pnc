@@ -8,7 +8,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from pnc_automation.app.pnc.domain.action_requests import SwipeInputSource, resolve_swipe_points_for_action
+from pnc_automation.app.pnc.domain.action_requests import (
+    SwipeGesturePrimitive,
+    SwipeInputSource,
+    resolve_swipe_points_for_action,
+)
 from pnc_automation.app.pnc.domain.observation import Observation, SpatialSurfaceType
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
 from pnc_automation.app.pnc.navigation.spatial_navigation import WorldMapCardinalDirection
@@ -64,6 +68,7 @@ class WorldMapCanonicalCardinalProfile:
     direction: WorldMapCardinalDirection
     lane_center_ratio: float
     input_source: SwipeInputSource
+    gesture_primitive: SwipeGesturePrimitive
 
     def to_document(self) -> dict[str, object]:
         """Exports the canonical profile as a JSON-ready document."""
@@ -72,6 +77,7 @@ class WorldMapCanonicalCardinalProfile:
             "direction": self.direction.value,
             "lane_center_ratio": round(self.lane_center_ratio, 4),
             "input_source": self.input_source.value,
+            "gesture_primitive": self.gesture_primitive.value,
         }
 
 
@@ -83,6 +89,7 @@ class WorldMapSwipeProbeResult:
     lane_center_ratio: float
     distance_ratio: float
     input_source: SwipeInputSource
+    gesture_primitive: SwipeGesturePrimitive
     swipe_points: tuple[int, int, int, int]
     before: WorldMapObservedCoordinateEvidence
     after: WorldMapObservedCoordinateEvidence
@@ -107,6 +114,7 @@ class WorldMapSwipeProbeResult:
             "lane_center_ratio": round(self.lane_center_ratio, 4),
             "distance_ratio": round(self.distance_ratio, 4),
             "input_source": self.input_source.value,
+            "gesture_primitive": self.gesture_primitive.value,
             "swipe_points": list(self.swipe_points),
             "before": self.before.to_document(),
             "after": self.after.to_document(),
@@ -125,6 +133,7 @@ class WorldMapCalibrationMatrixEntry:
     lane_center_ratio: float
     distance_ratio: float
     input_source: SwipeInputSource
+    gesture_primitive: SwipeGesturePrimitive
     trial_results: tuple[WorldMapSwipeProbeResult, ...]
 
     def displacement_distribution(self) -> dict[int | None, int]:
@@ -147,6 +156,7 @@ class WorldMapCalibrationMatrixEntry:
             "lane_center_ratio": round(self.lane_center_ratio, 4),
             "distance_ratio": round(self.distance_ratio, 4),
             "input_source": self.input_source.value,
+            "gesture_primitive": self.gesture_primitive.value,
             "repeated_trial_count": len(self.trial_results),
             "displacement_distribution": {
                 "null" if displacement is None else str(displacement): count
@@ -437,6 +447,7 @@ class WorldMapMovementCalibrationService:
                             lane_center_ratio=lane_center_ratio,
                             distance_ratio=float(ratio),
                             input_source=trial_results[0].input_source,
+                            gesture_primitive=trial_results[0].gesture_primitive,
                             trial_results=tuple(trial_results),
                         )
                     )
@@ -705,6 +716,7 @@ class WorldMapMovementCalibrationService:
                 lane_center_ratio=_resolved_lane_center_ratio(direction=direction, action=action),
                 distance_ratio=distance_ratio,
                 input_source=action.input_source,
+                gesture_primitive=action.gesture_primitive,
                 swipe_points=resolve_swipe_points_for_action(
                     width=current.image_size[0],
                     height=current.image_size[1],
@@ -799,6 +811,7 @@ class WorldMapMovementCalibrationService:
                     direction=direction,
                     lane_center_ratio=_resolved_lane_center_ratio(direction=direction, action=action),
                     input_source=action.input_source,
+                    gesture_primitive=action.gesture_primitive,
                 )
             )
         return profiles

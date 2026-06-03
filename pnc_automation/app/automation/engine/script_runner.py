@@ -18,6 +18,7 @@ from pnc_automation.app.authoring.scripts.loader import load_run_script
 from pnc_automation.app.authoring.scripts.models import RunScript, ScriptStep
 from pnc_automation.app.authoring.scripts.registry import TaskRegistry
 from pnc_automation.app.automation.engine.task import TaskId
+from pnc_automation.app.pnc.domain.action_requests import SwipeGesturePrimitive
 from pnc_automation.app.authoring.mail.loader import (
     build_generated_send_mail_script_for_hour,
     generated_mail_schedule_name_for_hour,
@@ -366,6 +367,8 @@ class ScriptRunner:
                 post_action_observe_delay_ms=self.config.defaults.post_action_observe_delay_ms,
                 chat_stable_click_delay_ms=self.config.defaults.chat_stable_click_delay_ms,
                 chat_post_action_observe_delay_ms=self.config.defaults.chat_post_action_observe_delay_ms,
+                world_map_movement_stable_click_delay_ms=self.config.defaults.world_map_movement_stable_click_delay_ms,
+                world_map_movement_post_action_observe_delay_ms=self.config.defaults.world_map_movement_post_action_observe_delay_ms,
                 logger=logging.LoggerAdapter(self.logger.logger, extra={**self.logger.extra, **shared_extra}),
             ),
             logger=logging.LoggerAdapter(self.logger.logger, extra={**self.logger.extra, **shared_extra}),
@@ -379,6 +382,26 @@ def configure_world_map_movement_budget(runtime: ConnectedAccountRuntime, moveme
         raise ValueError("World-map movement step budget must be positive.")
     runtime.world_map_movement_calibration_service.movement_step_budget = movement_step_budget
     runtime.world_map_search_service.movement_step_budget = movement_step_budget
+
+
+def configure_world_map_movement_granularity(
+    runtime: ConnectedAccountRuntime,
+    *,
+    max_axis_delta_per_leg: int | None,
+) -> None:
+    """Applies one shared direct-movement granularity cap to the connected world-map coordinate mover."""
+
+    runtime.world_map_search_service.coordinate_mover_for_runtime().max_axis_delta_per_leg = max_axis_delta_per_leg
+
+
+def configure_world_map_movement_gesture_primitive(
+    runtime: ConnectedAccountRuntime,
+    *,
+    gesture_primitive: SwipeGesturePrimitive,
+) -> None:
+    """Applies one shared world-map drag primitive across the connected search and calibration services."""
+
+    runtime.flow_planner.world_map_navigator.gesture_primitive = gesture_primitive
 
 
 def _prepare_account_session_steps(castle: CastleIdentity | None) -> tuple[ScriptStep, ...]:
