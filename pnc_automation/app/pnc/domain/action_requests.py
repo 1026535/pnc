@@ -17,6 +17,7 @@ class ActionTimingProfile(StrEnum):
 
     DEFAULT = "default"
     CHAT = "chat"
+    WORLD_MAP_MOVEMENT = "world_map_movement"
 
 
 class SwipeInputSource(StrEnum):
@@ -24,6 +25,13 @@ class SwipeInputSource(StrEnum):
 
     DEFAULT = "default"
     TOUCHSCREEN = "touchscreen"
+
+
+class SwipeGesturePrimitive(StrEnum):
+    """Identifies which low-level Android gesture primitive should realize one swipe-like drag."""
+
+    SWIPE = "swipe"
+    PRESS_MOVE_RELEASE = "press_move_release"
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,6 +141,7 @@ class SwipeAction(ActionRequest):
     distance_ratio: float = 0.5
     duration_ms: int = 300
     input_source: SwipeInputSource = SwipeInputSource.TOUCHSCREEN
+    gesture_primitive: SwipeGesturePrimitive = SwipeGesturePrimitive.SWIPE
     start_x_ratio: float | None = None
     start_y_ratio: float | None = None
     end_x_ratio: float | None = None

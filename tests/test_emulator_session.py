@@ -134,6 +134,39 @@ class BlueStacksSessionTests(unittest.TestCase):
             [("127.0.0.1:5555", ("input", "swipe", "100", "200", "300", "400", "750"))],
         )
 
+    def test_swipe_can_emit_press_move_release_motion_events(self) -> None:
+        """Supports a desktop-like press-drag-release primitive through Android motion events."""
+
+        adb_client = _FakeAdbClient(
+            connect_result=_command_result(returncode=0, stdout_text="connected"),
+            state_result=_command_result(returncode=0, stdout_text="device"),
+            shell_result=_command_result(returncode=0, stdout_text=""),
+        )
+        session = BlueStacksSession(
+            adb_client=adb_client,
+            instance=BlueStacksInstance(
+                id="bs-main",
+                display_name="serious_stuff",
+                device_id="127.0.0.1:5555",
+                app_package="com.global.tmslg",
+            ),
+            sleep=lambda _: None,
+        )
+
+        session.swipe(100, 200, 300, 400, duration_ms=750, gesture_primitive="press_move_release")
+
+        self.assertEqual(
+            adb_client.shell_calls,
+            [
+                ("127.0.0.1:5555", ("input", "touchscreen", "motionevent", "DOWN", "100", "200")),
+                ("127.0.0.1:5555", ("input", "touchscreen", "motionevent", "MOVE", "150", "250")),
+                ("127.0.0.1:5555", ("input", "touchscreen", "motionevent", "MOVE", "200", "300")),
+                ("127.0.0.1:5555", ("input", "touchscreen", "motionevent", "MOVE", "250", "350")),
+                ("127.0.0.1:5555", ("input", "touchscreen", "motionevent", "MOVE", "300", "400")),
+                ("127.0.0.1:5555", ("input", "touchscreen", "motionevent", "UP", "300", "400")),
+            ],
+        )
+
 
 def _command_result(*, returncode: int, stdout_text: str = "", stderr_text: str = "") -> CommandResult:
     """Builds one raw ADB command result for tests."""

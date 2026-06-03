@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from pnc_automation.core.infra.adb.client import AdbClient
@@ -15,6 +17,7 @@ class BlueStacksSession:
 
     adb_client: AdbClient
     instance: BlueStacksInstance
+    sleep: Callable[[float], None] = time.sleep
 
     def connect(self) -> None:
         """Connects to the configured ADB endpoint and validates device readiness."""
@@ -132,20 +135,13 @@ class BlueStacksSession:
         *,
         duration_ms: int = 300,
         input_source: str = "touchscreen",
+        gesture_primitive: str = "swipe",
     ) -> None:
-        """Sends one swipe gesture through the requested Android input source."""
+        """Sends one swipe-like drag through the requested Android input primitive."""
 
-        command = ["input"]
-        if input_source == "touchscreen":
-            command.append("touchscreen")
-        elif input_source != "default":
-            raise DeviceConnectionError(
-                "Unsupported swipe input source.",
-                device_id=self.instance.device_id,
-                input_source=input_source,
-            )
-        command.extend(
-            [
+        if gesture_primitive == "swipe":
+            command = [
+                *_input_command_prefix(input_source=input_source, device_id=self.instance.device_id),
                 "swipe",
                 str(start_x),
                 str(start_y),
@@ -153,17 +149,51 @@ class BlueStacksSession:
                 str(end_y),
                 str(duration_ms),
             ]
-        )
-        result = self.adb_client.shell(
-            self.instance.device_id,
-            *command,
-        )
-        if not result.succeeded:
-            raise DeviceConnectionError(
-                "Failed to send swipe gesture.",
-                device_id=self.instance.device_id,
-                stderr=result.stderr_text,
+            result = self.adb_client.shell(
+                self.instance.device_id,
+                *command,
             )
+            if not result.succeeded:
+                raise DeviceConnectionError(
+                    "Failed to send swipe gesture.",
+                    device_id=self.instance.device_id,
+                    stderr=result.stderr_text,
+                    gesture_primitive=gesture_primitive,
+                )
+            return
+        if gesture_primitive != "press_move_release":
+            raise DeviceConnectionError(
+                "Unsupported swipe gesture primitive.",
+                device_id=self.instance.device_id,
+                gesture_primitive=gesture_primitive,
+            )
+        motion_event_prefix = [*_input_command_prefix(input_source=input_source, device_id=self.instance.device_id), "motionevent"]
+        timeline = _motion_event_drag_timeline(
+            start_x=start_x,
+            start_y=start_y,
+            end_x=end_x,
+            end_y=end_y,
+            duration_ms=duration_ms,
+        )
+        for index, (event_name, x, y, delay_seconds) in enumerate(timeline):
+            result = self.adb_client.shell(
+                self.instance.device_id,
+                *motion_event_prefix,
+                event_name,
+                str(x),
+                str(y),
+            )
+            if not result.succeeded:
+                raise DeviceConnectionError(
+                    "Failed to send press-move-release gesture.",
+                    device_id=self.instance.device_id,
+                    stderr=result.stderr_text,
+                    gesture_primitive=gesture_primitive,
+                    event_name=event_name,
+                    event_index=index,
+                )
+            if delay_seconds > 0:
+                self.sleep(delay_seconds)
 
     def capture_screenshot_bytes(self) -> bytes:
         """Captures a PNG screenshot through `adb exec-out screencap -p`."""
@@ -196,3 +226,46 @@ def _encode_adb_text(text: str) -> str:
         '"': '\\"',
     }
     return "".join(replacements.get(character, character) for character in text)
+
+
+def _input_command_prefix(*, input_source: str, device_id: str) -> list[str]:
+    """Returns the shared `adb shell input` prefix for the requested Android input source."""
+
+    if input_source == "touchscreen":
+        return ["input", "touchscreen"]
+    if input_source == "default":
+        return ["input"]
+    raise DeviceConnectionError(
+        "Unsupported swipe input source.",
+        device_id=device_id,
+        input_source=input_source,
+    )
+
+
+def _motion_event_drag_timeline(
+    *,
+    start_x: int,
+    start_y: int,
+    end_x: int,
+    end_y: int,
+    duration_ms: int,
+) -> tuple[tuple[str, int, int, float], ...]:
+    """Builds one linear press-move-release event timeline with bounded intermediate move samples."""
+
+    move_event_count = 4
+    points = [(start_x, start_y)]
+    for step_index in range(1, move_event_count + 1):
+        progress = step_index / move_event_count
+        points.append(
+            (
+                round(start_x + ((end_x - start_x) * progress)),
+                round(start_y + ((end_y - start_y) * progress)),
+            )
+        )
+    transition_count = move_event_count + 1
+    segment_delay_seconds = max(duration_ms, 0) / 1000.0 / transition_count
+    timeline: list[tuple[str, int, int, float]] = [("DOWN", start_x, start_y, segment_delay_seconds)]
+    for x, y in points[1:]:
+        timeline.append(("MOVE", x, y, segment_delay_seconds))
+    timeline.append(("UP", end_x, end_y, 0.0))
+    return tuple(timeline)

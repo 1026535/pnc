@@ -101,6 +101,15 @@ class ObservationRequest:
         )
 
     @classmethod
+    def world_map_movement_follow_up(cls) -> "ObservationRequest":
+        """Returns the narrow OCR scope used after one world-map swipe movement attempt."""
+
+        return cls(
+            candidate_screen_types=frozenset({ScreenType.PNC_WORLD_MAP, ScreenType.PNC_WORLD_MAP_ROOT, ScreenType.UNKNOWN}),
+            ocr_screen_types=frozenset({ScreenType.PNC_WORLD_MAP}),
+        )
+
+    @classmethod
     def world_map_coordinate_dialog_follow_up(cls) -> "ObservationRequest":
         """Returns the narrow OCR scope used while opening or editing the world-map coordinate dialog."""
 

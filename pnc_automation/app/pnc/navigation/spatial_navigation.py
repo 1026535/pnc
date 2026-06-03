@@ -11,6 +11,8 @@ from typing import Any
 from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.app.pnc.domain.action_requests import (
     ActionRequest,
+    SwipeGesturePrimitive,
+    ActionTimingProfile,
     SwipeAction,
     SwipeInputSource,
     TapAction,
@@ -800,6 +802,7 @@ class WorldMapNavigator(SpatialSurfaceNavigator):
 
     surface_type: SpatialSurfaceType = SpatialSurfaceType.WORLD_MAP
     focus_tolerance: int = 1
+    gesture_primitive: SwipeGesturePrimitive = SwipeGesturePrimitive.SWIPE
     min_swipe_ratio: float = 0.08
     max_swipe_ratio: float = 0.72
     max_stagnant_attempts: int = 2
@@ -846,12 +849,14 @@ class WorldMapNavigator(SpatialSurfaceNavigator):
         return [
             _build_world_map_navigation_swipe_action(
                 profile=profile,
+                gesture_primitive=self.gesture_primitive,
                 horizontal_distance_ratio=horizontal_distance_ratio,
                 vertical_distance_ratio=vertical_distance_ratio,
                 duration_ms=profile.default_duration_ms,
                 reason=f"focus_world_coordinate_{profile.name}",
                 observe_after=True,
-                follow_up_request=ObservationRequest.source_screen_retry(ScreenType.PNC_WORLD_MAP),
+                follow_up_request=ObservationRequest.world_map_movement_follow_up(),
+                timing_profile=ActionTimingProfile.WORLD_MAP_MOVEMENT,
             )
         ]
 
@@ -898,6 +903,7 @@ class WorldMapNavigator(SpatialSurfaceNavigator):
             distance_ratio=distance_ratio,
             duration_ms=profile.default_duration_ms,
             input_source=profile.input_source,
+            gesture_primitive=self.gesture_primitive,
             reason=reason,
             observe_after=observe_after,
             follow_up_request=follow_up_request,
@@ -1109,12 +1115,14 @@ class WorldMapNavigator(SpatialSurfaceNavigator):
 def _build_world_map_navigation_swipe_action(
     *,
     profile: _WorldMapSwipeProfile,
+    gesture_primitive: SwipeGesturePrimitive,
     horizontal_distance_ratio: float,
     vertical_distance_ratio: float,
     duration_ms: int,
     reason: str,
     observe_after: bool,
     follow_up_request: ObservationRequest | None,
+    timing_profile: ActionTimingProfile,
 ) -> SwipeAction:
     """Builds one world-map drag from the selected calibrated profile, scaled around its safe-lane center."""
 
@@ -1135,9 +1143,11 @@ def _build_world_map_navigation_swipe_action(
         distance_ratio=max(horizontal_distance_ratio, vertical_distance_ratio),
         duration_ms=duration_ms,
         input_source=profile.input_source,
+        gesture_primitive=gesture_primitive,
         reason=reason,
         observe_after=observe_after,
         follow_up_request=follow_up_request,
+        timing_profile=timing_profile,
         start_x_ratio=start_x_ratio,
         start_y_ratio=start_y_ratio,
         end_x_ratio=end_x_ratio,

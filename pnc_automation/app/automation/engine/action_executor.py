@@ -48,6 +48,8 @@ class ActionExecutor:
     chat_stable_click_delay_ms: int
     chat_post_action_observe_delay_ms: int
     logger: logging.LoggerAdapter
+    world_map_movement_stable_click_delay_ms: int = 300
+    world_map_movement_post_action_observe_delay_ms: int = 800
     sleep: Callable[[float], None] = time.sleep
 
     def execute_actions(
@@ -181,6 +183,7 @@ class ActionExecutor:
                 end_y,
                 duration_ms=action.duration_ms,
                 input_source=action.input_source.value,
+                gesture_primitive=action.gesture_primitive.value,
             )
             self._sleep_ms(self._stable_delay_ms_for(action))
             return True
@@ -247,6 +250,8 @@ class ActionExecutor:
 
         if action.timing_profile == ActionTimingProfile.CHAT:
             return self.chat_stable_click_delay_ms
+        if action.timing_profile == ActionTimingProfile.WORLD_MAP_MOVEMENT:
+            return self.world_map_movement_stable_click_delay_ms
         return self.stable_click_delay_ms
 
     def _observe_delay_ms_for(self, action: ActionRequest) -> int:
@@ -254,6 +259,8 @@ class ActionExecutor:
 
         if action.timing_profile == ActionTimingProfile.CHAT:
             return self.chat_post_action_observe_delay_ms
+        if action.timing_profile == ActionTimingProfile.WORLD_MAP_MOVEMENT:
+            return self.world_map_movement_post_action_observe_delay_ms
         return self.post_action_observe_delay_ms
 
     def _clear_existing_text(self, action: InputTextAction, observation: Observation) -> None:

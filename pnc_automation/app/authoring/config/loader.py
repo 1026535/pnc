@@ -115,6 +115,14 @@ def _load_defaults(raw_defaults: Any, *, workspace_root: Path) -> DefaultsConfig
             raw.get("chat_post_action_observe_delay_ms", 250),
             context="defaults.chat_post_action_observe_delay_ms",
         ),
+        world_map_movement_stable_click_delay_ms=require_int(
+            raw.get("world_map_movement_stable_click_delay_ms", raw.get("stable_click_delay_ms", 300)),
+            context="defaults.world_map_movement_stable_click_delay_ms",
+        ),
+        world_map_movement_post_action_observe_delay_ms=require_int(
+            raw.get("world_map_movement_post_action_observe_delay_ms", raw.get("post_action_observe_delay_ms", 800)),
+            context="defaults.world_map_movement_post_action_observe_delay_ms",
+        ),
     )
 
 
