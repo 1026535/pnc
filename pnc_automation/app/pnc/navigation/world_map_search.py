@@ -888,12 +888,12 @@ class WorldMapResolvedSearchPlan:
     movement_tool: WorldMapMovementToolKind
     route_plan: WorldMapTraversalRoutePlan
     execution_plan: WorldMapTraversalExecutionPlan
+    route: tuple[WorldMapTraversalCheckpoint, ...] = field(init=False)
 
-    @property
-    def route(self) -> tuple[WorldMapTraversalCheckpoint, ...]:
-        """Returns the flattened checkpoint route for compatibility call sites."""
+    def __post_init__(self) -> None:
+        """Caches the flattened checkpoint route once for compatibility consumers."""
 
-        return self.execution_plan.steps_to_checkpoints()
+        object.__setattr__(self, "route", tuple(step.checkpoint for step in self.execution_plan.steps))
 
 
 @dataclass(frozen=True, slots=True)
@@ -1129,155 +1129,283 @@ class WorldMapCoordinateMover:
                 action_family=movement_family,
             )
             active_max_axis_delta_per_leg = self.movement_policy.max_axis_delta_for_mode(movement_mode)
+            freshest_observation = current
             try:
-                actions = self.navigator.plan_focus_coordinate(
-                    current,
-                    leg_target,
-                    runtime_state=movement_state,
-                )
-            except SelectorResolutionError as error:
-                exhausted = _build_stagnant_retry_exhausted_error(
-                    error=error,
-                    movement_state=movement_state,
-                    target_coordinate=addressable_target_coordinate,
-                    requested_coordinate=target_coordinate,
-                )
-                if exhausted is not None:
-                    raise exhausted from error
-                raise
-            if not actions:
-                current_coordinate = _require_world_map_viewport_coordinate(current)
-                if _coordinate_within_tolerance(
-                    current_coordinate,
-                    addressable_target_coordinate,
-                    tolerance=self.navigator.focus_tolerance,
-                ):
-                    continue
-                raise SelectorResolutionError(
-                    "World-map movement could not derive a cardinal swipe while the requested coordinate remained unresolved.",
-                    target_coordinate=addressable_target_coordinate,
-                    requested_coordinate=target_coordinate,
-                    current_coordinate=current_coordinate,
+                try:
+                    actions = self.navigator.plan_focus_coordinate(
+                        current,
+                        leg_target,
+                        runtime_state=movement_state,
+                    )
+                except SelectorResolutionError as error:
+                    exhausted = _build_stagnant_retry_exhausted_error(
+                        error=error,
+                        movement_state=movement_state,
+                        target_coordinate=addressable_target_coordinate,
+                        requested_coordinate=target_coordinate,
+                    )
+                    if exhausted is not None:
+                        raise exhausted from error
+                    raise
+                if not actions:
+                    current_coordinate = _require_world_map_viewport_coordinate(current)
+                    if _coordinate_within_tolerance(
+                        current_coordinate,
+                        addressable_target_coordinate,
+                        tolerance=self.navigator.focus_tolerance,
+                    ):
+                        continue
+                    raise SelectorResolutionError(
+                        "World-map movement could not derive a cardinal swipe while the requested coordinate remained unresolved.",
+                        target_coordinate=addressable_target_coordinate,
+                        requested_coordinate=target_coordinate,
+                        current_coordinate=current_coordinate,
+                        leg_target=(leg_target.x, leg_target.y),
+                    )
+                actions = self._prepare_step_actions(
+                    actions=actions,
                     leg_target=(leg_target.x, leg_target.y),
+                    target_coordinate=addressable_target_coordinate,
+                    arrival_observation_request=arrival_observation_request,
                 )
-            actions = self._prepare_step_actions(
-                actions=actions,
-                leg_target=(leg_target.x, leg_target.y),
-                target_coordinate=addressable_target_coordinate,
-                arrival_observation_request=arrival_observation_request,
-            )
-            action_started_at = time.perf_counter()
-            intermediate_after = self._execute_actions(
-                actions,
-                current,
-                label_prefix=f"{label_prefix}_{step_index}",
-                artifact_selection=(
-                    arrival_artifact_selection
-                    if arrival_observation_request is not None and (leg_target.x, leg_target.y) == addressable_target_coordinate
-                    else movement_proof_artifact_selection
-                ),
-            )
-            action_elapsed_ms = (time.perf_counter() - action_started_at) * 1000.0
-            prove_started_at = time.perf_counter()
-            after = _require_proven_world_map_observation(
-                observation_service=self.observation_service,
-                observation=intermediate_after,
-                label_prefix=f"{label_prefix}_refresh_{step_index}",
-            )
-            prove_elapsed_ms = (time.perf_counter() - prove_started_at) * 1000.0
-            after_coordinate = _require_world_map_viewport_coordinate(after)
-            direction = _direction_for_cardinal_leg(from_coordinate=before_coordinate, leg_target=leg_target)
-            delta = after_coordinate[0] - before_coordinate[0], after_coordinate[1] - before_coordinate[1]
-            attempt_details = _build_cardinal_move_attempt_details(
-                action=actions[0],
-                before_observation=current,
-                after_observation=after,
-                before_coordinate=before_coordinate,
-                after_coordinate=after_coordinate,
-                target_coordinate=addressable_target_coordinate,
-                requested_coordinate=target_coordinate,
-                leg_target=(leg_target.x, leg_target.y),
-                delta=delta,
-                direction=direction.value,
-            )
-            classification = classify_world_map_cardinal_delta(
-                direction=direction,
-                before_coordinate=before_coordinate,
-                delta=delta,
-                boundary_bounds=boundary_bounds,
-                orthogonal_drift_tolerance=self.orthogonal_drift_tolerance,
-            )
-            self._log_step_timing(
-                step_index=step_index,
-                before_coordinate=before_coordinate,
-                leg_target=(leg_target.x, leg_target.y),
-                after_coordinate=after_coordinate,
-                requested_coordinate=target_coordinate,
-                normalized_target_coordinate=addressable_target_coordinate,
-                action_family=movement_family,
-                movement_mode=movement_mode,
-                max_axis_delta_per_leg=active_max_axis_delta_per_leg,
-                plan_elapsed_ms=plan_elapsed_ms,
-                action_elapsed_ms=action_elapsed_ms,
-                prove_elapsed_ms=prove_elapsed_ms,
-                total_elapsed_ms=(time.perf_counter() - step_started_at) * 1000.0,
-                classification=classification,
-                runtime_state=runtime_state,
-                logging_mode=logging_mode,
-            )
-            _record_movement_step_trace(
-                movement_state=movement_state,
-                trace=WorldMapMovementStepTrace(
+                action_started_at = time.perf_counter()
+                freshest_observation = intermediate_after = self._execute_actions(
+                    actions,
+                    current,
+                    label_prefix=f"{label_prefix}_{step_index}",
+                    artifact_selection=(
+                        arrival_artifact_selection
+                        if arrival_observation_request is not None and (leg_target.x, leg_target.y) == addressable_target_coordinate
+                        else movement_proof_artifact_selection
+                    ),
+                )
+                action_elapsed_ms = (time.perf_counter() - action_started_at) * 1000.0
+                prove_started_at = time.perf_counter()
+                freshest_observation = after = _require_proven_world_map_observation(
+                    observation_service=self.observation_service,
+                    observation=intermediate_after,
+                    label_prefix=f"{label_prefix}_refresh_{step_index}",
+                )
+                prove_elapsed_ms = (time.perf_counter() - prove_started_at) * 1000.0
+                after_coordinate = _require_world_map_viewport_coordinate(after)
+                direction = _direction_for_cardinal_leg(from_coordinate=before_coordinate, leg_target=leg_target)
+                delta = after_coordinate[0] - before_coordinate[0], after_coordinate[1] - before_coordinate[1]
+                attempt_details = _build_cardinal_move_attempt_details(
+                    action=actions[0],
+                    before_observation=current,
+                    after_observation=after,
+                    before_coordinate=before_coordinate,
+                    after_coordinate=after_coordinate,
+                    target_coordinate=addressable_target_coordinate,
+                    requested_coordinate=target_coordinate,
+                    leg_target=(leg_target.x, leg_target.y),
+                    delta=delta,
+                    direction=direction.value,
+                )
+                classification = classify_world_map_cardinal_delta(
+                    direction=direction,
+                    before_coordinate=before_coordinate,
+                    delta=delta,
+                    boundary_bounds=boundary_bounds,
+                    orthogonal_drift_tolerance=self.orthogonal_drift_tolerance,
+                )
+                self._log_step_timing(
                     step_index=step_index,
                     before_coordinate=before_coordinate,
                     leg_target=(leg_target.x, leg_target.y),
                     after_coordinate=after_coordinate,
                     requested_coordinate=target_coordinate,
                     normalized_target_coordinate=addressable_target_coordinate,
-                    action_family=movement_family.value,
-                    movement_mode=movement_mode.value,
+                    action_family=movement_family,
+                    movement_mode=movement_mode,
                     max_axis_delta_per_leg=active_max_axis_delta_per_leg,
-                    gesture_primitive=actions[0].gesture_primitive.value if isinstance(actions[0], SwipeAction) else "unknown",
                     plan_elapsed_ms=plan_elapsed_ms,
                     action_elapsed_ms=action_elapsed_ms,
                     prove_elapsed_ms=prove_elapsed_ms,
                     total_elapsed_ms=(time.perf_counter() - step_started_at) * 1000.0,
-                    classification=classification.value,
-                    before_artifact_path=None if current.artifact_path is None else str(current.artifact_path),
-                    after_artifact_path=None if after.artifact_path is None else str(after.artifact_path),
-                ),
-            )
-            _remember_last_cardinal_move_attempt(
-                movement_state=movement_state,
-                attempt_details=attempt_details,
-                classification=classification,
-            )
-            if classification in {
-                WorldMapCardinalMovementClassification.PARSER_UNCERTAIN,
-                WorldMapCardinalMovementClassification.UNEXPECTED_DELTA,
-                WorldMapCardinalMovementClassification.EXPECTED_BOUNDARY_STOP,
-            }:
-                raise SelectorResolutionError(
-                    "World-map movement produced an unusable cardinal swipe delta.",
-                    **attempt_details,
-                    classification=classification.value,
+                    classification=classification,
+                    runtime_state=runtime_state,
+                    logging_mode=logging_mode,
                 )
-            if classification == WorldMapCardinalMovementClassification.INTERIOR_STALL:
-                current = after
-                continue
-            if classification == WorldMapCardinalMovementClassification.MOVED_WITH_DRIFT:
-                _remember_orthogonal_drift_correction(
+                _record_movement_step_trace(
                     movement_state=movement_state,
-                    direction=direction,
-                    current_coordinate=after_coordinate,
-                    target_coordinate=addressable_target_coordinate,
-                    focus_tolerance=self.navigator.focus_tolerance,
+                    trace=WorldMapMovementStepTrace(
+                        step_index=step_index,
+                        before_coordinate=before_coordinate,
+                        leg_target=(leg_target.x, leg_target.y),
+                        after_coordinate=after_coordinate,
+                        requested_coordinate=target_coordinate,
+                        normalized_target_coordinate=addressable_target_coordinate,
+                        action_family=movement_family.value,
+                        movement_mode=movement_mode.value,
+                        max_axis_delta_per_leg=active_max_axis_delta_per_leg,
+                        gesture_primitive=actions[0].gesture_primitive.value if isinstance(actions[0], SwipeAction) else "unknown",
+                        plan_elapsed_ms=plan_elapsed_ms,
+                        action_elapsed_ms=action_elapsed_ms,
+                        prove_elapsed_ms=prove_elapsed_ms,
+                        total_elapsed_ms=(time.perf_counter() - step_started_at) * 1000.0,
+                        classification=classification.value,
+                        before_artifact_path=None if current.artifact_path is None else str(current.artifact_path),
+                        after_artifact_path=None if after.artifact_path is None else str(after.artifact_path),
+                    ),
                 )
-            current = after
+                _remember_last_cardinal_move_attempt(
+                    movement_state=movement_state,
+                    attempt_details=attempt_details,
+                    classification=classification,
+                )
+                if classification in {
+                    WorldMapCardinalMovementClassification.PARSER_UNCERTAIN,
+                    WorldMapCardinalMovementClassification.UNEXPECTED_DELTA,
+                    WorldMapCardinalMovementClassification.EXPECTED_BOUNDARY_STOP,
+                }:
+                    raise SelectorResolutionError(
+                        "World-map movement produced an unusable cardinal swipe delta.",
+                        **attempt_details,
+                        classification=classification.value,
+                    )
+                if classification == WorldMapCardinalMovementClassification.INTERIOR_STALL:
+                    current = after
+                    continue
+                if classification == WorldMapCardinalMovementClassification.MOVED_WITH_DRIFT:
+                    _remember_orthogonal_drift_correction(
+                        movement_state=movement_state,
+                        direction=direction,
+                        current_coordinate=after_coordinate,
+                        target_coordinate=addressable_target_coordinate,
+                        focus_tolerance=self.navigator.focus_tolerance,
+                    )
+                current = after
+            except Exception as error:
+                self._record_failed_step_diagnostics(
+                    error=error,
+                    step_index=step_index,
+                    current_observation=freshest_observation,
+                    before_coordinate=before_coordinate,
+                    leg_target=(leg_target.x, leg_target.y),
+                    requested_coordinate=target_coordinate,
+                    normalized_target_coordinate=addressable_target_coordinate,
+                    action_family=movement_family,
+                    movement_mode=movement_mode,
+                    max_axis_delta_per_leg=active_max_axis_delta_per_leg,
+                    runtime_state=runtime_state,
+                    logging_mode=logging_mode,
+                    label_prefix=label_prefix,
+                )
+                raise
         raise SelectorResolutionError(
             "World-map movement exhausted its bounded coordinate-focus budget.",
             target_coordinate=addressable_target_coordinate,
             requested_coordinate=target_coordinate,
+        )
+
+    def _record_failed_step_diagnostics(
+        self,
+        *,
+        error: Exception,
+        step_index: int,
+        current_observation: Observation,
+        before_coordinate: tuple[int, int],
+        leg_target: tuple[int, int],
+        requested_coordinate: tuple[int, int],
+        normalized_target_coordinate: tuple[int, int],
+        action_family: WorldMapTraversalActionFamily,
+        movement_mode: WorldMapMovementMode,
+        max_axis_delta_per_leg: int | None,
+        runtime_state: dict[str, Any] | None,
+        logging_mode: DiagnosticLogMode,
+        label_prefix: str,
+    ) -> None:
+        """Persists one failure screenshot and emits one explicit movement-leg failure diagnostic."""
+
+        self.persist_failure_observation(
+            observation=current_observation,
+            label=f"{label_prefix}_failure_{step_index}",
+            error=error,
+        )
+        self._log_step_failure(
+            error=error,
+            step_index=step_index,
+            before_coordinate=before_coordinate,
+            leg_target=leg_target,
+            requested_coordinate=requested_coordinate,
+            normalized_target_coordinate=normalized_target_coordinate,
+            action_family=action_family,
+            movement_mode=movement_mode,
+            max_axis_delta_per_leg=max_axis_delta_per_leg,
+            runtime_state=runtime_state,
+            logging_mode=logging_mode,
+        )
+
+    def persist_failure_observation(
+        self,
+        *,
+        observation: Observation,
+        label: str,
+        error: Exception,
+    ) -> None:
+        """Captures one failure screenshot so the latest failed movement frame is retained."""
+
+        artifact_selection = self._failure_artifact_selection()
+        if self.observation_service is None or not artifact_selection:
+            return
+        try:
+            self.observation_service.capture_observation(
+                label,
+                request=ObservationRequest.full_runtime_default(),
+                artifact_selection=artifact_selection,
+            )
+        except Exception as persist_error:
+            error.add_note(f"Failure observation persistence also failed: {persist_error!r}")
+
+    def _failure_artifact_selection(self) -> ObservationArtifactSelection | None:
+        """Returns the canonical artifact selection used for failed movement diagnostics."""
+
+        if self.observation_service is None:
+            return None
+        return resolve_routine_artifact_selection(
+            mode=self.observation_service.mode,
+            routine=ObservationArtifactRoutine.FAILURE,
+        )
+
+    def _log_step_failure(
+        self,
+        *,
+        error: Exception,
+        step_index: int,
+        before_coordinate: tuple[int, int],
+        leg_target: tuple[int, int],
+        requested_coordinate: tuple[int, int],
+        normalized_target_coordinate: tuple[int, int],
+        action_family: WorldMapTraversalActionFamily,
+        movement_mode: WorldMapMovementMode,
+        max_axis_delta_per_leg: int | None,
+        runtime_state: dict[str, Any] | None,
+        logging_mode: DiagnosticLogMode,
+    ) -> None:
+        """Emits one explicit failed-leg diagnostic event before the error is re-raised."""
+
+        error_details = error.details if isinstance(error, SelectorResolutionError) else None
+        emit_diagnostic_log(
+            logger=self.logger,
+            runtime_state=runtime_state,
+            mode=logging_mode,
+            level=logging.ERROR,
+            message="World-map movement step failed.",
+            extra={
+                "step_index": step_index,
+                "before_coordinate": before_coordinate,
+                "leg_target": leg_target,
+                "requested_coordinate": requested_coordinate,
+                "normalized_target_coordinate": normalized_target_coordinate,
+                "action_family": action_family.value,
+                "movement_mode": movement_mode.value,
+                "max_axis_delta_per_leg": max_axis_delta_per_leg,
+                "gesture_primitive": self.movement_policy.gesture_primitive.value,
+                "error_type": type(error).__name__,
+                "error_message": str(error),
+                "error_details": error_details,
+            },
         )
 
     def _log_step_timing(
@@ -2130,6 +2258,7 @@ class WorldMapSearchService:
 
         try:
             steps = plan.execution_plan.steps
+            route_length = len(steps)
             for step in steps:
                 checkpoint = step.checkpoint
                 if request.stop_policy.max_radius_units is not None and checkpoint.distance_from_origin > request.stop_policy.max_radius_units:
@@ -2154,7 +2283,7 @@ class WorldMapSearchService:
                 )
                 stop_reason = self._evaluate_stop_policy(
                     request=request,
-                    route=plan.route,
+                    route_length=route_length,
                     checkpoint=checkpoint,
                     matched_count=len(matched_keys),
                     visited_count=len(visited_checkpoints),
@@ -2189,7 +2318,7 @@ class WorldMapSearchService:
                         )
                         stop_reason = self._evaluate_stop_policy(
                             request=request,
-                            route=plan.route,
+                            route_length=route_length,
                             checkpoint=checkpoint,
                             matched_count=len(matched_keys),
                             visited_count=len(visited_checkpoints),
@@ -2202,10 +2331,7 @@ class WorldMapSearchService:
                 else WorldMapSearchStopReason.ROUTE_EXHAUSTED
             )
         finally:
-            flush_buffered_diagnostic_logs(
-                logger=None if self.action_executor is None else getattr(self.action_executor, "logger", None),
-                runtime_state=active_runtime_state,
-            )
+            self.flush_runtime_diagnostics(runtime_state=active_runtime_state)
 
     def _build_result(
         self,
@@ -2274,11 +2400,52 @@ class WorldMapSearchService:
         """Executes one coordinate-jump move or fails fast when the runtime lacks the required primitive."""
 
         plan = self.coordinate_navigator.plan_jump(target=checkpoint.coordinate, current_observation=observation)
-        if not plan.requires_execution:
-            proven = _require_proven_world_map_observation(
+        freshest_observation = observation
+        try:
+            if not plan.requires_execution:
+                freshest_observation = proven = _require_proven_world_map_observation(
+                    observation_service=self.observation_service,
+                    observation=observation,
+                    label_prefix=f"{label_prefix}_already_at_target",
+                )
+                self._require_checkpoint_landing(
+                    proven,
+                    checkpoint=checkpoint,
+                    requested_coordinate=plan.normalized_target_coordinate,
+                )
+                return proven
+            assert plan.open_action is not None and plan.submit_action is not None
+            freshest_observation = opened = self._execute_actions(
+                [plan.open_action],
+                observation,
+                label_prefix=f"{label_prefix}_open",
+                artifact_selection=self._routine_artifact_selection(ObservationArtifactRoutine.WORLD_MAP_MOVEMENT_PROOF),
+            )
+            initial_dialog_state = self.coordinate_navigator.require_dialog_state(opened)
+            filled = opened
+            if plan.fill_actions:
+                freshest_observation = filled = self._execute_actions(
+                    plan.fill_actions,
+                    opened,
+                    label_prefix=f"{label_prefix}_fill",
+                    artifact_selection=self._routine_artifact_selection(ObservationArtifactRoutine.WORLD_MAP_MOVEMENT_PROOF),
+                )
+            self.coordinate_navigator.require_pre_submit_state(
+                filled,
+                plan=plan,
+                initial_state=initial_dialog_state,
+            )
+            freshest_observation = after = self._execute_actions(
+                [plan.submit_action],
+                filled,
+                label_prefix=f"{label_prefix}_submit",
+                artifact_selection=self._routine_artifact_selection(ObservationArtifactRoutine.WORLD_MAP_ANALYZED_CHECKPOINT),
+            )
+            _raise_if_world_map_coordinate_jump_status_banner(after, target_coordinate=checkpoint.coordinate)
+            freshest_observation = proven = _require_proven_world_map_observation(
                 observation_service=self.observation_service,
-                observation=observation,
-                label_prefix=f"{label_prefix}_already_at_target",
+                observation=after,
+                label_prefix=f"{label_prefix}_verify_landing",
             )
             self._require_checkpoint_landing(
                 proven,
@@ -2286,30 +2453,15 @@ class WorldMapSearchService:
                 requested_coordinate=plan.normalized_target_coordinate,
             )
             return proven
-        assert plan.open_action is not None and plan.submit_action is not None
-        opened = self._execute_actions([plan.open_action], observation, label_prefix=f"{label_prefix}_open")
-        initial_dialog_state = self.coordinate_navigator.require_dialog_state(opened)
-        filled = opened
-        if plan.fill_actions:
-            filled = self._execute_actions(plan.fill_actions, opened, label_prefix=f"{label_prefix}_fill")
-        self.coordinate_navigator.require_pre_submit_state(
-            filled,
-            plan=plan,
-            initial_state=initial_dialog_state,
-        )
-        after = self._execute_actions([plan.submit_action], filled, label_prefix=f"{label_prefix}_submit")
-        _raise_if_world_map_coordinate_jump_status_banner(after, target_coordinate=checkpoint.coordinate)
-        proven = _require_proven_world_map_observation(
-            observation_service=self.observation_service,
-            observation=after,
-            label_prefix=f"{label_prefix}_verify_landing",
-        )
-        self._require_checkpoint_landing(
-            proven,
-            checkpoint=checkpoint,
-            requested_coordinate=plan.normalized_target_coordinate,
-        )
-        return proven
+        except Exception as error:
+            self._record_checkpoint_movement_failure(
+                error=error,
+                observation=freshest_observation,
+                checkpoint=checkpoint,
+                label=f"{label_prefix}_failure",
+                movement_tool=WorldMapMovementToolKind.COORDINATE_JUMP,
+            )
+            raise
 
     def _require_checkpoint_landing(
         self,
@@ -2348,27 +2500,40 @@ class WorldMapSearchService:
                 label_prefix=label_prefix,
             )
         normalized_target = self.overview_navigator.normalize_target_coordinate(checkpoint.coordinate)
-        opened = self._execute_actions(
-            self.overview_navigator.plan_open(observation),
-            observation,
-            label_prefix=f"{label_prefix}_overview_open",
-        )
-        after = self._execute_actions(
-            self.overview_navigator.plan_recenter(opened, target_coordinate=checkpoint.coordinate),
-            opened,
-            label_prefix=f"{label_prefix}_overview_recenter",
-        )
-        proven = _require_proven_world_map_observation(
-            observation_service=self.observation_service,
-            observation=after,
-            label_prefix=f"{label_prefix}_verify_landing",
-        )
-        self._require_checkpoint_landing(
-            proven,
-            checkpoint=checkpoint,
-            requested_coordinate=normalized_target,
-        )
-        return proven
+        freshest_observation = observation
+        try:
+            freshest_observation = opened = self._execute_actions(
+                self.overview_navigator.plan_open(observation),
+                observation,
+                label_prefix=f"{label_prefix}_overview_open",
+                artifact_selection=self._routine_artifact_selection(ObservationArtifactRoutine.WORLD_MAP_MOVEMENT_PROOF),
+            )
+            freshest_observation = after = self._execute_actions(
+                self.overview_navigator.plan_recenter(opened, target_coordinate=checkpoint.coordinate),
+                opened,
+                label_prefix=f"{label_prefix}_overview_recenter",
+                artifact_selection=self._routine_artifact_selection(ObservationArtifactRoutine.WORLD_MAP_ANALYZED_CHECKPOINT),
+            )
+            freshest_observation = proven = _require_proven_world_map_observation(
+                observation_service=self.observation_service,
+                observation=after,
+                label_prefix=f"{label_prefix}_verify_landing",
+            )
+            self._require_checkpoint_landing(
+                proven,
+                checkpoint=checkpoint,
+                requested_coordinate=normalized_target,
+            )
+            return proven
+        except Exception as error:
+            self._record_checkpoint_movement_failure(
+                error=error,
+                observation=freshest_observation,
+                checkpoint=checkpoint,
+                label=f"{label_prefix}_failure",
+                movement_tool=WorldMapMovementToolKind.OVERVIEW_SEED,
+            )
+            raise
 
     def _execute_actions(
         self,
@@ -2376,6 +2541,7 @@ class WorldMapSearchService:
         observation: Observation,
         *,
         label_prefix: str,
+        artifact_selection: ObservationArtifactSelection | None = None,
     ) -> Observation:
         """Executes the provided actions and returns the freshest observed result."""
 
@@ -2384,7 +2550,11 @@ class WorldMapSearchService:
         return self.action_executor.execute_actions(
             actions,
             observation,
-            observe=lambda label, request=None: self.observation_service.observe(f"{label_prefix}_{label}", request=request),
+            observe=lambda label, request=None: self.observation_service.observe(
+                f"{label_prefix}_{label}",
+                request=request,
+                artifact_selection=artifact_selection,
+            ),
         ).observation
 
     def _ingest_checkpoint_observation(
@@ -2436,6 +2606,58 @@ class WorldMapSearchService:
         if self.observation_service is None:
             return None
         return resolve_routine_artifact_selection(mode=self.observation_service.mode, routine=routine)
+
+    def flush_runtime_diagnostics(self, *, runtime_state: dict[str, Any] | None) -> None:
+        """Flushes any buffered traversal diagnostics for the provided shared runtime state."""
+
+        flush_buffered_diagnostic_logs(
+            logger=None if self.action_executor is None else getattr(self.action_executor, "logger", None),
+            runtime_state=runtime_state,
+        )
+
+    def _record_checkpoint_movement_failure(
+        self,
+        *,
+        error: Exception,
+        observation: Observation,
+        checkpoint: WorldMapTraversalCheckpoint,
+        label: str,
+        movement_tool: WorldMapMovementToolKind,
+    ) -> None:
+        """Persists one failure screenshot and logs one explicit non-swipe checkpoint-movement failure."""
+
+        if self.coordinate_mover is not None:
+            self.coordinate_mover.persist_failure_observation(
+                observation=observation,
+                label=label,
+                error=error,
+            )
+        elif self.observation_service is not None and (
+            artifact_selection := self._routine_artifact_selection(ObservationArtifactRoutine.FAILURE)
+        ):
+            try:
+                self.observation_service.capture_observation(
+                    label,
+                    request=ObservationRequest.full_runtime_default(),
+                    artifact_selection=artifact_selection,
+                )
+            except Exception as persist_error:
+                error.add_note(f"Failure observation persistence also failed: {persist_error!r}")
+        emit_diagnostic_log(
+            logger=None if self.action_executor is None else getattr(self.action_executor, "logger", None),
+            runtime_state=None,
+            mode=DiagnosticLogMode.IMMEDIATE,
+            level=logging.ERROR,
+            message="World-map checkpoint movement failed.",
+            extra={
+                "movement_tool": movement_tool.value,
+                "checkpoint_coordinate": checkpoint.coordinate,
+                "route_index": checkpoint.route_index,
+                "error_type": type(error).__name__,
+                "error_message": str(error),
+                "error_details": error.details if isinstance(error, SelectorResolutionError) else None,
+            },
+        )
 
     def _persist_sequence_summary(
         self,
@@ -2577,7 +2799,7 @@ class WorldMapSearchService:
         self,
         *,
         request: WorldMapSearchRequest,
-        route: Sequence[WorldMapTraversalCheckpoint],
+        route_length: int,
         checkpoint: WorldMapTraversalCheckpoint,
         matched_count: int,
         visited_count: int,
@@ -2589,7 +2811,7 @@ class WorldMapSearchService:
             return WorldMapSearchStopReason.FIRST_CONFIRMED_MATCH
         if stop_policy.max_matches is not None and matched_count >= stop_policy.max_matches:
             return WorldMapSearchStopReason.MATCH_LIMIT_REACHED
-        if stop_policy.max_checkpoints is not None and visited_count >= stop_policy.max_checkpoints and checkpoint.route_index < len(route) - 1:
+        if stop_policy.max_checkpoints is not None and visited_count >= stop_policy.max_checkpoints and checkpoint.route_index < route_length - 1:
             return WorldMapSearchStopReason.CHECKPOINT_BUDGET_EXHAUSTED
         return None
 

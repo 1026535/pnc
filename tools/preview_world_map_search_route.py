@@ -108,21 +108,24 @@ def main() -> int:
     current = observation
     runtime_state: dict[str, object] = {}
     executed = []
-    for step in plan.execution_plan.steps[: arguments.execute_first]:
-        current = connected.runtime.world_map_search_service.move_to_checkpoint(
-            current,
-            plan=plan,
-            step=step,
-            label_prefix=f"preview_execute_{step.step_index}",
-            runtime_state=runtime_state,
-        )
-        executed.append(
-            {
-                "step_index": step.step_index,
-                "coordinate": [step.checkpoint.coordinate[0], step.checkpoint.coordinate[1]],
-                "intent": step.traversal_segment_intent.value,
-            }
-        )
+    try:
+        for step in plan.execution_plan.steps[: arguments.execute_first]:
+            current = connected.runtime.world_map_search_service.move_to_checkpoint(
+                current,
+                plan=plan,
+                step=step,
+                label_prefix=f"preview_execute_{step.step_index}",
+                runtime_state=runtime_state,
+            )
+            executed.append(
+                {
+                    "step_index": step.step_index,
+                    "coordinate": [step.checkpoint.coordinate[0], step.checkpoint.coordinate[1]],
+                    "intent": step.traversal_segment_intent.value,
+                }
+            )
+    finally:
+        connected.runtime.world_map_search_service.flush_runtime_diagnostics(runtime_state=runtime_state)
     print(json.dumps({"executed_steps": executed}, indent=2, sort_keys=True))
     return 0
 

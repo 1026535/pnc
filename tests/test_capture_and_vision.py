@@ -72,6 +72,7 @@ from pnc_automation.app.pnc.vision.selectors import (
     build_default_selector_registry,
 )
 from pnc_automation.core.vision.template.template_matcher import PillowTemplateMatcher
+from tests.local_fixture_artifacts import require_local_fixture_artifact
 from tests.test_support import FakeObservationService, FakeSession, build_logger, build_png_bytes, make_observation
 
 
@@ -923,11 +924,13 @@ class CaptureAndVisionTests(unittest.TestCase):
             (),
             {
                 "image": Image.open(
-                    Path(__file__).resolve().parents[1]
-                    / "artifacts"
-                    / "2026-03-13"
-                    / "k287_pine_cobaye_1"
-                    / "20260313T134419Z_live_send_chat_helper_post_action_1.png"
+                    require_local_fixture_artifact(
+                        "chat_follow_up_geometry_first",
+                        default_repo_relative_path=(
+                            "artifacts/2026-03-13/k287_pine_cobaye_1/"
+                            "20260313T134419Z_live_send_chat_helper_post_action_1.png"
+                        ),
+                    )
                 ),
                 "artifact": type("Artifact", (), {"path": Path("chat.png"), "captured_at": None})(),
             },

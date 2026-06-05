@@ -18,3 +18,4 @@ home_city_map_unlabeled.png
 # Local secrets
 config/accounts.yaml
 config/castles.yaml
+tests/data/local_fixture_artifacts.json

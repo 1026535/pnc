@@ -57,6 +57,7 @@ from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservatio
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
 from pnc_automation.app.pnc.vision.selectors import Region, build_default_selector_registry
 from pnc_automation.core.vision.template.template_matcher import PillowTemplateMatcher
+from tests.local_fixture_artifacts import require_local_fixture_artifact
 from tests.test_support import FakeObservationService, FakeSession, build_logger, build_png_bytes, make_entry, make_observation
 
 
@@ -1702,11 +1703,13 @@ class MailWorkflowTests(unittest.TestCase):
         """Covers the March 24, 2026 live OCR shape so split rows, timestamps, and sticker rows normalize safely."""
 
         image = Image.open(
-            Path(__file__).resolve().parents[1]
-            / "artifacts"
-            / "2026-03-24"
-            / "serious_stuff"
-            / "20260324T143723Z_collect_kingdom_chat_failure_result.png"
+            require_local_fixture_artifact(
+                "kingdom_chat_failure_shape",
+                default_repo_relative_path=(
+                    "artifacts/2026-03-24/serious_stuff/"
+                    "20260324T143723Z_collect_kingdom_chat_failure_result.png"
+                ),
+            )
         )
         observation = _build_observation(
             request=ObservationRequest.chat_transcript_observation(),
