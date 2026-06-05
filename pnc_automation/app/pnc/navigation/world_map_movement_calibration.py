@@ -28,13 +28,16 @@ from pnc_automation.app.pnc.navigation.world_map_search import (
     WorldMapSearchService,
     WorldMapSearchStopPolicy,
     WorldMapTraversalCheckpoint,
+    TraversalStridePolicy,
     classify_world_map_cardinal_delta,
     is_world_map_coordinate_near_boundary,
     _coordinate_within_tolerance,
+    _require_valid_world_map_step_budget,
     _require_proven_world_map_observation,
 )
 from pnc_automation.app.pnc.navigation.world_map_survey_recorder import WorldMapSurveyRecorder
 from pnc_automation.core.errors import SelectorResolutionError
+from pnc_automation.core.infra.diagnostics.buffered_logging import flush_buffered_diagnostic_logs
 
 if TYPE_CHECKING:
     from pnc_automation.app.pnc.vision.observation_builder import ObservationService
@@ -260,7 +263,7 @@ class WorldMapSweepValidationRequest:
 
     name: str
     pattern: WorldMapSearchPattern
-    checkpoint_spacing: int
+    traversal_stride_policy: TraversalStridePolicy = TraversalStridePolicy.viewport_default()
     origin: WorldMapSearchOrigin | None = None
     boundary: WorldMapSearchBoundary | None = None
     max_checkpoints: int | None = None
@@ -270,11 +273,6 @@ class WorldMapSweepValidationRequest:
 
         if self.name.strip() == "":
             raise SelectorResolutionError("World-map sweep validation requests require a non-empty name.")
-        if self.checkpoint_spacing <= 0:
-            raise SelectorResolutionError(
-                "World-map sweep validation requests require a positive checkpoint spacing.",
-                checkpoint_spacing=self.checkpoint_spacing,
-            )
         if self.max_checkpoints is not None and self.max_checkpoints <= 0:
             raise SelectorResolutionError(
                 "World-map sweep validation requests require positive max_checkpoints when present.",
@@ -373,6 +371,14 @@ class WorldMapMovementCalibrationService:
     default_probe_ratios: tuple[float, ...] = (0.10, 0.20, 0.30, 0.40)
     default_horizontal_lane_candidates: tuple[float, ...] = (0.50, 0.60, 0.70)
     default_vertical_lane_candidates: tuple[float, ...] = (0.40, 0.46, 0.52)
+
+    def __post_init__(self) -> None:
+        """Rejects invalid movement budget wiring before calibration starts."""
+
+        _require_valid_world_map_step_budget(
+            self.movement_step_budget,
+            field_name="movement_step_budget",
+        )
 
     def probe_swipe(
         self,
@@ -560,7 +566,7 @@ class WorldMapMovementCalibrationService:
             matcher=lambda _sighting: False,
             stop_policy=WorldMapSearchStopPolicy(max_checkpoints=request.max_checkpoints),
             pattern=request.pattern,
-            checkpoint_spacing=request.checkpoint_spacing,
+            traversal_stride_policy=request.traversal_stride_policy,
             origin=request.origin,
             boundary=request.boundary,
         )
@@ -576,7 +582,7 @@ class WorldMapMovementCalibrationService:
             current = search_service.move_to_checkpoint(
                 current,
                 plan=plan,
-                checkpoint=checkpoint,
+                step=next(step for step in plan.execution_plan.steps if step.checkpoint == checkpoint),
                 label_prefix=f"{label_prefix}_move_{checkpoint.route_index}",
                 runtime_state=runtime_state,
             )
@@ -608,6 +614,10 @@ class WorldMapMovementCalibrationService:
                 )
             )
             current = recorded_observation
+        flush_buffered_diagnostic_logs(
+            logger=None if search_service.action_executor is None else getattr(search_service.action_executor, "logger", None),
+            runtime_state=runtime_state,
+        )
         return WorldMapSweepValidationResult(
             name=request.name,
             pattern=request.pattern,

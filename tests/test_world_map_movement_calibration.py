@@ -20,6 +20,7 @@ from pnc_automation.app.pnc.navigation.world_map_movement_calibration import (
     WorldMapSweepValidationRequest,
 )
 from pnc_automation.app.pnc.navigation.world_map_search import (
+    TraversalStridePolicy,
     WorldMapBounds,
     WorldMapSearchBoundary,
     WorldMapSearchOrigin,
@@ -257,9 +258,9 @@ class WorldMapMovementCalibrationTests(unittest.TestCase):
             request=WorldMapSweepValidationRequest(
                 name="row_major_segment",
                 pattern=WorldMapSearchPattern.row_major_sweep(),
+                traversal_stride_policy=TraversalStridePolicy.symmetric(10),
                 origin=WorldMapSearchOrigin.current_viewport(),
                 boundary=WorldMapSearchBoundary.rectangle(min_coordinate=(10, 0), max_coordinate=(10, 10)),
-                checkpoint_spacing=10,
             ),
             label_prefix="row_major_segment",
         )
@@ -300,9 +301,9 @@ class WorldMapMovementCalibrationTests(unittest.TestCase):
             request=WorldMapSweepValidationRequest(
                 name="shared_mover",
                 pattern=WorldMapSearchPattern.row_major_sweep(),
+                traversal_stride_policy=TraversalStridePolicy.symmetric(10),
                 origin=WorldMapSearchOrigin.current_viewport(),
                 boundary=WorldMapSearchBoundary.rectangle(min_coordinate=(10, 0), max_coordinate=(20, 0)),
-                checkpoint_spacing=10,
             ),
             label_prefix="shared_mover",
         )
@@ -372,10 +373,25 @@ class _RecordingCoordinateMover:
         runtime_state: dict[str, object] | None = None,
         boundary_bounds: object = None,
         coordinate_domain: object = None,
+        movement_family: object = None,
+        arrival_observation_request: object = None,
+        movement_proof_artifact_selection: object = None,
+        arrival_artifact_selection: object = None,
+        logging_mode: object = None,
     ) -> object:
         """Records the requested movement and returns a world-map observation at the target."""
 
-        del observation, label_prefix, boundary_bounds, coordinate_domain
+        del (
+            observation,
+            label_prefix,
+            boundary_bounds,
+            coordinate_domain,
+            movement_family,
+            arrival_observation_request,
+            movement_proof_artifact_selection,
+            arrival_artifact_selection,
+            logging_mode,
+        )
         self.target_coordinates.append(target_coordinate)
         self.runtime_states.append(runtime_state)
         return _make_world_map_observation(*target_coordinate)

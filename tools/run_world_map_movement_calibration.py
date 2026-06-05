@@ -22,12 +22,14 @@ from pnc_automation.app.pnc.navigation.world_map_movement_calibration import (
     WorldMapSweepValidationRequest,
 )
 from pnc_automation.app.pnc.navigation.world_map_search import (
+    TraversalStridePolicy,
     WorldMapBounds,
     WorldMapCoordinateDomain,
-    WorldMapEdge,
+    WorldMapMapCorner,
     WorldMapSearchBoundary,
     WorldMapSearchOrigin,
     WorldMapSearchPattern,
+    WorldMapTraversalCorner,
 )
 
 _WORLD_MAP_PREFLIGHT_MAX_STEPS = 20
@@ -155,13 +157,9 @@ def main() -> None:
             ),
             (
                 "edge_band",
-                WorldMapSearchPattern.edge_band_sweep(),
-                WorldMapSearchOrigin.map_edge_reference(WorldMapEdge.LEFT),
-                WorldMapSearchBoundary.edge_band(
-                    map_bounds=local_bounds,
-                    band_width_units=arguments.checkpoint_spacing,
-                    edges=(WorldMapEdge.LEFT, WorldMapEdge.TOP),
-                ),
+                WorldMapSearchPattern.perimeter_ring_sweep(start_corner=WorldMapTraversalCorner.UPPER_LEFT),
+                WorldMapSearchOrigin.map_corner(WorldMapMapCorner.UPPER_LEFT),
+                WorldMapSearchBoundary.full_map(local_bounds),
             ),
         ):
             if current is None:
@@ -187,9 +185,9 @@ def main() -> None:
                     request=WorldMapSweepValidationRequest(
                         name=name,
                         pattern=pattern,
+                        traversal_stride_policy=TraversalStridePolicy.symmetric(arguments.checkpoint_spacing),
                         origin=origin,
                         boundary=boundary,
-                        checkpoint_spacing=arguments.checkpoint_spacing,
                         max_checkpoints=3,
                     ),
                     label_prefix=f"{arguments.label}_{name}",

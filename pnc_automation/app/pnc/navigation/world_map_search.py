@@ -7,7 +7,7 @@ import re
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -15,6 +15,7 @@ from pnc_automation.app.pnc.domain.action_requests import (
     ActionRequest,
     InputTextAction,
     KeyEventAction,
+    SwipeGesturePrimitive,
     SwipeAction,
     TapAction,
     TapPointAction,
@@ -58,16 +59,36 @@ from pnc_automation.app.pnc.navigation.world_map_overview_projection import (
 )
 from pnc_automation.app.pnc.navigation.world_map_survey_recorder import WorldMapSurveyRecorder
 from pnc_automation.app.pnc.navigation.world_map_traversal import (
+    ResolvedTraversalStride,
+    TraversalRotation,
+    TraversalSegmentIntent,
+    TraversalStridePolicy,
     WorldMapEdge,
     WorldMapSearchBoundaryKind,
     WorldMapSearchPatternKind,
+    WorldMapTraversalActionFamily,
     WorldMapTraversalCheckpoint,
-    WorldMapTraversalEdgeBand,
+    WorldMapTraversalCorner,
+    WorldMapTraversalExecutionPlan,
+    WorldMapTraversalExecutionPlanner,
+    WorldMapTraversalExecutionStep,
     WorldMapTraversalPlanner,
+    WorldMapTraversalRoutePlan,
+    WorldMapViewportStrideProfile,
 )
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.app.pnc.vision.world_map_coordinates import parse_world_coordinate_dialog_field_text
+from pnc_automation.app.runtime.observation_artifacts import (
+    ObservationArtifactRoutine,
+    ObservationArtifactSelection,
+    resolve_routine_artifact_selection,
+)
 from pnc_automation.core.errors import SelectorResolutionError
+from pnc_automation.core.infra.diagnostics.buffered_logging import (
+    DiagnosticLogMode,
+    emit_diagnostic_log,
+    flush_buffered_diagnostic_logs,
+)
 
 if TYPE_CHECKING:
     from pnc_automation.app.pnc.vision.observation_builder import ObservationService
@@ -93,7 +114,6 @@ class WorldMapSearchOriginKind(StrEnum):
     CURRENT_VIEWPORT = "current_viewport"
     EXPLICIT_COORDINATE = "explicit_coordinate"
     MAP_CORNER = "map_corner"
-    MAP_EDGE_REFERENCE = "map_edge_reference"
 
 
 class WorldMapMapCorner(StrEnum):
@@ -147,6 +167,38 @@ class WorldMapSearchPattern:
     """Defines one canonical world-map traversal pattern."""
 
     kind: WorldMapSearchPatternKind
+    perimeter_start_corner: WorldMapTraversalCorner = WorldMapTraversalCorner.UPPER_LEFT
+    perimeter_rotation: TraversalRotation = TraversalRotation.CLOCKWISE
+    inset_x: int | None = None
+    inset_y: int | None = None
+
+    def __post_init__(self) -> None:
+        """Rejects pattern-local parameters that do not apply to the selected traversal family."""
+
+        if self.kind in {
+            WorldMapSearchPatternKind.ROW_MAJOR_SWEEP,
+            WorldMapSearchPatternKind.SERPENTINE_ROW_SWEEP,
+            WorldMapSearchPatternKind.EXPANDING_RING,
+        }:
+            if self.inset_x is not None or self.inset_y is not None:
+                raise SelectorResolutionError(
+                    "Only shrinking perimeter traversal may declare inset_x or inset_y.",
+                    pattern=self.kind.value,
+                    inset_x=self.inset_x,
+                    inset_y=self.inset_y,
+                )
+        if self.kind != WorldMapSearchPatternKind.SHRINKING_PERIMETER_SWEEP:
+            return
+        if self.inset_x is not None and self.inset_x <= 0:
+            raise SelectorResolutionError(
+                "Shrinking perimeter traversal requires a positive inset_x value when present.",
+                inset_x=self.inset_x,
+            )
+        if self.inset_y is not None and self.inset_y <= 0:
+            raise SelectorResolutionError(
+                "Shrinking perimeter traversal requires a positive inset_y value when present.",
+                inset_y=self.inset_y,
+            )
 
     @classmethod
     def row_major_sweep(cls) -> "WorldMapSearchPattern":
@@ -155,16 +207,50 @@ class WorldMapSearchPattern:
         return cls(WorldMapSearchPatternKind.ROW_MAJOR_SWEEP)
 
     @classmethod
+    def serpentine_row_sweep(cls) -> "WorldMapSearchPattern":
+        """Returns the canonical serpentine row sweep pattern."""
+
+        return cls(WorldMapSearchPatternKind.SERPENTINE_ROW_SWEEP)
+
+    @classmethod
     def expanding_ring(cls) -> "WorldMapSearchPattern":
         """Returns the canonical expanding-ring pattern."""
 
         return cls(WorldMapSearchPatternKind.EXPANDING_RING)
 
     @classmethod
-    def edge_band_sweep(cls) -> "WorldMapSearchPattern":
-        """Returns the canonical edge-band sweep pattern."""
+    def perimeter_ring_sweep(
+        cls,
+        *,
+        start_corner: WorldMapTraversalCorner = WorldMapTraversalCorner.UPPER_LEFT,
+        rotation: TraversalRotation = TraversalRotation.CLOCKWISE,
+    ) -> "WorldMapSearchPattern":
+        """Returns the canonical single-perimeter traversal pattern."""
 
-        return cls(WorldMapSearchPatternKind.EDGE_BAND_SWEEP)
+        return cls(
+            WorldMapSearchPatternKind.PERIMETER_RING_SWEEP,
+            perimeter_start_corner=start_corner,
+            perimeter_rotation=rotation,
+        )
+
+    @classmethod
+    def shrinking_perimeter_sweep(
+        cls,
+        *,
+        start_corner: WorldMapTraversalCorner = WorldMapTraversalCorner.UPPER_LEFT,
+        rotation: TraversalRotation = TraversalRotation.CLOCKWISE,
+        inset_x: int | None = None,
+        inset_y: int | None = None,
+    ) -> "WorldMapSearchPattern":
+        """Returns the canonical inward-perimeter traversal pattern."""
+
+        return cls(
+            WorldMapSearchPatternKind.SHRINKING_PERIMETER_SWEEP,
+            perimeter_start_corner=start_corner,
+            perimeter_rotation=rotation,
+            inset_x=inset_x,
+            inset_y=inset_y,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -174,7 +260,6 @@ class WorldMapSearchOrigin:
     kind: WorldMapSearchOriginKind
     coordinate: tuple[int, int] | None = None
     corner: WorldMapMapCorner | None = None
-    edge: WorldMapEdge | None = None
 
     def __post_init__(self) -> None:
         """Rejects inconsistent origin payloads before planning begins."""
@@ -187,24 +272,18 @@ class WorldMapSearchOrigin:
         if self.kind == WorldMapSearchOriginKind.EXPLICIT_COORDINATE:
             if self.coordinate is None:
                 raise SelectorResolutionError("Explicit-coordinate search origins require one coordinate pair.")
-            if self.corner is not None or self.edge is not None:
-                raise SelectorResolutionError("Explicit-coordinate origins must not also declare corner or edge hints.")
+            if self.corner is not None:
+                raise SelectorResolutionError("Explicit-coordinate origins must not also declare corner hints.")
             return
         if self.kind == WorldMapSearchOriginKind.MAP_CORNER:
             if self.corner is None:
                 raise SelectorResolutionError("Map-corner search origins require one exact map corner.")
-            if self.coordinate is not None or self.edge is not None:
-                raise SelectorResolutionError("Map-corner origins must not also declare coordinate or edge values.")
+            if self.coordinate is not None:
+                raise SelectorResolutionError("Map-corner origins must not also declare coordinate values.")
             return
-        if self.kind == WorldMapSearchOriginKind.MAP_EDGE_REFERENCE:
-            if self.edge is None:
-                raise SelectorResolutionError("Map-edge-reference origins require one exact map edge.")
-            if self.coordinate is not None or self.corner is not None:
-                raise SelectorResolutionError("Map-edge-reference origins must not also declare coordinate or corner values.")
-            return
-        if self.coordinate is not None or self.corner is not None or self.edge is not None:
+        if self.coordinate is not None or self.corner is not None:
             raise SelectorResolutionError(
-                "Viewport- and self-derived search origins must not carry explicit coordinate, corner, or edge payloads.",
+                "Viewport- and self-derived search origins must not carry explicit coordinate or corner payloads.",
                 kind=self.kind.value,
             )
 
@@ -232,12 +311,6 @@ class WorldMapSearchOrigin:
 
         return cls(WorldMapSearchOriginKind.MAP_CORNER, corner=corner)
 
-    @classmethod
-    def map_edge_reference(cls, edge: WorldMapEdge) -> "WorldMapSearchOrigin":
-        """Returns the canonical map-edge reference origin."""
-
-        return cls(WorldMapSearchOriginKind.MAP_EDGE_REFERENCE, edge=edge)
-
 
 @dataclass(frozen=True, slots=True)
 class WorldMapSearchBoundary:
@@ -247,8 +320,6 @@ class WorldMapSearchBoundary:
     radius_units: int | None = None
     rectangle_bounds: WorldMapBounds | None = None
     map_bounds: WorldMapBounds | None = None
-    edges: tuple[WorldMapEdge, ...] = ()
-    band_width_units: int | None = None
 
     def __post_init__(self) -> None:
         """Rejects inconsistent boundary payloads before traversal planning begins."""
@@ -259,35 +330,20 @@ class WorldMapSearchBoundary:
                     "Radius-from-origin boundaries require a positive radius_units value.",
                     radius_units=self.radius_units,
                 )
-            if self.rectangle_bounds is not None or self.map_bounds is not None or self.edges or self.band_width_units is not None:
-                raise SelectorResolutionError("Radius boundaries must not declare rectangle, map-bounds, or edge-band payloads.")
+            if self.rectangle_bounds is not None or self.map_bounds is not None:
+                raise SelectorResolutionError("Radius boundaries must not declare rectangle or map-bounds payloads.")
             return
         if self.kind == WorldMapSearchBoundaryKind.RECTANGLE:
             if self.rectangle_bounds is None:
                 raise SelectorResolutionError("Rectangle search boundaries require explicit rectangular bounds.")
-            if self.radius_units is not None or self.map_bounds is not None or self.edges or self.band_width_units is not None:
-                raise SelectorResolutionError("Rectangle boundaries must not declare radius, full-map, or edge-band payloads.")
+            if self.radius_units is not None or self.map_bounds is not None:
+                raise SelectorResolutionError("Rectangle boundaries must not declare radius or full-map payloads.")
             return
         if self.kind == WorldMapSearchBoundaryKind.FULL_MAP:
             if self.map_bounds is None:
                 raise SelectorResolutionError("Full-map search boundaries require resolvable world-map bounds.")
-            if self.radius_units is not None or self.rectangle_bounds is not None or self.edges or self.band_width_units is not None:
-                raise SelectorResolutionError("Full-map boundaries must not declare radius, rectangle, or edge-band payloads.")
-            return
-        if self.kind == WorldMapSearchBoundaryKind.EDGE_BAND:
-            if self.map_bounds is None:
-                raise SelectorResolutionError("Edge-band search boundaries require resolvable world-map bounds.")
-            if self.band_width_units is None or self.band_width_units <= 0:
-                raise SelectorResolutionError(
-                    "Edge-band search boundaries require a positive band_width_units value.",
-                    band_width_units=self.band_width_units,
-                )
-            if not self.edges:
-                raise SelectorResolutionError("Edge-band search boundaries require at least one requested edge.")
-            if len(frozenset(self.edges)) != len(self.edges):
-                raise SelectorResolutionError("Edge-band search boundaries must not repeat edges.", edges=self.edges)
             if self.radius_units is not None or self.rectangle_bounds is not None:
-                raise SelectorResolutionError("Edge-band boundaries must not also declare radius or rectangle payloads.")
+                raise SelectorResolutionError("Full-map boundaries must not declare radius or rectangle payloads.")
             return
         raise SelectorResolutionError("Unsupported world-map search boundary kind.", kind=self.kind.value)
 
@@ -316,23 +372,6 @@ class WorldMapSearchBoundary:
         """Returns one full-map search boundary."""
 
         return cls(WorldMapSearchBoundaryKind.FULL_MAP, map_bounds=map_bounds)
-
-    @classmethod
-    def edge_band(
-        cls,
-        *,
-        map_bounds: WorldMapBounds,
-        band_width_units: int,
-        edges: Sequence[WorldMapEdge],
-    ) -> "WorldMapSearchBoundary":
-        """Returns one edge-band search boundary."""
-
-        return cls(
-            WorldMapSearchBoundaryKind.EDGE_BAND,
-            map_bounds=map_bounds,
-            band_width_units=band_width_units,
-            edges=tuple(edges),
-        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -809,7 +848,7 @@ class WorldMapSearchRequest:
     matcher: WorldMapSearchMatcher | SpatialObjectQuery | WorldMapCastleQuery | WorldMapCastleProfileQuery | Any
     stop_policy: WorldMapSearchStopPolicy
     pattern: WorldMapSearchPattern
-    checkpoint_spacing: int
+    traversal_stride_policy: TraversalStridePolicy = field(default_factory=TraversalStridePolicy.viewport_default)
     coordinate_domain: WorldMapCoordinateDomain = field(
         default_factory=WorldMapCoordinateDomain.puzzles_and_conquest,
     )
@@ -822,36 +861,19 @@ class WorldMapSearchRequest:
         """Canonicalizes the matcher and rejects unsupported request combinations."""
 
         object.__setattr__(self, "matcher", adapt_world_map_search_matcher(self.matcher))
-        if self.checkpoint_spacing <= 0:
-            raise SelectorResolutionError(
-                "World-map search requests require a positive checkpoint_spacing value.",
-                checkpoint_spacing=self.checkpoint_spacing,
-            )
         _validate_boundary_within_coordinate_domain(self.boundary, self.coordinate_domain)
-        if self.pattern.kind == WorldMapSearchPatternKind.EDGE_BAND_SWEEP:
-            if self.boundary is None or self.boundary.kind != WorldMapSearchBoundaryKind.EDGE_BAND:
-                raise SelectorResolutionError(
-                    "Edge-band sweep patterns require one edge-band boundary.",
-                    pattern=self.pattern.kind.value,
-                    boundary_kind=None if self.boundary is None else self.boundary.kind.value,
-                )
-        if self.origin is not None and self.origin.kind == WorldMapSearchOriginKind.MAP_EDGE_REFERENCE:
-            if self.pattern.kind != WorldMapSearchPatternKind.EDGE_BAND_SWEEP:
-                raise SelectorResolutionError(
-                    "Map-edge-reference origins only make sense for edge-band traversal.",
-                    origin_kind=self.origin.kind.value,
-                    pattern=self.pattern.kind.value,
-                )
-        if self.boundary is not None and self.boundary.kind == WorldMapSearchBoundaryKind.EDGE_BAND:
-            if self.origin is not None and self.origin.kind not in {
-                WorldMapSearchOriginKind.SELF_TERRITORY,
-                WorldMapSearchOriginKind.CURRENT_VIEWPORT,
-                WorldMapSearchOriginKind.MAP_CORNER,
-                WorldMapSearchOriginKind.MAP_EDGE_REFERENCE,
+        if self.pattern.kind in {
+            WorldMapSearchPatternKind.PERIMETER_RING_SWEEP,
+            WorldMapSearchPatternKind.SHRINKING_PERIMETER_SWEEP,
+        }:
+            if self.boundary is None or self.boundary.kind not in {
+                WorldMapSearchBoundaryKind.RECTANGLE,
+                WorldMapSearchBoundaryKind.FULL_MAP,
             }:
                 raise SelectorResolutionError(
-                    "Edge-band boundaries do not support explicit-coordinate origins outside the configured map context.",
-                    origin_kind=self.origin.kind.value,
+                    "Perimeter traversal requires a rectangle or full-map boundary.",
+                    pattern=self.pattern.kind.value,
+                    boundary_kind=None if self.boundary is None else self.boundary.kind.value,
                 )
 
 
@@ -862,8 +884,16 @@ class WorldMapResolvedSearchPlan:
     request: WorldMapSearchRequest
     origin_coordinate: tuple[int, int]
     coverage_bounds: WorldMapBounds
+    stride: ResolvedTraversalStride
     movement_tool: WorldMapMovementToolKind
-    route: tuple[WorldMapTraversalCheckpoint, ...]
+    route_plan: WorldMapTraversalRoutePlan
+    execution_plan: WorldMapTraversalExecutionPlan
+
+    @property
+    def route(self) -> tuple[WorldMapTraversalCheckpoint, ...]:
+        """Returns the flattened checkpoint route for compatibility call sites."""
+
+        return self.execution_plan.steps_to_checkpoints()
 
 
 @dataclass(frozen=True, slots=True)
@@ -879,6 +909,66 @@ class WorldMapSearchResult:
     survey_index: WorldMapSurveyIndex
 
 
+class WorldMapMovementMode(StrEnum):
+    """Defines the active direct-movement behavior used for one coordinate-movement leg."""
+
+    TRAVERSE = "traverse"
+    FINE_CORRECTION = "fine_correction"
+
+
+@dataclass(frozen=True, slots=True)
+class WorldMapMovementPolicy:
+    """Defines the canonical gesture and traverse-vs-correction policy for direct world-map movement."""
+
+    gesture_primitive: SwipeGesturePrimitive = SwipeGesturePrimitive.SWIPE
+    correction_threshold_units: int = 10
+    traverse_max_axis_delta_per_leg: int | None = None
+    correction_max_axis_delta_per_leg: int | None = None
+
+    def __post_init__(self) -> None:
+        """Rejects malformed movement-policy combinations before runtime execution begins."""
+
+        if self.correction_threshold_units <= 0:
+            raise SelectorResolutionError(
+                "World-map movement policies require a positive correction_threshold_units value.",
+                correction_threshold_units=self.correction_threshold_units,
+            )
+        for field_name, value in (
+            ("traverse_max_axis_delta_per_leg", self.traverse_max_axis_delta_per_leg),
+            ("correction_max_axis_delta_per_leg", self.correction_max_axis_delta_per_leg),
+        ):
+            if value is not None and value <= 0:
+                raise SelectorResolutionError(
+                    "World-map movement policy leg caps must be positive when configured.",
+                    field_name=field_name,
+                    value=value,
+                )
+
+    def mode_for_remaining_delta(
+        self,
+        *,
+        current_coordinate: tuple[int, int],
+        target_coordinate: tuple[int, int],
+        action_family: WorldMapTraversalActionFamily,
+    ) -> WorldMapMovementMode:
+        """Returns whether the next leg should use broad traversal or near-target correction behavior."""
+
+        remaining_x = abs(target_coordinate[0] - current_coordinate[0])
+        remaining_y = abs(target_coordinate[1] - current_coordinate[1])
+        if action_family == WorldMapTraversalActionFamily.NON_LOCAL_DIRECT:
+            return WorldMapMovementMode.TRAVERSE
+        if max(remaining_x, remaining_y) >= self.correction_threshold_units:
+            return WorldMapMovementMode.TRAVERSE
+        return WorldMapMovementMode.FINE_CORRECTION
+
+    def max_axis_delta_for_mode(self, mode: WorldMapMovementMode) -> int | None:
+        """Returns the active per-leg granularity cap for the selected movement mode."""
+
+        if mode == WorldMapMovementMode.TRAVERSE:
+            return self.traverse_max_axis_delta_per_leg
+        return self.correction_max_axis_delta_per_leg
+
+
 @dataclass(frozen=True, slots=True)
 class WorldMapMovementStepTrace:
     """Captures one observed direct-movement leg plus its timing and coordinate proof details."""
@@ -889,6 +979,8 @@ class WorldMapMovementStepTrace:
     after_coordinate: tuple[int, int]
     requested_coordinate: tuple[int, int]
     normalized_target_coordinate: tuple[int, int]
+    action_family: str
+    movement_mode: str
     max_axis_delta_per_leg: int | None
     gesture_primitive: str
     plan_elapsed_ms: float
@@ -912,6 +1004,8 @@ class WorldMapMovementStepTrace:
                 self.normalized_target_coordinate[0],
                 self.normalized_target_coordinate[1],
             ],
+            "action_family": self.action_family,
+            "movement_mode": self.movement_mode,
             "max_axis_delta_per_leg": self.max_axis_delta_per_leg,
             "gesture_primitive": self.gesture_primitive,
             "plan_elapsed_ms": round(self.plan_elapsed_ms, 2),
@@ -932,28 +1026,58 @@ class WorldMapCoordinateMover:
     action_executor: WorldMapObservedActionExecutor | None
     navigator: WorldMapNavigator
     coordinate_domain: WorldMapCoordinateDomain = field(default_factory=WorldMapCoordinateDomain.puzzles_and_conquest)
+    movement_policy: WorldMapMovementPolicy = field(default_factory=WorldMapMovementPolicy)
     movement_step_budget: int = 8
     orthogonal_drift_tolerance: int = 1
-    max_axis_delta_per_leg: int | None = None
     logger: logging.LoggerAdapter | None = None
 
     def __post_init__(self) -> None:
-        """Rejects invalid movement granularity before runtime execution begins."""
+        """Rejects invalid movement policy combinations before runtime execution begins."""
 
-        if self.max_axis_delta_per_leg is not None and self.max_axis_delta_per_leg <= 0:
+        _require_valid_world_map_step_budget(
+            self.movement_step_budget,
+            field_name="movement_step_budget",
+        )
+        if self.movement_policy.correction_threshold_units <= self.navigator.focus_tolerance:
             raise SelectorResolutionError(
-                "World-map movement granularity requires a positive max_axis_delta_per_leg when configured.",
-                max_axis_delta_per_leg=self.max_axis_delta_per_leg,
-            )
-        if (
-            self.max_axis_delta_per_leg is not None
-            and self.max_axis_delta_per_leg <= self.navigator.focus_tolerance
-        ):
-            raise SelectorResolutionError(
-                "World-map movement granularity must be greater than the navigator focus_tolerance, otherwise capped legs are treated as already in tolerance and no swipe can be planned.",
-                max_axis_delta_per_leg=self.max_axis_delta_per_leg,
+                "World-map movement correction_threshold_units must be greater than the navigator focus_tolerance.",
+                correction_threshold_units=self.movement_policy.correction_threshold_units,
                 focus_tolerance=self.navigator.focus_tolerance,
             )
+        for field_name, value in (
+            ("traverse_max_axis_delta_per_leg", self.movement_policy.traverse_max_axis_delta_per_leg),
+            ("correction_max_axis_delta_per_leg", self.movement_policy.correction_max_axis_delta_per_leg),
+        ):
+            if value is not None and value <= self.navigator.focus_tolerance:
+                raise SelectorResolutionError(
+                    "World-map movement granularity must be greater than the navigator focus_tolerance, otherwise capped legs are treated as already in tolerance and no swipe can be planned.",
+                    field_name=field_name,
+                    value=value,
+                    focus_tolerance=self.navigator.focus_tolerance,
+                )
+
+    @property
+    def max_axis_delta_per_leg(self) -> int | None:
+        """Returns the broad-traverse leg cap for compatibility call sites and diagnostics."""
+
+        return self.movement_policy.traverse_max_axis_delta_per_leg
+
+    @max_axis_delta_per_leg.setter
+    def max_axis_delta_per_leg(self, value: int | None) -> None:
+        """Updates the broad-traverse leg cap while preserving the rest of the movement policy."""
+
+        if value is not None and value <= self.navigator.focus_tolerance:
+            raise SelectorResolutionError(
+                "World-map movement granularity must be greater than the navigator focus_tolerance, otherwise capped legs are treated as already in tolerance and no swipe can be planned.",
+                traverse_max_axis_delta_per_leg=value,
+                focus_tolerance=self.navigator.focus_tolerance,
+            )
+        self.movement_policy = WorldMapMovementPolicy(
+            gesture_primitive=self.movement_policy.gesture_primitive,
+            correction_threshold_units=self.movement_policy.correction_threshold_units,
+            traverse_max_axis_delta_per_leg=value,
+            correction_max_axis_delta_per_leg=self.movement_policy.correction_max_axis_delta_per_leg,
+        )
 
     def move_to_coordinate(
         self,
@@ -964,6 +1088,11 @@ class WorldMapCoordinateMover:
         runtime_state: dict[str, Any] | None = None,
         boundary_bounds: WorldMapBounds | None = None,
         coordinate_domain: WorldMapCoordinateDomain | None = None,
+        movement_family: WorldMapTraversalActionFamily = WorldMapTraversalActionFamily.LOCAL_DIRECT,
+        arrival_observation_request: ObservationRequest | None = None,
+        movement_proof_artifact_selection: ObservationArtifactSelection | None = None,
+        arrival_artifact_selection: ObservationArtifactSelection | None = None,
+        logging_mode: DiagnosticLogMode = DiagnosticLogMode.IMMEDIATE,
     ) -> Observation:
         """Moves toward the requested coordinate using bounded cardinal legs and returns the freshest proven world-map observation."""
 
@@ -984,12 +1113,22 @@ class WorldMapCoordinateMover:
                 target_coordinate=addressable_target_coordinate,
                 focus_tolerance=self.navigator.focus_tolerance,
                 preferred_axis=preferred_axis,
-                max_axis_delta_per_leg=self.max_axis_delta_per_leg,
+                max_axis_delta_per_leg=self._active_max_axis_delta(
+                    current=current,
+                    target_coordinate=addressable_target_coordinate,
+                    movement_family=movement_family,
+                ),
             )
             plan_elapsed_ms = (time.perf_counter() - plan_started_at) * 1000.0
             if leg_target is None:
                 return current
             before_coordinate = _require_world_map_viewport_coordinate(current)
+            movement_mode = self.movement_policy.mode_for_remaining_delta(
+                current_coordinate=before_coordinate,
+                target_coordinate=addressable_target_coordinate,
+                action_family=movement_family,
+            )
+            active_max_axis_delta_per_leg = self.movement_policy.max_axis_delta_for_mode(movement_mode)
             try:
                 actions = self.navigator.plan_focus_coordinate(
                     current,
@@ -1021,8 +1160,23 @@ class WorldMapCoordinateMover:
                     current_coordinate=current_coordinate,
                     leg_target=(leg_target.x, leg_target.y),
                 )
+            actions = self._prepare_step_actions(
+                actions=actions,
+                leg_target=(leg_target.x, leg_target.y),
+                target_coordinate=addressable_target_coordinate,
+                arrival_observation_request=arrival_observation_request,
+            )
             action_started_at = time.perf_counter()
-            intermediate_after = self._execute_actions(actions, current, label_prefix=f"{label_prefix}_{step_index}")
+            intermediate_after = self._execute_actions(
+                actions,
+                current,
+                label_prefix=f"{label_prefix}_{step_index}",
+                artifact_selection=(
+                    arrival_artifact_selection
+                    if arrival_observation_request is not None and (leg_target.x, leg_target.y) == addressable_target_coordinate
+                    else movement_proof_artifact_selection
+                ),
+            )
             action_elapsed_ms = (time.perf_counter() - action_started_at) * 1000.0
             prove_started_at = time.perf_counter()
             after = _require_proven_world_map_observation(
@@ -1060,11 +1214,16 @@ class WorldMapCoordinateMover:
                 after_coordinate=after_coordinate,
                 requested_coordinate=target_coordinate,
                 normalized_target_coordinate=addressable_target_coordinate,
+                action_family=movement_family,
+                movement_mode=movement_mode,
+                max_axis_delta_per_leg=active_max_axis_delta_per_leg,
                 plan_elapsed_ms=plan_elapsed_ms,
                 action_elapsed_ms=action_elapsed_ms,
                 prove_elapsed_ms=prove_elapsed_ms,
                 total_elapsed_ms=(time.perf_counter() - step_started_at) * 1000.0,
                 classification=classification,
+                runtime_state=runtime_state,
+                logging_mode=logging_mode,
             )
             _record_movement_step_trace(
                 movement_state=movement_state,
@@ -1075,7 +1234,9 @@ class WorldMapCoordinateMover:
                     after_coordinate=after_coordinate,
                     requested_coordinate=target_coordinate,
                     normalized_target_coordinate=addressable_target_coordinate,
-                    max_axis_delta_per_leg=self.max_axis_delta_per_leg,
+                    action_family=movement_family.value,
+                    movement_mode=movement_mode.value,
+                    max_axis_delta_per_leg=active_max_axis_delta_per_leg,
                     gesture_primitive=actions[0].gesture_primitive.value if isinstance(actions[0], SwipeAction) else "unknown",
                     plan_elapsed_ms=plan_elapsed_ms,
                     action_elapsed_ms=action_elapsed_ms,
@@ -1128,18 +1289,25 @@ class WorldMapCoordinateMover:
         after_coordinate: tuple[int, int],
         requested_coordinate: tuple[int, int],
         normalized_target_coordinate: tuple[int, int],
+        action_family: WorldMapTraversalActionFamily,
+        movement_mode: WorldMapMovementMode,
+        max_axis_delta_per_leg: int | None,
         plan_elapsed_ms: float,
         action_elapsed_ms: float,
         prove_elapsed_ms: float,
         total_elapsed_ms: float,
         classification: "WorldMapCardinalMovementClassification",
+        runtime_state: dict[str, Any] | None,
+        logging_mode: DiagnosticLogMode,
     ) -> None:
         """Logs one timing breakdown for the completed movement leg when a runtime logger is available."""
 
-        if self.logger is None:
-            return
-        self.logger.info(
-            "World-map movement step completed.",
+        emit_diagnostic_log(
+            logger=self.logger,
+            runtime_state=runtime_state,
+            mode=logging_mode,
+            level=logging.INFO,
+            message="World-map movement step completed.",
             extra={
                 "step_index": step_index,
                 "before_coordinate": before_coordinate,
@@ -1147,8 +1315,10 @@ class WorldMapCoordinateMover:
                 "after_coordinate": after_coordinate,
                 "requested_coordinate": requested_coordinate,
                 "normalized_target_coordinate": normalized_target_coordinate,
-                "max_axis_delta_per_leg": self.max_axis_delta_per_leg,
-                "gesture_primitive": self.navigator.gesture_primitive.value,
+                "action_family": action_family.value,
+                "movement_mode": movement_mode.value,
+                "max_axis_delta_per_leg": max_axis_delta_per_leg,
+                "gesture_primitive": self.movement_policy.gesture_primitive.value,
                 "plan_elapsed_ms": round(plan_elapsed_ms, 2),
                 "action_elapsed_ms": round(action_elapsed_ms, 2),
                 "prove_elapsed_ms": round(prove_elapsed_ms, 2),
@@ -1163,6 +1333,7 @@ class WorldMapCoordinateMover:
         observation: Observation,
         *,
         label_prefix: str,
+        artifact_selection: ObservationArtifactSelection | None = None,
     ) -> Observation:
         """Executes one movement increment and returns the freshest observed result."""
 
@@ -1171,8 +1342,53 @@ class WorldMapCoordinateMover:
         return self.action_executor.execute_actions(
             actions,
             observation,
-            observe=lambda label, request=None: self.observation_service.observe(f"{label_prefix}_{label}", request=request),
+            observe=lambda label, request=None: self.observation_service.observe(
+                f"{label_prefix}_{label}",
+                request=request,
+                artifact_selection=artifact_selection,
+            ),
         ).observation
+
+    def _active_max_axis_delta(
+        self,
+        *,
+        current: Observation,
+        target_coordinate: tuple[int, int],
+        movement_family: WorldMapTraversalActionFamily,
+    ) -> int | None:
+        """Returns the active per-leg movement cap implied by the current delta and movement policy."""
+
+        current_coordinate = _require_world_map_viewport_coordinate(current)
+        movement_mode = self.movement_policy.mode_for_remaining_delta(
+            current_coordinate=current_coordinate,
+            target_coordinate=target_coordinate,
+            action_family=movement_family,
+        )
+        return self.movement_policy.max_axis_delta_for_mode(movement_mode)
+
+    def _prepare_step_actions(
+        self,
+        *,
+        actions: Sequence[ActionRequest],
+        leg_target: tuple[int, int],
+        target_coordinate: tuple[int, int],
+        arrival_observation_request: ObservationRequest | None,
+    ) -> Sequence[ActionRequest]:
+        """Applies the reviewed gesture primitive and final-arrival observation mode to one planned movement leg."""
+
+        prepared_actions = [
+            replace(action, gesture_primitive=self.movement_policy.gesture_primitive)
+            if isinstance(action, SwipeAction)
+            else action
+            for action in actions
+        ]
+        if arrival_observation_request is None or leg_target != target_coordinate or not prepared_actions:
+            return tuple(prepared_actions)
+        last_action = prepared_actions[-1]
+        if not isinstance(last_action, SwipeAction):
+            return tuple(prepared_actions)
+        prepared_actions[-1] = replace(last_action, follow_up_request=arrival_observation_request)
+        return tuple(prepared_actions)
 
 
 def world_map_movement_trace_document(runtime_state: dict[str, Any] | None) -> dict[str, object]:
@@ -1544,6 +1760,14 @@ class ObservationBackedWorldMapCastleInspector:
     movement_step_budget: int = 8
     world_map_navigator: WorldMapNavigator | None = None
 
+    def __post_init__(self) -> None:
+        """Rejects invalid movement budget values before inspection begins."""
+
+        _require_valid_world_map_step_budget(
+            self.movement_step_budget,
+            field_name="movement_step_budget",
+        )
+
     def inspect_candidates(
         self,
         *,
@@ -1748,6 +1972,7 @@ class WorldMapSearchService:
 
     screen_flows: ScreenFlowPlanner
     traversal_planner: WorldMapTraversalPlanner = field(default_factory=WorldMapTraversalPlanner)
+    traversal_execution_planner: WorldMapTraversalExecutionPlanner = field(default_factory=WorldMapTraversalExecutionPlanner)
     coordinate_navigator: WorldMapCoordinateNavigator = field(default_factory=WorldMapCoordinateNavigator)
     overview_navigator: WorldMapOverviewNavigator = field(default_factory=WorldMapOverviewNavigator)
     observation_service: "ObservationService | None" = None
@@ -1758,6 +1983,14 @@ class WorldMapSearchService:
     world_map_entry_step_budget: int = 6
     movement_step_budget: int = 8
 
+    def __post_init__(self) -> None:
+        """Rejects invalid step-budget wiring before the shared runtime service is used."""
+
+        _require_valid_world_map_step_budget(
+            self.movement_step_budget,
+            field_name="movement_step_budget",
+        )
+
     def resolve_plan(self, request: WorldMapSearchRequest, observation: Observation) -> WorldMapResolvedSearchPlan:
         """Resolves one request against the current world-map surface into a deterministic traversal plan."""
 
@@ -1765,21 +1998,92 @@ class WorldMapSearchService:
         origin = self._resolve_origin_coordinate(request=request, surface=surface)
         coverage_bounds = self._resolve_coverage_bounds(request=request, origin_coordinate=origin)
         movement_tool = self._select_movement_tool(request=request)
-        route = self.traversal_planner.build_route(
+        route_plan = self.traversal_planner.build_route_plan(
             pattern_kind=request.pattern.kind,
             coordinate_domain=request.coordinate_domain,
             origin_coordinate=origin,
             coverage_bounds=coverage_bounds,
-            spacing=request.checkpoint_spacing,
-            edge_band=_traversal_edge_band(request),
+            stride_policy=request.traversal_stride_policy,
+            perimeter_start_corner=request.pattern.perimeter_start_corner,
+            perimeter_rotation=request.pattern.perimeter_rotation,
+            inset_x=request.pattern.inset_x,
+            inset_y=request.pattern.inset_y,
+        )
+        execution_plan = self.traversal_execution_planner.build_execution_plan(
+            route_plan=route_plan,
+            origin_coordinate=origin,
         )
         return WorldMapResolvedSearchPlan(
             request=request,
             origin_coordinate=origin,
             coverage_bounds=coverage_bounds,
+            stride=route_plan.stride,
             movement_tool=movement_tool,
-            route=route,
+            route_plan=route_plan,
+            execution_plan=execution_plan,
         )
+
+    def preview_route(
+        self,
+        request: WorldMapSearchRequest,
+        observation: Observation,
+        *,
+        head: int = 5,
+        tail: int = 5,
+    ) -> dict[str, object]:
+        """Builds one route-preview document suitable for dry-run auditing before live sweep execution."""
+
+        if head <= 0 or tail <= 0:
+            raise SelectorResolutionError(
+                "World-map route preview requires positive head and tail sizes.",
+                head=head,
+                tail=tail,
+            )
+        plan = self.resolve_plan(request, observation)
+        checkpoints = plan.route
+        preview_head = checkpoints[:head]
+        preview_tail = checkpoints[-tail:] if len(checkpoints) > tail else checkpoints
+        return {
+            "pattern": plan.request.pattern.kind.value,
+            "origin_coordinate": [plan.origin_coordinate[0], plan.origin_coordinate[1]],
+            "coverage_bounds": {
+                "min_x": plan.coverage_bounds.min_x,
+                "min_y": plan.coverage_bounds.min_y,
+                "max_x": plan.coverage_bounds.max_x,
+                "max_y": plan.coverage_bounds.max_y,
+            },
+            "stride": {
+                "horizontal_stride_units": plan.stride.horizontal_stride_units,
+                "vertical_stride_units": plan.stride.vertical_stride_units,
+            },
+            "checkpoint_count": len(checkpoints),
+            "head_checkpoints": [
+                {
+                    "route_index": checkpoint.route_index,
+                    "coordinate": [checkpoint.coordinate[0], checkpoint.coordinate[1]],
+                    "distance_from_origin": checkpoint.distance_from_origin,
+                }
+                for checkpoint in preview_head
+            ],
+            "tail_checkpoints": [
+                {
+                    "route_index": checkpoint.route_index,
+                    "coordinate": [checkpoint.coordinate[0], checkpoint.coordinate[1]],
+                    "distance_from_origin": checkpoint.distance_from_origin,
+                }
+                for checkpoint in preview_tail
+            ],
+            "segments": [
+                {
+                    "segment_index": segment.segment_index,
+                    "intent": segment.traversal_segment_intent.value,
+                    "start_coordinate": [segment.start_coordinate[0], segment.start_coordinate[1]],
+                    "end_coordinate": [segment.end_coordinate[0], segment.end_coordinate[1]],
+                    "checkpoint_count": len(segment.analyzed_checkpoint_coordinates),
+                }
+                for segment in plan.route_plan.segments
+            ],
+        }
 
     def execute_search(
         self,
@@ -1795,6 +2099,7 @@ class WorldMapSearchService:
             raise SelectorResolutionError(
                 "World-map search execution requires observation_service, action_executor, and survey_recorder dependencies."
             )
+        active_runtime_state = {} if runtime_state is None else runtime_state
         current_observation = start_observation or self.observation_service.observe(f"{label_prefix}_start")
         if current_observation.screen_type != ScreenType.PNC_WORLD_MAP or current_observation.spatial_surface is None:
             raise SelectorResolutionError(
@@ -1806,105 +2111,101 @@ class WorldMapSearchService:
         matched_by_key: dict[WorldMapObjectKey, WorldMapObjectSighting] = {}
         visited_checkpoints: list[WorldMapTraversalCheckpoint] = []
         castle_enrichment_used = False
-        route = plan.route
-        for checkpoint in route:
-            if request.stop_policy.max_radius_units is not None and checkpoint.distance_from_origin > request.stop_policy.max_radius_units:
-                return self._build_result(
-                    matched_keys=matched_keys,
-                    matched_by_key=matched_by_key,
-                    stop_reason=WorldMapSearchStopReason.RADIUS_LIMIT_REACHED,
-                    visited_checkpoints=visited_checkpoints,
-                    plan=plan,
-                    castle_enrichment_used=castle_enrichment_used,
-                )
-            current_observation = self.move_to_checkpoint(
-                current_observation,
-                plan=plan,
-                checkpoint=checkpoint,
-                label_prefix=f"{label_prefix}_move_{checkpoint.route_index}",
-                runtime_state=runtime_state,
+
+        def finish(stop_reason: WorldMapSearchStopReason) -> WorldMapSearchResult:
+            """Builds the final result and persists one sequence summary when checkpoints were analyzed."""
+
+            self._persist_sequence_summary(
+                label=f"{label_prefix}_summary",
+                visited_checkpoints=visited_checkpoints,
             )
-            current_observation = self._ingest_checkpoint_observation(
-                current_observation,
-                label=f"{label_prefix}_checkpoint_{checkpoint.route_index}",
-            )
-            visited_checkpoints.append(checkpoint)
-            self._collect_checkpoint_matches(
-                request=request,
-                observation=current_observation,
+            return self._build_result(
                 matched_keys=matched_keys,
                 matched_by_key=matched_by_key,
+                stop_reason=stop_reason,
+                visited_checkpoints=visited_checkpoints,
+                plan=plan,
+                castle_enrichment_used=castle_enrichment_used,
             )
-            stop_reason = self._evaluate_stop_policy(
-                request=request,
-                route=route,
-                checkpoint=checkpoint,
-                matched_count=len(matched_keys),
-                visited_count=len(visited_checkpoints),
-            )
-            if stop_reason is not None:
-                return self._build_result(
+
+        try:
+            steps = plan.execution_plan.steps
+            for step in steps:
+                checkpoint = step.checkpoint
+                if request.stop_policy.max_radius_units is not None and checkpoint.distance_from_origin > request.stop_policy.max_radius_units:
+                    return finish(WorldMapSearchStopReason.RADIUS_LIMIT_REACHED)
+                current_observation = self.move_to_checkpoint(
+                    current_observation,
+                    plan=plan,
+                    step=step,
+                    label_prefix=f"{label_prefix}_move_{checkpoint.route_index}",
+                    runtime_state=active_runtime_state,
+                )
+                current_observation = self._ingest_checkpoint_observation(
+                    current_observation,
+                    label=f"{label_prefix}_checkpoint_{checkpoint.route_index}",
+                )
+                visited_checkpoints.append(checkpoint)
+                self._collect_checkpoint_matches(
+                    request=request,
+                    observation=current_observation,
                     matched_keys=matched_keys,
                     matched_by_key=matched_by_key,
-                    stop_reason=stop_reason,
-                    visited_checkpoints=visited_checkpoints,
-                    plan=plan,
-                    castle_enrichment_used=castle_enrichment_used,
                 )
-            if (
-                request.castle_enrichment_policy.kind == WorldMapCastleEnrichmentPolicyKind.WHEN_REQUIRED
-                and request.matcher.supports_castle_enrichment()
-                and self.castle_inspector is not None
-                and not matched_keys
-            ):
-                candidates = tuple(
-                    _rank_castle_candidates(
-                        matcher=request.matcher,
-                        index=self.survey_recorder.index,
-                    )[: request.castle_enrichment_policy.max_candidates]
+                stop_reason = self._evaluate_stop_policy(
+                    request=request,
+                    route=plan.route,
+                    checkpoint=checkpoint,
+                    matched_count=len(matched_keys),
+                    visited_count=len(visited_checkpoints),
                 )
-                if candidates:
-                    castle_enrichment_used = True
-                    current_observation, _ = self.castle_inspector.inspect_candidates(
-                        matcher=request.matcher,
-                        candidates=candidates,
-                        current_observation=current_observation,
-                        label_prefix=f"{label_prefix}_castle_enrichment_{checkpoint.route_index}",
-                        runtime_state=runtime_state,
+                if stop_reason is not None:
+                    return finish(stop_reason)
+                if (
+                    request.castle_enrichment_policy.kind == WorldMapCastleEnrichmentPolicyKind.WHEN_REQUIRED
+                    and request.matcher.supports_castle_enrichment()
+                    and self.castle_inspector is not None
+                    and not matched_keys
+                ):
+                    candidates = tuple(
+                        _rank_castle_candidates(
+                            matcher=request.matcher,
+                            index=self.survey_recorder.index,
+                        )[: request.castle_enrichment_policy.max_candidates]
                     )
-                    self._collect_index_matches(
-                        matcher=request.matcher,
-                        matched_keys=matched_keys,
-                        matched_by_key=matched_by_key,
-                    )
-                    stop_reason = self._evaluate_stop_policy(
-                        request=request,
-                        route=route,
-                        checkpoint=checkpoint,
-                        matched_count=len(matched_keys),
-                        visited_count=len(visited_checkpoints),
-                    )
-                    if stop_reason is not None:
-                        return self._build_result(
+                    if candidates:
+                        castle_enrichment_used = True
+                        current_observation, _ = self.castle_inspector.inspect_candidates(
+                            matcher=request.matcher,
+                            candidates=candidates,
+                            current_observation=current_observation,
+                            label_prefix=f"{label_prefix}_castle_enrichment_{checkpoint.route_index}",
+                            runtime_state=active_runtime_state,
+                        )
+                        self._collect_index_matches(
+                            matcher=request.matcher,
                             matched_keys=matched_keys,
                             matched_by_key=matched_by_key,
-                            stop_reason=stop_reason,
-                            visited_checkpoints=visited_checkpoints,
-                            plan=plan,
-                            castle_enrichment_used=castle_enrichment_used,
                         )
-        return self._build_result(
-            matched_keys=matched_keys,
-            matched_by_key=matched_by_key,
-            stop_reason=(
+                        stop_reason = self._evaluate_stop_policy(
+                            request=request,
+                            route=plan.route,
+                            checkpoint=checkpoint,
+                            matched_count=len(matched_keys),
+                            visited_count=len(visited_checkpoints),
+                        )
+                        if stop_reason is not None:
+                            return finish(stop_reason)
+            return finish(
                 WorldMapSearchStopReason.BOUNDARY_EXHAUSTED
                 if request.boundary is not None
                 else WorldMapSearchStopReason.ROUTE_EXHAUSTED
-            ),
-            visited_checkpoints=visited_checkpoints,
-            plan=plan,
-            castle_enrichment_used=castle_enrichment_used,
-        )
+            )
+        finally:
+            flush_buffered_diagnostic_logs(
+                logger=None if self.action_executor is None else getattr(self.action_executor, "logger", None),
+                runtime_state=active_runtime_state,
+            )
 
     def _build_result(
         self,
@@ -1934,12 +2235,13 @@ class WorldMapSearchService:
         observation: Observation,
         *,
         plan: WorldMapResolvedSearchPlan,
-        checkpoint: WorldMapTraversalCheckpoint,
+        step: WorldMapTraversalExecutionStep,
         label_prefix: str,
         runtime_state: dict[str, Any] | None = None,
     ) -> Observation:
         """Moves toward the requested checkpoint using the selected low-level movement primitive."""
 
+        checkpoint = step.checkpoint
         if plan.movement_tool == WorldMapMovementToolKind.COORDINATE_JUMP:
             return self._move_with_coordinate_jump(observation, checkpoint=checkpoint, label_prefix=label_prefix)
         if plan.movement_tool == WorldMapMovementToolKind.OVERVIEW_SEED:
@@ -1951,6 +2253,15 @@ class WorldMapSearchService:
             runtime_state=runtime_state,
             boundary_bounds=_known_world_map_bounds(plan.request),
             coordinate_domain=plan.request.coordinate_domain,
+            movement_family=step.action_family,
+            arrival_observation_request=ObservationRequest.world_map_checkpoint_analysis(),
+            movement_proof_artifact_selection=self._routine_artifact_selection(
+                ObservationArtifactRoutine.WORLD_MAP_MOVEMENT_PROOF
+            ),
+            arrival_artifact_selection=self._routine_artifact_selection(
+                ObservationArtifactRoutine.WORLD_MAP_ANALYZED_CHECKPOINT
+            ),
+            logging_mode=DiagnosticLogMode.BUFFERED_SEQUENCE,
         )
 
     def _move_with_coordinate_jump(
@@ -2093,12 +2404,22 @@ class WorldMapSearchService:
 
         if self.coordinate_mover is not None:
             self.coordinate_mover.movement_step_budget = self.movement_step_budget
+            if hasattr(self.coordinate_mover, "movement_policy"):
+                self.coordinate_mover.movement_policy = WorldMapMovementPolicy(
+                    gesture_primitive=self.screen_flows.world_map_navigator.gesture_primitive,
+                    correction_threshold_units=self.coordinate_mover.movement_policy.correction_threshold_units,
+                    traverse_max_axis_delta_per_leg=self.coordinate_mover.movement_policy.traverse_max_axis_delta_per_leg,
+                    correction_max_axis_delta_per_leg=self.coordinate_mover.movement_policy.correction_max_axis_delta_per_leg,
+                )
             return self.coordinate_mover
         self.coordinate_mover = WorldMapCoordinateMover(
             observation_service=self.observation_service,
             action_executor=self.action_executor,
             navigator=self.screen_flows.world_map_navigator,
             coordinate_domain=WorldMapCoordinateDomain.puzzles_and_conquest(),
+            movement_policy=WorldMapMovementPolicy(
+                gesture_primitive=self.screen_flows.world_map_navigator.gesture_primitive,
+            ),
             movement_step_budget=self.movement_step_budget,
             logger=None if self.action_executor is None else getattr(self.action_executor, "logger", None),
         )
@@ -2108,6 +2429,33 @@ class WorldMapSearchService:
         """Returns the canonical coordinate mover for legacy private call sites."""
 
         return self.coordinate_mover_for_runtime()
+
+    def _routine_artifact_selection(self, routine: ObservationArtifactRoutine) -> ObservationArtifactSelection | None:
+        """Returns the shared routine artifact selection for the current observation mode when available."""
+
+        if self.observation_service is None:
+            return None
+        return resolve_routine_artifact_selection(mode=self.observation_service.mode, routine=routine)
+
+    def _persist_sequence_summary(
+        self,
+        *,
+        label: str,
+        visited_checkpoints: Sequence[WorldMapTraversalCheckpoint],
+    ) -> None:
+        """Persists one end-of-sequence survey summary when the configured artifact policy requests it."""
+
+        if self.survey_recorder is None or not visited_checkpoints:
+            return
+        if not hasattr(self.survey_recorder.observation_service, "artifact_directory"):
+            return
+        artifact_selection = self._routine_artifact_selection(ObservationArtifactRoutine.WORLD_MAP_SEQUENCE_SUMMARY)
+        if not artifact_selection:
+            return
+        self.survey_recorder.persist_checkpoint(
+            label,
+            artifact_selection=artifact_selection,
+        )
 
     def _resolve_origin_coordinate(
         self,
@@ -2135,10 +2483,6 @@ class WorldMapSearchService:
             bounds = _require_map_bounds(request)
             assert origin.corner is not None
             return request.coordinate_domain.nearest_addressable_in_bounds(_coordinate_for_corner(bounds, origin.corner))
-        if origin.kind == WorldMapSearchOriginKind.MAP_EDGE_REFERENCE:
-            bounds = _require_map_bounds(request)
-            assert origin.edge is not None
-            return request.coordinate_domain.nearest_addressable_in_bounds(_coordinate_for_edge(bounds, origin.edge))
         raise SelectorResolutionError("Unsupported world-map search origin.", origin_kind=origin.kind.value)
 
     def _resolve_coverage_bounds(
@@ -2172,10 +2516,6 @@ class WorldMapSearchService:
             request.coordinate_domain.require_bounds_inside(boundary.rectangle_bounds)
             return boundary.rectangle_bounds
         if boundary.kind == WorldMapSearchBoundaryKind.FULL_MAP:
-            assert boundary.map_bounds is not None
-            request.coordinate_domain.require_bounds_inside(boundary.map_bounds)
-            return boundary.map_bounds
-        if boundary.kind == WorldMapSearchBoundaryKind.EDGE_BAND:
             assert boundary.map_bounds is not None
             request.coordinate_domain.require_bounds_inside(boundary.map_bounds)
             return boundary.map_bounds
@@ -2295,20 +2635,6 @@ def _coordinate_for_corner(bounds: WorldMapBounds, corner: WorldMapMapCorner) ->
     if corner == WorldMapMapCorner.LOWER_LEFT:
         return bounds.min_x, bounds.max_y
     return bounds.max_x, bounds.max_y
-
-
-def _coordinate_for_edge(bounds: WorldMapBounds, edge: WorldMapEdge) -> tuple[int, int]:
-    """Returns one deterministic coordinate centered on the requested edge."""
-
-    center_x = (bounds.min_x + bounds.max_x) // 2
-    center_y = (bounds.min_y + bounds.max_y) // 2
-    if edge == WorldMapEdge.LEFT:
-        return bounds.min_x, center_y
-    if edge == WorldMapEdge.RIGHT:
-        return bounds.max_x, center_y
-    if edge == WorldMapEdge.TOP:
-        return center_x, bounds.min_y
-    return center_x, bounds.max_y
 
 
 def _rank_castle_candidates(
@@ -2672,21 +2998,9 @@ def _known_world_map_bounds(request: WorldMapSearchRequest) -> WorldMapBounds | 
 
     if request.boundary is None:
         return request.coordinate_domain.bounds
-    if request.boundary.kind in {WorldMapSearchBoundaryKind.FULL_MAP, WorldMapSearchBoundaryKind.EDGE_BAND}:
+    if request.boundary.kind == WorldMapSearchBoundaryKind.FULL_MAP:
         return request.boundary.map_bounds
     return request.coordinate_domain.bounds
-
-
-def _traversal_edge_band(request: WorldMapSearchRequest) -> WorldMapTraversalEdgeBand | None:
-    """Adapts an edge-band search boundary to the traversal module's request-independent payload."""
-
-    boundary = request.boundary
-    if boundary is None or boundary.kind != WorldMapSearchBoundaryKind.EDGE_BAND:
-        return None
-    return WorldMapTraversalEdgeBand(
-        edges=boundary.edges,
-        band_width_units=boundary.band_width_units or 0,
-    )
 
 
 def _validate_boundary_within_coordinate_domain(
@@ -2804,6 +3118,21 @@ def _build_stagnant_retry_exhausted_error(
         "World-map movement exhausted its bounded stagnant-swipe retry budget.",
         **details,
     )
+
+
+def _require_valid_world_map_step_budget(
+    step_budget: int,
+    *,
+    field_name: str,
+) -> None:
+    """Rejects invalid world-map step budgets before runtime loops consume them."""
+
+    if step_budget <= 0:
+        raise SelectorResolutionError(
+            "World-map step budgets must be positive integers.",
+            field_name=field_name,
+            step_budget=step_budget,
+        )
 
 
 def _world_map_coordinate_text_or_none(observation: Observation) -> str | None:

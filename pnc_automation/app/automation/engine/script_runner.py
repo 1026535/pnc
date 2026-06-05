@@ -376,7 +376,7 @@ class ScriptRunner:
 
 
 def configure_world_map_movement_budget(runtime: ConnectedAccountRuntime, movement_step_budget: int) -> None:
-    """Applies one live world-map movement step budget to every runtime service that performs coordinate moves."""
+    """Applies one shared world-map movement step budget to the connected runtime services."""
 
     if movement_step_budget <= 0:
         raise ValueError("World-map movement step budget must be positive.")
@@ -402,6 +402,14 @@ def configure_world_map_movement_gesture_primitive(
     """Applies one shared world-map drag primitive across the connected search and calibration services."""
 
     runtime.flow_planner.world_map_navigator.gesture_primitive = gesture_primitive
+    mover = runtime.world_map_search_service.coordinate_mover
+    if mover is not None:
+        mover.movement_policy = type(mover.movement_policy)(
+            gesture_primitive=gesture_primitive,
+            correction_threshold_units=mover.movement_policy.correction_threshold_units,
+            traverse_max_axis_delta_per_leg=mover.movement_policy.traverse_max_axis_delta_per_leg,
+            correction_max_axis_delta_per_leg=mover.movement_policy.correction_max_axis_delta_per_leg,
+        )
 
 
 def _prepare_account_session_steps(castle: CastleIdentity | None) -> tuple[ScriptStep, ...]:

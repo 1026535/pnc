@@ -28,6 +28,7 @@ from pnc_automation.app.pnc.navigation.world_map_overview_projection import proj
 from pnc_automation.app.pnc.navigation.world_map_index import WorldMapCastleQuery
 from pnc_automation.app.pnc.navigation.world_map_search import (
     ObservationBackedWorldMapCastleInspector,
+    TraversalStridePolicy,
     WorldMapBounds,
     WorldMapCastleProfileQuery,
     WorldMapCoordinateDomain,
@@ -35,17 +36,19 @@ from pnc_automation.app.pnc.navigation.world_map_search import (
     WorldMapCoordinateJumpPlan,
     WorldMapCoordinateMover,
     WorldMapCoordinateNavigator,
-    WorldMapEdge,
     WorldMapMapCorner,
+    WorldMapMovementPolicy,
     WorldMapMovementPreferences,
     WorldMapMovementToolKind,
     WorldMapOverviewNavigator,
     WorldMapSearchBoundary,
     WorldMapSearchOrigin,
     WorldMapSearchPattern,
+    WorldMapSearchPatternKind,
     WorldMapSearchService,
     WorldMapSearchStopPolicy,
     WorldMapSearchStopReason,
+    WorldMapTraversalCorner,
     _resolve_cardinal_sweep_leg_target,
     adapt_world_map_search_matcher,
     all_of_world_map_search,
@@ -153,8 +156,8 @@ class WorldMapSearchTests(unittest.TestCase):
             ],
         )
 
-    def test_resolve_plan_builds_edge_band_route_from_full_map_bounds(self) -> None:
-        """Restricts edge-band sweeps to the requested map edges while ordering checkpoints from the resolved origin."""
+    def test_resolve_plan_builds_perimeter_route_from_full_map_bounds(self) -> None:
+        """Builds one explicit perimeter traversal around the requested bounds."""
 
         service = WorldMapSearchService(screen_flows=self.flows)
         observation = _make_world_map_observation(0, 0)
@@ -162,12 +165,10 @@ class WorldMapSearchTests(unittest.TestCase):
         plan = service.resolve_plan(
             _search_request(
                 matcher=SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.RESOURCE_NODE),
-                pattern=WorldMapSearchPattern.edge_band_sweep(),
-                origin=WorldMapSearchOrigin.map_edge_reference(WorldMapEdge.LEFT),
-                boundary=WorldMapSearchBoundary.edge_band(
-                    map_bounds=WorldMapBounds(min_x=0, min_y=0, max_x=20, max_y=20),
-                    band_width_units=5,
-                    edges=(WorldMapEdge.LEFT, WorldMapEdge.TOP),
+                pattern=WorldMapSearchPattern.perimeter_ring_sweep(start_corner=WorldMapTraversalCorner.UPPER_LEFT),
+                origin=WorldMapSearchOrigin.map_corner(WorldMapMapCorner.UPPER_LEFT),
+                boundary=WorldMapSearchBoundary.full_map(
+                    WorldMapBounds(min_x=0, min_y=0, max_x=20, max_y=20),
                 ),
                 checkpoint_spacing=10,
             ),
@@ -176,7 +177,7 @@ class WorldMapSearchTests(unittest.TestCase):
 
         self.assertEqual(
             [checkpoint.coordinate for checkpoint in plan.route],
-            [(0, 10), (0, 0), (0, 20), (10, 0), (20, 0)],
+            [(0, 0), (10, 0), (20, 0), (20, 10), (20, 20), (10, 20), (0, 20), (0, 10)],
         )
 
     def test_coordinate_domain_models_addressable_coordinate_pairs_not_axes(self) -> None:
@@ -358,11 +359,12 @@ class WorldMapSearchTests(unittest.TestCase):
                 observation_service=None,
                 action_executor=None,
                 navigator=WorldMapNavigator(focus_tolerance=1),
-                max_axis_delta_per_leg=1,
+                movement_policy=WorldMapMovementPolicy(traverse_max_axis_delta_per_leg=1),
             )
 
         self.assertIn("must be greater than the navigator focus_tolerance", str(error.exception))
-        self.assertEqual(error.exception.details["max_axis_delta_per_leg"], 1)
+        self.assertEqual(error.exception.details["field_name"], "traverse_max_axis_delta_per_leg")
+        self.assertEqual(error.exception.details["value"], 1)
         self.assertEqual(error.exception.details["focus_tolerance"], 1)
 
     def test_world_map_navigation_swipes_use_dedicated_movement_follow_up_and_timing(self) -> None:
@@ -412,6 +414,60 @@ class WorldMapSearchTests(unittest.TestCase):
         self.assertGreaterEqual(trace["action_elapsed_ms"], 0.0)
         self.assertGreaterEqual(trace["prove_elapsed_ms"], 0.0)
         self.assertEqual(observer.requests, [ObservationRequest.world_map_movement_follow_up()])
+
+    def test_move_to_checkpoint_uses_checkpoint_analysis_scope_on_final_landing_without_recapture(self) -> None:
+        """Uses the richer checkpoint-analysis observation on the final leg instead of proof then recapturing the same viewport."""
+
+        service, observer, _session = self._build_runtime_service_bundle(
+            observations=[
+                _make_world_map_observation(10, 0),
+            ]
+        )
+        start = _make_world_map_observation(0, 0)
+        plan = service.resolve_plan(
+            _search_request(
+                matcher=SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.RESOURCE_NODE),
+                pattern=WorldMapSearchPattern.row_major_sweep(),
+                origin=WorldMapSearchOrigin.current_viewport(),
+                boundary=WorldMapSearchBoundary.rectangle(min_coordinate=(10, 0), max_coordinate=(10, 0)),
+                checkpoint_spacing=10,
+            ),
+            start,
+        )
+
+        end = service.move_to_checkpoint(
+            start,
+            plan=plan,
+            step=plan.execution_plan.steps[0],
+            label_prefix="checkpoint_analysis_arrival",
+            runtime_state={},
+        )
+
+        self.assertEqual(end.require_spatial_surface(SpatialSurfaceType.WORLD_MAP).viewport.coordinate, (10, 0))
+        self.assertEqual(observer.requests, [ObservationRequest.world_map_checkpoint_analysis()])
+
+    def test_preview_route_reports_segments_and_head_tail_checkpoints(self) -> None:
+        """Exposes one dry-run route preview so live sweeps can be audited before execution."""
+
+        service = WorldMapSearchService(screen_flows=self.flows)
+        preview = service.preview_route(
+            _search_request(
+                matcher=SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.RESOURCE_NODE),
+                pattern=WorldMapSearchPattern.serpentine_row_sweep(),
+                origin=WorldMapSearchOrigin.current_viewport(),
+                boundary=WorldMapSearchBoundary.rectangle(min_coordinate=(0, 0), max_coordinate=(20, 20)),
+                checkpoint_spacing=10,
+            ),
+            _make_world_map_observation(0, 0),
+            head=2,
+            tail=2,
+        )
+
+        self.assertEqual(preview["pattern"], WorldMapSearchPatternKind.SERPENTINE_ROW_SWEEP.value)
+        self.assertEqual(preview["checkpoint_count"], 9)
+        self.assertEqual(preview["head_checkpoints"][0]["coordinate"], [0, 0])
+        self.assertEqual(preview["tail_checkpoints"][-1]["coordinate"], [20, 20])
+        self.assertEqual(preview["segments"][1]["intent"], "local_traverse")
 
     def test_search_service_caches_runtime_coordinate_mover_for_live_tuning(self) -> None:
         """Reuses one runtime coordinate mover so live helpers can tune granularity on the shared instance."""
@@ -1191,6 +1247,40 @@ class WorldMapSearchTests(unittest.TestCase):
             ],
         )
 
+    def test_execute_search_supports_explicitly_larger_coordinate_focus_budget_for_long_sweeps(self) -> None:
+        """Allows long-running sweep traversal to keep advancing past the default bounded leg budget when configured."""
+
+        service, observer = self._build_runtime_service(
+            observations=[
+                _make_world_map_observation(10, 0),
+                _make_world_map_observation(20, 0),
+                _make_world_map_observation(30, 0),
+                _make_world_map_observation(40, 0),
+                _make_world_map_observation(50, 0),
+                _make_world_map_observation(60, 0),
+                _make_world_map_observation(70, 0),
+                _make_world_map_observation(80, 0),
+                _make_world_map_observation(90, 0),
+            ]
+        )
+        service.movement_step_budget = 10
+
+        result = service.execute_search(
+            _search_request(
+                matcher=SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.RESOURCE_NODE),
+                pattern=WorldMapSearchPattern.row_major_sweep(),
+                origin=WorldMapSearchOrigin.current_viewport(),
+                boundary=WorldMapSearchBoundary.rectangle(min_coordinate=(90, 0), max_coordinate=(90, 0)),
+                checkpoint_spacing=10,
+            ),
+            label_prefix="extended_coordinate_focus_budget",
+            start_observation=_make_world_map_observation(0, 0),
+        )
+
+        self.assertEqual([checkpoint.coordinate for checkpoint in result.visited_checkpoints], [(90, 0)])
+        self.assertEqual(len(observer.labels), 9)
+        self.assertEqual(service.coordinate_mover_for_runtime().movement_step_budget, 10)
+
     def test_execute_search_does_not_run_screen_flow_world_map_readiness_per_checkpoint(self) -> None:
         """Keeps checkpoint traversal inside the world-map surface after the caller supplies the entry proof."""
 
@@ -1727,7 +1817,7 @@ def _search_request(
         matcher=matcher,
         stop_policy=WorldMapSearchStopPolicy() if stop_policy is None else stop_policy,
         pattern=pattern,
-        checkpoint_spacing=checkpoint_spacing,
+        traversal_stride_policy=TraversalStridePolicy.symmetric(checkpoint_spacing),
         origin=origin,
         boundary=boundary,
         movement_preferences=WorldMapMovementPreferences() if movement_preferences is None else movement_preferences,
