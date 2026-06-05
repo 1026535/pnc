@@ -37,7 +37,6 @@ from pnc_automation.app.pnc.navigation.world_map_search import (
 )
 from pnc_automation.app.pnc.navigation.world_map_survey_recorder import WorldMapSurveyRecorder
 from pnc_automation.core.errors import SelectorResolutionError
-from pnc_automation.core.infra.diagnostics.buffered_logging import flush_buffered_diagnostic_logs
 
 if TYPE_CHECKING:
     from pnc_automation.app.pnc.vision.observation_builder import ObservationService
@@ -575,49 +574,49 @@ class WorldMapMovementCalibrationService:
         runtime_state: dict[str, object] = {}
         checkpoint_results: list[WorldMapSweepCheckpointResult] = []
         stop_reason = "route_exhausted"
-        for checkpoint in plan.route:
-            if request.max_checkpoints is not None and len(checkpoint_results) >= request.max_checkpoints:
-                stop_reason = "checkpoint_budget_exhausted"
-                break
-            current = search_service.move_to_checkpoint(
-                current,
-                plan=plan,
-                step=next(step for step in plan.execution_plan.steps if step.checkpoint == checkpoint),
-                label_prefix=f"{label_prefix}_move_{checkpoint.route_index}",
-                runtime_state=runtime_state,
-            )
-            recorded_observation = self._record_checkpoint(
-                label=f"{label_prefix}_checkpoint_{checkpoint.route_index}",
-                observation=current,
-            )
-            evidence = _coordinate_evidence(recorded_observation)
-            delta_from_checkpoint = _checkpoint_delta(
-                requested_coordinate=checkpoint.coordinate,
-                observed_coordinate=evidence.coordinate,
-            )
-            within_tolerance = (
-                False
-                if evidence.coordinate is None
-                else _coordinate_within_tolerance(
-                    evidence.coordinate,
-                    checkpoint.coordinate,
-                    tolerance=search_service.coordinate_mover_for_runtime().navigator.focus_tolerance,
+        try:
+            for step in plan.execution_plan.steps:
+                checkpoint = step.checkpoint
+                if request.max_checkpoints is not None and len(checkpoint_results) >= request.max_checkpoints:
+                    stop_reason = "checkpoint_budget_exhausted"
+                    break
+                current = search_service.move_to_checkpoint(
+                    current,
+                    plan=plan,
+                    step=step,
+                    label_prefix=f"{label_prefix}_move_{checkpoint.route_index}",
+                    runtime_state=runtime_state,
                 )
-            )
-            checkpoint_results.append(
-                WorldMapSweepCheckpointResult(
-                    checkpoint=checkpoint,
-                    evidence=evidence,
-                    usable_observation=evidence.coordinate is not None,
-                    delta_from_checkpoint=delta_from_checkpoint,
-                    within_tolerance=within_tolerance,
+                recorded_observation = self._record_checkpoint(
+                    label=f"{label_prefix}_checkpoint_{checkpoint.route_index}",
+                    observation=current,
                 )
-            )
-            current = recorded_observation
-        flush_buffered_diagnostic_logs(
-            logger=None if search_service.action_executor is None else getattr(search_service.action_executor, "logger", None),
-            runtime_state=runtime_state,
-        )
+                evidence = _coordinate_evidence(recorded_observation)
+                delta_from_checkpoint = _checkpoint_delta(
+                    requested_coordinate=checkpoint.coordinate,
+                    observed_coordinate=evidence.coordinate,
+                )
+                within_tolerance = (
+                    False
+                    if evidence.coordinate is None
+                    else _coordinate_within_tolerance(
+                        evidence.coordinate,
+                        checkpoint.coordinate,
+                        tolerance=search_service.coordinate_mover_for_runtime().navigator.focus_tolerance,
+                    )
+                )
+                checkpoint_results.append(
+                    WorldMapSweepCheckpointResult(
+                        checkpoint=checkpoint,
+                        evidence=evidence,
+                        usable_observation=evidence.coordinate is not None,
+                        delta_from_checkpoint=delta_from_checkpoint,
+                        within_tolerance=within_tolerance,
+                    )
+                )
+                current = recorded_observation
+        finally:
+            search_service.flush_runtime_diagnostics(runtime_state=runtime_state)
         return WorldMapSweepValidationResult(
             name=request.name,
             pattern=request.pattern,

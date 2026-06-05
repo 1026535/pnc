@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import tempfile
 import unittest
 from pathlib import Path
@@ -312,13 +313,41 @@ class WorldMapMovementCalibrationTests(unittest.TestCase):
         self.assertEqual(mover.target_coordinates, [(10, 0), (20, 0)])
         self.assertEqual(len({id(runtime_state) for runtime_state in mover.runtime_states}), 1)
 
+    def test_validate_sweep_flushes_buffered_logs_when_a_later_checkpoint_fails(self) -> None:
+        """Flushes already-buffered checkpoint movement logs even when sweep validation fails mid-route."""
+
+        logger, records = _build_recording_logger("world_map_sweep_flush")
+        service, _observer, _session = self._build_service(
+            observations=[
+                _make_world_map_observation(10, 0),
+            ],
+            logger=logger,
+        )
+
+        with self.assertRaises(AssertionError):
+            service.validate_sweep(
+                _make_world_map_observation(0, 0),
+                request=WorldMapSweepValidationRequest(
+                    name="flush_on_failure",
+                    pattern=WorldMapSearchPattern.row_major_sweep(),
+                    traversal_stride_policy=TraversalStridePolicy.symmetric(10),
+                    origin=WorldMapSearchOrigin.current_viewport(),
+                    boundary=WorldMapSearchBoundary.rectangle(min_coordinate=(10, 0), max_coordinate=(20, 0)),
+                ),
+                label_prefix="flush_on_failure",
+            )
+
+        self.assertTrue(any(record.msg == "World-map movement step completed." for record in records))
+
     def _build_service(
         self,
         *,
         observations: list[object],
+        logger: logging.LoggerAdapter | None = None,
     ) -> tuple[WorldMapMovementCalibrationService, FakeObservationService, FakeSession]:
         """Builds one fully wired calibration service plus the fake runtime services backing it."""
 
+        runtime_logger = build_logger() if logger is None else logger
         observer = FakeObservationService(observations=observations)
         session = FakeSession()
         recorder = WorldMapSurveyRecorder(
@@ -336,10 +365,10 @@ class WorldMapMovementCalibrationTests(unittest.TestCase):
                     post_action_observe_delay_ms=0,
                     chat_stable_click_delay_ms=0,
                     chat_post_action_observe_delay_ms=0,
-                    logger=build_logger(),
+                    logger=runtime_logger,
                     sleep=lambda _: None,
                 ),
-                logger=build_logger(),
+                logger=runtime_logger,
                 sleep=lambda _: None,
             ),
             survey_recorder=recorder,
@@ -410,6 +439,23 @@ def _make_world_map_observation(x: int, y: int) -> object:
             metadata={"coordinate_text": f"X:{x} Y:{y}"},
         ),
     )
+
+
+def _build_recording_logger(name: str) -> tuple[logging.LoggerAdapter, list[logging.LogRecord]]:
+    """Builds one in-memory logger adapter plus the structured records it emits."""
+
+    records: list[logging.LogRecord] = []
+
+    class _ListHandler(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            records.append(record)
+
+    logger = logging.getLogger(f"pnc_automation.tests.{name}")
+    logger.handlers.clear()
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    logger.addHandler(_ListHandler())
+    return logging.LoggerAdapter(logger, extra={}), records
 
 
 if __name__ == "__main__":

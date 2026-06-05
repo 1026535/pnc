@@ -60,6 +60,8 @@
 - `tests/__init__.py` redirects temporary files into `.tmp_test_workspace`; treat `.tmp_test_workspace/`, `.tmp_test_artifacts/`, and `artifacts/` as generated test/runtime output unless the task specifically concerns persisted evidence.
 - Prefer adding focused unit coverage beside the related behavior in the existing `tests/test_*.py` module. Reuse shared builders and fakes from `tests/test_support.py` instead of inventing parallel fixtures.
 - Keep integration-style coverage deterministic by using saved screenshots, authored YAML, fake sessions, and explicit fixtures. Do not make ordinary tests depend on live emulator timing or the current account state.
+- When a bug is discovered from a real screenshot, add a regression test for it. Prefer a committed deterministic fixture when the image is safe and reasonably sized; otherwise reference the screenshot through the local path mapping file `tests/data/local_fixture_artifacts.json` (copy `tests/data/local_fixture_artifacts.example.json` first) so the test can run locally without hardcoding machine-specific `artifacts/` paths.
+- Screenshot-backed tests must fail clearly on malformed inputs and must skip with an explicit message when a required local-only fixture path has not been configured yet; do not leave them crashing with raw `FileNotFoundError`.
 
 ### Live smoke tests
 - Live smoke tests are opt-in `unittest` modules named `tests/test_live_*_smoke.py`; they are skipped unless their environment flag is set.

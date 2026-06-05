@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import tempfile
 import unittest
 from pathlib import Path
@@ -59,6 +60,7 @@ from pnc_automation.app.pnc.navigation.world_map_survey_recorder import WorldMap
 from pnc_automation.app.pnc.persistence.world_map_survey_debug_store import WorldMapSurveyDebugStore
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
+from pnc_automation.app.runtime.observation_artifacts import ObservationArtifactKind, observation_artifact_selection
 from pnc_automation.core.errors import SelectorResolutionError
 from tests.test_support import (
     FakeObservationService,
@@ -446,6 +448,67 @@ class WorldMapSearchTests(unittest.TestCase):
         self.assertEqual(end.require_spatial_surface(SpatialSurfaceType.WORLD_MAP).viewport.coordinate, (10, 0))
         self.assertEqual(observer.requests, [ObservationRequest.world_map_checkpoint_analysis()])
 
+    def test_resolved_plan_caches_route_for_compatibility_consumers(self) -> None:
+        """Materializes the compatibility route once so auxiliary readers do not keep rebuilding it."""
+
+        service = WorldMapSearchService(screen_flows=self.flows)
+        plan = service.resolve_plan(
+            _search_request(
+                matcher=SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.RESOURCE_NODE),
+                pattern=WorldMapSearchPattern.row_major_sweep(),
+                origin=WorldMapSearchOrigin.current_viewport(),
+                boundary=WorldMapSearchBoundary.rectangle(min_coordinate=(0, 0), max_coordinate=(20, 0)),
+                checkpoint_spacing=10,
+            ),
+            _make_world_map_observation(0, 0),
+        )
+
+        self.assertIs(plan.route, plan.route)
+
+    def test_move_to_checkpoint_persists_failure_artifact_and_logs_failed_swipe_leg(self) -> None:
+        """Captures one failure screenshot and one explicit failed-leg diagnostic when swipe proof refresh exhausts."""
+
+        logger, records = _build_recording_logger("world_map_search_failed_leg")
+        service, observer, _session = self._build_runtime_service_bundle(
+            observations=[
+                make_observation(ScreenType.PNC_WORLD_MAP),
+                make_observation(ScreenType.PNC_WORLD_MAP),
+                make_observation(ScreenType.PNC_WORLD_MAP),
+                _make_world_map_observation(0, 0),
+            ],
+            logger=logger,
+        )
+        start = _make_world_map_observation(0, 0)
+        plan = service.resolve_plan(
+            _search_request(
+                matcher=SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.RESOURCE_NODE),
+                pattern=WorldMapSearchPattern.row_major_sweep(),
+                origin=WorldMapSearchOrigin.current_viewport(),
+                boundary=WorldMapSearchBoundary.rectangle(min_coordinate=(10, 0), max_coordinate=(10, 0)),
+                checkpoint_spacing=10,
+            ),
+            start,
+        )
+        runtime_state: dict[str, object] = {}
+
+        with self.assertRaises(SelectorResolutionError):
+            service.move_to_checkpoint(
+                start,
+                plan=plan,
+                step=plan.execution_plan.steps[0],
+                label_prefix="checkpoint_failure",
+                runtime_state=runtime_state,
+            )
+        service.flush_runtime_diagnostics(runtime_state=runtime_state)
+
+        screenshot_selection = observation_artifact_selection(ObservationArtifactKind.SCREENSHOT)
+        self.assertEqual(observer.artifact_selections[0], screenshot_selection)
+        self.assertEqual(observer.artifact_selections[-1], screenshot_selection)
+        self.assertTrue(observer.labels[-1].endswith("checkpoint_failure_failure_0"))
+        failure_records = [record for record in records if record.msg == "World-map movement step failed."]
+        self.assertEqual(len(failure_records), 1)
+        self.assertEqual(failure_records[0].step_index, 0)
+
     def test_preview_route_reports_segments_and_head_tail_checkpoints(self) -> None:
         """Exposes one dry-run route preview so live sweeps can be audited before execution."""
 
@@ -750,6 +813,7 @@ class WorldMapSearchTests(unittest.TestCase):
                 _make_coordinate_dialog_observation(157, 0, 0),
                 _make_coordinate_dialog_observation(157, 10, 0),
                 _make_coordinate_dialog_observation(157, 10, 0, status_banner_text="Invalid coordinates"),
+                _make_coordinate_dialog_observation(157, 10, 0, status_banner_text="Invalid coordinates"),
             ]
         )
         service.coordinate_navigator = _FakeCoordinateJumpNavigator()
@@ -776,8 +840,10 @@ class WorldMapSearchTests(unittest.TestCase):
                 ObservationRequest.world_map_coordinate_dialog_follow_up(),
                 ObservationRequest.world_map_coordinate_dialog_follow_up(),
                 ObservationRequest.world_map_coordinate_jump_follow_up(),
+                ObservationRequest.full_runtime_default(),
             ],
         )
+        self.assertTrue(observer.labels[-1].endswith("coordinate_jump_invalid_move_0_failure"))
 
     def test_execute_search_fails_no_action_coordinate_jump_when_not_at_target(self) -> None:
         """Verifies a no-op coordinate jump before treating the current viewport as the checkpoint."""
@@ -805,10 +871,11 @@ class WorldMapSearchTests(unittest.TestCase):
     def test_execute_search_fails_coordinate_jump_that_lands_at_wrong_coordinate(self) -> None:
         """Rejects coordinate-dialog movement when the resulting viewport proves a different coordinate."""
 
-        service, _observer = self._build_runtime_service(
+        service, observer = self._build_runtime_service(
             observations=[
                 _make_coordinate_dialog_observation(157, 0, 0),
                 _make_coordinate_dialog_observation(157, 10, 0),
+                _make_world_map_observation(8, 0),
                 _make_world_map_observation(8, 0),
             ]
         )
@@ -830,6 +897,8 @@ class WorldMapSearchTests(unittest.TestCase):
 
         self.assertEqual(error.exception.details["target_coordinate"], (10, 0))
         self.assertEqual(error.exception.details["current_coordinate"], (8, 0))
+        self.assertEqual(observer.artifact_selections[-1], observation_artifact_selection(ObservationArtifactKind.SCREENSHOT))
+        self.assertTrue(observer.labels[-1].endswith("coordinate_jump_wrong_landing_move_0_failure"))
 
     def test_execute_search_fails_coordinate_jump_when_landing_lacks_world_map_surface(self) -> None:
         """Requires a proven world-map surface before checkpoint ingestion after coordinate-dialog movement."""
@@ -862,7 +931,7 @@ class WorldMapSearchTests(unittest.TestCase):
     def test_execute_search_accepts_coordinate_jump_landing_at_normalized_target(self) -> None:
         """Verifies coordinate-jump landings against the normalized in-domain checkpoint coordinate."""
 
-        service, _observer = self._build_runtime_service(
+        service, observer = self._build_runtime_service(
             observations=[
                 _make_coordinate_dialog_observation(157, 0, 0),
                 _make_coordinate_dialog_observation(157, 510, 0),
@@ -884,6 +953,14 @@ class WorldMapSearchTests(unittest.TestCase):
         )
 
         self.assertEqual(result.visited_checkpoints[0].coordinate, (510, 0))
+        self.assertEqual(
+            observer.artifact_selections,
+            [
+                frozenset(),
+                frozenset(),
+                observation_artifact_selection(ObservationArtifactKind.SCREENSHOT),
+            ],
+        )
 
     def test_execute_search_moves_with_overview_seed_and_verifies_landing(self) -> None:
         """Executes the full overview open-plus-recenter flow and proves the landed world-map coordinate."""
@@ -914,6 +991,13 @@ class WorldMapSearchTests(unittest.TestCase):
             [
                 ObservationRequest.world_map_overview_follow_up(expected_coordinate=(0, 0)),
                 ObservationRequest.world_map_overview_exit_follow_up(),
+            ],
+        )
+        self.assertEqual(
+            observer.artifact_selections,
+            [
+                frozenset(),
+                observation_artifact_selection(ObservationArtifactKind.SCREENSHOT),
             ],
         )
 
@@ -1218,6 +1302,7 @@ class WorldMapSearchTests(unittest.TestCase):
                 _make_world_map_observation(0, 0, artifact_path=Path("artifacts/stall_1.png")),
                 _make_world_map_observation(0, 0, artifact_path=Path("artifacts/stall_2.png")),
                 _make_world_map_observation(0, 0, artifact_path=Path("artifacts/stall_3.png")),
+                _make_world_map_observation(0, 0, artifact_path=Path("artifacts/stall_failure.png")),
             ]
         )
 
@@ -1244,6 +1329,7 @@ class WorldMapSearchTests(unittest.TestCase):
                 "zero_delta_reactive_move_0_0_post_action_1",
                 "zero_delta_reactive_move_0_1_post_action_1",
                 "zero_delta_reactive_move_0_2_post_action_1",
+                "zero_delta_reactive_move_0_failure_3",
             ],
         )
 
@@ -1703,9 +1789,11 @@ class WorldMapSearchTests(unittest.TestCase):
         self,
         *,
         observations: list[object],
+        logger: logging.LoggerAdapter | None = None,
     ) -> tuple[WorldMapSearchService, FakeObservationService, FakeSession]:
         """Builds one fully wired search service plus the fake session used to execute its actions."""
 
+        runtime_logger = build_logger() if logger is None else logger
         observer = FakeObservationService(observations=observations)
         session = FakeSession()
         recorder = WorldMapSurveyRecorder(
@@ -1723,10 +1811,10 @@ class WorldMapSearchTests(unittest.TestCase):
                     post_action_observe_delay_ms=0,
                     chat_stable_click_delay_ms=0,
                     chat_post_action_observe_delay_ms=0,
-                    logger=build_logger(),
+                    logger=runtime_logger,
                     sleep=lambda _: None,
                 ),
-                logger=build_logger(),
+                logger=runtime_logger,
                 sleep=lambda _: None,
             ),
             survey_recorder=recorder,
@@ -1986,6 +2074,23 @@ def _overview_marker_point_for_coordinate(coordinate: tuple[int, int]) -> tuple[
             height=120,
         ).bounds,
     )
+
+
+def _build_recording_logger(name: str) -> tuple[logging.LoggerAdapter, list[logging.LogRecord]]:
+    """Builds one in-memory logger adapter plus the structured records it emits."""
+
+    records: list[logging.LogRecord] = []
+
+    class _ListHandler(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            records.append(record)
+
+    logger = logging.getLogger(f"pnc_automation.tests.{name}")
+    logger.handlers.clear()
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    logger.addHandler(_ListHandler())
+    return logging.LoggerAdapter(logger, extra={}), records
 
 
 if __name__ == "__main__":
