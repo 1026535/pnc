@@ -177,20 +177,9 @@ class WorldMapCoordinateDomain:
 
         self.require_bounds_inside(bounds)
         coordinates: set[tuple[int, int]] = set()
-        x_step = self._same_row_spacing(spacing)
-        for y in _axis_samples(bounds.min_y, bounds.max_y, spacing):
-            first_x = self._first_addressable_x(bounds=bounds, y=y)
-            if first_x is None:
-                continue
-            last_x = self._last_addressable_x(bounds=bounds, y=y)
-            assert last_x is not None
-            xs = list(range(first_x, last_x + 1, x_step))
-            if xs[-1] != last_x:
-                xs.append(last_x)
-            for x in xs:
-                coordinate = (x, y)
-                if self.is_addressable(coordinate):
-                    coordinates.add(coordinate)
+        for y in self.row_samples(bounds=bounds, spacing=spacing):
+            for coordinate in self.addressable_coordinates_on_row(bounds=bounds, y=y, spacing=spacing):
+                coordinates.add(coordinate)
         for corner in (
             (bounds.min_x, bounds.min_y),
             (bounds.max_x, bounds.min_y),
@@ -239,14 +228,118 @@ class WorldMapCoordinateDomain:
             domain_bounds=self.bounds,
         )
 
-    def _same_row_spacing(self, spacing: int) -> int:
-        """Returns a spacing value that can advance across addressable coordinates on one map row."""
+    def row_samples(self, *, bounds: WorldMapBounds, spacing: int) -> tuple[int, ...]:
+        """Returns the deterministic y-samples used when traversing rows inside the bounds."""
+
+        self.require_bounds_inside(bounds)
+        values = set(_axis_samples(bounds.min_y, bounds.max_y, self._require_positive_spacing(spacing)))
+        values.update(
+            self.nearest_addressable_in_bounds(corner)[1]
+            for corner in (
+                (bounds.min_x, bounds.min_y),
+                (bounds.max_x, bounds.min_y),
+                (bounds.min_x, bounds.max_y),
+                (bounds.max_x, bounds.max_y),
+            )
+            if bounds.contains(corner)
+        )
+        return tuple(sorted(values))
+
+    def column_samples(self, *, bounds: WorldMapBounds, spacing: int) -> tuple[int, ...]:
+        """Returns the deterministic x-samples used when traversing columns inside the bounds."""
+
+        self.require_bounds_inside(bounds)
+        values = set(_axis_samples(bounds.min_x, bounds.max_x, self._require_positive_spacing(spacing)))
+        values.update(
+            self.nearest_addressable_in_bounds(corner)[0]
+            for corner in (
+                (bounds.min_x, bounds.min_y),
+                (bounds.max_x, bounds.min_y),
+                (bounds.min_x, bounds.max_y),
+                (bounds.max_x, bounds.max_y),
+            )
+            if bounds.contains(corner)
+        )
+        return tuple(sorted(values))
+
+    def addressable_coordinates_on_row(
+        self,
+        *,
+        bounds: WorldMapBounds,
+        y: int,
+        spacing: int,
+        reverse: bool = False,
+    ) -> tuple[tuple[int, int], ...]:
+        """Returns the addressable coordinates available on one row in the requested traversal direction."""
+
+        self.require_bounds_inside(bounds)
+        if not bounds.min_y <= y <= bounds.max_y:
+            raise SelectorResolutionError(
+                "World-map row traversal requires the requested y to lie inside the bounds.",
+                y=y,
+                bounds=bounds,
+            )
+        x_step = self._same_axis_spacing(spacing)
+        first_x = self._first_addressable_x(bounds=bounds, y=y)
+        if first_x is None:
+            return ()
+        last_x = self._last_addressable_x(bounds=bounds, y=y)
+        assert last_x is not None
+        xs = list(range(first_x, last_x + 1, x_step))
+        if xs[-1] != last_x:
+            xs.append(last_x)
+        ordered_xs = list(reversed(xs)) if reverse else xs
+        return tuple((x, y) for x in ordered_xs if self.is_addressable((x, y)))
+
+    def addressable_coordinates_on_column(
+        self,
+        *,
+        bounds: WorldMapBounds,
+        x: int,
+        spacing: int,
+        reverse: bool = False,
+    ) -> tuple[tuple[int, int], ...]:
+        """Returns the addressable coordinates available on one column in the requested traversal direction."""
+
+        self.require_bounds_inside(bounds)
+        if not bounds.min_x <= x <= bounds.max_x:
+            raise SelectorResolutionError(
+                "World-map column traversal requires the requested x to lie inside the bounds.",
+                x=x,
+                bounds=bounds,
+            )
+        y_step = self._same_axis_spacing(spacing)
+        first_y = self._first_addressable_y(bounds=bounds, x=x)
+        if first_y is None:
+            return ()
+        last_y = self._last_addressable_y(bounds=bounds, x=x)
+        assert last_y is not None
+        ys = list(range(first_y, last_y + 1, y_step))
+        if ys[-1] != last_y:
+            ys.append(last_y)
+        ordered_ys = list(reversed(ys)) if reverse else ys
+        return tuple((x, y) for y in ordered_ys if self.is_addressable((x, y)))
+
+    def _same_axis_spacing(self, spacing: int) -> int:
+        """Returns a spacing value that can advance across addressable coordinates on one fixed-axis line."""
+
+        spacing = self._require_positive_spacing(spacing)
 
         if self.addressable_sum_parity is None:
             return spacing
         if spacing == 1:
             return 2
         return spacing if spacing % 2 == 0 else spacing + 1
+
+    def _require_positive_spacing(self, spacing: int) -> int:
+        """Returns the validated spacing used by addressable traversal helpers."""
+
+        if spacing <= 0:
+            raise SelectorResolutionError(
+                "World-map traversal helpers require a positive spacing value.",
+                spacing=spacing,
+            )
+        return spacing
 
     def _first_addressable_x(self, *, bounds: WorldMapBounds, y: int) -> int | None:
         """Returns the first addressable x-coordinate on one y row inside the bounds."""
@@ -262,6 +355,22 @@ class WorldMapCoordinateDomain:
         for x in range(bounds.max_x, bounds.min_x - 1, -1):
             if self.is_addressable((x, y)):
                 return x
+        return None
+
+    def _first_addressable_y(self, *, bounds: WorldMapBounds, x: int) -> int | None:
+        """Returns the first addressable y-coordinate on one x column inside the bounds."""
+
+        for y in range(bounds.min_y, bounds.max_y + 1):
+            if self.is_addressable((x, y)):
+                return y
+        return None
+
+    def _last_addressable_y(self, *, bounds: WorldMapBounds, x: int) -> int | None:
+        """Returns the last addressable y-coordinate on one x column inside the bounds."""
+
+        for y in range(bounds.max_y, bounds.min_y - 1, -1):
+            if self.is_addressable((x, y)):
+                return y
         return None
 
     def _addressable_snap_order_key(

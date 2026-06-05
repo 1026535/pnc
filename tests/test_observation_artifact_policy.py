@@ -17,9 +17,11 @@ from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.app.runtime.observation_artifacts import (
     ObservationArtifactKind,
     ObservationArtifactOwner,
+    ObservationArtifactRoutine,
     observation_artifact_selection,
     resolve_observation_artifact_policy,
     resolve_observation_artifact_selection,
+    resolve_routine_artifact_selection,
 )
 from pnc_automation.app.runtime.observation_mode import ObservationMode
 from pnc_automation.core.errors import SelectorResolutionError
@@ -88,6 +90,31 @@ class ObservationArtifactSelectionTests(unittest.TestCase):
         )
         self.assertEqual(
             policy.unsupported_for_owner(ObservationArtifactOwner.OBSERVATION_SERVICE),
+            observation_artifact_selection(ObservationArtifactKind.WORLD_MAP_SURVEY_STATE),
+        )
+
+    def test_world_map_routine_defaults_are_selective_for_debug_sweeps(self) -> None:
+        """Keeps movement-proof artifacts cheap while still preserving analyzed checkpoints and sequence summaries."""
+
+        self.assertEqual(
+            resolve_routine_artifact_selection(
+                mode=ObservationMode.DEBUG,
+                routine=ObservationArtifactRoutine.WORLD_MAP_MOVEMENT_PROOF,
+            ),
+            frozenset(),
+        )
+        self.assertEqual(
+            resolve_routine_artifact_selection(
+                mode=ObservationMode.DEBUG,
+                routine=ObservationArtifactRoutine.WORLD_MAP_ANALYZED_CHECKPOINT,
+            ),
+            observation_artifact_selection(ObservationArtifactKind.SCREENSHOT),
+        )
+        self.assertEqual(
+            resolve_routine_artifact_selection(
+                mode=ObservationMode.DEBUG,
+                routine=ObservationArtifactRoutine.WORLD_MAP_SEQUENCE_SUMMARY,
+            ),
             observation_artifact_selection(ObservationArtifactKind.WORLD_MAP_SURVEY_STATE),
         )
 

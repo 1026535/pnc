@@ -101,13 +101,30 @@ class ObservationRequest:
         )
 
     @classmethod
-    def world_map_movement_follow_up(cls) -> "ObservationRequest":
-        """Returns the narrow OCR scope used after one world-map swipe movement attempt."""
+    def world_map_movement_proof_follow_up(cls) -> "ObservationRequest":
+        """Returns the narrow OCR scope used to prove a world-map movement landing cheaply."""
 
         return cls(
             candidate_screen_types=frozenset({ScreenType.PNC_WORLD_MAP, ScreenType.PNC_WORLD_MAP_ROOT, ScreenType.UNKNOWN}),
             ocr_screen_types=frozenset({ScreenType.PNC_WORLD_MAP}),
         )
+
+    @classmethod
+    def world_map_checkpoint_analysis(cls) -> "ObservationRequest":
+        """Returns the richer observation scope used when one settled world-map viewport should be fully analyzed."""
+
+        return cls(
+            candidate_screen_types=frozenset({ScreenType.PNC_WORLD_MAP, ScreenType.PNC_WORLD_MAP_ROOT}),
+            ocr_screen_types=frozenset({ScreenType.PNC_WORLD_MAP}),
+            include_popup_guard=True,
+            include_loading_guard=True,
+        )
+
+    @classmethod
+    def world_map_movement_follow_up(cls) -> "ObservationRequest":
+        """Returns the legacy alias for the canonical world-map movement-proof observation scope."""
+
+        return cls.world_map_movement_proof_follow_up()
 
     @classmethod
     def world_map_coordinate_dialog_follow_up(cls) -> "ObservationRequest":

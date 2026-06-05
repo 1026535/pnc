@@ -23,6 +23,16 @@ class ObservationArtifactOwner(StrEnum):
     WORLD_MAP_SURVEY = "world_map_survey"
 
 
+class ObservationArtifactRoutine(StrEnum):
+    """Identifies one shared runtime routine whose artifact defaults may differ from the mode default."""
+
+    DEFAULT = "default"
+    WORLD_MAP_MOVEMENT_PROOF = "world_map_movement_proof"
+    WORLD_MAP_ANALYZED_CHECKPOINT = "world_map_analyzed_checkpoint"
+    WORLD_MAP_SEQUENCE_SUMMARY = "world_map_sequence_summary"
+    FAILURE = "failure"
+
+
 type ObservationArtifactSelection = frozenset[ObservationArtifactKind]
 
 
@@ -59,6 +69,28 @@ def mode_default_artifact_selection(mode: ObservationMode) -> ObservationArtifac
     if mode == ObservationMode.LIGHT:
         return frozenset()
     raise ValueError(f"Unsupported observation mode '{mode}'.")
+
+
+def resolve_routine_artifact_selection(
+    *,
+    mode: ObservationMode,
+    routine: ObservationArtifactRoutine,
+) -> ObservationArtifactSelection:
+    """Returns the shared artifact-selection default for one higher-level runtime routine."""
+
+    if routine == ObservationArtifactRoutine.DEFAULT:
+        return mode_default_artifact_selection(mode)
+    if routine == ObservationArtifactRoutine.WORLD_MAP_MOVEMENT_PROOF:
+        return frozenset()
+    if routine == ObservationArtifactRoutine.WORLD_MAP_ANALYZED_CHECKPOINT:
+        return mode_default_artifact_selection(mode)
+    if routine == ObservationArtifactRoutine.WORLD_MAP_SEQUENCE_SUMMARY:
+        if mode == ObservationMode.DEBUG:
+            return observation_artifact_selection(ObservationArtifactKind.WORLD_MAP_SURVEY_STATE)
+        return frozenset()
+    if routine == ObservationArtifactRoutine.FAILURE:
+        return observation_artifact_selection(ObservationArtifactKind.SCREENSHOT)
+    raise ValueError(f"Unsupported observation artifact routine '{routine}'.")
 
 
 def resolve_observation_artifact_selection(

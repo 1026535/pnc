@@ -17,14 +17,16 @@ from pnc_automation.app.pnc.navigation.world_map_movement_calibration import (
     WorldMapSweepValidationRequest,
 )
 from pnc_automation.app.pnc.navigation.world_map_search import (
+    TraversalStridePolicy,
     WorldMapBounds,
     WorldMapCoordinateDomain,
-    WorldMapEdge,
+    WorldMapMapCorner,
     WorldMapSearchBoundary,
     WorldMapSearchOrigin,
     WorldMapSearchPattern,
     WorldMapSearchRequest,
     WorldMapSearchStopPolicy,
+    WorldMapTraversalCorner,
 )
 from pnc_automation.app.pnc.navigation.spatial_navigation import WorldMapCardinalDirection
 from tests.live_smoke_support import build_live_runtime_bundle
@@ -113,12 +115,12 @@ class LiveWorldMapMovementCalibrationSmokeTests(unittest.TestCase):
             request=WorldMapSweepValidationRequest(
                 name="live_row_major",
                 pattern=WorldMapSearchPattern.row_major_sweep(),
+                traversal_stride_policy=TraversalStridePolicy.symmetric(6),
                 origin=WorldMapSearchOrigin.explicit_coordinate(start_coordinate),
                 boundary=WorldMapSearchBoundary.rectangle(
                     min_coordinate=(local_bounds.min_x, local_bounds.min_y),
                     max_coordinate=(local_bounds.max_x, local_bounds.max_y),
                 ),
-                checkpoint_spacing=6,
                 max_checkpoints=4,
             ),
             label_prefix="live_row_major",
@@ -129,9 +131,9 @@ class LiveWorldMapMovementCalibrationSmokeTests(unittest.TestCase):
             request=WorldMapSweepValidationRequest(
                 name="live_ring",
                 pattern=WorldMapSearchPattern.expanding_ring(),
+                traversal_stride_policy=TraversalStridePolicy.symmetric(6),
                 origin=WorldMapSearchOrigin.explicit_coordinate(start_coordinate),
                 boundary=WorldMapSearchBoundary.radius_from_origin(12),
-                checkpoint_spacing=6,
                 max_checkpoints=4,
             ),
             label_prefix="live_ring",
@@ -141,14 +143,10 @@ class LiveWorldMapMovementCalibrationSmokeTests(unittest.TestCase):
             current,
             request=WorldMapSweepValidationRequest(
                 name="live_edge",
-                pattern=WorldMapSearchPattern.edge_band_sweep(),
-                origin=WorldMapSearchOrigin.map_edge_reference(WorldMapEdge.LEFT),
-                boundary=WorldMapSearchBoundary.edge_band(
-                    map_bounds=local_bounds,
-                    band_width_units=6,
-                    edges=(WorldMapEdge.LEFT, WorldMapEdge.TOP),
-                ),
-                checkpoint_spacing=6,
+                pattern=WorldMapSearchPattern.perimeter_ring_sweep(start_corner=WorldMapTraversalCorner.UPPER_LEFT),
+                traversal_stride_policy=TraversalStridePolicy.symmetric(6),
+                origin=WorldMapSearchOrigin.map_corner(WorldMapMapCorner.UPPER_LEFT),
+                boundary=WorldMapSearchBoundary.full_map(local_bounds),
                 max_checkpoints=4,
             ),
             label_prefix="live_edge",
@@ -218,7 +216,7 @@ class LiveWorldMapMovementCalibrationSmokeTests(unittest.TestCase):
                 matcher=lambda _object: False,
                 stop_policy=WorldMapSearchStopPolicy(max_checkpoints=4),
                 pattern=WorldMapSearchPattern.row_major_sweep(),
-                checkpoint_spacing=6,
+                traversal_stride_policy=TraversalStridePolicy.symmetric(6),
                 origin=WorldMapSearchOrigin.explicit_coordinate(start_coordinate),
                 boundary=WorldMapSearchBoundary.rectangle(
                     min_coordinate=(local_bounds.min_x, local_bounds.min_y),

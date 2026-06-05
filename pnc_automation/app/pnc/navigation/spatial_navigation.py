@@ -855,7 +855,7 @@ class WorldMapNavigator(SpatialSurfaceNavigator):
                 duration_ms=profile.default_duration_ms,
                 reason=f"focus_world_coordinate_{profile.name}",
                 observe_after=True,
-                follow_up_request=ObservationRequest.world_map_movement_follow_up(),
+                follow_up_request=ObservationRequest.world_map_movement_proof_follow_up(),
                 timing_profile=ActionTimingProfile.WORLD_MAP_MOVEMENT,
             )
         ]
