@@ -5,7 +5,7 @@ from __future__ import annotations
 import io
 import logging
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -313,6 +313,7 @@ class FakeObservationService:
     labels: list[str] = field(default_factory=list)
     requests: list[ObservationRequest | None] = field(default_factory=list)
     artifact_selections: list[ObservationArtifactSelection | None] = field(default_factory=list)
+    captures: list[CapturedObservation] = field(default_factory=list)
 
     def observe(
         self,
@@ -356,16 +357,20 @@ class FakeObservationService:
             if ObservationArtifactKind.SCREENSHOT in resolved_artifact_selection
             else None
         )
-        return CapturedObservation(
+        if artifact is not None and observation.artifact_path is None:
+            observation = replace(observation, artifact_path=artifact.path)
+        capture = CapturedObservation(
             screenshot=CapturedScreenshot(
                 artifact=artifact,
                 image=Image.new("RGB", observation.image_size or (10, 10), (0, 0, 0)),
                 image_format="PNG",
                 payload=build_png_bytes(size=observation.image_size or (10, 10)),
-                ephemeral_captured_at=None if artifact is not None else datetime.now(tz=UTC),
+                ephemeral_captured_at=None if artifact is not None else observation.captured_at,
             ),
             observation=observation,
         )
+        self.captures.append(capture)
+        return capture
 
 
 def build_logger() -> logging.LoggerAdapter:

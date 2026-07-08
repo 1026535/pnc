@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import logging
 import tempfile
+import threading
+import time
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 from pnc_automation.app.automation.engine.action_executor import ActionExecutor
@@ -25,6 +28,7 @@ from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
 from pnc_automation.app.pnc.navigation.spatial_navigation import WorldCoordinate, WorldMapNavigator
+from pnc_automation.app.pnc.navigation.world_map_analysis import WorldMapViewportAnalyzer
 from pnc_automation.app.pnc.navigation.world_map_overview_projection import project_world_coordinate_to_overview_point
 from pnc_automation.app.pnc.navigation.world_map_index import WorldMapCastleQuery
 from pnc_automation.app.pnc.navigation.world_map_search import (
@@ -49,14 +53,17 @@ from pnc_automation.app.pnc.navigation.world_map_search import (
     WorldMapSearchService,
     WorldMapSearchStopPolicy,
     WorldMapSearchStopReason,
+    WorldMapTraversalActionFamily,
     WorldMapTraversalCorner,
     _resolve_cardinal_sweep_leg_target,
     adapt_world_map_search_matcher,
     all_of_world_map_search,
     any_of_world_map_search,
+    world_map_search_execution_profile_document,
     world_map_movement_trace_document,
 )
 from pnc_automation.app.pnc.navigation.world_map_survey_recorder import WorldMapSurveyRecorder
+from pnc_automation.app.pnc.navigation.world_map_sweep import WorldMapSweepPolicy
 from pnc_automation.app.pnc.persistence.world_map_survey_debug_store import WorldMapSurveyDebugStore
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
@@ -321,6 +328,120 @@ class WorldMapSearchTests(unittest.TestCase):
         self.assertIn((0, 1022), [checkpoint.coordinate for checkpoint in plan.route])
         self.assertTrue(all(domain.is_addressable(checkpoint.coordinate) for checkpoint in plan.route))
 
+    def test_full_map_row_sweep_prepends_non_local_entry_intent_from_far_current_viewport(self) -> None:
+        """Models broad full-map entry as one non-local itinerary step instead of ordinary local traversal."""
+
+        service = WorldMapSearchService(screen_flows=self.flows)
+        domain = WorldMapCoordinateDomain.puzzles_and_conquest()
+
+        plan = service.resolve_plan(
+            _search_request(
+                matcher=SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.RESOURCE_NODE),
+                pattern=WorldMapSearchPattern.serpentine_row_sweep(),
+                origin=WorldMapSearchOrigin.current_viewport(),
+                boundary=WorldMapSearchBoundary.full_map(domain.bounds),
+                checkpoint_spacing=10,
+            ),
+            _make_world_map_observation(334, 510),
+        )
+
+        self.assertEqual(plan.coverage_bounds, WorldMapBounds(min_x=0, min_y=0, max_x=511, max_y=1023))
+        self.assertEqual(len(plan.route), 5460)
+        self.assertEqual(plan.execution_start_coordinate, (334, 510))
+        self.assertEqual(plan.route[0].coordinate, (0, 0))
+        self.assertEqual(plan.execution_plan.steps[0].action_family, WorldMapTraversalActionFamily.NON_LOCAL_DIRECT)
+        self.assertEqual(plan.execution_plan.steps[1].action_family, WorldMapTraversalActionFamily.LOCAL_DIRECT)
+        self.assertEqual(plan.first_step_movement_tool, WorldMapMovementToolKind.COORDINATE_JUMP)
+
+    def test_execute_full_map_entry_uses_coordinate_jump_then_local_swipe(self) -> None:
+        """Keeps primitive dispatch per itinerary step so the entry jump does not force local checkpoints to jump."""
+
+        domain = WorldMapCoordinateDomain.puzzles_and_conquest()
+        service, observer, session = self._build_runtime_service_bundle(
+            observations=[
+                _make_coordinate_dialog_observation(157, 334, 510),
+                _make_coordinate_dialog_observation(157, 0, 0),
+                _make_world_map_observation(0, 0),
+                _make_world_map_observation(10, 0),
+            ]
+        )
+        service.coordinate_navigator = _FakeCoordinateJumpNavigator()
+
+        result = service.execute_search(
+            _search_request(
+                matcher=SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.RESOURCE_NODE),
+                pattern=WorldMapSearchPattern.row_major_sweep(),
+                origin=WorldMapSearchOrigin.current_viewport(),
+                boundary=WorldMapSearchBoundary.full_map(domain.bounds),
+                checkpoint_spacing=10,
+                stop_policy=WorldMapSearchStopPolicy(max_checkpoints=2),
+            ),
+            label_prefix="full_map_entry_then_swipe",
+            start_observation=_make_world_map_observation(334, 510),
+        )
+
+        self.assertEqual([checkpoint.coordinate for checkpoint in result.visited_checkpoints], [(0, 0), (10, 0)])
+        self.assertEqual(len(session.swipes), 1)
+        self.assertIsNotNone(result.execution_profile)
+        assert result.execution_profile is not None
+        profile_document = result.execution_profile.to_document()
+        self.assertEqual(profile_document["first_step_movement_tool"], WorldMapMovementToolKind.COORDINATE_JUMP.value)
+        self.assertEqual(profile_document["checkpoint_profiles"][0]["movement_tool"], "coordinate_jump")
+        self.assertEqual(profile_document["checkpoint_profiles"][0]["movement_phase"], "non_local_entry")
+        self.assertEqual(profile_document["checkpoint_profiles"][1]["movement_tool"], "swipe")
+        self.assertEqual(profile_document["checkpoint_profiles"][1]["movement_phase"], "steady_state")
+        self.assertEqual(
+            observer.requests,
+            [
+                ObservationRequest.world_map_coordinate_dialog_follow_up(),
+                ObservationRequest.world_map_coordinate_dialog_follow_up(),
+                ObservationRequest.world_map_coordinate_jump_follow_up(),
+                ObservationRequest.world_map_movement_proof_follow_up(),
+            ],
+        )
+
+    def test_coordinate_jump_refreshes_dialog_once_when_field_state_is_transiently_missing(self) -> None:
+        """Recovers the live dialog proof case where the screen is recognized but one zero field is absent."""
+
+        domain = WorldMapCoordinateDomain.puzzles_and_conquest()
+        service, observer, _session = self._build_runtime_service_bundle(
+            observations=[
+                _make_incomplete_coordinate_dialog_observation(157, x=334, y=None),
+                _make_coordinate_dialog_observation(157, 334, 510),
+                _make_coordinate_dialog_observation(157, 0, 0),
+                _make_world_map_observation(0, 0),
+            ]
+        )
+        service.coordinate_navigator = _FakeCoordinateJumpNavigator()
+
+        result = service.execute_search(
+            _search_request(
+                matcher=SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.RESOURCE_NODE),
+                pattern=WorldMapSearchPattern.row_major_sweep(),
+                origin=WorldMapSearchOrigin.current_viewport(),
+                boundary=WorldMapSearchBoundary.full_map(domain.bounds),
+                checkpoint_spacing=10,
+                stop_policy=WorldMapSearchStopPolicy(max_checkpoints=1),
+            ),
+            label_prefix="coordinate_dialog_missing_field_refresh",
+            start_observation=_make_world_map_observation(334, 510),
+        )
+
+        self.assertEqual([checkpoint.coordinate for checkpoint in result.visited_checkpoints], [(0, 0)])
+        self.assertEqual(
+            observer.requests,
+            [
+                ObservationRequest.world_map_coordinate_dialog_follow_up(),
+                ObservationRequest.world_map_coordinate_dialog_follow_up(),
+                ObservationRequest.world_map_coordinate_dialog_follow_up(),
+                ObservationRequest.world_map_coordinate_jump_follow_up(),
+            ],
+        )
+        self.assertEqual(
+            observer.labels[1],
+            "coordinate_dialog_missing_field_refresh_move_0_open_dialog_refresh",
+        )
+
     def test_coordinate_mover_normalizes_unaddressable_target_before_planning(self) -> None:
         """Lets direct movement callers target raw magnifier coordinates while planning against the corrected tile."""
 
@@ -338,6 +459,68 @@ class WorldMapSearchTests(unittest.TestCase):
         )
 
         self.assertIs(result, observation)
+
+    def test_coordinate_mover_accepts_near_target_without_unstable_micro_correction(self) -> None:
+        """Avoids issuing tiny correction swipes that can overshoot live coordinate-bar movement."""
+
+        mover = WorldMapCoordinateMover(
+            observation_service=None,
+            action_executor=None,
+            navigator=WorldMapNavigator(focus_tolerance=1),
+            movement_policy=WorldMapMovementPolicy(arrival_tolerance_units=2),
+        )
+        observation = _make_world_map_observation(154, 0)
+
+        result = mover.move_to_coordinate(
+            observation,
+            target_coordinate=(152, 0),
+            label_prefix="near_target_live_overshoot_guard",
+        )
+
+        self.assertIs(result, observation)
+
+    def test_coordinate_mover_stops_after_post_swipe_near_target_overshoot(self) -> None:
+        """Stops after a swipe lands inside arrival tolerance instead of chasing oscillating corrections."""
+
+        service, _observer, session = self._build_runtime_service_bundle(
+            observations=[
+                _make_world_map_observation(216, 0),
+            ]
+        )
+        mover = service.coordinate_mover_for_runtime()
+        mover.movement_policy = WorldMapMovementPolicy(arrival_tolerance_units=2)
+
+        result = mover.move_to_coordinate(
+            _make_world_map_observation(210, 0),
+            target_coordinate=(214, 0),
+            label_prefix="near_target_post_swipe_overshoot_guard",
+        )
+
+        self.assertEqual(result.require_spatial_surface(SpatialSurfaceType.WORLD_MAP).viewport.coordinate, (216, 0))
+        self.assertEqual(len(session.swipes), 1)
+
+    def test_coordinate_mover_accepts_crossed_target_inside_overshoot_band(self) -> None:
+        """Accepts live quantized movement that crosses a checkpoint instead of oscillating back and forth."""
+
+        service, _observer, session = self._build_runtime_service_bundle(
+            observations=[
+                _make_world_map_observation(268, 0),
+            ]
+        )
+        mover = service.coordinate_mover_for_runtime()
+        mover.movement_policy = WorldMapMovementPolicy(
+            arrival_tolerance_units=2,
+            overshoot_tolerance_units=4,
+        )
+
+        result = mover.move_to_coordinate(
+            _make_world_map_observation(260, 0),
+            target_coordinate=(264, 0),
+            label_prefix="crossed_target_overshoot_guard",
+        )
+
+        self.assertEqual(result.require_spatial_surface(SpatialSurfaceType.WORLD_MAP).viewport.coordinate, (268, 0))
+        self.assertEqual(len(session.swipes), 1)
 
     def test_coordinate_mover_can_cap_one_axis_delta_per_observed_leg(self) -> None:
         """Lets callers configure coordinate granularity instead of always targeting the full remaining axis delta."""
@@ -414,11 +597,15 @@ class WorldMapSearchTests(unittest.TestCase):
         self.assertEqual(trace["gesture_primitive"], "swipe")
         self.assertEqual(trace["classification"], "moved")
         self.assertGreaterEqual(trace["action_elapsed_ms"], 0.0)
+        self.assertGreaterEqual(trace["action_follow_up_observe_elapsed_ms"], 0.0)
+        self.assertGreaterEqual(trace["action_executor_overhead_elapsed_ms"], 0.0)
+        self.assertLessEqual(trace["action_follow_up_observe_elapsed_ms"], trace["action_elapsed_ms"])
+        self.assertEqual(trace["action_follow_up_observation_count"], 1)
         self.assertGreaterEqual(trace["prove_elapsed_ms"], 0.0)
         self.assertEqual(observer.requests, [ObservationRequest.world_map_movement_follow_up()])
 
-    def test_move_to_checkpoint_uses_checkpoint_analysis_scope_on_final_landing_without_recapture(self) -> None:
-        """Uses the richer checkpoint-analysis observation on the final leg instead of proof then recapturing the same viewport."""
+    def test_move_to_checkpoint_uses_movement_proof_scope_on_final_landing(self) -> None:
+        """Keeps the mover on the narrow P1 proof contract instead of hiding rich checkpoint analysis inside movement."""
 
         service, observer, _session = self._build_runtime_service_bundle(
             observations=[
@@ -446,7 +633,49 @@ class WorldMapSearchTests(unittest.TestCase):
         )
 
         self.assertEqual(end.require_spatial_surface(SpatialSurfaceType.WORLD_MAP).viewport.coordinate, (10, 0))
-        self.assertEqual(observer.requests, [ObservationRequest.world_map_checkpoint_analysis()])
+        self.assertEqual(observer.requests, [ObservationRequest.world_map_movement_proof_follow_up()])
+
+    def test_execute_search_records_json_ready_execution_profile_in_runtime_state_and_result(self) -> None:
+        """Captures canonical per-checkpoint benchmark timings without bypassing survey ingestion or matching."""
+
+        service, _observer = self._build_runtime_service(
+            observations=[
+                _make_world_map_observation(0, 0),
+                _make_world_map_observation(10, 0),
+            ]
+        )
+        runtime_state: dict[str, object] = {}
+
+        result = service.execute_search(
+            _search_request(
+                matcher=SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.RESOURCE_NODE),
+                pattern=WorldMapSearchPattern.row_major_sweep(),
+                origin=WorldMapSearchOrigin.current_viewport(),
+                boundary=WorldMapSearchBoundary.rectangle(min_coordinate=(0, 0), max_coordinate=(10, 0)),
+                checkpoint_spacing=10,
+            ),
+            label_prefix="execution_profile_capture",
+            start_observation=_make_world_map_observation(0, 0),
+            runtime_state=runtime_state,
+        )
+
+        document = world_map_search_execution_profile_document(runtime_state)
+        self.assertIsNotNone(result.execution_profile)
+        assert result.execution_profile is not None
+        self.assertEqual(document["movement_tool"], WorldMapMovementToolKind.SWIPE.value)
+        self.assertEqual(document["stop_reason"], WorldMapSearchStopReason.BOUNDARY_EXHAUSTED.value)
+        self.assertEqual(len(document["checkpoint_profiles"]), 2)
+        self.assertEqual(document["checkpoint_profiles"][0]["checkpoint_coordinate"], [0, 0])
+        self.assertEqual(document["checkpoint_profiles"][1]["checkpoint_coordinate"], [10, 0])
+        self.assertEqual(document["checkpoint_profiles"][0]["action_family"], "local_direct")
+        self.assertEqual(document["checkpoint_profiles"][1]["action_family"], "local_direct")
+        self.assertEqual(document["checkpoint_profiles"][0]["status"], "completed")
+        self.assertIsNone(document["checkpoint_profiles"][0]["failure_stage"])
+        self.assertGreaterEqual(document["plan_elapsed_ms"], 0.0)
+        self.assertGreaterEqual(document["persist_summary_elapsed_ms"], 0.0)
+        self.assertGreaterEqual(document["total_elapsed_ms"], 0.0)
+        self.assertGreaterEqual(document["stage_totals"]["move_elapsed_ms"], 0.0)
+        self.assertGreaterEqual(result.execution_profile.total_elapsed_ms, 0.0)
 
     def test_resolved_plan_caches_route_for_compatibility_consumers(self) -> None:
         """Materializes the compatibility route once so auxiliary readers do not keep rebuilding it."""
@@ -502,7 +731,7 @@ class WorldMapSearchTests(unittest.TestCase):
         service.flush_runtime_diagnostics(runtime_state=runtime_state)
 
         screenshot_selection = observation_artifact_selection(ObservationArtifactKind.SCREENSHOT)
-        self.assertEqual(observer.artifact_selections[0], screenshot_selection)
+        self.assertEqual(observer.artifact_selections[0], frozenset())
         self.assertEqual(observer.artifact_selections[-1], screenshot_selection)
         self.assertTrue(observer.labels[-1].endswith("checkpoint_failure_failure_0"))
         failure_records = [record for record in records if record.msg == "World-map movement step failed."]
@@ -543,6 +772,276 @@ class WorldMapSearchTests(unittest.TestCase):
 
         self.assertIs(first, second)
         self.assertEqual(second.max_axis_delta_per_leg, 5)
+
+    def test_execute_search_builds_p2_from_narrow_p1_checkpoint_capture(self) -> None:
+        """Captures once in P1 when a caller-supplied start observation has no owned screenshot."""
+
+        service, observer = self._build_runtime_service(
+            observations=[
+                _make_world_map_observation(
+                    10,
+                    0,
+                    objects=(make_spatial_object(SpatialObjectKind.MONSTER, estimated_world_coordinate=(10, 0)),),
+                ),
+            ]
+        )
+        start = _make_world_map_observation(
+            10,
+            0,
+            objects=(make_spatial_object(SpatialObjectKind.MONSTER, estimated_world_coordinate=(10, 0)),),
+        )
+
+        result = service.execute_search(
+            _search_request(
+                matcher=SpatialObjectQuery(surface_type=SpatialSurfaceType.WORLD_MAP, kind=SpatialObjectKind.MONSTER),
+                pattern=WorldMapSearchPattern.row_major_sweep(),
+                origin=WorldMapSearchOrigin.current_viewport(),
+                boundary=WorldMapSearchBoundary.rectangle(min_coordinate=(10, 0), max_coordinate=(10, 0)),
+                checkpoint_spacing=10,
+            ),
+            label_prefix="p1_p2",
+            start_observation=start,
+        )
+
+        self.assertEqual(result.stop_reason, WorldMapSearchStopReason.BOUNDARY_EXHAUSTED)
+        self.assertEqual(observer.labels, ["p1_p2_checkpoint_0_p1_capture"])
+        self.assertEqual(observer.requests, [ObservationRequest.world_map_movement_proof_follow_up()])
+        assert result.execution_profile is not None
+        self.assertGreaterEqual(result.execution_profile.checkpoint_profiles[0].p2_analysis_elapsed_ms, 0.0)
+        self.assertEqual(len(result.survey_index.sightings), 1)
+
+    def test_execute_search_submits_live_landing_inside_movement_arrival_tolerance(self) -> None:
+        """Uses the mover's canonical arrival tolerance again at the P1-to-P2 boundary."""
+
+        service, _observer = self._build_runtime_service(
+            observations=[_make_world_map_observation(0, 8)]
+        )
+
+        result = service.execute_search(
+            _search_request(
+                matcher=SpatialObjectQuery(
+                    surface_type=SpatialSurfaceType.WORLD_MAP,
+                    kind=SpatialObjectKind.RESOURCE_NODE,
+                ),
+                pattern=WorldMapSearchPattern.row_major_sweep(),
+                origin=WorldMapSearchOrigin.current_viewport(),
+                boundary=WorldMapSearchBoundary.rectangle(min_coordinate=(0, 10), max_coordinate=(0, 10)),
+                checkpoint_spacing=10,
+            ),
+            label_prefix="arrival_tolerance_p2",
+            start_observation=_make_world_map_observation(0, 0),
+        )
+
+        self.assertEqual(result.visited_checkpoints[0].coordinate, (0, 10))
+
+    def test_execute_search_submits_crossed_target_inside_movement_overshoot_band(self) -> None:
+        """Preserves a mover-accepted crossed-target landing at the P1-to-P2 boundary."""
+
+        service, _observer = self._build_runtime_service(
+            observations=[_make_world_map_observation(0, 14)]
+        )
+
+        result = service.execute_search(
+            _search_request(
+                matcher=SpatialObjectQuery(
+                    surface_type=SpatialSurfaceType.WORLD_MAP,
+                    kind=SpatialObjectKind.RESOURCE_NODE,
+                ),
+                pattern=WorldMapSearchPattern.row_major_sweep(),
+                origin=WorldMapSearchOrigin.current_viewport(),
+                boundary=WorldMapSearchBoundary.rectangle(min_coordinate=(0, 10), max_coordinate=(0, 10)),
+                checkpoint_spacing=10,
+            ),
+            label_prefix="overshoot_tolerance_p2",
+            start_observation=_make_world_map_observation(0, 0),
+        )
+
+        self.assertEqual(result.visited_checkpoints[0].coordinate, (0, 10))
+
+    def test_production_search_overlaps_actual_p1_samples_with_movement(self) -> None:
+        """Runs bounded P2 workers from narrow P1 sample screenshots while movement continues."""
+
+        service, observer = self._build_runtime_service(
+            observations=[
+                _make_world_map_observation(0, 0),
+                _make_world_map_observation(10, 0),
+                _make_world_map_observation(20, 0),
+            ]
+        )
+        worker_threads: list[str] = []
+        work_has_observation: list[bool] = []
+        screenshot_ids: list[int] = []
+
+        def analyze_screenshot(screenshot: object, request: ObservationRequest) -> Observation:
+            """Simulates rich OCR long enough to prove movement/P2 overlap."""
+
+            worker_threads.append(threading.current_thread().name)
+            screenshot_ids.append(id(screenshot))
+            time.sleep(0.02)
+            if request.expected_world_coordinate is None:
+                raise AssertionError("P2 production samples must carry a projected coordinate.")
+            return _make_world_map_observation(*request.expected_world_coordinate)
+
+        analyzer = WorldMapViewportAnalyzer(observation_builder=analyze_screenshot)
+
+        class RecordingAnalyzer:
+            """Records queued work-item shape before delegating rich analysis."""
+
+            @staticmethod
+            def analyze(work_item: object):
+                """Records that no Observation crossed into P2 and analyzes its screenshot."""
+
+                work_has_observation.append(hasattr(work_item, "observation"))
+                return analyzer.analyze(work_item)
+
+        service.viewport_analyzer = RecordingAnalyzer()
+
+        result = service.execute_search(
+            _search_request(
+                matcher=SpatialObjectQuery(
+                    surface_type=SpatialSurfaceType.WORLD_MAP,
+                    kind=SpatialObjectKind.RESOURCE_NODE,
+                ),
+                pattern=WorldMapSearchPattern.serpentine_row_sweep(),
+                origin=WorldMapSearchOrigin.current_viewport(),
+                boundary=WorldMapSearchBoundary.rectangle(min_coordinate=(0, 0), max_coordinate=(20, 0)),
+                checkpoint_spacing=10,
+                sweep_policy=WorldMapSweepPolicy.production_full_map(max_pending_p2_items=2),
+            ),
+            label_prefix="production_p2_overlap",
+            start_observation=_make_world_map_observation(0, 0),
+        )
+
+        assert result.execution_profile is not None
+        self.assertEqual(result.execution_profile.p2_queue_submission_count, 3)
+        self.assertGreaterEqual(result.execution_profile.p2_queue_peak_depth, 2)
+        self.assertGreaterEqual(result.execution_profile.p2_movement_overlap_count, 1)
+        self.assertEqual(work_has_observation, [False, False, False])
+        self.assertEqual(len(set(screenshot_ids)), 3)
+        self.assertEqual(observer.requests.count(ObservationRequest.world_map_movement_proof_follow_up()), 3)
+        self.assertTrue(all(name.startswith("world-map-p2") for name in worker_threads))
+
+    def test_production_segment_keeps_actual_trajectory_samples_when_no_coverage_gap(self) -> None:
+        """Avoids correcting planned-coordinate drift when actual sampled viewports preserve continuous coverage."""
+
+        service, observer, session = self._build_runtime_service_bundle(
+            observations=[
+                _make_world_map_observation(0, 0),
+                _make_world_map_observation(10, 8),
+                _make_world_map_observation(20, 8),
+            ]
+        )
+
+        def analyze_screenshot(_screenshot: object, request: ObservationRequest) -> Observation:
+            """Builds a rich observation at the P2 work item's coordinate."""
+
+            if request.expected_world_coordinate is None:
+                raise AssertionError("P2 production samples must carry a projected coordinate.")
+            return _make_world_map_observation(*request.expected_world_coordinate)
+
+        service.viewport_analyzer = WorldMapViewportAnalyzer(observation_builder=analyze_screenshot)
+
+        result = service.execute_search(
+            _search_request(
+                matcher=SpatialObjectQuery(
+                    surface_type=SpatialSurfaceType.WORLD_MAP,
+                    kind=SpatialObjectKind.RESOURCE_NODE,
+                ),
+                pattern=WorldMapSearchPattern.serpentine_row_sweep(),
+                origin=WorldMapSearchOrigin.current_viewport(),
+                boundary=WorldMapSearchBoundary.rectangle(min_coordinate=(0, 0), max_coordinate=(20, 0)),
+                checkpoint_spacing=10,
+                sweep_policy=WorldMapSweepPolicy.production_full_map(max_pending_p2_items=2),
+            ),
+            label_prefix="production_endpoint_correction",
+            start_observation=_make_world_map_observation(0, 0),
+        )
+
+        self.assertEqual([checkpoint.coordinate for checkpoint in result.visited_checkpoints], [(0, 0), (10, 0), (20, 0)])
+        self.assertFalse(any("coverage_correction" in label for label in observer.labels))
+        self.assertTrue(all(start_y == end_y for _start_x, start_y, _end_x, end_y, _duration in session.swipes))
+        assert result.execution_profile is not None
+        self.assertEqual(result.execution_profile.p2_queue_submission_count, 3)
+
+    def test_production_segment_start_samples_current_viewport_when_coverage_is_contiguous(self) -> None:
+        """Starts production from the actual current viewport instead of exact-snapping to a covered route start."""
+
+        service, observer, session = self._build_runtime_service_bundle(
+            observations=[
+                _make_world_map_observation(5, 5),
+                _make_world_map_observation(10, 0),
+                _make_world_map_observation(20, 0),
+            ]
+        )
+        analyzed_coordinates: list[tuple[int, int]] = []
+
+        def analyze_screenshot(_screenshot: object, request: ObservationRequest) -> Observation:
+            """Records the actual-coordinate P2 anchor used for each sampled screenshot."""
+
+            if request.expected_world_coordinate is None:
+                raise AssertionError("P2 production samples must carry an actual coordinate.")
+            analyzed_coordinates.append(request.expected_world_coordinate)
+            return _make_world_map_observation(*request.expected_world_coordinate)
+
+        service.viewport_analyzer = WorldMapViewportAnalyzer(observation_builder=analyze_screenshot)
+
+        result = service.execute_search(
+            _search_request(
+                matcher=SpatialObjectQuery(
+                    surface_type=SpatialSurfaceType.WORLD_MAP,
+                    kind=SpatialObjectKind.RESOURCE_NODE,
+                ),
+                pattern=WorldMapSearchPattern.serpentine_row_sweep(),
+                origin=WorldMapSearchOrigin.current_viewport(),
+                boundary=WorldMapSearchBoundary.rectangle(min_coordinate=(0, 0), max_coordinate=(20, 0)),
+                checkpoint_spacing=10,
+                sweep_policy=WorldMapSweepPolicy.production_full_map(max_pending_p2_items=2),
+            ),
+            label_prefix="production_segment_start_covered",
+            start_observation=_make_world_map_observation(5, 5),
+        )
+
+        self.assertEqual([checkpoint.coordinate for checkpoint in result.visited_checkpoints], [(0, 0), (10, 0), (20, 0)])
+        self.assertEqual(analyzed_coordinates, [(5, 5), (10, 0), (20, 0)])
+        self.assertFalse(any("_segment_0_start" in label for label in observer.labels))
+        self.assertEqual(observer.labels[0], "production_segment_start_covered_segment_0_sample_0")
+        self.assertEqual(len(session.swipes), 2)
+
+    def test_production_search_propagates_p2_worker_failure(self) -> None:
+        """Surfaces a worker failure instead of returning a partially parsed survey."""
+
+        service, _observer = self._build_runtime_service(
+            observations=[
+                _make_world_map_observation(0, 0),
+                _make_world_map_observation(10, 0),
+            ]
+        )
+
+        def fail_p2(_screenshot: object, request: ObservationRequest) -> Observation:
+            """Raises a deterministic rich-analysis failure for the second viewport."""
+
+            if request.expected_world_coordinate == (10, 0):
+                raise RuntimeError("synthetic P2 failure")
+            return _make_world_map_observation(0, 0)
+
+        service.viewport_analyzer = WorldMapViewportAnalyzer(observation_builder=fail_p2)
+
+        with self.assertRaisesRegex(RuntimeError, "synthetic P2 failure"):
+            service.execute_search(
+                _search_request(
+                    matcher=SpatialObjectQuery(
+                        surface_type=SpatialSurfaceType.WORLD_MAP,
+                        kind=SpatialObjectKind.RESOURCE_NODE,
+                    ),
+                    pattern=WorldMapSearchPattern.serpentine_row_sweep(),
+                    origin=WorldMapSearchOrigin.current_viewport(),
+                    boundary=WorldMapSearchBoundary.rectangle(min_coordinate=(0, 0), max_coordinate=(10, 0)),
+                    checkpoint_spacing=10,
+                    sweep_policy=WorldMapSweepPolicy.production_full_map(max_pending_p2_items=2),
+                ),
+                label_prefix="production_p2_failure",
+                start_observation=_make_world_map_observation(0, 0),
+            )
 
     def test_resolve_plan_fails_when_self_territory_origin_cannot_be_resolved(self) -> None:
         """Fails fast when a self-territory-relative search is requested from a surface that lacks self evidence."""
@@ -1034,6 +1533,18 @@ class WorldMapSearchTests(unittest.TestCase):
         service, _observer = self._build_runtime_service(
             observations=[
                 _make_world_map_observation(
+                    0,
+                    0,
+                    objects=(
+                        make_spatial_object(
+                            SpatialObjectKind.RESOURCE_NODE,
+                            name_text="Food Farm A",
+                            metadata={"resource_type": "food"},
+                            confirmed_world_coordinate=(0, 0),
+                        ),
+                    ),
+                ),
+                _make_world_map_observation(
                     10,
                     0,
                     objects=(
@@ -1081,12 +1592,27 @@ class WorldMapSearchTests(unittest.TestCase):
         self.assertEqual([match.key.coordinate for match in result.matches], [(0, 0), (10, 0)])
         self.assertEqual(len(result.visited_checkpoints), 2)
         self.assertEqual(len(result.survey_index.sightings), 2)
-        self.assertEqual(len(_observer.labels), 1)
+        self.assertEqual(len(_observer.labels), 2)
 
     def test_execute_search_matches_player_name_from_visible_castle_label_without_profile_inspection(self) -> None:
         """Uses the visible map-side castle label directly instead of opening lord profile for player-name matching."""
 
-        service, observer = self._build_runtime_service(observations=[])
+        service, observer = self._build_runtime_service(
+            observations=[
+                _make_world_map_observation(
+                    0,
+                    0,
+                    objects=(
+                        make_spatial_object(
+                            SpatialObjectKind.CASTLE,
+                            name_text="Alice",
+                            kingdom="K1",
+                            confirmed_world_coordinate=(0, 0),
+                        ),
+                    ),
+                ),
+            ]
+        )
 
         result = service.execute_search(
             _search_request(
@@ -1373,6 +1899,7 @@ class WorldMapSearchTests(unittest.TestCase):
         flows = _CountingScreenFlowPlanner()
         observer = FakeObservationService(
             observations=[
+                _make_world_map_observation(0, 0),
                 _make_world_map_observation(10, 0),
             ]
         )
@@ -1381,6 +1908,15 @@ class WorldMapSearchTests(unittest.TestCase):
             observation_service=observer,
             debug_store=WorldMapSurveyDebugStore(root=Path(self.temp_directory.name)),
         )
+
+        def build_p2_observation(screenshot: object, _request: ObservationRequest) -> Observation:
+            """Builds a distinct rich fixture observation from the exact fake P1 screenshot."""
+
+            for capture in observer.captures:
+                if capture.screenshot is screenshot:
+                    return replace(capture.observation)
+            raise AssertionError("P2 received a screenshot that P1 did not capture.")
+
         service = WorldMapSearchService(
             screen_flows=flows,
             observation_service=observer,
@@ -1399,6 +1935,7 @@ class WorldMapSearchTests(unittest.TestCase):
                 sleep=lambda _: None,
             ),
             survey_recorder=recorder,
+            viewport_analyzer=WorldMapViewportAnalyzer(observation_builder=build_p2_observation),
         )
 
         service.execute_search(
@@ -1493,7 +2030,22 @@ class WorldMapSearchTests(unittest.TestCase):
     def test_stop_policy_prioritizes_first_confirmed_match_when_enabled(self) -> None:
         """Stops on the first confirmed match before consulting later match-count limits."""
 
-        service, _observer = self._build_runtime_service(observations=[])
+        service, _observer = self._build_runtime_service(
+            observations=[
+                _make_world_map_observation(
+                    0,
+                    0,
+                    objects=(
+                        make_spatial_object(
+                            SpatialObjectKind.RESOURCE_NODE,
+                            name_text="Food Farm A",
+                            metadata={"resource_type": "food"},
+                            confirmed_world_coordinate=(0, 0),
+                        ),
+                    ),
+                ),
+            ]
+        )
 
         result = service.execute_search(
             _search_request(
@@ -1639,6 +2191,19 @@ class WorldMapSearchTests(unittest.TestCase):
 
         service, observer = self._build_runtime_service(
             observations=[
+                _make_world_map_observation(
+                    0,
+                    0,
+                    objects=(
+                        make_spatial_object(
+                            SpatialObjectKind.CASTLE,
+                            name_text="UnknownCastle",
+                            kingdom="K1",
+                            confirmed_world_coordinate=(0, 0),
+                            action_point=(77, 88),
+                        ),
+                    ),
+                ),
                 make_observation(
                     ScreenType.PNC_PLAYER_TERRITORY,
                     visible_ids=(
@@ -1800,6 +2365,15 @@ class WorldMapSearchTests(unittest.TestCase):
             observation_service=observer,
             debug_store=WorldMapSurveyDebugStore(root=Path(self.temp_directory.name)),
         )
+
+        def build_p2_observation(screenshot: object, _request: ObservationRequest) -> Observation:
+            """Builds a distinct rich fixture observation from the exact fake P1 screenshot."""
+
+            for capture in observer.captures:
+                if capture.screenshot is screenshot:
+                    return replace(capture.observation)
+            raise AssertionError("P2 received a screenshot that P1 did not capture.")
+
         service = WorldMapSearchService(
             screen_flows=self.flows,
             observation_service=observer,
@@ -1818,6 +2392,7 @@ class WorldMapSearchTests(unittest.TestCase):
                 sleep=lambda _: None,
             ),
             survey_recorder=recorder,
+            viewport_analyzer=WorldMapViewportAnalyzer(observation_builder=build_p2_observation),
         )
         return service, observer, session
 
@@ -1896,6 +2471,7 @@ def _search_request(
     boundary: WorldMapSearchBoundary | None = None,
     movement_preferences: WorldMapMovementPreferences | None = None,
     stop_policy: WorldMapSearchStopPolicy | None = None,
+    sweep_policy: WorldMapSweepPolicy | None = None,
 ) -> object:
     """Builds one search request with concise defaults for tests."""
 
@@ -1909,6 +2485,7 @@ def _search_request(
         origin=origin,
         boundary=boundary,
         movement_preferences=WorldMapMovementPreferences() if movement_preferences is None else movement_preferences,
+        sweep_policy=WorldMapSweepPolicy.debug_exact_checkpoint() if sweep_policy is None else sweep_policy,
     )
 
 
@@ -1989,6 +2566,47 @@ def _make_coordinate_dialog_observation(
                 empty=False,
             ),
         },
+    )
+
+
+def _make_incomplete_coordinate_dialog_observation(
+    kingdom: int | None,
+    *,
+    x: int | None,
+    y: int | None,
+) -> Observation:
+    """Builds a classified coordinate dialog while omitting selected field states."""
+
+    text_field_states: dict[UiElementId, ObservedTextFieldState] = {}
+    if kingdom is not None:
+        text_field_states[UiElementId.PNC_WORLD_COORDINATE_DIALOG_K_FIELD] = ObservedTextFieldState(
+            selector_id=UiElementId.PNC_WORLD_COORDINATE_DIALOG_K_FIELD,
+            text=str(kingdom),
+            empty=False,
+        )
+    if x is not None:
+        text_field_states[UiElementId.PNC_WORLD_COORDINATE_DIALOG_X_FIELD] = ObservedTextFieldState(
+            selector_id=UiElementId.PNC_WORLD_COORDINATE_DIALOG_X_FIELD,
+            text=str(x),
+            empty=False,
+        )
+    if y is not None:
+        text_field_states[UiElementId.PNC_WORLD_COORDINATE_DIALOG_Y_FIELD] = ObservedTextFieldState(
+            selector_id=UiElementId.PNC_WORLD_COORDINATE_DIALOG_Y_FIELD,
+            text=str(y),
+            empty=False,
+        )
+    return make_observation(
+        ScreenType.PNC_WORLD_COORDINATE_DIALOG,
+        visible_ids=(
+            UiElementId.PNC_WORLD_COORDINATE_DIALOG_K_FIELD,
+            UiElementId.PNC_WORLD_COORDINATE_DIALOG_X_FIELD,
+            UiElementId.PNC_WORLD_COORDINATE_DIALOG_Y_FIELD,
+            UiElementId.PNC_WORLD_COORDINATE_DIALOG_GO_BUTTON,
+            UiElementId.PNC_WORLD_COORDINATE_DIALOG_CLOSE_BUTTON,
+            UiElementId.PNC_WORLD_COORDINATE_DIALOG_KEYBOARD_OK_BUTTON,
+        ),
+        text_field_states=text_field_states,
     )
 
 

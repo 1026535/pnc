@@ -31,6 +31,7 @@ class ObservationRequest:
     text_field_selectors: frozenset[UiElementId] = frozenset()
     expected_mailbox: MailboxType | None = None
     expected_world_coordinate: tuple[int, int] | None = None
+    world_map_coordinate_only: bool = False
     artifact_selection: ObservationArtifactSelection | None = None
 
     @classmethod
@@ -107,17 +108,23 @@ class ObservationRequest:
         return cls(
             candidate_screen_types=frozenset({ScreenType.PNC_WORLD_MAP, ScreenType.PNC_WORLD_MAP_ROOT, ScreenType.UNKNOWN}),
             ocr_screen_types=frozenset({ScreenType.PNC_WORLD_MAP}),
+            world_map_coordinate_only=True,
         )
 
     @classmethod
-    def world_map_checkpoint_analysis(cls) -> "ObservationRequest":
-        """Returns the richer observation scope used when one settled world-map viewport should be fully analyzed."""
+    def world_map_checkpoint_analysis(
+        cls,
+        *,
+        expected_coordinate: tuple[int, int] | None = None,
+    ) -> "ObservationRequest":
+        """Returns rich P2 scope seeded by the coordinate P1 already proved for this screenshot."""
 
         return cls(
             candidate_screen_types=frozenset({ScreenType.PNC_WORLD_MAP, ScreenType.PNC_WORLD_MAP_ROOT}),
             ocr_screen_types=frozenset({ScreenType.PNC_WORLD_MAP}),
             include_popup_guard=True,
             include_loading_guard=True,
+            expected_world_coordinate=expected_coordinate,
         )
 
     @classmethod

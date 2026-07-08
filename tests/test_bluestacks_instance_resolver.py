@@ -29,6 +29,29 @@ class _FakeRunningInstanceSource:
         return self.running_instances
 
 
+class _FailingRunningInstanceSource:
+    """Models Windows denying access to process command-line metadata."""
+
+    def list_running_instances(self) -> tuple[BlueStacksRunningInstance, ...]:
+        """Raises the canonical process-enumeration failure."""
+
+        raise ConfigurationError("process metadata unavailable")
+
+
+@dataclass(frozen=True, slots=True)
+class _FakePortProbe:
+    """Returns one deterministic ADB-port reachability result."""
+
+    reachable: bool
+
+    def is_reachable(self, host: str, port: int) -> bool:
+        """Returns the seeded result after validating the requested endpoint."""
+
+        if host != "127.0.0.1" or port <= 0:
+            raise AssertionError("Resolver supplied an invalid local ADB endpoint.")
+        return self.reachable
+
+
 class BlueStacksInstanceResolverTests(unittest.TestCase):
     """Validates runtime BlueStacks port discovery from the authoritative host config."""
 
@@ -172,6 +195,47 @@ class BlueStacksInstanceResolverTests(unittest.TestCase):
 
             with self.assertRaises(ConfigurationError):
                 resolver.resolve(_make_instance_config(display_name="serious_stuff"))
+
+    def test_resolve_uses_unique_reachable_adb_port_when_process_metadata_is_denied(self) -> None:
+        """Falls back to the authored local endpoint only for explicit process-enumeration failure."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            config_path = _write_bluestacks_config(
+                Path(temp_directory),
+                """
+                bst.instance.Rvc64.display_name="157_farm"
+                bst.instance.Rvc64.status.adb_port="5556"
+                """,
+            )
+            resolver = BlueStacksInstanceResolver(
+                config_path=config_path,
+                running_instance_source=_FailingRunningInstanceSource(),
+                port_probe=_FakePortProbe(reachable=True),
+            )
+
+            instance = resolver.resolve(_make_instance_config(display_name="157_farm"))
+
+            self.assertEqual(instance.device_id, "127.0.0.1:5556")
+
+    def test_resolve_preserves_process_error_when_fallback_port_is_unreachable(self) -> None:
+        """Does not misclassify an inaccessible process snapshot as a running emulator."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            config_path = _write_bluestacks_config(
+                Path(temp_directory),
+                """
+                bst.instance.Rvc64.display_name="157_farm"
+                bst.instance.Rvc64.status.adb_port="5556"
+                """,
+            )
+            resolver = BlueStacksInstanceResolver(
+                config_path=config_path,
+                running_instance_source=_FailingRunningInstanceSource(),
+                port_probe=_FakePortProbe(reachable=False),
+            )
+
+            with self.assertRaisesRegex(ConfigurationError, "process metadata unavailable"):
+                resolver.resolve(_make_instance_config(display_name="157_farm"))
 
     def test_resolve_rejects_shared_port_claimed_by_multiple_running_instances(self) -> None:
         """Fails fast when multiple active BlueStacks instances claim the same runtime ADB port."""

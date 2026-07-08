@@ -343,6 +343,8 @@ class ActionExecutor:
         del action
         if request is None or request == ObservationRequest.full_runtime_default():
             return False
+        if request == ObservationRequest.world_map_movement_proof_follow_up():
+            return False
         if observation.has(UiElementId.PNC_STATUS_BANNER):
             return False
         if observation.screen_type == ScreenType.UNKNOWN:

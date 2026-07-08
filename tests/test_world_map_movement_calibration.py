@@ -407,6 +407,7 @@ class _RecordingCoordinateMover:
         movement_proof_artifact_selection: object = None,
         arrival_artifact_selection: object = None,
         logging_mode: object = None,
+        p1_capture_sink: object = None,
     ) -> object:
         """Records the requested movement and returns a world-map observation at the target."""
 
@@ -420,6 +421,7 @@ class _RecordingCoordinateMover:
             movement_proof_artifact_selection,
             arrival_artifact_selection,
             logging_mode,
+            p1_capture_sink,
         )
         self.target_coordinates.append(target_coordinate)
         self.runtime_states.append(runtime_state)

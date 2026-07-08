@@ -341,6 +341,15 @@ class ScreenFlowPlanner:
             ]
         if observation.screen_type == ScreenType.ANDROID_HOME:
             return self.ensure_pnc_foreground(observation)
+        if observation.screen_type == ScreenType.PNC_LOADING:
+            return [
+                WaitAction(
+                    milliseconds=1000,
+                    reason="wait_for_game_loading",
+                    observe_after=True,
+                    follow_up_request=ObservationRequest.full_runtime_default(),
+                )
+            ]
         if observation.screen_type == ScreenType.UNKNOWN:
             return self.recover_unknown_game_screen(observation, reason="recover_unknown_home_city")
         return self.return_to_safe_root_screen(observation)

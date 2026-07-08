@@ -19,6 +19,7 @@ from pnc_automation.app.authoring.scripts.models import RunScript, ScriptStep
 from pnc_automation.app.authoring.scripts.registry import TaskRegistry
 from pnc_automation.app.automation.engine.task import TaskId
 from pnc_automation.app.pnc.domain.action_requests import SwipeGesturePrimitive
+from pnc_automation.app.pnc.domain.observation import Observation
 from pnc_automation.app.authoring.mail.loader import (
     build_generated_send_mail_script_for_hour,
     generated_mail_schedule_name_for_hour,
@@ -27,7 +28,7 @@ from pnc_automation.app.authoring.mail.loader import (
 )
 from pnc_automation.app.pnc.persistence.chat_archive_store import ChatArchiveStore
 from pnc_automation.app.pnc.persistence.mail_archive_store import MailArchiveStore
-from pnc_automation.core.infra.capture.screenshot_service import ScreenshotService
+from pnc_automation.core.infra.capture.screenshot_service import CapturedScreenshot, ScreenshotService
 from pnc_automation.app.pnc.persistence.castle_roster_store import CastleRosterStore
 from pnc_automation.app.pnc.persistence.world_map_movement_calibration_store import WorldMapMovementCalibrationStore
 from pnc_automation.app.pnc.persistence.world_map_survey_debug_store import WorldMapSurveyDebugStore
@@ -35,6 +36,7 @@ from pnc_automation.app.authoring.config.models import AccountConfig, AppConfig,
 from pnc_automation.core.infra.emulator.bluestacks_instance import BlueStacksInstance
 from pnc_automation.core.infra.emulator.bluestacks_instance_resolver import BlueStacksInstanceResolver
 from pnc_automation.app.pnc.navigation.world_map_movement_calibration import WorldMapMovementCalibrationService
+from pnc_automation.app.pnc.navigation.world_map_analysis import WorldMapViewportAnalyzer
 from pnc_automation.app.pnc.navigation.world_map_search import (
     ObservationBackedWorldMapCastleInspector,
     WorldMapSearchService,
@@ -43,6 +45,7 @@ from pnc_automation.app.pnc.navigation.world_map_survey_recorder import WorldMap
 from pnc_automation.core.infra.emulator.session import BlueStacksSession
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
 from pnc_automation.app.pnc.vision.observation_builder import ObservationBuilder, ObservationService
+from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,6 +91,7 @@ class ScriptRunner:
     adb_client: AdbClient
     instance_resolver: BlueStacksInstanceResolver
     logger: logging.LoggerAdapter
+    p2_observation_builder_factory: Callable[[], ObservationBuilder] | None = None
 
     def run(self, *, account_id: str, script_path: str) -> RunResult:
         """Executes the selected script for one configured account target."""
@@ -199,10 +203,25 @@ class ScriptRunner:
             debug_store=WorldMapSurveyDebugStore(root=self.config.artifact_root),
         )
         world_map_movement_calibration_store = WorldMapMovementCalibrationStore(root=self.config.artifact_root)
+        p2_observation_builder: ObservationBuilder | None = None
+
+        def build_p2_observation(screenshot: CapturedScreenshot, request: ObservationRequest) -> Observation:
+            """Lazily builds the independently owned P2 pipeline on its worker thread."""
+
+            nonlocal p2_observation_builder
+            if p2_observation_builder is None:
+                p2_observation_builder = (
+                    self.observation_builder
+                    if self.p2_observation_builder_factory is None
+                    else self.p2_observation_builder_factory()
+                )
+            return p2_observation_builder.build(screenshot, request=request)
+
         world_map_search_service = WorldMapSearchService(
             screen_flows=flow_planner,
             observation_service=observation_service,
             survey_recorder=world_map_survey_recorder,
+            viewport_analyzer=WorldMapViewportAnalyzer(observation_builder=build_p2_observation),
         )
         world_map_movement_calibration_service = WorldMapMovementCalibrationService(
             screen_flows=flow_planner,
@@ -391,7 +410,15 @@ def configure_world_map_movement_granularity(
 ) -> None:
     """Applies one shared direct-movement granularity cap to the connected world-map coordinate mover."""
 
-    runtime.world_map_search_service.coordinate_mover_for_runtime().max_axis_delta_per_leg = max_axis_delta_per_leg
+    mover = runtime.world_map_search_service.coordinate_mover_for_runtime()
+    mover.movement_policy = type(mover.movement_policy)(
+        gesture_primitive=mover.movement_policy.gesture_primitive,
+        arrival_tolerance_units=mover.movement_policy.arrival_tolerance_units,
+        overshoot_tolerance_units=mover.movement_policy.overshoot_tolerance_units,
+        correction_threshold_units=mover.movement_policy.correction_threshold_units,
+        traverse_max_axis_delta_per_leg=max_axis_delta_per_leg,
+        correction_max_axis_delta_per_leg=max_axis_delta_per_leg,
+    )
 
 
 def configure_world_map_movement_gesture_primitive(

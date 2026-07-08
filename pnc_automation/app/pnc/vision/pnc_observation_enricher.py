@@ -52,6 +52,7 @@ from pnc_automation.app.pnc.vision.text_anchors import (
 )
 from pnc_automation.app.pnc.vision.world_map_coordinates import (
     ParsedWorldViewport,
+    build_proven_world_viewport,
     parse_world_coordinate_dialog_field_text,
     parse_world_viewport,
     read_world_coordinate_bar_viewport,
@@ -167,6 +168,16 @@ _WORLD_MAP_INVALID_COORDINATE_STATUS_REJECTION_TEXTS = frozenset({"INCORRECT", "
 _WORLD_MAP_INVALID_COORDINATE_STATUS_PROMPT_TEXTS = frozenset({"PLEASEENTER", "ENTER", "INPUT"})
 _WORLD_MAP_INVALID_COORDINATE_STATUS_PROMPT_QUALIFIERS = frozenset({"CORRECT", "VALID"})
 _WORLD_MAP_OVERVIEW_HEADER_PATTERN = re.compile(r"\bK\s*[:：]\s*\d+\b", re.IGNORECASE)
+_WORLD_COORDINATE_DIALOG_FIELD_ZERO_SELECTOR_IDS = frozenset(
+    {
+        UiElementId.PNC_WORLD_COORDINATE_DIALOG_X_FIELD,
+        UiElementId.PNC_WORLD_COORDINATE_DIALOG_Y_FIELD,
+    }
+)
+_WORLD_COORDINATE_DIALOG_ZERO_GLYPH_MIN_BRIGHTNESS = 140
+_WORLD_COORDINATE_DIALOG_ZERO_GLYPH_MIN_PIXELS = 20
+_WORLD_COORDINATE_DIALOG_ZERO_GLYPH_MAX_DENSITY = 0.68
+_WORLD_COORDINATE_DIALOG_ZERO_GLYPH_CENTER_MAX_DENSITY = 0.12
 _WORLD_OVERVIEW_MARKER_COMPONENT_GAP_PX = 18
 _WORLD_OVERVIEW_MARKER_EDGE_MARGIN_PX = 18
 _WORLD_OVERVIEW_MARKER_HINT_MIN_CLUSTER_PIXELS = 40
@@ -1604,6 +1615,22 @@ class PncObservationEnricher:
             and not request.include_chat_entries
         ):
             return chat_geometry
+        if (
+            request.world_map_coordinate_only
+            and request.allows_screen(ScreenType.PNC_WORLD_MAP)
+            and can_attempt_screen_family_ocr(
+                request_screen=ScreenType.PNC_WORLD_MAP,
+                observed_screen=screen_type,
+            )
+        ):
+            world_map_proof = _build_world_map_coordinate_only_additions(
+                image=image,
+                selector_registry=self.selector_registry,
+                ocr_service=self.ocr_service,
+            )
+            if world_map_proof is not None:
+                return world_map_proof
+            return ObservationAdditions()
         if not request.requires_ocr(screen_type):
             return ObservationAdditions()
         ocr_result = self.ocr_service.read_result(image)
@@ -1622,6 +1649,13 @@ class PncObservationEnricher:
             loading = _build_loading_additions(image=image, lines=lines)
             if loading is not None:
                 return loading
+        if request.allows_screen(ScreenType.ANDROID_HOME) and can_attempt_screen_family_ocr(
+            request_screen=ScreenType.ANDROID_HOME,
+            observed_screen=screen_type,
+        ):
+            android_home = _build_android_home_additions(image=image, lines=lines)
+            if android_home is not None:
+                return android_home
         if request.allows_screen(ScreenType.PNC_WORLD_COORDINATE_DIALOG) and can_attempt_screen_family_ocr(
             request_screen=ScreenType.PNC_WORLD_COORDINATE_DIALOG,
             observed_screen=screen_type,
@@ -1748,6 +1782,7 @@ class PncObservationEnricher:
                 anchors=anchors,
                 selector_registry=self.selector_registry,
                 ocr_service=self.ocr_service,
+                expected_coordinate=request.expected_world_coordinate,
             )
             if world_map is not None:
                 return _with_status_banner(world_map, status_banner)
@@ -2176,18 +2211,17 @@ class PncObservationEnricher:
         image: Image.Image,
         lines: tuple[OcrLine, ...],
     ) -> ObservationAdditions | None:
-        """Returns OCR-backed coordinate-dialog evidence plus committed field state."""
+        """Returns OCR-backed coordinate-dialog identity plus any proven committed field state."""
 
         if self.selector_registry is None:
             return None
         label_min_y = int(image.height * 0.32)
         label_max_y = int(image.height * 0.55)
-        if (
-            _find_line_with_normalized_text(lines=lines, normalized_text="K", min_y=label_min_y, max_y=label_max_y) is None
-            or _find_line_with_normalized_text(lines=lines, normalized_text="X", min_y=label_min_y, max_y=label_max_y) is None
-            or _find_line_with_normalized_text(lines=lines, normalized_text="Y", min_y=label_min_y, max_y=label_max_y) is None
-        ):
-            return None
+        label_texts = _find_world_map_coordinate_dialog_label_texts(
+            lines=lines,
+            min_y=label_min_y,
+            max_y=label_max_y,
+        )
         go_line = _find_line_with_normalized_text(
             lines=lines,
             normalized_text="GO",
@@ -2198,16 +2232,15 @@ class PncObservationEnricher:
             return None
         visible_elements: dict[UiElementId, VisibleElement] = {}
         text_field_states: dict[UiElementId, ObservedTextFieldState] = {}
-        parsed_fields: dict[UiElementId, int] = {}
         for selector_id in world_map_coordinate_dialog_text_field_selector_ids():
-            state = self._build_observed_text_field_state(image=image, selector_id=selector_id)
-            parsed_value = parse_world_coordinate_dialog_field_text(selector_id=selector_id, text=state.text)
-            if parsed_value is None:
-                return None
-            parsed_fields[selector_id] = parsed_value
-            text_field_states[selector_id] = state
             visible_elements[selector_id] = self._materialize_selector_visible(selector_id=selector_id, image=image)
-        if parsed_fields[UiElementId.PNC_WORLD_COORDINATE_DIALOG_K_FIELD] <= 0:
+            state = self._build_world_map_coordinate_dialog_field_state(image=image, selector_id=selector_id)
+            if state is not None:
+                text_field_states[selector_id] = state
+        if not _world_map_coordinate_dialog_identity_proven(
+            label_texts=label_texts,
+            text_field_states=text_field_states,
+        ):
             return None
         for selector_id in (
             UiElementId.PNC_WORLD_COORDINATE_DIALOG_CLOSE_BUTTON,
@@ -2223,6 +2256,24 @@ class PncObservationEnricher:
             screen_evidence=(ScreenEvidence(ScreenType.PNC_WORLD_COORDINATE_DIALOG, "ocr_world_coordinate_dialog"),),
             text_field_states=text_field_states,
         )
+
+    def _build_world_map_coordinate_dialog_field_state(
+        self,
+        *,
+        image: Image.Image,
+        selector_id: UiElementId,
+    ) -> ObservedTextFieldState | None:
+        """Returns a parsed coordinate-dialog field state, including the live zero-glyph OCR fallback."""
+
+        state = self._build_observed_text_field_state(image=image, selector_id=selector_id)
+        if parse_world_coordinate_dialog_field_text(selector_id=selector_id, text=state.text) is not None:
+            return state
+        if selector_id not in _WORLD_COORDINATE_DIALOG_FIELD_ZERO_SELECTOR_IDS:
+            return None
+        region = self._require_selector_region(selector_id, image=image)
+        if not _coordinate_dialog_field_contains_zero_glyph(image=image, region=region):
+            return None
+        return ObservedTextFieldState(selector_id=selector_id, text="0", empty=False)
 
     def _build_world_map_overview_additions(
         self,
@@ -3959,6 +4010,9 @@ def _build_popup_additions(
     vip_daily_reset = _build_vip_daily_reset_popup_additions(image=image, lines=lines)
     if vip_daily_reset is not None:
         return vip_daily_reset
+    reconnect_popup = _build_reconnect_popup_additions(image=image, lines=lines)
+    if reconnect_popup is not None:
+        return reconnect_popup
     dismiss_anchor = _find_popup_dismiss_anchor(image=image, anchors=anchors)
     if dismiss_anchor is not None:
         return ObservationAdditions(
@@ -3971,6 +4025,56 @@ def _build_popup_additions(
             screen_evidence=(ScreenEvidence(ScreenType.PNC_POPUP, "ocr_popup_cancel_button"),),
         )
     return _build_promotional_popup_additions(image=image, lines=lines)
+
+
+def _build_reconnect_popup_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Returns the reconnect confirmation modal as the shared blocking-popup contract."""
+
+    message_line = _find_line_matching(
+        lines=lines,
+        predicate=lambda line: (
+            "DISCONNECTED" in normalize_ocr_text(line.text)
+            or ("RECONNECT" in normalize_ocr_text(line.text) and "NOW" in normalize_ocr_text(line.text))
+        ),
+        min_y=int(image.height * 0.25),
+        max_y=int(image.height * 0.6),
+    )
+    confirm_line = _find_line_with_normalized_text(
+        lines=lines,
+        normalized_text="CONFIRM",
+        min_y=int(image.height * 0.45),
+        max_y=int(image.height * 0.8),
+    )
+    if message_line is None or confirm_line is None:
+        return None
+
+    horizontal_padding = max(28, confirm_line.bounds.width // 2)
+    vertical_padding = max(16, confirm_line.bounds.height)
+    left = max(0, confirm_line.bounds.x - horizontal_padding)
+    top = max(0, confirm_line.bounds.y - vertical_padding)
+    width = min(image.width - left, confirm_line.bounds.width + (horizontal_padding * 2))
+    height = min(image.height - top, confirm_line.bounds.height + (vertical_padding * 2))
+    return ObservationAdditions(
+        visible_elements={
+            UiElementId.PNC_POPUP_CLOSE_BUTTON: _make_visible(
+                selector_id=UiElementId.PNC_POPUP_CLOSE_BUTTON,
+                x=left,
+                y=top,
+                width=width,
+                height=height,
+                action_point=(
+                    confirm_line.bounds.x + (confirm_line.bounds.width // 2),
+                    confirm_line.bounds.y + (confirm_line.bounds.height // 2),
+                ),
+                extracted_text=confirm_line.text,
+            )
+        },
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_POPUP, "ocr_reconnect_popup"),),
+    )
 
 
 def _build_vip_daily_reset_popup_additions(
@@ -4129,7 +4233,7 @@ def _has_popup_primary_action(
             continue
         if abs(anchor.bounds.y - dismiss_anchor.bounds.y) > row_tolerance:
             continue
-        if anchor.bounds.x <= dismiss_anchor.bounds.x + minimum_gap:
+        if abs(anchor.bounds.x - dismiss_anchor.bounds.x) <= minimum_gap:
             continue
         return True
     return False
@@ -4213,6 +4317,40 @@ def _build_loading_splash_additions(
         return None
     return ObservationAdditions(
         screen_evidence=(ScreenEvidence(ScreenType.PNC_LOADING, "ocr_loading_splash"),),
+    )
+
+
+def _build_android_home_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Returns Android-home evidence when the BlueStacks launcher exposes the P&C app label."""
+
+    pnc_label = _find_line_matching(
+        lines=lines,
+        predicate=lambda line: normalize_ocr_text(line.text) in {"PUZZLESCONQUEST", "PUZZLESANDCONQUEST"},
+        min_y=int(image.height * 0.12),
+        max_y=int(image.height * 0.35),
+    )
+    if pnc_label is None:
+        return None
+    icon_size = max(48, int(image.width * 0.11))
+    icon_left = max(0, pnc_label.bounds.x + (pnc_label.bounds.width // 2) - (icon_size // 2))
+    icon_top = max(0, pnc_label.bounds.y - icon_size - max(12, int(image.height * 0.025)))
+    return ObservationAdditions(
+        visible_elements={
+            UiElementId.ANDROID_HOME_PNC_ICON: _make_visible(
+                selector_id=UiElementId.ANDROID_HOME_PNC_ICON,
+                x=icon_left,
+                y=icon_top,
+                width=min(icon_size, image.width - icon_left),
+                height=min(icon_size, image.height - icon_top),
+                action_point=(pnc_label.bounds.x + (pnc_label.bounds.width // 2), icon_top + (icon_size // 2)),
+                extracted_text=pnc_label.text,
+            )
+        },
+        screen_evidence=(ScreenEvidence(ScreenType.ANDROID_HOME, "ocr_android_home_pnc_label"),),
     )
 
 
@@ -4690,15 +4828,24 @@ def _build_world_map_additions(
     anchors: tuple[DetectedTextAnchor, ...],
     selector_registry: SelectorRegistry | None,
     ocr_service: OcrService,
+    expected_coordinate: tuple[int, int] | None = None,
 ) -> ObservationAdditions | None:
-    """Returns world-map additions once OCR proves the coordinate bar, optionally enriching fixed footer chrome."""
+    """Returns rich world-map additions, reusing P1 coordinate proof when supplied by P2."""
 
     visible_nav_elements, nav_anchors = _extract_bottom_nav_additions(image=image, anchors=anchors)
-    parsed_viewport = _read_world_map_coordinate_viewport(
-        image=image,
-        lines=lines,
-        selector_registry=selector_registry,
-        ocr_service=ocr_service,
+    parsed_viewport = (
+        _build_proven_world_map_viewport(
+            image=image,
+            selector_registry=selector_registry,
+            coordinate=expected_coordinate,
+        )
+        if expected_coordinate is not None
+        else _read_world_map_coordinate_viewport(
+            image=image,
+            lines=lines,
+            selector_registry=selector_registry,
+            ocr_service=ocr_service,
+        )
     )
     if parsed_viewport is None:
         return None
@@ -4734,6 +4881,71 @@ def _build_world_map_additions(
     )
 
 
+def _build_proven_world_map_viewport(
+    *,
+    image: Image.Image,
+    selector_registry: SelectorRegistry | None,
+    coordinate: tuple[int, int],
+) -> ParsedWorldViewport:
+    """Builds P2 viewport state from P1 proof and canonical coordinate-bar geometry without OCR."""
+
+    if selector_registry is None:
+        raise SelectorResolutionError("P2 world-map treatment requires selector_registry for coordinate-bar geometry.")
+    selector = selector_registry.require(UiElementId.PNC_WORLD_COORDINATE_BAR)
+    if selector.relative_bounds is None:
+        raise SelectorResolutionError(
+            "P2 world-map treatment requires canonical coordinate-bar relative bounds.",
+            selector_id=selector.id,
+        )
+    return build_proven_world_viewport(
+        coordinate=coordinate,
+        coordinate_bounds=selector.relative_bounds.materialize_region(image_size=image.size),
+    )
+
+
+def _build_world_map_coordinate_only_additions(
+    *,
+    image: Image.Image,
+    selector_registry: SelectorRegistry | None,
+    ocr_service: OcrService,
+) -> ObservationAdditions | None:
+    """Returns the minimal coordinate-addressed world-map proof used between movement swipes."""
+
+    parsed_viewport = _read_world_map_coordinate_viewport(
+        image=image,
+        lines=(),
+        selector_registry=selector_registry,
+        ocr_service=ocr_service,
+    )
+    if parsed_viewport is None:
+        return None
+    visible_elements = {
+        UiElementId.PNC_WORLD_COORDINATE_BAR: _make_visible(
+            selector_id=UiElementId.PNC_WORLD_COORDINATE_BAR,
+            x=parsed_viewport.coordinate_bounds.x,
+            y=parsed_viewport.coordinate_bounds.y,
+            width=parsed_viewport.coordinate_bounds.width,
+            height=parsed_viewport.coordinate_bounds.height,
+            extracted_text=parsed_viewport.coordinate_text,
+        ),
+        UiElementId.PNC_WORLD_SEARCH_BUTTON: _build_world_map_search_button_element(
+            image=image,
+            coordinate_bounds=parsed_viewport.coordinate_bounds,
+        ),
+    }
+    return ObservationAdditions(
+        visible_elements=visible_elements,
+        spatial_surface=build_world_map_spatial_surface(
+            image=image,
+            lines=(),
+            selector_registry=selector_registry,
+            parsed_viewport=parsed_viewport,
+            include_objects=False,
+        ),
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_WORLD_MAP, "ocr_world_coordinate_bar_only"),),
+    )
+
+
 def _read_world_map_coordinate_viewport(
     *,
     image: Image.Image,
@@ -4765,7 +4977,11 @@ def _build_world_map_search_button_element(
 
     button_size = max(28, int(round(coordinate_bounds.height * 1.6)))
     horizontal_gap = max(8, int(round(coordinate_bounds.height * 0.5)))
-    action_x = max(0, coordinate_bounds.x - horizontal_gap - (button_size // 2))
+    if _coordinate_bounds_include_search_button(image=image, coordinate_bounds=coordinate_bounds):
+        action_x = coordinate_bounds.x + int(round(coordinate_bounds.height * 0.4))
+    else:
+        action_x = coordinate_bounds.x - horizontal_gap - (button_size // 2)
+    action_x = max(0, min(image.width - 1, action_x))
     action_y = max(0, min(image.height - 1, coordinate_bounds.y + (coordinate_bounds.height // 2)))
     left = max(0, action_x - (button_size // 2))
     top = max(0, action_y - (button_size // 2))
@@ -4779,6 +4995,12 @@ def _build_world_map_search_button_element(
         height=height,
         action_point=(action_x, action_y),
     )
+
+
+def _coordinate_bounds_include_search_button(*, image: Image.Image, coordinate_bounds: Bounds) -> bool:
+    """Returns whether the proven coordinate crop is the widened live HUD crop that contains the magnifier."""
+
+    return coordinate_bounds.x >= int(image.width * 0.2) and coordinate_bounds.width >= int(image.width * 0.25)
 
 
 def _build_world_map_root_additions(
@@ -5810,6 +6032,139 @@ def _anchor_in_line_range(anchor: DetectedTextAnchor, row_lines: tuple[OcrLine, 
     top = row_lines[0].bounds.y
     bottom = row_lines[-1].bounds.y + row_lines[-1].bounds.height
     return anchor.bounds.y >= top and anchor.bounds.y <= bottom
+
+
+def _find_world_map_coordinate_dialog_label_texts(
+    *,
+    lines: tuple[OcrLine, ...],
+    min_y: int,
+    max_y: int,
+) -> frozenset[str]:
+    """Returns the coordinate-dialog field labels proven by full-screen OCR."""
+
+    label_texts = {
+        label_text
+        for label_text in ("K", "X", "Y")
+        if _find_line_with_normalized_text(
+            lines=lines,
+            normalized_text=label_text,
+            min_y=min_y,
+            max_y=max_y,
+        )
+        is not None
+    }
+    return frozenset(label_texts)
+
+
+def _world_map_coordinate_dialog_identity_proven(
+    *,
+    label_texts: frozenset[str],
+    text_field_states: Mapping[UiElementId, ObservedTextFieldState],
+) -> bool:
+    """Returns whether OCR labels or selector-backed fields prove the coordinate dialog identity."""
+
+    if label_texts == frozenset({"K", "X", "Y"}):
+        return True
+    if len(label_texts) < 2 or "K" not in label_texts:
+        return False
+    return all(selector_id in text_field_states for selector_id in world_map_coordinate_dialog_text_field_selector_ids())
+
+
+def _coordinate_dialog_field_contains_zero_glyph(*, image: Image.Image, region: object) -> bool:
+    """Returns whether one coordinate-dialog field crop visually proves a single zero glyph."""
+
+    crop = image.crop((region.x, region.y, region.x + region.width, region.y + region.height)).convert("L")
+    bright_points: list[tuple[int, int]] = []
+    pixels = crop.load()
+    for y in range(crop.height):
+        for x in range(crop.width):
+            if pixels[x, y] >= _WORLD_COORDINATE_DIALOG_ZERO_GLYPH_MIN_BRIGHTNESS:
+                bright_points.append((x, y))
+    if len(bright_points) < _WORLD_COORDINATE_DIALOG_ZERO_GLYPH_MIN_PIXELS:
+        return False
+    min_x = min(x for x, _y in bright_points)
+    max_x = max(x for x, _y in bright_points)
+    min_y = min(y for _x, y in bright_points)
+    max_y = max(y for _x, y in bright_points)
+    glyph_width = max_x - min_x + 1
+    glyph_height = max_y - min_y + 1
+    if glyph_width < max(5, int(crop.width * 0.05)) or glyph_width > max(16, int(crop.width * 0.24)):
+        return False
+    if glyph_height < max(10, int(crop.height * 0.24)) or glyph_height > max(30, int(crop.height * 0.6)):
+        return False
+    glyph_density = len(bright_points) / (glyph_width * glyph_height)
+    if glyph_density > _WORLD_COORDINATE_DIALOG_ZERO_GLYPH_MAX_DENSITY:
+        return False
+    glyph_center_x = (min_x + max_x) / 2.0
+    glyph_center_y = (min_y + max_y) / 2.0
+    if glyph_center_x < crop.width * 0.3 or glyph_center_x > crop.width * 0.7:
+        return False
+    if glyph_center_y < crop.height * 0.25 or glyph_center_y > crop.height * 0.7:
+        return False
+    bright_tuple = tuple(bright_points)
+    if not _zero_glyph_has_ring_support(
+        bright_points=bright_tuple,
+        min_x=min_x,
+        min_y=min_y,
+        glyph_width=glyph_width,
+        glyph_height=glyph_height,
+    ):
+        return False
+    return _zero_glyph_center_density(
+        bright_points=bright_tuple,
+        min_x=min_x,
+        min_y=min_y,
+        glyph_width=glyph_width,
+        glyph_height=glyph_height,
+    ) <= _WORLD_COORDINATE_DIALOG_ZERO_GLYPH_CENTER_MAX_DENSITY
+
+
+def _zero_glyph_has_ring_support(
+    *,
+    bright_points: tuple[tuple[int, int], ...],
+    min_x: int,
+    min_y: int,
+    glyph_width: int,
+    glyph_height: int,
+) -> bool:
+    """Returns whether bright pixels occupy all four stroke bands expected for a zero glyph."""
+
+    top_limit = min_y + max(1, int(glyph_height * 0.25))
+    bottom_start = min_y + int(glyph_height * 0.75)
+    left_limit = min_x + max(1, int(glyph_width * 0.35))
+    right_start = min_x + int(glyph_width * 0.65)
+    has_top = has_bottom = has_left = has_right = False
+    for x, y in bright_points:
+        has_top = has_top or y <= top_limit
+        has_bottom = has_bottom or y >= bottom_start
+        has_left = has_left or x <= left_limit
+        has_right = has_right or x >= right_start
+        if has_top and has_bottom and has_left and has_right:
+            return True
+    return False
+
+
+def _zero_glyph_center_density(
+    *,
+    bright_points: tuple[tuple[int, int], ...],
+    min_x: int,
+    min_y: int,
+    glyph_width: int,
+    glyph_height: int,
+) -> float:
+    """Returns the bright-pixel density inside the expected hollow center of a zero glyph."""
+
+    center_left = min_x + int(glyph_width * 0.35)
+    center_right = min_x + max(int(glyph_width * 0.65), int(glyph_width * 0.35) + 1)
+    center_top = min_y + int(glyph_height * 0.3)
+    center_bottom = min_y + max(int(glyph_height * 0.7), int(glyph_height * 0.3) + 1)
+    center_area = max(1, (center_right - center_left + 1) * (center_bottom - center_top + 1))
+    center_pixels = sum(
+        1
+        for x, y in bright_points
+        if center_left <= x <= center_right and center_top <= y <= center_bottom
+    )
+    return center_pixels / center_area
 
 
 def _region_warmth(image: Image.Image, region: object) -> float:
