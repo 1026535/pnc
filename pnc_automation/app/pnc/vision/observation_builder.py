@@ -83,6 +83,14 @@ class ObservationAdditions:
 
 
 @dataclass(frozen=True, slots=True)
+class ObservationSelectorDetectionPlan:
+    """Defines the initial selector scope for one observation build request."""
+
+    selector_ids: tuple[UiElementId, ...]
+    source: str
+
+
+@dataclass(frozen=True, slots=True)
 class CapturedObservation:
     """Pairs one persisted screenshot capture with the built typed observation."""
 
@@ -253,18 +261,20 @@ class ObservationBuilder:
         """Builds one observation from a captured screenshot."""
 
         active_request = request or ObservationRequest.full_runtime_default()
+        detection_plan = self._selector_detection_plan(active_request)
         probe_matches = self.selector_engine.detect(
             screenshot.image,
             self.selector_registry,
-            selector_ids=self.screen_classifier.probe_selector_ids(),
+            selector_ids=detection_plan.selector_ids,
         )
         visible_elements = _matches_to_visible_elements(probe_matches)
         screen_type = self.screen_classifier.classify(visible_elements)
-        visible_elements, screen_type = self._complete_screen_scope(
-            screenshot=screenshot,
-            visible_elements=visible_elements,
-            screen_type=screen_type,
-        )
+        if not active_request.world_map_coordinate_only:
+            visible_elements, screen_type = self._complete_screen_scope(
+                screenshot=screenshot,
+                visible_elements=visible_elements,
+                screen_type=screen_type,
+            )
         base_screen_type = screen_type
         additions = self.enricher.enrich(
             screenshot.image,
@@ -279,7 +289,7 @@ class ObservationBuilder:
             or additions.screen_evidence
             or additions.suppress_geometry_selector_ids
             or screen_type != base_screen_type
-        ):
+        ) and not active_request.world_map_coordinate_only:
             visible_elements, screen_type = self._complete_screen_scope(
                 screenshot=screenshot,
                 visible_elements=visible_elements,
@@ -309,6 +319,35 @@ class ObservationBuilder:
             text_field_states=additions.text_field_states,
             chat_draft_empty=additions.chat_draft_empty,
             chat_draft_text=additions.chat_draft_text,
+        )
+
+    def _selector_detection_plan(self, request: ObservationRequest) -> ObservationSelectorDetectionPlan:
+        """Returns the minimal initial selector scope implied by the observation request."""
+
+        if request.world_map_coordinate_only:
+            return ObservationSelectorDetectionPlan(selector_ids=(), source="world_map_coordinate_only")
+        if not request.candidate_screen_types:
+            return ObservationSelectorDetectionPlan(
+                selector_ids=self.screen_classifier.probe_selector_ids(),
+                source="classifier_probe",
+            )
+        selector_ids: set[UiElementId] = set()
+        for screen_type in request.candidate_screen_types:
+            if screen_type == ScreenType.UNKNOWN:
+                continue
+            selector_ids.update(selector.id for selector in self.selector_registry.for_screen(screen_type))
+        if request.include_popup_guard:
+            selector_ids.add(UiElementId.PNC_POPUP_CLOSE_BUTTON)
+        if request.include_loading_guard:
+            selector_ids.update(selector.id for selector in self.selector_registry.for_screen(ScreenType.PNC_LOADING))
+        if not selector_ids:
+            return ObservationSelectorDetectionPlan(
+                selector_ids=self.screen_classifier.probe_selector_ids(),
+                source="classifier_probe",
+            )
+        return ObservationSelectorDetectionPlan(
+            selector_ids=tuple(sorted(selector_ids, key=lambda selector_id: selector_id.value)),
+            source="request_candidate_scope",
         )
 
     def persist_debug_artifacts(self, *, screenshot: CapturedScreenshot, observation: Observation) -> None:

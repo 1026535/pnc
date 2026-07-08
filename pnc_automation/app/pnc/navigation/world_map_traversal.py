@@ -76,8 +76,8 @@ class WorldMapTraversalActionFamily(StrEnum):
 class WorldMapViewportStrideProfile:
     """Owns the reviewed default viewport-sized stride values shared by traversal patterns."""
 
-    default_horizontal_viewport_stride_units: int = 10
-    default_vertical_viewport_stride_units: int = 10
+    default_horizontal_viewport_stride_units: int = 6
+    default_vertical_viewport_stride_units: int = 6
 
     def __post_init__(self) -> None:
         """Rejects invalid default stride values before planning consumes them."""
@@ -424,7 +424,7 @@ class WorldMapTraversalExecutionPlanner:
         route_plan: WorldMapTraversalRoutePlan,
         origin_coordinate: tuple[int, int],
     ) -> WorldMapTraversalExecutionPlan:
-        """Returns the executable traversal steps implied by the ordered route geometry."""
+        """Returns executable steps, including a non-local entry when origin differs from the first checkpoint."""
 
         steps: list[WorldMapTraversalExecutionStep] = []
         route_index = 0
@@ -435,10 +435,16 @@ class WorldMapTraversalExecutionPlanner:
                     distance_from_origin=coordinate_chebyshev_distance(origin_coordinate, coordinate),
                     route_index=route_index,
                 )
-                intent = (
-                    segment.traversal_segment_intent
-                    if checkpoint_index == 0
-                    else TraversalSegmentIntent.LOCAL_TRAVERSE
+                intent = _resolve_execution_step_intent(
+                    segment_intent=segment.traversal_segment_intent,
+                    checkpoint_index=checkpoint_index,
+                    route_index=route_index,
+                    origin_coordinate=origin_coordinate,
+                    checkpoint_coordinate=coordinate,
+                    local_entry_threshold_units=max(
+                        route_plan.stride.horizontal_stride_units,
+                        route_plan.stride.vertical_stride_units,
+                    ),
                 )
                 steps.append(
                     WorldMapTraversalExecutionStep(
@@ -455,6 +461,27 @@ class WorldMapTraversalExecutionPlanner:
                 )
                 route_index += 1
         return WorldMapTraversalExecutionPlan(route_plan=route_plan, steps=tuple(steps))
+
+
+def _resolve_execution_step_intent(
+    *,
+    segment_intent: TraversalSegmentIntent,
+    checkpoint_index: int,
+    route_index: int,
+    origin_coordinate: tuple[int, int],
+    checkpoint_coordinate: tuple[int, int],
+    local_entry_threshold_units: int,
+) -> TraversalSegmentIntent:
+    """Returns the movement intent for one checkpoint entry without duplicating route semantics."""
+
+    if (
+        route_index == 0
+        and coordinate_chebyshev_distance(origin_coordinate, checkpoint_coordinate) > local_entry_threshold_units
+    ):
+        return TraversalSegmentIntent.NON_LOCAL_RESET
+    if checkpoint_index == 0:
+        return segment_intent
+    return TraversalSegmentIntent.LOCAL_TRAVERSE
 
 
 def _row_segments(

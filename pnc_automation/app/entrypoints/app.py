@@ -30,7 +30,7 @@ from pnc_automation.app.pnc.vision.observation_builder import (
 from pnc_automation.core.vision.ocr.ocr_service import CachedOcrService, RapidOcrService
 from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservationEnricher
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
-from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
+from pnc_automation.app.pnc.vision.selectors import SelectorRegistry, build_default_selector_registry
 from pnc_automation.core.vision.template.template_matcher import PillowTemplateMatcher
 
 
@@ -104,21 +104,8 @@ def build_application_runner(
         artifact_store=artifact_store,
         screenshot_format=app_config.defaults.screenshot_format,
     )
-    ocr_service = CachedOcrService(RapidOcrService())
     selector_registry = build_default_selector_registry(catalog_path=catalog_path)
-    observation_builder = ObservationBuilder(
-        selector_registry=selector_registry,
-        selector_engine=PillowSelectorEngine(
-            template_matcher=PillowTemplateMatcher(),
-            ocr_service=ocr_service,
-        ),
-        screen_classifier=ScreenClassifier(),
-        enricher=PncObservationEnricher(
-            ocr_service=ocr_service,
-            selector_registry=selector_registry,
-        ),
-        debug_artifact_collector=ObservationDebugArtifactCollector(ocr_service=ocr_service),
-    )
+    observation_builder = _build_observation_builder(selector_registry)
     script_runner = ScriptRunner(
         config=app_config,
         task_registry=build_default_task_registry(),
@@ -133,8 +120,28 @@ def build_application_runner(
         adb_client=AdbClient(adb_path=app_config.defaults.adb_path),
         instance_resolver=BlueStacksInstanceResolver(config_path=app_config.defaults.bluestacks_config_path),
         logger=logger,
+        p2_observation_builder_factory=lambda: _build_observation_builder(selector_registry),
     )
     return ApplicationRunner(script_runner=script_runner)
+
+
+def _build_observation_builder(selector_registry: SelectorRegistry) -> ObservationBuilder:
+    """Builds one independently owned observation pipeline and OCR engine."""
+
+    ocr_service = CachedOcrService(RapidOcrService())
+    return ObservationBuilder(
+        selector_registry=selector_registry,
+        selector_engine=PillowSelectorEngine(
+            template_matcher=PillowTemplateMatcher(),
+            ocr_service=ocr_service,
+        ),
+        screen_classifier=ScreenClassifier(),
+        enricher=PncObservationEnricher(
+            ocr_service=ocr_service,
+            selector_registry=selector_registry,
+        ),
+        debug_artifact_collector=ObservationDebugArtifactCollector(ocr_service=ocr_service),
+    )
 
 
 def _override_observation_mode(config: AppConfig, *, observation_mode: ObservationMode) -> AppConfig:

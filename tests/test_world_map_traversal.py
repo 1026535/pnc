@@ -31,6 +31,10 @@ class WorldMapTraversalPlannerTests(unittest.TestCase):
     def test_stride_policy_resolves_profile_defaults_and_axis_overrides(self) -> None:
         """Keeps one canonical stride-policy seam for default and axis-specific traversal spacing."""
 
+        canonical_default = TraversalStridePolicy.viewport_default().resolve(profile=WorldMapViewportStrideProfile())
+        self.assertEqual(canonical_default.horizontal_stride_units, 6)
+        self.assertEqual(canonical_default.vertical_stride_units, 6)
+
         profile = WorldMapViewportStrideProfile(
             default_horizontal_viewport_stride_units=8,
             default_vertical_viewport_stride_units=12,

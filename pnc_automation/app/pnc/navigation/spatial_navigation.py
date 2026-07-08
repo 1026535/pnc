@@ -913,6 +913,31 @@ class WorldMapNavigator(SpatialSurfaceNavigator):
             end_y_ratio=end_y_ratio,
         )
 
+    def build_default_cardinal_navigation_action(
+        self,
+        direction: WorldMapCardinalDirection,
+        *,
+        reason: str,
+        observe_after: bool = True,
+        follow_up_request: ObservationRequest | None = None,
+    ) -> SwipeAction:
+        """Builds a reviewed default-distance cardinal world-map swipe without target-coordinate calibration state."""
+
+        profile = _WORLD_MAP_SWIPE_PROFILE_BY_NAME[direction.value]
+        distance_ratio = max(profile.default_horizontal_distance_ratio, profile.default_vertical_distance_ratio)
+        if distance_ratio <= 0:
+            raise SelectorResolutionError(
+                "Default cardinal world-map navigation requires a positive distance ratio.",
+                direction=direction.value,
+            )
+        return self.build_cardinal_probe_action(
+            direction,
+            distance_ratio=distance_ratio,
+            reason=reason,
+            observe_after=observe_after,
+            follow_up_request=follow_up_request,
+        )
+
     def tap_visible_object(
         self,
         observation: Observation,

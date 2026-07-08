@@ -10,6 +10,7 @@ from PIL import Image
 from pnc_automation.app.pnc.domain.observation import Bounds, SpatialViewport, SpatialViewportAddressingKind
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.navigation.world_map_coordinate_domain import WorldMapCoordinateDomain
+from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.core.vision.ocr.ocr_service import OcrLine, OcrService
 
 _WORLD_X_COORDINATE_LABEL_PATTERN = re.compile(r"X\s*[:\uff1a]?", re.IGNORECASE)
@@ -72,12 +73,18 @@ def read_world_coordinate_bar_viewport(
     bounds: object,
     ocr_service: OcrService,
 ) -> ParsedWorldViewport | None:
-    """Returns the parsed coordinate-bar viewport from the canonical blue/cyan filtered selector crop."""
+    """Returns the parsed coordinate-bar viewport from cheap focused OCR passes."""
 
     text = read_world_coordinate_bar_text(image=image, bounds=bounds, ocr_service=ocr_service)
     pair = parse_world_coordinate_text(text)
     if pair is None:
-        return None
+        parsed = _parse_world_viewport_from_lines(ocr_service.read_lines(image, bounds))
+        if parsed is not None:
+            return parsed
+        return parse_world_viewport(
+            image=image,
+            lines=ocr_service.read_lines(image, _world_coordinate_top_hud_region(image=image)),
+        )
     return _build_parsed_world_viewport(
         x=pair[0],
         y=pair[1],
@@ -130,6 +137,12 @@ def build_world_coordinate_bar_ocr_image(*, image: Image.Image, bounds: object) 
     )
 
 
+def _world_coordinate_top_hud_region(*, image: Image.Image) -> Bounds:
+    """Returns the bounded top-HUD OCR fallback region that can still prove world-map coordinates."""
+
+    return Bounds(x=0, y=0, width=image.width, height=max(1, int(image.height * 0.18)))
+
+
 def world_coordinate_text_matches(text: str) -> bool:
     """Returns whether raw OCR text contains one coherent world-coordinate X/Y pair."""
 
@@ -155,6 +168,25 @@ def parse_world_coordinate_text(text: str) -> tuple[int, int] | None:
     if x_value is None or y_value is None:
         return None
     return x_value, y_value
+
+
+def build_proven_world_viewport(
+    *,
+    coordinate: tuple[int, int],
+    coordinate_bounds: Bounds,
+) -> ParsedWorldViewport:
+    """Builds a parsed viewport from P1-proven coordinates without repeating coordinate OCR in P2."""
+
+    if not _WORLD_COORDINATE_BOUNDS.contains(coordinate):
+        raise SelectorResolutionError(
+            "Proven world-map coordinate is outside the canonical domain.",
+            coordinate=coordinate,
+        )
+    return _build_parsed_world_viewport(
+        x=coordinate[0],
+        y=coordinate[1],
+        coordinate_bounds=coordinate_bounds,
+    )
 
 
 def parse_world_coordinate_dialog_field_text(*, selector_id: UiElementId, text: str | None) -> int | None:
@@ -191,6 +223,24 @@ def _build_parsed_world_viewport(*, x: int, y: int, coordinate_bounds: Bounds) -
         ),
         coordinate_bounds=coordinate_bounds,
         coordinate_text=f"X:{x} Y:{y}",
+    )
+
+
+def _parse_world_viewport_from_lines(lines: tuple[OcrLine, ...]) -> ParsedWorldViewport | None:
+    """Builds one parsed viewport from OCR lines that already came from a narrow coordinate-bar candidate region."""
+
+    coordinate_pair = _extract_world_coordinate_pair(lines)
+    if coordinate_pair is None:
+        return None
+    bounds_source = coordinate_pair.lines
+    left = min(line.bounds.x for line in bounds_source)
+    top = min(line.bounds.y for line in bounds_source)
+    right = max(line.bounds.x + line.bounds.width for line in bounds_source)
+    bottom = max(line.bounds.y + line.bounds.height for line in bounds_source)
+    return _build_parsed_world_viewport(
+        x=coordinate_pair.x,
+        y=coordinate_pair.y,
+        coordinate_bounds=Bounds(x=left, y=top, width=max(1, right - left), height=max(1, bottom - top)),
     )
 
 

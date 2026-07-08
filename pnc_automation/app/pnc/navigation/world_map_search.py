@@ -57,7 +57,32 @@ from pnc_automation.app.pnc.navigation.world_map_overview_projection import (
     project_overview_marker_to_world_coordinate,
     project_world_coordinate_to_overview_point,
 )
+from pnc_automation.app.pnc.navigation.world_map_analysis import (
+    WorldMapViewportAnalysisQueue,
+    WorldMapViewportAnalysisResult,
+    WorldMapViewportAnalysisTreatmentKind,
+    WorldMapViewportAnalysisWorkItem,
+    WorldMapViewportAnalyzer,
+)
+from pnc_automation.app.pnc.navigation.world_map_proof import (
+    WorldMapMovementProofPolicy,
+    WorldMapProofStrength,
+    WorldMapViewportProof,
+    require_exact_world_map_observation,
+    require_exact_world_map_proof,
+)
 from pnc_automation.app.pnc.navigation.world_map_survey_recorder import WorldMapSurveyRecorder
+from pnc_automation.app.pnc.navigation.world_map_sweep import (
+    WorldMapCoordinateProjectionContext,
+    WorldMapProjectedFrame,
+    WorldMapSampledFrame,
+    WorldMapSweepSegment,
+    WorldMapSweepPlan,
+    WorldMapSweepPolicy,
+    WorldMapSweepPolicyKind,
+    build_world_map_sweep_plan,
+    world_map_sample_gap_exceeds_scan_footprint,
+)
 from pnc_automation.app.pnc.navigation.world_map_traversal import (
     ResolvedTraversalStride,
     TraversalRotation,
@@ -77,6 +102,7 @@ from pnc_automation.app.pnc.navigation.world_map_traversal import (
     WorldMapViewportStrideProfile,
 )
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
+from pnc_automation.app.pnc.vision.spatial_surfaces import estimated_world_map_visible_scan_footprint_units
 from pnc_automation.app.pnc.vision.world_map_coordinates import parse_world_coordinate_dialog_field_text
 from pnc_automation.app.runtime.observation_artifacts import (
     ObservationArtifactRoutine,
@@ -91,11 +117,14 @@ from pnc_automation.core.infra.diagnostics.buffered_logging import (
 )
 
 if TYPE_CHECKING:
-    from pnc_automation.app.pnc.vision.observation_builder import ObservationService
+    from pnc_automation.app.pnc.vision.observation_builder import CapturedObservation, ObservationService
 
 
 class WorldMapObservedActionExecutor(Protocol):
     """Defines the narrow action-execution contract the search layer needs without importing the automation package."""
+
+    def execute_action(self, action: ActionRequest, observation: Observation) -> bool:
+        """Executes one action without forcing an observation follow-up."""
 
     def execute_actions(
         self,
@@ -856,6 +885,7 @@ class WorldMapSearchRequest:
     boundary: WorldMapSearchBoundary | None = None
     movement_preferences: WorldMapMovementPreferences = field(default_factory=WorldMapMovementPreferences)
     castle_enrichment_policy: WorldMapCastleEnrichmentPolicy = field(default_factory=WorldMapCastleEnrichmentPolicy)
+    sweep_policy: WorldMapSweepPolicy = field(default_factory=WorldMapSweepPolicy.debug_exact_checkpoint)
 
     def __post_init__(self) -> None:
         """Canonicalizes the matcher and rejects unsupported request combinations."""
@@ -886,14 +916,275 @@ class WorldMapResolvedSearchPlan:
     coverage_bounds: WorldMapBounds
     stride: ResolvedTraversalStride
     movement_tool: WorldMapMovementToolKind
+    execution_start_coordinate: tuple[int, int]
+    first_step_movement_tool: WorldMapMovementToolKind
     route_plan: WorldMapTraversalRoutePlan
     execution_plan: WorldMapTraversalExecutionPlan
+    sweep_plan: WorldMapSweepPlan
     route: tuple[WorldMapTraversalCheckpoint, ...] = field(init=False)
 
     def __post_init__(self) -> None:
         """Caches the flattened checkpoint route once for compatibility consumers."""
 
         object.__setattr__(self, "route", tuple(step.checkpoint for step in self.execution_plan.steps))
+
+
+@dataclass(frozen=True, slots=True)
+class WorldMapSearchCheckpointProfile:
+    """Captures one analyzed checkpoint's stage timings inside the canonical search loop."""
+
+    checkpoint_route_index: int
+    checkpoint_coordinate: tuple[int, int]
+    action_family: str
+    movement_tool: str
+    movement_phase: str
+    move_elapsed_ms: float
+    ingest_elapsed_ms: float
+    match_elapsed_ms: float
+    stop_policy_elapsed_ms: float
+    enrichment_elapsed_ms: float
+    p2_analysis_elapsed_ms: float
+    total_elapsed_ms: float
+    status: str
+    failure_stage: str | None = None
+
+    def __post_init__(self) -> None:
+        """Rejects malformed checkpoint profiles so benchmark consumers can trust the schema."""
+
+        for field_name, value in (
+            ("move_elapsed_ms", self.move_elapsed_ms),
+            ("ingest_elapsed_ms", self.ingest_elapsed_ms),
+            ("match_elapsed_ms", self.match_elapsed_ms),
+            ("stop_policy_elapsed_ms", self.stop_policy_elapsed_ms),
+            ("enrichment_elapsed_ms", self.enrichment_elapsed_ms),
+            ("p2_analysis_elapsed_ms", self.p2_analysis_elapsed_ms),
+            ("total_elapsed_ms", self.total_elapsed_ms),
+        ):
+            if value < 0:
+                raise SelectorResolutionError(
+                    "World-map search checkpoint timing fields must stay non-negative.",
+                    field_name=field_name,
+                    value=value,
+                )
+        if self.status not in {"completed", "failed"}:
+            raise SelectorResolutionError(
+                "World-map search checkpoint profiles require a supported status.",
+                status=self.status,
+            )
+        if self.movement_phase not in {"non_local_entry", "steady_state"}:
+            raise SelectorResolutionError(
+                "World-map search checkpoint profiles require a supported movement phase.",
+                movement_phase=self.movement_phase,
+            )
+        if self.status == "failed" and self.failure_stage is None:
+            raise SelectorResolutionError(
+                "Failed world-map search checkpoint profiles must declare their failure_stage.",
+                checkpoint_route_index=self.checkpoint_route_index,
+            )
+        if self.status == "completed" and self.failure_stage is not None:
+            raise SelectorResolutionError(
+                "Completed world-map search checkpoint profiles must not declare a failure_stage.",
+                checkpoint_route_index=self.checkpoint_route_index,
+                failure_stage=self.failure_stage,
+            )
+
+    def to_document(self) -> dict[str, object]:
+        """Exports the checkpoint timing profile as one JSON-ready document."""
+
+        return {
+            "checkpoint_route_index": self.checkpoint_route_index,
+            "checkpoint_coordinate": [self.checkpoint_coordinate[0], self.checkpoint_coordinate[1]],
+            "action_family": self.action_family,
+            "movement_tool": self.movement_tool,
+            "movement_phase": self.movement_phase,
+            "move_elapsed_ms": round(self.move_elapsed_ms, 2),
+            "ingest_elapsed_ms": round(self.ingest_elapsed_ms, 2),
+            "match_elapsed_ms": round(self.match_elapsed_ms, 2),
+            "stop_policy_elapsed_ms": round(self.stop_policy_elapsed_ms, 2),
+            "enrichment_elapsed_ms": round(self.enrichment_elapsed_ms, 2),
+            "p2_analysis_elapsed_ms": round(self.p2_analysis_elapsed_ms, 2),
+            "total_elapsed_ms": round(self.total_elapsed_ms, 2),
+            "status": self.status,
+            "failure_stage": self.failure_stage,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class WorldMapSearchSegmentProfile:
+    """Captures one production row/lane segment's movement, sampling, and proof timings."""
+
+    segment_index: int
+    start_coordinate: tuple[int, int]
+    end_coordinate: tuple[int, int]
+    checkpoint_count: int
+    sampled_frame_count: int
+    move_elapsed_ms: float
+    start_anchor_elapsed_ms: float
+    end_anchor_elapsed_ms: float
+    ingest_elapsed_ms: float
+    total_elapsed_ms: float
+    status: str
+    failure_stage: str | None = None
+
+    def __post_init__(self) -> None:
+        """Rejects malformed segment profiles before benchmark consumers trust them."""
+
+        if self.segment_index < 0:
+            raise SelectorResolutionError("World-map segment profiles require a non-negative segment_index.")
+        for field_name, value in (
+            ("checkpoint_count", self.checkpoint_count),
+            ("sampled_frame_count", self.sampled_frame_count),
+        ):
+            if value < 0:
+                raise SelectorResolutionError("World-map segment profile counts must be non-negative.", field_name=field_name)
+        for field_name, value in (
+            ("move_elapsed_ms", self.move_elapsed_ms),
+            ("start_anchor_elapsed_ms", self.start_anchor_elapsed_ms),
+            ("end_anchor_elapsed_ms", self.end_anchor_elapsed_ms),
+            ("ingest_elapsed_ms", self.ingest_elapsed_ms),
+            ("total_elapsed_ms", self.total_elapsed_ms),
+        ):
+            if value < 0:
+                raise SelectorResolutionError("World-map segment profile timings must be non-negative.", field_name=field_name)
+        if self.status not in {"completed", "failed"}:
+            raise SelectorResolutionError("World-map segment profiles require a supported status.", status=self.status)
+        if self.status == "failed" and self.failure_stage is None:
+            raise SelectorResolutionError("Failed world-map segment profiles must declare a failure_stage.")
+        if self.status == "completed" and self.failure_stage is not None:
+            raise SelectorResolutionError("Completed world-map segment profiles must not declare a failure_stage.")
+
+    def to_document(self) -> dict[str, object]:
+        """Exports the production segment timing profile as one JSON-ready document."""
+
+        return {
+            "segment_index": self.segment_index,
+            "start_coordinate": [self.start_coordinate[0], self.start_coordinate[1]],
+            "end_coordinate": [self.end_coordinate[0], self.end_coordinate[1]],
+            "checkpoint_count": self.checkpoint_count,
+            "sampled_frame_count": self.sampled_frame_count,
+            "move_elapsed_ms": round(self.move_elapsed_ms, 2),
+            "start_anchor_elapsed_ms": round(self.start_anchor_elapsed_ms, 2),
+            "end_anchor_elapsed_ms": round(self.end_anchor_elapsed_ms, 2),
+            "ingest_elapsed_ms": round(self.ingest_elapsed_ms, 2),
+            "total_elapsed_ms": round(self.total_elapsed_ms, 2),
+            "status": self.status,
+            "failure_stage": self.failure_stage,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class WorldMapSearchExecutionProfile:
+    """Summarizes canonical search-stage timings so live sweeps can be benchmarked without parallel flows."""
+
+    movement_tool: WorldMapMovementToolKind | None
+    execution_start_coordinate: tuple[int, int] | None
+    first_step_movement_tool: WorldMapMovementToolKind | None
+    plan_elapsed_ms: float
+    persist_summary_elapsed_ms: float
+    total_elapsed_ms: float
+    stop_reason: WorldMapSearchStopReason | None
+    checkpoint_profiles: tuple[WorldMapSearchCheckpointProfile, ...]
+    segment_profiles: tuple[WorldMapSearchSegmentProfile, ...] = ()
+    p2_queue_submission_count: int = 0
+    p2_queue_peak_depth: int = 0
+    p2_movement_overlap_count: int = 0
+    p2_queue_drain_elapsed_ms: float = 0.0
+    p1_fallback_capture_count: int = 0
+
+    def __post_init__(self) -> None:
+        """Rejects malformed aggregate search timings before callers consume them."""
+
+        for field_name, value in (
+            ("plan_elapsed_ms", self.plan_elapsed_ms),
+            ("persist_summary_elapsed_ms", self.persist_summary_elapsed_ms),
+            ("total_elapsed_ms", self.total_elapsed_ms),
+            ("p2_queue_drain_elapsed_ms", self.p2_queue_drain_elapsed_ms),
+        ):
+            if value < 0:
+                raise SelectorResolutionError(
+                    "World-map search execution timing fields must stay non-negative.",
+                    field_name=field_name,
+                    value=value,
+                )
+        for field_name, value in (
+            ("p2_queue_submission_count", self.p2_queue_submission_count),
+            ("p2_queue_peak_depth", self.p2_queue_peak_depth),
+            ("p2_movement_overlap_count", self.p2_movement_overlap_count),
+            ("p1_fallback_capture_count", self.p1_fallback_capture_count),
+        ):
+            if value < 0:
+                raise SelectorResolutionError(
+                    "World-map search execution count fields must stay non-negative.",
+                    field_name=field_name,
+                    value=value,
+                )
+
+    def to_document(self) -> dict[str, object]:
+        """Exports the aggregate benchmark profile as one JSON-ready document."""
+
+        return {
+            "movement_tool": None if self.movement_tool is None else self.movement_tool.value,
+            "execution_start_coordinate": (
+                None
+                if self.execution_start_coordinate is None
+                else [self.execution_start_coordinate[0], self.execution_start_coordinate[1]]
+            ),
+            "first_step_movement_tool": (
+                None if self.first_step_movement_tool is None else self.first_step_movement_tool.value
+            ),
+            "plan_elapsed_ms": round(self.plan_elapsed_ms, 2),
+            "persist_summary_elapsed_ms": round(self.persist_summary_elapsed_ms, 2),
+            "total_elapsed_ms": round(self.total_elapsed_ms, 2),
+            "stop_reason": None if self.stop_reason is None else self.stop_reason.value,
+            "p2_pipeline": {
+                "submission_count": self.p2_queue_submission_count,
+                "peak_depth": self.p2_queue_peak_depth,
+                "movement_overlap_count": self.p2_movement_overlap_count,
+                "drain_elapsed_ms": round(self.p2_queue_drain_elapsed_ms, 2),
+                "p1_fallback_capture_count": self.p1_fallback_capture_count,
+            },
+            "stage_totals": {
+                "move_elapsed_ms": round(sum(profile.move_elapsed_ms for profile in self.checkpoint_profiles), 2),
+                "segment_move_elapsed_ms": round(sum(profile.move_elapsed_ms for profile in self.segment_profiles), 2),
+                "segment_anchor_elapsed_ms": round(
+                    sum(
+                        profile.start_anchor_elapsed_ms + profile.end_anchor_elapsed_ms
+                        for profile in self.segment_profiles
+                    ),
+                    2,
+                ),
+                "ingest_elapsed_ms": round(sum(profile.ingest_elapsed_ms for profile in self.checkpoint_profiles), 2),
+                "segment_ingest_elapsed_ms": round(sum(profile.ingest_elapsed_ms for profile in self.segment_profiles), 2),
+                "match_elapsed_ms": round(sum(profile.match_elapsed_ms for profile in self.checkpoint_profiles), 2),
+                "stop_policy_elapsed_ms": round(
+                    sum(profile.stop_policy_elapsed_ms for profile in self.checkpoint_profiles), 2
+                ),
+                "enrichment_elapsed_ms": round(
+                    sum(profile.enrichment_elapsed_ms for profile in self.checkpoint_profiles), 2
+                ),
+                "p2_analysis_elapsed_ms": round(
+                    sum(profile.p2_analysis_elapsed_ms for profile in self.checkpoint_profiles), 2
+                ),
+                "non_local_entry_move_elapsed_ms": round(
+                    sum(
+                        profile.move_elapsed_ms
+                        for profile in self.checkpoint_profiles
+                        if profile.movement_phase == "non_local_entry"
+                    ),
+                    2,
+                ),
+                "steady_state_move_elapsed_ms": round(
+                    sum(
+                        profile.move_elapsed_ms
+                        for profile in self.checkpoint_profiles
+                        if profile.movement_phase == "steady_state"
+                    ),
+                    2,
+                ),
+            },
+            "checkpoint_profiles": [profile.to_document() for profile in self.checkpoint_profiles],
+            "segment_profiles": [profile.to_document() for profile in self.segment_profiles],
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -907,6 +1198,7 @@ class WorldMapSearchResult:
     movement_tool: WorldMapMovementToolKind
     castle_enrichment_used: bool
     survey_index: WorldMapSurveyIndex
+    execution_profile: WorldMapSearchExecutionProfile | None = None
 
 
 class WorldMapMovementMode(StrEnum):
@@ -921,6 +1213,8 @@ class WorldMapMovementPolicy:
     """Defines the canonical gesture and traverse-vs-correction policy for direct world-map movement."""
 
     gesture_primitive: SwipeGesturePrimitive = SwipeGesturePrimitive.SWIPE
+    arrival_tolerance_units: int = 2
+    overshoot_tolerance_units: int = 4
     correction_threshold_units: int = 10
     traverse_max_axis_delta_per_leg: int | None = None
     correction_max_axis_delta_per_leg: int | None = None
@@ -928,6 +1222,17 @@ class WorldMapMovementPolicy:
     def __post_init__(self) -> None:
         """Rejects malformed movement-policy combinations before runtime execution begins."""
 
+        if self.arrival_tolerance_units <= 0:
+            raise SelectorResolutionError(
+                "World-map movement policies require a positive arrival_tolerance_units value.",
+                arrival_tolerance_units=self.arrival_tolerance_units,
+            )
+        if self.overshoot_tolerance_units < self.arrival_tolerance_units:
+            raise SelectorResolutionError(
+                "World-map movement policies require overshoot_tolerance_units to cover arrival_tolerance_units.",
+                arrival_tolerance_units=self.arrival_tolerance_units,
+                overshoot_tolerance_units=self.overshoot_tolerance_units,
+            )
         if self.correction_threshold_units <= 0:
             raise SelectorResolutionError(
                 "World-map movement policies require a positive correction_threshold_units value.",
@@ -943,6 +1248,12 @@ class WorldMapMovementPolicy:
                     field_name=field_name,
                     value=value,
                 )
+
+    @property
+    def maximum_accepted_landing_delta_units(self) -> int:
+        """Returns the largest landing delta accepted after canonical movement validation."""
+
+        return self.overshoot_tolerance_units
 
     def mode_for_remaining_delta(
         self,
@@ -985,6 +1296,9 @@ class WorldMapMovementStepTrace:
     gesture_primitive: str
     plan_elapsed_ms: float
     action_elapsed_ms: float
+    action_follow_up_observe_elapsed_ms: float
+    action_executor_overhead_elapsed_ms: float
+    action_follow_up_observation_count: int
     prove_elapsed_ms: float
     total_elapsed_ms: float
     classification: str
@@ -1010,12 +1324,31 @@ class WorldMapMovementStepTrace:
             "gesture_primitive": self.gesture_primitive,
             "plan_elapsed_ms": round(self.plan_elapsed_ms, 2),
             "action_elapsed_ms": round(self.action_elapsed_ms, 2),
+            "action_follow_up_observe_elapsed_ms": round(self.action_follow_up_observe_elapsed_ms, 2),
+            "action_executor_overhead_elapsed_ms": round(self.action_executor_overhead_elapsed_ms, 2),
+            "action_follow_up_observation_count": self.action_follow_up_observation_count,
             "prove_elapsed_ms": round(self.prove_elapsed_ms, 2),
             "total_elapsed_ms": round(self.total_elapsed_ms, 2),
             "classification": self.classification,
             "before_artifact_path": self.before_artifact_path,
             "after_artifact_path": self.after_artifact_path,
         }
+
+
+@dataclass(frozen=True, slots=True)
+class WorldMapMovementActionTiming:
+    """Carries the movement-action result plus the benchmark split measured at the live observation seam."""
+
+    observation: Observation
+    total_elapsed_ms: float
+    follow_up_observe_elapsed_ms: float
+    follow_up_observation_count: int
+
+    @property
+    def executor_overhead_elapsed_ms(self) -> float:
+        """Returns action execution time outside the observation callback."""
+
+        return max(0.0, self.total_elapsed_ms - self.follow_up_observe_elapsed_ms)
 
 
 @dataclass(slots=True)
@@ -1074,6 +1407,8 @@ class WorldMapCoordinateMover:
             )
         self.movement_policy = WorldMapMovementPolicy(
             gesture_primitive=self.movement_policy.gesture_primitive,
+            arrival_tolerance_units=self.movement_policy.arrival_tolerance_units,
+            overshoot_tolerance_units=self.movement_policy.overshoot_tolerance_units,
             correction_threshold_units=self.movement_policy.correction_threshold_units,
             traverse_max_axis_delta_per_leg=value,
             correction_max_axis_delta_per_leg=self.movement_policy.correction_max_axis_delta_per_leg,
@@ -1093,6 +1428,7 @@ class WorldMapCoordinateMover:
         movement_proof_artifact_selection: ObservationArtifactSelection | None = None,
         arrival_artifact_selection: ObservationArtifactSelection | None = None,
         logging_mode: DiagnosticLogMode = DiagnosticLogMode.IMMEDIATE,
+        p1_capture_sink: Callable[["CapturedObservation"], None] | None = None,
     ) -> Observation:
         """Moves toward the requested coordinate using bounded cardinal legs and returns the freshest proven world-map observation."""
 
@@ -1102,7 +1438,15 @@ class WorldMapCoordinateMover:
             observation_service=self.observation_service,
             observation=observation,
             label_prefix=f"{label_prefix}_start",
+            p1_capture_sink=p1_capture_sink,
+            artifact_selection=movement_proof_artifact_selection,
         )
+        if _coordinate_within_tolerance(
+            _require_world_map_viewport_coordinate(current),
+            addressable_target_coordinate,
+            tolerance=self.movement_policy.arrival_tolerance_units,
+        ):
+            return current
         movement_state = _mutable_runtime_state(runtime_state, "world_map_search_swipe_navigation")
         for step_index in range(self.movement_step_budget):
             step_started_at = time.perf_counter()
@@ -1152,7 +1496,7 @@ class WorldMapCoordinateMover:
                     if _coordinate_within_tolerance(
                         current_coordinate,
                         addressable_target_coordinate,
-                        tolerance=self.navigator.focus_tolerance,
+                        tolerance=self.movement_policy.arrival_tolerance_units,
                     ):
                         continue
                     raise SelectorResolutionError(
@@ -1168,8 +1512,7 @@ class WorldMapCoordinateMover:
                     target_coordinate=addressable_target_coordinate,
                     arrival_observation_request=arrival_observation_request,
                 )
-                action_started_at = time.perf_counter()
-                freshest_observation = intermediate_after = self._execute_actions(
+                action_timing = self._execute_actions(
                     actions,
                     current,
                     label_prefix=f"{label_prefix}_{step_index}",
@@ -1178,13 +1521,19 @@ class WorldMapCoordinateMover:
                         if arrival_observation_request is not None and (leg_target.x, leg_target.y) == addressable_target_coordinate
                         else movement_proof_artifact_selection
                     ),
+                    p1_capture_sink=p1_capture_sink,
                 )
-                action_elapsed_ms = (time.perf_counter() - action_started_at) * 1000.0
+                freshest_observation = intermediate_after = action_timing.observation
+                action_elapsed_ms = action_timing.total_elapsed_ms
+                action_follow_up_observe_elapsed_ms = action_timing.follow_up_observe_elapsed_ms
+                action_executor_overhead_elapsed_ms = action_timing.executor_overhead_elapsed_ms
                 prove_started_at = time.perf_counter()
                 freshest_observation = after = _require_proven_world_map_observation(
                     observation_service=self.observation_service,
                     observation=intermediate_after,
                     label_prefix=f"{label_prefix}_refresh_{step_index}",
+                    p1_capture_sink=p1_capture_sink,
+                    artifact_selection=movement_proof_artifact_selection,
                 )
                 prove_elapsed_ms = (time.perf_counter() - prove_started_at) * 1000.0
                 after_coordinate = _require_world_map_viewport_coordinate(after)
@@ -1221,6 +1570,9 @@ class WorldMapCoordinateMover:
                     max_axis_delta_per_leg=active_max_axis_delta_per_leg,
                     plan_elapsed_ms=plan_elapsed_ms,
                     action_elapsed_ms=action_elapsed_ms,
+                    action_follow_up_observe_elapsed_ms=action_follow_up_observe_elapsed_ms,
+                    action_executor_overhead_elapsed_ms=action_executor_overhead_elapsed_ms,
+                    action_follow_up_observation_count=action_timing.follow_up_observation_count,
                     prove_elapsed_ms=prove_elapsed_ms,
                     total_elapsed_ms=(time.perf_counter() - step_started_at) * 1000.0,
                     classification=classification,
@@ -1239,9 +1591,14 @@ class WorldMapCoordinateMover:
                         action_family=movement_family.value,
                         movement_mode=movement_mode.value,
                         max_axis_delta_per_leg=active_max_axis_delta_per_leg,
-                        gesture_primitive=actions[0].gesture_primitive.value if isinstance(actions[0], SwipeAction) else "unknown",
+                        gesture_primitive=(
+                            actions[0].gesture_primitive.value if isinstance(actions[0], SwipeAction) else "unknown"
+                        ),
                         plan_elapsed_ms=plan_elapsed_ms,
                         action_elapsed_ms=action_elapsed_ms,
+                        action_follow_up_observe_elapsed_ms=action_follow_up_observe_elapsed_ms,
+                        action_executor_overhead_elapsed_ms=action_executor_overhead_elapsed_ms,
+                        action_follow_up_observation_count=action_timing.follow_up_observation_count,
                         prove_elapsed_ms=prove_elapsed_ms,
                         total_elapsed_ms=(time.perf_counter() - step_started_at) * 1000.0,
                         classification=classification.value,
@@ -1254,6 +1611,17 @@ class WorldMapCoordinateMover:
                     attempt_details=attempt_details,
                     classification=classification,
                 )
+                if _coordinate_within_tolerance(
+                    after_coordinate,
+                    addressable_target_coordinate,
+                    tolerance=self.movement_policy.arrival_tolerance_units,
+                ) or _coordinate_overshot_within_tolerance(
+                    before_coordinate=before_coordinate,
+                    after_coordinate=after_coordinate,
+                    target_coordinate=addressable_target_coordinate,
+                    tolerance=self.movement_policy.overshoot_tolerance_units,
+                ):
+                    return after
                 if classification in {
                     WorldMapCardinalMovementClassification.PARSER_UNCERTAIN,
                     WorldMapCardinalMovementClassification.UNEXPECTED_DELTA,
@@ -1422,6 +1790,9 @@ class WorldMapCoordinateMover:
         max_axis_delta_per_leg: int | None,
         plan_elapsed_ms: float,
         action_elapsed_ms: float,
+        action_follow_up_observe_elapsed_ms: float,
+        action_executor_overhead_elapsed_ms: float,
+        action_follow_up_observation_count: int,
         prove_elapsed_ms: float,
         total_elapsed_ms: float,
         classification: "WorldMapCardinalMovementClassification",
@@ -1449,6 +1820,9 @@ class WorldMapCoordinateMover:
                 "gesture_primitive": self.movement_policy.gesture_primitive.value,
                 "plan_elapsed_ms": round(plan_elapsed_ms, 2),
                 "action_elapsed_ms": round(action_elapsed_ms, 2),
+                "action_follow_up_observe_elapsed_ms": round(action_follow_up_observe_elapsed_ms, 2),
+                "action_executor_overhead_elapsed_ms": round(action_executor_overhead_elapsed_ms, 2),
+                "action_follow_up_observation_count": action_follow_up_observation_count,
                 "prove_elapsed_ms": round(prove_elapsed_ms, 2),
                 "total_elapsed_ms": round(total_elapsed_ms, 2),
                 "classification": classification.value,
@@ -1462,20 +1836,46 @@ class WorldMapCoordinateMover:
         *,
         label_prefix: str,
         artifact_selection: ObservationArtifactSelection | None = None,
-    ) -> Observation:
-        """Executes one movement increment and returns the freshest observed result."""
+        p1_capture_sink: Callable[["CapturedObservation"], None] | None = None,
+    ) -> WorldMapMovementActionTiming:
+        """Executes one movement increment and returns its freshest observation plus benchmark timing."""
 
         if self.action_executor is None or self.observation_service is None:
             raise SelectorResolutionError("World-map coordinate movement requires observation_service and action_executor.")
-        return self.action_executor.execute_actions(
+
+        follow_up_observe_elapsed_ms = 0.0
+        follow_up_observation_count = 0
+
+        def observe_follow_up(label: str, request: ObservationRequest | None = None) -> Observation:
+            """Captures and times one P1 follow-up while preserving its screenshot for P2."""
+
+            nonlocal follow_up_observe_elapsed_ms, follow_up_observation_count
+            follow_up_observation_count += 1
+            started_at = time.perf_counter()
+            try:
+                capture = self.observation_service.capture_observation(
+                    f"{label_prefix}_{label}",
+                    request=request,
+                    artifact_selection=artifact_selection,
+                )
+                if p1_capture_sink is not None:
+                    p1_capture_sink(capture)
+                return capture.observation
+            finally:
+                follow_up_observe_elapsed_ms += (time.perf_counter() - started_at) * 1000.0
+
+        started_at = time.perf_counter()
+        execution = self.action_executor.execute_actions(
             actions,
             observation,
-            observe=lambda label, request=None: self.observation_service.observe(
-                f"{label_prefix}_{label}",
-                request=request,
-                artifact_selection=artifact_selection,
-            ),
-        ).observation
+            observe=observe_follow_up,
+        )
+        return WorldMapMovementActionTiming(
+            observation=execution.observation,
+            total_elapsed_ms=(time.perf_counter() - started_at) * 1000.0,
+            follow_up_observe_elapsed_ms=follow_up_observe_elapsed_ms,
+            follow_up_observation_count=follow_up_observation_count,
+        )
 
     def _active_max_axis_delta(
         self,
@@ -1531,6 +1931,16 @@ def world_map_movement_trace_document(runtime_state: dict[str, Any] | None) -> d
             for trace in _movement_step_traces(movement_state)
         ]
     }
+
+
+def world_map_search_execution_profile_document(runtime_state: dict[str, Any] | None) -> dict[str, object]:
+    """Exports the canonical search execution benchmark profile from runtime state as one JSON-ready document."""
+
+    if runtime_state is None:
+        return _build_search_execution_profile_from_state({}).to_document()
+    return _build_search_execution_profile_from_state(
+        _mutable_runtime_state(runtime_state, "world_map_search_execution_profile")
+    ).to_document()
 
 
 @dataclass(slots=True)
@@ -2108,6 +2518,7 @@ class WorldMapSearchService:
     survey_recorder: WorldMapSurveyRecorder | None = None
     castle_inspector: WorldMapCastleInspector | None = None
     coordinate_mover: WorldMapCoordinateMover | None = None
+    viewport_analyzer: WorldMapViewportAnalyzer = field(default_factory=WorldMapViewportAnalyzer)
     world_map_entry_step_budget: int = 6
     movement_step_budget: int = 8
 
@@ -2141,14 +2552,25 @@ class WorldMapSearchService:
             route_plan=route_plan,
             origin_coordinate=origin,
         )
+        sweep_plan = build_world_map_sweep_plan(
+            route_plan=route_plan,
+            policy=request.sweep_policy,
+        )
+        first_step_movement_tool = self._movement_tool_for_action_family(
+            request=request,
+            action_family=execution_plan.steps[0].action_family,
+        )
         return WorldMapResolvedSearchPlan(
             request=request,
             origin_coordinate=origin,
             coverage_bounds=coverage_bounds,
             stride=route_plan.stride,
             movement_tool=movement_tool,
+            execution_start_coordinate=surface.viewport.coordinate or origin,
+            first_step_movement_tool=first_step_movement_tool,
             route_plan=route_plan,
             execution_plan=execution_plan,
+            sweep_plan=sweep_plan,
         )
 
     def preview_route(
@@ -2185,6 +2607,8 @@ class WorldMapSearchService:
                 "vertical_stride_units": plan.stride.vertical_stride_units,
             },
             "checkpoint_count": len(checkpoints),
+            "sweep_policy": plan.sweep_plan.policy.kind.value,
+            "sweep_segment_count": len(plan.sweep_plan.segments),
             "head_checkpoints": [
                 {
                     "route_index": checkpoint.route_index,
@@ -2228,25 +2652,103 @@ class WorldMapSearchService:
                 "World-map search execution requires observation_service, action_executor, and survey_recorder dependencies."
             )
         active_runtime_state = {} if runtime_state is None else runtime_state
+        profile_state = _mutable_runtime_state(active_runtime_state, "world_map_search_execution_profile")
+        search_started_at = time.perf_counter()
         current_observation = start_observation or self.observation_service.observe(f"{label_prefix}_start")
         if current_observation.screen_type != ScreenType.PNC_WORLD_MAP or current_observation.spatial_surface is None:
             raise SelectorResolutionError(
                 "World-map search execution requires the caller to provide or capture a proven world-map observation first.",
                 screen_type=current_observation.screen_type,
             )
+        plan_started_at = time.perf_counter()
         plan = self.resolve_plan(request, current_observation)
+        profile_state["movement_tool"] = plan.movement_tool
+        profile_state["execution_start_coordinate"] = plan.execution_start_coordinate
+        profile_state["first_step_movement_tool"] = plan.first_step_movement_tool
+        profile_state["plan_elapsed_ms"] = (time.perf_counter() - plan_started_at) * 1000.0
         matched_keys: list[WorldMapObjectKey] = []
         matched_by_key: dict[WorldMapObjectKey, WorldMapObjectSighting] = {}
         visited_checkpoints: list[WorldMapTraversalCheckpoint] = []
         castle_enrichment_used = False
+        asynchronous_p2 = request.sweep_policy.kind == WorldMapSweepPolicyKind.PRODUCTION_FULL_MAP
+        if asynchronous_p2 and (
+            request.stop_policy.stop_on_first_confirmed_match
+            or request.stop_policy.max_matches is not None
+            or (
+                request.castle_enrichment_policy.kind == WorldMapCastleEnrichmentPolicyKind.WHEN_REQUIRED
+                and request.matcher.supports_castle_enrichment()
+            )
+        ):
+            raise SelectorResolutionError(
+                "Production full-map P2 overlap requires exhaustive checkpoint treatment; "
+                "match-driven stopping and castle enrichment require synchronous result application."
+            )
+        if asynchronous_p2:
+            return self._execute_production_segment_search(
+                request=request,
+                label_prefix=label_prefix,
+                current_observation=current_observation,
+                runtime_state=active_runtime_state,
+                profile_state=profile_state,
+                search_started_at=search_started_at,
+                plan=plan,
+            )
+        p2_queue = (
+            WorldMapViewportAnalysisQueue(
+                analyzer=self.viewport_analyzer.analyze,
+                max_pending=request.sweep_policy.max_pending_p2_items,
+            )
+            if asynchronous_p2
+            else None
+        )
+
+        def apply_p2_result(result: WorldMapViewportAnalysisResult) -> Observation:
+            """Applies one worker result and performs matching on the coordinator thread."""
+
+            rich_observation = self._apply_checkpoint_analysis_result(result)
+            self._collect_checkpoint_matches(
+                request=request,
+                observation=rich_observation,
+                matched_keys=matched_keys,
+                matched_by_key=matched_by_key,
+            )
+            return rich_observation
+
+        def drain_ready_p2() -> None:
+            """Applies the completed route-order prefix without blocking movement."""
+
+            if p2_queue is None:
+                return
+            for result in p2_queue.drain_ready():
+                apply_p2_result(result)
+
+        def drain_all_p2() -> None:
+            """Blocks for all remaining work and records final queue evidence."""
+
+            if p2_queue is None:
+                return
+            drain_started_at = time.perf_counter()
+            for result in p2_queue.drain_all():
+                apply_p2_result(result)
+            profile_state["p2_queue_drain_elapsed_ms"] = (
+                profile_state.get("p2_queue_drain_elapsed_ms", 0.0)
+                + (time.perf_counter() - drain_started_at) * 1000.0
+            )
+            profile_state["p2_queue_submission_count"] = p2_queue.submission_count
+            profile_state["p2_queue_peak_depth"] = p2_queue.peak_depth
 
         def finish(stop_reason: WorldMapSearchStopReason) -> WorldMapSearchResult:
             """Builds the final result and persists one sequence summary when checkpoints were analyzed."""
 
+            drain_all_p2()
+            persist_summary_started_at = time.perf_counter()
             self._persist_sequence_summary(
                 label=f"{label_prefix}_summary",
                 visited_checkpoints=visited_checkpoints,
             )
+            profile_state["persist_summary_elapsed_ms"] = (time.perf_counter() - persist_summary_started_at) * 1000.0
+            profile_state["stop_reason"] = stop_reason
+            profile_state["total_elapsed_ms"] = (time.perf_counter() - search_started_at) * 1000.0
             return self._build_result(
                 matched_keys=matched_keys,
                 matched_by_key=matched_by_key,
@@ -2254,6 +2756,7 @@ class WorldMapSearchService:
                 visited_checkpoints=visited_checkpoints,
                 plan=plan,
                 castle_enrichment_used=castle_enrichment_used,
+                execution_profile=_build_search_execution_profile_from_state(profile_state),
             )
 
         try:
@@ -2263,75 +2766,550 @@ class WorldMapSearchService:
                 checkpoint = step.checkpoint
                 if request.stop_policy.max_radius_units is not None and checkpoint.distance_from_origin > request.stop_policy.max_radius_units:
                     return finish(WorldMapSearchStopReason.RADIUS_LIMIT_REACHED)
-                current_observation = self.move_to_checkpoint(
-                    current_observation,
-                    plan=plan,
-                    step=step,
-                    label_prefix=f"{label_prefix}_move_{checkpoint.route_index}",
-                    runtime_state=active_runtime_state,
-                )
-                current_observation = self._ingest_checkpoint_observation(
-                    current_observation,
-                    label=f"{label_prefix}_checkpoint_{checkpoint.route_index}",
-                )
-                visited_checkpoints.append(checkpoint)
-                self._collect_checkpoint_matches(
-                    request=request,
-                    observation=current_observation,
-                    matched_keys=matched_keys,
-                    matched_by_key=matched_by_key,
-                )
-                stop_reason = self._evaluate_stop_policy(
-                    request=request,
-                    route_length=route_length,
-                    checkpoint=checkpoint,
-                    matched_count=len(matched_keys),
-                    visited_count=len(visited_checkpoints),
-                )
-                if stop_reason is not None:
-                    return finish(stop_reason)
-                if (
-                    request.castle_enrichment_policy.kind == WorldMapCastleEnrichmentPolicyKind.WHEN_REQUIRED
-                    and request.matcher.supports_castle_enrichment()
-                    and self.castle_inspector is not None
-                    and not matched_keys
-                ):
-                    candidates = tuple(
-                        _rank_castle_candidates(
-                            matcher=request.matcher,
-                            index=self.survey_recorder.index,
-                        )[: request.castle_enrichment_policy.max_candidates]
+                checkpoint_started_at = time.perf_counter()
+                move_elapsed_ms = 0.0
+                ingest_elapsed_ms = 0.0
+                match_elapsed_ms = 0.0
+                stop_policy_elapsed_ms = 0.0
+                enrichment_elapsed_ms = 0.0
+                p2_analysis_elapsed_ms = 0.0
+                checkpoint_status = "completed"
+                failure_stage: str | None = None
+                pending_stop_reason: WorldMapSearchStopReason | None = None
+                movement_tool = self._movement_tool_for_step(plan=plan, step=step)
+                p1_captures: list[CapturedObservation] = []
+                try:
+                    move_started_at = time.perf_counter()
+                    failure_stage = "move"
+                    if p2_queue is not None and p2_queue.pending_count > 0:
+                        profile_state["p2_movement_overlap_count"] = (
+                            profile_state.get("p2_movement_overlap_count", 0) + 1
+                        )
+                    current_observation = self.move_to_checkpoint(
+                        current_observation,
+                        plan=plan,
+                        step=step,
+                        label_prefix=f"{label_prefix}_move_{checkpoint.route_index}",
+                        runtime_state=active_runtime_state,
+                        p1_capture_sink=p1_captures.append,
                     )
-                    if candidates:
-                        castle_enrichment_used = True
-                        current_observation, _ = self.castle_inspector.inspect_candidates(
-                            matcher=request.matcher,
-                            candidates=candidates,
-                            current_observation=current_observation,
-                            label_prefix=f"{label_prefix}_castle_enrichment_{checkpoint.route_index}",
-                            runtime_state=active_runtime_state,
+                    move_elapsed_ms = (time.perf_counter() - move_started_at) * 1000.0
+
+                    ingest_started_at = time.perf_counter()
+                    failure_stage = "p2_analysis"
+                    drain_ready_p2()
+                    current_observation, work_item = self._build_checkpoint_analysis_work_item(
+                        current_observation,
+                        p1_captures=p1_captures,
+                        label=f"{label_prefix}_checkpoint_{checkpoint.route_index}",
+                        checkpoint=checkpoint,
+                        profile_state=profile_state,
+                    )
+                    if p2_queue is None:
+                        result = self.viewport_analyzer.analyze(work_item)
+                        current_observation = apply_p2_result(result)
+                        p2_analysis_elapsed_ms = result.elapsed_ms
+                    else:
+                        if p2_queue.pending_count >= request.sweep_policy.max_pending_p2_items:
+                            apply_p2_result(p2_queue.drain_next())
+                        p2_queue.submit(work_item)
+                    ingest_elapsed_ms = (time.perf_counter() - ingest_started_at) * 1000.0
+
+                    visited_checkpoints.append(checkpoint)
+
+                    match_started_at = time.perf_counter()
+                    failure_stage = "match"
+                    match_elapsed_ms = (time.perf_counter() - match_started_at) * 1000.0
+
+                    stop_policy_started_at = time.perf_counter()
+                    failure_stage = "stop_policy"
+                    stop_reason = self._evaluate_stop_policy(
+                        request=request,
+                        route_length=route_length,
+                        checkpoint=checkpoint,
+                        matched_count=len(matched_keys),
+                        visited_count=len(visited_checkpoints),
+                    )
+                    stop_policy_elapsed_ms = (time.perf_counter() - stop_policy_started_at) * 1000.0
+                    if stop_reason is not None:
+                        pending_stop_reason = stop_reason
+
+                    if (
+                        pending_stop_reason is None
+                        and
+                        request.castle_enrichment_policy.kind == WorldMapCastleEnrichmentPolicyKind.WHEN_REQUIRED
+                        and request.matcher.supports_castle_enrichment()
+                        and self.castle_inspector is not None
+                        and not matched_keys
+                    ):
+                        candidates = tuple(
+                            _rank_castle_candidates(
+                                matcher=request.matcher,
+                                index=self.survey_recorder.index,
+                            )[: request.castle_enrichment_policy.max_candidates]
                         )
-                        self._collect_index_matches(
-                            matcher=request.matcher,
-                            matched_keys=matched_keys,
-                            matched_by_key=matched_by_key,
-                        )
-                        stop_reason = self._evaluate_stop_policy(
-                            request=request,
-                            route_length=route_length,
-                            checkpoint=checkpoint,
-                            matched_count=len(matched_keys),
-                            visited_count=len(visited_checkpoints),
-                        )
-                        if stop_reason is not None:
-                            return finish(stop_reason)
+                        if candidates:
+                            enrichment_started_at = time.perf_counter()
+                            failure_stage = "castle_enrichment"
+                            castle_enrichment_used = True
+                            current_observation, _ = self.castle_inspector.inspect_candidates(
+                                matcher=request.matcher,
+                                candidates=candidates,
+                                current_observation=current_observation,
+                                label_prefix=f"{label_prefix}_castle_enrichment_{checkpoint.route_index}",
+                                runtime_state=active_runtime_state,
+                            )
+                            self._collect_index_matches(
+                                matcher=request.matcher,
+                                matched_keys=matched_keys,
+                                matched_by_key=matched_by_key,
+                            )
+                            stop_reason = self._evaluate_stop_policy(
+                                request=request,
+                                route_length=route_length,
+                                checkpoint=checkpoint,
+                                matched_count=len(matched_keys),
+                                visited_count=len(visited_checkpoints),
+                            )
+                            enrichment_elapsed_ms = (time.perf_counter() - enrichment_started_at) * 1000.0
+                            if stop_reason is not None:
+                                pending_stop_reason = stop_reason
+                    failure_stage = None
+                except Exception:
+                    checkpoint_status = "failed"
+                    raise
+                finally:
+                    _record_search_checkpoint_profile(
+                        profile_state=profile_state,
+                        profile=WorldMapSearchCheckpointProfile(
+                            checkpoint_route_index=checkpoint.route_index,
+                            checkpoint_coordinate=checkpoint.coordinate,
+                            action_family=step.action_family.value,
+                            movement_tool=movement_tool.value,
+                            movement_phase=_movement_phase_for_step(step),
+                            move_elapsed_ms=move_elapsed_ms,
+                            ingest_elapsed_ms=ingest_elapsed_ms,
+                            match_elapsed_ms=match_elapsed_ms,
+                            stop_policy_elapsed_ms=stop_policy_elapsed_ms,
+                            enrichment_elapsed_ms=enrichment_elapsed_ms,
+                            p2_analysis_elapsed_ms=p2_analysis_elapsed_ms,
+                            total_elapsed_ms=(time.perf_counter() - checkpoint_started_at) * 1000.0,
+                            status=checkpoint_status,
+                            failure_stage=failure_stage,
+                        ),
+                    )
+                if pending_stop_reason is not None:
+                    return finish(pending_stop_reason)
             return finish(
                 WorldMapSearchStopReason.BOUNDARY_EXHAUSTED
                 if request.boundary is not None
                 else WorldMapSearchStopReason.ROUTE_EXHAUSTED
             )
         finally:
+            if p2_queue is not None:
+                p2_queue.close()
+            profile_state.setdefault("total_elapsed_ms", (time.perf_counter() - search_started_at) * 1000.0)
             self.flush_runtime_diagnostics(runtime_state=active_runtime_state)
+
+    def _execute_production_segment_search(
+        self,
+        *,
+        request: WorldMapSearchRequest,
+        label_prefix: str,
+        current_observation: Observation,
+        runtime_state: dict[str, Any],
+        profile_state: dict[str, Any],
+        search_started_at: float,
+        plan: WorldMapResolvedSearchPlan,
+    ) -> WorldMapSearchResult:
+        """Runs production full-map traversal by row/lane segments with sparse exact anchors."""
+
+        p2_queue = WorldMapViewportAnalysisQueue(
+            analyzer=self.viewport_analyzer.analyze,
+            max_pending=request.sweep_policy.max_pending_p2_items,
+        )
+        matched_keys: list[WorldMapObjectKey] = []
+        matched_by_key: dict[WorldMapObjectKey, WorldMapObjectSighting] = {}
+        visited_checkpoints: list[WorldMapTraversalCheckpoint] = []
+        step_by_route_index = {
+            step.checkpoint.route_index: step
+            for step in plan.execution_plan.steps
+        }
+        sampled_budget = request.stop_policy.max_checkpoints
+
+        def apply_p2_result(result: WorldMapViewportAnalysisResult) -> Observation:
+            """Applies one segment-sample result on the coordinator thread."""
+
+            rich_observation = self._apply_checkpoint_analysis_result(result)
+            self._collect_checkpoint_matches(
+                request=request,
+                observation=rich_observation,
+                matched_keys=matched_keys,
+                matched_by_key=matched_by_key,
+            )
+            return rich_observation
+
+        def drain_ready_p2() -> None:
+            """Applies any completed segment-sample prefix without blocking movement."""
+
+            for result in p2_queue.drain_ready():
+                apply_p2_result(result)
+
+        def submit_p2(work_item: WorldMapViewportAnalysisWorkItem) -> None:
+            """Submits one sample, applying backpressure through the canonical queue."""
+
+            if p2_queue.pending_count >= request.sweep_policy.max_pending_p2_items:
+                apply_p2_result(p2_queue.drain_next())
+            p2_queue.submit(work_item)
+
+        def drain_all_p2() -> None:
+            """Drains queued samples and records aggregate P2 evidence."""
+
+            drain_started_at = time.perf_counter()
+            for result in p2_queue.drain_all():
+                apply_p2_result(result)
+            profile_state["p2_queue_drain_elapsed_ms"] = (
+                profile_state.get("p2_queue_drain_elapsed_ms", 0.0)
+                + (time.perf_counter() - drain_started_at) * 1000.0
+            )
+            profile_state["p2_queue_submission_count"] = p2_queue.submission_count
+            profile_state["p2_queue_peak_depth"] = p2_queue.peak_depth
+
+        def finish(stop_reason: WorldMapSearchStopReason) -> WorldMapSearchResult:
+            """Builds the final production result after deterministic P2 drain."""
+
+            drain_all_p2()
+            persist_summary_started_at = time.perf_counter()
+            self._persist_sequence_summary(
+                label=f"{label_prefix}_summary",
+                visited_checkpoints=visited_checkpoints,
+            )
+            profile_state["persist_summary_elapsed_ms"] = (time.perf_counter() - persist_summary_started_at) * 1000.0
+            profile_state["stop_reason"] = stop_reason
+            profile_state["total_elapsed_ms"] = (time.perf_counter() - search_started_at) * 1000.0
+            return self._build_result(
+                matched_keys=matched_keys,
+                matched_by_key=matched_by_key,
+                stop_reason=stop_reason,
+                visited_checkpoints=visited_checkpoints,
+                plan=plan,
+                castle_enrichment_used=False,
+                execution_profile=_build_search_execution_profile_from_state(profile_state),
+            )
+
+        try:
+            active_observation = current_observation
+            for segment in plan.sweep_plan.segments:
+                if sampled_budget is not None and len(visited_checkpoints) >= sampled_budget:
+                    return finish(WorldMapSearchStopReason.CHECKPOINT_BUDGET_EXHAUSTED)
+                segment_started_at = time.perf_counter()
+                status = "completed"
+                failure_stage: str | None = None
+                move_elapsed_ms = 0.0
+                start_anchor_elapsed_ms = 0.0
+                end_anchor_elapsed_ms = 0.0
+                ingest_elapsed_ms = 0.0
+                sampled_frame_count = 0
+                pending_stop_reason: WorldMapSearchStopReason | None = None
+                try:
+                    failure_stage = "start_anchor"
+                    start_anchor_started_at = time.perf_counter()
+                    active_observation, start_work_item = self._move_to_segment_start_work_item(
+                        observation=active_observation,
+                        plan=plan,
+                        segment=segment,
+                        step_by_route_index=step_by_route_index,
+                        label_prefix=label_prefix,
+                        runtime_state=runtime_state,
+                        profile_state=profile_state,
+                    )
+                    start_anchor_elapsed_ms = (time.perf_counter() - start_anchor_started_at) * 1000.0
+                    ingest_started_at = time.perf_counter()
+                    submit_p2(start_work_item)
+                    first_checkpoint = step_by_route_index[segment.checkpoint_route_indices[0]].checkpoint
+                    visited_checkpoints.append(first_checkpoint)
+                    sampled_frame_count += 1
+                    ingest_elapsed_ms += (time.perf_counter() - ingest_started_at) * 1000.0
+
+                    pending_stop_reason = self._evaluate_stop_policy(
+                        request=request,
+                        route_length=len(plan.execution_plan.steps),
+                        checkpoint=first_checkpoint,
+                        matched_count=len(matched_keys),
+                        visited_count=len(visited_checkpoints),
+                    )
+                    if pending_stop_reason is None:
+                        active_observation, move_elapsed_ms, end_anchor_elapsed_ms, sampled_count, pending_stop_reason = (
+                            self._traverse_production_segment_samples(
+                                observation=active_observation,
+                                request=request,
+                                plan=plan,
+                                segment=segment,
+                                step_by_route_index=step_by_route_index,
+                                label_prefix=label_prefix,
+                                runtime_state=runtime_state,
+                                visited_checkpoints=visited_checkpoints,
+                                start_anchor_coordinate=start_work_item.checkpoint_coordinate,
+                                submit_p2=submit_p2,
+                                drain_ready_p2=drain_ready_p2,
+                                p2_pending_count=lambda: p2_queue.pending_count,
+                            )
+                        )
+                        sampled_frame_count += sampled_count
+                except Exception:
+                    status = "failed"
+                    raise
+                finally:
+                    _record_search_segment_profile(
+                        profile_state=profile_state,
+                        profile=WorldMapSearchSegmentProfile(
+                            segment_index=segment.segment_index,
+                            start_coordinate=segment.start_coordinate,
+                            end_coordinate=segment.end_coordinate,
+                            checkpoint_count=len(segment.checkpoint_coordinates),
+                            sampled_frame_count=sampled_frame_count,
+                            move_elapsed_ms=move_elapsed_ms,
+                            start_anchor_elapsed_ms=start_anchor_elapsed_ms,
+                            end_anchor_elapsed_ms=end_anchor_elapsed_ms,
+                            ingest_elapsed_ms=ingest_elapsed_ms,
+                            total_elapsed_ms=(time.perf_counter() - segment_started_at) * 1000.0,
+                            status=status,
+                            failure_stage=failure_stage if status == "failed" else None,
+                        ),
+                    )
+                if pending_stop_reason is not None:
+                    return finish(pending_stop_reason)
+            return finish(
+                WorldMapSearchStopReason.BOUNDARY_EXHAUSTED
+                if request.boundary is not None
+                else WorldMapSearchStopReason.ROUTE_EXHAUSTED
+            )
+        finally:
+            p2_queue.close()
+            profile_state.setdefault("total_elapsed_ms", (time.perf_counter() - search_started_at) * 1000.0)
+            self.flush_runtime_diagnostics(runtime_state=runtime_state)
+
+    def _move_to_segment_start_work_item(
+        self,
+        *,
+        observation: Observation,
+        plan: WorldMapResolvedSearchPlan,
+        segment: WorldMapSweepSegment,
+        step_by_route_index: Mapping[int, WorldMapTraversalExecutionStep],
+        label_prefix: str,
+        runtime_state: dict[str, Any],
+        profile_state: dict[str, Any],
+    ) -> tuple[Observation, WorldMapViewportAnalysisWorkItem]:
+        """Samples a segment start, correcting first only when current coverage would leave a gap."""
+
+        if self.observation_service is None:
+            raise SelectorResolutionError("Production segment starts require observation_service.")
+        start_route_index = segment.checkpoint_route_indices[0]
+        start_step = step_by_route_index[start_route_index]
+        current_coordinate = _require_world_map_viewport_coordinate(observation)
+        sample_label = f"{label_prefix}_segment_{segment.segment_index}_sample_{start_route_index}"
+        scan_footprint_units = estimated_world_map_visible_scan_footprint_units()
+        if world_map_sample_gap_exceeds_scan_footprint(
+            previous_coordinate=current_coordinate,
+            current_coordinate=start_step.checkpoint.coordinate,
+            scan_footprint_units=scan_footprint_units,
+        ):
+            p1_captures: list[CapturedObservation] = []
+            observation = self.move_to_checkpoint(
+                observation,
+                plan=plan,
+                step=start_step,
+                label_prefix=f"{sample_label}_coverage_correction",
+                runtime_state=runtime_state,
+                p1_capture_sink=p1_captures.append,
+            )
+            observation, capture = self._resolve_p1_movement_proof_capture(
+                observation,
+                p1_captures=p1_captures,
+                label=sample_label,
+                profile_state=profile_state,
+            )
+        else:
+            capture = self.observation_service.capture_observation(
+                sample_label,
+                request=ObservationRequest.world_map_movement_proof_follow_up(),
+                artifact_selection=self._routine_artifact_selection(
+                    ObservationArtifactRoutine.WORLD_MAP_MOVEMENT_PROOF
+                ),
+            )
+            observation = capture.observation
+        return observation, self._build_production_sample_analysis_work_item(
+            capture=capture,
+            route_index=start_route_index,
+            label=sample_label,
+            projected_frame=None,
+        )
+
+    def _traverse_production_segment_samples(
+        self,
+        *,
+        observation: Observation,
+        request: WorldMapSearchRequest,
+        plan: WorldMapResolvedSearchPlan,
+        segment: WorldMapSweepSegment,
+        step_by_route_index: Mapping[int, WorldMapTraversalExecutionStep],
+        label_prefix: str,
+        runtime_state: dict[str, Any],
+        visited_checkpoints: list[WorldMapTraversalCheckpoint],
+        start_anchor_coordinate: tuple[int, int],
+        submit_p2: Any,
+        drain_ready_p2: Any,
+        p2_pending_count: Any,
+    ) -> tuple[Observation, float, float, int, WorldMapSearchStopReason | None]:
+        """Traverses one row/lane by actual coverage, correcting only when adjacent samples can leave a gap."""
+
+        if self.observation_service is None or self.action_executor is None:
+            raise SelectorResolutionError("Production segment traversal requires observation_service and action_executor.")
+        if len(segment.checkpoint_coordinates) == 1:
+            return observation, 0.0, 0.0, 0, None
+        current = observation
+        move_elapsed_ms = 0.0
+        end_anchor_elapsed_ms = 0.0
+        sampled_count = 0
+        previous_coordinate = start_anchor_coordinate
+        scan_footprint_units = estimated_world_map_visible_scan_footprint_units()
+        for sample_index, (route_index, coordinate) in enumerate(
+            zip(segment.checkpoint_route_indices[1:], segment.checkpoint_coordinates[1:]),
+            start=1,
+        ):
+            if request.stop_policy.max_checkpoints is not None and len(visited_checkpoints) >= request.stop_policy.max_checkpoints:
+                return current, move_elapsed_ms, end_anchor_elapsed_ms, sampled_count, WorldMapSearchStopReason.CHECKPOINT_BUDGET_EXHAUSTED
+            checkpoint = step_by_route_index[route_index].checkpoint
+            if request.stop_policy.max_radius_units is not None and checkpoint.distance_from_origin > request.stop_policy.max_radius_units:
+                return current, move_elapsed_ms, end_anchor_elapsed_ms, sampled_count, WorldMapSearchStopReason.RADIUS_LIMIT_REACHED
+            action = self._build_segment_swipe_action(
+                planned_from_coordinate=segment.checkpoint_coordinates[sample_index - 1],
+                planned_to_coordinate=coordinate,
+            )
+            if p2_pending_count() > 0:
+                profile_state = _mutable_runtime_state(runtime_state, "world_map_search_execution_profile")
+                profile_state["p2_movement_overlap_count"] = profile_state.get("p2_movement_overlap_count", 0) + 1
+            move_started_at = time.perf_counter()
+            self.action_executor.execute_action(
+                action,
+                _observation_with_world_map_coordinate(current, previous_coordinate),
+            )
+            move_elapsed_ms += (time.perf_counter() - move_started_at) * 1000.0
+            sample_label = f"{label_prefix}_segment_{segment.segment_index}_sample_{route_index}"
+            proof_started_at = time.perf_counter()
+            capture = self.observation_service.capture_observation(
+                sample_label,
+                request=ObservationRequest.world_map_movement_proof_follow_up(),
+                artifact_selection=self._routine_artifact_selection(
+                    ObservationArtifactRoutine.WORLD_MAP_MOVEMENT_PROOF
+                ),
+            )
+            current = capture.observation
+            end_anchor_elapsed_ms += (time.perf_counter() - proof_started_at) * 1000.0
+            proof = WorldMapViewportProof.from_capture(capture)
+            if proof.strength != WorldMapProofStrength.EXACT or proof.coordinate is None:
+                raise SelectorResolutionError(
+                    "Production segment samples require exact P1 coordinate proof.",
+                    proof_strength=proof.strength.value,
+                )
+            if world_map_sample_gap_exceeds_scan_footprint(
+                previous_coordinate=previous_coordinate,
+                current_coordinate=proof.coordinate,
+                scan_footprint_units=scan_footprint_units,
+            ):
+                correction_started_at = time.perf_counter()
+                p1_captures: list[CapturedObservation] = []
+                current = self.move_to_checkpoint(
+                    current,
+                    plan=plan,
+                    step=step_by_route_index[route_index],
+                    label_prefix=f"{sample_label}_coverage_correction",
+                    runtime_state=runtime_state,
+                    p1_capture_sink=p1_captures.append,
+                )
+                end_anchor_elapsed_ms += (time.perf_counter() - correction_started_at) * 1000.0
+                corrected_capture = self._find_matching_p1_capture(observation=current, captures=p1_captures)
+                if corrected_capture is None:
+                    corrected_capture = self.observation_service.capture_observation(
+                        f"{sample_label}_coverage_correction_capture",
+                        request=ObservationRequest.world_map_movement_proof_follow_up(),
+                        artifact_selection=self._routine_artifact_selection(
+                            ObservationArtifactRoutine.WORLD_MAP_MOVEMENT_PROOF
+                        ),
+                    )
+                    current = corrected_capture.observation
+                capture = corrected_capture
+                proof = WorldMapViewportProof.from_capture(capture)
+                if proof.coordinate is None or world_map_sample_gap_exceeds_scan_footprint(
+                    previous_coordinate=previous_coordinate,
+                    current_coordinate=proof.coordinate,
+                    scan_footprint_units=scan_footprint_units,
+                ):
+                    raise SelectorResolutionError(
+                        "Production segment coverage correction did not restore contiguous sampled coverage.",
+                        previous_coordinate=previous_coordinate,
+                        current_coordinate=proof.coordinate,
+                        scan_footprint_units=scan_footprint_units,
+                    )
+            work_item = self._build_production_sample_analysis_work_item(
+                capture=capture,
+                route_index=route_index,
+                label=sample_label,
+                projected_frame=WorldMapCoordinateProjectionContext(
+                    segment=segment,
+                    start_anchor_coordinate=previous_coordinate,
+                    end_anchor_coordinate=proof.coordinate,
+                    max_uncertainty_units=request.sweep_policy.sparse_proof_policy.max_projection_uncertainty_units,
+                ).project_frame(
+                    WorldMapSampledFrame(
+                        frame_id=sample_label,
+                        segment_index=segment.segment_index,
+                        sample_index=sample_index,
+                        progress_ratio=1.0,
+                        screenshot_artifact_path=capture.screenshot.artifact_path,
+                    )
+                ),
+            )
+            submit_p2(work_item)
+            drain_ready_p2()
+            visited_checkpoints.append(checkpoint)
+            sampled_count += 1
+            previous_coordinate = proof.coordinate
+            stop_reason = self._evaluate_stop_policy(
+                request=request,
+                route_length=len(plan.execution_plan.steps),
+                checkpoint=checkpoint,
+                matched_count=0,
+                visited_count=len(visited_checkpoints),
+            )
+            if stop_reason is not None:
+                return current, move_elapsed_ms, end_anchor_elapsed_ms, sampled_count, stop_reason
+        return current, move_elapsed_ms, end_anchor_elapsed_ms, sampled_count, None
+
+    def _build_segment_swipe_action(
+        self,
+        *,
+        planned_from_coordinate: tuple[int, int],
+        planned_to_coordinate: tuple[int, int],
+    ) -> SwipeAction:
+        """Builds one no-observe cardinal lane swipe for a production segment leg."""
+
+        direction = _direction_for_planned_segment_leg(
+            from_coordinate=planned_from_coordinate,
+            to_coordinate=planned_to_coordinate,
+        )
+        action = self.coordinate_mover_for_runtime().navigator.build_default_cardinal_navigation_action(
+            direction,
+            reason=f"production_segment_lane_{direction.value}",
+            observe_after=False,
+            follow_up_request=None,
+        )
+        return replace(
+            action,
+            observe_after=False,
+            follow_up_request=None,
+            gesture_primitive=self.coordinate_mover_for_runtime().movement_policy.gesture_primitive,
+        )
 
     def _build_result(
         self,
@@ -2342,6 +3320,7 @@ class WorldMapSearchService:
         visited_checkpoints: Sequence[WorldMapTraversalCheckpoint],
         plan: WorldMapResolvedSearchPlan,
         castle_enrichment_used: bool,
+        execution_profile: WorldMapSearchExecutionProfile | None,
     ) -> WorldMapSearchResult:
         """Builds one canonical search result from the accumulated runtime state."""
 
@@ -2354,6 +3333,7 @@ class WorldMapSearchService:
             movement_tool=plan.movement_tool,
             castle_enrichment_used=castle_enrichment_used,
             survey_index=self.survey_recorder.index,
+            execution_profile=execution_profile,
         )
 
     def move_to_checkpoint(
@@ -2364,14 +3344,26 @@ class WorldMapSearchService:
         step: WorldMapTraversalExecutionStep,
         label_prefix: str,
         runtime_state: dict[str, Any] | None = None,
+        p1_capture_sink: Callable[["CapturedObservation"], None] | None = None,
     ) -> Observation:
-        """Moves toward the requested checkpoint using the selected low-level movement primitive."""
+        """Moves toward the requested checkpoint using the step's resolved low-level movement primitive."""
 
         checkpoint = step.checkpoint
-        if plan.movement_tool == WorldMapMovementToolKind.COORDINATE_JUMP:
-            return self._move_with_coordinate_jump(observation, checkpoint=checkpoint, label_prefix=label_prefix)
-        if plan.movement_tool == WorldMapMovementToolKind.OVERVIEW_SEED:
-            return self._move_with_overview_seed(observation, checkpoint=checkpoint, label_prefix=label_prefix)
+        movement_tool = self._movement_tool_for_step(plan=plan, step=step)
+        if movement_tool == WorldMapMovementToolKind.COORDINATE_JUMP:
+            return self._move_with_coordinate_jump(
+                observation,
+                checkpoint=checkpoint,
+                label_prefix=label_prefix,
+                p1_capture_sink=p1_capture_sink,
+            )
+        if movement_tool == WorldMapMovementToolKind.OVERVIEW_SEED:
+            return self._move_with_overview_seed(
+                observation,
+                checkpoint=checkpoint,
+                label_prefix=label_prefix,
+                p1_capture_sink=p1_capture_sink,
+            )
         return self.coordinate_mover_for_runtime().move_to_coordinate(
             observation,
             target_coordinate=checkpoint.coordinate,
@@ -2380,14 +3372,11 @@ class WorldMapSearchService:
             boundary_bounds=_known_world_map_bounds(plan.request),
             coordinate_domain=plan.request.coordinate_domain,
             movement_family=step.action_family,
-            arrival_observation_request=ObservationRequest.world_map_checkpoint_analysis(),
             movement_proof_artifact_selection=self._routine_artifact_selection(
                 ObservationArtifactRoutine.WORLD_MAP_MOVEMENT_PROOF
             ),
-            arrival_artifact_selection=self._routine_artifact_selection(
-                ObservationArtifactRoutine.WORLD_MAP_ANALYZED_CHECKPOINT
-            ),
             logging_mode=DiagnosticLogMode.BUFFERED_SEQUENCE,
+            p1_capture_sink=p1_capture_sink,
         )
 
     def _move_with_coordinate_jump(
@@ -2396,6 +3385,7 @@ class WorldMapSearchService:
         *,
         checkpoint: WorldMapTraversalCheckpoint,
         label_prefix: str,
+        p1_capture_sink: Callable[["CapturedObservation"], None] | None = None,
     ) -> Observation:
         """Executes one coordinate-jump move or fails fast when the runtime lacks the required primitive."""
 
@@ -2407,6 +3397,10 @@ class WorldMapSearchService:
                     observation_service=self.observation_service,
                     observation=observation,
                     label_prefix=f"{label_prefix}_already_at_target",
+                    p1_capture_sink=p1_capture_sink,
+                    artifact_selection=self._routine_artifact_selection(
+                        ObservationArtifactRoutine.WORLD_MAP_MOVEMENT_PROOF
+                    ),
                 )
                 self._require_checkpoint_landing(
                     proven,
@@ -2420,8 +3414,12 @@ class WorldMapSearchService:
                 observation,
                 label_prefix=f"{label_prefix}_open",
                 artifact_selection=self._routine_artifact_selection(ObservationArtifactRoutine.WORLD_MAP_MOVEMENT_PROOF),
+                p1_capture_sink=p1_capture_sink,
             )
-            initial_dialog_state = self.coordinate_navigator.require_dialog_state(opened)
+            initial_dialog_state = self._require_coordinate_dialog_state(
+                opened,
+                label_prefix=f"{label_prefix}_open_dialog_refresh",
+            )
             filled = opened
             if plan.fill_actions:
                 freshest_observation = filled = self._execute_actions(
@@ -2429,9 +3427,11 @@ class WorldMapSearchService:
                     opened,
                     label_prefix=f"{label_prefix}_fill",
                     artifact_selection=self._routine_artifact_selection(ObservationArtifactRoutine.WORLD_MAP_MOVEMENT_PROOF),
+                    p1_capture_sink=p1_capture_sink,
                 )
-            self.coordinate_navigator.require_pre_submit_state(
+            self._require_coordinate_dialog_pre_submit_state(
                 filled,
+                label_prefix=f"{label_prefix}_fill_dialog_refresh",
                 plan=plan,
                 initial_state=initial_dialog_state,
             )
@@ -2440,12 +3440,17 @@ class WorldMapSearchService:
                 filled,
                 label_prefix=f"{label_prefix}_submit",
                 artifact_selection=self._routine_artifact_selection(ObservationArtifactRoutine.WORLD_MAP_ANALYZED_CHECKPOINT),
+                p1_capture_sink=p1_capture_sink,
             )
             _raise_if_world_map_coordinate_jump_status_banner(after, target_coordinate=checkpoint.coordinate)
             freshest_observation = proven = _require_proven_world_map_observation(
                 observation_service=self.observation_service,
                 observation=after,
                 label_prefix=f"{label_prefix}_verify_landing",
+                p1_capture_sink=p1_capture_sink,
+                artifact_selection=self._routine_artifact_selection(
+                    ObservationArtifactRoutine.WORLD_MAP_MOVEMENT_PROOF
+                ),
             )
             self._require_checkpoint_landing(
                 proven,
@@ -2462,6 +3467,59 @@ class WorldMapSearchService:
                 movement_tool=WorldMapMovementToolKind.COORDINATE_JUMP,
             )
             raise
+
+    def _require_coordinate_dialog_state(
+        self,
+        observation: Observation,
+        *,
+        label_prefix: str,
+    ) -> WorldMapCoordinateDialogState:
+        """Returns coordinate-dialog state, retrying once for transient missing field OCR."""
+
+        try:
+            return self.coordinate_navigator.require_dialog_state(observation)
+        except SelectorResolutionError as error:
+            if not _coordinate_dialog_field_refresh_is_allowed(error=error, observation=observation):
+                raise
+            refreshed = self._refresh_coordinate_dialog_observation(label_prefix=label_prefix)
+            return self.coordinate_navigator.require_dialog_state(refreshed)
+
+    def _require_coordinate_dialog_pre_submit_state(
+        self,
+        observation: Observation,
+        *,
+        label_prefix: str,
+        plan: WorldMapCoordinateJumpPlan,
+        initial_state: WorldMapCoordinateDialogState,
+    ) -> WorldMapCoordinateDialogState:
+        """Returns pre-submit dialog state, retrying once for transient missing field OCR."""
+
+        try:
+            return self.coordinate_navigator.require_pre_submit_state(
+                observation,
+                plan=plan,
+                initial_state=initial_state,
+            )
+        except SelectorResolutionError as error:
+            if not _coordinate_dialog_field_refresh_is_allowed(error=error, observation=observation):
+                raise
+            refreshed = self._refresh_coordinate_dialog_observation(label_prefix=label_prefix)
+            return self.coordinate_navigator.require_pre_submit_state(
+                refreshed,
+                plan=plan,
+                initial_state=initial_state,
+            )
+
+    def _refresh_coordinate_dialog_observation(self, *, label_prefix: str) -> Observation:
+        """Captures one fresh coordinate-dialog proof using the canonical narrow request."""
+
+        if self.observation_service is None:
+            raise SelectorResolutionError("Coordinate-dialog proof refresh requires observation_service.")
+        return self.observation_service.observe(
+            label_prefix,
+            request=ObservationRequest.world_map_coordinate_dialog_follow_up(),
+            artifact_selection=self._routine_artifact_selection(ObservationArtifactRoutine.WORLD_MAP_MOVEMENT_PROOF),
+        )
 
     def _require_checkpoint_landing(
         self,
@@ -2490,6 +3548,7 @@ class WorldMapSearchService:
         *,
         checkpoint: WorldMapTraversalCheckpoint,
         label_prefix: str,
+        p1_capture_sink: Callable[["CapturedObservation"], None] | None = None,
     ) -> Observation:
         """Executes one overview-assisted move or fails fast when the runtime lacks the required primitive."""
 
@@ -2507,17 +3566,23 @@ class WorldMapSearchService:
                 observation,
                 label_prefix=f"{label_prefix}_overview_open",
                 artifact_selection=self._routine_artifact_selection(ObservationArtifactRoutine.WORLD_MAP_MOVEMENT_PROOF),
+                p1_capture_sink=p1_capture_sink,
             )
             freshest_observation = after = self._execute_actions(
                 self.overview_navigator.plan_recenter(opened, target_coordinate=checkpoint.coordinate),
                 opened,
                 label_prefix=f"{label_prefix}_overview_recenter",
                 artifact_selection=self._routine_artifact_selection(ObservationArtifactRoutine.WORLD_MAP_ANALYZED_CHECKPOINT),
+                p1_capture_sink=p1_capture_sink,
             )
             freshest_observation = proven = _require_proven_world_map_observation(
                 observation_service=self.observation_service,
                 observation=after,
                 label_prefix=f"{label_prefix}_verify_landing",
+                p1_capture_sink=p1_capture_sink,
+                artifact_selection=self._routine_artifact_selection(
+                    ObservationArtifactRoutine.WORLD_MAP_MOVEMENT_PROOF
+                ),
             )
             self._require_checkpoint_landing(
                 proven,
@@ -2542,32 +3607,151 @@ class WorldMapSearchService:
         *,
         label_prefix: str,
         artifact_selection: ObservationArtifactSelection | None = None,
+        p1_capture_sink: Callable[["CapturedObservation"], None] | None = None,
     ) -> Observation:
         """Executes the provided actions and returns the freshest observed result."""
 
         if self.action_executor is None or self.observation_service is None:
             raise SelectorResolutionError("World-map search action execution requires observation_service and action_executor.")
-        return self.action_executor.execute_actions(
-            actions,
-            observation,
-            observe=lambda label, request=None: self.observation_service.observe(
+        def observe(label: str, request: ObservationRequest | None = None) -> Observation:
+            """Captures one action follow-up and exposes its screenshot to the P1 coordinator."""
+
+            capture = self.observation_service.capture_observation(
                 f"{label_prefix}_{label}",
                 request=request,
                 artifact_selection=artifact_selection,
-            ),
+            )
+            if p1_capture_sink is not None:
+                p1_capture_sink(capture)
+            return capture.observation
+
+        return self.action_executor.execute_actions(
+            actions,
+            observation,
+            observe=observe,
         ).observation
 
-    def _ingest_checkpoint_observation(
+    def _build_checkpoint_analysis_work_item(
         self,
         observation: Observation,
         *,
+        p1_captures: Sequence["CapturedObservation"],
         label: str,
-    ) -> Observation:
-        """Indexes the already-proven checkpoint observation and only falls back to recapture when the surface is still missing."""
+        checkpoint: WorldMapTraversalCheckpoint,
+        profile_state: dict[str, Any],
+    ) -> tuple[Observation, WorldMapViewportAnalysisWorkItem]:
+        """Builds an observation-free P2 item from the exact screenshot P1 used for movement proof."""
+
+        observation, capture = self._resolve_p1_movement_proof_capture(
+            observation,
+            p1_captures=p1_captures,
+            label=label,
+            profile_state=profile_state,
+        )
+        proof = WorldMapViewportProof.from_capture(capture)
+        if proof.strength != WorldMapProofStrength.EXACT or proof.coordinate is None:
+            raise SelectorResolutionError(
+                "P2 checkpoint submission requires exact P1 movement proof.",
+                proof_strength=proof.strength.value,
+            )
+        if not _coordinate_within_tolerance(
+            proof.coordinate,
+            checkpoint.coordinate,
+            tolerance=(
+                self.coordinate_mover_for_runtime().movement_policy.maximum_accepted_landing_delta_units
+            ),
+        ):
+            raise SelectorResolutionError(
+                "P1 checkpoint screenshot does not prove the requested checkpoint landing.",
+                checkpoint_coordinate=checkpoint.coordinate,
+                proof_coordinate=proof.coordinate,
+            )
+        return observation, WorldMapViewportAnalysisWorkItem(
+            route_index=checkpoint.route_index,
+            checkpoint_coordinate=proof.coordinate,
+            screenshot=capture.screenshot,
+            proof=proof,
+            label=label,
+            treatment_kind=WorldMapViewportAnalysisTreatmentKind.CHECKPOINT_SEARCH,
+        )
+
+    def _resolve_p1_movement_proof_capture(
+        self,
+        observation: Observation,
+        *,
+        p1_captures: Sequence["CapturedObservation"],
+        label: str,
+        profile_state: dict[str, Any],
+    ) -> tuple[Observation, "CapturedObservation"]:
+        """Returns the P1 capture matching movement state, recapturing narrowly when executor capture identity is absent."""
+
+        capture = self._find_matching_p1_capture(observation=observation, captures=p1_captures)
+        if capture is not None:
+            return observation, capture
+        if self.observation_service is None:
+            raise SelectorResolutionError("P1 movement-proof capture requires observation_service.")
+        if p1_captures:
+            profile_state["p1_fallback_capture_count"] = profile_state.get("p1_fallback_capture_count", 0) + 1
+        capture = self.observation_service.capture_observation(
+            f"{label}_p1_capture",
+            request=ObservationRequest.world_map_movement_proof_follow_up(),
+            artifact_selection=self._routine_artifact_selection(ObservationArtifactRoutine.WORLD_MAP_MOVEMENT_PROOF),
+        )
+        return capture.observation, capture
+
+    @staticmethod
+    def _build_production_sample_analysis_work_item(
+        *,
+        capture: "CapturedObservation",
+        route_index: int,
+        label: str,
+        projected_frame: WorldMapProjectedFrame | None,
+    ) -> WorldMapViewportAnalysisWorkItem:
+        """Builds the canonical P2 inventory work item for one actual-coordinate production sample."""
+
+        proof = WorldMapViewportProof.from_capture(capture)
+        if proof.strength != WorldMapProofStrength.EXACT or proof.coordinate is None:
+            raise SelectorResolutionError(
+                "Production segment samples require exact P1 coordinate proof.",
+                proof_strength=proof.strength.value,
+            )
+        return WorldMapViewportAnalysisWorkItem(
+            route_index=route_index,
+            checkpoint_coordinate=proof.coordinate,
+            screenshot=capture.screenshot,
+            proof=proof,
+            label=label,
+            treatment_kind=WorldMapViewportAnalysisTreatmentKind.INVENTORY_ONLY,
+            projected_frame=projected_frame,
+        )
+
+    @staticmethod
+    def _find_matching_p1_capture(
+        *,
+        observation: Observation,
+        captures: Sequence["CapturedObservation"],
+    ) -> "CapturedObservation | None":
+        """Returns the newest P1 capture whose minimal observation is the current movement state."""
+
+        for capture in reversed(captures):
+            if capture.observation is observation:
+                return capture
+            if (
+                capture.observation.captured_at == observation.captured_at
+                and capture.observation.artifact_path == observation.artifact_path
+            ):
+                return capture
+        return None
+
+    def _apply_checkpoint_analysis_result(self, result: WorldMapViewportAnalysisResult) -> Observation:
+        """Applies one immutable P2 result to the survey on the coordinator thread."""
 
         assert self.survey_recorder is not None
-        checkpoint_capture = self.survey_recorder.record_checkpoint(label, observation)
-        return observation if checkpoint_capture.capture is None else checkpoint_capture.capture.observation
+        checkpoint_capture = self.survey_recorder.ingest_checkpoint_observation(
+            result.work_item.label,
+            result.observation,
+        )
+        return result.observation if checkpoint_capture.capture is None else checkpoint_capture.capture.observation
 
     def coordinate_mover_for_runtime(self) -> WorldMapCoordinateMover:
         """Returns the canonical coordinate mover shared by sweep traversal and calibration helpers."""
@@ -2577,6 +3761,8 @@ class WorldMapSearchService:
             if hasattr(self.coordinate_mover, "movement_policy"):
                 self.coordinate_mover.movement_policy = WorldMapMovementPolicy(
                     gesture_primitive=self.screen_flows.world_map_navigator.gesture_primitive,
+                    arrival_tolerance_units=self.coordinate_mover.movement_policy.arrival_tolerance_units,
+                    overshoot_tolerance_units=self.coordinate_mover.movement_policy.overshoot_tolerance_units,
                     correction_threshold_units=self.coordinate_mover.movement_policy.correction_threshold_units,
                     traverse_max_axis_delta_per_leg=self.coordinate_mover.movement_policy.traverse_max_axis_delta_per_leg,
                     correction_max_axis_delta_per_leg=self.coordinate_mover.movement_policy.correction_max_axis_delta_per_leg,
@@ -2758,6 +3944,67 @@ class WorldMapSearchService:
             allowed_tools=tuple(tool.value for tool in request.movement_preferences.allowed_tools),
         )
 
+    def _movement_tool_for_step(
+        self,
+        *,
+        plan: WorldMapResolvedSearchPlan,
+        step: WorldMapTraversalExecutionStep,
+    ) -> WorldMapMovementToolKind:
+        """Returns the supported movement primitive for one executable itinerary step."""
+
+        return self._movement_tool_for_action_family(
+            request=plan.request,
+            action_family=step.action_family,
+        )
+
+    def _movement_tool_for_action_family(
+        self,
+        *,
+        request: WorldMapSearchRequest,
+        action_family: WorldMapTraversalActionFamily,
+    ) -> WorldMapMovementToolKind:
+        """Resolves movement per step so non-local entry does not force local checkpoints to jump."""
+
+        if action_family == WorldMapTraversalActionFamily.NON_LOCAL_DIRECT:
+            for tool in (
+                WorldMapMovementToolKind.COORDINATE_JUMP,
+                WorldMapMovementToolKind.OVERVIEW_SEED,
+                WorldMapMovementToolKind.SWIPE,
+            ):
+                if self._movement_tool_allowed_for_step(request=request, tool=tool) and self._movement_tool_supported(tool):
+                    return tool
+        for tool in request.movement_preferences.allowed_tools:
+            if self._movement_tool_supported(tool):
+                return tool
+        raise SelectorResolutionError(
+            "The requested world-map movement preferences cannot be satisfied by the current runtime.",
+            allowed_tools=tuple(tool.value for tool in request.movement_preferences.allowed_tools),
+            action_family=action_family.value,
+        )
+
+    def _movement_tool_supported(self, tool: WorldMapMovementToolKind) -> bool:
+        """Returns whether the runtime can execute one low-level world-map movement primitive."""
+
+        if tool == WorldMapMovementToolKind.SWIPE:
+            return True
+        if tool == WorldMapMovementToolKind.COORDINATE_JUMP:
+            return self.coordinate_navigator.is_supported()
+        if tool == WorldMapMovementToolKind.OVERVIEW_SEED:
+            return self.overview_navigator.is_supported()
+        raise SelectorResolutionError("Unsupported world-map movement tool.", movement_tool=tool.value)
+
+    def _movement_tool_allowed_for_step(
+        self,
+        *,
+        request: WorldMapSearchRequest,
+        tool: WorldMapMovementToolKind,
+    ) -> bool:
+        """Returns whether a primitive is available to this step without broadening local checkpoint movement."""
+
+        if tool in request.movement_preferences.allowed_tools:
+            return True
+        return request.boundary is not None and request.boundary.kind == WorldMapSearchBoundaryKind.FULL_MAP
+
     def _collect_checkpoint_matches(
         self,
         *,
@@ -2905,33 +4152,21 @@ def _require_proven_world_map_observation(
     observation: Observation,
     label_prefix: str,
     refresh_budget: int = 2,
+    p1_capture_sink: Callable[["CapturedObservation"], None] | None = None,
+    artifact_selection: ObservationArtifactSelection | None = None,
 ) -> Observation:
-    """Returns one proven world-map observation, allowing bounded refresh across strict, coarse, and transient unknown post-action frames."""
+    """Returns one exact P1-proven world-map observation using the canonical proof seam."""
 
-    current = observation
-    for refresh_index in range(refresh_budget + 1):
-        if current.spatial_surface is not None and current.spatial_surface.surface_type == SpatialSurfaceType.WORLD_MAP:
-            return current
-        if current.screen_type not in {ScreenType.PNC_WORLD_MAP, ScreenType.PNC_WORLD_MAP_ROOT, ScreenType.UNKNOWN}:
-            raise SelectorResolutionError(
-                "World-map operations require an already-proven world-map observation.",
-                screen_type=current.screen_type,
-            )
-        if observation_service is None or refresh_index >= refresh_budget:
-            raise SelectorResolutionError(
-                "World-map operations require a parsed world-map surface, but the latest observation did not expose one.",
-                screen_type=current.screen_type,
-            )
-        request = (
-            ObservationRequest.full_runtime_default()
-            if current.screen_type == ScreenType.UNKNOWN
-            else ObservationRequest.source_screen_retry(ScreenType.PNC_WORLD_MAP)
-        )
-        current = observation_service.observe(
-            f"{label_prefix}_{refresh_index}",
-            request=request,
-        )
-    raise AssertionError("Unreachable world-map surface refresh fallthrough.")
+    return require_exact_world_map_observation(
+        observation_service=observation_service,
+        observation=observation,
+        label_prefix=label_prefix,
+        policy=WorldMapMovementProofPolicy(
+            refresh_budget=refresh_budget,
+            capture_sink=p1_capture_sink,
+            artifact_selection=artifact_selection,
+        ),
+    )
 
 
 def _raise_if_world_map_coordinate_jump_status_banner(
@@ -3157,6 +4392,45 @@ def _coordinate_within_tolerance(
     )
 
 
+def _coordinate_dialog_field_refresh_is_allowed(
+    *,
+    error: SelectorResolutionError,
+    observation: Observation,
+) -> bool:
+    """Returns whether one coordinate-dialog proof miss is safe to refresh once."""
+
+    return (
+        observation.screen_type == ScreenType.PNC_WORLD_COORDINATE_DIALOG
+        and error.message == "The requested text-field state was not observed for the current screen."
+    )
+
+
+def _coordinate_overshot_within_tolerance(
+    *,
+    before_coordinate: tuple[int, int],
+    after_coordinate: tuple[int, int],
+    target_coordinate: tuple[int, int],
+    tolerance: int,
+) -> bool:
+    """Returns whether one cardinal swipe crossed the target and landed in the accepted overshoot band."""
+
+    if _coordinate_within_tolerance(after_coordinate, target_coordinate, tolerance=tolerance):
+        crossed_x = _axis_crossed_target(before_coordinate[0], after_coordinate[0], target_coordinate[0])
+        crossed_y = _axis_crossed_target(before_coordinate[1], after_coordinate[1], target_coordinate[1])
+        moved_x = before_coordinate[0] != after_coordinate[0]
+        moved_y = before_coordinate[1] != after_coordinate[1]
+        return (moved_x and crossed_x and after_coordinate[1] == target_coordinate[1]) or (
+            moved_y and crossed_y and after_coordinate[0] == target_coordinate[0]
+        )
+    return False
+
+
+def _axis_crossed_target(before_axis_value: int, after_axis_value: int, target_axis_value: int) -> bool:
+    """Returns whether a one-dimensional movement segment includes the target value."""
+
+    return min(before_axis_value, after_axis_value) <= target_axis_value <= max(before_axis_value, after_axis_value)
+
+
 def _direction_for_cardinal_leg(
     *,
     from_coordinate: tuple[int, int],
@@ -3184,6 +4458,19 @@ def _direction_for_cardinal_leg(
         "Cardinal world-map movement legs require a non-zero target delta.",
         from_coordinate=from_coordinate,
         leg_target=(leg_target.x, leg_target.y),
+    )
+
+
+def _direction_for_planned_segment_leg(
+    *,
+    from_coordinate: tuple[int, int],
+    to_coordinate: tuple[int, int],
+) -> WorldMapCardinalDirection:
+    """Returns the lane direction for two adjacent planned production segment checkpoints."""
+
+    return _direction_for_cardinal_leg(
+        from_coordinate=from_coordinate,
+        leg_target=WorldCoordinate(*to_coordinate),
     )
 
 
@@ -3267,6 +4554,167 @@ def _record_movement_step_trace(*, movement_state: dict[str, Any], trace: WorldM
     """Appends one recorded direct-movement trace to the shared runtime state."""
 
     _movement_step_traces(movement_state).append(trace)
+
+
+def _search_checkpoint_profiles(profile_state: dict[str, Any]) -> list[WorldMapSearchCheckpointProfile]:
+    """Returns the mutable list that stores canonical per-checkpoint benchmark records on runtime state."""
+
+    profiles = profile_state.get("checkpoint_profiles")
+    if isinstance(profiles, list) and all(isinstance(profile, WorldMapSearchCheckpointProfile) for profile in profiles):
+        return profiles
+    profiles = []
+    profile_state["checkpoint_profiles"] = profiles
+    return profiles
+
+
+def _record_search_checkpoint_profile(
+    *,
+    profile_state: dict[str, Any],
+    profile: WorldMapSearchCheckpointProfile,
+) -> None:
+    """Appends one canonical checkpoint benchmark record to runtime state."""
+
+    _search_checkpoint_profiles(profile_state).append(profile)
+
+
+def _search_segment_profiles(profile_state: dict[str, Any]) -> list[WorldMapSearchSegmentProfile]:
+    """Returns the mutable list that stores production segment benchmark records on runtime state."""
+
+    profiles = profile_state.get("segment_profiles")
+    if isinstance(profiles, list) and all(isinstance(profile, WorldMapSearchSegmentProfile) for profile in profiles):
+        return profiles
+    profiles = []
+    profile_state["segment_profiles"] = profiles
+    return profiles
+
+
+def _record_search_segment_profile(
+    *,
+    profile_state: dict[str, Any],
+    profile: WorldMapSearchSegmentProfile,
+) -> None:
+    """Appends one production segment benchmark record to runtime state."""
+
+    _search_segment_profiles(profile_state).append(profile)
+
+
+def _build_search_execution_profile_from_state(profile_state: Mapping[str, Any]) -> WorldMapSearchExecutionProfile:
+    """Builds one canonical aggregate benchmark profile from runtime state."""
+
+    movement_tool = profile_state.get("movement_tool")
+    if movement_tool is not None and not isinstance(movement_tool, WorldMapMovementToolKind):
+        raise SelectorResolutionError(
+            "World-map search execution profiling requires a valid movement_tool enum when present.",
+            movement_tool=movement_tool,
+        )
+    execution_start_coordinate = profile_state.get("execution_start_coordinate")
+    if execution_start_coordinate is not None and not is_integer_pair(execution_start_coordinate):
+        raise SelectorResolutionError(
+            "World-map search execution profiling requires a valid execution_start_coordinate pair when present.",
+            execution_start_coordinate=execution_start_coordinate,
+        )
+    first_step_movement_tool = profile_state.get("first_step_movement_tool")
+    if first_step_movement_tool is not None and not isinstance(first_step_movement_tool, WorldMapMovementToolKind):
+        raise SelectorResolutionError(
+            "World-map search execution profiling requires a valid first_step_movement_tool enum when present.",
+            first_step_movement_tool=first_step_movement_tool,
+        )
+    stop_reason = profile_state.get("stop_reason")
+    if stop_reason is not None and not isinstance(stop_reason, WorldMapSearchStopReason):
+        raise SelectorResolutionError(
+            "World-map search execution profiling requires a valid stop_reason enum when present.",
+            stop_reason=stop_reason,
+        )
+    checkpoint_profiles = profile_state.get("checkpoint_profiles", ())
+    if not isinstance(checkpoint_profiles, tuple | list) or not all(
+        isinstance(profile, WorldMapSearchCheckpointProfile) for profile in checkpoint_profiles
+    ):
+        raise SelectorResolutionError(
+            "World-map search execution profiling requires checkpoint_profiles to contain only canonical checkpoint records."
+        )
+    segment_profiles = profile_state.get("segment_profiles", ())
+    if not isinstance(segment_profiles, tuple | list) or not all(
+        isinstance(profile, WorldMapSearchSegmentProfile) for profile in segment_profiles
+    ):
+        raise SelectorResolutionError(
+            "World-map search execution profiling requires segment_profiles to contain only canonical segment records."
+        )
+    return WorldMapSearchExecutionProfile(
+        movement_tool=movement_tool,
+        execution_start_coordinate=execution_start_coordinate,
+        first_step_movement_tool=first_step_movement_tool,
+        plan_elapsed_ms=_coerce_profile_elapsed_ms(profile_state.get("plan_elapsed_ms", 0.0), field_name="plan_elapsed_ms"),
+        persist_summary_elapsed_ms=_coerce_profile_elapsed_ms(
+            profile_state.get("persist_summary_elapsed_ms", 0.0),
+            field_name="persist_summary_elapsed_ms",
+        ),
+        total_elapsed_ms=_coerce_profile_elapsed_ms(
+            profile_state.get("total_elapsed_ms", 0.0),
+            field_name="total_elapsed_ms",
+        ),
+        stop_reason=stop_reason,
+        checkpoint_profiles=tuple(checkpoint_profiles),
+        segment_profiles=tuple(segment_profiles),
+        p2_queue_submission_count=_coerce_profile_count(
+            profile_state.get("p2_queue_submission_count", 0),
+            field_name="p2_queue_submission_count",
+        ),
+        p2_queue_peak_depth=_coerce_profile_count(
+            profile_state.get("p2_queue_peak_depth", 0),
+            field_name="p2_queue_peak_depth",
+        ),
+        p2_movement_overlap_count=_coerce_profile_count(
+            profile_state.get("p2_movement_overlap_count", 0),
+            field_name="p2_movement_overlap_count",
+        ),
+        p2_queue_drain_elapsed_ms=_coerce_profile_elapsed_ms(
+            profile_state.get("p2_queue_drain_elapsed_ms", 0.0),
+            field_name="p2_queue_drain_elapsed_ms",
+        ),
+        p1_fallback_capture_count=_coerce_profile_count(
+            profile_state.get("p1_fallback_capture_count", 0),
+            field_name="p1_fallback_capture_count",
+        ),
+    )
+
+
+def _coerce_profile_elapsed_ms(value: object, *, field_name: str) -> float:
+    """Normalizes one internal timing value to float milliseconds or fails fast on malformed state."""
+
+    if not isinstance(value, int | float):
+        raise SelectorResolutionError(
+            "World-map search execution profiling requires numeric millisecond values.",
+            field_name=field_name,
+            value=value,
+        )
+    normalized = float(value)
+    if normalized < 0:
+        raise SelectorResolutionError(
+            "World-map search execution profiling requires non-negative millisecond values.",
+            field_name=field_name,
+            value=value,
+        )
+    return normalized
+
+
+def _coerce_profile_count(value: object, *, field_name: str) -> int:
+    """Normalizes one internal non-negative integer profile count or fails fast."""
+
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise SelectorResolutionError(
+            "World-map search execution profiling requires non-negative integer counts.",
+            field_name=field_name,
+            value=value,
+        )
+    return value
+
+
+def _movement_phase_for_step(step: WorldMapTraversalExecutionStep) -> str:
+    """Returns the profile phase for one executable checkpoint step."""
+
+    if step.step_index == 0 and step.action_family == WorldMapTraversalActionFamily.NON_LOCAL_DIRECT:
+        return "non_local_entry"
+    return "steady_state"
 
 
 def _build_cardinal_move_attempt_details(
@@ -3367,3 +4815,21 @@ def _world_map_coordinate_text_or_none(observation: Observation) -> str | None:
     if coordinate_text is None:
         return None
     return str(coordinate_text)
+
+
+def _observation_with_world_map_coordinate(
+    observation: Observation,
+    coordinate: tuple[int, int],
+) -> Observation:
+    """Returns a planning-only observation with the same screenshot metadata and a synthetic viewport coordinate."""
+
+    surface = observation.require_spatial_surface(SpatialSurfaceType.WORLD_MAP)
+    viewport = replace(surface.viewport, x=coordinate[0], y=coordinate[1])
+    return replace(
+        observation,
+        spatial_surface=replace(
+            surface,
+            viewport=viewport,
+            metadata={**surface.metadata, "coordinate_text": f"X:{coordinate[0]} Y:{coordinate[1]}"},
+        ),
+    )

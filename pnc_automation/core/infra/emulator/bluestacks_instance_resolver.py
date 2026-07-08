@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import shlex
+import socket
 import subprocess
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -21,7 +22,7 @@ _HD_PLAYER_INSTANCE_ARGUMENT = "--instance"
 _LIST_HD_PLAYER_PROCESSES_SCRIPT = rf"""
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 @(
-    Get-CimInstance Win32_Process -Filter "Name = '{_HD_PLAYER_PROCESS_NAME}'" |
+    Get-CimInstance Win32_Process -Filter "Name = '{_HD_PLAYER_PROCESS_NAME}'" -ErrorAction Stop |
     Select-Object ProcessId, CommandLine
 ) | ConvertTo-Json -Compress
 """.strip()
@@ -32,6 +33,29 @@ class BlueStacksRunningInstanceSource(Protocol):
 
     def list_running_instances(self) -> tuple["BlueStacksRunningInstance", ...]:
         """Returns all running BlueStacks instances visible to the current user."""
+
+
+class BlueStacksPortProbe(Protocol):
+    """Checks a configured local BlueStacks ADB endpoint when process metadata is unavailable."""
+
+    def is_reachable(self, host: str, port: int) -> bool:
+        """Returns whether the endpoint accepts a bounded TCP connection."""
+
+
+@dataclass(frozen=True, slots=True)
+class SocketBlueStacksPortProbe:
+    """Provides the bounded local TCP fallback for inaccessible Windows process metadata."""
+
+    timeout_seconds: float = 1.0
+
+    def is_reachable(self, host: str, port: int) -> bool:
+        """Returns whether the configured endpoint accepts a connection within the timeout."""
+
+        try:
+            with socket.create_connection((host, port), timeout=self.timeout_seconds):
+                return True
+        except OSError:
+            return False
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,6 +175,7 @@ class BlueStacksInstanceResolver:
     running_instance_source: BlueStacksRunningInstanceSource = field(
         default_factory=PowerShellBlueStacksRunningInstanceSource,
     )
+    port_probe: BlueStacksPortProbe = field(default_factory=SocketBlueStacksPortProbe)
 
     def load_runtime_instances(self) -> tuple[BlueStacksRuntimeInstanceRecord, ...]:
         """Parses the BlueStacks host metadata file into typed runtime instance records."""
@@ -234,8 +259,22 @@ class BlueStacksInstanceResolver:
                 bluestacks_config_path=str(self.config_path),
                 instance_keys=tuple(record.instance_key for record in matches),
             )
-        catalog = self.load_runtime_catalog(records=records)
         match = matches[0]
+        try:
+            catalog = self.load_runtime_catalog(records=records)
+        except ConfigurationError as process_error:
+            matched_port = match.require_adb_port(config_path=self.config_path)
+            conflicting_instance_keys = tuple(
+                record.instance_key
+                for record in records
+                if record.instance_key != match.instance_key and record.adb_port == match.adb_port
+            )
+            if conflicting_instance_keys or not self.port_probe.is_reachable(self.adb_host, matched_port):
+                raise process_error
+            return BlueStacksInstance.from_config(
+                config,
+                device_id=match.require_device_id(config_path=self.config_path, adb_host=self.adb_host),
+            )
         running_instance_keys = catalog.running_instance_keys()
         if match.instance_key not in running_instance_keys:
             raise ConfigurationError(

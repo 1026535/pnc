@@ -18,7 +18,7 @@ from pnc_automation.core.infra.capture.screenshot_service import ScreenshotServi
 from pnc_automation.app.pnc.persistence.castle_roster_store import CastleRosterStore
 from pnc_automation.app.authoring.config.models import CastleIdentity, PncAccountCastleRosterConfig
 from pnc_automation.app.automation.engine.action_executor import ActionExecutor
-from pnc_automation.core.errors import SelectorResolutionError
+from pnc_automation.core.errors import ScreenClassificationError, SelectorResolutionError
 from pnc_automation.app.pnc.domain.chat import ChatChannel
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
 from pnc_automation.app.pnc.navigation.world_map_coordinate_domain import WorldMapCoordinateDomain
@@ -47,8 +47,12 @@ from pnc_automation.app.pnc.vision.observation_builder import (
 )
 from pnc_automation.app.pnc.vision.image_models import SelectorMatch
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
-from pnc_automation.core.vision.ocr.ocr_service import OcrLine, OcrResult, UnavailableOcrService
-from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservationEnricher, _find_world_map_root_coordinate_line
+from pnc_automation.core.vision.ocr.ocr_service import OcrLine, OcrResult, RapidOcrService, UnavailableOcrService
+from pnc_automation.app.pnc.vision.pnc_observation_enricher import (
+    PncObservationEnricher,
+    _build_world_map_search_button_element,
+    _find_world_map_root_coordinate_line,
+)
 from pnc_automation.app.pnc.vision.world_map_coordinates import (
     parse_world_coordinate_dialog_field_text,
     parse_world_coordinate_text,
@@ -188,6 +192,44 @@ class _CoordinateBarFilteringFullOcrService(_CoordinateBarFilteringOcrService):
         if region is None:
             return self.full_lines
         return _CoordinateBarFilteringOcrService.read_lines(self, image, region)
+
+
+@dataclass(slots=True)
+class _CoordinateBarTopHudFallbackOcrService:
+    """Simulates a selector-crop coordinate miss with a successful bounded top-HUD OCR fallback."""
+
+    top_hud_lines: tuple[OcrLine, ...]
+    read_text_calls: int = 0
+    read_lines_regions: list[Region | None] = field(default_factory=list)
+
+    def read_result(self, image: Image.Image, region: Region | None = None) -> OcrResult:
+        """Returns OCR lines for callers that request a full OCR result."""
+
+        lines = self.read_lines(image, region)
+        return OcrResult(lines=lines, words=tuple(word for line in lines for word in line.words))
+
+    def read_lines(self, image: Image.Image, region: Region | None = None) -> tuple[OcrLine, ...]:
+        """Returns top-HUD coordinate lines only outside the canonical selector crop."""
+
+        del image
+        self.read_lines_regions.append(region)
+        if region is None or region.x != 0 or region.y != 0:
+            return ()
+        return tuple(
+            line
+            for line in self.top_hud_lines
+            if line.bounds.x >= region.x
+            and line.bounds.y >= region.y
+            and line.bounds.x + line.bounds.width <= region.x + region.width
+            and line.bounds.y + line.bounds.height <= region.y + region.height
+        )
+
+    def read_text(self, image: Image.Image, region: Region) -> str:
+        """Returns an empty filtered selector-crop read to force the top-HUD fallback."""
+
+        del image, region
+        self.read_text_calls += 1
+        return ""
 
 
 def _materialize_chat_region(
@@ -2052,6 +2094,203 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertEqual(observation.require_text_field_state(UiElementId.PNC_WORLD_COORDINATE_DIALOG_X_FIELD).text, "262")
             self.assertEqual(observation.require_text_field_state(UiElementId.PNC_WORLD_COORDINATE_DIALOG_Y_FIELD).text, "436")
 
+    def test_observation_builder_reads_coordinate_dialog_zero_fields_when_ocr_drops_zero_lines(self) -> None:
+        """Keeps live coordinate-jump proof stable when OCR omits single zero-value X/Y field lines."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            registry = build_default_selector_registry()
+            image = Image.new("RGB", (540, 960), (15, 28, 68))
+            for selector_id in (
+                UiElementId.PNC_WORLD_COORDINATE_DIALOG_X_FIELD,
+                UiElementId.PNC_WORLD_COORDINATE_DIALOG_Y_FIELD,
+            ):
+                relative_bounds = registry.require(selector_id).relative_bounds
+                assert relative_bounds is not None
+                _paint_coordinate_dialog_zero_glyph(
+                    image,
+                    bounds=relative_bounds.materialize_region(image_size=image.size),
+                )
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(image)),
+                artifact_directory="live_zero_world_coordinate_dialog",
+                label="world_coordinate_dialog_zero_fallback",
+            )
+            builder = ObservationBuilder(
+                selector_registry=registry,
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("K:", x=76, y=398, width=26, height=26),
+                            _ocr_line("230", x=132, y=400, width=41, height=24),
+                            _ocr_line("X:", x=202, y=397, width=30, height=29),
+                            _ocr_line("Y:", x=332, y=399, width=27, height=25),
+                            _ocr_line("Go", x=253, y=532, width=36, height=26),
+                        )
+                    ),
+                    selector_registry=registry,
+                ),
+            )
+
+            observation = builder.build(
+                screenshot,
+                request=ObservationRequest.world_map_coordinate_dialog_follow_up(),
+            )
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_WORLD_COORDINATE_DIALOG)
+            self.assertTrue(observation.has(UiElementId.PNC_WORLD_COORDINATE_DIALOG_GO_BUTTON))
+            self.assertTrue(observation.has(UiElementId.PNC_WORLD_COORDINATE_DIALOG_CLOSE_BUTTON))
+            self.assertEqual(observation.require_text_field_state(UiElementId.PNC_WORLD_COORDINATE_DIALOG_K_FIELD).text, "230")
+            self.assertEqual(observation.require_text_field_state(UiElementId.PNC_WORLD_COORDINATE_DIALOG_X_FIELD).text, "0")
+            self.assertEqual(observation.require_text_field_state(UiElementId.PNC_WORLD_COORDINATE_DIALOG_Y_FIELD).text, "0")
+
+    def test_observation_builder_uses_field_proof_when_coordinate_dialog_ocr_misses_one_label(self) -> None:
+        """Classifies the coordinate dialog when field-region proof fills one missed full-screen label."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            registry = build_default_selector_registry()
+            image = Image.new("RGB", (540, 960), (15, 28, 68))
+            for selector_id in (
+                UiElementId.PNC_WORLD_COORDINATE_DIALOG_X_FIELD,
+                UiElementId.PNC_WORLD_COORDINATE_DIALOG_Y_FIELD,
+            ):
+                relative_bounds = registry.require(selector_id).relative_bounds
+                assert relative_bounds is not None
+                _paint_coordinate_dialog_zero_glyph(
+                    image,
+                    bounds=relative_bounds.materialize_region(image_size=image.size),
+                )
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(image)),
+                artifact_directory="live_missing_y_label_world_coordinate_dialog",
+                label="world_coordinate_dialog_missing_y_label",
+            )
+            builder = ObservationBuilder(
+                selector_registry=registry,
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("K:", x=76, y=398, width=26, height=26),
+                            _ocr_line("226", x=132, y=400, width=41, height=24),
+                            _ocr_line("X:", x=202, y=397, width=30, height=29),
+                            _ocr_line("Go", x=253, y=532, width=36, height=26),
+                        )
+                    ),
+                    selector_registry=registry,
+                ),
+            )
+
+            observation = builder.build(
+                screenshot,
+                request=ObservationRequest.world_map_coordinate_dialog_follow_up(),
+            )
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_WORLD_COORDINATE_DIALOG)
+            self.assertEqual(observation.require_text_field_state(UiElementId.PNC_WORLD_COORDINATE_DIALOG_K_FIELD).text, "226")
+            self.assertEqual(observation.require_text_field_state(UiElementId.PNC_WORLD_COORDINATE_DIALOG_X_FIELD).text, "0")
+            self.assertEqual(observation.require_text_field_state(UiElementId.PNC_WORLD_COORDINATE_DIALOG_Y_FIELD).text, "0")
+
+    def test_observation_builder_classifies_live_coordinate_dialog_zero_field_fixture(self) -> None:
+        """Replays the live coordinate-jump dialog screenshot where RapidOCR omitted X/Y zero lines."""
+
+        fixture_path = require_local_fixture_artifact(
+            "world_coordinate_dialog_zero_fields_live_20260613",
+            default_repo_relative_path="tests/data/world_map/world_coordinate_dialog_zero_fields_live_20260613.png",
+        )
+        try:
+            ocr_service = RapidOcrService()
+        except ScreenClassificationError as error:
+            self.skipTest(str(error))
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            image = Image.open(fixture_path).convert("RGB")
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(image)),
+                artifact_directory="live_coordinate_dialog_zero_fixture",
+                label="world_coordinate_dialog_zero_fixture",
+            )
+            registry = build_default_selector_registry()
+            builder = ObservationBuilder(
+                selector_registry=registry,
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=ocr_service,
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=ocr_service,
+                    selector_registry=registry,
+                ),
+            )
+
+            observation = builder.build(
+                screenshot,
+                request=ObservationRequest.world_map_coordinate_dialog_follow_up(),
+            )
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_WORLD_COORDINATE_DIALOG)
+            self.assertEqual(observation.require_text_field_state(UiElementId.PNC_WORLD_COORDINATE_DIALOG_K_FIELD).text, "230")
+            self.assertEqual(observation.require_text_field_state(UiElementId.PNC_WORLD_COORDINATE_DIALOG_X_FIELD).text, "0")
+            self.assertEqual(observation.require_text_field_state(UiElementId.PNC_WORLD_COORDINATE_DIALOG_Y_FIELD).text, "0")
+
+    def test_observation_builder_classifies_live_coordinate_dialog_missing_label_fixture(self) -> None:
+        """Replays the English live coordinate dialog where one full-screen label was unstable."""
+
+        fixture_path = require_local_fixture_artifact(
+            "world_coordinate_dialog_missing_y_label_live_20260614",
+            default_repo_relative_path="tests/data/world_map/world_coordinate_dialog_missing_y_label_live_20260614.png",
+        )
+        try:
+            ocr_service = RapidOcrService()
+        except ScreenClassificationError as error:
+            self.skipTest(str(error))
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            image = Image.open(fixture_path).convert("RGB")
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(image)),
+                artifact_directory="live_coordinate_dialog_missing_label_fixture",
+                label="world_coordinate_dialog_missing_label_fixture",
+            )
+            registry = build_default_selector_registry()
+            builder = ObservationBuilder(
+                selector_registry=registry,
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=ocr_service,
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=ocr_service,
+                    selector_registry=registry,
+                ),
+            )
+
+            observation = builder.build(
+                screenshot,
+                request=ObservationRequest.world_map_coordinate_dialog_follow_up(),
+            )
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_WORLD_COORDINATE_DIALOG)
+            self.assertEqual(observation.require_text_field_state(UiElementId.PNC_WORLD_COORDINATE_DIALOG_K_FIELD).text, "226")
+            self.assertEqual(observation.require_text_field_state(UiElementId.PNC_WORLD_COORDINATE_DIALOG_X_FIELD).text, "0")
+            self.assertEqual(observation.require_text_field_state(UiElementId.PNC_WORLD_COORDINATE_DIALOG_Y_FIELD).text, "0")
+
     def test_observation_builder_detects_world_overview_marker_without_hint_near_map_edge(self) -> None:
         """Falls back to the border-touching warm cluster when overview opens without a prior coordinate hint."""
 
@@ -2283,6 +2522,207 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertEqual(observation.require(UiElementId.PNC_WORLD_COORDINATE_BAR).extracted_text, "X:230 Y:958")
             self.assertEqual(observation.spatial_surface.viewport.coordinate, (230, 958))
             self.assertEqual(observation.spatial_surface.metadata["coordinate_text"], "X:230 Y:958")
+
+    def test_world_map_movement_proof_uses_coordinate_only_ocr_without_full_viewport_analysis(self) -> None:
+        """Keeps movement proof cheap by parsing only the coordinate bar instead of full-frame world-map objects."""
+
+        registry = build_default_selector_registry()
+        image = Image.new("RGB", (540, 960), (15, 28, 68))
+        coordinate_region = registry.require(UiElementId.PNC_WORLD_COORDINATE_BAR).relative_bounds
+        assert coordinate_region is not None
+        bounds = coordinate_region.materialize_region(image_size=image.size)
+        for x in range(bounds.x + 8, bounds.x + bounds.width - 8):
+            for y in range(bounds.y + 8, bounds.y + bounds.height - 8):
+                image.putpixel((x, y), (42, 198, 224))
+        screenshot = type(
+            "Captured",
+            (),
+            {
+                "image": image,
+                "artifact": type("Artifact", (), {"path": Path("synthetic.png"), "captured_at": None})(),
+            },
+        )()
+        ocr_service = _RecordingOcrService(
+            lines=(
+                _ocr_line("X:230 Y:958", x=bounds.x + 4, y=bounds.y + 4, width=100, height=18),
+                _ocr_line("Lv.36 Monster", x=180, y=400, width=120, height=18),
+            )
+        )
+        builder = ObservationBuilder(
+            selector_registry=registry,
+            selector_engine=PillowSelectorEngine(
+                template_matcher=PillowTemplateMatcher(),
+                ocr_service=ocr_service,
+            ),
+            screen_classifier=ScreenClassifier(),
+            enricher=PncObservationEnricher(
+                ocr_service=ocr_service,
+                selector_registry=registry,
+            ),
+        )
+
+        observation = builder.build(screenshot, request=ObservationRequest.world_map_movement_proof_follow_up())
+
+        self.assertEqual(observation.screen_type, ScreenType.PNC_WORLD_MAP)
+        self.assertEqual(ocr_service.read_result_calls, 0)
+        self.assertGreater(ocr_service.read_text_calls, 0)
+        self.assertIsNotNone(observation.spatial_surface)
+        assert observation.spatial_surface is not None
+        self.assertEqual(observation.spatial_surface.viewport.coordinate, (230, 958))
+        self.assertEqual(observation.spatial_surface.objects, ())
+        self.assertEqual(observation.spatial_surface.metadata["scan_scope"], "coordinate_only")
+
+    def test_world_map_movement_proof_falls_back_to_bounded_top_hud_coordinate_ocr(self) -> None:
+        """Replays the live movement-proof miss where selector-crop OCR failed but top-HUD OCR saw coordinates."""
+
+        fixture_path = require_local_fixture_artifact(
+            "world_map_coordinate_only_top_hud_live_20260617",
+            default_repo_relative_path="tests/data/world_map/world_map_coordinate_only_top_hud_live_20260617.png",
+        )
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            image = Image.open(fixture_path).convert("RGB")
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(image)),
+                artifact_directory="world_map_coordinate_only_top_hud",
+                label="world_map_coordinate_only_top_hud",
+            )
+            registry = build_default_selector_registry()
+            ocr_service = _CoordinateBarTopHudFallbackOcrService(
+                top_hud_lines=(
+                    _ocr_line("X:370Y:510", x=373, y=146, width=199, height=33),
+                    _ocr_line("Hell Fortress", x=421, y=423, width=123, height=26),
+                )
+            )
+            builder = ObservationBuilder(
+                selector_registry=registry,
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=ocr_service,
+                    selector_registry=registry,
+                ),
+            )
+
+            observation = builder.build(screenshot, request=ObservationRequest.world_map_movement_proof_follow_up())
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_WORLD_MAP)
+            self.assertIsNotNone(observation.spatial_surface)
+            assert observation.spatial_surface is not None
+            self.assertEqual(observation.spatial_surface.viewport.coordinate, (370, 510))
+            self.assertEqual(observation.spatial_surface.objects, ())
+            self.assertEqual(ocr_service.read_text_calls, 1)
+            self.assertTrue(any(region is not None and region.x == 0 for region in ocr_service.read_lines_regions))
+
+    def test_observation_builder_recovers_live_world_coordinate_bar_when_filtered_crop_drops_y_axis(self) -> None:
+        """Keeps world-map proof on the reviewed live edge-case screenshot by falling back to raw OCR inside the canonical bar crop."""
+
+        fixture_path = require_local_fixture_artifact(
+            "world_coordinate_bar_live_edge_failure_20260606",
+            default_repo_relative_path="tests/data/world_map/world_coordinate_bar_live_edge_failure_20260606.png",
+        )
+        try:
+            ocr_service = RapidOcrService()
+        except ScreenClassificationError as error:
+            self.skipTest(str(error))
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            image = Image.open(fixture_path).convert("RGB")
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(image)),
+                artifact_directory="world_map_live_coordinate_bar_edge",
+                label="world_map_live_coordinate_bar_edge",
+            )
+            registry = build_default_selector_registry()
+            builder = ObservationBuilder(
+                selector_registry=registry,
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=ocr_service,
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=ocr_service,
+                    selector_registry=registry,
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_WORLD_MAP)
+            self.assertIsNotNone(observation.spatial_surface)
+            assert observation.spatial_surface is not None
+            self.assertEqual(observation.spatial_surface.viewport.coordinate, (0, 4))
+            self.assertEqual(observation.require(UiElementId.PNC_WORLD_COORDINATE_BAR).extracted_text, "X:0 Y:4")
+            search_action_point = observation.require(UiElementId.PNC_WORLD_SEARCH_BUTTON).action_point
+            assert search_action_point is not None
+            self.assertLess(
+                search_action_point[0],
+                observation.require(UiElementId.PNC_WORLD_COORDINATE_BAR).bounds.x,
+            )
+
+    def test_observation_builder_keeps_live_three_digit_y_inside_world_coordinate_bar_crop(self) -> None:
+        """Keeps the canonical coordinate-bar crop wide enough for live three-digit Y values near the HUD edge."""
+
+        fixture_path = require_local_fixture_artifact(
+            "world_coordinate_bar_live_y_truncation_20260607",
+            default_repo_relative_path="tests/data/world_map/world_coordinate_bar_live_y_truncation_20260607.png",
+        )
+        try:
+            ocr_service = RapidOcrService()
+        except ScreenClassificationError as error:
+            self.skipTest(str(error))
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            image = Image.open(fixture_path).convert("RGB")
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(image)),
+                artifact_directory="world_map_live_coordinate_bar_y_truncation",
+                label="world_map_live_coordinate_bar_y_truncation",
+            )
+            registry = build_default_selector_registry()
+            builder = ObservationBuilder(
+                selector_registry=registry,
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=ocr_service,
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=ocr_service,
+                    selector_registry=registry,
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_WORLD_MAP)
+            self.assertIsNotNone(observation.spatial_surface)
+            assert observation.spatial_surface is not None
+            self.assertEqual(observation.spatial_surface.viewport.coordinate, (341, 663))
+            self.assertEqual(observation.require(UiElementId.PNC_WORLD_COORDINATE_BAR).extracted_text, "X:341 Y:663")
+            search_action_point = observation.require(UiElementId.PNC_WORLD_SEARCH_BUTTON).action_point
+            assert search_action_point is not None
+            self.assertLess(
+                search_action_point[0],
+                observation.require(UiElementId.PNC_WORLD_COORDINATE_BAR).bounds.x,
+            )
+
+    def test_world_map_search_button_target_stays_inside_widened_live_coordinate_crop(self) -> None:
+        """Targets the magnifier inside the widened coordinate crop instead of tapping a map object to its left."""
+
+        search_button = _build_world_map_search_button_element(
+            image=Image.new("RGB", (900, 1600), (0, 0, 0)),
+            coordinate_bounds=Bounds(x=307, y=112, width=270, height=88),
+        )
+
+        self.assertEqual(search_button.action_point, (342, 156))
 
     def test_observation_builder_builds_world_map_spatial_surface_with_typed_objects(self) -> None:
         """Parses typed world-map scene objects with relationships instead of forcing them into selectors."""
@@ -3176,6 +3616,130 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertTrue(observation.blocking_popup)
             self.assertTrue(observation.has(UiElementId.PNC_POPUP_CLOSE_BUTTON))
 
+    def test_observation_builder_classifies_exit_game_popup_when_cancel_is_right_aligned(self) -> None:
+        """Replays the live exit-game modal whose safe Cancel action sits to the right of Confirm."""
+
+        fixture_path = require_local_fixture_artifact(
+            "world_map_exit_game_cancel_right_live_20260617",
+            default_repo_relative_path="tests/data/world_map/world_map_exit_game_cancel_right_live_20260617.png",
+        )
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            image = Image.open(fixture_path).convert("RGB")
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(image)),
+                artifact_directory="live_exit_game_popup",
+                label="exit_game_cancel_right",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Exit the game?", x=59, y=385, width=134, height=22),
+                            _ocr_line("Confirm", x=122, y=536, width=73, height=20),
+                            _ocr_line("Cancel", x=351, y=533, width=63, height=23),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_POPUP)
+            self.assertTrue(observation.blocking_popup)
+            close_button = observation.require(UiElementId.PNC_POPUP_CLOSE_BUTTON)
+            self.assertEqual(close_button.extracted_text, "Cancel")
+            self.assertGreater(close_button.bounds.center()[0], image.width // 2)
+
+    def test_observation_builder_classifies_live_disconnect_reconnect_popup(self) -> None:
+        """Replays the live disconnect modal as the shared recoverable blocking-popup contract."""
+
+        fixture_path = require_local_fixture_artifact(
+            "world_map_disconnect_popup_live_20260615",
+            default_repo_relative_path="tests/data/world_map/world_map_disconnect_popup_live_20260615.png",
+        )
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            image = Image.open(fixture_path).convert("RGB")
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(image)),
+                artifact_directory="live_disconnect_popup",
+                label="world_map_disconnect_popup",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Disconnected. Reconnect now?[-10013]", x=47, y=382, width=422, height=35),
+                            _ocr_line("Confirm", x=231, y=533, width=107, height=34),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_POPUP)
+            self.assertTrue(observation.blocking_popup)
+            close_button = observation.require(UiElementId.PNC_POPUP_CLOSE_BUTTON)
+            self.assertEqual(close_button.extracted_text, "Confirm")
+            self.assertEqual(close_button.action_point, (284, 550))
+
+    def test_observation_builder_classifies_bluestacks_android_home_from_pnc_label(self) -> None:
+        """Replays BlueStacks home when template matching misses but OCR proves the P&C launcher label."""
+
+        fixture_path = require_local_fixture_artifact(
+            "bluestacks_android_home_pnc_label_live_20260617",
+            default_repo_relative_path="tests/data/world_map/bluestacks_android_home_pnc_label_live_20260617.png",
+        )
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            image = Image.open(fixture_path).convert("RGB")
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(image)),
+                artifact_directory="live_android_home",
+                label="bluestacks_android_home",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Search for games & apps", x=125, y=56, width=113, height=16),
+                            _ocr_line("Store", x=86, y=215, width=44, height=20),
+                            _ocr_line("System apps", x=221, y=216, width=98, height=20),
+                            _ocr_line("Puzzles & Conquest", x=359, y=217, width=146, height=17),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot, request=ObservationRequest.full_runtime_default())
+
+            self.assertEqual(observation.screen_type, ScreenType.ANDROID_HOME)
+            launcher = observation.require(UiElementId.ANDROID_HOME_PNC_ICON)
+            self.assertEqual(launcher.extracted_text, "Puzzles & Conquest")
+
     def test_observation_builder_classifies_research_queue_overlay_as_blocking_popup(self) -> None:
         """Recognizes the in-game research queue overlay as a popup so bootstrap stays inside the game."""
 
@@ -3796,6 +4360,39 @@ class CaptureAndVisionTests(unittest.TestCase):
         self.assertNotIn(UiElementId.PNC_HOME_RIGHT_RAIL_EVENT_CENTER_ICON, selector_engine.requested_selector_ids[0])
         self.assertIn(UiElementId.PNC_HOME_RIGHT_RAIL_EVENT_CENTER_ICON, selector_engine.requested_selector_ids[1])
         self.assertNotIn(UiElementId.PNC_BAG_MAIN_TAB_BAG, selector_engine.requested_selector_ids[1])
+
+    def test_observation_builder_skips_selector_detection_for_world_map_movement_proof(self) -> None:
+        """Avoids broad selector scans when movement proof only needs the coordinate bar."""
+
+        registry = build_default_selector_registry()
+        selector_engine = _RecordingSelectorEngine(responses=[()])
+        coordinate_region = registry.require(UiElementId.PNC_WORLD_COORDINATE_BAR).relative_bounds
+        assert coordinate_region is not None
+        bounds = coordinate_region.materialize_region(image_size=(100, 100))
+        ocr_service = _RecordingOcrService(
+            lines=(_ocr_line("X:12 Y:34", x=bounds.x, y=bounds.y, width=max(1, bounds.width), height=max(1, bounds.height)),)
+        )
+        builder = ObservationBuilder(
+            selector_registry=registry,
+            selector_engine=selector_engine,
+            screen_classifier=ScreenClassifier(),
+            enricher=PncObservationEnricher(ocr_service=ocr_service, selector_registry=registry),
+        )
+        screenshot = type(
+            "Captured",
+            (),
+            {
+                "image": Image.new("RGB", (100, 100), (0, 0, 0)),
+                "artifact": type("Artifact", (), {"path": Path("synthetic.png"), "captured_at": None})(),
+            },
+        )()
+
+        observation = builder.build(screenshot, request=ObservationRequest.world_map_movement_proof_follow_up())
+
+        self.assertEqual(observation.screen_type, ScreenType.PNC_WORLD_MAP)
+        self.assertEqual(len(selector_engine.requested_selector_ids), 1)
+        self.assertEqual(selector_engine.requested_selector_ids[0], ())
+        self.assertEqual(ocr_service.read_result_calls, 0)
 
     def test_observation_builder_keeps_click_only_geometry_hidden_without_detection(self) -> None:
         """Does not auto-materialize relative click regions that still require explicit visibility proof."""
@@ -4459,6 +5056,40 @@ def _ocr_line(text: str, *, x: int, y: int, width: int, height: int) -> OcrLine:
     """Builds one deterministic OCR line for tests."""
 
     return OcrLine(text=text, bounds=Region(x=x, y=y, width=width, height=height), confidence=0.99)
+
+
+def _paint_coordinate_dialog_zero_glyph(image: Image.Image, *, bounds: Bounds) -> None:
+    """Paints the compact zero glyph shape seen in live coordinate-dialog field crops."""
+
+    pattern = (
+        "...####...",
+        "..######..",
+        ".##....##.",
+        ".##....+#.",
+        "##......#+",
+        "##......##",
+        "##......##",
+        "##......##",
+        "##......##",
+        "##......##",
+        "##......#+",
+        "##......#+",
+        ".#+....##.",
+        ".##....#+.",
+        "..######..",
+        "...+#+....",
+    )
+    draw = ImageDraw.Draw(image)
+    glyph_width = len(pattern[0])
+    glyph_height = len(pattern)
+    left = bounds.x + (bounds.width - glyph_width) // 2
+    top = bounds.y + (bounds.height - glyph_height) // 2
+    for row_index, row in enumerate(pattern):
+        for column_index, marker in enumerate(row):
+            if marker == ".":
+                continue
+            brightness = 220 if marker == "#" else 160
+            draw.point((left + column_index, top + row_index), fill=(brightness, brightness, brightness))
 
 
 def _spatial_query(

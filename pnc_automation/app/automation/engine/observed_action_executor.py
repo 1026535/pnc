@@ -88,6 +88,11 @@ class ObservedActionExecutor:
     policy: ObservedActionExecutionPolicy = field(default_factory=ObservedActionExecutionPolicy)
     sleep: Callable[[float], None] = time.sleep
 
+    def execute_action(self, action: ActionRequest, observation: Observation) -> bool:
+        """Executes one action without observing, for callers that own follow-up capture timing."""
+
+        return self.action_executor.execute_action(action, observation)
+
     def execute_actions(
         self,
         actions: Sequence[ActionRequest],

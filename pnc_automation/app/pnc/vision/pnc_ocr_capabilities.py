@@ -17,6 +17,7 @@ _HOME_CITY_BUILDING_FLOW_SCREENS = _HOME_CITY_ADJACENT_SCREENS | frozenset({Scre
 _HOME_CITY_QUEUE_SCREENS = _HOME_CITY_ADJACENT_SCREENS | frozenset({ScreenType.PNC_BUILD_QUEUE, ScreenType.PNC_POPUP})
 
 _SCREEN_FAMILY_OBSERVED_SCREENS = {
+    ScreenType.ANDROID_HOME: frozenset({ScreenType.UNKNOWN, ScreenType.ANDROID_HOME}),
     ScreenType.PNC_LOGIN: frozenset({ScreenType.UNKNOWN, ScreenType.PNC_LOGIN}),
     ScreenType.PNC_ACCOUNT_SWITCH: frozenset({ScreenType.UNKNOWN, ScreenType.PNC_ACCOUNT_SWITCH}),
     ScreenType.PNC_LORD_INFO: frozenset({ScreenType.UNKNOWN, ScreenType.PNC_LORD_INFO}),

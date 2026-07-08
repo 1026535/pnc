@@ -52,7 +52,23 @@ _HOME_CITY_TIMER_PATTERN = re.compile(r"(?<!\d)(?P<timer>\d{1,2}:\d{2}:\d{2})(?!
 _HOME_CITY_LEVEL_PATTERN = re.compile(r"^(?:LV\.?|LEVEL)?\s*(?P<level>\d{1,3})$", re.IGNORECASE)
 _WORLD_MAP_ESTIMATED_VIEWPORT_WIDTH_UNITS = 900
 _WORLD_MAP_ESTIMATED_VIEWPORT_HEIGHT_UNITS = 1184
+_WORLD_MAP_VISIBLE_SCAN_TOP_RATIO = 0.1
+_WORLD_MAP_VISIBLE_SCAN_BOTTOM_RATIO = 0.84
 _HOME_EMPTY_SLOT_TEXTS = frozenset({"BUILD", "EMPTY"})
+
+
+def estimated_world_map_visible_scan_footprint_units() -> tuple[int, int]:
+    """Returns the modeled world-coordinate footprint used by full-viewport world-map object scans."""
+
+    return (
+        _WORLD_MAP_ESTIMATED_VIEWPORT_WIDTH_UNITS,
+        int(
+            round(
+                _WORLD_MAP_ESTIMATED_VIEWPORT_HEIGHT_UNITS
+                * (_WORLD_MAP_VISIBLE_SCAN_BOTTOM_RATIO - _WORLD_MAP_VISIBLE_SCAN_TOP_RATIO)
+            )
+        ),
+    )
 
 
 def build_world_map_surface_observation(
@@ -74,6 +90,7 @@ def build_world_map_spatial_surface(
     selector_registry: SelectorRegistry | None,
     object_scan_bounds: Bounds | None = None,
     parsed_viewport: ParsedWorldViewport | None = None,
+    include_objects: bool = True,
 ) -> SpatialSurfaceObservation | None:
     """Builds the canonical world-map spatial surface from the full viewport or one requested subsection."""
 
@@ -83,13 +100,17 @@ def build_world_map_spatial_surface(
     surface_definition = None if selector_registry is None else selector_registry.surface_for_screen(ScreenType.PNC_WORLD_MAP)
     viewport_bounds = _resolve_world_map_scan_bounds(image=image, requested_bounds=None)
     scan_bounds = _resolve_world_map_scan_bounds(image=image, requested_bounds=object_scan_bounds)
-    objects = _parse_world_map_objects(
-        image=image,
-        lines=lines,
-        surface_definition=surface_definition,
-        scan_bounds=scan_bounds,
-        viewport_bounds=viewport_bounds,
-        viewport_coordinate=viewport.viewport.coordinate,
+    objects = (
+        _parse_world_map_objects(
+            image=image,
+            lines=lines,
+            surface_definition=surface_definition,
+            scan_bounds=scan_bounds,
+            viewport_bounds=viewport_bounds,
+            viewport_coordinate=viewport.viewport.coordinate,
+        )
+        if include_objects
+        else ()
     )
     return SpatialSurfaceObservation(
         surface_type=SpatialSurfaceType.WORLD_MAP,
@@ -98,7 +119,11 @@ def build_world_map_spatial_surface(
         metadata={
             "coordinate_text": viewport.coordinate_text,
             "scan_bounds": scan_bounds,
-            "scan_scope": "section" if object_scan_bounds is not None else "full_viewport",
+            "scan_scope": "coordinate_only"
+            if not include_objects
+            else "section"
+            if object_scan_bounds is not None
+            else "full_viewport",
             **({} if surface_definition is None else {"surface_id": surface_definition.id}),
         },
     )
@@ -670,9 +695,13 @@ def _resolve_world_map_scan_bounds(*, image: Image.Image, requested_bounds: Boun
 
     full_viewport_bounds = Bounds(
         x=0,
-        y=int(image.height * 0.1),
+        y=int(image.height * _WORLD_MAP_VISIBLE_SCAN_TOP_RATIO),
         width=image.width,
-        height=max(1, int(image.height * 0.84) - int(image.height * 0.1)),
+        height=max(
+            1,
+            int(image.height * _WORLD_MAP_VISIBLE_SCAN_BOTTOM_RATIO)
+            - int(image.height * _WORLD_MAP_VISIBLE_SCAN_TOP_RATIO),
+        ),
     )
     if requested_bounds is None:
         return full_viewport_bounds

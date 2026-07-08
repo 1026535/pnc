@@ -236,6 +236,16 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertIsInstance(actions[0], KeyEventAction)
         self.assertEqual(actions[0].key_code, "KEYCODE_BACK")
 
+    def test_ensure_home_city_waits_on_loading_instead_of_pressing_back(self) -> None:
+        """Keeps launch/loading states from opening the exit-game confirmation during preflight."""
+
+        actions = self.flows.ensure_home_city(make_observation(ScreenType.PNC_LOADING))
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], WaitAction)
+        self.assertEqual(actions[0].reason, "wait_for_game_loading")
+        self.assertEqual(actions[0].follow_up_request, ObservationRequest.full_runtime_default())
+
     def test_ensure_home_city_from_unknown_uses_in_game_recovery_without_relaunching(self) -> None:
         """Keeps ambiguous states inside the bounded in-game recovery path instead of bouncing through Android home."""
 
