@@ -244,6 +244,25 @@ class WorldMapSweepTests(unittest.TestCase):
 
         self.assertEqual(projected.estimated_viewport_center, (10, 4))
 
+    def test_projection_context_rejects_windows_over_policy_uncertainty(self) -> None:
+        """Fails fast when a projected frame is too far from exact anchors to stay inside policy."""
+
+        segment = build_world_map_sweep_plan(
+            route_plan=self._small_serpentine_route(),
+            policy=WorldMapSweepPolicy.production_full_map(),
+        ).segments[0]
+        projection = WorldMapCoordinateProjectionContext(
+            segment=segment,
+            start_anchor_coordinate=(0, 0),
+            end_anchor_coordinate=(100, 0),
+            max_uncertainty_units=3.0,
+        )
+
+        with self.assertRaises(SelectorResolutionError):
+            projection.project_frame(
+                WorldMapSampledFrame(frame_id="middle", segment_index=0, sample_index=1, progress_ratio=0.5)
+            )
+
     def test_unknown_element_detection_must_retain_uncertainty_reason(self) -> None:
         """Keeps seen-but-unclassified content instead of silently dropping parser uncertainty."""
 

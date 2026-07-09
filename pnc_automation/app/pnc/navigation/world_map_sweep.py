@@ -140,7 +140,7 @@ class WorldMapSweepPolicy:
         sparse_proof_policy: WorldMapSparseProofPolicy | None = None,
         max_pending_p2_items: int = 4,
     ) -> "WorldMapSweepPolicy":
-        """Returns the production policy target for continuous parsed full-map sweeping."""
+        """Returns the exact-P1 sampled production policy while sparse OCR throughput work remains gated."""
 
         return cls(
             kind=WorldMapSweepPolicyKind.PRODUCTION_FULL_MAP,
@@ -327,7 +327,17 @@ class WorldMapCoordinateProjectionContext:
             round(start_x + (end_x - start_x) * frame.progress_ratio),
             round(start_y + (end_y - start_y) * frame.progress_ratio),
         )
-        uncertainty = min(self.max_uncertainty_units, max(1.0, self.max_uncertainty_units * 0.5))
+        distance_from_start = max(abs(center[0] - start_x), abs(center[1] - start_y))
+        distance_from_end = max(abs(center[0] - end_x), abs(center[1] - end_y))
+        distance_from_nearest_anchor = min(distance_from_start, distance_from_end)
+        uncertainty = max(1.0, distance_from_nearest_anchor * 0.1)
+        if uncertainty > self.max_uncertainty_units:
+            raise SelectorResolutionError(
+                "Projected frame uncertainty exceeds the sparse-proof policy limit.",
+                frame_id=frame.frame_id,
+                uncertainty_units=uncertainty,
+                max_uncertainty_units=self.max_uncertainty_units,
+            )
         radius = int(round(uncertainty))
         return WorldMapProjectedFrame(
             sampled_frame=frame,

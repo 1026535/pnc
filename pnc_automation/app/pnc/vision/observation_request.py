@@ -128,6 +128,20 @@ class ObservationRequest:
         )
 
     @classmethod
+    def world_map_inventory_analysis(
+        cls,
+        *,
+        expected_coordinate: tuple[int, int],
+    ) -> "ObservationRequest":
+        """Returns narrow P2 world-map inventory scope seeded by exact P1 coordinate proof."""
+
+        return cls(
+            candidate_screen_types=frozenset({ScreenType.PNC_WORLD_MAP}),
+            ocr_screen_types=frozenset({ScreenType.PNC_WORLD_MAP}),
+            expected_world_coordinate=expected_coordinate,
+        )
+
+    @classmethod
     def world_map_movement_follow_up(cls) -> "ObservationRequest":
         """Returns the legacy alias for the canonical world-map movement-proof observation scope."""
 
