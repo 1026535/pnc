@@ -2,7 +2,7 @@
 
 ## Status
 
-Active as of July 8, 2026. This plan supersedes the remaining performance slice from [PNC_WORLD_MAP_PROOF_STABILITY_AND_LONG_SWEEP_PERFORMANCE_PLAN.md](PNC_WORLD_MAP_PROOF_STABILITY_AND_LONG_SWEEP_PERFORMANCE_PLAN.md).
+Active as of July 8, 2026. This plan supersedes the remaining performance slice from [PNC_WORLD_MAP_PROOF_STABILITY_AND_LONG_SWEEP_PERFORMANCE_PLAN.md](reviewed_plans/abandonned/PNC_WORLD_MAP_PROOF_STABILITY_AND_LONG_SWEEP_PERFORMANCE_PLAN.md).
 
 ## Purpose
 

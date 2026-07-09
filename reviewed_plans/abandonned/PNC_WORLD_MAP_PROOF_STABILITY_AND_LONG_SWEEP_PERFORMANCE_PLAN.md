@@ -2,7 +2,7 @@
 
 > Status: **closed / superseded as of July 8, 2026**.
 >
-> This document is retained as historical context for the world-map proof, traversal, and long-sweep work already completed or partially implemented. New active performance work is tracked in [PNC_WORLD_MAP_OCR_THROUGHPUT_OPTIMIZATION_PLAN.md](PNC_WORLD_MAP_OCR_THROUGHPUT_OPTIMIZATION_PLAN.md), which narrows the next implementation slice to benchmark-proven P1 coordinate OCR/proof speed and P2 checkpoint-builder throughput.
+> This document is retained as historical context for the world-map proof, traversal, and long-sweep work already completed or partially implemented. New active performance work is tracked in [PNC_WORLD_MAP_OCR_THROUGHPUT_OPTIMIZATION_PLAN.md](../../PNC_WORLD_MAP_OCR_THROUGHPUT_OPTIMIZATION_PLAN.md), which narrows the next implementation slice to benchmark-proven P1 coordinate OCR/proof speed and P2 checkpoint-builder throughput.
 
 ## Purpose
 
@@ -16,7 +16,7 @@ This document intentionally treats those as one ordered program instead of two u
 
 ## Current Implementation Status And Definition Of Done
 
-This document was the canonical plan for the broader proof-stability and long-sweep program. It is now closed because the remaining work has been narrowed to measured OCR throughput bottlenecks in [PNC_WORLD_MAP_OCR_THROUGHPUT_OPTIMIZATION_PLAN.md](PNC_WORLD_MAP_OCR_THROUGHPUT_OPTIMIZATION_PLAN.md).
+This document was the canonical plan for the broader proof-stability and long-sweep program. It is now closed because the remaining work has been narrowed to measured OCR throughput bottlenecks in [PNC_WORLD_MAP_OCR_THROUGHPUT_OPTIMIZATION_PLAN.md](../../PNC_WORLD_MAP_OCR_THROUGHPUT_OPTIMIZATION_PLAN.md).
 
 As of June 25, 2026, the plan is partially implemented and is explicitly **not complete**. The canonical production search now executes bounded asynchronous P1-screenshot/P2 treatment and has a live-smoked production segment executor, but real sampled-frame inventory/coverage merge, complete profiling, live multi-row calibration, and the required live sequence remain unfinished.
 
