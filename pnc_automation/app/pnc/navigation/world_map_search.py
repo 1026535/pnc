@@ -58,6 +58,8 @@ from pnc_automation.app.pnc.navigation.world_map_overview_projection import (
     project_world_coordinate_to_overview_point,
 )
 from pnc_automation.app.pnc.navigation.world_map_analysis import (
+    WorldMapActualSample,
+    WorldMapViewportAnalysisTelemetryRecord,
     WorldMapViewportAnalysisQueue,
     WorldMapViewportAnalysisResult,
     WorldMapViewportAnalysisTreatmentKind,
@@ -160,6 +162,12 @@ class WorldMapMovementToolKind(StrEnum):
     SWIPE = "swipe"
     COORDINATE_JUMP = "coordinate_jump"
     OVERVIEW_SEED = "overview_seed"
+
+
+class WorldMapProductionSampleProofMode(StrEnum):
+    """Defines the proof contract used by production segment sampling."""
+
+    EXACT_P1_SAMPLED_SEGMENT = "exact_p1_sampled_segment"
 
 
 class WorldMapCardinalMovementClassification(StrEnum):
@@ -1090,6 +1098,14 @@ class WorldMapSearchExecutionProfile:
     p2_movement_overlap_count: int = 0
     p2_queue_drain_elapsed_ms: float = 0.0
     p1_fallback_capture_count: int = 0
+    p1_missing_capture_count: int = 0
+    p1_mismatched_capture_count: int = 0
+    p2_queue_backpressure_block_count: int = 0
+    p2_queue_backpressure_block_elapsed_ms: float = 0.0
+    p2_queue_first_failure: WorldMapViewportAnalysisTelemetryRecord | None = None
+    p2_queue_telemetry: tuple[WorldMapViewportAnalysisTelemetryRecord, ...] = ()
+    production_samples: tuple[WorldMapActualSample, ...] = ()
+    production_sample_proof_mode: WorldMapProductionSampleProofMode | None = None
 
     def __post_init__(self) -> None:
         """Rejects malformed aggregate search timings before callers consume them."""
@@ -1099,6 +1115,7 @@ class WorldMapSearchExecutionProfile:
             ("persist_summary_elapsed_ms", self.persist_summary_elapsed_ms),
             ("total_elapsed_ms", self.total_elapsed_ms),
             ("p2_queue_drain_elapsed_ms", self.p2_queue_drain_elapsed_ms),
+            ("p2_queue_backpressure_block_elapsed_ms", self.p2_queue_backpressure_block_elapsed_ms),
         ):
             if value < 0:
                 raise SelectorResolutionError(
@@ -1111,6 +1128,9 @@ class WorldMapSearchExecutionProfile:
             ("p2_queue_peak_depth", self.p2_queue_peak_depth),
             ("p2_movement_overlap_count", self.p2_movement_overlap_count),
             ("p1_fallback_capture_count", self.p1_fallback_capture_count),
+            ("p1_missing_capture_count", self.p1_missing_capture_count),
+            ("p1_mismatched_capture_count", self.p1_mismatched_capture_count),
+            ("p2_queue_backpressure_block_count", self.p2_queue_backpressure_block_count),
         ):
             if value < 0:
                 raise SelectorResolutionError(
@@ -1118,6 +1138,8 @@ class WorldMapSearchExecutionProfile:
                     field_name=field_name,
                     value=value,
                 )
+        if self.p2_queue_first_failure is not None and not self.p2_queue_first_failure.failed:
+            raise SelectorResolutionError("World-map P2 first-failure telemetry must describe a failed item.")
 
     def to_document(self) -> dict[str, object]:
         """Exports the aggregate benchmark profile as one JSON-ready document."""
@@ -1142,7 +1164,19 @@ class WorldMapSearchExecutionProfile:
                 "movement_overlap_count": self.p2_movement_overlap_count,
                 "drain_elapsed_ms": round(self.p2_queue_drain_elapsed_ms, 2),
                 "p1_fallback_capture_count": self.p1_fallback_capture_count,
+                "p1_missing_capture_count": self.p1_missing_capture_count,
+                "p1_mismatched_capture_count": self.p1_mismatched_capture_count,
+                "backpressure_block_count": self.p2_queue_backpressure_block_count,
+                "backpressure_block_elapsed_ms": round(self.p2_queue_backpressure_block_elapsed_ms, 2),
+                "first_failure": (
+                    None if self.p2_queue_first_failure is None else self.p2_queue_first_failure.to_document()
+                ),
+                "telemetry": [record.to_document() for record in self.p2_queue_telemetry],
             },
+            "production_sample_proof_mode": (
+                None if self.production_sample_proof_mode is None else self.production_sample_proof_mode.value
+            ),
+            "production_samples": [sample.to_document() for sample in self.production_samples],
             "stage_totals": {
                 "move_elapsed_ms": round(sum(profile.move_elapsed_ms for profile in self.checkpoint_profiles), 2),
                 "segment_move_elapsed_ms": round(sum(profile.move_elapsed_ms for profile in self.segment_profiles), 2),
@@ -2693,14 +2727,6 @@ class WorldMapSearchService:
                 search_started_at=search_started_at,
                 plan=plan,
             )
-        p2_queue = (
-            WorldMapViewportAnalysisQueue(
-                analyzer=self.viewport_analyzer.analyze,
-                max_pending=request.sweep_policy.max_pending_p2_items,
-            )
-            if asynchronous_p2
-            else None
-        )
 
         def apply_p2_result(result: WorldMapViewportAnalysisResult) -> Observation:
             """Applies one worker result and performs matching on the coordinator thread."""
@@ -2714,33 +2740,9 @@ class WorldMapSearchService:
             )
             return rich_observation
 
-        def drain_ready_p2() -> None:
-            """Applies the completed route-order prefix without blocking movement."""
-
-            if p2_queue is None:
-                return
-            for result in p2_queue.drain_ready():
-                apply_p2_result(result)
-
-        def drain_all_p2() -> None:
-            """Blocks for all remaining work and records final queue evidence."""
-
-            if p2_queue is None:
-                return
-            drain_started_at = time.perf_counter()
-            for result in p2_queue.drain_all():
-                apply_p2_result(result)
-            profile_state["p2_queue_drain_elapsed_ms"] = (
-                profile_state.get("p2_queue_drain_elapsed_ms", 0.0)
-                + (time.perf_counter() - drain_started_at) * 1000.0
-            )
-            profile_state["p2_queue_submission_count"] = p2_queue.submission_count
-            profile_state["p2_queue_peak_depth"] = p2_queue.peak_depth
-
         def finish(stop_reason: WorldMapSearchStopReason) -> WorldMapSearchResult:
             """Builds the final result and persists one sequence summary when checkpoints were analyzed."""
 
-            drain_all_p2()
             persist_summary_started_at = time.perf_counter()
             self._persist_sequence_summary(
                 label=f"{label_prefix}_summary",
@@ -2781,10 +2783,6 @@ class WorldMapSearchService:
                 try:
                     move_started_at = time.perf_counter()
                     failure_stage = "move"
-                    if p2_queue is not None and p2_queue.pending_count > 0:
-                        profile_state["p2_movement_overlap_count"] = (
-                            profile_state.get("p2_movement_overlap_count", 0) + 1
-                        )
                     current_observation = self.move_to_checkpoint(
                         current_observation,
                         plan=plan,
@@ -2797,7 +2795,6 @@ class WorldMapSearchService:
 
                     ingest_started_at = time.perf_counter()
                     failure_stage = "p2_analysis"
-                    drain_ready_p2()
                     current_observation, work_item = self._build_checkpoint_analysis_work_item(
                         current_observation,
                         p1_captures=p1_captures,
@@ -2805,14 +2802,9 @@ class WorldMapSearchService:
                         checkpoint=checkpoint,
                         profile_state=profile_state,
                     )
-                    if p2_queue is None:
-                        result = self.viewport_analyzer.analyze(work_item)
-                        current_observation = apply_p2_result(result)
-                        p2_analysis_elapsed_ms = result.elapsed_ms
-                    else:
-                        if p2_queue.pending_count >= request.sweep_policy.max_pending_p2_items:
-                            apply_p2_result(p2_queue.drain_next())
-                        p2_queue.submit(work_item)
+                    result = self.viewport_analyzer.analyze(work_item)
+                    current_observation = apply_p2_result(result)
+                    p2_analysis_elapsed_ms = result.elapsed_ms
                     ingest_elapsed_ms = (time.perf_counter() - ingest_started_at) * 1000.0
 
                     visited_checkpoints.append(checkpoint)
@@ -2906,8 +2898,6 @@ class WorldMapSearchService:
                 else WorldMapSearchStopReason.ROUTE_EXHAUSTED
             )
         finally:
-            if p2_queue is not None:
-                p2_queue.close()
             profile_state.setdefault("total_elapsed_ms", (time.perf_counter() - search_started_at) * 1000.0)
             self.flush_runtime_diagnostics(runtime_state=active_runtime_state)
 
@@ -2922,8 +2912,9 @@ class WorldMapSearchService:
         search_started_at: float,
         plan: WorldMapResolvedSearchPlan,
     ) -> WorldMapSearchResult:
-        """Runs production full-map traversal by row/lane segments with sparse exact anchors."""
+        """Runs exact-P1 sampled production traversal by row/lane segments."""
 
+        profile_state["production_sample_proof_mode"] = WorldMapProductionSampleProofMode.EXACT_P1_SAMPLED_SEGMENT
         p2_queue = WorldMapViewportAnalysisQueue(
             analyzer=self.viewport_analyzer.analyze,
             max_pending=request.sweep_policy.max_pending_p2_items,
@@ -2958,22 +2949,25 @@ class WorldMapSearchService:
         def submit_p2(work_item: WorldMapViewportAnalysisWorkItem) -> None:
             """Submits one sample, applying backpressure through the canonical queue."""
 
+            if work_item.actual_sample is not None:
+                _record_production_sample(profile_state=profile_state, sample=work_item.actual_sample)
             if p2_queue.pending_count >= request.sweep_policy.max_pending_p2_items:
-                apply_p2_result(p2_queue.drain_next())
+                apply_p2_result(p2_queue.drain_next(blocking_reason="backpressure"))
             p2_queue.submit(work_item)
 
         def drain_all_p2() -> None:
             """Drains queued samples and records aggregate P2 evidence."""
 
             drain_started_at = time.perf_counter()
-            for result in p2_queue.drain_all():
-                apply_p2_result(result)
-            profile_state["p2_queue_drain_elapsed_ms"] = (
-                profile_state.get("p2_queue_drain_elapsed_ms", 0.0)
-                + (time.perf_counter() - drain_started_at) * 1000.0
-            )
-            profile_state["p2_queue_submission_count"] = p2_queue.submission_count
-            profile_state["p2_queue_peak_depth"] = p2_queue.peak_depth
+            try:
+                for result in p2_queue.drain_all():
+                    apply_p2_result(result)
+            finally:
+                profile_state["p2_queue_drain_elapsed_ms"] = (
+                    profile_state.get("p2_queue_drain_elapsed_ms", 0.0)
+                    + (time.perf_counter() - drain_started_at) * 1000.0
+                )
+                _record_p2_queue_profile(profile_state=profile_state, queue=p2_queue)
 
         def finish(stop_reason: WorldMapSearchStopReason) -> WorldMapSearchResult:
             """Builds the final production result after deterministic P2 drain."""
@@ -3100,7 +3094,7 @@ class WorldMapSearchService:
         runtime_state: dict[str, Any],
         profile_state: dict[str, Any],
     ) -> tuple[Observation, WorldMapViewportAnalysisWorkItem]:
-        """Samples a segment start, correcting first only when current coverage would leave a gap."""
+        """Samples a segment start only after the movement anchor is aligned to the planned lane."""
 
         if self.observation_service is None:
             raise SelectorResolutionError("Production segment starts require observation_service.")
@@ -3108,18 +3102,17 @@ class WorldMapSearchService:
         start_step = step_by_route_index[start_route_index]
         current_coordinate = _require_world_map_viewport_coordinate(observation)
         sample_label = f"{label_prefix}_segment_{segment.segment_index}_sample_{start_route_index}"
-        scan_footprint_units = estimated_world_map_visible_scan_footprint_units()
-        if world_map_sample_gap_exceeds_scan_footprint(
-            previous_coordinate=current_coordinate,
-            current_coordinate=start_step.checkpoint.coordinate,
-            scan_footprint_units=scan_footprint_units,
+        if not _coordinate_within_tolerance(
+            current_coordinate,
+            start_step.checkpoint.coordinate,
+            tolerance=self.coordinate_mover_for_runtime().movement_policy.maximum_accepted_landing_delta_units,
         ):
             p1_captures: list[CapturedObservation] = []
             observation = self.move_to_checkpoint(
                 observation,
                 plan=plan,
                 step=start_step,
-                label_prefix=f"{sample_label}_coverage_correction",
+                label_prefix=f"{sample_label}_anchor_alignment",
                 runtime_state=runtime_state,
                 p1_capture_sink=p1_captures.append,
             )
@@ -3141,6 +3134,7 @@ class WorldMapSearchService:
         return observation, self._build_production_sample_analysis_work_item(
             capture=capture,
             route_index=start_route_index,
+            planned_coordinate=start_step.checkpoint.coordinate,
             label=sample_label,
             projected_frame=None,
         )
@@ -3254,6 +3248,7 @@ class WorldMapSearchService:
             work_item = self._build_production_sample_analysis_work_item(
                 capture=capture,
                 route_index=route_index,
+                planned_coordinate=coordinate,
                 label=sample_label,
                 projected_frame=WorldMapCoordinateProjectionContext(
                     segment=segment,
@@ -3690,8 +3685,11 @@ class WorldMapSearchService:
             return observation, capture
         if self.observation_service is None:
             raise SelectorResolutionError("P1 movement-proof capture requires observation_service.")
+        profile_state["p1_fallback_capture_count"] = profile_state.get("p1_fallback_capture_count", 0) + 1
         if p1_captures:
-            profile_state["p1_fallback_capture_count"] = profile_state.get("p1_fallback_capture_count", 0) + 1
+            profile_state["p1_mismatched_capture_count"] = profile_state.get("p1_mismatched_capture_count", 0) + 1
+        else:
+            profile_state["p1_missing_capture_count"] = profile_state.get("p1_missing_capture_count", 0) + 1
         capture = self.observation_service.capture_observation(
             f"{label}_p1_capture",
             request=ObservationRequest.world_map_movement_proof_follow_up(),
@@ -3704,6 +3702,7 @@ class WorldMapSearchService:
         *,
         capture: "CapturedObservation",
         route_index: int,
+        planned_coordinate: tuple[int, int],
         label: str,
         projected_frame: WorldMapProjectedFrame | None,
     ) -> WorldMapViewportAnalysisWorkItem:
@@ -3715,6 +3714,14 @@ class WorldMapSearchService:
                 "Production segment samples require exact P1 coordinate proof.",
                 proof_strength=proof.strength.value,
             )
+        actual_sample = WorldMapActualSample(
+            route_index=route_index,
+            planned_coordinate=planned_coordinate,
+            actual_coordinate=proof.coordinate,
+            proof=proof,
+            screenshot=capture.screenshot,
+            projected_frame=projected_frame,
+        )
         return WorldMapViewportAnalysisWorkItem(
             route_index=route_index,
             checkpoint_coordinate=proof.coordinate,
@@ -3723,6 +3730,7 @@ class WorldMapSearchService:
             label=label,
             treatment_kind=WorldMapViewportAnalysisTreatmentKind.INVENTORY_ONLY,
             projected_frame=projected_frame,
+            actual_sample=actual_sample,
         )
 
     @staticmethod
@@ -3747,10 +3755,7 @@ class WorldMapSearchService:
         """Applies one immutable P2 result to the survey on the coordinator thread."""
 
         assert self.survey_recorder is not None
-        checkpoint_capture = self.survey_recorder.ingest_checkpoint_observation(
-            result.work_item.label,
-            result.observation,
-        )
+        checkpoint_capture = self.survey_recorder.ingest_analysis_result(result)
         return result.observation if checkpoint_capture.capture is None else checkpoint_capture.capture.observation
 
     def coordinate_mover_for_runtime(self) -> WorldMapCoordinateMover:
@@ -4598,6 +4603,37 @@ def _record_search_segment_profile(
     _search_segment_profiles(profile_state).append(profile)
 
 
+def _record_production_sample(
+    *,
+    profile_state: dict[str, Any],
+    sample: WorldMapActualSample,
+) -> None:
+    """Appends one canonical production sample identity to runtime profile state."""
+
+    samples = profile_state.get("production_samples")
+    if samples is None:
+        samples = []
+        profile_state["production_samples"] = samples
+    if not isinstance(samples, list):
+        raise SelectorResolutionError("World-map production sample profile state must be list-backed.")
+    samples.append(sample)
+
+
+def _record_p2_queue_profile(
+    *,
+    profile_state: dict[str, Any],
+    queue: WorldMapViewportAnalysisQueue,
+) -> None:
+    """Copies canonical P2 queue counters and telemetry into runtime profile state."""
+
+    profile_state["p2_queue_submission_count"] = queue.submission_count
+    profile_state["p2_queue_peak_depth"] = queue.peak_depth
+    profile_state["p2_queue_backpressure_block_count"] = queue.backpressure_block_count
+    profile_state["p2_queue_backpressure_block_elapsed_ms"] = queue.backpressure_block_elapsed_ms
+    profile_state["p2_queue_first_failure"] = queue.first_failure
+    profile_state["p2_queue_telemetry"] = queue.telemetry_records
+
+
 def _build_search_execution_profile_from_state(profile_state: Mapping[str, Any]) -> WorldMapSearchExecutionProfile:
     """Builds one canonical aggregate benchmark profile from runtime state."""
 
@@ -4639,6 +4675,31 @@ def _build_search_execution_profile_from_state(profile_state: Mapping[str, Any])
         raise SelectorResolutionError(
             "World-map search execution profiling requires segment_profiles to contain only canonical segment records."
         )
+    p2_queue_first_failure = profile_state.get("p2_queue_first_failure")
+    if p2_queue_first_failure is not None and not isinstance(
+        p2_queue_first_failure,
+        WorldMapViewportAnalysisTelemetryRecord,
+    ):
+        raise SelectorResolutionError("World-map search execution profiling requires typed P2 first-failure telemetry.")
+    p2_queue_telemetry = profile_state.get("p2_queue_telemetry", ())
+    if not isinstance(p2_queue_telemetry, tuple | list) or not all(
+        isinstance(record, WorldMapViewportAnalysisTelemetryRecord) for record in p2_queue_telemetry
+    ):
+        raise SelectorResolutionError("World-map search execution profiling requires typed P2 queue telemetry.")
+    production_samples = profile_state.get("production_samples", ())
+    if not isinstance(production_samples, tuple | list) or not all(
+        isinstance(sample, WorldMapActualSample) for sample in production_samples
+    ):
+        raise SelectorResolutionError("World-map search execution profiling requires typed production samples.")
+    production_sample_proof_mode = profile_state.get("production_sample_proof_mode")
+    if production_sample_proof_mode is not None and not isinstance(
+        production_sample_proof_mode,
+        WorldMapProductionSampleProofMode,
+    ):
+        raise SelectorResolutionError(
+            "World-map search execution profiling requires a valid production sample proof mode.",
+            production_sample_proof_mode=production_sample_proof_mode,
+        )
     return WorldMapSearchExecutionProfile(
         movement_tool=movement_tool,
         execution_start_coordinate=execution_start_coordinate,
@@ -4675,6 +4736,26 @@ def _build_search_execution_profile_from_state(profile_state: Mapping[str, Any])
             profile_state.get("p1_fallback_capture_count", 0),
             field_name="p1_fallback_capture_count",
         ),
+        p1_missing_capture_count=_coerce_profile_count(
+            profile_state.get("p1_missing_capture_count", 0),
+            field_name="p1_missing_capture_count",
+        ),
+        p1_mismatched_capture_count=_coerce_profile_count(
+            profile_state.get("p1_mismatched_capture_count", 0),
+            field_name="p1_mismatched_capture_count",
+        ),
+        p2_queue_backpressure_block_count=_coerce_profile_count(
+            profile_state.get("p2_queue_backpressure_block_count", 0),
+            field_name="p2_queue_backpressure_block_count",
+        ),
+        p2_queue_backpressure_block_elapsed_ms=_coerce_profile_elapsed_ms(
+            profile_state.get("p2_queue_backpressure_block_elapsed_ms", 0.0),
+            field_name="p2_queue_backpressure_block_elapsed_ms",
+        ),
+        p2_queue_first_failure=p2_queue_first_failure,
+        p2_queue_telemetry=tuple(p2_queue_telemetry),
+        production_samples=tuple(production_samples),
+        production_sample_proof_mode=production_sample_proof_mode,
     )
 
 

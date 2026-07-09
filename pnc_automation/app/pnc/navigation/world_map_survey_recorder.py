@@ -8,6 +8,7 @@ from pathlib import Path
 
 from pnc_automation.app.pnc.domain.observation import Observation, SpatialObjectQuery, SpatialSurfaceObservation, SpatialSurfaceType
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.pnc.navigation.world_map_analysis import WorldMapViewportAnalysisResult
 from pnc_automation.app.pnc.navigation.world_map_index import (
     WorldMapCastleQuery,
     WorldMapObjectKey,
@@ -140,6 +141,33 @@ class WorldMapSurveyRecorder:
         artifact_selection: ObservationArtifactSelection | None = None,
     ) -> WorldMapSurveyCheckpointResult:
         """Indexes one already-proven checkpoint observation and persists debug state without forcing a second capture."""
+
+        return self._ingest_analysis_observation(
+            label=label,
+            observation=observation,
+            request=request,
+            artifact_selection=artifact_selection,
+        )
+
+    def ingest_analysis_result(self, result: WorldMapViewportAnalysisResult) -> WorldMapSurveyCheckpointResult:
+        """Indexes one immutable P2 analysis result through the recorder-owned survey writer."""
+
+        return self._ingest_analysis_observation(
+            label=result.work_item.label,
+            observation=result.observation,
+            request=None,
+            artifact_selection=result.work_item.artifact_selection,
+        )
+
+    def _ingest_analysis_observation(
+        self,
+        *,
+        label: str,
+        observation: Observation,
+        request: ObservationRequest | None,
+        artifact_selection: ObservationArtifactSelection | None,
+    ) -> WorldMapSurveyCheckpointResult:
+        """Indexes one already-built world-map analysis observation and persists requested survey artifacts."""
 
         artifact_policy = self._resolve_artifact_policy(
             request=request,
