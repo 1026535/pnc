@@ -1,0 +1,4 @@
+interface:
+  display_name: "Test BlueStacks Live"
+  short_description: "Run opt-in BlueStacks live smoke checks"
+  default_prompt: "Use $test-bluestacks-live to validate this change against the live BlueStacks smoke workflow."
