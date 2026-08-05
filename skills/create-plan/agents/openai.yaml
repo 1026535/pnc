@@ -1,0 +1,4 @@
+interface:
+  display_name: "Create Plan"
+  short_description: "Draft rigorous, actionable implementation plans"
+  default_prompt: "Use $create-plan to produce a rigorous implementation plan for this change."

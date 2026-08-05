@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Code"
+  short_description: "Find actionable code review issues"
+  default_prompt: "Use $review-code to review these changes and report actionable findings."
