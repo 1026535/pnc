@@ -4,8 +4,147 @@ accounts:
       main:
         kingdom: K287
         castle_name: pine cobaye 1
+      hopeful_npc_k323:
+        kingdom: K323
+        castle_name: Hopeful NPC
+        castle_level: 16
+      cute_zenpc:
+        kingdom: K157
+        castle_name: Cute ZeNPC
+        castle_level: 22
+      k30213bfcc8584:
+        kingdom: K302
+        castle_name: K30213bfcc8584
+        castle_level: 1
+      k301116f4e4654:
+        kingdom: K301
+        castle_name: K301116f4e4654
+        castle_level: 1
+
   - account_id: serious_stuff
     castle_targets:
       main:
         kingdom: K230
-        castle_name: Lv. 6 hellhound
+        castle_name: Lv. 6 hellound
+        castle_level: 11
+      justice_for_my_cat:
+        kingdom: K307
+        castle_name: Justice for my cat
+        castle_level: 4
+      k304caf8305606:
+        kingdom: K304
+        castle_name: K304caf8305606
+        castle_level: 5
+      pretty_poney:
+        kingdom: K295
+        castle_name: PrettyPoney
+        castle_level: 4
+      k294c3ff473986:
+        kingdom: K294
+        castle_name: K294c3ff473986
+        castle_level: 5
+      big_evil_overlord:
+        kingdom: K290
+        castle_name: Big Evil Overlord
+        castle_level: 5
+      k28776145d1722:
+        kingdom: K287
+        castle_name: K28776145d1722
+        castle_level: 5
+      k278a6d3154457:
+        kingdom: K278
+        castle_name: K278a6d3154457
+        castle_level: 9
+      gimme_cookies:
+        kingdom: K271
+        castle_name: gimme cookies
+        castle_level: 5
+      not_toast:
+        kingdom: K259
+        castle_name: not Toast
+        castle_level: 5
+      k2562a7a977843:
+        kingdom: K256
+        castle_name: K2562a7a977843
+        castle_level: 5
+      who_is_u:
+        kingdom: K226
+        castle_name: who is u
+        castle_level: 15
+
+  - account_id: main
+    castle_targets:
+      main:
+        kingdom: K191
+        castle_name: Farming NPC
+        castle_level: 29
+      lazy_intern:
+        kingdom: K290
+        castle_name: Lazy Intern
+        castle_level: 26
+      jobless_intern:
+        kingdom: K290
+        castle_name: Jobless Intern
+        castle_level: 22
+      npc_on_hopium:
+        kingdom: K157
+        castle_name: NPC on Hopium
+        castle_level: 31
+      npc_on_copium:
+        kingdom: K191
+        castle_name: NPC on Copium
+        castle_level: 24
+      hopeful_npc_k157:
+        kingdom: K157
+        castle_name: Hopeful NPC- _-
+        castle_level: 34
+      underpaid_intern:
+        kingdom: K290
+        castle_name: Underpaid Intern
+        castle_level: 31
+      coping_intern:
+        kingdom: K290
+        castle_name: Coping Intern
+        castle_level: 22
+
+  - account_id: mega_old_acc
+    castle_targets:
+      main:
+        kingdom: K314
+        castle_name: K314a4452b3900
+        castle_level: 1
+      sticker_npc:
+        kingdom: K157
+        castle_name: 0 sticker NPC
+        castle_level: 15
+
+  - account_id: 3xx_spies
+    castle_targets:
+      main:
+        kingdom: K287
+        castle_name: K287e40c0a989
+        castle_level: 9
+      k314e66ab29777:
+        kingdom: K314
+        castle_name: K314e66ab29777
+        castle_level: 4
+      cold_duke_of_the_north:
+        kingdom: K313
+        castle_name: ColdDukeOfTheNorth
+        castle_level: 2
+      k304554ca2797:
+        kingdom: K304
+        castle_name: K304554ca2797
+        castle_level: 5
+      nox_simp:
+        kingdom: K253
+        castle_name: Nox simp
+        castle_level: 4
+      k199c0c5983668:
+        kingdom: K199
+        castle_name: K199c0c5983668
+        castle_level: 1
+      k157f69a736769:
+        kingdom: K157
+        castle_name: K157f69a736769
+        castle_level: 3
