@@ -6,7 +6,8 @@ import json
 import shlex
 import socket
 import subprocess
-from collections.abc import Mapping
+import time
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
@@ -19,6 +20,7 @@ BLUESTACKS_ADB_HOST = "127.0.0.1"
 _BLUESTACKS_INSTANCE_PREFIX = "bst.instance."
 _HD_PLAYER_PROCESS_NAME = "HD-Player.exe"
 _HD_PLAYER_INSTANCE_ARGUMENT = "--instance"
+_DEFAULT_HD_PLAYER_PATH = Path(r"C:\Program Files\BlueStacks_nxt\HD-Player.exe")
 _LIST_HD_PLAYER_PROCESSES_SCRIPT = rf"""
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 @(
@@ -42,6 +44,13 @@ class BlueStacksPortProbe(Protocol):
         """Returns whether the endpoint accepts a bounded TCP connection."""
 
 
+class BlueStacksInstanceLauncher(Protocol):
+    """Starts one configured BlueStacks instance by host-config instance key."""
+
+    def launch_instance(self, instance_key: str) -> None:
+        """Requests startup for the requested BlueStacks instance key."""
+
+
 @dataclass(frozen=True, slots=True)
 class SocketBlueStacksPortProbe:
     """Provides the bounded local TCP fallback for inaccessible Windows process metadata."""
@@ -56,6 +65,28 @@ class SocketBlueStacksPortProbe:
                 return True
         except OSError:
             return False
+
+
+@dataclass(frozen=True, slots=True)
+class HDPlayerBlueStacksInstanceLauncher:
+    """Launches BlueStacks 5 instances through the installed `HD-Player.exe` entry point."""
+
+    player_path: Path = field(default_factory=lambda: _DEFAULT_HD_PLAYER_PATH)
+
+    def launch_instance(self, instance_key: str) -> None:
+        """Starts one BlueStacks player process using the canonical `--instance` argument."""
+
+        if not self.player_path.is_file():
+            raise ConfigurationError(
+                f"BlueStacks player executable '{self.player_path}' does not exist.",
+                player_path=str(self.player_path),
+                instance_key=instance_key,
+            )
+        subprocess.Popen(
+            [str(self.player_path), _HD_PLAYER_INSTANCE_ARGUMENT, instance_key],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -176,6 +207,10 @@ class BlueStacksInstanceResolver:
         default_factory=PowerShellBlueStacksRunningInstanceSource,
     )
     port_probe: BlueStacksPortProbe = field(default_factory=SocketBlueStacksPortProbe)
+    instance_launcher: BlueStacksInstanceLauncher = field(default_factory=HDPlayerBlueStacksInstanceLauncher)
+    launch_poll_attempts: int = 30
+    launch_poll_interval_seconds: float = 2.0
+    sleep: Callable[[float], None] = time.sleep
 
     def load_runtime_instances(self) -> tuple[BlueStacksRuntimeInstanceRecord, ...]:
         """Parses the BlueStacks host metadata file into typed runtime instance records."""
@@ -277,13 +312,11 @@ class BlueStacksInstanceResolver:
             )
         running_instance_keys = catalog.running_instance_keys()
         if match.instance_key not in running_instance_keys:
-            raise ConfigurationError(
-                f"BlueStacks display_name '{config.display_name}' maps to instance_key '{match.instance_key}', but that instance is not currently running.",
-                display_name=config.display_name,
-                instance_id=config.id,
-                instance_key=match.instance_key,
-                running_instance_keys=tuple(sorted(running_instance_keys)),
-                bluestacks_config_path=str(self.config_path),
+            catalog = self._launch_and_wait_for_instance(
+                config=config,
+                match=match,
+                records=records,
+                initial_running_instance_keys=running_instance_keys,
             )
         matched_port = match.require_adb_port(config_path=self.config_path)
         matching_running_port_claims = tuple(
@@ -305,6 +338,35 @@ class BlueStacksInstanceResolver:
         return BlueStacksInstance.from_config(
             config,
             device_id=match.require_device_id(config_path=self.config_path, adb_host=self.adb_host),
+        )
+
+    def _launch_and_wait_for_instance(
+        self,
+        *,
+        config: BlueStacksInstanceConfig,
+        match: BlueStacksRuntimeInstanceRecord,
+        records: tuple[BlueStacksRuntimeInstanceRecord, ...],
+        initial_running_instance_keys: frozenset[str],
+    ) -> BlueStacksRuntimeCatalog:
+        """Starts a configured inactive BlueStacks instance and waits for process metadata to confirm it."""
+
+        self.instance_launcher.launch_instance(match.instance_key)
+        poll_attempts = max(1, self.launch_poll_attempts)
+        for attempt_index in range(poll_attempts):
+            if self.launch_poll_interval_seconds > 0:
+                self.sleep(self.launch_poll_interval_seconds)
+            catalog = self.load_runtime_catalog(records=records)
+            if match.instance_key in catalog.running_instance_keys():
+                return catalog
+        raise ConfigurationError(
+            f"BlueStacks display_name '{config.display_name}' maps to instance_key '{match.instance_key}', but that instance did not start.",
+            display_name=config.display_name,
+            instance_id=config.id,
+            instance_key=match.instance_key,
+            running_instance_keys=tuple(sorted(initial_running_instance_keys)),
+            launch_poll_attempts=poll_attempts,
+            launch_poll_interval_seconds=self.launch_poll_interval_seconds,
+            bluestacks_config_path=str(self.config_path),
         )
 
 

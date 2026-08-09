@@ -11,9 +11,9 @@ Run live emulator validation only when the fidelity is worth the cost. Use offli
 
 ## Safety And Preconditions
 
-1. Confirm BlueStacks is running before live tests.
-2. Confirm ADB is enabled in BlueStacks and reachable through the configured local endpoint.
-3. Confirm the requested account, castle, and BlueStacks display name exist in `config/`.
+1. Confirm the requested account, castle, and BlueStacks display name exist in `config/`.
+2. Let the canonical runtime launch the configured BlueStacks instance when it is not running.
+3. Confirm ADB is enabled in BlueStacks and reachable through the resolved local endpoint after startup.
 4. Use the repo's configured `adb_path` and `bluestacks_config_path`; do not hard-code ADB ports or device IDs.
 5. Keep ADB local. Treat exposed ADB ports as sensitive because unauthenticated ADB access can control the emulator.
 6. Never overwrite real local config unless the user explicitly asks.
@@ -66,6 +66,7 @@ py tools/run_world_map_movement_calibration.py
 Before finishing, report:
 
 - Live preconditions checked.
+- Whether the configured BlueStacks instance was already running or launched by the runtime.
 - Offline tests run before live testing.
 - Exact live command, environment flag, account, and smoke target.
 - Artifact paths inspected or generated.

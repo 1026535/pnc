@@ -18,37 +18,53 @@ class BlueStacksSession:
     adb_client: AdbClient
     instance: BlueStacksInstance
     sleep: Callable[[float], None] = time.sleep
+    connect_attempts: int = 30
+    connect_retry_delay_seconds: float = 2.0
 
     def connect(self) -> None:
         """Connects to the configured ADB endpoint and validates device readiness."""
 
-        result = self.adb_client.connect(self.instance.device_id)
-        if not result.succeeded:
+        attempts = max(1, self.connect_attempts)
+        last_connect_result = None
+        last_state_result = None
+        for attempt_index in range(attempts):
+            last_connect_result = self.adb_client.connect(self.instance.device_id)
+            if last_connect_result.succeeded:
+                last_state_result = self.adb_client.get_state(self.instance.device_id)
+                if last_state_result.succeeded and last_state_result.stdout_text.strip() == "device":
+                    return
+            if attempt_index < attempts - 1 and self.connect_retry_delay_seconds > 0:
+                self.sleep(self.connect_retry_delay_seconds)
+        if last_connect_result is not None and not last_connect_result.succeeded:
             raise DeviceConnectionError(
                 f"Failed to connect to device '{self.instance.device_id}'.",
                 device_id=self.instance.device_id,
-                stderr=result.stderr_text,
+                stderr=last_connect_result.stderr_text,
             )
-        state = self.adb_client.get_state(self.instance.device_id)
-        if not state.succeeded or state.stdout_text.strip() != "device":
-            raise DeviceConnectionError(
-                f"Device '{self.instance.device_id}' is not ready.",
-                device_id=self.instance.device_id,
-                stdout=state.stdout_text,
-                stderr=state.stderr_text,
-            )
+        raise DeviceConnectionError(
+            f"Device '{self.instance.device_id}' is not ready.",
+            device_id=self.instance.device_id,
+            stdout="" if last_state_result is None else last_state_result.stdout_text,
+            stderr="" if last_state_result is None else last_state_result.stderr_text,
+        )
 
     def ensure_responsive(self) -> None:
         """Ensures the Android session responds to a trivial shell command."""
 
-        result = self.adb_client.shell(self.instance.device_id, "getprop", "ro.product.model")
-        if not result.succeeded or result.stdout_text.strip() == "":
-            raise DeviceConnectionError(
-                f"Device '{self.instance.device_id}' did not respond to a readiness check.",
-                device_id=self.instance.device_id,
-                stdout=result.stdout_text,
-                stderr=result.stderr_text,
-            )
+        attempts = max(1, self.connect_attempts)
+        last_result = None
+        for attempt_index in range(attempts):
+            last_result = self.adb_client.shell(self.instance.device_id, "getprop", "ro.product.model")
+            if last_result.succeeded and last_result.stdout_text.strip() != "":
+                return
+            if attempt_index < attempts - 1 and self.connect_retry_delay_seconds > 0:
+                self.sleep(self.connect_retry_delay_seconds)
+        raise DeviceConnectionError(
+            f"Device '{self.instance.device_id}' did not respond to a readiness check.",
+            device_id=self.instance.device_id,
+            stdout="" if last_result is None else last_result.stdout_text,
+            stderr="" if last_result is None else last_result.stderr_text,
+        )
 
     def is_app_foregrounded(self) -> bool:
         """Returns whether the configured P&C package is the foreground app."""
