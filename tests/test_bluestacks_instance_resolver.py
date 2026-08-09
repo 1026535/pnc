@@ -5,7 +5,7 @@ from __future__ import annotations
 import tempfile
 import textwrap
 import unittest
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from pnc_automation.app.authoring.config.models import BlueStacksInstanceConfig
@@ -50,6 +50,33 @@ class _FakePortProbe:
         if host != "127.0.0.1" or port <= 0:
             raise AssertionError("Resolver supplied an invalid local ADB endpoint.")
         return self.reachable
+
+
+@dataclass(slots=True)
+class _SequencedRunningInstanceSource:
+    """Returns a deterministic sequence of running-instance snapshots."""
+
+    snapshots: tuple[tuple[BlueStacksRunningInstance, ...], ...]
+    calls: int = 0
+
+    def list_running_instances(self) -> tuple[BlueStacksRunningInstance, ...]:
+        """Returns the next seeded snapshot, repeating the final value once exhausted."""
+
+        index = min(self.calls, len(self.snapshots) - 1)
+        self.calls += 1
+        return self.snapshots[index]
+
+
+@dataclass(slots=True)
+class _FakeInstanceLauncher:
+    """Records requested BlueStacks launches without starting local processes."""
+
+    launched_instance_keys: list[str] = field(default_factory=list)
+
+    def launch_instance(self, instance_key: str) -> None:
+        """Records one requested instance startup."""
+
+        self.launched_instance_keys.append(instance_key)
 
 
 class BlueStacksInstanceResolverTests(unittest.TestCase):
@@ -173,8 +200,8 @@ class BlueStacksInstanceResolverTests(unittest.TestCase):
             with self.assertRaises(ConfigurationError):
                 resolver.resolve(_make_instance_config(display_name="serious_stuff"))
 
-    def test_resolve_rejects_matching_display_name_when_instance_is_not_running(self) -> None:
-        """Fails fast when the authored display name exists in host metadata but its instance key is inactive."""
+    def test_resolve_launches_matching_display_name_when_instance_is_not_running(self) -> None:
+        """Starts the configured BlueStacks instance before resolving its ADB endpoint."""
 
         with tempfile.TemporaryDirectory() as temp_directory:
             config_path = _write_bluestacks_config(
@@ -186,15 +213,57 @@ class BlueStacksInstanceResolverTests(unittest.TestCase):
                 bst.instance.Nougat32_1.status.adb_port="5566"
                 """,
             )
+            running_source = _SequencedRunningInstanceSource(
+                snapshots=(
+                    (_make_running_instance(instance_key="Nougat32_1"),),
+                    (
+                        _make_running_instance(instance_key="Nougat32_1"),
+                        _make_running_instance(instance_key="Nougat32", process_id=102),
+                    ),
+                ),
+            )
+            launcher = _FakeInstanceLauncher()
+            resolver = BlueStacksInstanceResolver(
+                config_path=config_path,
+                running_instance_source=running_source,
+                instance_launcher=launcher,
+                launch_poll_interval_seconds=0,
+            )
+
+            instance = resolver.resolve(_make_instance_config(display_name="serious_stuff"))
+
+            self.assertEqual(instance.device_id, "127.0.0.1:5555")
+            self.assertEqual(launcher.launched_instance_keys, ["Nougat32"])
+            self.assertEqual(running_source.calls, 2)
+
+    def test_resolve_rejects_matching_display_name_when_launch_does_not_start_instance(self) -> None:
+        """Fails fast when BlueStacks launch returns but process metadata never exposes the target."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            config_path = _write_bluestacks_config(
+                Path(temp_directory),
+                """
+                bst.instance.Nougat32.display_name="serious_stuff"
+                bst.instance.Nougat32.status.adb_port="5555"
+                bst.instance.Nougat32_1.display_name="testing"
+                bst.instance.Nougat32_1.status.adb_port="5566"
+                """,
+            )
+            launcher = _FakeInstanceLauncher()
             resolver = BlueStacksInstanceResolver(
                 config_path=config_path,
                 running_instance_source=_FakeRunningInstanceSource(
                     running_instances=(_make_running_instance(instance_key="Nougat32_1"),),
                 ),
+                instance_launcher=launcher,
+                launch_poll_attempts=2,
+                launch_poll_interval_seconds=0,
             )
 
-            with self.assertRaises(ConfigurationError):
+            with self.assertRaisesRegex(ConfigurationError, "did not start"):
                 resolver.resolve(_make_instance_config(display_name="serious_stuff"))
+
+            self.assertEqual(launcher.launched_instance_keys, ["Nougat32"])
 
     def test_resolve_uses_unique_reachable_adb_port_when_process_metadata_is_denied(self) -> None:
         """Falls back to the authored local endpoint only for explicit process-enumeration failure."""
