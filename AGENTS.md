@@ -1,93 +1,130 @@
-# PNC Automation AGENTS Guidelines
+# PNC Automation Agent Guide
 
-## Coding
-- Make minimal, well-reasoned changes. Avoid duplicating existing code or logic.
-- When new requirements arrive, do not patch a now-wrong design with more code. Re-evaluate the design and refactor so the result stays minimal, DRY, and easy to maintain.
-- Prefer using existing, authoritative interfaces instead of reimplementing behavior.
-- Prioritize clarity, documentation, and maintainability;
-- Avoid duplicating logic / re-hardcoding logic at ALL COST.
-- Always first make sure everything makes sense and that you have a very deep understanding of the intricacies of the context. Take time to analyze the codebase and current architecture. Take time to make sure we have a very clean and logical solution, with DRY code and a clean architecture, that integrates well with the current designs.
-- Throw on unexpected conditions: do not silently swallow exceptions or ignore unexpected inputs—prefer throwing or asserting so issues surface during development and testing.
+## Mission
 
-## General Architecture Requirements
-1. Single canonical implementation per concept.
-2. No duplicated logic (DRY).
-3. Open-Closed extension model.
-4. Fail-fast validation for invalid content.
-5. Minimal boilerplate and complexity.
-6. Strong types are preferred
+Work only in this `pnc` repository. Treat each task as done only when the requested behavior is implemented, verified at the right level, and explained clearly. For feature requests, do not stop at a plan unless the user explicitly asks for planning only.
 
-## Documentation Requirements
-- Add concise Python docstrings for every class and function we add or modify, including private helpers when they contain meaningful logic.
-- Keep documentation high value and concise: explain responsibility, important interactions/ownership, non-obvious behavior, invariants, and relevant limitations.
-- Add brief in-code comments for complex logic when the intent or constraint would not be obvious from the code and docstrings alone.
-- Do not write comments that only restate the signature.
+## Operating Workflow
 
-## Non-negotiables (MUST)
-- MUST avoid duplicating logic: no “same concept, different place” helpers.
-- MUST refactor when requirements shift responsibilities (ownership changes).
-- MUST delete obsolete code after refactors; do not keep parallel APIs.
-- MUST fail fast on unexpected conditions; do not silently swallow invalid states.
-- MUST prefer porting everything to the current format and never add support for old legacy code/serializations; update authored config, scripts, and persisted data as needed so all data uses the latest schema.
+1. Understand the task and current architecture before editing. Read the relevant code, tests, configs, scripts, prompts, artifacts, and prior plans.
+2. Use internet research when current external behavior matters, especially for OpenAI/Codex, BlueStacks, Android/ADB, test strategy, library APIs, security, or platform-specific behavior. Prefer official docs and cite sources in the final answer when they shaped the work.
+3. For non-trivial work, make a compact implementation plan internally or in the conversation, then execute it. Save a Markdown plan only when the user asks for a plan document or the task is too large to complete safely in one pass.
+4. Implement in small, coherent slices. After each risky or live-relevant slice, run the smallest useful validation before continuing.
+5. Before saying "done", run the required offline tests and, for live/runtime changes, the smallest relevant live validation path. If live validation cannot run, state the exact blocker and command that remains.
 
-## Project Overview
-- Work happens in **pnc** only.
+## Architecture Rules
+
+- Keep one canonical implementation per concept.
+- Avoid duplicated logic, predicates, parsers, formatters, selectors, workflow steps, and config schemas.
+- Prefer refactoring ownership when requirements shift instead of adding compatibility shims or parallel APIs.
+- Fail fast on invalid configuration, unexpected screen state, malformed artifacts, or unsupported content.
+- Prefer precise typed models, dataclasses, enums, and well-defined interfaces over ad hoc dictionaries or string conventions.
+- Reuse existing application runner, script runner, observation, selector, navigation, storage, BlueStacks, ADB, and artifact abstractions.
+- Delete obsolete code paths after migrations. Do not preserve legacy serializations unless the user explicitly asks and the plan explains why.
 
 ## Coding Style
-- Python code targets Python 3.13+ and should follow PEP 8 with 4 spaces, type hints, and clear module boundaries.
-- Keep imports at the top of the file, grouped standard library first, then third-party packages, then local `pnc_automation` imports.
-- Favor idiomatic Python and the standard library first; introduce third-party dependencies only when they provide clear value and are compatible with `pyproject.toml`.
-- Prefer dataclasses, enums, and typed domain models over ad hoc dictionaries, tuples, or hard-coded strings when representing stable concepts.
-- Keep functions and methods concise, focused, and readable; prefer early returns and compact conditional logic for simple cases.
-- Favor comprehensions, decorators, lambdas, functional tools, assignment expressions, and structural pattern matching when they keep the code readable; avoid them when they obscure intent.
+
+- Python targets 3.13+ and follows PEP 8 with 4-space indentation and type hints.
+- Keep imports at the top, grouped standard library, third-party, then local `pnc_automation` imports.
+- Prefer `pathlib.Path` for filesystem paths.
+- Keep functions focused and readable. Use comprehensions, pattern matching, decorators, or functional tools only when they improve clarity.
 - Handle `None` explicitly with guard clauses, early returns, or exceptions.
-- Do not implement heuristics that guess or probe for multiple field, attribute, or key names. Use the precise intended symbol name or a well-defined interface.
-- Use `pathlib.Path` for filesystem paths and the existing storage/artifact helpers when they already model the concept.
+- Do not guess among multiple possible field, attribute, or key names. Use the precise intended symbol or a defined interface.
+- Add concise docstrings for every class or function you add or modify, including private helpers with meaningful logic.
+- Add comments only for non-obvious intent, invariants, or constraints.
 
-## Development Tips
-- Runtime package code lives under `pnc_automation/`; tests live under `tests/`; live/manual tools live under `tools/`; authored automation YAML lives under `scripts/`; user configuration examples live under `config/`.
-- Treat `config/*.example.yaml` as documented templates. Do not overwrite real local config files such as `config/accounts.yaml` or `config/castle_targets.yaml` unless the task explicitly asks for it.
-- Screenshot, OCR, navigation, and live-run evidence is generated under `artifacts/` and temporary test directories. Use it for debugging, but do not treat fresh generated output as source code.
-- Reuse the existing application runner, script runner, observation, selector, navigation, and storage abstractions instead of adding parallel entry points.
-- BlueStacks/ADB behavior belongs behind the existing emulator/session/client interfaces so offline tests can keep using fakes.
-- If unrelated workspace changes already exist, continue the requested task and do not stop for those changes; never revert unrelated files unless the user explicitly asks.
+## Repository Map
 
-## Testing
-- Tests live under `tests/` and use Python's standard `unittest` runner. Keep normal tests offline/headless: they must not require BlueStacks, ADB, live game state, network access, or credentials unless they are explicitly opt-in live smoke tests.
-- Run the full offline suite with `python -m unittest discover -s tests`.
-- Run targeted tests with module or class paths, for example `python -m unittest tests.test_world_map_search` or `python -m unittest tests.test_flows_and_tasks.SomeTestClass.test_specific_case`.
-- The package requires Python 3.13+ per `pyproject.toml`. If imports fail in a fresh environment, install the package dependencies before testing.
-- `tests/__init__.py` redirects temporary files into `.tmp_test_workspace`; treat `.tmp_test_workspace/`, `.tmp_test_artifacts/`, and `artifacts/` as generated test/runtime output unless the task specifically concerns persisted evidence.
-- Prefer adding focused unit coverage beside the related behavior in the existing `tests/test_*.py` module. Reuse shared builders and fakes from `tests/test_support.py` instead of inventing parallel fixtures.
-- Keep integration-style coverage deterministic by using saved screenshots, authored YAML, fake sessions, and explicit fixtures. Do not make ordinary tests depend on live emulator timing or the current account state.
-- When a bug is discovered from a real screenshot, add a regression test for it. Prefer a committed deterministic fixture when the image is safe and reasonably sized; otherwise reference the screenshot through the local path mapping file `tests/data/local_fixture_artifacts.json` (copy `tests/data/local_fixture_artifacts.example.json` first) so the test can run locally without hardcoding machine-specific `artifacts/` paths.
-- Screenshot-backed tests must fail clearly on malformed inputs and must skip with an explicit message when a required local-only fixture path has not been configured yet; do not leave them crashing with raw `FileNotFoundError`.
+- Runtime package code: `pnc_automation/`
+- Offline tests and fakes: `tests/`
+- Live/manual tools: `tools/`
+- Authored automation YAML: `scripts/`
+- Reusable run script guidance: `scripts/README.md`
+- User config examples: `config/*.example.yaml`
+- Real local config: `config/accounts.yaml`, `config/castles.yaml`, `config/castle_targets.yaml`
+- Runtime evidence: `artifacts/`
+- Reviewed plans and implementation reviews: `reviewed_plans/`
+- Local workflow skills: `skills/`
+- Prompt templates: `prompts/`
 
-### Live smoke tests
-- Live smoke tests are opt-in `unittest` modules named `tests/test_live_*_smoke.py`; they are skipped unless their environment flag is set.
-- The shared account-navigation and spatial-surface smoke tests use `PNC_RUN_LIVE_SMOKE=1`, with optional `PNC_LIVE_SMOKE_CONFIG`, `PNC_LIVE_SMOKE_ACCOUNT`, and `PNC_LIVE_SMOKE_SCRIPT`.
-- The chat workflow smoke test uses `PNC_RUN_LIVE_CHAT_SMOKE=1`, with optional `PNC_LIVE_CHAT_CONFIG`, `PNC_LIVE_CHAT_ACCOUNT`, and `PNC_LIVE_CHAT_BASELINE_SECONDS`.
-- The home-city atlas smoke test uses `PNC_RUN_LIVE_HOME_CITY_MAP_SMOKE=1`, with optional `PNC_LIVE_SMOKE_CONFIG`, `PNC_LIVE_HOME_CITY_MAP_SMOKE_ACCOUNTS`, `PNC_LIVE_HOME_CITY_MAP_SMOKE_SEED`, and `PNC_LIVE_HOME_CITY_MAP_SMOKE_TARGETS`.
-- The world-map movement calibration smoke test uses `PNC_RUN_LIVE_WORLD_MAP_MOVEMENT_CALIBRATION=1`, with optional `PNC_LIVE_WORLD_MAP_MOVEMENT_CONFIG` and `PNC_LIVE_WORLD_MAP_MOVEMENT_ACCOUNT`.
-- If no other live target is proposed, use the BlueStacks instance/account configured for `testing` with the PNC account/castle `pine cobaye 1`.
-- Before running any live smoke test, verify BlueStacks is running, ADB can reach the configured instance, and the requested account/castle configuration exists under `config/`.
+## Config And Secrets
 
-### Validation workflow (required)
-- For pure code changes, run `python -m unittest discover -s tests` before finishing.
-- For narrow changes, run the most relevant targeted test first, then run the full offline suite once the focused failure is fixed.
-- For changes touching live runtime boundaries, selectors, screen classification, navigation, or ADB/emulator integration, run the full offline suite and call out which live smoke flag should be used for optional manual validation.
-- For selector-registry or navigation-selector changes, include the relevant offline tests and consider the live tools only when real-device evidence is needed: `python tools/validate_navigation_selectors.py`, `python tools/update_selector_registry.py`, `python tools/discover_selector_registry.py`, or `tools/run_selector_discovery_workflow.bat`.
-- For world-map movement calibration changes, run the relevant offline tests first, then use `python tools/run_world_map_movement_calibration.py` or the live calibration smoke flag when a live account is available.
+- Treat `config/*.example.yaml` as documented templates.
+- Do not overwrite real local config files unless the user explicitly asks.
+- Do not paste credentials, tokens, or account secrets into final answers.
+- When validating configs, prefer typed loaders and existing validation helpers over string parsing.
+- For `castle_targets.yaml`, validate against `accounts.yaml`, `castles.yaml`, and, when relevant, live BlueStacks roster evidence.
 
-### Test failure handling
-- Read the failing assertion and traceback first; most tests are ordinary `unittest` failures and should not need a custom log parser.
-- If a live smoke test fails, inspect the generated observation artifacts and screenshots under `artifacts/` for the run label before changing code.
-- If a test writes stale generated evidence or temporary files, clean only the generated output needed for the rerun. Never remove authored config, scripts, reviewed plans, or user changes as part of test cleanup.
+## Testing Strategy
 
-## DRY enforcement checklist (required)
+- Tests use Python `unittest`. On this Windows workspace, prefer `py` when the `python` alias is unavailable.
+- Full offline suite: `py -m unittest discover -s tests`.
+- Targeted tests: `py -m unittest tests.test_world_map_search` or `py -m unittest tests.test_flows_and_tasks.SomeTestClass.test_specific_case`.
+- Keep normal tests offline/headless. They must not require BlueStacks, ADB, live game state, network access, or credentials.
+- Use saved screenshots, authored YAML, fake sessions, and explicit fixtures for deterministic integration-style coverage.
+- When a live screenshot exposes a bug, add a regression test. Prefer a committed deterministic fixture when safe and reasonably sized; otherwise use `tests/data/local_fixture_artifacts.json` copied from the example.
+- Screenshot-backed tests must skip clearly when local-only fixtures are not configured.
+- Test shape should follow risk: many fast unit tests, fewer integration tests, and a narrow set of high-value live smoke tests for real emulator behavior.
 
-Before you finish:
-- Confirm there is exactly one canonical implementation per concept.
-- Confirm there are no duplicated predicates/formatters/parsers.
-- Confirm obsolete code paths/interfaces were removed.
-- Confirm naming reflects ownership (policy vs consumer).
+## Live BlueStacks Validation
+
+Live smoke tests are opt-in modules named `tests/test_live_*_smoke.py`.
+
+- Shared account navigation and spatial surface: `PNC_RUN_LIVE_SMOKE=1`
+- Chat workflow: `PNC_RUN_LIVE_CHAT_SMOKE=1`
+- Home-city atlas/building navigation: `PNC_RUN_LIVE_HOME_CITY_MAP_SMOKE=1`
+- World-map movement calibration: `PNC_RUN_LIVE_WORLD_MAP_MOVEMENT_CALIBRATION=1`
+
+Before live validation:
+
+- Confirm the requested account, castle target, and BlueStacks display name exist in `config/`.
+- Let the canonical runtime launch the configured BlueStacks instance when it is not already running.
+- Verify ADB reaches the resolved instance before continuing.
+- Use the configured `adb_path` and `bluestacks_config_path`; do not hard-code ports or device ids.
+- If no live target is specified, use account `testing` and castle `pine cobaye 1`.
+
+During live validation:
+
+- Start with the smallest smoke path that proves the risky boundary.
+- Use observation-based waits and existing runner/navigation abstractions.
+- Inspect generated screenshots, OCR JSON, logs, and observation artifacts under `artifacts/` before changing code after a live failure.
+- Preserve artifact paths in the final answer when they explain a result or failure.
+- Treat live validation as required for completion when a configured BlueStacks account is available and the change touches live runtime behavior, selectors, screen classification, navigation, ADB/emulator integration, or authored live workflows.
+
+## Validation Requirements
+
+- Pure code changes: run `py -m unittest discover -s tests` before finishing.
+- Narrow changes: run the most relevant targeted test first, then the full offline suite.
+- Selector or navigation changes: run relevant offline tests and consider `py tools/validate_navigation_selectors.py`, `py tools/update_selector_registry.py`, `py tools/discover_selector_registry.py`, or `tools/run_selector_discovery_workflow.bat`.
+- World-map movement calibration changes: run relevant offline tests, then use `py tools/run_world_map_movement_calibration.py` or the live calibration smoke flag when live access is available.
+- Skill-only or documentation-only changes: run the relevant validator when one exists; otherwise run `git diff --check`.
+- Always report commands run and whether they passed, failed, or were skipped.
+
+## Planning, Review, And Skills
+
+- Use `skills/create-plan` for substantial implementation plans.
+- Use `skills/write-code` for implementation-heavy work.
+- Use `skills/review-code` for review requests or commit/diff audits.
+- Use `skills/test-bluestacks-live` for live BlueStacks validation.
+- Treat `prompts/` as legacy/local inspiration, not as a reason to skip current best practice.
+- For reviews, findings come first, ordered by severity, with file and line references. If no issues are found, say so and name remaining risk.
+
+## Working Tree Safety
+
+- The working tree may already be dirty. Never revert or overwrite user changes unless explicitly asked.
+- If unrelated changes exist, ignore them. If they affect the requested task, work with them and mention the interaction.
+- Do not use destructive commands such as `git reset --hard` or `git checkout --` unless the user clearly requests that operation.
+- Clean only generated evidence needed for reruns. Never remove authored config, scripts, reviewed plans, or user work as test cleanup.
+
+## Done Checklist
+
+Before final response:
+
+- Confirm the implementation matches the requested behavior, not only the plan.
+- Confirm exactly one canonical implementation exists for each concept touched.
+- Confirm no duplicated predicates, parsers, formatters, selectors, workflows, or config schemas were introduced.
+- Confirm obsolete code paths/interfaces were removed or migrated.
+- Confirm naming reflects ownership.
+- Confirm offline validation passed or explain failures.
+- Confirm live validation passed for live/runtime changes, or state the exact blocker and remaining command.
+- Summarize changed files and important artifacts without exposing secrets.
