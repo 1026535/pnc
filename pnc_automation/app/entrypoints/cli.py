@@ -25,7 +25,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Parses CLI arguments, runs automation, and prints a summary."""
 
     arguments = list(sys.argv[1:] if argv is None else argv)
-    if arguments and arguments[0] not in {"run", "login", "build", "open-building", "send-mail", "run-mail-schedules"}:
+    if arguments and arguments[0] not in {
+        "run", "login", "build", "construct", "open-building", "send-mail", "run-mail-schedules"
+    }:
         arguments.insert(0, "run")
 
     parser = argparse.ArgumentParser(description="Run Puzzles & Conquest automation.")
@@ -46,6 +48,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     _add_common_arguments(build_parser)
     _add_castle_arguments(build_parser)
     _add_building_upgrade_arguments(build_parser)
+
+    construct_parser = subparsers.add_parser(
+        "construct",
+        help="Construct one exact building from its canonical empty-slot family.",
+    )
+    _add_common_arguments(construct_parser)
+    _add_castle_arguments(construct_parser)
+    _add_building_construction_arguments(construct_parser)
 
     open_building_parser = subparsers.add_parser(
         "open-building",
@@ -94,6 +104,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         step_result = application.run_task(
             account_id=parsed.account,
             task_id=TaskId.OPEN_BUILDING,
+            params={"building": parsed.building},
+        )
+        print(_serialize_step_result(account_id=parsed.account, step_result=step_result))
+        return 0
+    if parsed.command == "construct":
+        castle = _parse_optional_castle(parser, parsed)
+        if castle is not None:
+            application.prepare_account_session(account_id=parsed.account, castle=castle)
+        step_result = application.run_task(
+            account_id=parsed.account,
+            task_id=TaskId.BUILDING_CONSTRUCT,
             params={"building": parsed.building},
         )
         print(_serialize_step_result(account_id=parsed.account, step_result=step_result))
@@ -181,6 +202,16 @@ def _add_open_building_arguments(parser: argparse.ArgumentParser) -> None:
         "--building",
         required=True,
         help="Exact home-city building id to open, such as infantry_barracks or sanctum.",
+    )
+
+
+def _add_building_construction_arguments(parser: argparse.ArgumentParser) -> None:
+    """Adds the exact constructable building id used by the direct command."""
+
+    parser.add_argument(
+        "--building",
+        required=True,
+        help="Exact constructable building id, such as farm, institute, or alliance_hall.",
     )
 
 

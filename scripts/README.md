@@ -20,6 +20,17 @@ This folder contains authored automation runbooks grouped by intent.
 - For authored recurring mail, define reusable payloads in `config/mail_definitions.yaml`, schedules in `config/mail_schedules.yaml`, and invoke `run-mail-schedules` hourly from the external scheduler.
 - Reusable building-upgrade batches belong under `scripts/manual/build_batches/` as ordered building-id files, not as duplicated multi-step run scripts.
 
+Construct one exact missing building with `building_construct` (or the direct `construct --building ...` CLI command):
+
+```yaml
+steps:
+  - task: building_construct
+    params:
+      building: farm
+```
+
+When resources are sufficient, construction starts directly without a resource popup. An unmet-resource popup is handled only as the insufficient-resources failure branch; this task never spends premium currency or uses speedups.
+
 ## Multi-Castle Pattern
 
 Use repeat blocks when you want to finish one full workflow for one castle before moving to the next:

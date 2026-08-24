@@ -1555,6 +1555,122 @@ selectors:
   - PNC_HOME_CITY
   status: planned
   detection_kind: planned
+- id: PNC_BUILD_HEADER
+  screens:
+  - PNC_BUILD_MENU_FIXED_SLOT
+  - PNC_BUILD_MENU_LARGE_SLOT
+  - PNC_BUILD_MENU_SMALL_SLOT
+  status: screenshot_seeded
+  detection_kind: planned
+  interaction_kind: label
+- id: PNC_BUILD_INSTITUTE_OPTION
+  screens:
+  - PNC_BUILD_MENU_FIXED_SLOT
+  status: screenshot_seeded
+  detection_kind: planned
+  interaction_kind: action
+- id: PNC_BUILD_WAREHOUSE_OPTION
+  screens:
+  - PNC_BUILD_MENU_FIXED_SLOT
+  status: screenshot_seeded
+  detection_kind: planned
+  interaction_kind: action
+- id: PNC_BUILD_TRAP_WORKSHOP_OPTION
+  screens:
+  - PNC_BUILD_MENU_FIXED_SLOT
+  status: screenshot_seeded
+  detection_kind: planned
+  interaction_kind: action
+- id: PNC_BUILD_GODDESS_STATUE_OPTION
+  screens:
+  - PNC_BUILD_MENU_FIXED_SLOT
+  status: screenshot_seeded
+  detection_kind: planned
+  interaction_kind: action
+- id: PNC_BUILD_ALLIANCE_HALL_OPTION
+  screens:
+  - PNC_BUILD_MENU_LARGE_SLOT
+  status: screenshot_seeded
+  detection_kind: planned
+  interaction_kind: action
+- id: PNC_BUILD_BLACKSMITH_OPTION
+  screens:
+  - PNC_BUILD_MENU_LARGE_SLOT
+  status: screenshot_seeded
+  detection_kind: planned
+  interaction_kind: action
+- id: PNC_BUILD_MARKET_OPTION
+  screens:
+  - PNC_BUILD_MENU_LARGE_SLOT
+  status: screenshot_seeded
+  detection_kind: planned
+  interaction_kind: action
+- id: PNC_BUILD_FARM_OPTION
+  screens:
+  - PNC_BUILD_MENU_SMALL_SLOT
+  status: interaction_validated
+  detection_kind: planned
+  interaction_kind: action
+  notes:
+  - Live observed on the small-slot Build menu before construction execution.
+- id: PNC_BUILD_LUMBER_CAMP_OPTION
+  screens:
+  - PNC_BUILD_MENU_SMALL_SLOT
+  status: screenshot_seeded
+  detection_kind: planned
+  interaction_kind: action
+- id: PNC_BUILD_MOON_WELL_OPTION
+  screens:
+  - PNC_BUILD_MENU_SMALL_SLOT
+  status: screenshot_seeded
+  detection_kind: planned
+  interaction_kind: action
+- id: PNC_BUILD_RECRUITING_CENTER_OPTION
+  screens:
+  - PNC_BUILD_MENU_SMALL_SLOT
+  status: screenshot_seeded
+  detection_kind: planned
+  interaction_kind: action
+- id: PNC_BUILD_INFIRMARY_OPTION
+  screens:
+  - PNC_BUILD_MENU_SMALL_SLOT
+  status: screenshot_seeded
+  detection_kind: planned
+  interaction_kind: action
+- id: PNC_BUILD_IRON_MINE_OPTION
+  screens:
+  - PNC_BUILD_MENU_SMALL_SLOT
+  status: screenshot_seeded
+  detection_kind: planned
+  interaction_kind: action
+- id: PNC_BUILD_GOLD_MINE_OPTION
+  screens:
+  - PNC_BUILD_MENU_SMALL_SLOT
+  status: screenshot_seeded
+  detection_kind: planned
+  interaction_kind: action
+- id: PNC_BUILDING_CONSTRUCTION_HEADER
+  screens:
+  - PNC_BUILDING_CONSTRUCTION
+  status: screenshot_seeded
+  detection_kind: planned
+  interaction_kind: label
+- id: PNC_BUILDING_CONSTRUCTION_BUILD_BUTTON
+  screens:
+  - PNC_BUILDING_CONSTRUCTION
+  status: interaction_validated
+  detection_kind: planned
+  interaction_kind: action
+  notes:
+  - Live validated by constructing a Farm with sufficient wood on the testing instance.
+- id: PNC_BUILDING_CONSTRUCTION_BUILD_NOW_BUTTON
+  screens:
+  - PNC_BUILDING_CONSTRUCTION
+  status: screenshot_seeded
+  detection_kind: planned
+  interaction_kind: action
+  notes:
+  - Premium instant-build action; building construction tasks must never select it.
 - id: PNC_BUILDING_UPGRADE_BUTTON
   screens:
   - PNC_BUILDING_DETAILS

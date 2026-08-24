@@ -13,7 +13,11 @@ from PIL import Image
 from pnc_automation.app.authoring.config.models import CastleIdentity
 from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.app.pnc.domain.chat import ChatChannel, ChatEntryKind
-from pnc_automation.app.pnc.domain.building_catalog import is_upgradeable_primary_screen
+from pnc_automation.app.pnc.domain.building_catalog import (
+    building_construction_source,
+    home_city_object_definition_for_label,
+    is_upgradeable_primary_screen,
+)
 from pnc_automation.app.pnc.domain.mail import MailboxType, compose_text_field_selector_ids
 from pnc_automation.app.pnc.domain.observation import (
     Bounds,
@@ -226,7 +230,8 @@ _BUILDING_REQUIREMENT_SECTION_TERMINATORS = frozenset({"MATERIALSREQUIRED", "EFF
 _BUILDING_UPGRADE_CONFIRMATION_REQUIRED_SECTION_TEXTS = frozenset({"TIME"})
 _BUILDING_UPGRADE_CONFIRMATION_SUPPORT_SECTION_TEXTS = frozenset({"REQUIREMENT", "MATERIALSREQUIRED", "EFFECT"})
 _BUILD_QUEUE_HEADER_TEXTS = frozenset({"BUILDQUEUE"})
-_BUILD_QUEUE_SUPPORT_TEXTS = frozenset({"SPEEDUP", "GO", "IDLE", "EXPIRED"})
+_BUILD_QUEUE_SUPPORT_TEXTS = frozenset({"SPEEDUP", "GO", "IDLE", "EXPIRED", "ACTIVATE", "INACTIVE"})
+_BUILD_QUEUE_HEADER_MAX_Y_RATIO = 0.34
 _RESEARCH_QUEUE_HEADER_TEXTS = frozenset({"RESEARCHQUEUE"})
 _RESEARCH_QUEUE_SUPPORT_TEXTS = frozenset({"GO", "IDLE"})
 _BUILD_QUEUE_ACTIVE_TITLE_PATTERN = re.compile(r"^\s*UPGRADING\s*[:.]?\s*(?P<title>.+?)\s*$", re.IGNORECASE)
@@ -1743,6 +1748,13 @@ class PncObservationEnricher:
             more_menu = _build_more_menu_additions(image=image, lines=lines, anchors=anchors)
             if more_menu is not None:
                 return more_menu
+        if request.allows_screen(ScreenType.PNC_BUILDING_CONSTRUCTION) and can_attempt_screen_family_ocr(
+            request_screen=ScreenType.PNC_BUILDING_CONSTRUCTION,
+            observed_screen=screen_type,
+        ):
+            building_construction = _build_building_construction_additions(image=image, lines=lines)
+            if building_construction is not None:
+                return building_construction
         text_screen = _build_matching_text_screen_additions(
             image=image,
             lines=lines,
@@ -2772,6 +2784,70 @@ def _find_world_map_overview_header_line(*, image: Image.Image, lines: tuple[Ocr
             continue
         return line
     return None
+
+
+def _build_building_construction_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Recognizes the resource-funded confirmation shown after selecting a build-menu option."""
+
+    header = _find_line_matching(
+        lines=lines,
+        predicate=lambda line: (
+            (definition := home_city_object_definition_for_label(line.text)) is not None
+            and building_construction_source(definition.id) is not None
+        ),
+        max_y=int(image.height * 0.15),
+    )
+    build_line = _find_line_matching(
+        lines=lines,
+        predicate=lambda line: normalize_ocr_text(line.text) == "BUILD" and line.bounds.x >= image.width * 0.6,
+        min_y=int(image.height * 0.2),
+        max_y=int(image.height * 0.4),
+    )
+    build_now_line = _find_line_matching(
+        lines=lines,
+        predicate=lambda line: normalize_ocr_text(line.text) == "BUILDNOW",
+        min_y=int(image.height * 0.2),
+        max_y=int(image.height * 0.4),
+    )
+    normalized_texts = {normalize_ocr_text(line.text) for line in lines}
+    if (
+        header is None
+        or build_line is None
+        or build_now_line is None
+        or "TIME" not in normalized_texts
+        or "MATERIALSREQUIRED" not in normalized_texts
+    ):
+        return None
+    return ObservationAdditions(
+        visible_elements={
+            UiElementId.PNC_BUILDING_CONSTRUCTION_HEADER: _make_visible_from_line(
+                selector_id=UiElementId.PNC_BUILDING_CONSTRUCTION_HEADER,
+                line=header,
+            ),
+            UiElementId.PNC_BUILDING_CONSTRUCTION_BUILD_BUTTON: _make_visible_from_line(
+                selector_id=UiElementId.PNC_BUILDING_CONSTRUCTION_BUILD_BUTTON,
+                line=build_line,
+            ),
+            UiElementId.PNC_BUILDING_CONSTRUCTION_BUILD_NOW_BUTTON: _make_visible_from_line(
+                selector_id=UiElementId.PNC_BUILDING_CONSTRUCTION_BUILD_NOW_BUTTON,
+                line=build_now_line,
+            ),
+            UiElementId.PNC_BACK_BUTTON_TOP_LEFT: _make_visible(
+                selector_id=UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+                x=0,
+                y=0,
+                width=max(1, int(image.width * 0.12)),
+                height=max(1, int(image.height * 0.08)),
+            ),
+        },
+        screen_evidence=(
+            ScreenEvidence(ScreenType.PNC_BUILDING_CONSTRUCTION, "ocr_building_construction_confirmation"),
+        ),
+    )
 
 
 def _build_world_map_overview_viewport_marker(
@@ -4468,29 +4544,50 @@ def _build_building_detail_additions(
     )
     if support_line is None:
         return None
+    visible_elements = {
+        UiElementId.PNC_BACK_BUTTON_TOP_LEFT: _make_visible(
+            selector_id=UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+            x=0,
+            y=0,
+            width=max(1, int(image.width * 0.12)),
+            height=max(1, int(image.height * 0.08)),
+        ),
+        UiElementId.PNC_BUILDING_UPGRADE_BUTTON: _make_visible(
+            selector_id=UiElementId.PNC_BUILDING_UPGRADE_BUTTON,
+            x=max(0, upgrade_anchor.bounds.x - max(12, upgrade_anchor.bounds.width // 2)),
+            y=max(0, upgrade_anchor.bounds.y - max(10, upgrade_anchor.bounds.height)),
+            width=min(
+                image.width,
+                upgrade_anchor.bounds.width + max(40, upgrade_anchor.bounds.width),
+            ),
+            height=min(
+                image.height,
+                upgrade_anchor.bounds.height + max(20, upgrade_anchor.bounds.height),
+            ),
+        ),
+    }
+    confirm_line = _find_building_upgrade_confirm_line(image=image, lines=lines)
+    required_section_lines = _find_text_lines_in_texts(
+        lines=lines,
+        texts=_BUILDING_UPGRADE_CONFIRMATION_REQUIRED_SECTION_TEXTS,
+        min_y=int(image.height * 0.3),
+    )
+    support_section_lines = _find_text_lines_in_texts(
+        lines=lines,
+        texts=_BUILDING_UPGRADE_CONFIRMATION_SUPPORT_SECTION_TEXTS,
+        min_y=int(image.height * 0.35),
+    )
+    if confirm_line is not None and required_section_lines and support_section_lines:
+        visible_elements[UiElementId.PNC_BUILDING_UPGRADE_CONFIRM_BUTTON] = _make_visible_from_line(
+            selector_id=UiElementId.PNC_BUILDING_UPGRADE_CONFIRM_BUTTON,
+            line=confirm_line,
+        )
+        visible_elements[UiElementId.PNC_BUILDING_UPGRADE_CONFIRMATION_PANEL] = _make_visible_from_lines(
+            selector_id=UiElementId.PNC_BUILDING_UPGRADE_CONFIRMATION_PANEL,
+            lines=(title_line, confirm_line, *required_section_lines, *support_section_lines),
+        )
     return ObservationAdditions(
-        visible_elements={
-            UiElementId.PNC_BACK_BUTTON_TOP_LEFT: _make_visible(
-                selector_id=UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
-                x=0,
-                y=0,
-                width=max(1, int(image.width * 0.12)),
-                height=max(1, int(image.height * 0.08)),
-            ),
-            UiElementId.PNC_BUILDING_UPGRADE_BUTTON: _make_visible(
-                selector_id=UiElementId.PNC_BUILDING_UPGRADE_BUTTON,
-                x=max(0, upgrade_anchor.bounds.x - max(12, upgrade_anchor.bounds.width // 2)),
-                y=max(0, upgrade_anchor.bounds.y - max(10, upgrade_anchor.bounds.height)),
-                width=min(
-                    image.width,
-                    upgrade_anchor.bounds.width + max(40, upgrade_anchor.bounds.width),
-                ),
-                height=min(
-                    image.height,
-                    upgrade_anchor.bounds.height + max(20, upgrade_anchor.bounds.height),
-                ),
-            ),
-        },
+        visible_elements=visible_elements,
         screen_evidence=(ScreenEvidence(ScreenType.PNC_BUILDING_DETAILS, "ocr_building_detail"),),
     )
 
@@ -4502,7 +4599,11 @@ def _build_build_queue_additions(
 ) -> ObservationAdditions | None:
     """Returns the build-queue overlay when OCR exposes its header plus queue-row support."""
 
-    header = _find_header_line(lines=lines, header_texts=_BUILD_QUEUE_HEADER_TEXTS, max_y=int(image.height * 0.18))
+    header = _find_header_line(
+        lines=lines,
+        header_texts=_BUILD_QUEUE_HEADER_TEXTS,
+        max_y=int(image.height * _BUILD_QUEUE_HEADER_MAX_Y_RATIO),
+    )
     if header is None:
         return None
     entries: list[DetectedListEntry] = []

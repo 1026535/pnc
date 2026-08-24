@@ -3,6 +3,7 @@
 from pnc_automation.app.entrypoints.api import (
     AutomationApi,
     build_api,
+    building_construct,
     building_upgrade,
     campaign,
     collect_kingdom_chat,
@@ -20,6 +21,7 @@ __all__ = [
     "AutomationApi",
     "build_api",
     "build_application_runner",
+    "building_construct",
     "building_upgrade",
     "campaign",
     "collect_kingdom_chat",

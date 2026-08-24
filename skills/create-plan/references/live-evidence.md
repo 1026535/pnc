@@ -5,10 +5,22 @@ Use this reference only when a plan needs current BlueStacks UI or runtime evide
 ## Preconditions
 
 1. Use the `test-bluestacks-live` skill and the existing PNC runtime. Do not invent a second emulator-control path.
-2. Resolve the account, castle, and BlueStacks display name from `config/`. If no target is specified, use `testing` and `pine cobaye 1`.
+2. Resolve the account and BlueStacks display name from `config/`. If no castle target is specified, use whichever castle is currently active on the `testing` instance; observe and record its identity, but do not select or switch castles. If a castle is explicitly specified, resolve and verify that target before navigating.
 3. Let `BlueStacksInstanceResolver` launch the configured instance when it is closed. Wait for `BlueStacksSession.connect()` and `ensure_responsive()` to succeed.
 4. Keep ADB local and use the configured `adb_path`, host, and port. Never print credentials, tokens, or unrelated device data.
 5. Define the evidence question before acting, for example: "Which screen follows opening the Institute?" or "Is this selector visible on the current home-city screen?"
+6. Treat a planning-only request as authorization for safe, read-only observation within the requested scope. It is not authorization for a state-changing action.
+
+## Mandatory Evidence Gate
+
+Before finalizing a plan, classify each material current-runtime question as one of:
+
+- `artifact_answered`: a current repository artifact directly answers it;
+- `live_observed`: a bounded live trace answers it;
+- `live_blocked`: a bounded live attempt reached a named stop condition; or
+- `mutation_boundary`: safe navigation reached the last read-only state, but answering the remainder requires explicit authorization for a state-changing action.
+
+Do not classify a question as future implementation work merely because live setup has a cost. If the plan's selectors, transitions, or success criteria depend on it, attempt the bounded workflow now. When the terminal action is forbidden, gather evidence up to the mutation boundary and preserve that screen instead of skipping live inspection entirely.
 
 ## Bounded Observation Loop
 
@@ -51,5 +63,7 @@ Include a compact evidence table in the plan or planning response with:
 - screenshot, OCR, observation, and log artifact paths;
 - claims labeled `observed`, `inferred`, or `unknown`; and
 - the final stop reason, including any blocker or authorization needed.
+
+Also list each original evidence question and its `artifact_answered`, `live_observed`, `live_blocked`, or `mutation_boundary` disposition. A plan cannot pass the evidence contract when a material question is merely deferred without a live attempt.
 
 Do not embed secrets or treat a screenshot as proof of behavior that was not actually observed. Convert live-discovered defects into deterministic regression fixtures or tests when practical.

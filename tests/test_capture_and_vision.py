@@ -64,7 +64,10 @@ from pnc_automation.app.pnc.vision.selector_catalog import (
     write_selector_catalog_document,
 )
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
-from pnc_automation.app.pnc.vision.spatial_surfaces import build_world_map_spatial_surface
+from pnc_automation.app.pnc.vision.spatial_surfaces import (
+    build_home_city_spatial_surface,
+    build_world_map_spatial_surface,
+)
 from pnc_automation.app.pnc.vision.selectors import (
     ClickDefinition,
     DetectionKind,
@@ -1683,6 +1686,88 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertFalse(observation.has(UiElementId.PNC_BUILDING_REQUIREMENT_HEADER))
             self.assertFalse(observation.has(UiElementId.PNC_BUILDING_REQUIREMENT_GO_BUTTON))
 
+    def test_observation_builder_classifies_resource_funded_construction_confirmation(self) -> None:
+        """Distinguishes ordinary Build from the premium Build Now action on construction confirmation."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                artifact_directory="building_construction_confirmation",
+                label="farm_construction_confirmation",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Farm", x=179, y=23, width=124, height=46),
+                            _ocr_line("Build", x=701, y=435, width=89, height=37),
+                            _ocr_line("Build Now", x=437, y=455, width=156, height=30),
+                            _ocr_line("Time", x=58, y=537, width=75, height=37),
+                            _ocr_line("Requirement", x=61, y=714, width=176, height=30),
+                            _ocr_line("Castle: Lv.1", x=153, y=768, width=141, height=27),
+                            _ocr_line("Materials required", x=60, y=866, width=242, height=30),
+                            _ocr_line("Effect", x=60, y=1036, width=83, height=33),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_BUILDING_CONSTRUCTION)
+            self.assertTrue(observation.has(UiElementId.PNC_BUILDING_CONSTRUCTION_BUILD_BUTTON))
+            self.assertTrue(observation.has(UiElementId.PNC_BUILDING_CONSTRUCTION_BUILD_NOW_BUTTON))
+            self.assertFalse(observation.has(UiElementId.PNC_BUILDING_REQUIREMENT_HEADER))
+
+    def test_generic_building_detail_exposes_upgrade_confirmation_panel(self) -> None:
+        """Models the final ordinary Upgrade action for repeatable buildings such as Farm."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                artifact_directory="farm_upgrade_confirmation",
+                label="farm_upgrade_confirmation",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Farm", x=180, y=23, width=123, height=46),
+                            _ocr_line("Where Food is produced. Upgrade", x=471, y=245, width=415, height=26),
+                            _ocr_line("Upgrade", x=671, y=440, width=147, height=37),
+                            _ocr_line("Upgrade Now", x=400, y=458, width=212, height=32),
+                            _ocr_line("Time", x=59, y=552, width=71, height=29),
+                            _ocr_line("Requirement", x=62, y=713, width=177, height=27),
+                            _ocr_line("Materials required", x=61, y=865, width=251, height=26),
+                            _ocr_line("Effect", x=60, y=1035, width=83, height=31),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_BUILDING_DETAILS)
+            self.assertTrue(observation.has(UiElementId.PNC_BUILDING_UPGRADE_BUTTON))
+            self.assertTrue(observation.has(UiElementId.PNC_BUILDING_UPGRADE_CONFIRMATION_PANEL))
+            self.assertTrue(observation.has(UiElementId.PNC_BUILDING_UPGRADE_CONFIRM_BUTTON))
+
     def test_observation_builder_rejects_upgrade_like_non_building_screens(self) -> None:
         """Keeps ambiguous upgrade screens unknown when the building evidence is incomplete."""
 
@@ -1949,6 +2034,43 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertEqual(active_entries[0].title_text, "Wall")
             self.assertEqual(active_entries[0].timer_text, "00:48:16")
             self.assertEqual(active_entries[0].metadata["queue_state"], "upgrading")
+
+    def test_observation_builder_classifies_centered_idle_build_queue(self) -> None:
+        """Recognizes the live centered queue overlay when its first queue is idle and second queue inactive."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                artifact_directory="testing_build_queue",
+                label="centered_idle_build_queue",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Build Queue", x=327, y=428, width=249, height=44),
+                            _ocr_line("1st Build Queue", x=212, y=541, width=216, height=32),
+                            _ocr_line("Idle", x=209, y=596, width=57, height=33),
+                            _ocr_line("2nd Build Queue", x=213, y=703, width=225, height=30),
+                            _ocr_line("Activate", x=662, y=734, width=125, height=31),
+                            _ocr_line("Inactive", x=211, y=758, width=110, height=30),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_BUILD_QUEUE)
+            self.assertEqual(observation.entries(ListEntryKind.BUILDING), ())
 
     def test_observation_builder_classifies_world_map_from_coordinates_and_bottom_nav_ocr(self) -> None:
         """Recognizes the live root-map layout so root navigation does not fall back to KEYCODE_BACK."""
@@ -3496,6 +3618,54 @@ class CaptureAndVisionTests(unittest.TestCase):
                     )
                 )
             )
+
+    def test_home_city_surface_detects_unlabeled_small_plot_geometry(self) -> None:
+        """Produces a typed small-slot object for a bright foundation surrounded by darker terrain."""
+
+        image = Image.new("RGB", (900, 1600), (74, 104, 34))
+        ImageDraw.Draw(image).ellipse((395, 570, 505, 630), fill=(145, 145, 120))
+
+        surface = build_home_city_spatial_surface(
+            image=image,
+            lines=(),
+            selector_registry=None,
+        )
+
+        empty_slots = surface.objects_of_kind(SpatialObjectKind.HOME_EMPTY_SLOT)
+        self.assertEqual(len(empty_slots), 1)
+        self.assertEqual(empty_slots[0].metadata["home_city_object_id"], "small_territory_build_slot")
+        self.assertEqual(empty_slots[0].metadata["detection_source"], "foundation_geometry")
+        self.assertAlmostEqual(empty_slots[0].action_point[0], 450, delta=16)
+        self.assertAlmostEqual(empty_slots[0].action_point[1], 600, delta=16)
+
+    def test_home_city_surface_does_not_treat_uniform_terrain_as_empty_plot(self) -> None:
+        """Rejects terrain without the localized neutral foundation contrast required by geometry detection."""
+
+        surface = build_home_city_spatial_surface(
+            image=Image.new("RGB", (900, 1600), (74, 104, 34)),
+            lines=(),
+            selector_registry=None,
+        )
+
+        self.assertEqual(surface.objects_of_kind(SpatialObjectKind.HOME_EMPTY_SLOT), ())
+
+    def test_home_city_surface_does_not_treat_live_castle_details_as_empty_plots(self) -> None:
+        """Rejects bright castle geometry from the live regression screenshot."""
+
+        fixture_path = require_local_fixture_artifact(
+            "home_city_castle_empty_slot_false_positive_20260822",
+            default_repo_relative_path=(
+                "artifacts/2026-08-22/testing/"
+                "20260822T033821Z_building_construct_final_safe_slot_contract.png"
+            ),
+        )
+        surface = build_home_city_spatial_surface(
+            image=Image.open(fixture_path).convert("RGB"),
+            lines=(),
+            selector_registry=None,
+        )
+
+        self.assertEqual(surface.objects_of_kind(SpatialObjectKind.HOME_EMPTY_SLOT), ())
 
     def test_home_city_spatial_objects_rebuild_from_each_viewport_observation(self) -> None:
         """Rebuilds home-city building targets from current OCR geometry instead of any fixed building coordinate."""

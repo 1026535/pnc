@@ -26,6 +26,8 @@ class BuildingAction(StrEnum):
     CRAFT_TRAPS = "craft_traps"
     SPEEDUP_CRAFTING = "speedup_crafting"
     COLLECT_CRAFTED_TRAPS = "collect_crafted_traps"
+    CONSTRUCT_FROM_FIXED_SLOT = "construct_from_fixed_slot"
+    CONSTRUCT_FROM_LARGE_SLOT = "construct_from_large_slot"
     CONSTRUCT_FROM_SMALL_SLOT = "construct_from_small_slot"
     OPEN_GEAR_SCREEN = "open_gear_screen"
     OPEN_GEM_SCREEN = "open_gem_screen"
@@ -87,6 +89,14 @@ class HomeCityObjectGroup(StrEnum):
     SMALL_TERRITORY_BUILDING_FAMILY = "small_territory_building_family"
 
 
+class ConstructionSlotFamily(StrEnum):
+    """Identifies the legal source-slot family for one constructable building."""
+
+    FIXED = "fixed"
+    LARGE = "large"
+    SMALL = "small"
+
+
 class HomeCityObjectId(StrEnum):
     """Enumerates the canonical home-city buildings and semantically distinct slots."""
 
@@ -144,6 +154,16 @@ class HomeCityObjectDefinition:
     supported_actions: tuple[BuildingAction, ...] = ()
     upgradeable: bool = False
     map_coordinate: "HomeCityMapCoordinate | None" = None
+
+
+@dataclass(frozen=True, slots=True)
+class BuildingConstructionSource:
+    """Maps one constructable building to its canonical source slot, menu, and option selector."""
+
+    slot_family: ConstructionSlotFamily
+    slot_id: HomeCityObjectId
+    menu_screen_type: ScreenType
+    option_selector_id: UiElementId
 
 
 @dataclass(frozen=True, slots=True)
@@ -221,6 +241,7 @@ _HOME_CITY_OBJECT_DEFINITIONS = (
         home_city_labels=("Institute", "Academy"),
         building_group=HomeCityObjectGroup.FIXED_UTILITY_BUILDING_FAMILY,
         supported_actions=(
+            BuildingAction.CONSTRUCT_FROM_FIXED_SLOT,
             BuildingAction.UPGRADE,
             BuildingAction.OPEN_GLORY_LEVEL,
             BuildingAction.OPEN_DEVELOPMENT_RESEARCH,
@@ -237,7 +258,11 @@ _HOME_CITY_OBJECT_DEFINITIONS = (
         display_name="Warehouse",
         home_city_labels=("Warehouse",),
         building_group=HomeCityObjectGroup.FIXED_UTILITY_BUILDING_FAMILY,
-        supported_actions=(BuildingAction.UPGRADE, BuildingAction.OPEN_GLORY_LEVEL),
+        supported_actions=(
+            BuildingAction.CONSTRUCT_FROM_FIXED_SLOT,
+            BuildingAction.UPGRADE,
+            BuildingAction.OPEN_GLORY_LEVEL,
+        ),
         upgradeable=True,
         map_coordinate=HomeCityMapCoordinate(x=1449, y=1041),
     ),
@@ -248,6 +273,7 @@ _HOME_CITY_OBJECT_DEFINITIONS = (
         home_city_labels=("Trap Workshop",),
         building_group=HomeCityObjectGroup.FIXED_UTILITY_BUILDING_FAMILY,
         supported_actions=(
+            BuildingAction.CONSTRUCT_FROM_FIXED_SLOT,
             BuildingAction.UPGRADE,
             BuildingAction.OPEN_GLORY_LEVEL,
             BuildingAction.OPEN_TRAP_EFFECT_TABLE,
@@ -337,6 +363,7 @@ _HOME_CITY_OBJECT_DEFINITIONS = (
         home_city_labels=("Blacksmith",),
         building_group=HomeCityObjectGroup.LARGE_SUPPORT_BUILDING_FAMILY,
         supported_actions=(
+            BuildingAction.CONSTRUCT_FROM_LARGE_SLOT,
             BuildingAction.UPGRADE,
             BuildingAction.OPEN_GLORY_LEVEL,
             BuildingAction.OPEN_GEAR_SCREEN,
@@ -356,6 +383,7 @@ _HOME_CITY_OBJECT_DEFINITIONS = (
         home_city_labels=("Alliance Hall",),
         building_group=HomeCityObjectGroup.LARGE_SUPPORT_BUILDING_FAMILY,
         supported_actions=(
+            BuildingAction.CONSTRUCT_FROM_LARGE_SLOT,
             BuildingAction.UPGRADE,
             BuildingAction.OPEN_GLORY_LEVEL,
             BuildingAction.SEND_BACK_REINFORCEMENTS,
@@ -371,6 +399,7 @@ _HOME_CITY_OBJECT_DEFINITIONS = (
         home_city_labels=("Market",),
         building_group=HomeCityObjectGroup.LARGE_SUPPORT_BUILDING_FAMILY,
         supported_actions=(
+            BuildingAction.CONSTRUCT_FROM_LARGE_SLOT,
             BuildingAction.UPGRADE,
             BuildingAction.OPEN_GLORY_LEVEL,
             BuildingAction.OPEN_TRANSPORT_MEMBER_LIST,
@@ -524,6 +553,7 @@ _HOME_CITY_OBJECT_DEFINITIONS = (
         display_name="Goddess Statue",
         home_city_labels=("Goddess Statue",),
         supported_actions=(
+            BuildingAction.CONSTRUCT_FROM_FIXED_SLOT,
             BuildingAction.UPGRADE,
             BuildingAction.OPEN_GLORY_LEVEL,
             BuildingAction.SPEEDUP_UPGRADE,
@@ -649,21 +679,91 @@ _PRIMARY_SCREEN_BY_HOME_CITY_OBJECT_ID = {
     HomeCityObjectId.SAUROI_LAIR: ScreenType.PNC_SAUROI_LAIR,
     HomeCityObjectId.WALL: ScreenType.PNC_WALL,
 }
-_BUILD_MENU_MATCH_BY_HOME_CITY_OBJECT_ID = {
-    HomeCityObjectId.INSTITUTE: (ScreenType.PNC_BUILD_MENU_FIXED_SLOT, UiElementId.PNC_BUILD_INSTITUTE_OPTION),
-    HomeCityObjectId.WAREHOUSE: (ScreenType.PNC_BUILD_MENU_FIXED_SLOT, UiElementId.PNC_BUILD_WAREHOUSE_OPTION),
-    HomeCityObjectId.TRAP_WORKSHOP: (ScreenType.PNC_BUILD_MENU_FIXED_SLOT, UiElementId.PNC_BUILD_TRAP_WORKSHOP_OPTION),
-    HomeCityObjectId.GODDESS_STATUE: (ScreenType.PNC_BUILD_MENU_FIXED_SLOT, UiElementId.PNC_BUILD_GODDESS_STATUE_OPTION),
-    HomeCityObjectId.ALLIANCE_HALL: (ScreenType.PNC_BUILD_MENU_LARGE_SLOT, UiElementId.PNC_BUILD_ALLIANCE_HALL_OPTION),
-    HomeCityObjectId.BLACKSMITH: (ScreenType.PNC_BUILD_MENU_LARGE_SLOT, UiElementId.PNC_BUILD_BLACKSMITH_OPTION),
-    HomeCityObjectId.MARKET: (ScreenType.PNC_BUILD_MENU_LARGE_SLOT, UiElementId.PNC_BUILD_MARKET_OPTION),
-    HomeCityObjectId.FARM: (ScreenType.PNC_BUILD_MENU_SMALL_SLOT, UiElementId.PNC_BUILD_FARM_OPTION),
-    HomeCityObjectId.LUMBER_CAMP: (ScreenType.PNC_BUILD_MENU_SMALL_SLOT, UiElementId.PNC_BUILD_LUMBER_CAMP_OPTION),
-    HomeCityObjectId.MOON_WELL: (ScreenType.PNC_BUILD_MENU_SMALL_SLOT, UiElementId.PNC_BUILD_MOON_WELL_OPTION),
-    HomeCityObjectId.RECRUITING_CENTER: (ScreenType.PNC_BUILD_MENU_SMALL_SLOT, UiElementId.PNC_BUILD_RECRUITING_CENTER_OPTION),
-    HomeCityObjectId.INFIRMARY: (ScreenType.PNC_BUILD_MENU_SMALL_SLOT, UiElementId.PNC_BUILD_INFIRMARY_OPTION),
-    HomeCityObjectId.IRON_MINE: (ScreenType.PNC_BUILD_MENU_SMALL_SLOT, UiElementId.PNC_BUILD_IRON_MINE_OPTION),
-    HomeCityObjectId.GOLD_MINE: (ScreenType.PNC_BUILD_MENU_SMALL_SLOT, UiElementId.PNC_BUILD_GOLD_MINE_OPTION),
+_CONSTRUCTION_SOURCE_BY_HOME_CITY_OBJECT_ID = {
+    HomeCityObjectId.INSTITUTE: BuildingConstructionSource(
+        slot_family=ConstructionSlotFamily.FIXED,
+        slot_id=HomeCityObjectId.RESERVED_INSTITUTE_SLOT,
+        menu_screen_type=ScreenType.PNC_BUILD_MENU_FIXED_SLOT,
+        option_selector_id=UiElementId.PNC_BUILD_INSTITUTE_OPTION,
+    ),
+    HomeCityObjectId.WAREHOUSE: BuildingConstructionSource(
+        slot_family=ConstructionSlotFamily.FIXED,
+        slot_id=HomeCityObjectId.RESERVED_WAREHOUSE_SLOT,
+        menu_screen_type=ScreenType.PNC_BUILD_MENU_FIXED_SLOT,
+        option_selector_id=UiElementId.PNC_BUILD_WAREHOUSE_OPTION,
+    ),
+    HomeCityObjectId.TRAP_WORKSHOP: BuildingConstructionSource(
+        slot_family=ConstructionSlotFamily.FIXED,
+        slot_id=HomeCityObjectId.RESERVED_TRAP_WORKSHOP_SLOT,
+        menu_screen_type=ScreenType.PNC_BUILD_MENU_FIXED_SLOT,
+        option_selector_id=UiElementId.PNC_BUILD_TRAP_WORKSHOP_OPTION,
+    ),
+    HomeCityObjectId.GODDESS_STATUE: BuildingConstructionSource(
+        slot_family=ConstructionSlotFamily.FIXED,
+        slot_id=HomeCityObjectId.RESERVED_GODDESS_STATUE_SLOT,
+        menu_screen_type=ScreenType.PNC_BUILD_MENU_FIXED_SLOT,
+        option_selector_id=UiElementId.PNC_BUILD_GODDESS_STATUE_OPTION,
+    ),
+    HomeCityObjectId.ALLIANCE_HALL: BuildingConstructionSource(
+        slot_family=ConstructionSlotFamily.LARGE,
+        slot_id=HomeCityObjectId.LARGE_SUPPORT_BUILD_SLOT,
+        menu_screen_type=ScreenType.PNC_BUILD_MENU_LARGE_SLOT,
+        option_selector_id=UiElementId.PNC_BUILD_ALLIANCE_HALL_OPTION,
+    ),
+    HomeCityObjectId.BLACKSMITH: BuildingConstructionSource(
+        slot_family=ConstructionSlotFamily.LARGE,
+        slot_id=HomeCityObjectId.LARGE_SUPPORT_BUILD_SLOT,
+        menu_screen_type=ScreenType.PNC_BUILD_MENU_LARGE_SLOT,
+        option_selector_id=UiElementId.PNC_BUILD_BLACKSMITH_OPTION,
+    ),
+    HomeCityObjectId.MARKET: BuildingConstructionSource(
+        slot_family=ConstructionSlotFamily.LARGE,
+        slot_id=HomeCityObjectId.LARGE_SUPPORT_BUILD_SLOT,
+        menu_screen_type=ScreenType.PNC_BUILD_MENU_LARGE_SLOT,
+        option_selector_id=UiElementId.PNC_BUILD_MARKET_OPTION,
+    ),
+    HomeCityObjectId.FARM: BuildingConstructionSource(
+        slot_family=ConstructionSlotFamily.SMALL,
+        slot_id=HomeCityObjectId.SMALL_TERRITORY_BUILD_SLOT,
+        menu_screen_type=ScreenType.PNC_BUILD_MENU_SMALL_SLOT,
+        option_selector_id=UiElementId.PNC_BUILD_FARM_OPTION,
+    ),
+    HomeCityObjectId.LUMBER_CAMP: BuildingConstructionSource(
+        slot_family=ConstructionSlotFamily.SMALL,
+        slot_id=HomeCityObjectId.SMALL_TERRITORY_BUILD_SLOT,
+        menu_screen_type=ScreenType.PNC_BUILD_MENU_SMALL_SLOT,
+        option_selector_id=UiElementId.PNC_BUILD_LUMBER_CAMP_OPTION,
+    ),
+    HomeCityObjectId.MOON_WELL: BuildingConstructionSource(
+        slot_family=ConstructionSlotFamily.SMALL,
+        slot_id=HomeCityObjectId.SMALL_TERRITORY_BUILD_SLOT,
+        menu_screen_type=ScreenType.PNC_BUILD_MENU_SMALL_SLOT,
+        option_selector_id=UiElementId.PNC_BUILD_MOON_WELL_OPTION,
+    ),
+    HomeCityObjectId.RECRUITING_CENTER: BuildingConstructionSource(
+        slot_family=ConstructionSlotFamily.SMALL,
+        slot_id=HomeCityObjectId.SMALL_TERRITORY_BUILD_SLOT,
+        menu_screen_type=ScreenType.PNC_BUILD_MENU_SMALL_SLOT,
+        option_selector_id=UiElementId.PNC_BUILD_RECRUITING_CENTER_OPTION,
+    ),
+    HomeCityObjectId.INFIRMARY: BuildingConstructionSource(
+        slot_family=ConstructionSlotFamily.SMALL,
+        slot_id=HomeCityObjectId.SMALL_TERRITORY_BUILD_SLOT,
+        menu_screen_type=ScreenType.PNC_BUILD_MENU_SMALL_SLOT,
+        option_selector_id=UiElementId.PNC_BUILD_INFIRMARY_OPTION,
+    ),
+    HomeCityObjectId.IRON_MINE: BuildingConstructionSource(
+        slot_family=ConstructionSlotFamily.SMALL,
+        slot_id=HomeCityObjectId.SMALL_TERRITORY_BUILD_SLOT,
+        menu_screen_type=ScreenType.PNC_BUILD_MENU_SMALL_SLOT,
+        option_selector_id=UiElementId.PNC_BUILD_IRON_MINE_OPTION,
+    ),
+    HomeCityObjectId.GOLD_MINE: BuildingConstructionSource(
+        slot_family=ConstructionSlotFamily.SMALL,
+        slot_id=HomeCityObjectId.SMALL_TERRITORY_BUILD_SLOT,
+        menu_screen_type=ScreenType.PNC_BUILD_MENU_SMALL_SLOT,
+        option_selector_id=UiElementId.PNC_BUILD_GOLD_MINE_OPTION,
+    ),
 }
 _OWNING_HOME_CITY_OBJECT_ID_BY_SCREEN = {
     ScreenType.PNC_CASTLE: HomeCityObjectId.CASTLE,
@@ -771,15 +871,36 @@ def home_city_object_id_for_screen(screen_type: ScreenType) -> HomeCityObjectId 
 def build_menu_screen_type_for_home_city_object(home_city_object_id: HomeCityObjectId) -> ScreenType | None:
     """Returns the build-menu screen family that proves one unbuilt home-city target was opened."""
 
-    build_menu_match = _BUILD_MENU_MATCH_BY_HOME_CITY_OBJECT_ID.get(home_city_object_id)
-    return None if build_menu_match is None else build_menu_match[0]
+    source = _CONSTRUCTION_SOURCE_BY_HOME_CITY_OBJECT_ID.get(home_city_object_id)
+    return None if source is None else source.menu_screen_type
 
 
 def build_menu_option_selector_for_home_city_object(home_city_object_id: HomeCityObjectId) -> UiElementId | None:
     """Returns the exact build-menu option selector that proves one unbuilt home-city target was opened."""
 
-    build_menu_match = _BUILD_MENU_MATCH_BY_HOME_CITY_OBJECT_ID.get(home_city_object_id)
-    return None if build_menu_match is None else build_menu_match[1]
+    source = _CONSTRUCTION_SOURCE_BY_HOME_CITY_OBJECT_ID.get(home_city_object_id)
+    return None if source is None else source.option_selector_id
+
+
+def building_construction_source(home_city_object_id: HomeCityObjectId) -> BuildingConstructionSource | None:
+    """Returns the canonical source-slot contract for one constructable building when supported."""
+
+    return _CONSTRUCTION_SOURCE_BY_HOME_CITY_OBJECT_ID.get(home_city_object_id)
+
+
+def require_building_construction_source(home_city_object_id: HomeCityObjectId) -> BuildingConstructionSource:
+    """Returns one required construction-source contract or rejects a non-constructable building."""
+
+    source = building_construction_source(home_city_object_id)
+    if source is None:
+        raise ValueError(f"Home-city object '{home_city_object_id.value}' is not constructable.")
+    return source
+
+
+def constructable_home_city_object_ids() -> tuple[HomeCityObjectId, ...]:
+    """Returns every building id with one canonical legal construction source."""
+
+    return tuple(_CONSTRUCTION_SOURCE_BY_HOME_CITY_OBJECT_ID)
 
 
 def is_upgradeable_primary_screen(screen_type: ScreenType) -> bool:
@@ -845,3 +966,45 @@ def build_home_city_object_metadata(home_city_object_id: HomeCityObjectId) -> di
     if definition.map_coordinate is not None:
         metadata["home_city_map_coordinate"] = (definition.map_coordinate.x, definition.map_coordinate.y)
     return metadata
+
+
+def _validate_construction_sources() -> None:
+    """Rejects incomplete or inconsistent target-to-slot construction mappings at import time."""
+
+    family_contracts = {
+        ConstructionSlotFamily.FIXED: (
+            HomeCityObjectRole.RESERVED_HOME_CITY_SLOT,
+            BuildingAction.CONSTRUCT_FROM_FIXED_SLOT,
+            BuildingAction.OPEN_FIXED_BUILD_MENU,
+            ScreenType.PNC_BUILD_MENU_FIXED_SLOT,
+        ),
+        ConstructionSlotFamily.LARGE: (
+            HomeCityObjectRole.FLEXIBLE_LARGE_BUILD_SLOT,
+            BuildingAction.CONSTRUCT_FROM_LARGE_SLOT,
+            BuildingAction.OPEN_LARGE_BUILD_MENU,
+            ScreenType.PNC_BUILD_MENU_LARGE_SLOT,
+        ),
+        ConstructionSlotFamily.SMALL: (
+            HomeCityObjectRole.FLEXIBLE_SMALL_BUILD_SLOT,
+            BuildingAction.CONSTRUCT_FROM_SMALL_SLOT,
+            BuildingAction.OPEN_SMALL_BUILD_MENU,
+            ScreenType.PNC_BUILD_MENU_SMALL_SLOT,
+        ),
+    }
+    seen_options: set[UiElementId] = set()
+    for target_id, source in _CONSTRUCTION_SOURCE_BY_HOME_CITY_OBJECT_ID.items():
+        expected_role, target_action, slot_action, expected_screen = family_contracts[source.slot_family]
+        target_definition = home_city_object_definition(target_id)
+        slot_definition = home_city_object_definition(source.slot_id)
+        if target_action not in target_definition.supported_actions:
+            raise ValueError(f"Constructable target '{target_id.value}' is missing action '{target_action.value}'.")
+        if slot_definition.role != expected_role or slot_action not in slot_definition.supported_actions:
+            raise ValueError(f"Construction source slot '{source.slot_id.value}' is inconsistent with its family.")
+        if source.menu_screen_type != expected_screen:
+            raise ValueError(f"Constructable target '{target_id.value}' uses the wrong build-menu screen family.")
+        if source.option_selector_id in seen_options:
+            raise ValueError(f"Construction option selector '{source.option_selector_id.value}' is assigned twice.")
+        seen_options.add(source.option_selector_id)
+
+
+_validate_construction_sources()

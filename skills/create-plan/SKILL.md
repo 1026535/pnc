@@ -1,6 +1,6 @@
 ---
 name: create-plan
-description: Create rigorous implementation plans, architecture plans, migration plans, project plans, subplans, and planning documents before execution, including bounded live-evidence gathering from a configured BlueStacks instance when screenshots or current runtime UI state are needed. Use when the user asks Codex to create, draft, review, improve, or save a plan; asks for a roadmap, implementation strategy, phased breakdown, design plan, execution plan, or plan file; or wants a deep planning pass before code or operational work.
+description: Create rigorous implementation plans, architecture plans, migration plans, project plans, subplans, and planning documents before execution, requiring bounded live-evidence gathering from a configured BlueStacks instance when material screenshots or current runtime UI state are not already evidenced. Use when the user asks Codex to create, draft, review, improve, or save a plan; asks for a roadmap, implementation strategy, phased breakdown, design plan, execution plan, or plan file; or wants a deep planning pass before code or operational work.
 ---
 
 # Create Plan
@@ -13,7 +13,7 @@ Create plans that are specific enough to execute, review, and verify. Favor deep
 
 1. Clarify the planning target only when required. Prefer inferring scope from the user's request, repository conventions, issue text, attached artifacts, or referenced documents.
 2. Gather context before designing. Inspect relevant code, docs, configs, tests, prompts, schemas, recent plans, and generated evidence. When the user asks to prioritize internet best practice, or when current external APIs, standards, tools, or platform behavior materially affect the plan, research authoritative internet sources first and cite them in the final answer or plan.
-3. Decide whether the plan needs live evidence. Use repository artifacts first, but when a current UI state, selector, navigation path, or emulator behavior is material and no adequate artifact exists, use the bounded live-evidence workflow in [references/live-evidence.md](references/live-evidence.md). Do not make the user provide a screenshot when the configured runtime can safely capture the required evidence.
+3. Apply the live-evidence gate before designing. Use repository artifacts first. When a current UI state, selector, navigation path, or emulator behavior is material and no adequate current artifact exists, live evidence is required: use the bounded workflow in [references/live-evidence.md](references/live-evidence.md) before finalizing the target design. A planning-only request is not a reason to skip safe observation. Do not defer required evidence into the plan as a future phase unless a bounded live attempt was made and hit a recorded stop condition. Do not make the user provide a screenshot when the configured runtime can safely capture the required evidence.
 4. State the objective in one or two sentences. Include the intended outcome, user-visible behavior, and any hard constraints.
 5. Define scope boundaries. List in-scope work, non-goals, assumptions, and known unknowns.
 6. Describe the current state. Name the existing architecture, ownership boundaries, canonical interfaces, and pain points the plan must respect or change.
@@ -24,11 +24,17 @@ Create plans that are specific enough to execute, review, and verify. Favor deep
 
 ## Live Evidence For Planning
 
-When live evidence is needed, use the `test-bluestacks-live` workflow and the repository's canonical runtime abstractions. Resolve the requested account, castle, and BlueStacks display name from configuration; if the user gives no live target, use the configured `testing` account and `pine cobaye 1`. If the configured instance is closed, allow `BlueStacksInstanceResolver` to launch it and wait for the configured ADB endpoint. Do not hard-code an emulator port, device ID, or executable path.
+Treat live evidence as a planning input, not merely an implementation-phase recommendation. Before drafting the target design, write down the specific evidence questions whose answers could change selectors, state transitions, architecture, or validation. If any question is material and repository evidence cannot answer it, perform the bounded live workflow now.
+
+The fact that the final behavior is state-changing does not justify skipping all live inspection. Navigate safely up to the last read-only screen, capture the available controls and classifications, then stop before the mutating action. Mark the unobserved transition `unknown` and name the authorization needed to cross it. Skip the whole live workflow only when adequate current artifacts already answer the evidence questions or a precondition/stop condition prevents a safe attempt.
+
+When live evidence is needed, use the `test-bluestacks-live` workflow and the repository's canonical runtime abstractions. Resolve the requested account and BlueStacks display name from configuration; if the user gives no live target, use whichever castle is currently active on the configured `testing` instance, verify its identity through observation, and do not select or switch castles. If the user explicitly names a castle, resolve and verify it before any castle navigation. If the configured instance is closed, allow `BlueStacksInstanceResolver` to launch it and wait for the configured ADB endpoint. Do not hard-code an emulator port, device ID, or executable path.
 
 Gather evidence in bounded, reversible increments. Capture a baseline observation, perform at most one existing navigation action, capture the post-action observation and artifacts, and decide whether the evidence is sufficient before continuing. Prefer `ScreenFlowPlanner`, selector-based `ActionRequest` objects, `ObservationService`, and existing live smoke/discovery tools over raw coordinate clicks or ad hoc ADB commands. Read [references/live-evidence.md](references/live-evidence.md) for the safety budget, allowed actions, stop conditions, and evidence reporting contract.
 
 Never perform a state-changing game action solely to obtain planning evidence. Without explicit user authorization, do not build, research, collect, claim, send mail or chat, march, gather, attack, purchase, spend resources, switch accounts, log out, or change authored configuration. If the requested evidence requires one of those actions, stop and record the exact unknown or ask for authorization rather than guessing.
+
+If live evidence was required but could not be gathered, include the attempted target, command or canonical entry point, reached state, artifact paths if any, exact stop condition, and the design decisions that remain provisional. A plan that only says “gather live evidence later” without an attempted bounded run fails this skill.
 
 ## Planning Principles
 
@@ -73,5 +79,7 @@ Before finalizing a plan, confirm:
 - Invalid inputs and unexpected states fail fast.
 - Each phase has clear dependencies and acceptance criteria.
 - Validation covers the changed behavior, architectural risk, and likely regressions.
+- Every material current-UI evidence question is answered by an adequate repository artifact, an observed bounded live trace, or a documented failed live attempt with a precise stop condition.
+- Required live evidence was not postponed into an implementation phase merely because the request was planning-only or the final action would be state-changing.
 - Any live evidence has a target, baseline, bounded action trace, post-action artifact, and explicit stop or failure reason.
 - The plan distinguishes live observations from inferences and unresolved unknowns, and preserves artifact paths without exposing secrets.

@@ -424,6 +424,19 @@ class RuntimeCastleTargetingTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             api.run_task(account_id="account_a", task_id=TaskId.RESEARCH, castle=self.target_castle)
 
+    def test_python_building_construct_forwards_exact_target(self) -> None:
+        """Exposes construction through the canonical direct task runner."""
+
+        fake_runner = _FakeApplicationRunner()
+        api = AutomationApi(application=fake_runner)
+
+        api.building_construct(account_id="account_a", building="farm")
+
+        self.assertEqual(
+            fake_runner.task_calls,
+            [(TaskId.BUILDING_CONSTRUCT, "account_a", {"building": "farm"})],
+        )
+
     def test_python_direct_task_calls_resolve_account_from_active_context(self) -> None:
         """Allows direct task wrappers to use the currently active `use_account(...)` scope."""
 
@@ -475,6 +488,23 @@ class RuntimeCastleTargetingTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertEqual(fake_runner.prepare_calls, [("account_a", None)])
         self.assertEqual(fake_runner.task_calls, [])
+
+    def test_cli_construct_runs_the_distinct_construction_task(self) -> None:
+        """Keeps construction separate from the existing building-upgrade command."""
+
+        fake_runner = _FakeApplicationRunner()
+        with patch("pnc_automation.app.entrypoints.cli.build_application_runner", return_value=fake_runner), patch(
+            "builtins.print"
+        ):
+            exit_code = cli_main(
+                ["construct", "--account", "account_a", "--building", "farm", "--config", "config/accounts.yaml"]
+            )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(
+            fake_runner.task_calls,
+            [(TaskId.BUILDING_CONSTRUCT, "account_a", {"building": "farm"})],
+        )
 
     def test_cli_login_with_castle_reuses_session_preparation_service(self) -> None:
         """Calls the shared preparation path with the explicit CLI castle target when one is provided."""

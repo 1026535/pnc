@@ -8,6 +8,7 @@ from typing import Final
 
 from pnc_automation.app.automation.engine.task import BaseAutomationTask, CastleTargetPolicy, TaskId
 from pnc_automation.app.automation.tasks.building_upgrade_task import BuildingUpgradeTask
+from pnc_automation.app.automation.tasks.building_construction_task import BuildingConstructionTask
 from pnc_automation.app.automation.tasks.campaign_task import CampaignTask
 from pnc_automation.app.automation.tasks.collect_kingdom_chat_task import CollectKingdomChatTask
 from pnc_automation.app.automation.tasks.collect_mail_task import CollectMailTask
@@ -326,6 +327,7 @@ def build_default_task_registry() -> TaskRegistry:
             CollectMailTask(),
             CollectKingdomChatTask(),
             OpenBuildingTask(),
+            BuildingConstructionTask(),
             BuildingUpgradeTask(),
             ResearchTask(),
             GatheringTask(),

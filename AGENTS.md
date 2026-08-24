@@ -81,7 +81,7 @@ Before live validation:
 - Let the canonical runtime launch the configured BlueStacks instance when it is not already running.
 - Verify ADB reaches the resolved instance before continuing.
 - Use the configured `adb_path` and `bluestacks_config_path`; do not hard-code ports or device ids.
-- If no live target is specified, use account `testing` and castle `pine cobaye 1`.
+- If no live target is specified, use the currently active castle on the configured `testing` BlueStacks instance. Do not select or switch castles unless the user explicitly names a castle and authorizes that navigation.
 
 During live validation:
 
