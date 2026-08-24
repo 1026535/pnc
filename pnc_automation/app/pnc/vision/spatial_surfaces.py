@@ -9,6 +9,7 @@ from PIL import Image
 
 from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.app.pnc.domain.building_catalog import (
+    HomeCityObjectId,
     build_home_city_object_metadata,
     home_city_object_definition_for_label,
 )
@@ -55,6 +56,21 @@ _WORLD_MAP_ESTIMATED_VIEWPORT_HEIGHT_UNITS = 1184
 _WORLD_MAP_VISIBLE_SCAN_TOP_RATIO = 0.1
 _WORLD_MAP_VISIBLE_SCAN_BOTTOM_RATIO = 0.84
 _HOME_EMPTY_SLOT_TEXTS = frozenset({"BUILD", "EMPTY"})
+_HOME_EMPTY_SLOT_GEOMETRY_SCALE = 4
+_HOME_EMPTY_SLOT_SCAN_MIN_X_RATIO = 0.13
+_HOME_EMPTY_SLOT_SCAN_MAX_X_RATIO = 0.70
+_HOME_EMPTY_SLOT_SCAN_MIN_Y_RATIO = 0.10
+_HOME_EMPTY_SLOT_SCAN_MAX_Y_RATIO = 0.60
+_HOME_EMPTY_SLOT_INNER_HALF_WIDTH = 14
+_HOME_EMPTY_SLOT_INNER_HALF_HEIGHT = 8
+_HOME_EMPTY_SLOT_OUTER_HALF_WIDTH = 21
+_HOME_EMPTY_SLOT_OUTER_HALF_HEIGHT = 14
+_HOME_EMPTY_SLOT_MIN_NEUTRAL_FRACTION = 0.27
+_HOME_EMPTY_SLOT_MIN_CONTRAST = 0.30
+_HOME_EMPTY_SLOT_MIN_SURROUNDING_GRASS_FRACTION = 0.40
+_HOME_EMPTY_SLOT_BOUNDS_WIDTH = 110
+_HOME_EMPTY_SLOT_BOUNDS_HEIGHT = 60
+_HOME_EMPTY_SLOT_MAX_RESULTS = 8
 
 
 def estimated_world_map_visible_scan_footprint_units() -> tuple[int, int]:
@@ -561,7 +577,211 @@ def _parse_home_city_objects(
         if supported_kinds is not None and object_.kind not in supported_kinds:
             continue
         parsed_objects.append(object_)
+    if supported_kinds is None or SpatialObjectKind.HOME_EMPTY_SLOT in supported_kinds:
+        parsed_objects.extend(
+            _detect_unlabeled_home_empty_slots(
+                image=image,
+                existing_objects=tuple(parsed_objects),
+            )
+        )
     return tuple(parsed_objects)
+
+
+def _detect_unlabeled_home_empty_slots(
+    *,
+    image: Image.Image,
+    existing_objects: tuple[DetectedSpatialObject, ...],
+) -> tuple[DetectedSpatialObject, ...]:
+    """Detects conservative small-slot foundation geometry when no OCR label is present."""
+
+    scale = _HOME_EMPTY_SLOT_GEOMETRY_SCALE
+    sampled_width = max(1, image.width // scale)
+    sampled_height = max(1, image.height // scale)
+    sampled = image.convert("RGB").resize((sampled_width, sampled_height), Image.Resampling.BILINEAR)
+    neutral_integral, grass_integral = _build_home_empty_slot_integrals(sampled)
+    candidates: list[tuple[float, int, int]] = []
+    min_x = max(
+        _HOME_EMPTY_SLOT_OUTER_HALF_WIDTH,
+        int(sampled_width * _HOME_EMPTY_SLOT_SCAN_MIN_X_RATIO),
+    )
+    max_x = min(
+        sampled_width - _HOME_EMPTY_SLOT_OUTER_HALF_WIDTH,
+        int(sampled_width * _HOME_EMPTY_SLOT_SCAN_MAX_X_RATIO),
+    )
+    min_y = max(
+        _HOME_EMPTY_SLOT_OUTER_HALF_HEIGHT,
+        int(sampled_height * _HOME_EMPTY_SLOT_SCAN_MIN_Y_RATIO),
+    )
+    max_y = min(
+        sampled_height - _HOME_EMPTY_SLOT_OUTER_HALF_HEIGHT,
+        int(sampled_height * _HOME_EMPTY_SLOT_SCAN_MAX_Y_RATIO),
+    )
+    for center_y in range(min_y, max_y + 1, 2):
+        for center_x in range(min_x, max_x + 1, 2):
+            contrast, inner_fraction = _home_empty_slot_geometry_score(
+                integral=neutral_integral,
+                center_x=center_x,
+                center_y=center_y,
+            )
+            if inner_fraction < _HOME_EMPTY_SLOT_MIN_NEUTRAL_FRACTION:
+                continue
+            if contrast < _HOME_EMPTY_SLOT_MIN_CONTRAST:
+                continue
+            surrounding_grass_fraction = _home_empty_slot_surrounding_fraction(
+                integral=grass_integral,
+                center_x=center_x,
+                center_y=center_y,
+            )
+            if surrounding_grass_fraction < _HOME_EMPTY_SLOT_MIN_SURROUNDING_GRASS_FRACTION:
+                continue
+            candidates.append((contrast, center_x * scale, center_y * scale))
+
+    detected: list[DetectedSpatialObject] = []
+    viewport_bounds = Bounds(x=0, y=0, width=image.width, height=image.height)
+    for confidence, center_x, center_y in sorted(candidates, reverse=True):
+        if len(detected) >= _HOME_EMPTY_SLOT_MAX_RESULTS:
+            break
+        if _home_empty_slot_candidate_overlaps_existing(
+            center=(center_x, center_y),
+            existing_objects=existing_objects,
+            detected_objects=tuple(detected),
+        ):
+            continue
+        bounds = Bounds(
+            x=max(0, center_x - (_HOME_EMPTY_SLOT_BOUNDS_WIDTH // 2)),
+            y=max(0, center_y - (_HOME_EMPTY_SLOT_BOUNDS_HEIGHT // 2)),
+            width=min(_HOME_EMPTY_SLOT_BOUNDS_WIDTH, image.width),
+            height=min(_HOME_EMPTY_SLOT_BOUNDS_HEIGHT, image.height),
+        )
+        metadata = build_home_city_object_metadata(HomeCityObjectId.SMALL_TERRITORY_BUILD_SLOT)
+        metadata.update(
+            {
+                "detection_source": "foundation_geometry",
+                "geometry_confidence": round(confidence, 4),
+            }
+        )
+        detected.append(
+            DetectedSpatialObject(
+                kind=SpatialObjectKind.HOME_EMPTY_SLOT,
+                bounds=bounds,
+                relationship=SpatialObjectRelationship.SELF,
+                name_text="Empty Small Plot",
+                action_point=bounds.center(),
+                viewport_offset=_bounds_center_offset(bounds=bounds, origin=viewport_bounds.center()),
+                viewport_offset_ratio=_bounds_center_offset_ratio(
+                    bounds=bounds,
+                    viewport_bounds=viewport_bounds,
+                ),
+                metadata=metadata,
+            )
+        )
+    return tuple(detected)
+
+
+def _build_home_empty_slot_integrals(image: Image.Image) -> tuple[list[list[int]], list[list[int]]]:
+    """Builds integral masks for neutral foundations and their surrounding grass."""
+
+    neutral_integral = [[0] * (image.width + 1) for _ in range(image.height + 1)]
+    grass_integral = [[0] * (image.width + 1) for _ in range(image.height + 1)]
+    pixels = image.load()
+    for y in range(image.height):
+        neutral_row_total = 0
+        grass_row_total = 0
+        for x in range(image.width):
+            red, green, blue = pixels[x, y]
+            average = (red + green + blue) // 3
+            neutral_row_total += int(abs(red - green) <= 20 and average >= 110)
+            grass_row_total += int(green >= red + 12 and green >= blue + 18)
+            neutral_integral[y + 1][x + 1] = neutral_integral[y][x + 1] + neutral_row_total
+            grass_integral[y + 1][x + 1] = grass_integral[y][x + 1] + grass_row_total
+    return neutral_integral, grass_integral
+
+
+def _home_empty_slot_geometry_score(
+    *,
+    integral: list[list[int]],
+    center_x: int,
+    center_y: int,
+) -> tuple[float, float]:
+    """Returns center-versus-surround contrast and center coverage for one plot candidate."""
+
+    inner_count = _integral_region_sum(
+        integral,
+        x0=center_x - _HOME_EMPTY_SLOT_INNER_HALF_WIDTH,
+        y0=center_y - _HOME_EMPTY_SLOT_INNER_HALF_HEIGHT,
+        x1=center_x + _HOME_EMPTY_SLOT_INNER_HALF_WIDTH,
+        y1=center_y + _HOME_EMPTY_SLOT_INNER_HALF_HEIGHT,
+    )
+    outer_total = _integral_region_sum(
+        integral,
+        x0=center_x - _HOME_EMPTY_SLOT_OUTER_HALF_WIDTH,
+        y0=center_y - _HOME_EMPTY_SLOT_OUTER_HALF_HEIGHT,
+        x1=center_x + _HOME_EMPTY_SLOT_OUTER_HALF_WIDTH,
+        y1=center_y + _HOME_EMPTY_SLOT_OUTER_HALF_HEIGHT,
+    )
+    inner_area = 4 * _HOME_EMPTY_SLOT_INNER_HALF_WIDTH * _HOME_EMPTY_SLOT_INNER_HALF_HEIGHT
+    outer_area = 4 * _HOME_EMPTY_SLOT_OUTER_HALF_WIDTH * _HOME_EMPTY_SLOT_OUTER_HALF_HEIGHT
+    inner_fraction = inner_count / inner_area
+    outer_fraction = (outer_total - inner_count) / (outer_area - inner_area)
+    return inner_fraction - outer_fraction, inner_fraction
+
+
+def _home_empty_slot_surrounding_fraction(
+    *,
+    integral: list[list[int]],
+    center_x: int,
+    center_y: int,
+) -> float:
+    """Returns the fraction of grass pixels surrounding one neutral foundation candidate."""
+
+    inner_count = _integral_region_sum(
+        integral,
+        x0=center_x - _HOME_EMPTY_SLOT_INNER_HALF_WIDTH,
+        y0=center_y - _HOME_EMPTY_SLOT_INNER_HALF_HEIGHT,
+        x1=center_x + _HOME_EMPTY_SLOT_INNER_HALF_WIDTH,
+        y1=center_y + _HOME_EMPTY_SLOT_INNER_HALF_HEIGHT,
+    )
+    outer_total = _integral_region_sum(
+        integral,
+        x0=center_x - _HOME_EMPTY_SLOT_OUTER_HALF_WIDTH,
+        y0=center_y - _HOME_EMPTY_SLOT_OUTER_HALF_HEIGHT,
+        x1=center_x + _HOME_EMPTY_SLOT_OUTER_HALF_WIDTH,
+        y1=center_y + _HOME_EMPTY_SLOT_OUTER_HALF_HEIGHT,
+    )
+    inner_area = 4 * _HOME_EMPTY_SLOT_INNER_HALF_WIDTH * _HOME_EMPTY_SLOT_INNER_HALF_HEIGHT
+    outer_area = 4 * _HOME_EMPTY_SLOT_OUTER_HALF_WIDTH * _HOME_EMPTY_SLOT_OUTER_HALF_HEIGHT
+    return (outer_total - inner_count) / (outer_area - inner_area)
+
+
+def _integral_region_sum(
+    integral: list[list[int]],
+    *,
+    x0: int,
+    y0: int,
+    x1: int,
+    y1: int,
+) -> int:
+    """Returns one half-open rectangle sum from an integral image."""
+
+    return integral[y1][x1] - integral[y0][x1] - integral[y1][x0] + integral[y0][x0]
+
+
+def _home_empty_slot_candidate_overlaps_existing(
+    *,
+    center: tuple[int, int],
+    existing_objects: tuple[DetectedSpatialObject, ...],
+    detected_objects: tuple[DetectedSpatialObject, ...],
+) -> bool:
+    """Returns whether a geometric candidate collides with parsed scene content or a stronger candidate."""
+
+    center_x, center_y = center
+    for object_ in (*existing_objects, *detected_objects):
+        object_center_x, object_center_y = object_.bounds.center()
+        horizontal_distance = (center_x - object_center_x) / 100
+        vertical_distance = (center_y - object_center_y) / 65
+        if (horizontal_distance * horizontal_distance) + (vertical_distance * vertical_distance) < 1:
+            return True
+    return False
 
 
 def _classify_home_city_object(

@@ -18,6 +18,15 @@ from pnc_automation.app.automation.tasks.open_building_support import (
     home_city_object_id_from_object,
     plan_focus_requested_home_city_object,
 )
+from pnc_automation.app.automation.tasks.building_workflow_support import (
+    build_queue_active_timer_text as _build_queue_active_timer_text,
+    building_requirement_is_visible as _building_requirement_is_visible,
+    building_requirement_text as _building_requirement_text,
+    can_open_build_queue as _can_open_build_queue,
+    home_build_help_is_available as _home_build_help_is_available,
+    home_city_active_build_is_visible as _home_city_active_build_is_visible,
+    home_city_active_build_timer_text as _home_city_active_build_timer_text,
+)
 from pnc_automation.app.pnc.domain.action_requests import ActionRequest, KeyEventAction, TapAction, WaitAction
 from pnc_automation.app.pnc.domain.building_catalog import (
     BuildingAction,
@@ -36,7 +45,6 @@ from pnc_automation.app.pnc.domain.observation import (
 from pnc_automation.app.pnc.domain.policy_models import BuildingPriority, BuildingUpgradePolicy
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
-from pnc_automation.core.text.normalization import normalize_ocr_text
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 
 _BUILDING_UPGRADE_PENDING_TARGET_STATE_KEY = "building_upgrade_pending_target"
@@ -753,25 +761,6 @@ def _finish_already_active_upgrade_skip(runtime_state: dict[str, Any], message: 
     return TaskResult.skipped(message)
 
 
-def _home_city_active_build_timer_text(observation: Observation) -> str | None:
-    """Returns the visible home-city construction timer when the shared spatial surface captured one."""
-
-    surface = observation.spatial_surface
-    if surface is None:
-        return None
-    timer_text = surface.metadata.get("active_build_timer_text")
-    if not isinstance(timer_text, str):
-        return None
-    stripped = timer_text.strip()
-    return None if stripped == "" else stripped
-
-
-def _home_city_active_build_is_visible(observation: Observation) -> bool:
-    """Returns whether the shared home-city spatial surface proves one active construction timer is visible."""
-
-    return _home_city_active_build_timer_text(observation) is not None
-
-
 def _home_city_timer_success_message(observation: Observation) -> str:
     """Returns the success message for the primary home-city timer proof."""
 
@@ -779,30 +768,6 @@ def _home_city_timer_success_message(observation: Observation) -> str:
     if timer_text is None:
         return "Building upgrade started and a home-city construction timer is visible."
     return f"Building upgrade started and the home city shows timer '{timer_text}'."
-
-
-def _can_open_build_queue(observation: Observation) -> bool:
-    """Returns whether the shared left-rail build control can be used for queue verification."""
-
-    build_action = observation.get(UiElementId.PNC_HOME_BUILD_BUTTON)
-    if build_action is None:
-        return False
-    if build_action.extracted_text is None:
-        return True
-    return normalize_ocr_text(build_action.extracted_text) != "HELP"
-
-
-def _build_queue_active_timer_text(observation: Observation) -> str | None:
-    """Returns the active build-queue timer when the queue overlay exposes one upgrading row."""
-
-    for entry in observation.entries(ListEntryKind.BUILDING):
-        queue_state = entry.metadata.get("queue_state")
-        if queue_state != "upgrading":
-            continue
-        if entry.timer_text is None or entry.timer_text.strip() == "":
-            continue
-        return entry.timer_text.strip()
-    return None
 
 
 def _visible_pending_target(observation: Observation, runtime_state: dict[str, Any]) -> DetectedSpatialObject | None:
@@ -846,21 +811,6 @@ def _home_city_level_increase_success_message(runtime_state: dict[str, Any], obs
     )
 
 
-def _home_build_help_is_available(observation: Observation) -> bool:
-    """Returns whether the shared home build-slot control is currently showing `Help` instead of `Build`."""
-
-    build_action = observation.get(UiElementId.PNC_HOME_BUILD_BUTTON)
-    if build_action is None or build_action.extracted_text is None:
-        return False
-    return normalize_ocr_text(build_action.extracted_text) == "HELP"
-
-
-def _building_requirement_is_visible(observation: Observation) -> bool:
-    """Returns whether the current building screen is showing an unmet upgrade requirement panel."""
-
-    return observation.has(UiElementId.PNC_BUILDING_REQUIREMENT_HEADER)
-
-
 def _building_upgrade_confirmation_is_visible(observation: Observation) -> bool:
     """Returns whether the current building screen is showing the shared final upgrade-confirmation layout."""
 
@@ -871,16 +821,6 @@ def _building_speedup_is_visible(observation: Observation) -> bool:
     """Returns whether the current building screen replaced `Upgrade` with the shared `Speedup` control."""
 
     return observation.has(UiElementId.PNC_BUILDING_SPEEDUP_BUTTON)
-
-
-def _building_requirement_text(observation: Observation) -> str | None:
-    """Returns the visible unmet prerequisite label from the shared requirement panel when available."""
-
-    requirement = observation.get(UiElementId.PNC_BUILDING_REQUIREMENT_TARGET_LABEL)
-    if requirement is None or requirement.extracted_text is None:
-        return None
-    text = requirement.extracted_text.strip()
-    return None if text == "" else text
 
 
 def _set_last_unmet_requirement(runtime_state: dict[str, Any], observation: Observation) -> None:

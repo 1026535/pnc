@@ -59,6 +59,7 @@ class ScreenType(StrEnum):
     PNC_BUILD_MENU_FIXED_SLOT = "pnc_build_menu_fixed_slot"
     PNC_BUILD_MENU_LARGE_SLOT = "pnc_build_menu_large_slot"
     PNC_BUILD_MENU_SMALL_SLOT = "pnc_build_menu_small_slot"
+    PNC_BUILDING_CONSTRUCTION = "pnc_building_construction"
     PNC_INSTITUTE = "pnc_institute"
     PNC_ACADEMY = "pnc_institute"
     PNC_WAREHOUSE = "pnc_warehouse"

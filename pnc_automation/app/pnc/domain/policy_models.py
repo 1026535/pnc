@@ -11,6 +11,7 @@ from pnc_automation.core.errors import ScriptValidationError
 from pnc_automation.app.pnc.domain.building_catalog import (
     HomeCityObjectId,
     HomeCityObjectRole,
+    building_construction_source,
     default_building_upgrade_priority,
     home_city_object_definition,
 )
@@ -128,6 +129,40 @@ class OpenBuildingPolicy:
         if role not in {HomeCityObjectRole.HOME_CITY_BUILDING, HomeCityObjectRole.REPEATABLE_SMALL_BUILDING}:
             raise ScriptValidationError(
                 f"Unsupported value '{raw_building}' for 'building'.",
+                field="building",
+                value=raw_building,
+            )
+        return cls(building=building)
+
+
+@dataclass(frozen=True, slots=True)
+class BuildingConstructionPolicy:
+    """Task parameters for constructing one exact home-city building."""
+
+    building: HomeCityObjectId
+
+    @classmethod
+    def from_params(cls, params: Mapping[str, Any]) -> "BuildingConstructionPolicy":
+        """Builds a typed policy and rejects buildings without a legal source slot."""
+
+        unexpected = set(params) - {"building"}
+        if unexpected:
+            field = sorted(unexpected)[0]
+            raise ScriptValidationError(f"Unexpected building-construction parameter '{field}'.", field=field)
+        raw_building = params.get("building")
+        if not isinstance(raw_building, str):
+            raise ScriptValidationError("Expected 'building' to be a string.", field="building")
+        try:
+            building = HomeCityObjectId(raw_building)
+        except ValueError as error:
+            raise ScriptValidationError(
+                f"Unsupported value '{raw_building}' for 'building'.",
+                field="building",
+                value=raw_building,
+            ) from error
+        if building_construction_source(building) is None:
+            raise ScriptValidationError(
+                f"Building '{raw_building}' cannot be constructed from a supported empty slot.",
                 field="building",
                 value=raw_building,
             )

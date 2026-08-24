@@ -26,7 +26,7 @@ Run live emulator validation only when the fidelity is worth the cost. Use offli
    - `PNC_RUN_LIVE_CHAT_SMOKE=1` for chat workflow validation.
    - `PNC_RUN_LIVE_HOME_CITY_MAP_SMOKE=1` for home-city atlas/building navigation.
    - `PNC_RUN_LIVE_WORLD_MAP_MOVEMENT_CALIBRATION=1` for movement calibration.
-3. Prefer the configured `testing` account and castle `pine cobaye 1` when no live target is specified.
+3. Prefer the configured `testing` account and whichever castle is currently active on that instance when no castle target is specified. Verify the active identity and do not select or switch castles unless the user explicitly names and authorizes one.
 4. Run through the existing live helpers and smoke modules. Reuse `ScriptRunner`, `BlueStacksInstanceResolver`, `BlueStacksSession`, observation services, selector tools, and artifacts.
 5. Use observation-based waits and bounded retries. Avoid blind sleeps except for short, justified settle windows already modeled by the runner.
 6. On failure, inspect generated screenshots, OCR JSON, logs, and observation artifacts under `artifacts/` before changing code.

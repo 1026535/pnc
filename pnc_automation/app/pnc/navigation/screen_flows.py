@@ -258,6 +258,7 @@ class ScreenFlowPlanner:
             ScreenType.PNC_BUILD_MENU_FIXED_SLOT,
             ScreenType.PNC_BUILD_MENU_LARGE_SLOT,
             ScreenType.PNC_BUILD_MENU_SMALL_SLOT,
+            ScreenType.PNC_BUILDING_CONSTRUCTION,
             ScreenType.PNC_LORD_INFO,
             ScreenType.PNC_PLAYER_TERRITORY,
             ScreenType.PNC_PLAYER_PROFILE,

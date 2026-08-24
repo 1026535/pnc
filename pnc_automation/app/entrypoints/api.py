@@ -68,6 +68,11 @@ class AutomationSession:
             allow_speedups=allow_speedups,
         )
 
+    def building_construct(self, *, building: str) -> StepRunResult:
+        """Runs one direct building-construction step against the prepared session."""
+
+        return self.api.building_construct(account_id=self.account_id, building=building)
+
     def open_building(self, *, building: str) -> StepRunResult:
         """Runs one direct open-building step against the prepared session."""
 
@@ -245,6 +250,20 @@ class AutomationApi:
                 "priority": resolved_priority,
                 "allow_speedups": allow_speedups,
             },
+        )
+
+    def building_construct(
+        self,
+        *,
+        account_id: str | None = None,
+        building: str,
+    ) -> StepRunResult:
+        """Constructs one exact building using current-castle semantics."""
+
+        return self.run_task(
+            account_id=self._resolve_account_id(account_id),
+            task_id=TaskId.BUILDING_CONSTRUCT,
+            params={"building": building},
         )
 
     def open_building(
@@ -495,6 +514,12 @@ def building_upgrade(
         priority_file=priority_file,
         allow_speedups=allow_speedups,
     )
+
+
+def building_construct(*, account_id: str | None = None, building: str) -> StepRunResult:
+    """Runs one direct building-construction step through the default facade."""
+
+    return _default_api().building_construct(account_id=account_id, building=building)
 
 
 def open_building(*, account_id: str | None = None, building: str) -> StepRunResult:

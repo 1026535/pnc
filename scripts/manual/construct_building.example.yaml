@@ -1,0 +1,5 @@
+name: construct_building_example
+steps:
+  - task: building_construct
+    params:
+      building: farm
