@@ -1,0 +1,17 @@
+# Every canonical construction target, one per line.
+# Use each id separately with `construct --building <id>`; the construction CLI
+# intentionally accepts one exact target rather than a priority file.
+institute
+warehouse
+trap_workshop
+goddess_statue
+alliance_hall
+blacksmith
+market
+farm
+lumber_camp
+moon_well
+recruiting_center
+infirmary
+iron_mine
+gold_mine

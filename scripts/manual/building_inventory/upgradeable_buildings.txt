@@ -1,0 +1,26 @@
+# Every canonical upgradeable building id, one per line.
+# This file is accepted by `build --priority-file`. One build invocation upgrades
+# the first currently eligible entry; it does not mutate every line in one run.
+castle
+wall
+institute
+warehouse
+trap_workshop
+watchtower
+farm
+lumber_camp
+moon_well
+recruiting_center
+infirmary
+iron_mine
+gold_mine
+blacksmith
+alliance_hall
+market
+infantry_barracks
+cavalry_barracks
+ranged_barracks
+siege_factory
+hall_of_war
+sauroi_lair
+goddess_statue

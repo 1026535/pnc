@@ -1252,6 +1252,18 @@ def _build_text_screen_additions(
         screen_type=definition.screen_type,
         visible_elements=visible_elements,
     )
+    _add_shared_building_speedup_control(
+        image=image,
+        lines=lines,
+        screen_type=definition.screen_type,
+        visible_elements=visible_elements,
+    )
+    _add_shared_building_level_label(
+        image=image,
+        lines=lines,
+        screen_type=definition.screen_type,
+        visible_elements=visible_elements,
+    )
     return ObservationAdditions(
         visible_elements=visible_elements,
         screen_evidence=(
@@ -1486,19 +1498,19 @@ def _add_upgrade_requirement_controls(
     header = _find_building_requirement_header_line(image=image, lines=lines)
     if header is None:
         return
-    requirement_line = _find_building_requirement_target_line(
-        image=image,
-        lines=lines,
-        header=header,
-    )
     go_line = _find_building_requirement_go_line(
         image=image,
         lines=lines,
         header=header,
-        requirement_line=requirement_line,
     )
     if go_line is None:
         return
+    requirement_line = _find_building_requirement_target_line(
+        image=image,
+        lines=lines,
+        header=header,
+        go_line=go_line,
+    )
     visible_elements[UiElementId.PNC_BUILDING_REQUIREMENT_HEADER] = _make_visible_from_line(
         selector_id=UiElementId.PNC_BUILDING_REQUIREMENT_HEADER,
         line=header,
@@ -1530,12 +1542,14 @@ def _find_building_requirement_target_line(
     image: Image.Image,
     lines: tuple[OcrLine, ...],
     header: OcrLine,
+    go_line: OcrLine,
 ) -> OcrLine | None:
-    """Returns the first visible prerequisite label listed under the unmet-requirement header."""
+    """Returns the prerequisite label horizontally aligned with the actionable `Go` row."""
 
     header_bottom = header.bounds.y + header.bounds.height
     max_y = min(image.height, header_bottom + int(image.height * 0.14))
     max_x = int(image.width * 0.65)
+    candidates: list[OcrLine] = []
     for line in lines:
         normalized_text = normalize_ocr_text(line.text)
         if normalized_text in {"", "GO"} or normalized_text in _BUILDING_REQUIREMENT_SECTION_TERMINATORS:
@@ -1544,8 +1558,64 @@ def _find_building_requirement_target_line(
             continue
         if line.bounds.x > max_x:
             continue
-        return line
-    return None
+        candidates.append(line)
+    if not candidates:
+        return None
+    go_center_y = go_line.bounds.y + (go_line.bounds.height // 2)
+    return min(
+        candidates,
+        key=lambda line: abs((line.bounds.y + (line.bounds.height // 2)) - go_center_y),
+    )
+
+
+def _add_shared_building_speedup_control(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+    screen_type: ScreenType,
+    visible_elements: dict[UiElementId, VisibleElement],
+) -> None:
+    """Adds the common top-right construction Speedup action on upgradeable building screens."""
+
+    if not is_upgradeable_primary_screen(screen_type):
+        return
+    speedup_line = _find_line_matching(
+        lines=lines,
+        predicate=lambda line: normalize_ocr_text(line.text) == "SPEEDUP",
+        min_x=int(image.width * 0.55),
+        max_y=int(image.height * 0.45),
+    )
+    if speedup_line is None:
+        return
+    visible_elements[UiElementId.PNC_BUILDING_SPEEDUP_BUTTON] = _make_visible_from_line(
+        selector_id=UiElementId.PNC_BUILDING_SPEEDUP_BUTTON,
+        line=speedup_line,
+    )
+
+
+def _add_shared_building_level_label(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+    screen_type: ScreenType,
+    visible_elements: dict[UiElementId, VisibleElement],
+) -> None:
+    """Adds the current building level from labels such as `8/45` on exact building screens."""
+
+    if not is_upgradeable_primary_screen(screen_type):
+        return
+    level_line = _find_line_matching(
+        lines=lines,
+        predicate=lambda line: re.fullmatch(r"\s*\d+\s*/\s*\d+\s*", line.text) is not None,
+        min_x=int(image.width * 0.08),
+        max_y=int(image.height * 0.38),
+    )
+    if level_line is None or level_line.bounds.x > int(image.width * 0.45):
+        return
+    visible_elements[UiElementId.PNC_BUILDING_LEVEL_LABEL] = _make_visible_from_line(
+        selector_id=UiElementId.PNC_BUILDING_LEVEL_LABEL,
+        line=level_line,
+    )
 
 
 def _find_building_requirement_go_line(
@@ -1553,15 +1623,11 @@ def _find_building_requirement_go_line(
     image: Image.Image,
     lines: tuple[OcrLine, ...],
     header: OcrLine,
-    requirement_line: OcrLine | None,
 ) -> OcrLine | None:
     """Returns the right-side `Go` affordance associated with one unmet-requirement row when visible."""
 
     min_y = header.bounds.y
     max_y = min(image.height, header.bounds.y + header.bounds.height + int(image.height * 0.14))
-    if requirement_line is not None:
-        min_y = max(min_y, requirement_line.bounds.y - requirement_line.bounds.height)
-        max_y = min(max_y, requirement_line.bounds.y + requirement_line.bounds.height + int(image.height * 0.03))
     min_x = int(image.width * 0.6)
     for line in lines:
         if normalize_ocr_text(line.text) != "GO":
@@ -1755,6 +1821,20 @@ class PncObservationEnricher:
             building_construction = _build_building_construction_additions(image=image, lines=lines)
             if building_construction is not None:
                 return building_construction
+        if request.allows_screen(ScreenType.PNC_BUILD_SPEEDUP) and can_attempt_screen_family_ocr(
+            request_screen=ScreenType.PNC_BUILD_SPEEDUP,
+            observed_screen=screen_type,
+        ):
+            build_speedup = _build_build_speedup_additions(image=image, lines=lines)
+            if build_speedup is not None:
+                return build_speedup
+        if request.allows_screen(ScreenType.PNC_BUILD_SPEEDUP_CONFIRM) and can_attempt_screen_family_ocr(
+            request_screen=ScreenType.PNC_BUILD_SPEEDUP_CONFIRM,
+            observed_screen=screen_type,
+        ):
+            build_speedup_confirm = _build_speedup_confirm_additions(image=image, lines=lines)
+            if build_speedup_confirm is not None:
+                return build_speedup_confirm
         text_screen = _build_matching_text_screen_additions(
             image=image,
             lines=lines,
@@ -4577,18 +4657,115 @@ def _build_building_detail_additions(
         texts=_BUILDING_UPGRADE_CONFIRMATION_SUPPORT_SECTION_TEXTS,
         min_y=int(image.height * 0.35),
     )
-    if confirm_line is not None and required_section_lines and support_section_lines:
-        visible_elements[UiElementId.PNC_BUILDING_UPGRADE_CONFIRM_BUTTON] = _make_visible_from_line(
-            selector_id=UiElementId.PNC_BUILDING_UPGRADE_CONFIRM_BUTTON,
-            line=confirm_line,
-        )
+    if required_section_lines and support_section_lines:
+        panel_lines = [title_line, upgrade_anchor, *required_section_lines, *support_section_lines]
+        if confirm_line is not None:
+            panel_lines.append(confirm_line)
+            visible_elements[UiElementId.PNC_BUILDING_UPGRADE_CONFIRM_BUTTON] = _make_visible_from_line(
+                selector_id=UiElementId.PNC_BUILDING_UPGRADE_CONFIRM_BUTTON,
+                line=confirm_line,
+            )
         visible_elements[UiElementId.PNC_BUILDING_UPGRADE_CONFIRMATION_PANEL] = _make_visible_from_lines(
             selector_id=UiElementId.PNC_BUILDING_UPGRADE_CONFIRMATION_PANEL,
-            lines=(title_line, confirm_line, *required_section_lines, *support_section_lines),
+            lines=tuple(panel_lines),
         )
     return ObservationAdditions(
         visible_elements=visible_elements,
         screen_evidence=(ScreenEvidence(ScreenType.PNC_BUILDING_DETAILS, "ocr_building_detail"),),
+    )
+
+
+def _build_build_speedup_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Returns the inventory-backed build-speedup screen while separating its premium action."""
+
+    header = _find_header_line(
+        lines=lines,
+        header_texts=frozenset({"BUILDSPEEDUP"}),
+        max_y=int(image.height * 0.15),
+    )
+    if header is None:
+        return None
+    auto_line = _find_line_matching(
+        lines=lines,
+        predicate=lambda line: normalize_ocr_text(line.text) == "AUTOSPEEDUP",
+        min_x=int(image.width * 0.45),
+        min_y=int(image.height * 0.82),
+    )
+    if auto_line is None:
+        return None
+    visible_elements = {
+        UiElementId.PNC_BACK_BUTTON_TOP_LEFT: _make_visible(
+            selector_id=UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+            x=0,
+            y=0,
+            width=max(1, int(image.width * 0.12)),
+            height=max(1, int(image.height * 0.08)),
+        ),
+        UiElementId.PNC_BUILD_SPEEDUP_HEADER: _make_visible_from_line(
+            selector_id=UiElementId.PNC_BUILD_SPEEDUP_HEADER,
+            line=header,
+        ),
+        UiElementId.PNC_BUILD_SPEEDUP_AUTO_BUTTON: _make_visible_from_line(
+            selector_id=UiElementId.PNC_BUILD_SPEEDUP_AUTO_BUTTON,
+            line=auto_line,
+        ),
+    }
+    premium_line = _find_line_matching(
+        lines=lines,
+        predicate=lambda line: (
+            normalize_ocr_text(line.text) == "BUILDNOW" and line.bounds.x <= int(image.width * 0.55)
+        ),
+        min_y=int(image.height * 0.82),
+    )
+    if premium_line is not None:
+        visible_elements[UiElementId.PNC_BUILD_SPEEDUP_PREMIUM_BUILD_NOW_BUTTON] = _make_visible_from_line(
+            selector_id=UiElementId.PNC_BUILD_SPEEDUP_PREMIUM_BUILD_NOW_BUTTON,
+            line=premium_line,
+        )
+    return ObservationAdditions(
+        visible_elements=visible_elements,
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_BUILD_SPEEDUP, "ocr_build_speedup"),),
+    )
+
+
+def _build_speedup_confirm_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Returns the explicit inventory-consumption confirmation popup for Auto Speedup."""
+
+    header = _find_line_matching(
+        lines=lines,
+        predicate=lambda line: normalize_ocr_text(line.text) == "BUILDSPEEDUP",
+        max_y=int(image.height * 0.4),
+    )
+    confirm_line = _find_line_matching(
+        lines=lines,
+        predicate=lambda line: normalize_ocr_text(line.text) == "CONFIRM",
+        min_x=int(image.width * 0.2),
+        min_y=int(image.height * 0.6),
+    )
+    if header is None or confirm_line is None:
+        return None
+    return ObservationAdditions(
+        visible_elements={
+            UiElementId.PNC_BUILD_SPEEDUP_CONFIRM_HEADER: _make_visible_from_line(
+                selector_id=UiElementId.PNC_BUILD_SPEEDUP_CONFIRM_HEADER,
+                line=header,
+            ),
+            UiElementId.PNC_BUILD_SPEEDUP_CONFIRM_BUTTON: _make_visible_from_line(
+                selector_id=UiElementId.PNC_BUILD_SPEEDUP_CONFIRM_BUTTON,
+                line=confirm_line,
+            ),
+        },
+        screen_evidence=(
+            ScreenEvidence(ScreenType.PNC_BUILD_SPEEDUP_CONFIRM, "ocr_build_speedup_confirm"),
+        ),
     )
 
 

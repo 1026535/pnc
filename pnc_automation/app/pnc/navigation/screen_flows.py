@@ -303,6 +303,8 @@ class ScreenFlowPlanner:
             ScreenType.PNC_CASTLE_SELECTION,
             ScreenType.PNC_MIGHT_RANK,
             ScreenType.PNC_BUILD_QUEUE,
+            ScreenType.PNC_BUILD_SPEEDUP,
+            ScreenType.PNC_BUILD_SPEEDUP_CONFIRM,
         }:
             if observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT):
                 return [

@@ -48,6 +48,13 @@ class BuildingPriority(StrEnum):
     GODDESS_STATUE = "goddess_statue"
 
 
+class BuildingPrerequisiteMode(StrEnum):
+    """Controls whether an unmet building prerequisite fails or enters the upgrade queue."""
+
+    FAIL = "fail"
+    QUEUE = "queue"
+
+
 class ResearchCategory(StrEnum):
     """Supported research categories for institute automation."""
 
@@ -81,6 +88,8 @@ class BuildingUpgradePolicy:
         BuildingPriority(home_city_object_id.value) for home_city_object_id in default_building_upgrade_priority()
     )
     allow_speedups: bool = False
+    prerequisite_mode: BuildingPrerequisiteMode = BuildingPrerequisiteMode.FAIL
+    allow_premium_material_purchases: bool = False
 
     @classmethod
     def from_params(cls, params: Mapping[str, Any]) -> "BuildingUpgradePolicy":
@@ -101,6 +110,15 @@ class BuildingUpgradePolicy:
                 field_name="priority",
             ),
             allow_speedups=_parse_bool(params.get("allow_speedups", False), field_name="allow_speedups"),
+            prerequisite_mode=_parse_enum_value(
+                params.get("prerequisite_mode", BuildingPrerequisiteMode.FAIL.value),
+                enum_type=BuildingPrerequisiteMode,
+                field_name="prerequisite_mode",
+            ),
+            allow_premium_material_purchases=_parse_bool(
+                params.get("allow_premium_material_purchases", False),
+                field_name="allow_premium_material_purchases",
+            ),
         )
 
 
@@ -263,6 +281,21 @@ def _parse_enum_list(values: Any, *, enum_type: type[TEnum], field_name: str) ->
     if not parsed:
         raise ScriptValidationError(f"Expected '{field_name}' to contain at least one value.", field=field_name)
     return tuple(parsed)
+
+
+def _parse_enum_value(value: Any, *, enum_type: type[TEnum], field_name: str) -> TEnum:
+    """Parses one strict string-backed enum field."""
+
+    if not isinstance(value, str):
+        raise ScriptValidationError(f"Expected '{field_name}' to be a string.", field=field_name)
+    try:
+        return enum_type(value)
+    except ValueError as error:
+        raise ScriptValidationError(
+            f"Unsupported value '{value}' for '{field_name}'.",
+            field=field_name,
+            value=value,
+        ) from error
 
 
 def _parse_bool(value: Any, *, field_name: str) -> bool:

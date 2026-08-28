@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
 
 from pnc_automation.app.authoring.config.models import (
     AccountConfig,
@@ -18,7 +19,9 @@ from pnc_automation.app.pnc.domain.action_requests import SwipeAction, TapAction
 from pnc_automation.app.pnc.domain.building_catalog import (
     ConstructionSlotFamily,
     HomeCityObjectId,
+    HomeCityObjectRole,
     constructable_home_city_object_ids,
+    home_city_object_definition,
     require_building_construction_source,
 )
 from pnc_automation.app.pnc.domain.observation import ListEntryKind, Observation, SpatialObjectKind, SpatialSurfaceType
@@ -30,6 +33,18 @@ from pnc_automation.app.pnc.vision.selector_interaction_kind import SelectorInte
 from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
 from pnc_automation.core.errors import ScriptValidationError
 from tests.test_support import build_logger, make_entry, make_observation, make_spatial_object, make_spatial_surface
+
+_REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _active_inventory_ids(path: Path) -> tuple[str, ...]:
+    """Returns uncommented ids from one authored building live-test input."""
+
+    return tuple(
+        line.split("#", 1)[0].strip()
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.split("#", 1)[0].strip() != ""
+    )
 
 
 class BuildingConstructionTests(unittest.TestCase):
@@ -85,6 +100,44 @@ class BuildingConstructionTests(unittest.TestCase):
                 selector = registry.require(source.option_selector_id)
                 self.assertIn(source.menu_screen_type, selector.screens)
                 self.assertEqual(selector.interaction_kind, SelectorInteractionKind.ACTION)
+
+    def test_live_test_building_lists_match_the_canonical_catalog(self) -> None:
+        """Keeps reusable construction and upgrade inputs synchronized with catalog capabilities."""
+
+        inventory_root = _REPOSITORY_ROOT / "scripts/manual/building_inventory"
+        upgrade_ids = _active_inventory_ids(inventory_root / "upgradeable_buildings.txt")
+        construction_ids = _active_inventory_ids(inventory_root / "constructable_buildings.txt")
+        expected_upgrade_ids = tuple(
+            object_id.value
+            for object_id in HomeCityObjectId
+            if home_city_object_definition(object_id).role
+            in {HomeCityObjectRole.HOME_CITY_BUILDING, HomeCityObjectRole.REPEATABLE_SMALL_BUILDING}
+            and home_city_object_definition(object_id).upgradeable
+        )
+
+        self.assertEqual(upgrade_ids, expected_upgrade_ids)
+        self.assertEqual(construction_ids, tuple(object_id.value for object_id in constructable_home_city_object_ids()))
+
+    def test_readable_inventory_classifies_every_catalog_building_once(self) -> None:
+        """Prevents omissions or duplicate classifications in the human-readable inventory."""
+
+        inventory_path = _REPOSITORY_ROOT / "scripts/manual/building_inventory/home_city_buildings.txt"
+        records = tuple(
+            tuple(segment.strip() for segment in line.split("|"))
+            for line in inventory_path.read_text(encoding="utf-8").splitlines()
+            if line.strip() != "" and not line.lstrip().startswith("#")
+        )
+        catalog_records = tuple(record for record in records if record[0] in {"upgradeable", "non_upgradeable"})
+        expected_ids = {
+            object_id.value
+            for object_id in HomeCityObjectId
+            if home_city_object_definition(object_id).role
+            in {HomeCityObjectRole.HOME_CITY_BUILDING, HomeCityObjectRole.REPEATABLE_SMALL_BUILDING}
+        }
+
+        self.assertTrue(all(len(record) == 5 for record in records))
+        self.assertEqual(len(catalog_records), len(expected_ids))
+        self.assertEqual({record[1] for record in catalog_records}, expected_ids)
 
     def test_policy_rejects_a_nonconstructable_building(self) -> None:
         """Rejects owned-only buildings before runtime actions are planned."""

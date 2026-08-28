@@ -1,0 +1,55 @@
+# Home City building inventory
+#
+# Generated from the canonical building catalog and checked against a safe live
+# panorama survey of the active castle on the `testing` BlueStacks instance on
+# 2026-08-24 plus earlier build-task evidence from the same instance. Fields are:
+#
+# classification | building_id | display_name | construction | live_evidence
+#
+# `constructable` means the construction task can create the building when its
+# legal slot is available. `existing_only` means it can be upgraded but is not a
+# supported construction target.
+
+# Upgradeable buildings (23)
+upgradeable | castle | Castle | existing_only | observed_live_lv9
+upgradeable | wall | Wall | existing_only | catalog_only_this_survey
+upgradeable | institute | Institute | constructable | observed_live
+upgradeable | warehouse | Warehouse | constructable | catalog_only_this_survey
+upgradeable | trap_workshop | Trap Workshop | constructable | absent_tutorial_requests_construction
+upgradeable | watchtower | Watch Tower | existing_only | catalog_only_this_survey
+upgradeable | farm | Farm | constructable | observed_live_prior_run_lv1_lv4_lv5
+upgradeable | lumber_camp | Lumber Camp | constructable | observed_live_prior_run
+upgradeable | moon_well | Moon Well | constructable | observed_live_lv5_lv6
+upgradeable | recruiting_center | Recruiting Center | constructable | observed_live_lv5_lv6
+upgradeable | infirmary | Infirmary | constructable | observed_live_prior_run
+upgradeable | iron_mine | Iron Mine | constructable | catalog_only_this_survey
+upgradeable | gold_mine | Gold Mine | constructable | catalog_only_this_survey
+upgradeable | blacksmith | Blacksmith | constructable | observed_live_prior_run
+upgradeable | alliance_hall | Alliance Hall | constructable | catalog_only_this_survey
+upgradeable | market | Market | constructable | catalog_only_this_survey
+upgradeable | infantry_barracks | Infantry Barracks | existing_only | observed_live_lv6
+upgradeable | cavalry_barracks | Cavalry Barracks | existing_only | observed_live_lv7
+upgradeable | ranged_barracks | Ranged Barracks | existing_only | observed_live_lv7
+upgradeable | siege_factory | Siege Factory | existing_only | observed_live_lv5
+upgradeable | hall_of_war | Hall of War | existing_only | observed_live_lv5
+upgradeable | sauroi_lair | Sauroi Lair | existing_only | observed_live
+upgradeable | goddess_statue | Goddess Statue | constructable | observed_live_lv1
+
+# Non-upgradeable catalog buildings (9)
+non_upgradeable | hero_hall | Hero Hall | not_constructable | observed_live
+non_upgradeable | sanctum | Sanctum | not_constructable | catalog_only_this_survey
+non_upgradeable | tower_of_trial | Tower of Trial | not_constructable | catalog_only_this_survey
+non_upgradeable | campaign | Campaign | not_constructable | observed_live
+non_upgradeable | arena | Arena | not_constructable | observed_live
+non_upgradeable | sacred_tree | Sacred Tree | not_constructable | observed_live
+non_upgradeable | pit | Pit | not_constructable | observed_live
+non_upgradeable | bank | Bank | not_constructable | observed_live
+non_upgradeable | dragondom_conquest | Dragondom Conquest | not_constructable | catalog_only_this_survey
+
+# Live-observed landmarks that are not automation building targets yet
+unmodeled_landmark | mystery_shop | Mystery Shop | unsupported | observed_live
+unmodeled_landmark | war_banner | War Banner | unsupported | observed_live
+
+# Slot/control objects are intentionally excluded from the building lists:
+# reserved fixed slots, flexible large/small slots, locked territory, and its
+# unlock control are navigation objects rather than buildings.

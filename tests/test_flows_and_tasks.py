@@ -61,7 +61,13 @@ from pnc_automation.app.pnc.domain.observation import (
     resolve_unambiguous_castle_identity,
 )
 from pnc_automation.app.pnc.navigation.spatial_navigation import WorldCoordinate
-from pnc_automation.app.pnc.domain.policy_models import BuildingPriority, BuildingUpgradePolicy, GatheringPolicy, OpenBuildingPolicy
+from pnc_automation.app.pnc.domain.policy_models import (
+    BuildingPrerequisiteMode,
+    BuildingPriority,
+    BuildingUpgradePolicy,
+    GatheringPolicy,
+    OpenBuildingPolicy,
+)
 from pnc_automation.app.pnc.navigation.screen_flows import ChatChannel, ScreenFlowPlanner
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
@@ -569,7 +575,7 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertEqual(actions[0].direction, "right")
         self.assertEqual(actions[0].reason, "focus_infantry_barracks_from_home_city_atlas_x")
         self.assertIsInstance(actions[1], TapPointAction)
-        self.assertEqual((actions[1].x, actions[1].y), (150, 699))
+        self.assertEqual((actions[1].x, actions[1].y), (180, 699))
         self.assertEqual(actions[1].reason, "open_infantry_barracks_from_home_city_atlas")
 
     def test_build_home_city_object_metadata_exposes_static_atlas_coordinate(self) -> None:
@@ -621,7 +627,7 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertEqual(actions[1].direction, "up")
         self.assertEqual(actions[1].reason, "focus_alliance_hall_from_home_city_atlas_y")
         self.assertIsInstance(actions[2], TapPointAction)
-        self.assertEqual((actions[2].x, actions[2].y), (810, 1085))
+        self.assertEqual((actions[2].x, actions[2].y), (640, 1085))
         self.assertTrue(actions[2].observe_after)
         self.assertEqual(actions[2].reason, "open_alliance_hall_from_home_city_atlas")
 
@@ -765,7 +771,7 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertEqual(actions[1].direction, "right")
         self.assertEqual(actions[1].reason, "focus_trap_workshop_from_home_city_atlas_x")
         self.assertIsInstance(actions[2], TapPointAction)
-        self.assertEqual((actions[2].x, actions[2].y), (150, 1085))
+        self.assertEqual((actions[2].x, actions[2].y), (180, 1085))
         self.assertEqual(actions[2].reason, "open_trap_workshop_from_home_city_atlas")
 
     def test_open_home_city_object_prioritizes_the_x_axis_before_vertical_motion_in_the_sauroi_band(self) -> None:
@@ -2760,6 +2766,17 @@ class FlowAndTaskTests(unittest.TestCase):
                 make_observation(ScreenType.PNC_HOME_CITY),
             )
 
+    def test_return_to_safe_root_screen_unwinds_build_speedup_confirmation(self) -> None:
+        """Dismisses an unconfirmed speedup popup with Android Back without consuming inventory."""
+
+        actions = self.flows.return_to_safe_root_screen(
+            make_observation(ScreenType.PNC_BUILD_SPEEDUP_CONFIRM)
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], KeyEventAction)
+        self.assertEqual(actions[0].key_code, "KEYCODE_BACK")
+
     def test_return_to_safe_root_screen_closes_more_overlay_without_triggering_exit_popup(self) -> None:
         """Closes the live More overlay with its own toggle instead of using Android back."""
 
@@ -3355,6 +3372,22 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertEqual(params.priority, (BuildingPriority.INSTITUTE, BuildingPriority.WAREHOUSE))
         self.assertFalse(params.allow_speedups)
 
+    def test_building_upgrade_task_parse_params_supports_explicit_mutation_policies(self) -> None:
+        """Loads independent prerequisite, speedup, and premium-material guards."""
+
+        params = BuildingUpgradeTask().parse_params(
+            {
+                "priority": ["hall_of_war"],
+                "allow_speedups": True,
+                "prerequisite_mode": "queue",
+                "allow_premium_material_purchases": True,
+            }
+        )
+
+        self.assertTrue(params.allow_speedups)
+        self.assertEqual(params.prerequisite_mode, BuildingPrerequisiteMode.QUEUE)
+        self.assertTrue(params.allow_premium_material_purchases)
+
     def test_building_upgrade_task_parse_params_rejects_priority_and_priority_file_together(self) -> None:
         """Fails fast when scripts try to mix direct building priorities with one priority-file source."""
 
@@ -3726,6 +3759,118 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertEqual(actions[0].reason, "leave_building_requirement_panel")
         self.assertTrue(actions[0].observe_after)
 
+    def test_building_upgrade_task_queue_mode_opens_visible_prerequisite(self) -> None:
+        """Uses the requirement Go control only when dependency resolution is explicitly enabled."""
+
+        task = BuildingUpgradeTask()
+        context = self._make_context(
+            params=BuildingUpgradePolicy(
+                priority=(BuildingPriority.INFANTRY_BARRACKS,),
+                prerequisite_mode=BuildingPrerequisiteMode.QUEUE,
+            ),
+            task_id=TaskId.BUILDING_UPGRADE,
+        )
+
+        actions = task.plan(
+            context,
+            make_observation(
+                ScreenType.PNC_INFANTRY_BARRACKS,
+                visible_ids=(
+                    UiElementId.PNC_BUILDING_REQUIREMENT_HEADER,
+                    UiElementId.PNC_BUILDING_REQUIREMENT_TARGET_LABEL,
+                    UiElementId.PNC_BUILDING_REQUIREMENT_GO_BUTTON,
+                ),
+                visible_texts={UiElementId.PNC_BUILDING_REQUIREMENT_TARGET_LABEL: "Recruiting Center : Lv.7"},
+            ),
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], TapAction)
+        self.assertEqual(actions[0].selector_id, UiElementId.PNC_BUILDING_REQUIREMENT_GO_BUTTON)
+        queued = context.runtime_state["building_upgrade_queued_prerequisite"]
+        self.assertEqual(queued.root_target, BuildingPriority.INFANTRY_BARRACKS)
+
+    def test_building_upgrade_task_queue_mode_records_canonical_prerequisite(self) -> None:
+        """Parses the live requirement row and makes that building the next active target."""
+
+        task = BuildingUpgradeTask()
+        context = self._make_context(
+            params=BuildingUpgradePolicy(
+                priority=(BuildingPriority.INFANTRY_BARRACKS,),
+                prerequisite_mode=BuildingPrerequisiteMode.QUEUE,
+            ),
+            task_id=TaskId.BUILDING_UPGRADE,
+        )
+        before = make_observation(
+            ScreenType.PNC_INFANTRY_BARRACKS,
+            visible_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
+        )
+        after = make_observation(
+            ScreenType.PNC_INFANTRY_BARRACKS,
+            visible_ids=(
+                UiElementId.PNC_BUILDING_UPGRADE_BUTTON,
+                UiElementId.PNC_BUILDING_REQUIREMENT_HEADER,
+                UiElementId.PNC_BUILDING_REQUIREMENT_TARGET_LABEL,
+                UiElementId.PNC_BUILDING_REQUIREMENT_GO_BUTTON,
+            ),
+            visible_texts={UiElementId.PNC_BUILDING_REQUIREMENT_TARGET_LABEL: "Recruiting Center : Lv.7"},
+        )
+
+        result = task.verify(context, before, after)
+        actions = task.plan(context, make_observation(ScreenType.PNC_HOME_CITY))
+
+        self.assertEqual(result.status, TaskStatus.REPLAN)
+        queued = context.runtime_state["building_upgrade_queued_prerequisite"]
+        self.assertEqual(queued.root_target, BuildingPriority.INFANTRY_BARRACKS)
+        self.assertEqual(queued.prerequisite, BuildingPriority.RECRUITING_CENTER)
+        self.assertEqual(queued.required_level, 7)
+        self.assertTrue(actions)
+
+    def test_building_upgrade_task_reports_scheduler_ready_prerequisite_outcome(self) -> None:
+        """Stops after starting the dependency and tells a future general scheduler when to rerun."""
+
+        task = BuildingUpgradeTask()
+        context = self._make_context(
+            params=BuildingUpgradePolicy(
+                priority=(BuildingPriority.INFANTRY_BARRACKS,),
+                prerequisite_mode=BuildingPrerequisiteMode.QUEUE,
+            ),
+            task_id=TaskId.BUILDING_UPGRADE,
+        )
+        requirement = make_observation(
+            ScreenType.PNC_INFANTRY_BARRACKS,
+            visible_ids=(
+                UiElementId.PNC_BUILDING_REQUIREMENT_HEADER,
+                UiElementId.PNC_BUILDING_REQUIREMENT_TARGET_LABEL,
+            ),
+            visible_texts={UiElementId.PNC_BUILDING_REQUIREMENT_TARGET_LABEL: "Recruiting Center : Lv.7"},
+        )
+        task.verify(
+            context,
+            make_observation(
+                ScreenType.PNC_INFANTRY_BARRACKS,
+                visible_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
+            ),
+            requirement,
+        )
+
+        result = task.verify(
+            context,
+            make_observation(
+                ScreenType.PNC_BUILDING_DETAILS,
+                visible_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
+            ),
+            make_observation(
+                ScreenType.PNC_BUILDING_DETAILS,
+                visible_ids=(UiElementId.PNC_BUILDING_SPEEDUP_BUTTON,),
+            ),
+        )
+
+        self.assertEqual(result.status, TaskStatus.SUCCESS)
+        self.assertIn("Prerequisite 'recruiting_center' toward Lv.7", result.message)
+        self.assertIn("Run the original upgrade again", result.message)
+        self.assertNotIn("building_upgrade_queued_prerequisite", context.runtime_state)
+
     def test_building_upgrade_task_replans_when_upgrade_click_lands_on_unknown_transition(self) -> None:
         """Keeps the task alive when a verified upgrade click lands on a transient unknown frame."""
 
@@ -4056,6 +4201,127 @@ class FlowAndTaskTests(unittest.TestCase):
 
         self.assertEqual(result.status, TaskStatus.SUCCESS)
         self.assertIn("Speedup", result.message)
+
+    def test_building_upgrade_task_opens_speedup_only_when_explicitly_allowed(self) -> None:
+        """Uses the active building's Speedup control only under the opt-in policy."""
+
+        task = BuildingUpgradeTask()
+        context = self._make_context(
+            params=BuildingUpgradePolicy(allow_speedups=True),
+            task_id=TaskId.BUILDING_UPGRADE,
+        )
+
+        actions = task.plan(
+            context,
+            make_observation(
+                ScreenType.PNC_WAREHOUSE,
+                visible_ids=(UiElementId.PNC_BUILDING_SPEEDUP_BUTTON,),
+            ),
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], TapAction)
+        self.assertEqual(actions[0].selector_id, UiElementId.PNC_BUILDING_SPEEDUP_BUTTON)
+
+    def test_building_upgrade_task_selects_inventory_auto_speedup(self) -> None:
+        """Selects Auto Speedup and never the premium Build Now control."""
+
+        task = BuildingUpgradeTask()
+        context = self._make_context(
+            params=BuildingUpgradePolicy(allow_speedups=True),
+            task_id=TaskId.BUILDING_UPGRADE,
+        )
+
+        actions = task.plan(
+            context,
+            make_observation(
+                ScreenType.PNC_BUILD_SPEEDUP,
+                visible_ids=(
+                    UiElementId.PNC_BUILD_SPEEDUP_AUTO_BUTTON,
+                    UiElementId.PNC_BUILD_SPEEDUP_PREMIUM_BUILD_NOW_BUTTON,
+                ),
+            ),
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], TapAction)
+        self.assertEqual(actions[0].selector_id, UiElementId.PNC_BUILD_SPEEDUP_AUTO_BUTTON)
+
+    def test_building_upgrade_task_confirms_inventory_auto_speedup(self) -> None:
+        """Confirms the item-consumption popup only after speedups were explicitly allowed."""
+
+        task = BuildingUpgradeTask()
+        context = self._make_context(
+            params=BuildingUpgradePolicy(allow_speedups=True),
+            task_id=TaskId.BUILDING_UPGRADE,
+        )
+
+        actions = task.plan(
+            context,
+            make_observation(
+                ScreenType.PNC_BUILD_SPEEDUP_CONFIRM,
+                visible_ids=(UiElementId.PNC_BUILD_SPEEDUP_CONFIRM_BUTTON,),
+            ),
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], TapAction)
+        self.assertEqual(actions[0].selector_id, UiElementId.PNC_BUILD_SPEEDUP_CONFIRM_BUTTON)
+
+    def test_building_upgrade_task_verifies_level_increase_after_auto_speedup(self) -> None:
+        """Requires the city-map building level to increase after inventory speedups are submitted."""
+
+        task = BuildingUpgradeTask()
+        context = self._make_context(
+            params=BuildingUpgradePolicy(
+                priority=(BuildingPriority.WAREHOUSE,),
+                allow_speedups=True,
+            ),
+            task_id=TaskId.BUILDING_UPGRADE,
+        )
+        task.plan(
+            context,
+            make_observation(
+                ScreenType.PNC_HOME_CITY,
+                spatial_surface=make_spatial_surface(
+                    SpatialSurfaceType.HOME_CITY_SURFACE,
+                    objects=(
+                        make_spatial_object(
+                            SpatialObjectKind.HOME_BUILDING,
+                            name_text="Warehouse",
+                            level=8,
+                            metadata=build_home_city_object_metadata(HomeCityObjectId.WAREHOUSE),
+                        ),
+                    ),
+                    metadata={"active_build_timer_text": "02:42:25"},
+                ),
+            ),
+        )
+
+        result = task.verify(
+            context,
+            make_observation(
+                ScreenType.PNC_BUILD_SPEEDUP,
+                visible_ids=(UiElementId.PNC_BUILD_SPEEDUP_AUTO_BUTTON,),
+            ),
+            make_observation(
+                ScreenType.PNC_HOME_CITY,
+                spatial_surface=make_spatial_surface(
+                    SpatialSurfaceType.HOME_CITY_SURFACE,
+                    objects=(
+                        make_spatial_object(
+                            SpatialObjectKind.HOME_BUILDING,
+                            name_text="Warehouse",
+                            level=9,
+                            metadata=build_home_city_object_metadata(HomeCityObjectId.WAREHOUSE),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        self.assertEqual(result.status, TaskStatus.SUCCESS)
+        self.assertIn("increased from Lv.8 to Lv.9", result.message)
 
     def test_building_upgrade_task_taps_post_upgrade_help_when_pending(self) -> None:
         """Uses the shared home-city build-slot control to request help after a successful upgrade start."""

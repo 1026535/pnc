@@ -1200,9 +1200,9 @@ class HomeCityNavigator(SpatialSurfaceNavigator):
     focus_tolerance_units: int = 48
     open_focus_tolerance_units: int = 0
     max_swipe_ratio: float = 0.78
-    open_safe_left_margin_units: int = 150
-    open_safe_right_margin_units: int = 90
-    open_safe_top_margin_units: int = 140
+    open_safe_left_margin_units: int = 180
+    open_safe_right_margin_units: int = 260
+    open_safe_top_margin_units: int = 300
     open_safe_bottom_margin_units: int = 515
 
     def focus_step_budget(self) -> int:

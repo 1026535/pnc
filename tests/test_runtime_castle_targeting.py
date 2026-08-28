@@ -448,7 +448,18 @@ class RuntimeCastleTargetingTests(unittest.TestCase):
 
         self.assertEqual(
             fake_runner.task_calls,
-            [(TaskId.BUILDING_UPGRADE, "account_a", {"priority": ["castle"], "allow_speedups": False})],
+            [
+                (
+                    TaskId.BUILDING_UPGRADE,
+                    "account_a",
+                    {
+                        "priority": ["castle"],
+                        "allow_speedups": False,
+                        "prerequisite_mode": "fail",
+                        "allow_premium_material_purchases": False,
+                    },
+                )
+            ],
         )
 
     def test_python_building_upgrade_loads_priority_file(self) -> None:
@@ -464,7 +475,18 @@ class RuntimeCastleTargetingTests(unittest.TestCase):
 
         self.assertEqual(
             fake_runner.task_calls,
-            [(TaskId.BUILDING_UPGRADE, "account_a", {"priority": ["institute", "warehouse"], "allow_speedups": False})],
+            [
+                (
+                    TaskId.BUILDING_UPGRADE,
+                    "account_a",
+                    {
+                        "priority": ["institute", "warehouse"],
+                        "allow_speedups": False,
+                        "prerequisite_mode": "fail",
+                        "allow_premium_material_purchases": False,
+                    },
+                )
+            ],
         )
 
     def test_python_generic_run_task_resolves_account_from_active_context(self) -> None:
@@ -553,7 +575,18 @@ class RuntimeCastleTargetingTests(unittest.TestCase):
         self.assertEqual(fake_runner.prepare_calls, [])
         self.assertEqual(
             fake_runner.task_calls,
-            [(TaskId.BUILDING_UPGRADE, "account_a", {"priority": ["institute", "warehouse"], "allow_speedups": False})],
+            [
+                (
+                    TaskId.BUILDING_UPGRADE,
+                    "account_a",
+                    {
+                        "priority": ["institute", "warehouse"],
+                        "allow_speedups": False,
+                        "prerequisite_mode": "fail",
+                        "allow_premium_material_purchases": False,
+                    },
+                )
+            ],
         )
 
     def test_cli_build_with_castle_and_priority_file_prepares_then_runs_direct_build_task(self) -> None:
@@ -586,7 +619,18 @@ class RuntimeCastleTargetingTests(unittest.TestCase):
         self.assertEqual(fake_runner.prepare_calls, [("account_a", self.target_castle)])
         self.assertEqual(
             fake_runner.task_calls,
-            [(TaskId.BUILDING_UPGRADE, "account_a", {"priority": ["institute", "warehouse"], "allow_speedups": False})],
+            [
+                (
+                    TaskId.BUILDING_UPGRADE,
+                    "account_a",
+                    {
+                        "priority": ["institute", "warehouse"],
+                        "allow_speedups": False,
+                        "prerequisite_mode": "fail",
+                        "allow_premium_material_purchases": False,
+                    },
+                )
+            ],
         )
 
     def test_cli_legacy_run_flags_still_route_through_the_shared_run_path(self) -> None:

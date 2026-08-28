@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+import re
 from typing import Any
 
 from pnc_automation.app.automation.engine.task import (
@@ -31,6 +32,7 @@ from pnc_automation.app.pnc.domain.action_requests import ActionRequest, KeyEven
 from pnc_automation.app.pnc.domain.building_catalog import (
     BuildingAction,
     HomeCityObjectId,
+    home_city_object_definition_for_label,
     home_city_object_id_for_screen,
     home_city_object_supports_action,
     is_repeatable_home_city_object,
@@ -42,7 +44,11 @@ from pnc_automation.app.pnc.domain.observation import (
     Observation,
     SpatialObjectKind,
 )
-from pnc_automation.app.pnc.domain.policy_models import BuildingPriority, BuildingUpgradePolicy
+from pnc_automation.app.pnc.domain.policy_models import (
+    BuildingPrerequisiteMode,
+    BuildingPriority,
+    BuildingUpgradePolicy,
+)
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
@@ -55,12 +61,18 @@ _BUILDING_UPGRADE_POST_START_HELP_PENDING_STATE_KEY = "building_upgrade_post_sta
 _BUILDING_UPGRADE_FOCUS_PENDING_STATE_KEY = "building_upgrade_focus_pending"
 _BUILDING_UPGRADE_LAST_UNMET_REQUIREMENT_STATE_KEY = "building_upgrade_last_unmet_requirement"
 _BUILDING_UPGRADE_SUCCESS_VERIFICATION_STAGE_STATE_KEY = "building_upgrade_success_verification_stage"
+_BUILDING_UPGRADE_QUEUED_PREREQUISITE_STATE_KEY = "building_upgrade_queued_prerequisite"
+_BUILDING_UPGRADE_SPEEDUP_COMPLETION_PENDING_STATE_KEY = "building_upgrade_speedup_completion_pending"
 _BUILDING_UPGRADE_SETTLE_WAIT_MS = 1500
 _BUILDING_UPGRADE_REPLAN_BUDGET_TARGET_CAP = 3
 _BUILDING_UPGRADE_REPLAN_BUDGET_OVERHEAD = 10
 _SUCCESS_VERIFICATION_STAGE_RETURN_HOME = "return_home"
 _SUCCESS_VERIFICATION_STAGE_OPEN_BUILD_QUEUE = "open_build_queue"
 _SUCCESS_VERIFICATION_STAGE_RETURN_HOME_FOR_LEVEL = "return_home_for_level"
+_BUILDING_REQUIREMENT_PATTERN = re.compile(
+    r"^(?P<building>.+?)\s*:\s*Lv\.?\s*(?P<level>\d+)$",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,6 +82,15 @@ class _PendingBuildingTarget:
     signature: tuple[object, ...]
     priority: BuildingPriority | None
     starting_level: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class _QueuedBuildingPrerequisite:
+    """Stores one prerequisite selected on behalf of the originally requested building."""
+
+    root_target: BuildingPriority
+    prerequisite: BuildingPriority
+    required_level: int
 
 
 class BuildingUpgradeTask(BaseAutomationTask):
@@ -103,13 +124,43 @@ class BuildingUpgradeTask(BaseAutomationTask):
     def plan(self, context: TaskContext, observation: Observation) -> list[ActionRequest]:
         """Plans one building-upgrade increment from the current screen."""
 
-        remaining_priorities = _remaining_requested_priorities(context.params.priority, context.runtime_state)
+        remaining_priorities = _active_requested_priorities(context.params, context.runtime_state)
         verification_stage = _success_verification_stage(context.runtime_state)
         if observation.screen_type == ScreenType.UNKNOWN:
             return [
                 WaitAction(
                     milliseconds=_BUILDING_UPGRADE_SETTLE_WAIT_MS,
                     reason="wait_for_building_upgrade_unknown_settle",
+                    observe_after=True,
+                )
+            ]
+        if _speedup_completion_pending(context.runtime_state):
+            if observation.screen_type == ScreenType.PNC_HOME_CITY:
+                return []
+            return context.flows.ensure_home_city(observation)
+        if observation.screen_type == ScreenType.PNC_BUILD_SPEEDUP:
+            if not context.params.allow_speedups:
+                return [
+                    KeyEventAction(
+                        key_code="KEYCODE_BACK",
+                        reason="leave_build_speedup_without_permission",
+                        observe_after=True,
+                    )
+                ]
+            return [
+                TapAction(
+                    selector_id=UiElementId.PNC_BUILD_SPEEDUP_AUTO_BUTTON,
+                    reason="use_inventory_auto_build_speedup",
+                    observe_after=True,
+                )
+            ]
+        if observation.screen_type == ScreenType.PNC_BUILD_SPEEDUP_CONFIRM:
+            if not context.params.allow_speedups:
+                return []
+            return [
+                TapAction(
+                    selector_id=UiElementId.PNC_BUILD_SPEEDUP_CONFIRM_BUTTON,
+                    reason="confirm_inventory_auto_build_speedup",
                     observe_after=True,
                 )
             ]
@@ -139,6 +190,7 @@ class BuildingUpgradeTask(BaseAutomationTask):
             and _home_build_help_is_available(observation)
             and _pending_target(context.runtime_state) is None
             and verification_stage is None
+            and not context.params.allow_speedups
         ):
             return [
                 TapAction(
@@ -152,6 +204,7 @@ class BuildingUpgradeTask(BaseAutomationTask):
             and _home_city_active_build_is_visible(observation)
             and _pending_target(context.runtime_state) is None
             and verification_stage is None
+            and not context.params.allow_speedups
         ):
             return []
         if not _is_upgrade_context_screen(observation.screen_type) and observation.screen_type != ScreenType.PNC_HOME_CITY:
@@ -167,6 +220,16 @@ class BuildingUpgradeTask(BaseAutomationTask):
                 ]
             _clear_focus_pending(context.runtime_state)
             if _building_requirement_is_visible(observation):
+                if context.params.prerequisite_mode == BuildingPrerequisiteMode.QUEUE:
+                    queue_error = _queue_visible_building_prerequisite(context, observation)
+                    if queue_error is None and observation.has(UiElementId.PNC_BUILDING_REQUIREMENT_GO_BUTTON):
+                        return [
+                            TapAction(
+                                selector_id=UiElementId.PNC_BUILDING_REQUIREMENT_GO_BUTTON,
+                                reason="open_queued_building_prerequisite",
+                                observe_after=True,
+                            )
+                        ]
                 return [
                     KeyEventAction(
                         key_code="KEYCODE_BACK",
@@ -185,6 +248,23 @@ class BuildingUpgradeTask(BaseAutomationTask):
                         reason="wait_for_building_upgrade_confirmation_settle",
                         observe_after=True,
                     ),
+                ]
+            if observation.has(UiElementId.PNC_BUILDING_SPEEDUP_BUTTON):
+                if context.params.allow_speedups:
+                    _record_pending_starting_level_from_screen(context.runtime_state, observation)
+                    return [
+                        TapAction(
+                            selector_id=UiElementId.PNC_BUILDING_SPEEDUP_BUTTON,
+                            reason="open_inventory_build_speedup",
+                            observe_after=True,
+                        )
+                    ]
+                return [
+                    KeyEventAction(
+                        key_code="KEYCODE_BACK",
+                        reason="leave_active_upgrade_without_speedup_permission",
+                        observe_after=True,
+                    )
                 ]
             if observation.has(UiElementId.PNC_BUILDING_UPGRADE_BUTTON):
                 return [
@@ -236,6 +316,63 @@ class BuildingUpgradeTask(BaseAutomationTask):
 
     def verify(self, context: TaskContext, before: Observation, after: Observation) -> TaskResult:
         """Verifies navigation, eligibility inspection, and the eventual upgrade start."""
+
+        if _speedup_completion_pending(context.runtime_state):
+            if after.screen_type == ScreenType.UNKNOWN:
+                return TaskResult.replan("Inventory build speedup completion is still settling.")
+            if after.screen_type == ScreenType.PNC_HOME_CITY:
+                if _home_city_pending_target_level_increased(after, context.runtime_state):
+                    return _finish_started_upgrade_success(
+                        context.runtime_state,
+                        _home_city_level_increase_success_message(context.runtime_state, after),
+                    )
+                return TaskResult.failure(
+                    "Inventory build speedup returned home without a verified building-level increase.",
+                    retryable=True,
+                )
+            if _building_screen_pending_target_level_increased(after, context.runtime_state):
+                return _finish_started_upgrade_success(
+                    context.runtime_state,
+                    _building_screen_level_increase_success_message(context.runtime_state, after),
+                )
+            return TaskResult.replan("Inventory build speedup was submitted and needs home-city level verification.")
+        if before.screen_type == ScreenType.PNC_BUILD_SPEEDUP_CONFIRM:
+            if not context.params.allow_speedups:
+                return TaskResult.failure("Build speedup use was not authorized.")
+            _set_speedup_completion_pending(context.runtime_state)
+            if after.screen_type == ScreenType.PNC_HOME_CITY:
+                if _home_city_pending_target_level_increased(after, context.runtime_state):
+                    return _finish_started_upgrade_success(
+                        context.runtime_state,
+                        _home_city_level_increase_success_message(context.runtime_state, after),
+                    )
+                return TaskResult.failure(
+                    "Inventory build speedup returned home without a verified building-level increase.",
+                    retryable=True,
+                )
+            if _building_screen_pending_target_level_increased(after, context.runtime_state):
+                return _finish_started_upgrade_success(
+                    context.runtime_state,
+                    _building_screen_level_increase_success_message(context.runtime_state, after),
+                )
+            return TaskResult.replan("Inventory build speedup was confirmed and needs home-city level verification.")
+        if before.screen_type == ScreenType.PNC_BUILD_SPEEDUP:
+            if not context.params.allow_speedups:
+                return TaskResult.failure("Build speedup use was not authorized.")
+            if after.screen_type == ScreenType.PNC_BUILD_SPEEDUP_CONFIRM:
+                return TaskResult.replan("Auto Speedup opened the explicit inventory-consumption confirmation.")
+            _set_speedup_completion_pending(context.runtime_state)
+            if after.screen_type == ScreenType.PNC_HOME_CITY:
+                if _home_city_pending_target_level_increased(after, context.runtime_state):
+                    return _finish_started_upgrade_success(
+                        context.runtime_state,
+                        _home_city_level_increase_success_message(context.runtime_state, after),
+                    )
+                return TaskResult.failure(
+                    "Inventory build speedup returned home without a verified building-level increase.",
+                    retryable=True,
+                )
+            return TaskResult.replan("Inventory build speedup was submitted and needs home-city level verification.")
 
         if before.screen_type == ScreenType.PNC_HOME_CITY and _has_post_start_help_pending(context.runtime_state):
             if after.screen_type == ScreenType.UNKNOWN:
@@ -326,7 +463,7 @@ class BuildingUpgradeTask(BaseAutomationTask):
                         retryable=True,
                     )
                 return TaskResult.failure("Build queue verification left the home city unexpectedly.", retryable=True)
-            remaining_priorities = _remaining_requested_priorities(context.params.priority, context.runtime_state)
+            remaining_priorities = _active_requested_priorities(context.params, context.runtime_state)
             if not remaining_priorities:
                 return _requested_priority_exhausted_result(context.runtime_state)
             if _is_upgrade_context_screen(after.screen_type):
@@ -336,6 +473,10 @@ class BuildingUpgradeTask(BaseAutomationTask):
                     _clear_focus_pending(context.runtime_state)
                     _clear_upgrade_confirmation_pending(context.runtime_state)
                     _set_last_unmet_requirement(context.runtime_state, after)
+                    if context.params.prerequisite_mode == BuildingPrerequisiteMode.QUEUE:
+                        queue_error = _queue_visible_building_prerequisite(context, after)
+                        if queue_error is not None:
+                            return queue_error
                     return TaskResult.replan(_unmet_requirement_replan_message(after))
                 if after.has(UiElementId.PNC_BUILDING_UPGRADE_BUTTON):
                     _clear_focus_pending(context.runtime_state)
@@ -357,6 +498,12 @@ class BuildingUpgradeTask(BaseAutomationTask):
                 return TaskResult.failure("Building upgrade could not continue the home-city search.", retryable=True)
             return TaskResult.failure("Building upgrade did not produce a verified state change.", retryable=True)
         if _is_upgrade_context_screen(before.screen_type) and _building_requirement_is_visible(before):
+            if context.params.prerequisite_mode == BuildingPrerequisiteMode.QUEUE:
+                if after.screen_type == ScreenType.UNKNOWN:
+                    return TaskResult.replan("Queued building prerequisite navigation is still settling.")
+                if after.screen_type == ScreenType.PNC_HOME_CITY or _is_upgrade_context_screen(after.screen_type):
+                    return TaskResult.replan("Reached the queued building prerequisite for upgrade planning.")
+                return TaskResult.failure("Queued building prerequisite navigation left the supported workflow.", retryable=True)
             _mark_screen_priority_ineligible(context.runtime_state, before.screen_type)
             _set_last_unmet_requirement(context.runtime_state, before)
             if after.screen_type == ScreenType.UNKNOWN:
@@ -369,6 +516,12 @@ class BuildingUpgradeTask(BaseAutomationTask):
             if _is_upgrade_context_screen(after.screen_type) and _building_requirement_is_visible(after):
                 return TaskResult.replan("Building requirement panel is still open and needs to return to home city.")
             return TaskResult.failure("Building upgrade could not leave the unmet requirement panel.", retryable=True)
+        if _is_upgrade_context_screen(before.screen_type) and _building_speedup_is_visible(before):
+            if after.screen_type == ScreenType.UNKNOWN:
+                return TaskResult.replan("Build speedup screen is still opening.")
+            if after.screen_type == ScreenType.PNC_BUILD_SPEEDUP:
+                return TaskResult.replan("Opened the inventory-backed build speedup screen.")
+            return TaskResult.failure("Building Speedup did not open the supported inventory screen.", retryable=True)
         if _is_upgrade_context_screen(before.screen_type) and _success_verification_stage(context.runtime_state) == _SUCCESS_VERIFICATION_STAGE_RETURN_HOME:
             if after.screen_type == ScreenType.UNKNOWN:
                 return TaskResult.replan("Returning home for upgrade verification is still settling.")
@@ -383,6 +536,10 @@ class BuildingUpgradeTask(BaseAutomationTask):
                 _mark_screen_priority_ineligible(context.runtime_state, after.screen_type)
                 _clear_upgrade_confirmation_pending(context.runtime_state)
                 _set_last_unmet_requirement(context.runtime_state, after)
+                if context.params.prerequisite_mode == BuildingPrerequisiteMode.QUEUE:
+                    queue_error = _queue_visible_building_prerequisite(context, after)
+                    if queue_error is not None:
+                        return queue_error
                 return TaskResult.replan(_unmet_requirement_replan_message(after))
             if _is_upgrade_context_screen(after.screen_type) and _building_upgrade_confirmation_is_visible(after):
                 if _has_upgrade_confirmation_pending(context.runtime_state):
@@ -411,7 +568,7 @@ class BuildingUpgradeTask(BaseAutomationTask):
         if after.screen_type == ScreenType.PNC_HOME_CITY:
             _clear_upgrade_confirmation_pending(context.runtime_state)
             _clear_pending_target(context.runtime_state)
-            remaining_priorities = _remaining_requested_priorities(context.params.priority, context.runtime_state)
+            remaining_priorities = _active_requested_priorities(context.params, context.runtime_state)
             if not remaining_priorities:
                 return _requested_priority_exhausted_result(context.runtime_state)
             return TaskResult.replan("Returned to home city after verifying the selected building is not upgradeable.")
@@ -596,6 +753,27 @@ def _clear_success_verification_stage(runtime_state: dict[str, Any]) -> None:
     runtime_state.pop(_BUILDING_UPGRADE_SUCCESS_VERIFICATION_STAGE_STATE_KEY, None)
 
 
+def _set_speedup_completion_pending(runtime_state: dict[str, Any]) -> None:
+    """Remembers that inventory speedups were submitted and level verification is required."""
+
+    runtime_state[_BUILDING_UPGRADE_SPEEDUP_COMPLETION_PENDING_STATE_KEY] = True
+
+
+def _speedup_completion_pending(runtime_state: dict[str, Any]) -> bool:
+    """Returns whether an inventory speedup needs final home-city verification."""
+
+    value = runtime_state.get(_BUILDING_UPGRADE_SPEEDUP_COMPLETION_PENDING_STATE_KEY, False)
+    if not isinstance(value, bool):
+        raise TypeError("Unexpected building_upgrade_speedup_completion_pending state.")
+    return value
+
+
+def _clear_speedup_completion_pending(runtime_state: dict[str, Any]) -> None:
+    """Clears the inventory-speedup verification marker."""
+
+    runtime_state.pop(_BUILDING_UPGRADE_SPEEDUP_COMPLETION_PENDING_STATE_KEY, None)
+
+
 def _success_verification_stage(runtime_state: dict[str, Any]) -> str | None:
     """Returns the ordered post-start verification stage when one is still pending."""
 
@@ -637,6 +815,78 @@ def _remaining_requested_priorities(
 
     blocked_object_ids = _ineligible_object_ids(runtime_state)
     return tuple(priority for priority in priorities if priority not in blocked_object_ids)
+
+
+def _active_requested_priorities(
+    policy: BuildingUpgradePolicy,
+    runtime_state: dict[str, Any],
+) -> tuple[BuildingPriority, ...]:
+    """Returns the queued prerequisite or the caller's remaining original priorities."""
+
+    queued = _queued_building_prerequisite(runtime_state)
+    if queued is not None:
+        return (queued.prerequisite,)
+    return _remaining_requested_priorities(policy.priority, runtime_state)
+
+
+def _queue_visible_building_prerequisite(
+    context: TaskContext,
+    observation: Observation,
+) -> TaskResult | None:
+    """Records one OCR-proven prerequisite or returns a terminal unsupported-requirement failure."""
+
+    requirement_text = _building_requirement_text(observation)
+    parsed = _parse_building_requirement(requirement_text)
+    if parsed is None:
+        return TaskResult.failure(
+            f"Cannot queue unsupported building prerequisite '{requirement_text or '<unknown>'}'."
+        )
+    prerequisite, required_level = parsed
+    existing = _queued_building_prerequisite(context.runtime_state)
+    current_target = _building_priority_from_screen(observation.screen_type)
+    pending = _pending_target(context.runtime_state)
+    root_target = (
+        existing.root_target
+        if existing is not None
+        else pending.priority
+        if pending is not None and pending.priority is not None
+        else current_target
+    )
+    if root_target is None:
+        return TaskResult.failure("Cannot queue a prerequisite without a canonical requested building target.")
+    context.runtime_state[_BUILDING_UPGRADE_QUEUED_PREREQUISITE_STATE_KEY] = _QueuedBuildingPrerequisite(
+        root_target=root_target,
+        prerequisite=prerequisite,
+        required_level=required_level,
+    )
+    return None
+
+
+def _parse_building_requirement(requirement_text: str | None) -> tuple[BuildingPriority, int] | None:
+    """Parses one OCR requirement such as `Alliance Hall : Lv.23` into a canonical target."""
+
+    if requirement_text is None:
+        return None
+    match = _BUILDING_REQUIREMENT_PATTERN.match(requirement_text.strip())
+    if match is None:
+        return None
+    definition = home_city_object_definition_for_label(match.group("building").strip())
+    if definition is None:
+        return None
+    try:
+        priority = BuildingPriority(definition.id.value)
+    except ValueError:
+        return None
+    return priority, int(match.group("level"))
+
+
+def _queued_building_prerequisite(runtime_state: dict[str, Any]) -> _QueuedBuildingPrerequisite | None:
+    """Returns the active prerequisite queue entry when one has been recorded."""
+
+    value = runtime_state.get(_BUILDING_UPGRADE_QUEUED_PREREQUISITE_STATE_KEY)
+    if value is None or isinstance(value, _QueuedBuildingPrerequisite):
+        return value
+    raise TypeError("Unexpected building_upgrade_queued_prerequisite state.")
 
 
 def _building_priority_from_screen(screen_type: ScreenType) -> BuildingPriority | None:
@@ -728,25 +978,50 @@ def _complete_started_upgrade_at_home_city(
     _clear_upgrade_confirmation_pending(runtime_state)
     _clear_last_unmet_requirement(runtime_state)
     _clear_success_verification_stage(runtime_state)
+    _clear_speedup_completion_pending(runtime_state)
     _clear_pending_target(runtime_state)
     _clear_focus_pending(runtime_state)
     if _home_build_help_is_available(observation):
         _set_post_start_help_pending(runtime_state)
         return TaskResult.replan(f"{success_message} Available alliance help can be requested.")
     _clear_post_start_help_pending(runtime_state)
-    return TaskResult.success(success_message)
+    return _queued_prerequisite_or_upgrade_success(runtime_state, success_message)
 
 
 def _finish_started_upgrade_success(runtime_state: dict[str, Any], message: str) -> TaskResult:
     """Clears post-start runtime state once one non-home success proof has already completed the task."""
 
+    queued = _queued_building_prerequisite(runtime_state)
     _clear_post_start_help_pending(runtime_state)
     _clear_upgrade_confirmation_pending(runtime_state)
     _clear_last_unmet_requirement(runtime_state)
     _clear_success_verification_stage(runtime_state)
+    _clear_speedup_completion_pending(runtime_state)
     _clear_pending_target(runtime_state)
     _clear_focus_pending(runtime_state)
+    runtime_state.pop(_BUILDING_UPGRADE_QUEUED_PREREQUISITE_STATE_KEY, None)
+    if queued is not None:
+        return TaskResult.success(_queued_prerequisite_success_message(queued, message))
     return TaskResult.success(message)
+
+
+def _queued_prerequisite_or_upgrade_success(runtime_state: dict[str, Any], message: str) -> TaskResult:
+    """Returns a prerequisite-queue outcome when the started upgrade belongs to a dependency."""
+
+    queued = _queued_building_prerequisite(runtime_state)
+    runtime_state.pop(_BUILDING_UPGRADE_QUEUED_PREREQUISITE_STATE_KEY, None)
+    if queued is None:
+        return TaskResult.success(message)
+    return TaskResult.success(_queued_prerequisite_success_message(queued, message))
+
+
+def _queued_prerequisite_success_message(queued: _QueuedBuildingPrerequisite, message: str) -> str:
+    """Formats the scheduler-ready outcome after one prerequisite upgrade enters the game queue."""
+
+    return (
+        f"Prerequisite '{queued.prerequisite.value}' toward Lv.{queued.required_level} started for "
+        f"'{queued.root_target.value}'. Run the original upgrade again after construction completes. {message}"
+    )
 
 
 def _finish_already_active_upgrade_skip(runtime_state: dict[str, Any], message: str) -> TaskResult:
@@ -756,6 +1031,7 @@ def _finish_already_active_upgrade_skip(runtime_state: dict[str, Any], message: 
     _clear_upgrade_confirmation_pending(runtime_state)
     _clear_last_unmet_requirement(runtime_state)
     _clear_success_verification_stage(runtime_state)
+    _clear_speedup_completion_pending(runtime_state)
     _clear_pending_target(runtime_state)
     _clear_focus_pending(runtime_state)
     return TaskResult.skipped(message)
