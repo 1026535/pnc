@@ -411,7 +411,7 @@ _HOME_CITY_OBJECT_DEFINITIONS = (
         id=HomeCityObjectId.INFANTRY_BARRACKS,
         role=HomeCityObjectRole.HOME_CITY_BUILDING,
         display_name="Infantry Barracks",
-        home_city_labels=("Infantry Barracks",),
+        home_city_labels=("Infantry Barracks", "Jnfantry Barracks"),
         building_group=HomeCityObjectGroup.BARRACKS_FAMILY,
         supported_actions=(
             BuildingAction.UPGRADE,
@@ -445,7 +445,7 @@ _HOME_CITY_OBJECT_DEFINITIONS = (
         id=HomeCityObjectId.RANGED_BARRACKS,
         role=HomeCityObjectRole.HOME_CITY_BUILDING,
         display_name="Ranged Barracks",
-        home_city_labels=("Ranged Barracks",),
+        home_city_labels=("Ranged Barracks", "Ranged Barrar"),
         building_group=HomeCityObjectGroup.BARRACKS_FAMILY,
         supported_actions=(
             BuildingAction.UPGRADE,

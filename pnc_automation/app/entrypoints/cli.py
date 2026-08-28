@@ -148,6 +148,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         params={
             "priority": priority,
             "allow_speedups": parsed.allow_speedups,
+            "prerequisite_mode": parsed.prerequisite_mode,
+            "allow_premium_material_purchases": parsed.allow_premium_material_purchases,
         },
     )
     print(_serialize_step_result(account_id=parsed.account, step_result=step_result))
@@ -192,6 +194,17 @@ def _add_building_upgrade_arguments(parser: argparse.ArgumentParser) -> None:
         "--allow-speedups",
         action="store_true",
         help="Allow the building-upgrade task to use supported speedups.",
+    )
+    parser.add_argument(
+        "--prerequisite-mode",
+        choices=("fail", "queue"),
+        default="fail",
+        help="Fail on an unmet prerequisite or queue its building upgrades first.",
+    )
+    parser.add_argument(
+        "--allow-premium-material-purchases",
+        action="store_true",
+        help="Allow explicitly supported premium-material purchases such as Hall of War Dwarf Engineering.",
     )
 
 

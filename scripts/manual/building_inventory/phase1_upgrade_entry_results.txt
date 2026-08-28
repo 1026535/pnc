@@ -1,0 +1,28 @@
+# Phase 1 live upgrade-entry inspection — testing instance, active castle, 2026-08-25
+# No Upgrade control was pressed and no resources were spent.
+# pass = requested screen exposed Upgrade; progression_locked = present but gated;
+# not_observed = not rediscovered by the bounded panorama/anchored pass.
+
+castle | pass | pnc_castle | 20260825T145702Z_phase1_upgrade_entry_castle_post_action_1.png
+wall | pass | pnc_wall | 20260825T150237Z_phase1_upgrade_entry_wall_post_action_1.png
+warehouse | pass | pnc_warehouse | 20260825T145713Z_phase1_upgrade_entry_warehouse_post_action_1.png
+institute | progression_locked_owned_0 | pnc_build_menu_fixed_slot | 20260825T150920Z_phase1_upgrade_entry_institute_verified.png
+infantry_barracks | progression_locked_chapter_2 | pnc_home_city | 20260825T145751Z_phase1_upgrade_entry_infantry_barracks_post_action_1.png
+cavalry_barracks | progression_locked_chapter_2 | pnc_home_city | 20260825T150335Z_phase1_upgrade_entry_cavalry_barracks_post_action_1.png
+ranged_barracks | progression_locked_chapter_2 | pnc_home_city | 20260825T150400Z_phase1_upgrade_entry_ranged_barracks_post_action_1.png
+sauroi_lair | progression_locked_pre_awaken | pnc_sauregg | 20260825T145728Z_phase1_upgrade_entry_sauroi_lair_post_action_1.png
+goddess_statue | navigation_gap_opened_castle | pnc_castle | 20260825T151346Z_open_building_post_action_3.png
+hall_of_war | navigation_gap_replan_budget_exhausted | - | -
+blacksmith | not_observed | - | -
+alliance_hall | not_observed | - | -
+market | not_observed | - | -
+siege_factory | not_observed | - | -
+trap_workshop | not_observed | - | -
+watchtower | not_observed | - | -
+farm | not_observed | - | -
+lumber_camp | not_observed | - | -
+moon_well | not_observed | - | -
+recruiting_center | not_observed | - | -
+infirmary | not_observed | - | -
+iron_mine | not_observed | - | -
+gold_mine | not_observed | - | -

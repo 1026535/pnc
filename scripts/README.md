@@ -19,6 +19,7 @@ This folder contains authored automation runbooks grouped by intent.
 - For ad hoc mail sends, prefer the direct `send-mail` CLI entry point instead of creating one-off YAML wrappers.
 - For authored recurring mail, define reusable payloads in `config/mail_definitions.yaml`, schedules in `config/mail_schedules.yaml`, and invoke `run-mail-schedules` hourly from the external scheduler.
 - Reusable building-upgrade batches belong under `scripts/manual/build_batches/` as ordered building-id files, not as duplicated multi-step run scripts.
+- The catalog-synchronized Home City classification and reusable construction/upgrade target lists live under `scripts/manual/building_inventory/`.
 
 Construct one exact missing building with `building_construct` (or the direct `construct --building ...` CLI command):
 

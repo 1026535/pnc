@@ -1,0 +1,14 @@
+# Phase 2 progression/tutorial candidates supplied during Phase 1.
+#
+# These canonical ids are deliberately separate from constructable_buildings.txt:
+# the current construction task cannot create them from a normal Build slot.
+# Tutorial/progression inspection must determine whether each appears through an
+# unlock step, a special placement flow, or automatic city progression.
+castle
+hall_of_war
+watchtower
+sauroi_lair
+infantry_barracks
+ranged_barracks
+cavalry_barracks
+siege_factory

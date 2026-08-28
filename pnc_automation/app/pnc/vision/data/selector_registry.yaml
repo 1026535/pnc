@@ -1676,6 +1676,34 @@ selectors:
   - PNC_BUILDING_DETAILS
   status: planned
   detection_kind: planned
+- id: PNC_BUILDING_SPEEDUP_BUTTON
+  screens:
+  - PNC_BUILDING_DETAILS
+  status: screenshot_seeded
+  detection_kind: planned
+  interaction_kind: action
+- id: PNC_BUILD_SPEEDUP_AUTO_BUTTON
+  screens:
+  - PNC_BUILD_SPEEDUP
+  status: screenshot_seeded
+  detection_kind: planned
+  interaction_kind: action
+  notes:
+  - Inventory-backed auto speedup; automation must never substitute the premium Build Now control.
+- id: PNC_BUILD_SPEEDUP_CONFIRM_BUTTON
+  screens:
+  - PNC_BUILD_SPEEDUP_CONFIRM
+  status: screenshot_seeded
+  detection_kind: planned
+  interaction_kind: action
+- id: PNC_BUILDING_REQUIREMENT_GO_BUTTON
+  screens:
+  - PNC_BUILDING_DETAILS
+  status: interaction_validated
+  detection_kind: planned
+  interaction_kind: action
+  notes:
+  - Live validated from the Castle multi-row requirement panel on the testing instance.
 - id: PNC_RESEARCH_AVAILABLE_BADGE
   screens:
   - PNC_INSTITUTE

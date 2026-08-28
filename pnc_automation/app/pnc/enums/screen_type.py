@@ -15,6 +15,8 @@ class ScreenType(StrEnum):
     PNC_HOME_CITY_ROOT = "pnc_home_city_root"
     PNC_HOME_CITY = "pnc_home_city"
     PNC_BUILD_QUEUE = "pnc_build_queue"
+    PNC_BUILD_SPEEDUP = "pnc_build_speedup"
+    PNC_BUILD_SPEEDUP_CONFIRM = "pnc_build_speedup_confirm"
     PNC_MORE_MENU = "pnc_more_menu"
     PNC_LORD_INFO = "pnc_lord_info"
     PNC_PLAYER_TERRITORY = "pnc_player_territory"

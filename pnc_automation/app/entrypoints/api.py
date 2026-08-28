@@ -58,6 +58,8 @@ class AutomationSession:
         priority: list[str] | None = None,
         priority_file: str | None = None,
         allow_speedups: bool = False,
+        prerequisite_mode: str = "fail",
+        allow_premium_material_purchases: bool = False,
     ) -> StepRunResult:
         """Runs one direct building-upgrade step against the prepared session."""
 
@@ -66,6 +68,8 @@ class AutomationSession:
             priority=priority,
             priority_file=priority_file,
             allow_speedups=allow_speedups,
+            prerequisite_mode=prerequisite_mode,
+            allow_premium_material_purchases=allow_premium_material_purchases,
         )
 
     def building_construct(self, *, building: str) -> StepRunResult:
@@ -239,6 +243,8 @@ class AutomationApi:
         priority: list[str] | None = None,
         priority_file: str | None = None,
         allow_speedups: bool = False,
+        prerequisite_mode: str = "fail",
+        allow_premium_material_purchases: bool = False,
     ) -> StepRunResult:
         """Runs one direct building-upgrade step using current-castle semantics."""
 
@@ -249,6 +255,8 @@ class AutomationApi:
             params={
                 "priority": resolved_priority,
                 "allow_speedups": allow_speedups,
+                "prerequisite_mode": prerequisite_mode,
+                "allow_premium_material_purchases": allow_premium_material_purchases,
             },
         )
 
@@ -505,6 +513,8 @@ def building_upgrade(
     priority: list[str] | None = None,
     priority_file: str | None = None,
     allow_speedups: bool = False,
+    prerequisite_mode: str = "fail",
+    allow_premium_material_purchases: bool = False,
 ) -> StepRunResult:
     """Runs one direct building-upgrade step through the default application facade."""
 
@@ -513,6 +523,8 @@ def building_upgrade(
         priority=priority,
         priority_file=priority_file,
         allow_speedups=allow_speedups,
+        prerequisite_mode=prerequisite_mode,
+        allow_premium_material_purchases=allow_premium_material_purchases,
     )
 
 
