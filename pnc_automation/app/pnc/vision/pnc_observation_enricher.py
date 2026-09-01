@@ -1104,13 +1104,33 @@ _TEXT_SCREEN_DEFINITIONS = (
                 selector_id=UiElementId.PNC_VERSUS_CENTER_TAB_EXCHANGE_SHOP,
                 texts=frozenset({"EXCHANGESHOP"}),
             ),
-            _TextScreenControlSpec(
-                selector_id=UiElementId.PNC_VERSUS_CENTER_HERO_SHOWDOWN_ENTRY,
-                texts=frozenset({"HEROSHOWDOWN"}),
-                contains_match=True,
-            ),
         ),
         minimum_control_matches=1,
+    ),
+    _TextScreenDefinition(
+        screen_type=ScreenType.PNC_HERO_SHOWDOWN_ELEMENTAL_INTRO,
+        header_selector_id=UiElementId.PNC_ELEMENTAL_FLUCTUATION_INTRO_HEADER,
+        header_texts=frozenset({"ELEMENTALFLUCTUATIONINTRO"}),
+        add_back_button=False,
+    ),
+    _TextScreenDefinition(
+        screen_type=ScreenType.PNC_HERO_SHOWDOWN_RANKING,
+        header_selector_id=UiElementId.PNC_HERO_SHOWDOWN_RANKING_HEADER,
+        header_texts=frozenset({"HEROSHOWDOWN"}),
+        controls=(
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_HERO_SHOWDOWN_CURRENT_RANK_LABEL,
+                texts=frozenset({"CURRENTRANK"}),
+                contains_match=True,
+                max_y_ratio=0.2,
+            ),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_HERO_SHOWDOWN_CHALLENGE_BUTTON,
+                texts=frozenset({"CHALLENGE"}),
+                min_y_ratio=0.75,
+            ),
+        ),
+        minimum_control_matches=2,
     ),
     _TextScreenDefinition(
         screen_type=ScreenType.PNC_WALL,
@@ -1192,6 +1212,14 @@ def _build_matching_text_screen_additions(
     observed_screen: ScreenType,
 ) -> ObservationAdditions | None:
     """Returns the first exact text-screen observation allowed by the current OCR request."""
+
+    if request.allows_screen(ScreenType.PNC_HERO_FORMATION) and can_attempt_screen_family_ocr(
+        request_screen=ScreenType.PNC_HERO_FORMATION,
+        observed_screen=observed_screen,
+    ):
+        hero_formation = _build_hero_formation_additions(image=image, lines=lines)
+        if hero_formation is not None:
+            return hero_formation
 
     for definition in _TEXT_SCREEN_DEFINITIONS:
         if not request.allows_screen(definition.screen_type):
@@ -1390,6 +1418,7 @@ def _make_text_screen_visible_element_seed(
             y=0,
             width=max(1, int(image.width * 0.12)),
             height=max(1, int(image.height * 0.08)),
+            source_kind=VisibleElementSourceKind.GEOMETRY,
         )
     return visible_elements
 
@@ -1659,7 +1688,7 @@ def _find_building_upgrade_confirm_line(*, image: Image.Image, lines: tuple[OcrL
 
 @dataclass(slots=True)
 class PncObservationEnricher:
-    """Derives P&C screen facts that are more reliable via OCR than selectors."""
+    """Derives P&C screen facts from guarded geometry and OCR evidence."""
 
     ocr_service: OcrService
     selector_registry: SelectorRegistry | None = None
@@ -1674,6 +1703,14 @@ class PncObservationEnricher:
     ) -> ObservationAdditions:
         """Builds OCR-backed bootstrap, fallback-classification, and castle-roster observations."""
 
+        if request.include_building_upgrade_warning:
+            building_warning = _build_visual_building_upgrade_warning_additions(image=image)
+            if building_warning is not None:
+                return building_warning
+        if request.include_popup_guard:
+            visual_popup = _build_visual_popup_close_additions(image=image)
+            if visual_popup is not None:
+                return visual_popup
         chat_geometry = self._build_chat_geometry_additions(
             image=image,
             screen_type=screen_type,
@@ -2864,6 +2901,50 @@ def _find_world_map_overview_header_line(*, image: Image.Image, lines: tuple[Ocr
             continue
         return line
     return None
+
+
+def _build_hero_formation_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Types Hero Formation from its unique bottom Save Form action without deriving click points from OCR."""
+
+    save_form_line = _find_line_matching(
+        lines=lines,
+        predicate=lambda line: normalize_ocr_text(line.text) == "SAVEFORM",
+        min_y=int(image.height * 0.85),
+    )
+    if save_form_line is None:
+        return None
+    return ObservationAdditions(
+        visible_elements={
+            UiElementId.PNC_HERO_FORMATION_HEADER: _make_visible(
+                selector_id=UiElementId.PNC_HERO_FORMATION_HEADER,
+                x=int(image.width * 0.12),
+                y=0,
+                width=max(1, int(image.width * 0.55)),
+                height=max(1, int(image.height * 0.08)),
+            ),
+            UiElementId.PNC_HERO_FORMATION_SAVE_BUTTON: _make_visible(
+                selector_id=UiElementId.PNC_HERO_FORMATION_SAVE_BUTTON,
+                x=int(image.width * 0.32),
+                y=int(image.height * 0.91),
+                width=max(1, int(image.width * 0.36)),
+                height=max(1, int(image.height * 0.07)),
+                source_kind=VisibleElementSourceKind.GEOMETRY,
+            ),
+            UiElementId.PNC_BACK_BUTTON_TOP_LEFT: _make_visible(
+                selector_id=UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+                x=0,
+                y=0,
+                width=max(1, int(image.width * 0.12)),
+                height=max(1, int(image.height * 0.08)),
+                source_kind=VisibleElementSourceKind.GEOMETRY,
+            ),
+        },
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_HERO_FORMATION, "ocr_hero_formation_save_form"),),
+    )
 
 
 def _build_building_construction_additions(
@@ -4181,6 +4262,153 @@ def _build_popup_additions(
             screen_evidence=(ScreenEvidence(ScreenType.PNC_POPUP, "ocr_popup_cancel_button"),),
         )
     return _build_promotional_popup_additions(image=image, lines=lines)
+
+
+def _build_visual_popup_close_additions(*, image: Image.Image) -> ObservationAdditions | None:
+    """Returns a generic popup close selector when upper-right image geometry contains a bright X."""
+
+    close_bounds = _find_visual_popup_close_bounds(image=image)
+    if close_bounds is None:
+        return None
+    return ObservationAdditions(
+        visible_elements={
+            UiElementId.PNC_POPUP_CLOSE_BUTTON: _make_visible(
+                selector_id=UiElementId.PNC_POPUP_CLOSE_BUTTON,
+                x=close_bounds.x,
+                y=close_bounds.y,
+                width=close_bounds.width,
+                height=close_bounds.height,
+                action_point=close_bounds.center(),
+                source_kind=VisibleElementSourceKind.GEOMETRY,
+            )
+        },
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_POPUP, "visual_upper_right_close_x"),),
+    )
+
+
+def _build_visual_building_upgrade_warning_additions(*, image: Image.Image) -> ObservationAdditions | None:
+    """Returns the task-owned Confirm control when the post-upgrade warning X is visually present."""
+
+    close_bounds = _find_visual_popup_close_bounds(image=image)
+    if close_bounds is None:
+        return None
+    close_center_y_ratio = close_bounds.center()[1] / image.height
+    if not 0.25 <= close_center_y_ratio <= 0.42:
+        return None
+    confirm_left = int(image.width * 0.55)
+    confirm_top = int(image.height * 0.52)
+    confirm_width = int(image.width * 0.35)
+    confirm_height = int(image.height * 0.07)
+    return ObservationAdditions(
+        visible_elements={
+            UiElementId.PNC_BUILDING_UPGRADE_WARNING_CONFIRM_BUTTON: _make_visible(
+                selector_id=UiElementId.PNC_BUILDING_UPGRADE_WARNING_CONFIRM_BUTTON,
+                x=confirm_left,
+                y=confirm_top,
+                width=confirm_width,
+                height=confirm_height,
+                action_point=(int(image.width * 0.72), int(image.height * 0.55)),
+                source_kind=VisibleElementSourceKind.GEOMETRY,
+            )
+        },
+        screen_evidence=(
+            ScreenEvidence(ScreenType.PNC_BUILDING_UPGRADE_WARNING, "visual_post_upgrade_warning"),
+        ),
+    )
+
+
+def _find_visual_popup_close_bounds(*, image: Image.Image) -> Bounds | None:
+    """Finds a square two-diagonal bright component in the normalized popup-close search area."""
+
+    rgb_image = image.convert("RGB")
+    search_left = int(image.width * 0.72)
+    search_right = int(image.width * 0.99)
+    search_top = int(image.height * 0.02)
+    search_bottom = int(image.height * 0.40)
+    bright_pixels = {
+        (x, y)
+        for y in range(search_top, search_bottom)
+        for x in range(search_left, search_right)
+        if _is_bright_popup_close_pixel(rgb_image.getpixel((x, y)))
+    }
+    candidates: list[Bounds] = []
+    neighbor_offsets = tuple(
+        (x_offset, y_offset)
+        for y_offset in (-1, 0, 1)
+        for x_offset in (-1, 0, 1)
+        if x_offset != 0 or y_offset != 0
+    )
+    while bright_pixels:
+        seed = bright_pixels.pop()
+        pending = [seed]
+        component = [seed]
+        while pending:
+            x, y = pending.pop()
+            for x_offset, y_offset in neighbor_offsets:
+                neighbor = (x + x_offset, y + y_offset)
+                if neighbor not in bright_pixels:
+                    continue
+                bright_pixels.remove(neighbor)
+                pending.append(neighbor)
+                component.append(neighbor)
+        bounds = _visual_close_component_bounds(image=image, component=component)
+        if bounds is not None:
+            candidates.append(bounds)
+    if not candidates:
+        return None
+    return max(candidates, key=lambda bounds: bounds.center()[0])
+
+
+def _is_bright_popup_close_pixel(pixel: tuple[int, int, int]) -> bool:
+    """Accepts the white or gold luminous pixels used by P&C popup close glyphs."""
+
+    red, green, blue = pixel
+    return min(pixel) >= 200 or (
+        red >= 190
+        and green >= 160
+        and blue >= 55
+        and red + green + blue >= 480
+    )
+
+
+def _visual_close_component_bounds(
+    *,
+    image: Image.Image,
+    component: list[tuple[int, int]],
+) -> Bounds | None:
+    """Returns bounds only when one bright component has a conservative X-shaped profile."""
+
+    if len(component) < 20:
+        return None
+    x_values = tuple(point[0] for point in component)
+    y_values = tuple(point[1] for point in component)
+    left = min(x_values)
+    top = min(y_values)
+    width = max(x_values) - left + 1
+    height = max(y_values) - top + 1
+    center_x = left + (width / 2)
+    if center_x < image.width * 0.86:
+        return None
+    if not int(image.width * 0.02) <= width <= int(image.width * 0.10):
+        return None
+    if not int(image.height * 0.01) <= height <= int(image.height * 0.07):
+        return None
+    if not 0.80 <= width / height <= 1.25:
+        return None
+
+    diagonal_tolerance = 0.18
+    descending_diagonal = sum(
+        abs(((x - left) / max(1, width - 1)) - ((y - top) / max(1, height - 1))) <= diagonal_tolerance
+        for x, y in component
+    ) / len(component)
+    ascending_diagonal = sum(
+        abs(((x - left) / max(1, width - 1)) + ((y - top) / max(1, height - 1)) - 1)
+        <= diagonal_tolerance
+        for x, y in component
+    ) / len(component)
+    if descending_diagonal < 0.42 or ascending_diagonal < 0.42:
+        return None
+    return Bounds(x=left, y=top, width=width, height=height)
 
 
 def _build_reconnect_popup_additions(
@@ -6098,14 +6326,15 @@ def _make_visible(
     height: int,
     extracted_text: str | None = None,
     action_point: tuple[int, int] | None = None,
+    source_kind: VisibleElementSourceKind = VisibleElementSourceKind.OCR,
 ) -> VisibleElement:
-    """Builds one derived visible element from OCR or anchored geometry."""
+    """Builds one derived visible element from OCR or guarded geometry."""
 
     return VisibleElement(
         selector_id=selector_id,
         bounds=Bounds(x=x, y=y, width=max(1, width), height=max(1, height)),
         confidence=1.0,
-        source_kind=VisibleElementSourceKind.OCR,
+        source_kind=source_kind,
         extracted_text=extracted_text,
         action_point=action_point,
     )

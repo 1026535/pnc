@@ -83,6 +83,58 @@ class ScreenClassifierTests(unittest.TestCase):
 
         self.assertEqual(screen_type, ScreenType.PNC_DAILY_TO_DO)
 
+    def test_classify_elemental_fluctuation_intro_from_header(self) -> None:
+        """Recognizes the informational Hero Showdown intro from its unique heading."""
+
+        classifier = ScreenClassifier()
+
+        screen_type = classifier.classify(
+            {
+                UiElementId.PNC_ELEMENTAL_FLUCTUATION_INTRO_HEADER: make_visible(
+                    UiElementId.PNC_ELEMENTAL_FLUCTUATION_INTRO_HEADER
+                ),
+            }
+        )
+
+        self.assertEqual(screen_type, ScreenType.PNC_HERO_SHOWDOWN_ELEMENTAL_INTRO)
+
+    def test_classify_hero_formation_from_header_and_save_action(self) -> None:
+        """Recognizes the weekly Hero Formation gate from its guarded controls."""
+
+        classifier = ScreenClassifier()
+
+        screen_type = classifier.classify(
+            {
+                UiElementId.PNC_HERO_FORMATION_HEADER: make_visible(UiElementId.PNC_HERO_FORMATION_HEADER),
+                UiElementId.PNC_HERO_FORMATION_SAVE_BUTTON: make_visible(
+                    UiElementId.PNC_HERO_FORMATION_SAVE_BUTTON
+                ),
+            }
+        )
+
+        self.assertEqual(screen_type, ScreenType.PNC_HERO_FORMATION)
+
+    def test_classify_hero_showdown_ranking_from_rank_and_challenge(self) -> None:
+        """Recognizes the normal Hero Showdown ranking destination."""
+
+        classifier = ScreenClassifier()
+
+        screen_type = classifier.classify(
+            {
+                UiElementId.PNC_HERO_SHOWDOWN_RANKING_HEADER: make_visible(
+                    UiElementId.PNC_HERO_SHOWDOWN_RANKING_HEADER
+                ),
+                UiElementId.PNC_HERO_SHOWDOWN_CURRENT_RANK_LABEL: make_visible(
+                    UiElementId.PNC_HERO_SHOWDOWN_CURRENT_RANK_LABEL
+                ),
+                UiElementId.PNC_HERO_SHOWDOWN_CHALLENGE_BUTTON: make_visible(
+                    UiElementId.PNC_HERO_SHOWDOWN_CHALLENGE_BUTTON
+                ),
+            }
+        )
+
+        self.assertEqual(screen_type, ScreenType.PNC_HERO_SHOWDOWN_RANKING)
+
     def test_classify_chat_from_header_tabs_and_send(self) -> None:
         """Recognizes chat from its header, one channel tab, and the footer send action."""
 

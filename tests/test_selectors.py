@@ -137,6 +137,26 @@ class SelectorRegistryTests(unittest.TestCase):
             registry.require(UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON).screens,
             (ScreenType.PNC_VIP_DAILY_RESET,),
         )
+        hero_showdown = registry.require(UiElementId.PNC_VERSUS_CENTER_HERO_SHOWDOWN_ENTRY)
+        self.assertEqual(hero_showdown.interaction_kind, SelectorInteractionKind.NAVIGATION)
+        self.assertIsNotNone(hero_showdown.relative_bounds)
+        assert hero_showdown.relative_bounds is not None
+        self.assertAlmostEqual(hero_showdown.relative_bounds.action_x_ratio, 0.5)
+        self.assertAlmostEqual(hero_showdown.relative_bounds.action_y_ratio, 0.21)
+        self.assertEqual(
+            tuple(outcome.target_screen for outcome in hero_showdown.click_outcomes),
+            (
+                ScreenType.PNC_HERO_SHOWDOWN_ELEMENTAL_INTRO,
+                ScreenType.PNC_HERO_FORMATION,
+                ScreenType.PNC_HERO_SHOWDOWN_RANKING,
+            ),
+        )
+        intro_confirm = registry.require(UiElementId.PNC_ELEMENTAL_FLUCTUATION_INTRO_CONFIRM_BUTTON)
+        self.assertEqual(intro_confirm.interaction_kind, SelectorInteractionKind.NAVIGATION)
+        self.assertIsNotNone(intro_confirm.relative_bounds)
+        assert intro_confirm.relative_bounds is not None
+        self.assertAlmostEqual(intro_confirm.relative_bounds.action_x_ratio, 0.5)
+        self.assertAlmostEqual(intro_confirm.relative_bounds.action_y_ratio, 0.667)
 
     def test_default_selector_template_root_stays_package_root_relative(self) -> None:
         """Keeps the default selector template root anchored at the package root after package moves."""

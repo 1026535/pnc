@@ -18,7 +18,7 @@ Create plans that are specific enough to execute, review, and verify. Favor deep
 5. Define scope boundaries. List in-scope work, non-goals, assumptions, and known unknowns.
 6. Describe the current state. Name the existing architecture, ownership boundaries, canonical interfaces, and pain points the plan must respect or change.
 7. Propose the target design. Identify the single canonical implementation for each concept, ownership of responsibilities, data model or API changes, extension points, and fail-fast validation rules.
-8. Break the work into deliverable-oriented phases. Each phase must have concrete files or components, dependencies, acceptance criteria, and tests or review checks.
+8. Break the work into deliverable-oriented phases. Each phase must have concrete files or components, dependencies, acceptance criteria, and tests or review checks. For runtime-affecting work, read [references/implementation-live-validation.md](references/implementation-live-validation.md) and attach a narrow offline-then-live validation gate to every implementation slice.
 9. Surface risks early. Include migration risks, compatibility risks, live/runtime risks, performance risks, data risks, and test gaps. Pair each risk with a mitigation or validation step.
 10. Finish with an execution checklist. Make the next actions ordered, minimal, and unambiguous.
 
@@ -34,7 +34,7 @@ Gather evidence in bounded, reversible increments. Capture a baseline observatio
 
 Never perform a state-changing game action solely to obtain planning evidence. Without explicit user authorization, do not build, research, collect, claim, send mail or chat, march, gather, attack, purchase, spend resources, switch accounts, log out, or change authored configuration. If the requested evidence requires one of those actions, stop and record the exact unknown or ask for authorization rather than guessing.
 
-If live evidence was required but could not be gathered, include the attempted target, command or canonical entry point, reached state, artifact paths if any, exact stop condition, and the design decisions that remain provisional. A plan that only says “gather live evidence later” without an attempted bounded run fails this skill.
+If live evidence was required but could not be gathered, include the attempted target, command or canonical entry point, reached state, artifact paths if any, exact stop condition, and the design decisions that remain provisional. A plan that only says "gather live evidence later" without an attempted bounded run fails this skill.
 
 ## Planning Principles
 
@@ -45,6 +45,8 @@ If live evidence was required but could not be gathered, include the attempted t
 - Make dependencies explicit: prerequisites, sequencing constraints, shared interfaces, data migrations, and validation dependencies.
 - Define done with observable acceptance criteria, not vague confidence.
 - Include validation that matches risk: focused tests first, full offline suites for broad code changes, and opt-in live smoke tests when runtime boundaries require them.
+- Keep live-affecting slices small and promote them incrementally. Do not batch several unproven runtime behaviors behind one final smoke test.
+- When the plan names live instances or castles, require a disposition for every planned target after every applicable live-affecting slice: `passed`, `applicability_skip`, or `blocked`. A missing matrix cell is not a pass.
 - Treat live screenshots and observations as evidence, not as a substitute for understanding the code or a license for unbounded experimentation. Label each important claim as observed, inferred, or unknown.
 - Keep the plan lean. Expand only where ambiguity, risk, or architecture warrants detail.
 
@@ -61,6 +63,7 @@ For substantial implementation plans, use this structure:
 - Current State
 - Target Design
 - Implementation Phases
+- Slice-by-Slice Live Validation Matrix
 - Data, Config, and Migration Notes
 - Validation Plan
 - Risks and Mitigations
@@ -79,6 +82,9 @@ Before finalizing a plan, confirm:
 - Invalid inputs and unexpected states fail fast.
 - Each phase has clear dependencies and acceptance criteria.
 - Validation covers the changed behavior, architectural risk, and likely regressions.
+- Every runtime-affecting slice identifies its mutation boundary, smallest offline test, exact opt-in live entry point, expected pre/post state, artifacts, recovery path, and stopping conditions.
+- Every named live instance/castle has an explicit outcome for every applicable slice; skips name the unmet applicability condition and blockers name the remaining command or evidence needed.
+- A slice cannot be promoted into an unattended routine until its offline checks and required target matrix pass. The next slice may be developed, but it must not hide or bypass a failed promotion gate.
 - Every material current-UI evidence question is answered by an adequate repository artifact, an observed bounded live trace, or a documented failed live attempt with a precise stop condition.
 - Required live evidence was not postponed into an implementation phase merely because the request was planning-only or the final action would be state-changing.
 - Any live evidence has a target, baseline, bounded action trace, post-action artifact, and explicit stop or failure reason.

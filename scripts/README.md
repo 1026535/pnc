@@ -11,6 +11,7 @@ This folder contains authored automation runbooks grouped by intent.
 ## Guidance
 
 - Keep scripts high level and task-oriented.
+- Promote a feature into an unattended routine only after focused offline tests and one opt-in live task smoke pass.
 - Prefer composing existing canonical tasks instead of inventing low-level tap sequences in YAML.
 - Add new scripts to the bucket that matches how they are meant to be used, not the feature area they touch.
 - When one task needs an explicit castle target, use `castle_ref` and define the alias in `config/castle_targets.yaml`.
@@ -54,3 +55,31 @@ steps:
 ```
 
 This expands during script preparation into ordinary single-target prepared steps. Runtime tasks still execute against one concrete castle at a time.
+
+## Nightly Daily Maintenance
+
+The canonical daily routine is castle-agnostic. Bind it to ordered account-scoped aliases at invocation time:
+
+```powershell
+py -m pnc_automation.app.entrypoints.cli run --account testing --script scripts/routines/daily_castle_maintenance.yaml --castle-ref main --castle-ref hopeful_npc_k323
+py -m pnc_automation.app.entrypoints.cli run --account serious_stuff --script scripts/routines/daily_castle_maintenance.yaml --castle-ref main
+```
+
+`tools/run_daily_maintenance.ps1` runs this initial three-castle selection and is the command intended for a 2:00 AM Windows Task Scheduler trigger. Configure the scheduled task so it does not start a second copy while the previous run remains active.
+
+The unattended routine currently contains only building upgrade with speedups disabled. Research, purchases, Gem, Saurgem, Gear, gathering, Campaign, Arena, and troop training remain excluded until each feature passes the promotion gate.
+
+For every new daily feature:
+
+1. Add deterministic offline task and runner coverage.
+2. Add a single-feature script under `scripts/smoke/`.
+3. Run that feature alone on the currently active `testing` castle:
+
+   ```powershell
+   $env:PNC_RUN_LIVE_DAILY_TASK_SMOKE="1"
+   py -m unittest tests.test_live_daily_task_smoke
+   ```
+
+4. Inspect the generated screenshots and logs under `artifacts/`.
+5. Convert live failures into offline regressions when practical.
+6. Add the task to `daily_castle_maintenance.yaml` only after the live smoke proves a safe success or intentional no-op.

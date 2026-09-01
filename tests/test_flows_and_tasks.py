@@ -4154,6 +4154,7 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertIsInstance(actions[0], TapAction)
         self.assertEqual(actions[0].selector_id, UiElementId.PNC_BUILDING_UPGRADE_BUTTON)
         self.assertEqual(actions[0].reason, "confirm_building_upgrade")
+        self.assertTrue(actions[1].follow_up_request.include_building_upgrade_warning)
 
     def test_building_upgrade_task_replans_when_upgrade_confirmation_layout_appears(self) -> None:
         """Treats the shared exact-screen confirmation layout as a real confirmation step instead of a failed click."""
@@ -4180,6 +4181,31 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertEqual(result.status, TaskStatus.REPLAN)
         self.assertIn("final `Upgrade` click", result.message)
         self.assertTrue(context.runtime_state["building_upgrade_confirmation_pending"])
+
+    def test_building_upgrade_task_owns_and_confirms_post_upgrade_warning(self) -> None:
+        """Confirms the task-scoped Castle shield warning before verifying the started build."""
+
+        task = BuildingUpgradeTask()
+        context = self._make_context(params=BuildingUpgradePolicy(), task_id=TaskId.BUILDING_UPGRADE)
+        warning = make_observation(
+            ScreenType.PNC_BUILDING_UPGRADE_WARNING,
+            visible_ids=(UiElementId.PNC_BUILDING_UPGRADE_WARNING_CONFIRM_BUTTON,),
+        )
+
+        actions = task.plan(context, warning)
+        result = task.verify(
+            context,
+            warning,
+            make_observation(
+                ScreenType.PNC_CASTLE,
+                visible_ids=(UiElementId.PNC_BUILDING_SPEEDUP_BUTTON,),
+            ),
+        )
+
+        self.assertEqual(actions[0].selector_id, UiElementId.PNC_BUILDING_UPGRADE_WARNING_CONFIRM_BUTTON)
+        self.assertEqual(actions[0].reason, "confirm_building_upgrade_warning")
+        self.assertEqual(result.status, TaskStatus.SUCCESS)
+        self.assertIn("warning confirmed", result.message)
 
     def test_building_upgrade_task_succeeds_when_speedup_replaces_upgrade_button(self) -> None:
         """Treats the shared `Speedup` control as a direct upgrade-start success proof."""
@@ -4222,6 +4248,46 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertEqual(len(actions), 1)
         self.assertIsInstance(actions[0], TapAction)
         self.assertEqual(actions[0].selector_id, UiElementId.PNC_BUILDING_SPEEDUP_BUTTON)
+
+    def test_building_upgrade_task_records_exact_screen_level_before_speedup(self) -> None:
+        """Preserves a unique building's level when speedup starts from an already-open screen."""
+
+        task = BuildingUpgradeTask()
+        context = self._make_context(
+            params=BuildingUpgradePolicy(allow_speedups=True),
+            task_id=TaskId.BUILDING_UPGRADE,
+        )
+        before = make_observation(
+            ScreenType.PNC_WAREHOUSE,
+            visible_ids=(
+                UiElementId.PNC_BUILDING_SPEEDUP_BUTTON,
+                UiElementId.PNC_BUILDING_LEVEL_LABEL,
+            ),
+            visible_texts={UiElementId.PNC_BUILDING_LEVEL_LABEL: "8/45"},
+        )
+
+        task.plan(context, before)
+        result = task.verify(
+            context,
+            make_observation(ScreenType.PNC_BUILD_SPEEDUP),
+            make_observation(
+                ScreenType.PNC_HOME_CITY,
+                spatial_surface=make_spatial_surface(
+                    SpatialSurfaceType.HOME_CITY_SURFACE,
+                    objects=(
+                        make_spatial_object(
+                            SpatialObjectKind.HOME_BUILDING,
+                            name_text="Warehouse",
+                            level=9,
+                            metadata=build_home_city_object_metadata(HomeCityObjectId.WAREHOUSE),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        self.assertEqual(result.status, TaskStatus.SUCCESS)
+        self.assertIn("increased from Lv.8 to Lv.9", result.message)
 
     def test_building_upgrade_task_selects_inventory_auto_speedup(self) -> None:
         """Selects Auto Speedup and never the premium Build Now control."""

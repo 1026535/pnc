@@ -341,6 +341,29 @@ class ScreenClassifier:
                 required_all=frozenset({UiElementId.PNC_VERSUS_CENTER_HEADER}),
             ),
             ClassificationRule(
+                screen_type=ScreenType.PNC_HERO_SHOWDOWN_ELEMENTAL_INTRO,
+                required_all=frozenset({UiElementId.PNC_ELEMENTAL_FLUCTUATION_INTRO_HEADER}),
+            ),
+            ClassificationRule(
+                screen_type=ScreenType.PNC_HERO_FORMATION,
+                required_all=frozenset(
+                    {
+                        UiElementId.PNC_HERO_FORMATION_HEADER,
+                        UiElementId.PNC_HERO_FORMATION_SAVE_BUTTON,
+                    }
+                ),
+            ),
+            ClassificationRule(
+                screen_type=ScreenType.PNC_HERO_SHOWDOWN_RANKING,
+                required_all=frozenset(
+                    {
+                        UiElementId.PNC_HERO_SHOWDOWN_RANKING_HEADER,
+                        UiElementId.PNC_HERO_SHOWDOWN_CURRENT_RANK_LABEL,
+                        UiElementId.PNC_HERO_SHOWDOWN_CHALLENGE_BUTTON,
+                    }
+                ),
+            ),
+            ClassificationRule(
                 screen_type=ScreenType.PNC_GODDESS_STATUE,
                 required_all=frozenset({UiElementId.PNC_GODDESS_STATUE_HEADER}),
             ),
