@@ -175,6 +175,26 @@ _SCREEN_FAMILY_OBSERVED_SCREENS = {
     ScreenType.PNC_CAMPAIGN_MAP: _HOME_CITY_BUILDING_FLOW_SCREENS,
     ScreenType.PNC_CAMPAIGN_STAGE: _HOME_CITY_BUILDING_FLOW_SCREENS,
     ScreenType.PNC_VERSUS_CENTER: _HOME_CITY_BUILDING_FLOW_SCREENS,
+    ScreenType.PNC_HERO_SHOWDOWN_ELEMENTAL_INTRO: frozenset(
+        {ScreenType.UNKNOWN, ScreenType.PNC_VERSUS_CENTER, ScreenType.PNC_HERO_SHOWDOWN_ELEMENTAL_INTRO}
+    ),
+    ScreenType.PNC_HERO_FORMATION: frozenset(
+        {
+            ScreenType.UNKNOWN,
+            ScreenType.PNC_VERSUS_CENTER,
+            ScreenType.PNC_HERO_SHOWDOWN_ELEMENTAL_INTRO,
+            ScreenType.PNC_HERO_FORMATION,
+        }
+    ),
+    ScreenType.PNC_HERO_SHOWDOWN_RANKING: frozenset(
+        {
+            ScreenType.UNKNOWN,
+            ScreenType.PNC_VERSUS_CENTER,
+            ScreenType.PNC_HERO_SHOWDOWN_ELEMENTAL_INTRO,
+            ScreenType.PNC_HERO_FORMATION,
+            ScreenType.PNC_HERO_SHOWDOWN_RANKING,
+        }
+    ),
 }
 
 

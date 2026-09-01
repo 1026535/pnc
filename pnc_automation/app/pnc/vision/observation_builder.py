@@ -545,7 +545,13 @@ class ObservationService:
             self.validated_current_castle = observation.current_castle
             self.validated_current_castle_evidence = observation.resolved_current_castle_evidence
             return
-        if observation.screen_type not in {ScreenType.PNC_HOME_CITY, ScreenType.PNC_MORE_MENU}:
+        if observation.screen_type not in {
+            ScreenType.PNC_HOME_CITY,
+            ScreenType.PNC_MORE_MENU,
+            ScreenType.PNC_LOADING,
+            ScreenType.PNC_POPUP,
+            ScreenType.UNKNOWN,
+        }:
             self.validated_current_castle = None
             self.validated_current_castle_evidence = None
 

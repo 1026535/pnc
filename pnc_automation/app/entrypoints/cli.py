@@ -36,6 +36,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     run_parser = subparsers.add_parser("run", help="Execute one automation script.")
     _add_common_arguments(run_parser)
     run_parser.add_argument("--script", required=True, help="Path to the run script YAML file.")
+    run_parser.add_argument(
+        "--castle-ref",
+        action="append",
+        default=None,
+        help="Bind the castle-agnostic routine body to this account-scoped castle alias; may be repeated.",
+    )
 
     login_parser = subparsers.add_parser("login", help="Prepare one account session and optionally align a castle.")
     _add_common_arguments(login_parser)
@@ -87,7 +93,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         observation_mode=None if parsed.observation_mode is None else ObservationMode(parsed.observation_mode),
     )
     if parsed.command == "run":
-        result = application.run(account_id=parsed.account, script_path=parsed.script)
+        result = application.run(
+            account_id=parsed.account,
+            script_path=parsed.script,
+            castle_refs=parsed.castle_ref,
+        )
         print(_serialize_run_result(result))
         return 0
     if parsed.command == "login":

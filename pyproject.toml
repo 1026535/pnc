@@ -7,6 +7,7 @@ dependencies = [
     "PyYAML>=6.0.3,<7.0.0",
     "Pillow>=12.1.1,<13.0.0",
     "rapidocr_onnxruntime>=1.2.3,<2.0.0",
+    "tzdata>=2026.3,<2027.0",
 ]
 
 [build-system]

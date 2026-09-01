@@ -103,6 +103,7 @@ During live validation:
 ## Planning, Review, And Skills
 
 - Use `skills/create-plan` for substantial implementation plans.
+- Use `skills/review-plan-live` to audit plan assumptions against repository evidence and bounded live BlueStacks observations.
 - Use `skills/write-code` for implementation-heavy work.
 - Use `skills/review-code` for review requests or commit/diff audits.
 - Use `skills/test-bluestacks-live` for live BlueStacks validation.

@@ -93,23 +93,46 @@ class ScriptRunner:
     logger: logging.LoggerAdapter
     p2_observation_builder_factory: Callable[[], ObservationBuilder] | None = None
 
-    def run(self, *, account_id: str, script_path: str) -> RunResult:
-        """Executes the selected script for one configured account target."""
+    def run(
+        self,
+        *,
+        account_id: str,
+        script_path: str,
+        castle_refs: list[str] | None = None,
+    ) -> RunResult:
+        """Executes the selected script for one account and optional ordered castle aliases."""
 
-        return self.run_script(account_id=account_id, script=load_run_script(script_path))
+        return self.run_script(
+            account_id=account_id,
+            script=load_run_script(script_path),
+            castle_refs=castle_refs,
+        )
 
-    def run_script(self, *, account_id: str, script: RunScript) -> RunResult:
-        """Executes one already-loaded run script for the selected account."""
+    def run_script(
+        self,
+        *,
+        account_id: str,
+        script: RunScript,
+        castle_refs: list[str] | None = None,
+    ) -> RunResult:
+        """Executes one loaded script for an account and optional ordered castle aliases."""
 
         account = self.config.require_account(account_id)
-        return self._run_script_for_account(account=account, script=script)
+        return self._run_script_for_account(account=account, script=script, castle_refs=castle_refs)
 
-    def _run_script_for_account(self, *, account: AccountConfig, script: RunScript) -> RunResult:
+    def _run_script_for_account(
+        self,
+        *,
+        account: AccountConfig,
+        script: RunScript,
+        castle_refs: list[str] | None = None,
+    ) -> RunResult:
         """Executes one already-loaded run script for one already-resolved account target."""
 
         prepared_script = self.task_registry.prepare_script(
             script,
             castle_targets=self.config.find_castle_targets(account.id),
+            castle_refs=castle_refs,
         )
         runner, castle_roster_provider = self._build_runner(account)
         return runner.run(

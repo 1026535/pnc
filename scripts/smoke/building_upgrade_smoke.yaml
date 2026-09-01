@@ -1,4 +1,4 @@
-name: daily_castle_maintenance
+name: building_upgrade_smoke
 
 steps:
   - task: ensure_game_running

@@ -30,6 +30,7 @@ from pnc_automation.app.pnc.navigation.world_map_search import WorldMapOverviewN
 from pnc_automation.app.pnc.domain.observation import (
     Bounds,
     ListEntryKind,
+    Observation,
     SpatialObjectKind,
     SpatialObjectQuery,
     SpatialObjectRelationship,
@@ -4213,6 +4214,140 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertTrue(observation.blocking_popup)
             self.assertTrue(observation.has(UiElementId.PNC_POPUP_CLOSE_BUTTON))
 
+    def test_observation_builder_classifies_generic_upper_right_popup_x_without_ocr(self) -> None:
+        """Recognizes the shared bright popup X and uses its detected center without an OCR dependency."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            image = Image.new("RGB", (900, 1600), (15, 28, 68))
+            drawing = ImageDraw.Draw(image)
+            drawing.line((794, 302, 832, 340), fill=(255, 247, 218), width=8)
+            drawing.line((832, 302, 794, 340), fill=(255, 247, 218), width=8)
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(image)),
+                artifact_directory="generic_visual_popup",
+                label="upper_right_close_x",
+            )
+            ocr_service = _RecordingOcrService(lines=())
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(ocr_service=ocr_service),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_POPUP)
+            self.assertTrue(observation.blocking_popup)
+            close_button = observation.require(UiElementId.PNC_POPUP_CLOSE_BUTTON)
+            self.assertEqual(close_button.source_kind, VisibleElementSourceKind.GEOMETRY)
+            self.assertAlmostEqual(close_button.action_point[0] / image.width, 0.903, delta=0.02)
+            self.assertAlmostEqual(close_button.action_point[1] / image.height, 0.201, delta=0.02)
+            self.assertEqual(ocr_service.read_result_calls, 0)
+
+    def test_observation_builder_rejects_bright_x_outside_popup_close_zone(self) -> None:
+        """Avoids treating crossed artwork left of the guarded upper-right close band as a popup."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            image = Image.new("RGB", (900, 1600), (15, 28, 68))
+            drawing = ImageDraw.Draw(image)
+            drawing.line((698, 302, 736, 340), fill=(255, 210, 90), width=8)
+            drawing.line((736, 302, 698, 340), fill=(255, 210, 90), width=8)
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(image)),
+                artifact_directory="generic_visual_popup",
+                label="crossed_artwork",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(ocr_service=_FakeOcrService(lines=())),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.UNKNOWN)
+            self.assertFalse(observation.blocking_popup)
+
+    def test_observation_builder_rejects_wide_crossed_badge_in_popup_close_zone(self) -> None:
+        """Rejects the live-like wide crossed badge geometry found in the home-city top-right HUD."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            image = Image.new("RGB", (900, 1600), (15, 28, 68))
+            drawing = ImageDraw.Draw(image)
+            drawing.line((814, 110, 860, 142), fill=(255, 211, 92), width=7)
+            drawing.line((860, 110, 814, 142), fill=(255, 211, 92), width=7)
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(image)),
+                artifact_directory="generic_visual_popup",
+                label="wide_crossed_badge",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(ocr_service=_FakeOcrService(lines=())),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.UNKNOWN)
+            self.assertFalse(observation.blocking_popup)
+
+    def test_observation_builder_owns_visual_x_as_post_upgrade_warning_when_requested(self) -> None:
+        """Routes the warning X to the building task and localizes Confirm without OCR."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            image = Image.new("RGB", (900, 1600), (15, 28, 68))
+            drawing = ImageDraw.Draw(image)
+            drawing.line((778, 514, 820, 556), fill=(255, 211, 92), width=8)
+            drawing.line((820, 514, 778, 556), fill=(255, 211, 92), width=8)
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(image)),
+                artifact_directory="building_upgrade_warning",
+                label="shield_warning",
+            )
+            ocr_service = _RecordingOcrService(lines=())
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(ocr_service=ocr_service),
+            )
+
+            observation = builder.build(
+                screenshot,
+                request=ObservationRequest.building_upgrade_warning_follow_up(),
+            )
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_BUILDING_UPGRADE_WARNING)
+            self.assertFalse(observation.blocking_popup)
+            confirm = observation.require(UiElementId.PNC_BUILDING_UPGRADE_WARNING_CONFIRM_BUTTON)
+            self.assertEqual(confirm.action_point, (648, 880))
+            self.assertEqual(confirm.source_kind, VisibleElementSourceKind.GEOMETRY)
+            self.assertEqual(ocr_service.read_result_calls, 0)
+
     def test_observation_builder_classifies_vip_daily_reset_popup_from_ocr(self) -> None:
         """Recognizes the VIP daily-reset popup as a dedicated blocking screen with a tappable Close button."""
 
@@ -4834,6 +4969,54 @@ class CaptureAndVisionTests(unittest.TestCase):
         self.assertEqual(ocr_service.read_result_calls, 0)
         self.assertEqual(ocr_service.read_text_calls, 0)
 
+    def test_observation_builder_types_hero_showdown_audit_screens(self) -> None:
+        """Types every reviewed Arena audit destination from semantic OCR evidence."""
+
+        versus = _build_observation_from_ocr_lines(
+            (
+                _ocr_line("Versus Center", x=280, y=20, width=340, height=40),
+                _ocr_line("Arena", x=180, y=1450, width=100, height=35),
+                _ocr_line("Hero Showdown", x=260, y=260, width=300, height=40),
+            )
+        )
+        intro = _build_observation_from_ocr_lines(
+            (
+                _ocr_line("Elemental Fluctuation Intro", x=180, y=210, width=540, height=40),
+                _ocr_line("Confirm", x=390, y=1040, width=120, height=35),
+            )
+        )
+        formation = _build_observation_from_ocr_lines(
+            (_ocr_line("Save Form", x=350, y=1490, width=200, height=40),)
+        )
+        ranking = _build_observation_from_ocr_lines(
+            (
+                _ocr_line("Hero Showdown", x=180, y=20, width=300, height=40),
+                _ocr_line("Current rank: 5635", x=220, y=120, width=300, height=35),
+                _ocr_line("Challenge", x=350, y=1450, width=200, height=40),
+            )
+        )
+
+        self.assertEqual(versus.screen_type, ScreenType.PNC_VERSUS_CENTER)
+        self.assertEqual(
+            versus.require(UiElementId.PNC_VERSUS_CENTER_HERO_SHOWDOWN_ENTRY).source_kind,
+            VisibleElementSourceKind.GEOMETRY,
+        )
+        self.assertEqual(intro.screen_type, ScreenType.PNC_HERO_SHOWDOWN_ELEMENTAL_INTRO)
+        self.assertEqual(
+            intro.require(UiElementId.PNC_ELEMENTAL_FLUCTUATION_INTRO_CONFIRM_BUTTON).source_kind,
+            VisibleElementSourceKind.GEOMETRY,
+        )
+        self.assertEqual(formation.screen_type, ScreenType.PNC_HERO_FORMATION)
+        self.assertEqual(
+            formation.require(UiElementId.PNC_HERO_FORMATION_SAVE_BUTTON).source_kind,
+            VisibleElementSourceKind.GEOMETRY,
+        )
+        self.assertEqual(ranking.screen_type, ScreenType.PNC_HERO_SHOWDOWN_RANKING)
+        self.assertEqual(
+            ranking.require(UiElementId.PNC_HERO_SHOWDOWN_CHALLENGE_BUTTON).source_kind,
+            VisibleElementSourceKind.OCR,
+        )
+
     def test_observation_builder_runs_ocr_when_requested(self) -> None:
         """Invokes OCR when the observation request explicitly asks for OCR-backed facts."""
 
@@ -5227,6 +5410,38 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertEqual(more_menu.current_castle, selected_castle)
             self.assertIsNone(world_map.current_castle)
 
+    def test_observation_service_carries_selected_castle_through_switch_loading_states(self) -> None:
+        """Preserves exact Manage Char selection through loading, unknown, and startup popup frames."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            payload = _encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))
+            selected_castle = CastleIdentity(kingdom="K157", castle_name="NPC 2", castle_level=22)
+            service = ObservationService(
+                screenshot_service=screenshot_service,
+                observation_builder=_SequencedObservationBuilder(
+                    observations=[
+                        make_observation(ScreenType.PNC_CASTLE_SELECTION, current_castle=selected_castle),
+                        make_observation(ScreenType.PNC_LOADING),
+                        make_observation(ScreenType.UNKNOWN),
+                        make_observation(ScreenType.PNC_POPUP, blocking_popup=True),
+                        make_observation(ScreenType.PNC_HOME_CITY),
+                    ]
+                ),
+                session=_FakeScreenshotSession(payload),
+                artifact_directory="k157_npc_2_switch_validation",
+            )
+
+            observations = tuple(
+                service.observe(label)
+                for label in ("selected", "loading", "unknown", "popup", "home")
+            )
+
+            self.assertEqual(observations[0].current_castle, selected_castle)
+            self.assertEqual(tuple(item.current_castle for item in observations[1:4]), (None, None, None))
+            self.assertEqual(observations[4].current_castle, selected_castle)
+
     def test_observation_service_skips_routine_artifact_persistence_in_light_mode(self) -> None:
         """Leaves routine observations ephemeral in light mode so idle scheduler runs do not flood artifacts."""
 
@@ -5379,6 +5594,33 @@ class CaptureAndVisionTests(unittest.TestCase):
                     else:
                         self.assertIsNone(capture.screenshot.artifact_path)
                         self.assertFalse(any((root / "artifacts").rglob("*.png")))
+
+
+def _build_observation_from_ocr_lines(lines: tuple[OcrLine, ...]) -> Observation:
+    """Builds one full-runtime observation from deterministic OCR lines and reviewed geometry."""
+
+    registry = build_default_selector_registry()
+    builder = ObservationBuilder(
+        selector_registry=registry,
+        selector_engine=PillowSelectorEngine(
+            template_matcher=PillowTemplateMatcher(),
+            ocr_service=UnavailableOcrService(),
+        ),
+        screen_classifier=ScreenClassifier(),
+        enricher=PncObservationEnricher(
+            ocr_service=_FakeOcrService(lines=lines),
+            selector_registry=registry,
+        ),
+    )
+    screenshot = type(
+        "Captured",
+        (),
+        {
+            "image": Image.new("RGB", (900, 1600), (15, 28, 68)),
+            "artifact": type("Artifact", (), {"path": Path("hero_arena_synthetic.png"), "captured_at": None})(),
+        },
+    )()
+    return builder.build(screenshot, request=ObservationRequest.full_runtime_default())
 
 
 def _ocr_line(text: str, *, x: int, y: int, width: int, height: int) -> OcrLine:

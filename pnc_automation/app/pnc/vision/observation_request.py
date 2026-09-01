@@ -25,6 +25,7 @@ class ObservationRequest:
     candidate_screen_types: frozenset[ScreenType] = frozenset()
     ocr_screen_types: frozenset[ScreenType] = frozenset()
     include_popup_guard: bool = False
+    include_building_upgrade_warning: bool = False
     include_loading_guard: bool = False
     include_chat_state: bool = False
     include_chat_entries: bool = False
@@ -227,6 +228,15 @@ class ObservationRequest:
             ocr_screen_types=frozenset({ScreenType.PNC_HOME_CITY, ScreenType.PNC_BUILD_QUEUE}),
             include_popup_guard=True,
             include_loading_guard=True,
+        )
+
+    @classmethod
+    def building_upgrade_warning_follow_up(cls) -> "ObservationRequest":
+        """Returns the geometry-only scope after the verified final building Upgrade click."""
+
+        return cls(
+            candidate_screen_types=frozenset({ScreenType.PNC_BUILDING_UPGRADE_WARNING}),
+            include_building_upgrade_warning=True,
         )
 
     @classmethod

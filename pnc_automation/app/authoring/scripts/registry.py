@@ -74,11 +74,77 @@ class TaskRegistry:
         script: RunScript,
         *,
         castle_targets: AccountCastleTargetsConfig | None = None,
+        castle_refs: Sequence[str] | None = None,
     ) -> PreparedRunScript:
         """Converts a raw run script into an execution-ready script with typed params."""
 
-        prepared_steps = self._prepare_script_nodes(script.steps, castle_targets=castle_targets)
+        nodes = (
+            script.steps
+            if castle_refs is None
+            else self._bind_script_nodes_to_castle_refs(script.steps, castle_refs=castle_refs)
+        )
+        prepared_steps = self._prepare_script_nodes(nodes, castle_targets=castle_targets)
         return PreparedRunScript(name=script.name, path=script.path, steps=tuple(prepared_steps))
+
+    def _bind_script_nodes_to_castle_refs(
+        self,
+        nodes: Sequence[ScriptNode],
+        *,
+        castle_refs: Sequence[str],
+    ) -> tuple[ScriptNode, ...]:
+        """Binds one castle-agnostic routine body to ordered account-scoped castle aliases."""
+
+        normalized_refs = _validate_runtime_castle_refs(castle_refs)
+        bootstrap_steps: list[ScriptStep] = []
+        routine_steps: list[ScriptStep] = []
+        routine_started = False
+        for index, node in enumerate(nodes):
+            step_path = f"steps[{index}]"
+            if not isinstance(node, ScriptStep):
+                raise ScriptValidationError(
+                    "Runtime castle binding requires a castle-agnostic script without authored repeat blocks.",
+                    step_index=index,
+                    step_path=step_path,
+                )
+            if node.castle is not None or node.castle_ref is not None:
+                raise ScriptValidationError(
+                    "Runtime castle binding cannot be combined with authored castle targets.",
+                    step_index=index,
+                    step_path=step_path,
+                    task=node.task,
+                    castle=node.castle,
+                    castle_ref=node.castle_ref,
+                )
+            task = self.require(node.task)
+            if task.castle_target_policy == CastleTargetPolicy.DISALLOWED:
+                if routine_started:
+                    raise ScriptValidationError(
+                        "Castle-independent bootstrap steps must precede the castle-bound routine body.",
+                        step_index=index,
+                        step_path=step_path,
+                        task=node.task,
+                    )
+                bootstrap_steps.append(node)
+                continue
+            if task.castle_target_policy == CastleTargetPolicy.REQUIRED:
+                raise ScriptValidationError(
+                    "Runtime castle binding does not accept tasks that already require their own castle target.",
+                    step_index=index,
+                    step_path=step_path,
+                    task=node.task,
+                )
+            routine_started = True
+            routine_steps.append(node)
+        if not routine_steps:
+            raise ScriptValidationError("Runtime castle binding requires at least one castle-aware routine step.")
+        return (
+            *bootstrap_steps,
+            CastleRefRepeatBlock(
+                castle_refs=normalized_refs,
+                steps=tuple(routine_steps),
+                provenance={"binding": "runtime_castle_refs"},
+            ),
+        )
 
     def _prepare_script_nodes(
         self,
@@ -309,6 +375,32 @@ def _validate_castle_target_policy(
             task=task_id,
             castle_ref=target_ref,
         )
+
+
+def _validate_runtime_castle_refs(castle_refs: Sequence[str]) -> tuple[str, ...]:
+    """Returns unique non-empty runtime castle aliases in their requested execution order."""
+
+    if not castle_refs:
+        raise ScriptValidationError("Runtime castle binding requires at least one castle_ref.")
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for index, castle_ref in enumerate(castle_refs):
+        if not isinstance(castle_ref, str) or castle_ref.strip() == "":
+            raise ScriptValidationError(
+                "Runtime castle_refs must contain only non-empty strings.",
+                castle_ref_index=index,
+                castle_ref=castle_ref,
+            )
+        normalized_ref = castle_ref.strip()
+        if normalized_ref in seen:
+            raise ScriptValidationError(
+                "Runtime castle_refs must not repeat the same alias.",
+                castle_ref_index=index,
+                castle_ref=normalized_ref,
+            )
+        seen.add(normalized_ref)
+        normalized.append(normalized_ref)
+    return tuple(normalized)
 
 
 def build_default_task_registry() -> TaskRegistry:

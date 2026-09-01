@@ -222,6 +222,115 @@ selectors:
   - PNC_HOME_CITY
   status: screenshot_seeded
   detection_kind: template
+- id: PNC_VERSUS_CENTER_HERO_SHOWDOWN_ENTRY
+  screens:
+  - PNC_VERSUS_CENTER
+  status: click_mapped
+  detection_kind: planned
+  interaction_kind: navigation
+  click:
+    anchor: center
+    outcomes:
+    - safe_to_click: true
+      monetized: false
+      target_screen: PNC_HERO_SHOWDOWN_ELEMENTAL_INTRO
+      verification_selectors:
+      - PNC_ELEMENTAL_FLUCTUATION_INTRO_HEADER
+    - safe_to_click: true
+      monetized: false
+      target_screen: PNC_HERO_FORMATION
+      verification_selectors:
+      - PNC_HERO_FORMATION_HEADER
+      - PNC_HERO_FORMATION_SAVE_BUTTON
+    - safe_to_click: true
+      monetized: false
+      target_screen: PNC_HERO_SHOWDOWN_RANKING
+      verification_selectors:
+      - PNC_HERO_SHOWDOWN_RANKING_HEADER
+      - PNC_HERO_SHOWDOWN_CURRENT_RANK_LABEL
+  relative_bounds:
+    x_ratio: 0.018888888889
+    y_ratio: 0.13375
+    width_ratio: 0.96
+    height_ratio: 0.15375
+    action_x_ratio: 0.5
+    action_y_ratio: 0.21
+  notes:
+  - Normalized geometry from the reviewed 2026-09-01 NPC 2 Versus Center audit artifact.
+  - OCR validates the screen and entry meaning but does not supply this click point.
+- id: PNC_ELEMENTAL_FLUCTUATION_INTRO_CONFIRM_BUTTON
+  screens:
+  - PNC_HERO_SHOWDOWN_ELEMENTAL_INTRO
+  status: click_mapped
+  detection_kind: planned
+  interaction_kind: navigation
+  click:
+    anchor: center
+    outcomes:
+    - safe_to_click: true
+      monetized: false
+      target_screen: PNC_HERO_FORMATION
+      verification_selectors:
+      - PNC_HERO_FORMATION_HEADER
+      - PNC_HERO_FORMATION_SAVE_BUTTON
+    - safe_to_click: true
+      monetized: false
+      target_screen: PNC_HERO_SHOWDOWN_RANKING
+      verification_selectors:
+      - PNC_HERO_SHOWDOWN_RANKING_HEADER
+      - PNC_HERO_SHOWDOWN_CURRENT_RANK_LABEL
+  relative_bounds:
+    x_ratio: 0.33
+    y_ratio: 0.64
+    width_ratio: 0.34
+    height_ratio: 0.06
+    action_x_ratio: 0.5
+    action_y_ratio: 0.667
+  notes:
+  - Normalized geometry from the reviewed 2026-09-01 NPC 2 Elemental Fluctuation Intro artifact.
+  - Dismisses only the informational intro and never enters an Arena attempt.
+- id: PNC_ELEMENTAL_FLUCTUATION_INTRO_HEADER
+  screens:
+  - PNC_HERO_SHOWDOWN_ELEMENTAL_INTRO
+  status: screenshot_seeded
+  detection_kind: planned
+  interaction_kind: label
+  notes:
+  - OCR supplies semantic screen evidence only and is never used as an action point.
+- id: PNC_HERO_FORMATION_HEADER
+  screens:
+  - PNC_HERO_FORMATION
+  status: screenshot_seeded
+  detection_kind: planned
+  interaction_kind: label
+- id: PNC_HERO_FORMATION_SAVE_BUTTON
+  screens:
+  - PNC_HERO_FORMATION
+  status: screenshot_seeded
+  detection_kind: planned
+  interaction_kind: action
+  notes:
+  - Present for classification and explicit audit avoidance; the recurrence audit never taps it.
+- id: PNC_HERO_SHOWDOWN_RANKING_HEADER
+  screens:
+  - PNC_HERO_SHOWDOWN_RANKING
+  status: screenshot_seeded
+  detection_kind: planned
+  interaction_kind: label
+- id: PNC_HERO_SHOWDOWN_CURRENT_RANK_LABEL
+  screens:
+  - PNC_HERO_SHOWDOWN_RANKING
+  status: screenshot_seeded
+  detection_kind: planned
+  interaction_kind: label
+- id: PNC_HERO_SHOWDOWN_CHALLENGE_BUTTON
+  screens:
+  - PNC_HERO_SHOWDOWN_RANKING
+  status: screenshot_seeded
+  detection_kind: planned
+  interaction_kind: action
+  notes:
+  - Present for classification and explicit audit avoidance; the recurrence audit never taps it.
 - id: PNC_HOME_BUILD_BUTTON
   screens:
   - PNC_HOME_CITY

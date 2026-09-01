@@ -40,10 +40,20 @@ class ApplicationRunner:
 
     script_runner: ScriptRunner
 
-    def run(self, *, account_id: str, script_path: str) -> RunResult:
-        """Executes one account/script combination."""
+    def run(
+        self,
+        *,
+        account_id: str,
+        script_path: str,
+        castle_refs: list[str] | None = None,
+    ) -> RunResult:
+        """Executes one script for an account and optional ordered castle aliases."""
 
-        return self.script_runner.run(account_id=account_id, script_path=script_path)
+        return self.script_runner.run(
+            account_id=account_id,
+            script_path=script_path,
+            castle_refs=castle_refs,
+        )
 
     def prepare_account_session(
         self,

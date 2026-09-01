@@ -184,6 +184,63 @@ class RuntimeCastleTargetingTests(unittest.TestCase):
         self.assertEqual(prepared.steps[1].provenance["step_path"], "steps[1].steps[0]")
         self.assertEqual(prepared.steps[3].provenance["repeat_castle_ref"], "farm")
 
+    def test_prepare_script_binds_castle_agnostic_routine_to_runtime_castle_refs(self) -> None:
+        """Repeats one canonical routine body for ordered CLI-supplied castle aliases."""
+
+        registry = build_default_task_registry()
+        farm_castle = CastleIdentity(kingdom="K230", castle_name="Farm", castle_level=6)
+
+        prepared = registry.prepare_script(
+            RunScript(
+                name="daily",
+                path=Path("daily.yaml"),
+                steps=(
+                    ScriptStep(task=TaskId.ENSURE_GAME_RUNNING),
+                    ScriptStep(task=TaskId.LOGIN),
+                    ScriptStep(
+                        task=TaskId.BUILDING_UPGRADE,
+                        params={"priority": ["castle"], "allow_speedups": False},
+                    ),
+                ),
+            ),
+            castle_targets=AccountCastleTargetsConfig(
+                account_id=self.account.id,
+                targets=(
+                    CastleTargetDefinition(target_id="main", castle=self.target_castle),
+                    CastleTargetDefinition(target_id="farm", castle=farm_castle),
+                ),
+            ),
+            castle_refs=["main", "farm"],
+        )
+
+        self.assertEqual(
+            [step.task for step in prepared.steps],
+            [
+                TaskId.ENSURE_GAME_RUNNING,
+                TaskId.LOGIN,
+                TaskId.BUILDING_UPGRADE,
+                TaskId.BUILDING_UPGRADE,
+            ],
+        )
+        self.assertEqual([step.castle_ref for step in prepared.steps[2:]], ["main", "farm"])
+        self.assertEqual([step.castle for step in prepared.steps[2:]], [self.target_castle, farm_castle])
+        self.assertEqual(prepared.steps[2].provenance["binding"], "runtime_castle_refs")
+
+    def test_prepare_script_rejects_duplicate_runtime_castle_refs(self) -> None:
+        """Prevents one scheduler invocation from maintaining the same castle twice."""
+
+        registry = build_default_task_registry()
+
+        with self.assertRaises(ScriptValidationError):
+            registry.prepare_script(
+                RunScript(
+                    name="daily",
+                    path=Path("daily.yaml"),
+                    steps=(ScriptStep(task=TaskId.BUILDING_UPGRADE),),
+                ),
+                castle_refs=["main", "main"],
+            )
+
     def test_prepare_script_rejects_unknown_repeat_block_castle_ref(self) -> None:
         """Fails fast when a repeat block references an alias absent from the selected account."""
 
@@ -643,7 +700,36 @@ class RuntimeCastleTargetingTests(unittest.TestCase):
             )
 
         self.assertEqual(exit_code, 0)
-        self.assertEqual(fake_runner.run_calls, [("account_a", "scripts/daily.yaml")])
+        self.assertEqual(fake_runner.run_calls, [("account_a", "scripts/daily.yaml", None)])
+
+    def test_cli_forwards_ordered_runtime_castle_refs(self) -> None:
+        """Binds one canonical routine to repeated account-scoped aliases from the CLI."""
+
+        fake_runner = _FakeApplicationRunner()
+        with patch("pnc_automation.app.entrypoints.cli.build_application_runner", return_value=fake_runner), patch(
+            "builtins.print"
+        ):
+            exit_code = cli_main(
+                [
+                    "run",
+                    "--account",
+                    "account_a",
+                    "--config",
+                    "config/accounts.yaml",
+                    "--script",
+                    "scripts/daily.yaml",
+                    "--castle-ref",
+                    "main",
+                    "--castle-ref",
+                    "farm",
+                ]
+            )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(
+            fake_runner.run_calls,
+            [("account_a", "scripts/daily.yaml", ["main", "farm"])],
+        )
 
     def test_cli_passes_observation_mode_override_to_application_builder(self) -> None:
         """Threads the explicit CLI observation-mode override into the canonical application builder."""
@@ -675,14 +761,20 @@ class RuntimeCastleTargetingTests(unittest.TestCase):
 class _FakeApplicationRunner:
     """Records Python API and CLI calls without constructing the full runtime."""
 
-    run_calls: list[tuple[str, str]] = field(default_factory=list)
+    run_calls: list[tuple[str, str, list[str] | None]] = field(default_factory=list)
     prepare_calls: list[tuple[str, CastleIdentity | None]] = field(default_factory=list)
     task_calls: list[tuple[TaskId, str, dict[str, object] | None]] = field(default_factory=list)
 
-    def run(self, *, account_id: str, script_path: str) -> RunResult:
+    def run(
+        self,
+        *,
+        account_id: str,
+        script_path: str,
+        castle_refs: list[str] | None = None,
+    ) -> RunResult:
         """Records one CLI/script run request and returns a synthetic success result."""
 
-        self.run_calls.append((account_id, script_path))
+        self.run_calls.append((account_id, script_path, castle_refs))
         return _make_run_result(script_name=script_path)
 
     def prepare_account_session(

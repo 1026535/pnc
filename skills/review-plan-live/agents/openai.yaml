@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Plan Against Live Evidence"
+  short_description: "Audit plan assumptions with bounded live evidence"
+  default_prompt: "Use $review-plan-live to review this plan against repository evidence and bounded live validation."
