@@ -25,9 +25,14 @@ If any item is missing, stop before spending and request the missing authorizati
 2. Let the canonical runtime resolve and launch the configured BlueStacks instance when needed, connect through configured ADB settings, and verify the active account, castle, app, and current screen using typed observations.
 3. Capture a labeled pre-action screenshot and observation, including the relevant resource balance or state when the existing observation pipeline exposes it.
 4. Implement one small runnable slice and execute only the authorized live action for that slice. Use existing tasks, navigation, selectors, observation waits, and artifact storage; do not add raw coordinate or ad hoc ADB control paths.
-5. Capture and inspect the post-action screenshot, OCR/observation data, logs, and any domain-specific proof. Confirm that the observed change matches the expected result and remains within the authorized budget.
-6. Stop after the smallest successful proof. If the action fails, the result is ambiguous, or the budget is exhausted, preserve artifacts and investigate without spending again unless the user explicitly authorized a bounded retry count.
-7. Return the runtime to a safe stable screen when the existing navigation flow can do so, then run the final offline validation required by `write-code`.
+5. Capture and inspect the post-action screenshot, OCR/observation data, logs, and any domain-specific proof. Classify the result as confirmed, approved applicability skip, engineering failure, user-input-required, or external blocker.
+6. On an engineering failure, preserve the artifacts, fix the implementation or regression test, rerun focused offline validation, and repeat the smallest relevant live probe. Do not spend again for the same mutation unless the authorization explicitly includes a bounded retry; read-only observation and navigation may iterate within their stated budget.
+7. On ambiguity, missing identity, missing authorization, or unsafe state, stop the mutation and report the exact question or blocker. On budget exhaustion, stop spending but continue offline diagnosis and documentation.
+8. Return the runtime to a safe stable screen when the existing navigation flow can do so, then run the final offline validation required by `write-code`.
+
+Live success is therefore a development exit condition, not merely a diagnostic result:
+the feature is complete only after its expected postcondition is observed and its
+evidence is recorded, or after a precise blocker/approved skip is recorded.
 
 ## Scope Boundary
 

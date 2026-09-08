@@ -10,6 +10,11 @@ Work only in this `pnc` repository. Treat each task as done only when the reques
 2. Use internet research when current external behavior matters, especially for OpenAI/Codex, BlueStacks, Android/ADB, test strategy, library APIs, security, or platform-specific behavior. Prefer official docs and cite sources in the final answer when they shaped the work.
 3. For non-trivial work, make a compact implementation plan internally or in the conversation, then execute it. Save a Markdown plan only when the user asks for a plan document or the task is too large to complete safely in one pass.
 4. Implement in small, coherent slices. After each risky or live-relevant slice, run the smallest useful validation before continuing.
+   Live validation is an iterative engineering loop: classify failures from their
+   artifacts, patch the implementation or regression fixture, and rerun the bounded
+   proof. Do not end the feature at the first engineering failure. Stop only on a
+   confirmed postcondition, approved applicability skip, exhausted authorization, or
+   a precise user-input/external-blocker disposition.
 5. Before saying "done", run the required offline tests and, for live/runtime changes, the smallest relevant live validation path. If live validation cannot run, state the exact blocker and command that remains.
 
 ## Architecture Rules

@@ -17,7 +17,7 @@ Make small, coherent code changes that improve long-term code health. Ground dec
 4. Implement through the repository's canonical interfaces. Do not add alternate entry points, legacy schema support, duplicate parsers, duplicate formatters, or hard-coded copies of existing rules.
 5. Validate inputs and invariants explicitly. Fail fast on unexpected states instead of silently swallowing invalid content.
 6. Add or update focused tests beside the behavior. Use deterministic offline tests first; use live or integration checks when the changed boundary requires them.
-7. For functionality that affects live runtime behavior, selectors, navigation, screen classification, ADB/emulator integration, or authored live workflows, iterate in runnable increments: implement one slice, run the smallest relevant live or smoke validation once the slice can execute, inspect artifacts, fix issues, and repeat before moving to the next slice.
+7. For functionality that affects live runtime behavior, selectors, navigation, screen classification, ADB/emulator integration, or authored live workflows, use the live-development loop below. A live failure is normally engineering feedback, not the end of the task: inspect its evidence, patch the implementation or fixture, rerun the smallest relevant proof, and continue until the slice is confirmed or a named external blocker remains.
 8. Run the narrowest useful validation first, then the repo-required suite for the risk level. Fix failures by reading the assertion, traceback, screenshots, logs, or artifacts before changing code.
 9. Summarize what changed, what was verified, and any remaining risk.
 
@@ -38,6 +38,42 @@ Make small, coherent code changes that improve long-term code health. Ground dec
 - For narrow changes, run targeted tests first, then the full offline suite after the focused behavior passes.
 - For functional PNC changes that depend on live game or emulator behavior, use the `test-bluestacks-live` skill and the smallest relevant opt-in live smoke path. If no BlueStacks instance is open, let the canonical runtime launch the configured instance before validating.
 - Preserve unrelated user changes in the working tree.
+
+## Live-development loop
+
+For a live-dependent slice, track a concrete feature proof rather than treating a
+smoke command as a one-shot check:
+
+1. Define the precondition, one observable success condition, postcondition, artifact,
+   and safe recovery path. For mutating work, also record the exact authorized budget.
+2. Implement the smallest runnable slice and run its focused offline tests.
+3. Run one bounded live probe through the canonical runtime. Capture baseline and
+   post-action evidence, even when the probe fails.
+4. Classify the result:
+   - `confirmed`: the expected postcondition is observed; add the evidence to the
+     feature result and continue to the next slice or final validation.
+   - `applicability_skip`: the approved target-specific condition is observed and
+     recorded; do not generalize it to other targets.
+   - `engineering_failure`: selector, parser, navigation, timing, or reconciliation
+     behavior is wrong or incomplete. Inspect artifacts, patch code/tests, rerun
+     focused offline tests, and return to step 3.
+   - `user_input_required`: identity, authorization, ambiguous game state, missing
+     target choice, or an unresolved product rule prevents a safe next action. Ask
+     one precise question and pause that slice.
+   - `external_blocker`: the configured emulator, app, account, or required game
+     state cannot be made available within the bounded workflow. Preserve the exact
+     command, state, and artifact path; do not claim confirmation.
+5. After each engineering iteration, update the deterministic regression test or
+   fixture when the live evidence exposed a reproducible case. Do not repeat a
+   mutation merely to obtain more evidence; repeat only a safe read-only probe or a
+   separately authorized bounded mutation.
+6. Finish only when the feature's success condition is confirmed, an approved skip is
+   recorded, or a precise user-input/external-blocker disposition is handed off.
+
+The live loop is bounded by the slice's action budget and observation/recovery budget,
+not by an arbitrary single attempt. "Stop after the first failed live test" is not a
+completion rule; "stop after repeated identical evidence without a meaningful code or
+state change" is a valid diagnostic boundary.
 
 ## Quality Gate
 
