@@ -35,6 +35,14 @@ _SCREEN_FAMILY_OBSERVED_SCREENS = {
     ScreenType.PNC_VIP: frozenset({ScreenType.UNKNOWN, ScreenType.PNC_VIP}),
     ScreenType.PNC_VIP_DAILY_RESET: _HOME_CITY_QUEUE_SCREENS | frozenset({ScreenType.PNC_VIP_DAILY_RESET}),
     ScreenType.PNC_IMPROVE_MIGHT: frozenset({ScreenType.UNKNOWN, ScreenType.PNC_IMPROVE_MIGHT}),
+    ScreenType.PNC_EVENT_CENTER: frozenset(
+        {
+            ScreenType.UNKNOWN,
+            ScreenType.PNC_HOME_CITY,
+            ScreenType.PNC_EVENT_CENTER,
+            ScreenType.PNC_MIGHT_RANK,
+        }
+    ),
     ScreenType.PNC_WORLD_MAP: frozenset({ScreenType.UNKNOWN, ScreenType.PNC_WORLD_MAP_ROOT, ScreenType.PNC_WORLD_MAP}),
     ScreenType.PNC_WORLD_COORDINATE_DIALOG: frozenset(
         {
@@ -141,6 +149,12 @@ _SCREEN_FAMILY_OBSERVED_SCREENS = {
     ScreenType.PNC_POPUP: _HOME_CITY_QUEUE_SCREENS,
     ScreenType.PNC_BAG: frozenset(
         {ScreenType.UNKNOWN, ScreenType.PNC_CASTLE_SELECTION, ScreenType.PNC_HOME_CITY, ScreenType.PNC_MORE_MENU}
+    ),
+    ScreenType.PNC_QUEST_MAIN: frozenset(
+        {ScreenType.UNKNOWN, ScreenType.PNC_HOME_CITY, ScreenType.PNC_QUEST_MAIN, ScreenType.PNC_QUEST_DAILY}
+    ),
+    ScreenType.PNC_QUEST_DAILY: frozenset(
+        {ScreenType.UNKNOWN, ScreenType.PNC_HOME_CITY, ScreenType.PNC_QUEST_MAIN, ScreenType.PNC_QUEST_DAILY}
     ),
     ScreenType.PNC_ALLIANCE_JOIN: frozenset(
         {ScreenType.UNKNOWN, ScreenType.PNC_CASTLE_SELECTION, ScreenType.PNC_HOME_CITY, ScreenType.PNC_MORE_MENU}

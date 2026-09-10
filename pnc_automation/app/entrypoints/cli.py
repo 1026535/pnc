@@ -9,12 +9,24 @@ import json
 from pathlib import Path
 import sys
 from typing import Sequence
+from zoneinfo import ZoneInfo
 
 from pnc_automation.app.automation.engine.runner import StepRunResult
+from pnc_automation.app.automation.daily_maintenance.application_service import (
+    DailyMaintenanceApplicationService,
+    DailyRunBoundary,
+)
+from pnc_automation.app.automation.daily_maintenance.authorization import DailyMutationAuthorizer
+from pnc_automation.app.automation.daily_maintenance.connected_runner import (
+    ConnectedClaimOnlyRunnerFactory,
+)
 from pnc_automation.app.automation.engine.task import TaskId
 from pnc_automation.app.runtime.observation_mode import ObservationMode
 from pnc_automation.app import build_application_runner
 from pnc_automation.app.authoring.config.models import CastleIdentity
+from pnc_automation.app.authoring.config.loader import load_app_config
+from pnc_automation.app.authoring.config.daily_maintenance import load_daily_maintenance_config
+from pnc_automation.app.authoring.config.mutation_acknowledgement import parse_mutation_acknowledgement
 from pnc_automation.app.authoring.config.yaml_helpers import build_castle_identity
 from pnc_automation.app.pnc.domain.building_priority_input import resolve_building_priority_values
 from pnc_automation.app.pnc.domain.mail import parse_send_mail_params, route_requires_player_name
@@ -26,7 +38,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     arguments = list(sys.argv[1:] if argv is None else argv)
     if arguments and arguments[0] not in {
-        "run", "login", "build", "construct", "open-building", "send-mail", "run-mail-schedules"
+        "run", "login", "build", "construct", "open-building", "send-mail", "run-mail-schedules",
+        "daily-maintenance",
     }:
         arguments.insert(0, "run")
 
@@ -86,7 +99,27 @@ def main(argv: Sequence[str] | None = None) -> int:
     _add_common_arguments(run_mail_schedules_parser)
     _add_run_mail_schedules_arguments(run_mail_schedules_parser)
 
+    daily_parser = subparsers.add_parser(
+        "daily-maintenance",
+        help="Run the promoted claim-only Daily coordinator for all configured targets.",
+    )
+    daily_parser.add_argument("--config", default="config/accounts.yaml", help="Path to account configuration.")
+    daily_parser.add_argument(
+        "--daily-config",
+        default="config/daily_maintenance.yaml",
+        help="Path to strict Daily maintenance policy configuration.",
+    )
+    daily_parser.add_argument(
+        "--acknowledgement",
+        action="append",
+        required=True,
+        help="Exact invocation-time mutation acknowledgement JSON; repeat once per target/capability.",
+    )
+    daily_parser.add_argument("--verbose", action="store_true", help="Enable verbose structured logging.")
+
     parsed = parser.parse_args(arguments)
+    if parsed.command == "daily-maintenance":
+        return _run_daily_maintenance(parsed)
     application = build_application_runner(
         Path(parsed.config),
         verbose=parsed.verbose,
@@ -164,6 +197,54 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     print(_serialize_step_result(account_id=parsed.account, step_result=step_result))
     return 0
+
+
+def _run_daily_maintenance(parsed: argparse.Namespace) -> int:
+    """Validates all mutation authority before ADB and runs the application coordinator."""
+
+    app_config = load_app_config(Path(parsed.config))
+    daily_config = load_daily_maintenance_config(
+        Path(parsed.daily_config),
+        app_config=app_config,
+    )
+    if not daily_config.automatic_runs_enabled:
+        raise PermissionError("Automatic Daily runs are disabled pending canary evaluation.")
+    now = datetime.now(ZoneInfo(daily_config.maintenance_timezone))
+    maintenance_date = now.date()
+    reset_date = now.astimezone(ZoneInfo("UTC")).date()
+    boundary = DailyRunBoundary(
+        maintenance_date=maintenance_date,
+        game_reset_id=f"pnc-reset-{reset_date.isoformat()}-{daily_config.game_reset_hour_utc:02d}",
+    )
+    acknowledgements = tuple(parse_mutation_acknowledgement(value) for value in parsed.acknowledgement)
+    authorizer = DailyMutationAuthorizer(acknowledgements)
+    for target in daily_config.targets:
+        if target.capabilities:
+            labels = ", ".join(policy.quest_id.value for policy in target.capabilities)
+            parser_error = (
+                "Daily configuration enables capabilities that have not passed their live promotion gates: "
+                f"{target.account_id}/{target.castle_ref}: {labels}."
+            )
+            raise PermissionError(parser_error)
+        authorizer.require_claims(
+            account_id=target.account_id,
+            castle_ref=target.castle_ref,
+            maintenance_date=maintenance_date,
+            max_claims=target.max_claims,
+        )
+    service = DailyMaintenanceApplicationService(
+        app_config=app_config,
+        daily_config=daily_config,
+        runner_factory=ConnectedClaimOnlyRunnerFactory(
+            config_path=str(parsed.config),
+            app_config=app_config,
+            acknowledgements=acknowledgements,
+            verbose=parsed.verbose,
+        ),
+    )
+    summary = service.run(boundary=boundary)
+    print(json.dumps(asdict(summary), indent=2, default=str))
+    return 0 if summary.succeeded else 1
 
 
 def _add_common_arguments(parser: argparse.ArgumentParser) -> None:

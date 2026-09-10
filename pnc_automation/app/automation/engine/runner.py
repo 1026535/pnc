@@ -11,7 +11,8 @@ from typing import Any
 from pnc_automation.app.automation.engine.observed_action_executor import ObservedActionExecutor
 from pnc_automation.app.authoring.scripts.models import PreparedRunScript, PreparedScriptStep, ScriptStep
 from pnc_automation.app.authoring.scripts.registry import TaskRegistry
-from pnc_automation.app.automation.engine.task import CastleTargetPolicy, TaskId, TaskPreflight, TaskResult, TaskStatus
+from pnc_automation.app.automation.engine.task import CastleTargetPolicy, TaskId, TaskPreflight
+from pnc_automation.app.automation.engine.task_executor import TaskExecutionResult, TaskExecutor
 from pnc_automation.app.automation.engine.task_context import TaskContext
 from pnc_automation.app.pnc.persistence.chat_archive_store import ChatArchiveStore
 from pnc_automation.app.pnc.persistence.mail_archive_store import MailArchiveStore
@@ -66,15 +67,6 @@ class StepExecutionPolicy:
             raise ValueError("StepExecutionPolicy.max_replans_per_step cannot be negative.")
         if self.max_retries_per_step < 0:
             raise ValueError("StepExecutionPolicy.max_retries_per_step cannot be negative.")
-
-
-@dataclass(frozen=True, slots=True)
-class _LoopExecutionResult:
-    """Carries one finished task-loop result and the freshest observation."""
-
-    result: TaskResult
-    attempts: int
-    final_observation: Observation
 
 
 @dataclass(slots=True)
@@ -229,7 +221,6 @@ class AutomationRunner:
             parsed_params=step.parsed_params,
             target_castle=step.castle,
             before=before,
-            allow_popup_recovery=True,
         )
         return StepRunResult(
             task_id=step.task,
@@ -267,7 +258,6 @@ class AutomationRunner:
             parsed_params=select_castle_task.parse_params({}),
             target_castle=step.castle,
             before=before,
-            allow_popup_recovery=True,
         )
         return execution.final_observation
 
@@ -283,9 +273,8 @@ class AutomationRunner:
         parsed_params: Any,
         target_castle: CastleIdentity | None,
         before: Observation,
-        allow_popup_recovery: bool,
-    ) -> _LoopExecutionResult:
-        """Runs one task through the canonical plan-act-verify loop."""
+    ) -> TaskExecutionResult:
+        """Preflights one task and delegates to the canonical task executor."""
 
         task = self.task_registry.require(step.task)
         context = self._build_context(
@@ -298,8 +287,6 @@ class AutomationRunner:
             parsed_params=parsed_params,
             target_castle=target_castle,
         )
-        attempts = 0
-        replans = 0
         current_before = self._run_task_preflight(
             task=task,
             step=step,
@@ -310,78 +297,13 @@ class AutomationRunner:
             mail_archive_store=mail_archive_store,
             chat_archive_store=chat_archive_store,
         )
-        while True:
-            attempts += 1
-            if allow_popup_recovery:
-                current_before = self._ensure_no_blocking_popup(
-                    current_before,
-                    account=account,
-                    castle_roster_store=castle_roster_store,
-                    mail_archive_store=mail_archive_store,
-                    chat_archive_store=chat_archive_store,
-                )
-            if not task.is_applicable(context, current_before):
-                self._raise_task_verification_error(
-                    f"Task '{step.task}' is not applicable on screen '{current_before.screen_type}'.",
-                    task_id=step.task,
-                    observation=current_before,
-                    screen_type=current_before.screen_type,
-                    label=f"{step.task.value}_failure_not_applicable",
-                )
-
-            context.logger.info(
-                "Planning task increment.",
-                extra={"screen_type": current_before.screen_type, "attempt": attempts},
-            )
-            actions = task.plan(context, current_before)
-            after = current_before
-            if actions:
-                execution = self.action_executor.execute_actions(
-                    actions,
-                    current_before,
-                    observe=lambda label, request=None: self.observation_service.observe(
-                        f"{step.task.value}_{label}",
-                        request=request,
-                    ),
-                )
-                after = execution.observation
-            result = task.verify(context, current_before, after)
-            context.logger.info(
-                "Task increment verified.",
-                extra={
-                    "result": result.status,
-                    "screen_type": after.screen_type,
-                    "message": result.message,
-                },
-            )
-            if result.succeeded:
-                return _LoopExecutionResult(result=result, attempts=attempts, final_observation=after)
-            if result.status == TaskStatus.REPLAN:
-                replans += 1
-                max_replans = task.max_replans_per_step(context)
-                if max_replans is None:
-                    max_replans = self.policy.max_replans_per_step
-                if replans > max_replans:
-                    self._raise_task_verification_error(
-                        f"Task '{step.task}' exceeded the maximum allowed replans.",
-                        task_id=step.task,
-                        observation=after,
-                        screen_type=after.screen_type,
-                        label=f"{step.task.value}_failure_replan_limit",
-                        replans=replans,
-                    )
-                current_before = after
-                continue
-            if result.retryable and attempts <= self.policy.max_retries_per_step:
-                current_before = self.observation_service.observe(f"{step.task.value}_retry_{attempts}")
-                continue
-            self._raise_task_verification_error(
-                result.message,
-                task_id=step.task,
-                observation=after,
-                screen_type=after.screen_type,
-                label=f"{step.task.value}_failure_result",
-            )
+        return TaskExecutor(
+            observation_service=self.observation_service,
+            action_executor=self.action_executor,
+            logger=self.logger,
+            max_replans_per_step=self.policy.max_replans_per_step,
+            max_retries_per_step=self.policy.max_retries_per_step,
+        ).execute(task=task, context=context, before=current_before)
 
     def _run_task_preflight(
         self,
@@ -397,6 +319,16 @@ class AutomationRunner:
     ) -> Observation:
         """Proves the task-declared entry state once before the task body begins executing."""
 
+        recovered = self.action_executor.recover_update_if_required(
+            before,
+            label_prefix=f"{step.task.value}_preflight_update",
+            observe=lambda label, request=None: self.observation_service.observe(
+                f"{step.task.value}_{label}",
+                request=request,
+            ),
+        )
+        if recovered is not None:
+            before = recovered
         requirement = getattr(task, "preflight", TaskPreflight.NONE)
         if requirement == TaskPreflight.NONE:
             return before
@@ -413,13 +345,26 @@ class AutomationRunner:
                     label=f"{step.task.value}_failure_preflight",
                     preflight=requirement.value,
                 )
-            current = self._ensure_no_blocking_popup(
-                current,
-                account=account,
-                castle_roster_store=castle_roster_store,
-                mail_archive_store=mail_archive_store,
-                chat_archive_store=chat_archive_store,
-            )
+            if current.screen_type == ScreenType.PNC_POPUP or current.blocking_popup:
+                recovered = self.action_executor.recover_update_if_required(
+                    current,
+                    label_prefix=f"{step.task.value}_preflight_update",
+                    observe=lambda label, request=None: self.observation_service.observe(
+                        f"{step.task.value}_{label}",
+                        request=request,
+                    ),
+                )
+                if recovered is not None:
+                    current = recovered
+                    continue
+                self._raise_task_verification_error(
+                    "A blocking popup interrupted task preflight outside bootstrap.",
+                    task_id=step.task,
+                    observation=current,
+                    screen_type=current.screen_type,
+                    label=f"{step.task.value}_failure_preflight_popup",
+                    preflight=requirement.value,
+                )
             if self._task_preflight_is_satisfied(requirement, current):
                 return current
             actions = self._plan_task_preflight(requirement, current)
@@ -520,35 +465,6 @@ class AutomationRunner:
             world_map_survey_recorder=self.world_map_survey_recorder,
             world_map_search_service=self.world_map_search_service,
         )
-
-    def _ensure_no_blocking_popup(
-        self,
-        observation: Observation,
-        *,
-        account: AccountConfig,
-        castle_roster_store: CastleRosterStore | None,
-        mail_archive_store: MailArchiveStore | None,
-        chat_archive_store: ChatArchiveStore | None,
-    ) -> Observation:
-        """Executes centralized popup recovery ahead of non-popup tasks."""
-
-        if not observation.blocking_popup:
-            return observation
-        popup_step = ScriptStep(task=TaskId.POPUP_RECOVERY)
-        popup_task = self.task_registry.require(TaskId.POPUP_RECOVERY)
-        execution = self._execute_step_loop(
-            account=account,
-            castle_roster_provider=None,
-            castle_roster_store=castle_roster_store,
-            mail_archive_store=mail_archive_store,
-            chat_archive_store=chat_archive_store,
-            step=popup_step,
-            parsed_params=popup_task.parse_params({}),
-            target_castle=None,
-            before=observation,
-            allow_popup_recovery=False,
-        )
-        return execution.final_observation
 
     def _raise_task_verification_error(
         self,

@@ -220,6 +220,8 @@ selectors:
 - id: PNC_BACK_BUTTON_TOP_LEFT
   screens:
   - PNC_HOME_CITY
+  - PNC_MIGHT_RANK
+  - PNC_EVENT_CENTER
   status: screenshot_seeded
   detection_kind: template
 - id: PNC_VERSUS_CENTER_HERO_SHOWDOWN_ENTRY
@@ -776,41 +778,54 @@ selectors:
   detection_kind: template
 - id: PNC_QUEST_TAB_MAIN
   screens:
+  - PNC_QUEST_MAIN
   - PNC_QUEST_DAILY
   status: screenshot_seeded
   detection_kind: template
 - id: PNC_QUEST_TAB_DAILY
   screens:
+  - PNC_QUEST_MAIN
   - PNC_QUEST_DAILY
   status: screenshot_seeded
   detection_kind: template
 - id: PNC_QUEST_TAB_ALLIANCE_ACTIVITY
   screens:
+  - PNC_QUEST_MAIN
   - PNC_QUEST_DAILY
   status: screenshot_seeded
   detection_kind: template
 - id: PNC_QUEST_REWARD_CHEST
   screens:
+  - PNC_QUEST_MAIN
   - PNC_QUEST_DAILY
   status: screenshot_seeded
   detection_kind: template
 - id: PNC_QUEST_ROW
   screens:
+  - PNC_QUEST_MAIN
   - PNC_QUEST_DAILY
   status: screenshot_seeded
   detection_kind: collection
 - id: PNC_QUEST_GO_BUTTON
+  screens:
+  - PNC_QUEST_MAIN
+  - PNC_QUEST_DAILY
+  status: screenshot_seeded
+  detection_kind: template
+- id: PNC_QUEST_CLAIM_BUTTON
   screens:
   - PNC_QUEST_DAILY
   status: screenshot_seeded
   detection_kind: template
 - id: PNC_QUEST_CLAIMED_LABEL
   screens:
+  - PNC_QUEST_MAIN
   - PNC_QUEST_DAILY
   status: screenshot_seeded
   detection_kind: template
 - id: PNC_QUEST_RESET_TIMER
   screens:
+  - PNC_QUEST_MAIN
   - PNC_QUEST_DAILY
   status: screenshot_seeded
   detection_kind: template
@@ -873,6 +888,23 @@ selectors:
   - PNC_HERO_DETAIL_ENHANCE
   status: screenshot_seeded
   detection_kind: template
+- id: PNC_HERO_HALL_RECRUIT_BANNER
+  screens:
+  - PNC_HERO_HALL
+  status: planned
+  detection_kind: planned
+  interaction_kind: label
+- id: PNC_HERO_HALL_RECRUIT_1X_BUTTON
+  screens:
+  - PNC_HERO_HALL
+  status: planned
+  detection_kind: planned
+  interaction_kind: action
+  relative_bounds:
+    x_ratio: 0.095
+    y_ratio: 0.72
+    width_ratio: 0.34
+    height_ratio: 0.06
 - id: PNC_MAIL_HEADER
   screens:
   - PNC_MAIL_HUB
@@ -1868,6 +1900,14 @@ selectors:
   - PNC_POPUP
   status: planned
   detection_kind: planned
+- id: PNC_UPDATE_CONFIRM_BUTTON
+  screens:
+  - PNC_POPUP
+  status: screenshot_seeded
+  detection_kind: planned
+  interaction_kind: action
+  notes:
+  - OCR materializes the exact Confirm control only when the new-version update message is present.
 surfaces:
 - id: PNC_WORLD_MAP_SURFACE
   surface_type: world_map

@@ -1,9 +1,0 @@
-name: daily_castle_maintenance
-
-steps:
-  - task: ensure_game_running
-  - task: login
-  - task: building_upgrade
-    params:
-      priority: [castle, wall, institute, infantry_barracks]
-      allow_speedups: false

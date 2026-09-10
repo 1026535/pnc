@@ -11,7 +11,7 @@ from typing import Protocol
 
 from pnc_automation.app.automation.engine.action_executor import ActionExecutor
 from pnc_automation.core.errors import SelectorResolutionError
-from pnc_automation.app.pnc.domain.action_requests import ActionRequest, TapAction
+from pnc_automation.app.pnc.domain.action_requests import ActionRequest, LaunchAppAction, TapAction
 from pnc_automation.app.pnc.domain.observation import Observation, VisibleElement, VisibleElementSourceKind
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
@@ -37,12 +37,21 @@ class ObservedActionExecutionPolicy:
     """Centralizes bounded settle behavior for observed selector taps."""
 
     max_settle_observations: int = 3
+    update_poll_interval_seconds: int = 10
+    update_max_wait_seconds: int = 600
+    update_max_popup_dismissals: int = 6
 
     def __post_init__(self) -> None:
         """Rejects invalid negative settle budgets."""
 
         if self.max_settle_observations < 0:
             raise ValueError("ObservedActionExecutionPolicy.max_settle_observations cannot be negative.")
+        if self.update_poll_interval_seconds <= 0:
+            raise ValueError("Update poll interval must be positive.")
+        if self.update_max_wait_seconds < self.update_poll_interval_seconds:
+            raise ValueError("Update wait budget must include at least one poll interval.")
+        if self.update_max_popup_dismissals < 0:
+            raise ValueError("Update popup dismissal budget cannot be negative.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,6 +76,7 @@ class ObservedActionExecutionResult:
 
     observation: Observation
     selector_interactions: tuple[SelectorInteractionResult, ...] = ()
+    update_recovered: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,6 +112,16 @@ class ObservedActionExecutor:
     ) -> ObservedActionExecutionResult:
         """Executes the action sequence and returns the freshest observed result."""
 
+        recovered = self.recover_update_if_required(
+            initial_observation,
+            label_prefix="pre_action_update",
+            observe=observe,
+        )
+        if recovered is not None:
+            return ObservedActionExecutionResult(
+                observation=recovered,
+                update_recovered=True,
+            )
         current_observation = initial_observation
         observed_after_action = False
         executed_any_action = False
@@ -118,6 +138,17 @@ class ObservedActionExecutor:
                 )
                 current_observation = interaction_result.observation
                 selector_interactions.extend(interaction_result.selector_interactions)
+                recovered = self.recover_update_if_required(
+                    current_observation,
+                    label_prefix=f"post_action_{index + 1}_update",
+                    observe=observe,
+                )
+                if recovered is not None:
+                    return ObservedActionExecutionResult(
+                        observation=recovered,
+                        selector_interactions=tuple(selector_interactions),
+                        update_recovered=True,
+                    )
                 executed_any_action = True
                 observed_after_action = True
                 continue
@@ -129,6 +160,17 @@ class ObservedActionExecutor:
                     label_prefix=f"post_action_{index + 1}",
                     observe=observe,
                 )
+                recovered = self.recover_update_if_required(
+                    current_observation,
+                    label_prefix=f"post_action_{index + 1}_update",
+                    observe=observe,
+                )
+                if recovered is not None:
+                    return ObservedActionExecutionResult(
+                        observation=recovered,
+                        selector_interactions=tuple(selector_interactions),
+                        update_recovered=True,
+                    )
                 if not self.action_executor.validate_follow_up(action, current_observation):
                     return ObservedActionExecutionResult(
                         observation=current_observation,
@@ -138,10 +180,133 @@ class ObservedActionExecutor:
         if executed_any_action and not observed_after_action:
             self._sleep_for_observe()
             current_observation = observe("post_actions")
+            recovered = self.recover_update_if_required(
+                current_observation,
+                label_prefix="post_actions_update",
+                observe=observe,
+            )
+            if recovered is not None:
+                return ObservedActionExecutionResult(
+                    observation=recovered,
+                    selector_interactions=tuple(selector_interactions),
+                    update_recovered=True,
+                )
         return ObservedActionExecutionResult(
             observation=current_observation,
             selector_interactions=tuple(selector_interactions),
         )
+
+    def recover_update_if_required(
+        self,
+        observation: Observation,
+        *,
+        label_prefix: str,
+        observe: ObservationCallback,
+    ) -> Observation | None:
+        """Confirms one detected game update and polls until typed Home is restored."""
+
+        if not observation.has(UiElementId.PNC_UPDATE_CONFIRM_BUTTON):
+            return None
+        self.logger.info(
+            "Confirming required game update and entering bounded Home recovery.",
+            extra={"screen_type": observation.screen_type},
+        )
+        confirmed = self.action_executor.execute_action(
+            TapAction(
+                selector_id=UiElementId.PNC_UPDATE_CONFIRM_BUTTON,
+                reason="confirm_required_game_update",
+            ),
+            observation,
+        )
+        if not confirmed:
+            raise SelectorResolutionError(
+                "Required game update Confirm was detected but not dispatched.",
+                selector_id=UiElementId.PNC_UPDATE_CONFIRM_BUTTON,
+                screen_type=observation.screen_type,
+            )
+        poll_count = self.policy.update_max_wait_seconds // self.policy.update_poll_interval_seconds
+        launched_from_android_home = False
+        dismissed_popup_fingerprints: set[str] = set()
+        current = observation
+        for index in range(poll_count):
+            self.sleep(float(self.policy.update_poll_interval_seconds))
+            current = observe(
+                f"{label_prefix}_wait_{index + 1}",
+                request=ObservationRequest.full_runtime_default(),
+            )
+            if current.screen_type == ScreenType.PNC_HOME_CITY and not current.blocking_popup:
+                self.logger.info(
+                    "Required game update completed and typed Home was restored.",
+                    extra={"poll_count": index + 1},
+                )
+                return current
+            if current.has(UiElementId.PNC_UPDATE_CONFIRM_BUTTON):
+                continue
+            popup_selector = self._update_recovery_popup_selector(current)
+            if popup_selector is not None:
+                fingerprint = current.frame_fingerprint
+                if fingerprint is None:
+                    raise SelectorResolutionError(
+                        "Post-update popup dismissal requires a visual frame fingerprint.",
+                        selector_id=popup_selector,
+                        screen_type=current.screen_type,
+                    )
+                if fingerprint in dismissed_popup_fingerprints:
+                    raise SelectorResolutionError(
+                        "Post-update popup remained after its one safe dismissal attempt.",
+                        selector_id=popup_selector,
+                        screen_type=current.screen_type,
+                        artifact_path=None if current.artifact_path is None else str(current.artifact_path),
+                    )
+                if len(dismissed_popup_fingerprints) >= self.policy.update_max_popup_dismissals:
+                    raise SelectorResolutionError(
+                        "Game update exceeded the bounded post-update popup dismissal budget.",
+                        screen_type=current.screen_type,
+                        artifact_path=None if current.artifact_path is None else str(current.artifact_path),
+                    )
+                self.action_executor.execute_action(
+                    TapAction(
+                        selector_id=popup_selector,
+                        reason="dismiss_post_update_popup",
+                    ),
+                    current,
+                )
+                dismissed_popup_fingerprints.add(fingerprint)
+                continue
+            if current.screen_type == ScreenType.ANDROID_HOME and not launched_from_android_home:
+                self.action_executor.execute_action(
+                    LaunchAppAction(reason="relaunch_pnc_after_required_update"),
+                    current,
+                )
+                launched_from_android_home = True
+                continue
+            if current.screen_type in {
+                ScreenType.ANDROID_HOME,
+                ScreenType.PNC_HOME_CITY_ROOT,
+                ScreenType.PNC_LOADING,
+                ScreenType.UNKNOWN,
+            }:
+                continue
+            raise SelectorResolutionError(
+                "Game update left the bounded recovery path on an unexpected screen.",
+                screen_type=current.screen_type,
+                artifact_path=None if current.artifact_path is None else str(current.artifact_path),
+            )
+        raise SelectorResolutionError(
+            "Game update did not return to Home within the ten-minute recovery budget.",
+            screen_type=current.screen_type,
+            artifact_path=None if current.artifact_path is None else str(current.artifact_path),
+        )
+
+    @staticmethod
+    def _update_recovery_popup_selector(observation: Observation) -> UiElementId | None:
+        """Returns a non-monetized close control allowed during post-update startup."""
+
+        if observation.has(UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON):
+            return UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON
+        if observation.has(UiElementId.PNC_POPUP_CLOSE_BUTTON):
+            return UiElementId.PNC_POPUP_CLOSE_BUTTON
+        return None
 
     def _resolve_observed_navigation_tap(
         self,

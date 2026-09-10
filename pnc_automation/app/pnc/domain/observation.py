@@ -55,6 +55,9 @@ class ListEntryKind(StrEnum):
     CHAT_MESSAGE = "chat_message"
     ALLIANCE_MEMBER = "alliance_member"
     RANKED_PLAYER = "ranked_player"
+    DAILY_QUEST = "daily_quest"
+    RESOURCE_ITEM = "resource_item"
+    RESOURCE_INVENTORY_EXCLUSION = "resource_inventory_exclusion"
 
 
 class CurrentCastleEvidenceKind(StrEnum):
@@ -405,6 +408,7 @@ class Observation:
     spatial_surface: SpatialSurfaceObservation | None = None
     artifact_path: Path | None = None
     image_size: tuple[int, int] | None = None
+    frame_fingerprint: str | None = None
     captured_at: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
     blocking_popup: bool = False
     current_castle: CastleIdentity | None = None

@@ -11,6 +11,8 @@ from pnc_automation.app.pnc.domain.action_requests import ActionRequest, WaitAct
 from pnc_automation.app.pnc.domain.observation import CurrentCastleMatch, CurrentCastleMatchStatus, Observation
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 
+_MAX_CASTLE_TRANSITION_REPLANS = 12
+
 
 class SelectCastleTask(BaseAutomationTask):
     """Ensures the explicit step-level castle target is selected for the active account."""
@@ -34,6 +36,12 @@ class SelectCastleTask(BaseAutomationTask):
             ScreenType.PNC_ACCOUNT_SWITCH,
         }
 
+    def max_replans_per_step(self, context: TaskContext) -> int | None:
+        """Allows a bounded extended wait for observed black castle-transition frames."""
+
+        del context
+        return _MAX_CASTLE_TRANSITION_REPLANS
+
     def plan(self, context: TaskContext, observation: Observation) -> list[ActionRequest]:
         """Delegates explicit castle switching to the canonical Manage Char flow."""
 
@@ -51,6 +59,14 @@ class SelectCastleTask(BaseAutomationTask):
             if observation.screen_type in {ScreenType.PNC_MORE_MENU, ScreenType.PNC_CASTLE_SELECTION}:
                 return context.flows.return_to_safe_root_screen(observation)
             return []
+        if observation.screen_type == ScreenType.PNC_CASTLE_SELECTION:
+            selected_entry = observation.find_castle_entry(target_castle)
+            if selected_entry is not None and selected_entry.selected:
+                context.runtime_state["selected_castle_identity"] = (
+                    target_castle.kingdom,
+                    target_castle.castle_name,
+                )
+                return context.flows.return_to_safe_root_screen(observation)
         if observation.screen_type == ScreenType.PNC_LORD_INFO:
             return context.flows.open_castle_selection(observation)
         return context.flows.ensure_correct_castle_selected(
@@ -75,6 +91,12 @@ class SelectCastleTask(BaseAutomationTask):
             return TaskResult.failure("Castle navigation could not return to a root-adjacent switching screen.", retryable=True)
         if after.screen_type == ScreenType.PNC_HOME_CITY and current_match.matches:
             return TaskResult.success(f"Target castle '{target_castle.castle_name}' is selected.")
+        if after.screen_type == ScreenType.PNC_HOME_CITY and context.runtime_state.get(
+            "selected_castle_identity"
+        ) == (target_castle.kingdom, target_castle.castle_name):
+            return TaskResult.success(
+                f"Target castle '{target_castle.castle_name}' was proved selected in Manage Char and returned home."
+            )
         if after.screen_type == ScreenType.PNC_LORD_INFO and current_match.matches:
             return TaskResult.success(f"Target castle '{target_castle.castle_name}' is selected.")
         if after.screen_type == ScreenType.PNC_MORE_MENU:

@@ -2742,6 +2742,36 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertEqual(actions[0].metadata_value, "K226")
         self.assertIsInstance(actions[1], WaitAction)
 
+    def test_select_castle_returns_home_when_manage_char_visually_marks_target_selected(self) -> None:
+        """Uses the selected-row checkmark when top-level current-castle evidence is absent."""
+
+        task = SelectCastleTask()
+        target_castle = CastleIdentity(kingdom="K287", castle_name="pine cobaye 1")
+        context = self._make_context(
+            params=None,
+            task_id=TaskId.SELECT_CASTLE,
+            target_castle=target_castle,
+        )
+        observation = make_observation(
+            ScreenType.PNC_CASTLE_SELECTION,
+            visible_ids=(UiElementId.PNC_BACK_BUTTON_TOP_LEFT,),
+            list_entries=(
+                make_entry(
+                    ListEntryKind.CASTLE,
+                    title="pine cobaye 1",
+                    metadata={"kingdom": "K287"},
+                    selected=True,
+                ),
+            ),
+        )
+
+        actions = task.plan(context, observation)
+        result = task.verify(context, observation, make_observation(ScreenType.PNC_HOME_CITY))
+
+        self.assertEqual(actions, self.flows.return_to_safe_root_screen(observation))
+        self.assertTrue(result.succeeded)
+        self.assertEqual(12, task.max_replans_per_step(context))
+
     def test_resolve_unambiguous_castle_identity_prefers_the_exact_requested_name_variant(self) -> None:
         """Returns the exact preferred castle spelling even when an equivalent variant appears first."""
 
@@ -3054,6 +3084,26 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertEqual(len(actions), 1)
         self.assertIsInstance(actions[0], TapAction)
         self.assertEqual(actions[0].selector_id, UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON)
+
+    def test_close_blocking_popup_prioritizes_required_update_confirm(self) -> None:
+        """Confirms only the typed required-update popup before any generic dismissal path."""
+
+        planner = ScreenFlowPlanner()
+        observation = make_observation(
+            ScreenType.PNC_POPUP,
+            visible_ids=(
+                UiElementId.PNC_UPDATE_CONFIRM_BUTTON,
+                UiElementId.PNC_POPUP_CLOSE_BUTTON,
+            ),
+            blocking_popup=True,
+        )
+
+        actions = planner.close_blocking_popup(observation)
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], TapAction)
+        self.assertEqual(actions[0].selector_id, UiElementId.PNC_UPDATE_CONFIRM_BUTTON)
+        self.assertEqual(actions[0].follow_up_request, ObservationRequest.full_runtime_default())
 
     def test_refresh_castle_roster_replaces_stale_cache_membership_with_observed_full_scan(self) -> None:
         """Drops obsolete cached castles instead of upgrading stale membership to `full_scan`."""

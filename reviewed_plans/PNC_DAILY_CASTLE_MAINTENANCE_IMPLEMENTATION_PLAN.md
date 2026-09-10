@@ -1,26 +1,215 @@
 # PNC Daily Castle Maintenance Automation — Implementation and Live-Promotion Plan
 
+## Interview decisions and implementation status — 2026-09-08
+
+These decisions supersede older review wording. Write failing deterministic acceptance
+tests for every canary/variant first; implement red–green–refactor in narrow slices,
+then perform bounded live proof. Offline success is not live promotion.
+
+- NPC 2 (mega_old_acc/npc_2, K157, level 22) and free cookies
+  (serious_stuff/free_cookies, K226, level 17) are CANARY ONLY.
+- Finish ALL canary evaluations before any automatic Daily release. Then run only
+  validated features. NPC 2 must pass; cookies may return an explicitly approved,
+  observed applicability skip. Failed/unproven features remain disabled.
+- Successful results are reused until a relevant code/policy/selector change requires
+  retesting. Do not repeat spending merely on a new date or test invocation.
+- Insufficient funds is a failed canary with reason insufficient_funds, not a software
+  error; absent stock is item_unavailable. Neither is a positive NPC 2 result.
+- Canary contracts specify permitted/expected actions, not completed live results.
+  No canary has been promoted by these edits. Automatic execution remains disabled.
+
+### Screenshot-confirmed automatic scope
+
+All of these run on the testing emulator, in screenshot order:
+
+| Alias | Kingdom | Castle | Level |
+|---|---|---|---|
+| k314e66ab29777 | K314 | K314e66ab29777 | 4 |
+| cold_duke_of_the_north | K313 | ColdDukeOfTheNorth | 2 |
+| k304554ca2797 | K304 | K304554ca2797 | 5 |
+| main | K287 | K287e40c0a989 | 10 |
+| nox_simp | K253 | Nox simp | 4 |
+| k199c0c5983668 | K199 | K199c0c5983668 | 1 |
+| k157f69a736769 | K157 | K157f69a736769 | 3 |
+
+The separate 3xx_spies screenshot shows K325 SmallArmsDino (3), K322 smoll & cringe
+(5, selected), K321 K3217ef93e7321 (5), K320 K320c86f763319 (5),
+K319 K3197f6186576 (5), K318 K318438a066255 (5), K315 K31520587b5634 (4),
+and a partially obscured K303 name (5). Add only legible aliases; verify K303 before
+making it actionable. 3xx_spies is NOT an automatic Daily target.
+
+Screenshots prove visible rosters, not login credentials. testing's cached login/roster
+mapping conflicts with its visible roster. Do not swap credentials or manufacture
+a fresh login-keyed cache from these screenshots. Verify account ownership read-only
+before repairing accounts.yaml and refreshing castles.yaml.
+
+The bounded testing observation
+`artifacts/2026-09-08/testing/20260908T162912Z_canary_plan_testing_identity_baseline.png`
+reached PNC_CASTLE_SELECTION; account identity was not visible. Stop before any
+preparation path that might log into the wrong account. Never expose credentials.
+
+### Additional locked feature details
+
+- Claims: sweep all completed Daily rows, not milestone chests; prove full-list
+  exhaustion after reordering. If NPC 2 has no claim, complete another approved feature.
+- Resource item: one smallest owned pack; ties Food, Wood, Iron, Gold. Never buy a
+  cash-mall pack. Cookies skips with no inventory; NPC 2 stays pending until an item exists.
+- Hero Hall: both castles wait for five free singles at five-minute cooldowns,
+  about 20–25 minutes depending on initial availability. Run other approved quests
+  while waiting; checkpoint singles and observed timers, never restart the count.
+- Hero upgrade: only an exactly level-70 hero. Prove zero-cost reset and restoration
+  resources BEFORE resetting; rebuild the same hero to exactly 70, satisfying three
+  upgrades. Never exceed 70 or reset a higher-level hero.
+- Saurgil: Sauroi's OWN level 30 unlocks it. NPC 2 uses one free daily single.
+  Cookies below 30 must produce a proved locked skip. No purchase or paid summon.
+- Wishes: five Daily target, count current progress; free first, paid allowed for BOTH
+  canaries with no diamond-price cap. Fifty total wishes per castle per UTC game day
+  is the shared safety ceiling across retries and future automation, not a target.
+  Prefer Food, fallback Wood/Iron/Gold. Stop on uncertain progress. Future resource
+  generation itself is not part of this implementation.
+- Trial Shop: NPC 2 buys ONE 60-minute speedup, fallback ONE 1-star Gem Essence;
+  cookies buys ONE Gem Essence. No 99 bulk, refresh, currency top-up or extra Daily
+  purchase. Neither NPC option affordable => failed/insufficient_funds.
+- NPC 2 may use minimum approved in-game prerequisites within each finalized feature
+  budget. Cookies generally uses free/existing inventory except its authorized shop
+  purchase. No real-money purchases. Unfinalized budgets are not unlimited permission.
+- Reset is fixed 00:00 UTC, separately from the 02:00 Toronto maintenance schedule.
+  Persist game-day counters across retries and canary/automatic callers.
+
+### Current implementation and remaining gates
+
+Typed configuration, claim coordinator/journal, CLI and wrapper foundations exist;
+many action TaskIds still have no complete game-action implementation. The canary
+contract/release tests are an offline foundation, not the full feature acceptance suite.
+The generic live smoke's success/skip checks alone cannot establish promotion.
+
+Local/example config separates canary_targets from targets and defaults
+automatic_runs_enabled=false, blocking even claims before connection. Empty action
+lists alone are NOT a disabled switch. The current CLI still rejects all action
+capabilities pending implementation/promotion.
+
+Remaining work: feature-level TDD, per-variant evidence and compatible revisions,
+persisted production promotion enforcement, shared wish budget and cooldown resume,
+production Campaign policies, donation/gift bounds,
+unfinalized canary budgets, verified login/cache repair, composed testing run and disabled
+background-scheduler validation. No scheduled task is enabled by this work.
+
+Implemented foundation updates: wishes now target five with an explicit nullable
+diamond cap and a fifty-wish game-day ceiling; Trial policies allow one item only.
+Journals are keyed by the UTC game-reset identity rather than the Toronto date, so
+local midnight cannot create a second allowance. These policy models do not yet
+implement the connected wish or Trial actions.
+
+The resource-item slice includes numeric smallest-pack selection, visual single-Use
+targets, full-inventory scan checks, durable dispatch and stock/Daily reconciliation.
+`tools/run_resource_item_canary.py --role free_cookies` is read-only by default;
+execution additionally requires exact one-item/zero-diamond acknowledgement.
+No resource mutation or positive live promotion has been established yet.
+Inspected live scroll frames `20260908T172714Z_resource_scroll_first.png` and
+`20260908T172717Z_resource_scroll_second.png` under
+`artifacts/2026-09-08/serious_stuff/` show top-edge overscroll settling.
+The adapter permits one observation-only reread and still requires two agreeing
+frames; deterministic tests cover both settling and persistent instability.
+The next read-only run passed that boundary and stopped on non-pack Resource-tab
+cards (Soulstones and output boosts). Explicit non-actionable recognition now covers
+the observed Soulstone and 24-hour Farm/Lumber boost rows; unknown rows still block
+full-scan proof. Evidence: `20260908T173517Z_resource_scroll_second.png` in the same
+artifact directory. A complete inventory traversal and the authorized one-pack
+mutation still remain before this feature can pass its live canary.
+Live observation `20260908T173824Z_resource_exclusion_verified.png` verified all six
+visible exclusion rows with no action points, including joined-word OCR forms.
+This is a parser-boundary check, not a completed resource-use canary. No packs or
+currency were spent. Continue with the read-only full-scan command above before
+attempting its acknowledged mutation; keep automatic execution disabled.
+
+On 2026-09-09, the existing resource-use journal was inspected with the new
+reconcile-only path. The emulator first exposed a disconnect/reconnect modal and then
+a `New version detected. Tap Confirm to update.` modal. Reconnect recovery is typed,
+and the user subsequently authorized the exact app-update Confirm action as a
+cross-workflow recovery path. The runtime now materializes a dedicated update selector,
+clicks it once, waits up to ten minutes using full-runtime observations, relaunches P&C
+once if the installer returns to Android Home, and requires typed Home before returning.
+An update observed after an ordinary task action fails that task as ambiguous rather
+than replaying the action. Daily Quest and Resource Bag reconciliation reopen their
+typed destination after recovery so journaled mutations can be resolved safely. The
+original blocker evidence is under
+`artifacts/2026-09-09/serious_stuff/` (`123357Z_resource_canary_identity_start.png`
+and `123636Z_resource_canary_identity_start.png`). The bounded live validation clicked
+Confirm once, observed update-resource download and restart frames, and then exposed a
+post-update `$4.99` offer. The recovery was refined to allow only fingerprint-bounded,
+typed close controls during startup; purchase controls remain forbidden. Evidence:
+`20260909T141402Z_resource_canary_identity_update_wait_1.png` and
+`20260909T141428Z_resource_canary_identity_update_wait_3.png`. A reconcile-only rerun
+closed the offer, returned to typed Home at
+`20260909T141646Z_resource_identity_0_post_action_1.png`, proved the exact free-cookies
+identity, completed Resource/Daily scanning, and wrote
+`20260909T142105Z_resource_item_canary.json`. The prior resource-use journal remains
+`pending_clarification`; no second resource-use dispatch occurred. Because the update
+prompt was consumed by the first attempt, the refined offer-close stage has deterministic
+coverage but still awaits a future update for one uninterrupted end-to-end replay.
+
+The Hero Hall slice now has deterministic OCR/state coverage and a canonical
+exactly-once executor. OCR recognizes the Recruit screen, Daily-attempt counter, and
+the presence of the `Free` single; the tap itself comes from a normalized selector
+region rather than OCR bounds. Each of the five singles is separately journaled,
+records a five-minute `next_ready_at` checkpoint, and returns a typed
+`waiting_cooldown` outcome without replaying earlier singles. The Daily coordinator
+defers that outcome while continuing other eligible rows in the same scan. The
+connected canary tool is read-only by default and requires exact five-mutation,
+zero-diamond acknowledgement for execution. No Hero Hall live mutation or promotion
+has been performed by this implementation slice.
+
+The first bounded read-only Hero Hall probe on 2026-09-09 stopped before identity
+navigation because the configured `serious_stuff` capture was entirely black. Evidence
+is `artifacts/2026-09-09/serious_stuff/20260909T171658Z_canary_identity_start.png`.
+The probe did not switch castles, tap Hero Hall, or send a recruit; rerun it only after
+the emulator/capture surface is restored.
+
+The bounded retry then restored the game but exposed a second blocker: the generic
+Home City atlas-open route tapped `Trial Challenge` instead of Hero Hall. Evidence is
+`artifacts/2026-09-09/serious_stuff/20260909T172649Z_hero_hall_open_step_1_post_action_1_runtime_retry.png`.
+The Hero Hall adapter now fails closed unless Hero Hall is visibly resolved; it may
+focus/pan, but it will not use an unproven atlas tap. No recruit or purchase was sent.
+
+On 2026-09-10, the read-only `free_cookies` probe recovered a typed VIP reset and
+Might Rank interruption, classified the underlying Event Center surface, returned to
+castle selection, proved the configured castle, and opened Hero Hall through the Home
+City spatial building path. It observed `Free` available with five Daily attempts
+remaining and sent no recruit or purchase. The report is
+`artifacts/2026-09-10/serious_stuff/20260910T133611Z_hero_hall_canary.json`; the
+navigation evidence runs from `20260910T133446Z_canary_identity_start.png` through
+`20260910T133610Z_hero_hall_canary_state.png`. This is a navigation/state-confirmation
+probe, not a passed mutation canary or promotion evidence.
+
+The connected claim-only runner now reports `succeeded=false` when a claim outcome is
+pending or otherwise unresolved instead of unconditionally reporting success. This is
+an offline/runtime correctness fix; it is not a live claim promotion.
+
+Canary results now have an atomic evidence store under the artifact root. Results are
+reloaded by feature/role and reevaluated against the current revision; stale or
+missing cells remain unvalidated, and persistence alone cannot enable automatic runs.
+
 ## Context
 
-PNC needs a low-touch daily-maintenance runner that executes at 02:00 America/Toronto across selected castles. One BlueStacks instance maps to one account, one account may contain several castles, instances may run in parallel, and castles within an instance run sequentially. The first production scope is deliberately limited to two targets:
+PNC needs a low-touch daily-maintenance runner that executes at 02:00 America/Toronto across selected castles. One BlueStacks instance maps to one account, one account may contain several castles, instances may run in parallel, and castles within an instance run sequentially. The production scope is the seven screenshot-confirmed castles on testing. The following two targets are canary-only, never recurring Daily targets:
 
 | Account | Castle | Role |
 |---|---|---|
 | `mega_old_acc` | `[NGF] NPC 2` | higher-level canary and broad feature coverage |
-| `serious_stuff` | `[NAX] free cookies` | serious target and lower-progression applicability coverage |
+| `serious_stuff` | `[NAX] free cookies` | canary-only, lower-progression applicability coverage |
 
 The working tree was clean at the 2026-09-02 review. The committed building-upgrade-only routine, one-feature live-smoke harness, and scheduler wrapper remain migration inputs, not behavior to preserve. Building upgrades are explicitly excluded from daily maintenance, and the current wrapper still targets stale castles.
 
 This plan is based on repository evidence and bounded live evidence gathered through 2026-09-01. It does not authorize new game mutations. Every mutating smoke requires an acknowledgement bound to the exact account, castle, capability, local date, maximum action count, and premium-currency budget.
 
-The rollout follows small-change/canary principles: deterministic tests first, one narrow live behavior at a time, and one successful live canary per distinct behavior variant. Repeating the same live behavior on every castle is not a promotion requirement. Target-specific policies that execute different code paths, such as the two Campaign modes or distinct Trial Shop policies, remain separate variants and each receives one live canary. This follows [Google SRE canary guidance](https://sre.google/workbook/canarying-releases/). ADB target verification and screenshot capture follow the [Android ADB documentation](https://developer.android.com/tools/adb). Windows schedule semantics follow Microsoft's documentation for [logon types](https://learn.microsoft.com/en-us/windows/win32/taskschd/principal-logontype), [task settings](https://learn.microsoft.com/en-us/windows/win32/taskschd/tasksettings), and [multiple-instance policy](https://learn.microsoft.com/en-us/windows/win32/taskschd/tasksettings-multipleinstances).
+The rollout follows small-change/canary principles: deterministic tests first, one narrow live behavior at a time, and paired live canary evaluation per distinct behavior variant. NPC 2 requires positive proof; free cookies requires positive proof or an explicitly approved observed applicability skip. Target-specific policies that execute different code paths, such as the two Campaign modes or distinct Trial Shop policies, remain separate variants and each receives one live canary. This follows [Google SRE canary guidance](https://sre.google/workbook/canarying-releases/). ADB target verification and screenshot capture follow the [Android ADB documentation](https://developer.android.com/tools/adb). Windows schedule semantics follow Microsoft's documentation for [logon types](https://learn.microsoft.com/en-us/windows/win32/taskschd/principal-logontype), [task settings](https://learn.microsoft.com/en-us/windows/win32/taskschd/tasksettings), and [multiple-instance policy](https://learn.microsoft.com/en-us/windows/win32/taskschd/tasksettings-multipleinstances).
 
 ## Reviewed Decisions — 2026-09-02
 
 - Diamonds are allowed only where the capability-specific policy below explicitly permits them. The governing invariant is no unbudgeted premium spend, not a blanket no-premium rule.
 - Efficiency takes priority over repeated verification. Use one fresh pre-action observation and one post-action observation for normal mutations; use two stable frames only for dynamic click geometry or after a scroll.
 - Unknown screens and OCR failures use a short, non-cyclic recovery ladder. They do not immediately fail the whole castle, but they also never cause blind mutation replay.
-- One live canary is sufficient for each distinct behavior variant. Convert its evidence into deterministic offline coverage and run the focused tests after adding the regression.
+- Both canaries must be evaluated for each distinct behavior variant. Convert its evidence into deterministic offline coverage and run the focused tests after adding the regression.
 - Exact castle identity is resolved once per castle-selection/session boundary and cached. Capabilities do not reopen Lord Info or Manage Char merely to re-prove the same identity.
 - Scheduled full-roster discovery is a separate follow-up plan because it has its own cadence, process-lock, cache-freshness, config-write, and failure semantics. Daily maintenance consumes that canonical cache.
 
@@ -33,7 +222,7 @@ The rollout follows small-change/canary principles: deterministic tests first, o
 | `GEOM-01` | Vision materializes normalized geometry once; executor receives final ADB pixels unchanged | None |
 | `POPUP-01` | Migrate existing runner/popup APIs; remove generic task-time recovery and Android-Back fallback | None |
 | `TRACE-01` | Downgraded static screenshots, added exact paths, required fixture manifest and same-trace evidence | Exact local fixtures selected in Phase 0 |
-| `SKIP-01` | Closed runtime skip reasons; `unittest.skip*` is not live evidence; one canary per behavior variant | None |
+| `SKIP-01` | Closed runtime skip reasons; `unittest.skip*` is not live evidence; paired canary outcomes per behavior variant | None |
 | `EXEC-01` | Extract from `AutomationRunner`, not `ScriptRunner`; coordinator is not recursively executed as a task | Whether routine YAML remains a manifest |
 | `IDENTITY-01` | Roster freshness plus one identity resolution per castle-selection/session boundary | Refresh cadence/cache age in separate plan |
 | `VALIDATOR-01` | Removed live selector validation from offline commands; added explicit account/selector example | None |
@@ -54,7 +243,7 @@ The rollout follows small-change/canary principles: deterministic tests first, o
 
 - No building upgrade, research/technology upgrade, troop training, Hell Fortress, stamina consumption, pack purchase, Hero Curio crafting, or Alliance Help execution.
 - No Daily reward-chest claims.
-- No automation for any castle other than NPC 2 and free cookies until explicitly added.
+- No automatic Daily execution on canary castles or 3xx_spies. Automatic scope is the seven testing castles listed in the interview decisions below.
 - No OCR-derived tap points and no broad removal of OCR from semantic classification.
 - No generic X dismissal inside a task workflow. Generic visual-X recovery exists only during bootstrap.
 - No scheduler enablement as part of implementation. Registration is disabled; enabling is a separate promotion decision after all gates pass.
@@ -72,7 +261,8 @@ The rollout follows small-change/canary principles: deterministic tests first, o
 - Daily row taps require two consecutive observations with equivalent row geometry after every scroll.
 - Enter Quest and explicitly select the Daily Quest tab every time. Main Quest and Daily Quest remain separate typed screens.
 - Exit Daily Quest with the in-game gold back control, never Android Back.
-- A Daily `Go` action may route directly, return Home and pan/highlight a building, or land on an intermediate screen. Every handler validates its typed destination rather than assuming `Go` succeeded.
+- Hero Hall is intentionally not entered through its Daily `Go` row. Its handler must ensure typed Home City, locate the observed Hero Hall building through the shared Home City spatial surface, focus/pan until that exact object is visible, tap the fresh object geometry, and prove typed Hero Hall. Daily is reopened only for read-only completion proof.
+- Other capabilities may use Daily `Go` only when their feature contract explicitly requires it; those handlers must validate the typed destination rather than assuming `Go` succeeded.
 
 ### Bootstrap interruptions
 
@@ -104,13 +294,13 @@ The runtime catalog is semantic and data-driven: normalized title aliases map to
 | Claim completed rows | Claim every completed-unclaimed Daily row, including rows whose underlying task is excluded. Never claim Daily chests. Claimed rows have no `Go`. |
 | Hero Arena 3x | Run up to three free Hero Showdown attempts; no refresh or purchases. Select the weakest foreign-kingdom candidate. |
 | Use resource item | In Bag/Resource choose globally smallest owned numeric amount; ties Food, Wood, Iron, Gold. Tap blue `Use` once, never orange bulk-use. Resource Shop is back-only. |
-| Hero Hall 5x | Perform five single free recruitments as cooldowns allow. Campaign may run while waiting. Never use 10x or paid actions. |
+| Hero Hall 5x | From typed Home City, open the observed Hero Hall building directly; do not use Daily `Go`. Perform five single free recruitments as cooldowns allow. Campaign may run while waiting. Never use 10x or paid actions. Reopen Daily only to prove completion. |
 | Upgrade Hero 3x | Use the first fully visible level-70 hero, only if free reset is available; perform three upgrades and restore exactly level 70. |
 | Campaign natural AP | Per-castle `fixed_stage` or `progress_then_farm`; preserve saved lineup, Challenge once, Auto battle, never Blitz, and verify result. |
 | Gather Food/Wood/Iron/Gold | Search highest available full unoccupied node with enough resources. Use cavalry only, T1 first then higher available tiers ascending until the smallest sufficient capacity; no heroes and no Quick Select. |
 | Gather alliance mine | Same cavalry-only formation policy where the Daily row and mine are eligible. |
 | Resource-building output boost | Use an owned boost item first; diamond fallback is allowed only up to 200. Farm selector must be repaired and boost UI typed before promotion. |
-| Trial Shop | Apply the configured per-castle policy: main-policy castle buys up to 99 maximum affordable 60-minute speedups; farm-policy castle buys one 1-star Gem Essence. No refresh. The canonical name is Trial Shop; remove Tower Shop naming without an alias. |
+| Trial Shop | Apply the configured per-castle policy: NPC 2 buys ONE 60-minute speedup, fallback ONE 1-star Gem Essence; free cookies buys ONE 1-star Gem Essence. No refresh. The canonical name is Trial Shop; remove Tower Shop naming without an alias. |
 | Rare Earth Shop | Buy exactly one 1-star Saurgem Essence before Saurgem enhancement. |
 | Alliance Shop | Buy exactly one 1-minute speedup if present; otherwise one 1-star gear item from Treasure; otherwise skip. No refresh, gems, or speedups of five minutes or more. |
 | Praise | Open typed Might Rank and tap the top-rank thumbs-up once. |
@@ -118,7 +308,7 @@ The runtime catalog is semantic and data-driven: normalized title aliases map to
 | Enhance Gem | Select a suitable lowest-star equipped item and one lowest-star material; no Auto Select; confirm once. |
 | Enhance Saurgem | Complete the Rare Earth purchase first, then use one lowest-star material; no Auto Select; confirm once. |
 | Enhance Gear | Use the first fully visible lowest `+` item and one lowest-star material; no Auto Select; confirm once. |
-| Wishes | Exhaust free resource wishes. Diamonds may be used only for the missing wishes needed to reach 50 total, according to the per-castle policy. |
+| Wishes | Reach five Daily wishes using observed current progress, free first then paid allowed for both canaries without a diamond-price cap. Fifty is the shared per-castle game-day count ceiling, not the Daily target. |
 | Land of Trial | Select first unlocked row with an explicit Trial button, Attack once; win or loss counts. |
 | Lost Land | Open current stage, trust exactly five game-preselected strongest heroes and save only if required, Challenge once. Daily-row progress is authoritative. |
 | Alliance donations | Prefer non-max HOT technology in Economy, then Military, then Alliance Skill; resource-only, never diamonds. |
@@ -202,7 +392,7 @@ Add these canonical models; exact module placement follows existing domain/confi
 - `DailyTargetOutcome`: success, typed applicability skip, runtime-unknown skip, failed, pending clarification, and artifact references.
 - `CastleRosterFreshness`: scan timestamp, account, ordering proof, roster fingerprint, and source artifact summary. It is written by the canonical roster-refresh workflow and consumed without reopening Manage Char for every capability.
 
-Create `config/daily_maintenance.example.yaml` and local `config/daily_maintenance.yaml`. The local file is keyed by account ID and castle alias and contains only the two selected targets. It configures campaign mode/target, Trial Shop policy, wish policy, boost cap, and feature enablement. It does not duplicate account, instance, kingdom, or castle identity fields. Those remain referenced from canonical account/castle-target config. Live identity is resolved once when the session selects a castle, cached for all capabilities on that castle, and invalidated only by a castle switch, app/account reset, roster-fingerprint change, or contradictory observation.
+Create `config/daily_maintenance.example.yaml` and local `config/daily_maintenance.yaml`. The local file is keyed by account ID and castle alias and separates the two canary_targets from the seven testing automatic targets and defaults automatic_runs_enabled to false. It configures campaign mode/target, Trial Shop policy, wish policy, boost cap, and feature enablement. It does not duplicate account, instance, kingdom, or castle identity fields. Those remain referenced from canonical account/castle-target config. Live identity is resolved once when the session selects a castle, cached for all capabilities on that castle, and invalidated only by a castle switch, app/account reset, roster-fingerprint change, or contradictory observation.
 
 Fail loading before launching BlueStacks when:
 
@@ -239,6 +429,9 @@ Completed rows moving to the bottom is expected. Row ordering is never a task id
 - A process-level lock prevents two nightly wrappers from overlapping.
 - The journal uses atomic replace. It writes a prepared intent before each individual mutation and a committed receipt after one postcondition reconciliation.
 - Restart recovery validates account and castle identity before resuming.
+- The exact `New version detected. Tap Confirm to update.` blocker is global runtime
+  recovery: Confirm once, poll for up to ten minutes, relaunch once from Android Home
+  if necessary, and return only after typed Home. Other untyped popups remain blocked.
 - Identity validation happens once per connected castle-selection boundary, then the exact identity is held in session state. Tasks reuse it without reopening Lord Info or Manage Char.
 
 ### Scheduling
@@ -259,21 +452,21 @@ Use Windows Task Scheduler as the external trigger. Register one task disabled w
 
 Background logon is a high-risk compatibility boundary because BlueStacks is GUI software. Prove that a password-logon scheduled invocation can launch/foreground both configured instances, establish ADB, capture typed Home, and write artifacts while the interactive session is not relied upon. If that smoke fails, do not silently change logon mode; leave the task disabled and report the exact blocker.
 
-The wrapper computes one `maintenance_date` in America/Toronto and one game-reset identifier at startup and passes both to every worker. The exact PNC daily-reset boundary remains an interview decision; the implementation must not infer it independently in each task.
+The wrapper computes one `maintenance_date` in America/Toronto and one game-reset identifier at startup and passes both to every worker. The fixed game reset is 00:00 UTC (20:00 Toronto daylight time, 19:00 standard time); it is separate from the 02:00 Toronto maintenance trigger.
 
 ## Implementation Phases
 
-Every numbered slice below is independently mergeable and promotable. For each slice: run focused offline tests, run the full suite when shared runtime code changes, then run one positive live canary for that distinct behavior variant. NPC 2 is preferred when applicable; use free cookies when it is the only applicable target or when its configured policy is a distinct code path. Convert the live result or defect into a deterministic fixture/test and rerun the focused module. Do not duplicate an identical live mutation merely to cover the second castle. Stop mutation on an ambiguous postcondition; pre-mutation OCR or unknown noise uses the bounded recovery ladder before producing a runtime skip.
+Every numbered slice below is independently mergeable and promotable. For each slice: run focused offline tests, run the full suite when shared runtime code changes, then run paired canary evaluation for that distinct behavior variant. NPC 2 must positively pass; free cookies must pass or produce an explicitly approved observed applicability skip. Convert the live result or defect into a deterministic fixture/test and rerun the focused module. Evaluate both target cases; reuse successful evidence until a relevant change requires retest, not merely a new date. Stop mutation on an ambiguous postcondition; pre-mutation OCR or unknown noise uses the bounded recovery ladder before producing a runtime skip.
 
 ### Phase 0 — Preserve evidence and establish exact targets
 
 1. Record the clean/dirty worktree state at implementation start and preserve any user changes that appear later.
 2. Convert safe, representative Daily, bootstrap, Arena, campaign, gather, and destination screenshots into committed deterministic fixtures when size and privacy allow; otherwise document them in `tests/data/local_fixture_artifacts.example.json` and require explicit local fixture configuration.
 3. Run the canonical `refresh_castle_roster` workflow once for each account, record `CastleRosterFreshness`, and propose the exact `castle_targets.yaml` alias changes for user review; do not overwrite the real target file without explicit authorization.
-4. Add `daily_maintenance.example.yaml`, its typed loader, and cross-config validation. Add only the two selected local target entries after authorization.
+4. Add `daily_maintenance.example.yaml`, its typed loader, and cross-config validation. Add two canary-only references and seven automatic testing targets, disabled until evaluation and activation gates pass.
 5. Replace stale README examples and wrapper target lists only after exact aliases validate.
 
-Acceptance: both target identities resolve uniquely; stale `testing` targets cannot enter the nightly wrapper; malformed policies fail before emulator launch.
+Acceptance: both target identities resolve uniquely; only the screenshot-confirmed testing targets can enter the nightly wrapper; malformed policies fail before emulator launch.
 
 Follow-up boundary: extract scheduled roster discovery, freshness policy, shared locking, and reviewed alias reconciliation into a separate `PNC_SCHEDULED_CASTLE_ROSTER_REFRESH_PLAN.md`. Daily maintenance consumes its cache contract but does not implement a second roster scanner or auto-rewrite authored target aliases.
 
@@ -379,17 +572,17 @@ The Farm route must reach and type the real boost UI read-only before any boost 
 
 1. Replace the building-upgrade routine with one application-level coordinator entrypoint and remove obsolete multi-castle daily wrappers or parallel schemas. Do not implement the coordinator as a task that recursively invokes the task runner.
 2. Keep the live smoke harness feature-only; require explicit account and castle alias instead of defaulting to `testing`.
-3. Add a capability-validation runner that invokes one positive live canary per distinct behavior variant and preserves the selected target, result, and evidence. It does not repeat the same variant on the second castle. Normal production still records per-target outcomes and keeps mutations one castle at a time per instance.
+3. Add a capability-validation runner that invokes paired live canary evaluation per distinct behavior variant and preserves the selected target, result, and evidence. It evaluates both castles, retaining approved skips and failed resource preconditions distinctly. Normal production still records per-target outcomes and keeps mutations one castle at a time per instance.
 4. Compose only promoted capabilities into the unattended routine. Unsupported or blocked slices remain disabled in typed config and appear in the report.
 5. Implement the production wrapper with process lock, per-instance parallel workers, per-castle sequential execution, summary exit code, and artifact paths.
 6. Add a Task Scheduler registration script that is idempotent, secret-safe, and disabled by default.
 7. Validate the manual wrapper, disabled task definition, password/background launch, no-overlap behavior, missed-trigger policy, and a forced nonzero child exit.
 
-Acceptance: the composed routine cannot include an unpromoted capability; only NPC 2 and free cookies resolve; the disabled task definition exactly matches the locked schedule policy.
+Acceptance: the composed routine cannot include an unpromoted capability; canary-only targets cannot enter the seven-castle automatic testing run; the disabled task definition exactly matches the locked schedule policy.
 
 ## Slice-by-Slice Live Validation Matrix
 
-Each row requires one positive live canary per distinct behavior variant, not one mutation per castle. The selected canary target is recorded in the run summary. Both production targets still require valid typed configuration, a fresh roster-cache match, offline policy coverage, and a normal per-run outcome, but the second castle does not duplicate an identical pre-promotion mutation. Every canary captures baseline, pre-mutation, post-mutation, final Home/Daily state, observation/OCR sidecars, logs, and a run summary.
+Each row requires a result for both canaries per distinct behavior variant: NPC 2 positive, cookies positive or approved proven skip. The selected canary target is recorded in the run summary. All seven production targets still require valid typed configuration, a fresh roster-cache match, offline policy coverage, and a normal per-run outcome, but the second canary still requires its own observed pass or approved applicability skip. Every canary captures baseline, pre-mutation, post-mutation, final Home/Daily state, observation/OCR sidecars, logs, and a run summary.
 
 | Slice | Required single live canary or variant | Other-target deployment guard | Promotion gate |
 |---|---|---|---|
@@ -435,7 +628,7 @@ For each slice, run the narrowest relevant module first. Add or extend tests for
 - journal atomicity, prepared/dispatched/reconciled/committed transitions, crash injection at every boundary, consumed recovery stages, and no blind replay;
 - one-reread/one-safe-root/one-instance-restart recovery without cycles; OCR and unknown failures skip only the affected capability when Home is recoverable;
 - per-instance parallelism and per-instance castle serialization;
-- live-canary record completeness per distinct behavior variant and both-target configuration/applicability coverage;
+- live-canary record completeness per distinct behavior variant and paired-canary and seven-production-target configuration coverage;
 - scheduler XML/PowerShell settings, quoting, working directory, disabled default, `StartWhenAvailable=false`, `WakeToRun=false`, and `IgnoreNew`;
 - stale/missing castle aliases failing before launch; and
 - the Talent false-positive Farm regression.
@@ -482,7 +675,7 @@ $env:PNC_LIVE_DAILY_TASK_SMOKE_SCRIPT="scripts/smoke/daily/<feature>.yaml"
 py -m unittest tests.test_live_daily_task_smoke
 ```
 
-Run a second command only when it exercises a materially different configured behavior variant; change the explicit account, castle, script, and acknowledgement together. The implementation must not assume these alias strings until the refreshed roster and local config confirm them. The smoke verifies ADB reaches the resolved instance, resolves exact castle identity once at the castle-selection boundary, and aborts before task action if identity differs. It does not reopen identity screens between capability steps.
+Evaluate the second canary as well, permitting only approved proven applicability skips; change the explicit account, castle, script, and acknowledgement together. The implementation must not assume these alias strings until the refreshed roster and local config confirm them. The smoke verifies ADB reaches the resolved instance, resolves exact castle identity once at the castle-selection boundary, and aborts before task action if identity differs. It does not reopen identity screens between capability steps.
 
 ## Promotion Gates
 
@@ -491,8 +684,8 @@ A capability may enter the coordinator's enabled capability set only when:
 1. focused offline tests pass;
 2. the full offline suite passes after shared-runtime changes;
 3. selector validation passes when selectors/navigation changed;
-4. one positive live canary passes for each distinct behavior variant, on NPC 2 by default or free cookies when appropriate;
-5. both target configurations and cached identities validate offline, while target-specific runtime inapplicability uses a structured `DailyApplicabilitySkipReason` during normal execution rather than a duplicate promotion smoke;
+4. NPC 2 passes each distinct behavior variant and free cookies passes or has an explicitly approved proven applicability skip;
+5. both target configurations and cached identities validate offline, while target-specific runtime inapplicability uses a structured `DailyApplicabilitySkipReason` during normal execution as well as the required paired canary evaluation;
 6. all known screens in that workflow are typed;
 7. no forbidden adjacent action occurred;
 8. artifacts and the per-operation mutation receipt were inspected;
@@ -503,7 +696,7 @@ Additional global gates before the disabled scheduled task is considered ready:
 
 - Farm output-boost UI is observed and typed on the repaired route.
 - Exact NPC 2 and free-cookies castle aliases are refreshed and reviewed against a timestamped full-scan roster.
-- The distinct-variant live-canary matrix has no blank or `blocked` required canary, and both production target configs pass offline validation.
+- The entire paired canary matrix has been evaluated, and all seven production target configs pass offline validation. Failed/blocked/unproven features stay disabled; only positively validated features may run.
 - A composed manual run completes both instances with castles sequential per instance.
 - Password/background Task Scheduler execution reaches typed Home and writes artifacts for both workers.
 - No-catch-up and no-overlap settings are inspected from the registered disabled task.
@@ -544,11 +737,11 @@ Additional global gates before the disabled scheduled task is considered ready:
 
 The 2026-09-02 review resolved premium spending, coordinate ownership, live-canary count, and per-capability identity reuse. The following items are reserved for the requested interview refinement:
 
-- Exact PNC daily-reset boundary and the canonical `game_reset_id` calculation used beside the Toronto maintenance date.
+- Implement the agreed fixed 00:00 UTC game-reset identifier beside the Toronto maintenance date; this is no longer an interview question.
 - Mutation-acknowledgement representation and operator workflow, while retaining exact account/castle/capability/date/count/diamond binding.
 - Scheduled roster-refresh cadence, maximum accepted cache age, and whether it shares the maintenance task or uses a separate disabled Task Scheduler registration. The architecture recommendation is a separate follow-up plan sharing the same process lock.
 - Whether the application-level coordinator replaces the routine YAML entirely or the YAML remains a non-executable manifest. It must not become a recursively executing `AutomationTask`.
-- Exact refreshed kingdom and alias records for NPC 2 and free cookies.
+- Verify login ownership and refresh login-keyed rosters; screenshot-confirmed aliases are NPC 2/K157 and free cookies/K226.
 - Farm's actual boost UI after selector repair.
 - VIP Login/Daily Reset popup occurrence when naturally encountered.
 - Whether password/background Task Scheduler execution can operate BlueStacks on this Windows installation.

@@ -19,6 +19,7 @@ from pnc_automation.app.pnc.domain.building_catalog import (
     is_upgradeable_primary_screen,
 )
 from pnc_automation.app.pnc.domain.mail import MailboxType, compose_text_field_selector_ids
+from pnc_automation.app.pnc.domain.daily_maintenance import DailyQuestRowState
 from pnc_automation.app.pnc.domain.observation import (
     Bounds,
     CurrentCastleEvidenceKind,
@@ -36,6 +37,8 @@ from pnc_automation.app.pnc.navigation.world_map_overview_projection import (
 )
 from pnc_automation.core.text.normalization import normalize_ocr_text
 from pnc_automation.app.pnc.vision.observation_builder import ObservationAdditions
+from pnc_automation.app.pnc.vision.daily_quest_rows import parse_daily_quest_screen
+from pnc_automation.app.pnc.vision.resource_inventory import parse_resource_inventory
 from pnc_automation.app.pnc.vision.observation_request import (
     ObservationRequest,
     world_map_coordinate_dialog_text_field_selector_ids,
@@ -334,6 +337,12 @@ _ALLIANCE_HOME_BOTTOM_TAB_SELECTOR_BY_TEXT = {
 _ALLIANCE_MEMBER_HEADER_TEXTS = frozenset({"MEMBER", "ALLIANCEMEMBER", "ALLIANCEMEMBERS"})
 _ALLIANCE_MEMBER_MANAGE_HEADER_TEXTS = frozenset({"MANAGE", "MEMBERMANAGE"})
 _ALLIANCE_MEMBER_ROW_ACTION_TEXTS = frozenset({"MANAGE", "APPOINT", "DEPOSE", "PENDING"})
+_EVENT_CENTER_HEADER_TEXT = "EVENTCENTER"
+_EVENT_CENTER_TAB_TEXT_TO_SELECTOR = {
+    "REGULAREVENTS": UiElementId.PNC_EVENT_CENTER_TAB_REGULAR_EVENTS,
+    "HOLIDAYEVENTS": UiElementId.PNC_EVENT_CENTER_TAB_HOLIDAY_EVENTS,
+    "ABOUTTOSTART": UiElementId.PNC_EVENT_CENTER_TAB_ABOUT_TO_START,
+}
 _MIGHT_RANK_HEADER_TEXTS = frozenset({"MIGHTRANK", "RANK"})
 _CHAT_PLAYER_ACTION_PROFILE_TEXTS = frozenset({"PROFILE", "PLAYERPROFILE"})
 _PERSONAL_INFO_TEXTS = frozenset({"PERSONALINFO", "PLAYERINFO"})
@@ -435,7 +444,9 @@ class _TextScreenControlSpec:
     min_y_ratio: float = 0.0
     max_y_ratio: float = 1.0
     contains_match: bool = False
+    exclude_contains_texts: frozenset[str] = frozenset()
     alias_selector_ids: tuple[UiElementId, ...] = ()
+    geometry_backed: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -775,6 +786,21 @@ _TEXT_SCREEN_DEFINITIONS = (
         controls=(
             _TextScreenControlSpec(selector_id=UiElementId.PNC_HERO_HALL_RECRUIT_TAB, texts=frozenset({"RECRUIT"})),
             _TextScreenControlSpec(selector_id=UiElementId.PNC_HERO_HALL_EXCHANGE_TAB, texts=frozenset({"EXCHANGE"})),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_HERO_HALL_RECRUIT_BANNER,
+                texts=frozenset({"DAILYATTEMPTS", "FREEIN"}),
+                min_y_ratio=0.5,
+                contains_match=True,
+            ),
+            _TextScreenControlSpec(
+                selector_id=UiElementId.PNC_HERO_HALL_RECRUIT_1X_BUTTON,
+                texts=frozenset({"FREE"}),
+                max_x_ratio=0.5,
+                min_y_ratio=0.65,
+                contains_match=True,
+                exclude_contains_texts=frozenset({"FREEIN"}),
+                geometry_backed=True,
+            ),
         ),
         minimum_control_matches=2,
     ),
@@ -1210,6 +1236,7 @@ def _build_matching_text_screen_additions(
     lines: tuple[OcrLine, ...],
     request: ObservationRequest,
     observed_screen: ScreenType,
+    selector_registry: SelectorRegistry | None,
 ) -> ObservationAdditions | None:
     """Returns the first exact text-screen observation allowed by the current OCR request."""
 
@@ -1233,6 +1260,7 @@ def _build_matching_text_screen_additions(
             image=image,
             lines=lines,
             definition=definition,
+            selector_registry=selector_registry,
         )
         if additions is not None:
             return additions
@@ -1244,6 +1272,7 @@ def _build_text_screen_additions(
     image: Image.Image,
     lines: tuple[OcrLine, ...],
     definition: _TextScreenDefinition,
+    selector_registry: SelectorRegistry | None,
 ) -> ObservationAdditions | None:
     """Builds one exact building-owned screen observation from a shared header-and-controls definition."""
 
@@ -1259,6 +1288,7 @@ def _build_text_screen_additions(
         lines=lines,
         definition=definition,
         header=header,
+        selector_registry=selector_registry,
     )
     if base_visible_elements is None:
         if not is_upgradeable_primary_screen(definition.screen_type):
@@ -1268,6 +1298,7 @@ def _build_text_screen_additions(
             lines=lines,
             definition=definition,
             header=header,
+            selector_registry=selector_registry,
         )
         if confirmation_visible_elements is None:
             return None
@@ -1292,8 +1323,15 @@ def _build_text_screen_additions(
         screen_type=definition.screen_type,
         visible_elements=visible_elements,
     )
+    suppressed_geometry_selector_ids = frozenset(
+        control.selector_id
+        for control in definition.controls
+        if control.geometry_backed
+        and _find_text_screen_control_line(image=image, lines=lines, control=control) is None
+    )
     return ObservationAdditions(
         visible_elements=visible_elements,
+        suppress_geometry_selector_ids=suppressed_geometry_selector_ids,
         screen_evidence=(
             ScreenEvidence(
                 definition.screen_type,
@@ -1309,6 +1347,7 @@ def _build_text_screen_visible_elements(
     lines: tuple[OcrLine, ...],
     definition: _TextScreenDefinition,
     header: OcrLine,
+    selector_registry: SelectorRegistry | None,
 ) -> dict[UiElementId, VisibleElement] | None:
     """Returns the canonical exact-screen controls when the base building-owned layout is present."""
 
@@ -1333,6 +1372,8 @@ def _build_text_screen_visible_elements(
             visible_elements=visible_elements,
             control=control,
             line=line,
+            image=image,
+            selector_registry=selector_registry,
         )
     if control_matches < definition.minimum_control_matches:
         return None
@@ -1345,6 +1386,7 @@ def _build_upgrade_confirmation_visible_elements(
     lines: tuple[OcrLine, ...],
     definition: _TextScreenDefinition,
     header: OcrLine,
+    selector_registry: SelectorRegistry | None,
 ) -> dict[UiElementId, VisibleElement] | None:
     """Returns the exact building-owned confirmation layout when upgrade details replace the base controls."""
 
@@ -1381,6 +1423,8 @@ def _build_upgrade_confirmation_visible_elements(
         visible_elements=visible_elements,
         control=upgrade_control,
         line=upgrade_line,
+        image=image,
+        selector_registry=selector_registry,
     )
     panel_lines = [header, upgrade_line, *required_section_lines, *support_section_lines]
     confirm_line = _find_building_upgrade_confirm_line(image=image, lines=lines)
@@ -1428,13 +1472,32 @@ def _add_text_screen_control_visible_elements(
     visible_elements: dict[UiElementId, VisibleElement],
     control: _TextScreenControlSpec,
     line: OcrLine,
+    image: Image.Image,
+    selector_registry: SelectorRegistry | None,
 ) -> None:
     """Projects one matched text-screen control into its selector ids and shared aliases."""
 
-    visible_elements[control.selector_id] = _make_visible_from_line(
-        selector_id=control.selector_id,
-        line=line,
-    )
+    if control.geometry_backed:
+        if selector_registry is None:
+            raise SelectorResolutionError(
+                "Geometry-backed text-screen controls require the shared selector registry.",
+                selector_id=control.selector_id,
+            )
+        selector = selector_registry.require(control.selector_id)
+        if selector.relative_bounds is None:
+            raise SelectorResolutionError(
+                "Geometry-backed text-screen controls require normalized relative bounds.",
+                selector_id=control.selector_id,
+            )
+        visible_elements[control.selector_id] = selector.relative_bounds.materialize(
+            selector_id=control.selector_id,
+            image_size=image.size,
+        )
+    else:
+        visible_elements[control.selector_id] = _make_visible_from_line(
+            selector_id=control.selector_id,
+            line=line,
+        )
     for alias_selector_id in control.alias_selector_ids:
         visible_elements[alias_selector_id] = _make_visible_from_line(
             selector_id=alias_selector_id,
@@ -1482,6 +1545,8 @@ def _text_screen_control_matches(*, control: _TextScreenControlSpec, raw_text: s
 
     normalized_text = normalize_ocr_text(raw_text)
     if normalized_text == "":
+        return False
+    if any(excluded in normalized_text for excluded in control.exclude_contains_texts):
         return False
     if control.contains_match:
         return any(text in normalized_text for text in control.texts)
@@ -1841,6 +1906,13 @@ class PncObservationEnricher:
             improve_might = _build_improve_might_additions(image=image, lines=lines)
             if improve_might is not None:
                 return improve_might
+        if request.allows_screen(ScreenType.PNC_EVENT_CENTER) and can_attempt_screen_family_ocr(
+            request_screen=ScreenType.PNC_EVENT_CENTER,
+            observed_screen=screen_type,
+        ):
+            event_center = _build_event_center_additions(image=image, lines=lines)
+            if event_center is not None:
+                return event_center
         if request.allows_screen(ScreenType.PNC_MORE_MENU) and can_attempt_screen_family_ocr(
             request_screen=ScreenType.PNC_MORE_MENU,
             observed_screen=screen_type,
@@ -1877,6 +1949,7 @@ class PncObservationEnricher:
             lines=lines,
             request=request,
             observed_screen=screen_type,
+            selector_registry=self.selector_registry,
         )
         if text_screen is not None:
             return text_screen
@@ -2027,6 +2100,14 @@ class PncObservationEnricher:
             alliance_member_manage = _build_alliance_member_manage_popup_additions(image=image, lines=lines)
             if alliance_member_manage is not None:
                 return alliance_member_manage
+        if any(
+            request.allows_screen(quest_screen)
+            and can_attempt_screen_family_ocr(request_screen=quest_screen, observed_screen=screen_type)
+            for quest_screen in (ScreenType.PNC_QUEST_MAIN, ScreenType.PNC_QUEST_DAILY)
+        ):
+            quest = _build_quest_additions(image=image, lines=lines)
+            if quest is not None:
+                return quest
         if request.allows_screen(ScreenType.PNC_DAILY_TO_DO) and can_attempt_screen_family_ocr(
             request_screen=ScreenType.PNC_DAILY_TO_DO,
             observed_screen=screen_type,
@@ -2057,7 +2138,18 @@ class PncObservationEnricher:
         if not _looks_like_castle_selection(anchors, entries):
             return ObservationAdditions() if status_banner is None else status_banner
 
-        visible_elements_by_id: dict[UiElementId, VisibleElement] = {}
+        # Manage Char has a fixed gold header Back control. OCR proves the screen,
+        # while normalized header geometry, not OCR text bounds, owns the tap.
+        visible_elements_by_id: dict[UiElementId, VisibleElement] = {
+            UiElementId.PNC_BACK_BUTTON_TOP_LEFT: _make_visible(
+                selector_id=UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+                x=0,
+                y=0,
+                width=max(1, int(image.width * 0.16)),
+                height=max(1, int(image.height * 0.055)),
+                source_kind=VisibleElementSourceKind.GEOMETRY,
+            ),
+        }
         if entries:
             visible_elements_by_id[UiElementId.PNC_CASTLE_LIST_ENTRY] = _make_visible_from_entry(
                 selector_id=UiElementId.PNC_CASTLE_LIST_ENTRY,
@@ -2865,6 +2957,14 @@ def _build_might_rank_additions(
         return None
     return ObservationAdditions(
         visible_elements={
+            UiElementId.PNC_BACK_BUTTON_TOP_LEFT: _make_visible(
+                selector_id=UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+                x=0,
+                y=0,
+                width=max(1, int(image.width * 0.16)),
+                height=max(1, int(image.height * 0.055)),
+                source_kind=VisibleElementSourceKind.GEOMETRY,
+            ),
             UiElementId.PNC_MIGHT_RANK_ROW: _make_visible_from_entry(
                 selector_id=UiElementId.PNC_MIGHT_RANK_ROW,
                 entry=entries[0],
@@ -2872,6 +2972,63 @@ def _build_might_rank_additions(
         },
         list_entries=entries,
         screen_evidence=(ScreenEvidence(ScreenType.PNC_MIGHT_RANK, "ocr_might_rank"),),
+    )
+
+
+def _build_event_center_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Returns the typed Event Center surface from its header, tabs, and event cards."""
+
+    header = _find_line_with_normalized_text(
+        lines=lines,
+        normalized_text=_EVENT_CENTER_HEADER_TEXT,
+        max_y=int(image.height * 0.12),
+    )
+    if header is None:
+        return None
+    tabs: dict[UiElementId, VisibleElement] = {}
+    for normalized_text, selector_id in _EVENT_CENTER_TAB_TEXT_TO_SELECTOR.items():
+        line = _find_line_with_normalized_text(lines=lines, normalized_text=normalized_text)
+        if line is not None:
+            tabs[selector_id] = _make_visible_from_line(selector_id=selector_id, line=line)
+    if len(tabs) < 2:
+        return None
+    event_lines = tuple(
+        line for line in lines
+        if not normalize_ocr_text(line.text).startswith("TIMELEFT")
+    )
+    entries = _extract_grouped_named_rows(
+        image=image,
+        lines=event_lines,
+        kind=ListEntryKind.EVENT_ENTRY,
+        min_y=int(image.height * 0.14),
+        excluded_texts=frozenset(_EVENT_CENTER_TAB_TEXT_TO_SELECTOR) | {_EVENT_CENTER_HEADER_TEXT},
+        action_x_ratio=0.5,
+    )
+    if not entries:
+        return None
+    visible_elements: dict[UiElementId, VisibleElement] = {
+        UiElementId.PNC_BACK_BUTTON_TOP_LEFT: _make_visible(
+            selector_id=UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+            x=0,
+            y=0,
+            width=max(1, int(image.width * 0.16)),
+            height=max(1, int(image.height * 0.055)),
+            source_kind=VisibleElementSourceKind.GEOMETRY,
+        ),
+        UiElementId.PNC_EVENT_CENTER_EVENT_ROW: _make_visible_from_entry(
+            selector_id=UiElementId.PNC_EVENT_CENTER_EVENT_ROW,
+            entry=entries[0],
+        ),
+    }
+    visible_elements.update(tabs)
+    return ObservationAdditions(
+        visible_elements=visible_elements,
+        list_entries=entries,
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_EVENT_CENTER, "ocr_event_center"),),
     )
 
 
@@ -4247,6 +4404,9 @@ def _build_popup_additions(
     vip_daily_reset = _build_vip_daily_reset_popup_additions(image=image, lines=lines)
     if vip_daily_reset is not None:
         return vip_daily_reset
+    update_required = _build_update_required_popup_additions(image=image, lines=lines)
+    if update_required is not None:
+        return update_required
     reconnect_popup = _build_reconnect_popup_additions(image=image, lines=lines)
     if reconnect_popup is not None:
         return reconnect_popup
@@ -4262,6 +4422,54 @@ def _build_popup_additions(
             screen_evidence=(ScreenEvidence(ScreenType.PNC_POPUP, "ocr_popup_cancel_button"),),
         )
     return _build_promotional_popup_additions(image=image, lines=lines)
+
+
+def _build_update_required_popup_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Materializes Confirm only for the exact required game-update message."""
+
+    update_line = _find_line_matching(
+        lines=lines,
+        predicate=lambda line: (
+            "NEWVERSIONDETECTED" in normalize_ocr_text(line.text)
+            and "CONFIRMTOUPDATE" in normalize_ocr_text(line.text)
+        ),
+        min_y=0,
+        max_y=int(image.height * 0.7),
+    )
+    confirm_line = _find_line_with_normalized_text(
+        lines=lines,
+        normalized_text="CONFIRM",
+        min_y=int(image.height * 0.45),
+        max_y=int(image.height * 0.75),
+    )
+    if update_line is None or confirm_line is None:
+        return None
+    horizontal_padding = max(28, confirm_line.bounds.width // 2)
+    vertical_padding = max(16, confirm_line.bounds.height)
+    return ObservationAdditions(
+        visible_elements={
+            UiElementId.PNC_UPDATE_CONFIRM_BUTTON: _make_visible(
+                selector_id=UiElementId.PNC_UPDATE_CONFIRM_BUTTON,
+                x=max(0, confirm_line.bounds.x - horizontal_padding),
+                y=max(0, confirm_line.bounds.y - vertical_padding),
+                width=min(
+                    image.width - max(0, confirm_line.bounds.x - horizontal_padding),
+                    confirm_line.bounds.width + (horizontal_padding * 2),
+                ),
+                height=min(
+                    image.height - max(0, confirm_line.bounds.y - vertical_padding),
+                    confirm_line.bounds.height + (vertical_padding * 2),
+                ),
+                action_point=confirm_line.bounds.center(),
+                extracted_text=confirm_line.text,
+            ),
+        },
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_POPUP, "ocr_update_required_popup"),),
+    )
 
 
 def _build_visual_popup_close_additions(*, image: Image.Image) -> ObservationAdditions | None:
@@ -5641,7 +5849,7 @@ def _build_bag_additions(
     lines: tuple[OcrLine, ...],
     anchors: tuple[DetectedTextAnchor, ...],
 ) -> ObservationAdditions | None:
-    """Returns bag-screen selectors when OCR matches the live inventory layout."""
+    """Returns Bag controls and geometry-owned resource rows from the inventory layout."""
 
     bag_anchor = _find_bag_tab_anchor(image=image, anchors=anchors)
     if bag_anchor is None:
@@ -5655,8 +5863,23 @@ def _build_bag_additions(
     )
     if use_line is None:
         return None
+    resource_rows = parse_resource_inventory(image=image, lines=lines)
     return ObservationAdditions(
         visible_elements={
+            UiElementId.PNC_BACK_BUTTON_TOP_LEFT: _make_visible(
+                selector_id=UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+                x=0, y=0,
+                width=max(1, int(image.width * 0.16)),
+                height=max(1, int(image.height * 0.055)),
+                source_kind=VisibleElementSourceKind.GEOMETRY,
+            ),
+            UiElementId.PNC_BAG_SUBTAB_RESOURCE: _make_visible(
+                selector_id=UiElementId.PNC_BAG_SUBTAB_RESOURCE,
+                x=0, y=int(image.height * 0.128),
+                width=max(1, int(image.width * 0.20)),
+                height=max(1, int(image.height * 0.04)),
+                source_kind=VisibleElementSourceKind.GEOMETRY,
+            ),
             UiElementId.PNC_BAG_MAIN_TAB_BAG: _make_visible_from_anchor(
                 selector_id=UiElementId.PNC_BAG_MAIN_TAB_BAG,
                 anchor=bag_anchor,
@@ -5670,6 +5893,7 @@ def _build_bag_additions(
                 extracted_text=use_line.text,
             ),
         },
+        list_entries=() if resource_rows is None else resource_rows,
         screen_evidence=(ScreenEvidence(ScreenType.PNC_BAG, "ocr_bag_layout"),),
     )
 
@@ -6674,6 +6898,94 @@ def _zero_glyph_center_density(
     return center_pixels / center_area
 
 
+def _build_quest_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Returns typed Quest chrome and visual-row geometry with OCR-only semantics."""
+
+    result = parse_daily_quest_screen(image=image, lines=lines)
+    if result is None or result.selected_tab not in {"main", "daily"}:
+        return None
+    tab_y = int(image.height * 0.052)
+    tab_height = max(1, int(image.height * 0.061))
+    tab_width = image.width // 3
+    visible_elements = {
+        UiElementId.PNC_BACK_BUTTON_TOP_LEFT: _make_visible(
+            selector_id=UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+            x=0,
+            y=0,
+            width=max(1, int(image.width * 0.16)),
+            height=max(1, int(image.height * 0.052)),
+            source_kind=VisibleElementSourceKind.GEOMETRY,
+        ),
+        UiElementId.PNC_QUEST_TAB_MAIN: _make_visible(
+            selector_id=UiElementId.PNC_QUEST_TAB_MAIN,
+            x=0,
+            y=tab_y,
+            width=tab_width,
+            height=tab_height,
+            source_kind=VisibleElementSourceKind.GEOMETRY,
+        ),
+        UiElementId.PNC_QUEST_TAB_DAILY: _make_visible(
+            selector_id=UiElementId.PNC_QUEST_TAB_DAILY,
+            x=tab_width,
+            y=tab_y,
+            width=tab_width,
+            height=tab_height,
+            source_kind=VisibleElementSourceKind.GEOMETRY,
+        ),
+        UiElementId.PNC_QUEST_TAB_ALLIANCE_ACTIVITY: _make_visible(
+            selector_id=UiElementId.PNC_QUEST_TAB_ALLIANCE_ACTIVITY,
+            x=tab_width * 2,
+            y=tab_y,
+            width=image.width - tab_width * 2,
+            height=tab_height,
+            source_kind=VisibleElementSourceKind.GEOMETRY,
+        ),
+    }
+    if result.rows:
+        first_row = result.rows[0]
+        visible_elements[UiElementId.PNC_QUEST_ROW] = _make_visible(
+            selector_id=UiElementId.PNC_QUEST_ROW,
+            x=first_row.bounds.x,
+            y=first_row.bounds.y,
+            width=first_row.bounds.width,
+            height=first_row.bounds.height,
+            source_kind=VisibleElementSourceKind.GEOMETRY,
+        )
+        first_actionable = next(
+            (
+                row
+                for row in result.rows
+                if row.metadata.get("row_state")
+                in {DailyQuestRowState.GO.value, DailyQuestRowState.CLAIM.value}
+            ),
+            None,
+        )
+        if first_actionable is not None:
+            selector_id = (
+                UiElementId.PNC_QUEST_CLAIM_BUTTON
+                if first_actionable.metadata.get("row_state") == DailyQuestRowState.CLAIM.value
+                else UiElementId.PNC_QUEST_GO_BUTTON
+            )
+            assert first_actionable.action_point is not None
+            visible_elements[selector_id] = _make_visible(
+                selector_id=selector_id,
+                x=int(image.width * 0.72),
+                y=first_actionable.bounds.y + int(first_actionable.bounds.height * 0.22),
+                width=int(image.width * 0.24),
+                height=max(1, int(first_actionable.bounds.height * 0.56)),
+                action_point=first_actionable.action_point,
+                source_kind=VisibleElementSourceKind.GEOMETRY,
+            )
+    screen_type = ScreenType.PNC_QUEST_DAILY if result.selected_tab == "daily" else ScreenType.PNC_QUEST_MAIN
+    return ObservationAdditions(
+        visible_elements=visible_elements,
+        list_entries=result.rows,
+        screen_evidence=(ScreenEvidence(screen_type, "visual_quest_tab_with_ocr_chrome"),),
+    )
 def _region_warmth(image: Image.Image, region: object) -> float:
     """Returns a simple warm-color score for one region used by the chat-tab state parser."""
 

@@ -51,6 +51,7 @@ from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.core.vision.ocr.ocr_service import OcrLine, OcrResult, RapidOcrService, UnavailableOcrService
 from pnc_automation.app.pnc.vision.pnc_observation_enricher import (
     PncObservationEnricher,
+    _build_popup_additions,
     _build_world_map_search_button_element,
     _find_world_map_root_coordinate_line,
 )
@@ -659,6 +660,11 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertEqual(castle_entries[1].metadata["castle_level"], 9)
             self.assertTrue(castle_entries[1].selected)
             self.assertEqual(observation.current_castle_name, "Lv.5 Hellhound")
+            self.assertTrue(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
+            self.assertEqual(
+                VisibleElementSourceKind.GEOMETRY,
+                observation.visible_elements[UiElementId.PNC_BACK_BUTTON_TOP_LEFT].source_kind,
+            )
 
     def test_observation_builder_parses_single_castle_manage_char_from_ocr(self) -> None:
         """Recognizes Manage Char even when OCR only exposes one visible castle row."""
@@ -1455,6 +1461,80 @@ class CaptureAndVisionTests(unittest.TestCase):
 
             self.assertEqual(observation.screen_type, ScreenType.PNC_VIP)
             self.assertTrue(observation.has(UiElementId.PNC_VIP_HEADER))
+
+    def test_observation_builder_exposes_gold_back_for_might_rank_recovery(self) -> None:
+        """Materializes the non-OCR gold back geometry needed to leave a live Might Rank screen safely."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                artifact_directory="might_rank_recovery",
+                label="might_rank_live_like",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Rank", x=330, y=30, width=80, height=30),
+                            _ocr_line("free cookies", x=80, y=500, width=180, height=30),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_MIGHT_RANK)
+            back = observation.require(UiElementId.PNC_BACK_BUTTON_TOP_LEFT)
+            self.assertEqual(back.source_kind, VisibleElementSourceKind.GEOMETRY)
+            self.assertEqual(back.bounds.center(), (72, 44))
+
+    def test_observation_builder_classifies_event_center_from_live_like_ocr(self) -> None:
+        """Recognizes Event Center rows so safe-root recovery does not treat the surface as unknown."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                artifact_directory="event_center_recovery",
+                label="event_center_live_like",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=PillowSelectorEngine(
+                    template_matcher=PillowTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Event Center", x=112, y=15, width=170, height=25),
+                            _ocr_line("Regular Events", x=7, y=70, width=174, height=24),
+                            _ocr_line("Holiday Events", x=185, y=70, width=175, height=22),
+                            _ocr_line("About to start", x=369, y=69, width=162, height=24),
+                            _ocr_line("Banner Brawl", x=32, y=239, width=165, height=22),
+                            _ocr_line("Time left: 5d 10:28:21", x=31, y=287, width=196, height=19),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_EVENT_CENTER)
+            self.assertTrue(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
+            self.assertTrue(observation.has(UiElementId.PNC_EVENT_CENTER_EVENT_ROW))
+            self.assertEqual("Banner Brawl", observation.entries(ListEntryKind.EVENT_ENTRY)[0].title_text)
 
     def test_observation_builder_classifies_improve_might_from_live_like_ocr(self) -> None:
         """Recognizes the Improve Might prompt from its title and explanatory guidance."""
@@ -4029,6 +4109,24 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertEqual(close_button.extracted_text, "Confirm")
             self.assertEqual(close_button.action_point, (284, 550))
 
+    def test_popup_classifier_materializes_exact_app_update_confirm(self) -> None:
+        """Exposes Confirm only when OCR proves the exact required-update modal."""
+
+        additions = _build_popup_additions(
+            image=Image.new("RGB", (540, 960)),
+            lines=(
+                _ocr_line("New version detected. Tap Confirm to update.", x=59, y=385, width=408, height=19),
+                _ocr_line("Confirm", x=234, y=536, width=73, height=20),
+            ),
+            anchors=(),
+        )
+
+        self.assertIsNotNone(additions)
+        confirm = additions.visible_elements[UiElementId.PNC_UPDATE_CONFIRM_BUTTON]
+        self.assertEqual("Confirm", confirm.extracted_text)
+        self.assertEqual((270, 546), confirm.action_point)
+        self.assertEqual(ScreenType.PNC_POPUP, additions.screen_evidence[0].screen_type)
+
     def test_observation_builder_classifies_bluestacks_android_home_from_pnc_label(self) -> None:
         """Replays BlueStacks home when template matching misses but OCR proves the P&C launcher label."""
 
@@ -5016,6 +5114,48 @@ class CaptureAndVisionTests(unittest.TestCase):
             ranking.require(UiElementId.PNC_HERO_SHOWDOWN_CHALLENGE_BUTTON).source_kind,
             VisibleElementSourceKind.OCR,
         )
+
+    def test_observation_builder_types_hero_hall_free_recruit_control(self) -> None:
+        """Classifies Hero Hall and exposes only the free single recruit control."""
+
+        observation = _build_observation_from_ocr_lines(
+            (
+                _ocr_line("Hero Hall", x=300, y=24, width=280, height=42),
+                _ocr_line("Recruit", x=165, y=142, width=130, height=36),
+                _ocr_line("Exchange", x=600, y=142, width=150, height=36),
+                _ocr_line("Daily attempts: 5", x=117, y=1104, width=260, height=32),
+                _ocr_line("Free", x=123, y=1176, width=75, height=32),
+            )
+        )
+
+        self.assertEqual(observation.screen_type, ScreenType.PNC_HERO_HALL)
+        banner = observation.require(UiElementId.PNC_HERO_HALL_RECRUIT_BANNER)
+        recruit = observation.require(UiElementId.PNC_HERO_HALL_RECRUIT_1X_BUTTON)
+        self.assertEqual(banner.extracted_text, "Daily attempts: 5")
+        self.assertIsNone(recruit.extracted_text)
+        self.assertEqual(recruit.source_kind, VisibleElementSourceKind.GEOMETRY)
+        self.assertIsNone(recruit.action_point)
+        self.assertEqual(recruit.bounds.center(), (239, 1200))
+        self.assertFalse(observation.has(UiElementId.PNC_HERO_HALL_RECRUIT_10X_BUTTON))
+
+    def test_observation_builder_does_not_treat_hero_hall_cooldown_as_free_control(self) -> None:
+        """Keeps the paid Recruit 1x geometry unavailable while the free timer is running."""
+
+        observation = _build_observation_from_ocr_lines(
+            (
+                _ocr_line("Hero Hall", x=300, y=24, width=280, height=42),
+                _ocr_line("Recruit", x=165, y=142, width=130, height=36),
+                _ocr_line("Exchange", x=600, y=142, width=150, height=36),
+                _ocr_line("Free in 00:08:31", x=73, y=1104, width=148, height=17),
+            )
+        )
+
+        self.assertEqual(observation.screen_type, ScreenType.PNC_HERO_HALL)
+        self.assertEqual(
+            observation.require(UiElementId.PNC_HERO_HALL_RECRUIT_BANNER).extracted_text,
+            "Free in 00:08:31",
+        )
+        self.assertFalse(observation.has(UiElementId.PNC_HERO_HALL_RECRUIT_1X_BUTTON))
 
     def test_observation_builder_runs_ocr_when_requested(self) -> None:
         """Invokes OCR when the observation request explicitly asks for OCR-backed facts."""

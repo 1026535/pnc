@@ -252,6 +252,17 @@ class ObservationRequest:
         )
 
     @classmethod
+    def daily_quest_follow_up(cls) -> "ObservationRequest":
+        """Returns the narrow OCR scope for opening, rescanning, or scrolling Daily Quest."""
+
+        target_screens = frozenset({ScreenType.PNC_QUEST_MAIN, ScreenType.PNC_QUEST_DAILY})
+        return cls(
+            candidate_screen_types=target_screens,
+            ocr_screen_types=target_screens,
+            include_loading_guard=True,
+        )
+
+    @classmethod
     def gather_node_follow_up(cls) -> "ObservationRequest":
         """Returns the narrow OCR scope used after selecting one world-map resource node."""
 
