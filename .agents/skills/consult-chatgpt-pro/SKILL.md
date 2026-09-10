@@ -1,6 +1,6 @@
 ---
 name: consult-chatgpt-pro
-description: "Consult ChatGPT Pro through the user's signed-in ChatGPT browser session in Chat mode using GPT-6 Pro, and return a repository-grounded second opinion using the GitHub connector, a verified exact commit, and narrowly scoped local-only context when needed. Use when the user explicitly asks Codex to ask, confer with, consult, or get planning, ideation, architecture, critique, research, code examples, or another opinion from ChatGPT Pro about the PNC repository. Do not invoke merely because a task would benefit from more reasoning; this workflow spends the user's Pro usage and communicates repository context to an external service."
+description: "Consult ChatGPT Pro in Chat mode with GPT-6 Pro and return a repository-grounded second opinion from a verified GitHub commit plus narrowly scoped local context. Use when the user explicitly requests Pro consultation or when the create-plan skill requires it; otherwise do not spend Pro usage or disclose repository context merely because more reasoning may help."
 ---
 
 # Consult ChatGPT Pro
@@ -11,7 +11,7 @@ Obtain a high-quality Pro consultation without copying the repository into a pro
 
 ## Scope And Safety
 
-- Treat an explicit invocation of this skill, or a plain request to consult ChatGPT Pro, as the user's explicit authorization to open a consultation chat and send the requested task plus clearly relevant repository context. This is a consultation-specific override of the `control-in-app-browser` skill's confirmation policy for the requested consultation message: the invocation itself is the action-time permission, so do not request a redundant second confirmation before clicking Send once the final checks pass.
+- Treat an explicit invocation, a plain request to consult ChatGPT Pro, or required routing from `create-plan` as authorization to open one consultation chat and send the requested task plus clearly relevant repository context. This satisfies the browser skill's action-time authorization for the consultation message, so do not request a redundant confirmation before sending once the final checks pass.
 - Keep connected systems read-only. Do not let ChatGPT modify GitHub or another external system.
 - Do not commit, push, install or connect a plugin, share a Project/chat, change account settings, or upload unrelated files without separate user authorization.
 - Never send credentials, tokens, `.env` contents, personal data, proprietary third-party assets, build output, or unrelated repository content.
@@ -22,7 +22,7 @@ Obtain a high-quality Pro consultation without copying the repository into a pro
 
 ## Required Browser Surface
 
-Read and follow [the shared ChatGPT Web browser-session instruction](../../instructions/chatgpt-web-browser-session.md) before browser work, using `https://chatgpt.com/` as the target. It owns browser selection, signed-in session handoff, stale-tab recovery, and cleanup. This skill owns consultation-specific repository context, Pro selection, GitHub attachment, monitoring, and response auditing.
+Read and follow [the shared ChatGPT Web browser-session instruction](../../../instructions/chatgpt-web-browser-session.md) before browser work, using `https://chatgpt.com/` as the target. It owns browser selection, signed-in session handoff, stale-tab recovery, and cleanup. This skill owns consultation-specific repository context, Pro selection, GitHub attachment, monitoring, and response auditing.
 
 If the Browser skill or a signed-in Pro browser surface is unavailable, report that constraint. If ChatGPT or GitHub authentication is required, ask the user to sign in or grant access in the selected browser; never handle credentials.
 
@@ -105,7 +105,7 @@ Preserve productive disagreement: do not bias Pro by embedding Codex's preferred
 3. Start a fresh chat for a new consultation. Continue an existing chat only for follow-ups to the same objective or when the user explicitly asks for continuity.
 4. While remaining in Chat mode, select GPT-6 Pro explicitly. Verify that the visible selected model is GPT-6 Pro before sending; do not accept a generic Pro label or substitute another model. If GPT-6 Pro is unavailable or quota-limited, stop and report it.
 5. Fill the prompt. Filling the composer can remove an inline connector pill.
-6. Upload the optional local packet, if required.
+6. Attach the optional local packet if required. Because the in-app browser cannot automate file uploads, use a supported external browser when the user has not constrained the browser choice, or pause for the user to attach the reviewed packet manually.
 7. Choose **Add files and more → GitHub** last so later composer edits cannot remove the connector pill.
 8. Immediately before sending, verify the final composer visibly contains the intended prompt, any intended packet, the GitHub pill, and the intended model/reasoning state. This consultation-specific rule directly overrides the `control-in-app-browser` skill's generic confirmation step for this requested message; do not pause to ask whether to send it again. Then send once.
 

@@ -4,6 +4,7 @@
 
 - Limit edits to this `pnc` repository unless the user explicitly requests another location. Reading required skills and external documentation is allowed.
 - Let the user's requested outcome and explicit constraints define the task. Make reasonable assumptions for reversible, in-scope decisions; ask only when a choice would materially change behavior, the live target, resource spending, or a destructive action.
+- Explicit user instructions take precedence over skill guidelines. If a skill causes work to pause, remain unfinished, or diverge from the request, identify the exact skill instruction and explain its effect.
 - For action requests, continue through implementation and appropriate verification. Stop at a plan only when the user asks for planning or the applicable planning skill requires a reviewable plan before implementation.
 - Preserve unrelated user changes. Never expand a task merely because adjacent cleanup is possible.
 
@@ -45,7 +46,7 @@
 - Config templates: `config/*.example.yaml`
 - Runtime evidence: `artifacts/`
 - Reviewed plans and implementation reviews: `reviewed_plans/`
-- Local workflow skills: `skills/`
+- Local workflow skills: `.agents/skills/`
 - Shared browser/session instructions: `instructions/`
 - Legacy prompt references: `prompts/`
 - Package metadata and Python requirement: `pyproject.toml`
@@ -79,7 +80,7 @@
 
 ## Live BlueStacks Validation
 
-Use `skills/test-bluestacks-live` for live validation. Available opt-in smoke flags are:
+Use `.agents/skills/test-bluestacks-live` for live validation. Available opt-in smoke flags are:
 
 - Account navigation and shared spatial surface: `PNC_RUN_LIVE_SMOKE=1`
 - Chat workflow: `PNC_RUN_LIVE_CHAT_SMOKE=1`
@@ -92,7 +93,7 @@ Before and during a live run:
 - Confirm the account, castle target, and BlueStacks display name in `config/`. Let the canonical runtime launch the configured instance when needed and verify ADB connectivity through the resolved instance.
 - Use configured `adb_path` and `bluestacks_config_path`; never hard-code ports or device IDs.
 - If no live target is named, use the currently active castle on the configured `testing` instance. Do not select or switch castles unless the user names a castle and authorizes that navigation.
-- Default to read-only or non-spending proof. Any live validation that can spend in-game resources requires the exact action, target, and budget to be explicitly authorized and must use `skills/write-code-live`.
+- Default to read-only or non-spending proof. Any live validation that can spend in-game resources requires the exact action, target, and budget from the current request or a user-approved execution plan and must use `.agents/skills/write-code-live`. Do not request duplicate confirmation when those details are complete.
 - Start with the smallest smoke path that proves the risky boundary. Use observation-based waits and existing runner/navigation abstractions.
 - On failure, inspect screenshots, OCR JSON, logs, and observation artifacts under `artifacts/` before changing code. Preserve relevant artifact paths in the final response.
 
@@ -100,15 +101,15 @@ Before and during a live run:
 
 Read the applicable `SKILL.md` completely before taking the actions it governs.
 
-- `skills/create-plan`: substantial plans and roadmaps.
-- `skills/review-plan-live`: plan audits that require repository and bounded live evidence.
-- `skills/write-code`: production implementation, fixes, refactors, tests, and scripts.
-- `skills/review-code`: code, diff, commit, branch, or implementation reviews.
-- `skills/test-bluestacks-live`: live emulator validation and diagnosis.
-- `skills/write-code-live`: implementation with explicitly authorized in-game resource spending; never invoke it implicitly.
-- `skills/control-in-app-browser`: browser automation through the selected browser surface.
-- `skills/consult-chatgpt-pro`: explicit, repository-grounded consultation with ChatGPT Pro.
-- `skills/implement-with-luna-global`: explicit delegation of substantial implementation to Luna workers.
+- `.agents/skills/create-plan`: substantial plans and roadmaps.
+- `.agents/skills/review-plan-live`: plan audits that require repository and bounded live evidence.
+- `.agents/skills/write-code`: production implementation, fixes, refactors, tests, and scripts.
+- `.agents/skills/review-code`: code, diff, commit, branch, or implementation reviews.
+- `.agents/skills/test-bluestacks-live`: live emulator validation and diagnosis.
+- `.agents/skills/write-code-live`: implementation with bounded in-game resource spending authorized by the current request or a user-approved execution plan.
+- `.agents/skills/control-in-app-browser`: browser automation through the selected browser surface.
+- `.agents/skills/consult-chatgpt-pro`: explicit or planning-required, repository-grounded consultation with ChatGPT Pro.
+- `.agents/skills/implement-with-luna-global`: explicit delegation of substantial implementation to Luna workers.
 
 Treat `prompts/` as legacy inspiration, not as a substitute for the applicable skill or current best practice. If a skill creates a blocker or conflicts with the requested outcome, identify the exact instruction and explain the impact instead of silently changing scope.
 

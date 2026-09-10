@@ -1,6 +1,6 @@
 ---
 name: write-code-live
-description: Implement PNC code changes with bounded live validation that may spend explicitly authorized in-game resources. Use only when the user or approved plan authorizes the exact live resource-spending action, target, and budget; use write-code for ordinary implementation or read-only live testing.
+description: Implement PNC code changes with bounded live validation that may spend authorized in-game resources. Use when the current request or a user-approved execution plan supplies the exact action, target, and budget; use write-code for ordinary implementation or read-only live testing.
 ---
 
 # Write Code Live
@@ -9,7 +9,7 @@ Use [../write-code/SKILL.md](../write-code/SKILL.md) as the canonical coding wor
 
 ## Authorization Gate
 
-Before any resource-spending action, record all of the following from the user's request or approved plan:
+Before any resource-spending action, record all of the following from the current request or a user-approved execution plan. When that source supplies every item, treat it as authorization and do not pause for duplicate confirmation:
 
 - the account and currently active castle; do not switch accounts or castles unless the user explicitly names and authorizes that navigation;
 - the exact live action and why the code change requires it;
@@ -17,7 +17,7 @@ Before any resource-spending action, record all of the following from the user's
 - the expected precondition, observable success signal, and post-action artifact needed to prove the result; and
 - the stop condition if the precondition, screen classification, selector, or post-action proof is missing.
 
-If any item is missing, stop before spending and request the missing authorization. Invocation of this skill alone is not permission to choose a target, invent a budget, or spend resources.
+If any item is missing, stop before spending and request only the missing information. Invocation of this skill alone is not permission to choose a target, invent a budget, or spend resources.
 
 ## Live Iteration
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Create Plan"
+  short_description: "Draft rigorous, actionable implementation plans"
+  default_prompt: "Use $create-plan to produce a rigorous implementation plan, consult ChatGPT Pro in Chat mode with GPT-6 Pro, and have Codex review the response before finalizing it."

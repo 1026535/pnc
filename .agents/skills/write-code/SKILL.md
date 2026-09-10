@@ -34,9 +34,8 @@ Make small, coherent code changes that improve long-term code health. Ground dec
 
 - Python targets Python 3.13+, `unittest`, `pathlib.Path`, type hints, and existing `pnc_automation` abstractions.
 - Reuse the runner, script runner, observation, selector, navigation, storage, emulator, and ADB interfaces instead of adding parallel mechanics.
-- For pure code changes, run `python -m unittest discover -s tests` before finishing when feasible.
-- For narrow changes, run targeted tests first, then the full offline suite after the focused behavior passes.
-- For functional PNC changes that depend on live game or emulator behavior, use the `test-bluestacks-live` skill and the smallest relevant opt-in live smoke path. If no BlueStacks instance is open, let the canonical runtime launch the configured instance before validating.
+- Run targeted tests first. Run `py -m unittest discover -s tests` for cross-cutting changes, shared interfaces, config schemas, authored workflows, or broader regression surfaces; targeted validation may be sufficient for an isolated low-risk change.
+- For functional PNC changes that depend on live game or emulator behavior, use [test-bluestacks-live](../test-bluestacks-live/SKILL.md) and the smallest relevant opt-in live smoke path. If no BlueStacks instance is open, let the canonical runtime launch the configured instance before validating.
 - Preserve unrelated user changes in the working tree.
 
 ## Live-development loop
