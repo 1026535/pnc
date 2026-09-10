@@ -47,7 +47,7 @@ class TaskExecutor:
         replans = 0
         current_before = before
         while True:
-            recovered = self.action_executor.recover_update_if_required(
+            recovered = self.action_executor.recover_interruption_if_required(
                 current_before,
                 label_prefix=f"{task.id.value}_pre_action_update",
                 observe=lambda label, request=None: self.observation_service.observe(

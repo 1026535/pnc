@@ -19,10 +19,45 @@ from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.app.pnc.vision.selector_interaction_kind import SelectorInteractionKind
 from pnc_automation.app.pnc.vision.selector_interactions import (
     is_settled_primary_navigation_miss,
+    is_transitional_observation,
     safe_navigation_outcomes,
     settle_reviewed_navigation_observation,
 )
 from pnc_automation.app.pnc.vision.selectors import ClickOutcome, SelectorDefinition, SelectorRegistry
+
+
+_SAFE_TRANSIENT_POPUP_SELECTORS: tuple[UiElementId, ...] = (
+    UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON,
+    UiElementId.PNC_POPUP_CLOSE_BUTTON,
+)
+
+_TASK_OWNED_POPUP_SCREENS = frozenset(
+    {
+        ScreenType.PNC_BUILDING_UPGRADE_WARNING,
+        ScreenType.PNC_BUILD_SPEEDUP_CONFIRM,
+        ScreenType.PNC_MARCH_CONFIRM,
+        ScreenType.PNC_MAIL_COMPOSE_POPUP,
+        ScreenType.PNC_CHAT_PLAYER_ACTION_POPUP,
+        ScreenType.PNC_ALLIANCE_MEMBER_MANAGE_POPUP,
+        ScreenType.PNC_WORLD_COORDINATE_DIALOG,
+    }
+)
+
+# These controls are explicitly action-owned.  Recovery must never infer ownership
+# from selector names: a generic PNC_POPUP may expose one of these alongside its X.
+_TASK_OWNED_POPUP_SELECTORS = frozenset(
+    {
+        UiElementId.PNC_UPDATE_CONFIRM_BUTTON,
+        UiElementId.PNC_BUILDING_UPGRADE_CONFIRM_BUTTON,
+        UiElementId.PNC_BUILDING_UPGRADE_WARNING_CONFIRM_BUTTON,
+        UiElementId.PNC_BUILD_SPEEDUP_CONFIRM_BUTTON,
+        UiElementId.PNC_MARCH_CONFIRM_BUTTON,
+        UiElementId.PNC_MAIL_COMPOSE_SEND_BUTTON,
+        UiElementId.PNC_CHAT_SEND_BUTTON,
+        UiElementId.PNC_ALLIANCE_MEMBER_MANAGE_PERSONAL_INFO_BUTTON,
+        UiElementId.PNC_CHAT_PLAYER_ACTION_PROFILE_BUTTON,
+    }
+)
 
 
 class ObservationCallback(Protocol):
@@ -80,6 +115,14 @@ class ObservedActionExecutionResult:
 
 
 @dataclass(frozen=True, slots=True)
+class _InterruptionRecoveryResult:
+    """Carries one recovered observation and whether an exact update was involved."""
+
+    observation: Observation | None
+    update_recovered: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class _ObservedNavigationTap:
     """Carries the shared metadata required for one fallback-eligible navigation tap."""
 
@@ -112,15 +155,15 @@ class ObservedActionExecutor:
     ) -> ObservedActionExecutionResult:
         """Executes the action sequence and returns the freshest observed result."""
 
-        recovered = self.recover_update_if_required(
+        recovered = self._recover_interruption_if_required(
             initial_observation,
             label_prefix="pre_action_update",
             observe=observe,
         )
-        if recovered is not None:
+        if recovered.observation is not None:
             return ObservedActionExecutionResult(
-                observation=recovered,
-                update_recovered=True,
+                observation=recovered.observation,
+                update_recovered=recovered.update_recovered,
             )
         current_observation = initial_observation
         observed_after_action = False
@@ -138,16 +181,22 @@ class ObservedActionExecutor:
                 )
                 current_observation = interaction_result.observation
                 selector_interactions.extend(interaction_result.selector_interactions)
-                recovered = self.recover_update_if_required(
+                if interaction_result.update_recovered:
+                    return ObservedActionExecutionResult(
+                        observation=current_observation,
+                        selector_interactions=tuple(selector_interactions),
+                        update_recovered=True,
+                    )
+                recovered = self._recover_interruption_if_required(
                     current_observation,
                     label_prefix=f"post_action_{index + 1}_update",
                     observe=observe,
                 )
-                if recovered is not None:
+                if recovered.observation is not None:
                     return ObservedActionExecutionResult(
-                        observation=recovered,
+                        observation=recovered.observation,
                         selector_interactions=tuple(selector_interactions),
-                        update_recovered=True,
+                        update_recovered=recovered.update_recovered,
                     )
                 executed_any_action = True
                 observed_after_action = True
@@ -160,16 +209,16 @@ class ObservedActionExecutor:
                     label_prefix=f"post_action_{index + 1}",
                     observe=observe,
                 )
-                recovered = self.recover_update_if_required(
+                recovered = self._recover_interruption_if_required(
                     current_observation,
                     label_prefix=f"post_action_{index + 1}_update",
                     observe=observe,
                 )
-                if recovered is not None:
+                if recovered.observation is not None:
                     return ObservedActionExecutionResult(
-                        observation=recovered,
+                        observation=recovered.observation,
                         selector_interactions=tuple(selector_interactions),
-                        update_recovered=True,
+                        update_recovered=recovered.update_recovered,
                     )
                 if not self.action_executor.validate_follow_up(action, current_observation):
                     return ObservedActionExecutionResult(
@@ -180,21 +229,42 @@ class ObservedActionExecutor:
         if executed_any_action and not observed_after_action:
             self._sleep_for_observe()
             current_observation = observe("post_actions")
-            recovered = self.recover_update_if_required(
+            recovered = self._recover_interruption_if_required(
                 current_observation,
                 label_prefix="post_actions_update",
                 observe=observe,
             )
-            if recovered is not None:
+            if recovered.observation is not None:
                 return ObservedActionExecutionResult(
-                    observation=recovered,
+                    observation=recovered.observation,
                     selector_interactions=tuple(selector_interactions),
-                    update_recovered=True,
+                    update_recovered=recovered.update_recovered,
                 )
         return ObservedActionExecutionResult(
             observation=current_observation,
             selector_interactions=tuple(selector_interactions),
         )
+
+    def recover_interruption_if_required(
+        self,
+        observation: Observation,
+        *,
+        label_prefix: str,
+        observe: ObservationCallback,
+    ) -> Observation | None:
+        """Recovers one exact update or one bounded episode of safe transient popups.
+
+        This is intentionally executor-owned: callers provide the current observation
+        and capture callback, while this method owns the safe selector whitelist,
+        fingerprint guard, and popup bound.  A ``None`` return means no interruption
+        was present in the supplied observation.
+        """
+
+        return self._recover_interruption_if_required(
+            observation,
+            label_prefix=label_prefix,
+            observe=observe,
+        ).observation
 
     def recover_update_if_required(
         self,
@@ -203,21 +273,73 @@ class ObservedActionExecutor:
         label_prefix: str,
         observe: ObservationCallback,
     ) -> Observation | None:
-        """Confirms one detected game update and polls until typed Home is restored."""
+        """Confirms one exact required-update interruption, if present.
+
+        This name intentionally remains update-only.  Callers that also need safe
+        transient popup handling must use ``recover_interruption_if_required``.
+        """
 
         if not observation.has(UiElementId.PNC_UPDATE_CONFIRM_BUTTON):
             return None
+        return self._recover_required_update(
+            observation,
+            label_prefix=label_prefix,
+            observe=observe,
+        )
+
+    def _recover_interruption_if_required(
+        self,
+        observation: Observation,
+        *,
+        label_prefix: str,
+        observe: ObservationCallback,
+    ) -> _InterruptionRecoveryResult:
+        """Returns an executor-owned interruption result for internal action-loop use."""
+
+        if not observation.has(UiElementId.PNC_UPDATE_CONFIRM_BUTTON):
+            if not self._is_popup_observation(observation):
+                return _InterruptionRecoveryResult(None)
+            return self._recover_transient_popups(
+                observation,
+                label_prefix=label_prefix,
+                observe=observe,
+            )
+        recovered = self._recover_required_update(
+            observation,
+            label_prefix=label_prefix,
+            observe=observe,
+        )
+        return _InterruptionRecoveryResult(recovered, update_recovered=True)
+
+    def _recover_required_update(
+        self,
+        observation: Observation,
+        *,
+        label_prefix: str,
+        observe: ObservationCallback,
+    ) -> Observation:
+        """Confirms one detected game update and polls until typed Home is restored."""
+
         self.logger.info(
             "Confirming required game update and entering bounded Home recovery.",
             extra={"screen_type": observation.screen_type},
         )
-        confirmed = self.action_executor.execute_action(
-            TapAction(
+        try:
+            confirmed = self.action_executor.execute_action(
+                TapAction(
+                    selector_id=UiElementId.PNC_UPDATE_CONFIRM_BUTTON,
+                    reason="confirm_required_game_update",
+                ),
+                observation,
+            )
+        except Exception as error:
+            raise SelectorResolutionError(
+                "Required game update Confirm dispatch failed.",
                 selector_id=UiElementId.PNC_UPDATE_CONFIRM_BUTTON,
-                reason="confirm_required_game_update",
-            ),
-            observation,
-        )
+                screen_type=observation.screen_type,
+                artifact_path=None if observation.artifact_path is None else str(observation.artifact_path),
+                dispatch_error=type(error).__name__,
+            ) from error
         if not confirmed:
             raise SelectorResolutionError(
                 "Required game update Confirm was detected but not dispatched.",
@@ -242,18 +364,19 @@ class ObservedActionExecutor:
                 return current
             if current.has(UiElementId.PNC_UPDATE_CONFIRM_BUTTON):
                 continue
-            popup_selector = self._update_recovery_popup_selector(current)
+            popup_selector = self._transient_popup_selector(current)
             if popup_selector is not None:
                 fingerprint = current.frame_fingerprint
-                if fingerprint is None:
+                if not fingerprint:
                     raise SelectorResolutionError(
                         "Post-update popup dismissal requires a visual frame fingerprint.",
                         selector_id=popup_selector,
                         screen_type=current.screen_type,
+                        artifact_path=None if current.artifact_path is None else str(current.artifact_path),
                     )
                 if fingerprint in dismissed_popup_fingerprints:
                     raise SelectorResolutionError(
-                        "Post-update popup remained after its one safe dismissal attempt.",
+                        "Post-update popup remained after its one safe dismissal attempt; its visual fingerprint was already consumed.",
                         selector_id=popup_selector,
                         screen_type=current.screen_type,
                         artifact_path=None if current.artifact_path is None else str(current.artifact_path),
@@ -264,20 +387,42 @@ class ObservedActionExecutor:
                         screen_type=current.screen_type,
                         artifact_path=None if current.artifact_path is None else str(current.artifact_path),
                     )
-                self.action_executor.execute_action(
-                    TapAction(
+                try:
+                    dispatched = self.action_executor.execute_action(
+                        TapAction(
+                            selector_id=popup_selector,
+                            reason="dismiss_post_update_popup",
+                        ),
+                        current,
+                    )
+                except Exception as error:
+                    raise SelectorResolutionError(
+                        "Post-update popup close control dispatch failed.",
                         selector_id=popup_selector,
-                        reason="dismiss_post_update_popup",
-                    ),
-                    current,
-                )
+                        screen_type=current.screen_type,
+                        artifact_path=None if current.artifact_path is None else str(current.artifact_path),
+                        dispatch_error=type(error).__name__,
+                    ) from error
+                if not dispatched:
+                    raise SelectorResolutionError(
+                        "Post-update popup close control was detected but dispatch failed.",
+                        selector_id=popup_selector,
+                        screen_type=current.screen_type,
+                        artifact_path=None if current.artifact_path is None else str(current.artifact_path),
+                    )
                 dismissed_popup_fingerprints.add(fingerprint)
                 continue
             if current.screen_type == ScreenType.ANDROID_HOME and not launched_from_android_home:
-                self.action_executor.execute_action(
+                launched = self.action_executor.execute_action(
                     LaunchAppAction(reason="relaunch_pnc_after_required_update"),
                     current,
                 )
+                if not launched:
+                    raise SelectorResolutionError(
+                        "P&C relaunch after required update was not dispatched.",
+                        screen_type=current.screen_type,
+                        artifact_path=None if current.artifact_path is None else str(current.artifact_path),
+                    )
                 launched_from_android_home = True
                 continue
             if current.screen_type in {
@@ -298,15 +443,155 @@ class ObservedActionExecutor:
             artifact_path=None if current.artifact_path is None else str(current.artifact_path),
         )
 
-    @staticmethod
-    def _update_recovery_popup_selector(observation: Observation) -> UiElementId | None:
-        """Returns a non-monetized close control allowed during post-update startup."""
+    def _recover_transient_popups(
+        self,
+        observation: Observation,
+        *,
+        label_prefix: str,
+        observe: ObservationCallback,
+    ) -> _InterruptionRecoveryResult:
+        """Dismisses only newly fingerprinted safe transient popups in one bounded episode."""
 
-        if observation.has(UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON):
-            return UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON
-        if observation.has(UiElementId.PNC_POPUP_CLOSE_BUTTON):
-            return UiElementId.PNC_POPUP_CLOSE_BUTTON
+        current = observation
+        dismissed_fingerprints: set[str] = set()
+        while self._is_popup_observation(current):
+            if current.has(UiElementId.PNC_UPDATE_CONFIRM_BUTTON):
+                recovered = self._recover_required_update(
+                    current,
+                    label_prefix=f"{label_prefix}_update",
+                    observe=observe,
+                )
+                return _InterruptionRecoveryResult(recovered, update_recovered=True)
+            selector = self._transient_popup_selector(current)
+            if selector is None:
+                raise self._transient_recovery_error(
+                    "Transient popup has no explicit safe close selector; Android Back is forbidden.",
+                    current,
+                )
+            fingerprint = current.frame_fingerprint
+            if not fingerprint:
+                raise self._transient_recovery_error(
+                    "Transient popup recovery requires a fresh visual frame fingerprint.",
+                    current,
+                    selector_id=selector,
+                )
+            if fingerprint in dismissed_fingerprints:
+                raise self._transient_recovery_error(
+                    "Transient popup visual fingerprint was already consumed in this recovery episode.",
+                    current,
+                    selector_id=selector,
+                )
+            if len(dismissed_fingerprints) >= self.policy.update_max_popup_dismissals:
+                raise self._transient_recovery_error(
+                    "Transient popup recovery exhausted its bounded distinct-popup dismissal budget.",
+                    current,
+                    selector_id=selector,
+                    dismissed_count=len(dismissed_fingerprints),
+                )
+            try:
+                dispatched = self.action_executor.execute_action(
+                    TapAction(
+                        selector_id=selector,
+                        reason="dismiss_transient_popup",
+                    ),
+                    current,
+                )
+            except Exception as error:
+                raise self._transient_recovery_error(
+                    "Transient popup close control dispatch failed.",
+                    current,
+                    selector_id=selector,
+                    dispatch_error=type(error).__name__,
+                ) from error
+            if not dispatched:
+                raise self._transient_recovery_error(
+                    "Transient popup close control was detected but dispatch failed.",
+                    current,
+                    selector_id=selector,
+                )
+            dismissed_fingerprints.add(fingerprint)
+            current = observe(
+                f"{label_prefix}_popup_{len(dismissed_fingerprints)}",
+                request=ObservationRequest.full_runtime_default(),
+            )
+            current = self._settle_popup_dismissal_observation(
+                current,
+                label_prefix=f"{label_prefix}_popup_{len(dismissed_fingerprints)}",
+                observe=observe,
+            )
+            if current.has(UiElementId.PNC_UPDATE_CONFIRM_BUTTON):
+                recovered = self._recover_required_update(
+                    current,
+                    label_prefix=f"{label_prefix}_update",
+                    observe=observe,
+                )
+                return _InterruptionRecoveryResult(recovered, update_recovered=True)
+            if not self._is_popup_observation(current):
+                return _InterruptionRecoveryResult(current)
+        return _InterruptionRecoveryResult(current)
+
+    def _settle_popup_dismissal_observation(
+        self,
+        observation: Observation,
+        *,
+        label_prefix: str,
+        observe: ObservationCallback,
+    ) -> Observation:
+        """Passively settles loading/unknown frames after a popup close tap.
+
+        These captures belong to the interruption episode and therefore do not
+        consume a task or navigation step budget.  Full-runtime requests preserve
+        the same broad observation semantics used by update recovery.
+        """
+
+        current = observation
+        for settle_index in range(self.policy.max_settle_observations):
+            if not is_transitional_observation(current):
+                return current
+            self._sleep_for_observe()
+            current = observe(
+                f"{label_prefix}_settle_{settle_index + 1}",
+                request=ObservationRequest.full_runtime_default(),
+            )
+        return current
+
+    @staticmethod
+    def _is_popup_observation(observation: Observation) -> bool:
+        """Returns whether the observation is a blocking popup state covered by recovery."""
+
+        if observation.screen_type in _TASK_OWNED_POPUP_SCREENS:
+            return False
+        return (
+            observation.screen_type in {ScreenType.PNC_POPUP, ScreenType.PNC_VIP_DAILY_RESET}
+            or any(observation.has(selector_id) for selector_id in _SAFE_TRANSIENT_POPUP_SELECTORS)
+            or observation.blocking_popup
+        )
+
+    @staticmethod
+    def _transient_popup_selector(observation: Observation) -> UiElementId | None:
+        """Returns the sole explicit safe selector allowed for a transient popup."""
+
+        if observation.screen_type in _TASK_OWNED_POPUP_SCREENS:
+            return None
+        if any(selector_id in _TASK_OWNED_POPUP_SELECTORS for selector_id in observation.visible_elements):
+            return None
+        for selector_id in _SAFE_TRANSIENT_POPUP_SELECTORS:
+            if observation.has(selector_id):
+                return selector_id
         return None
+
+    @staticmethod
+    def _transient_recovery_error(
+        message: str,
+        observation: Observation,
+        **details: object,
+    ) -> SelectorResolutionError:
+        """Builds one popup recovery error with the current artifact when available."""
+
+        if observation.artifact_path is not None:
+            details.setdefault("artifact_path", str(observation.artifact_path))
+        details.setdefault("screen_type", observation.screen_type)
+        return SelectorResolutionError(message, **details)
 
     def _resolve_observed_navigation_tap(
         self,
@@ -351,19 +636,28 @@ class ObservedActionExecutor:
         self.action_executor.execute_action(action, before)
         self._sleep_for_observe(action)
         first_after = observe(label_prefix, request=follow_up_request)
-        settled_after = (
-            first_after
-            if self._should_preserve_first_follow_up(first_after)
-            else settle_reviewed_navigation_observation(
-                first_observation=first_after,
-                label_prefix=label_prefix,
-                request=follow_up_request,
-                reviewed_outcomes=candidate.reviewed_outcomes,
-                max_settle_observations=self.policy.max_settle_observations,
-                observe=observe,
-                sleep=self._sleep_for_observe,
-            )
+        first_recovery = self._recover_interruption_if_required(
+            first_after,
+            label_prefix=f"{label_prefix}_interruption",
+            observe=observe,
         )
+        interruption_recovered = first_recovery.observation is not None
+        if first_recovery.observation is not None:
+            settled_after = first_recovery.observation
+        else:
+            settled_after = (
+                first_after
+                if self._should_preserve_first_follow_up(first_after)
+                else settle_reviewed_navigation_observation(
+                    first_observation=first_after,
+                    label_prefix=label_prefix,
+                    request=follow_up_request,
+                    reviewed_outcomes=candidate.reviewed_outcomes,
+                    max_settle_observations=self.policy.max_settle_observations,
+                    observe=observe,
+                    sleep=self._sleep_for_observe,
+                )
+            )
         final_after = settled_after
         if (
             final_after.screen_type == ScreenType.UNKNOWN
@@ -378,7 +672,8 @@ class ObservedActionExecutor:
         fallback_used = False
         fallback_source_kind: VisibleElementSourceKind | None = None
         if (
-            not final_after.has(UiElementId.PNC_STATUS_BANNER)
+            not interruption_recovered
+            and not final_after.has(UiElementId.PNC_STATUS_BANNER)
             and is_settled_primary_navigation_miss(candidate.selector, before, settled_after, candidate.source_element)
         ):
             fallback_attempted = True
@@ -431,6 +726,7 @@ class ObservedActionExecutor:
         return ObservedActionExecutionResult(
             observation=final_after,
             selector_interactions=(interaction,),
+            update_recovered=first_recovery.update_recovered,
         )
 
     def _should_preserve_first_follow_up(self, observation: Observation) -> bool:

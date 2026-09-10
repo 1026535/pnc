@@ -38,6 +38,7 @@ class LoginTask(BaseAutomationTask):
         if observation.screen_type in {
             ScreenType.PNC_HOME_CITY,
             ScreenType.PNC_MORE_MENU,
+            ScreenType.PNC_SETTINGS,
             ScreenType.PNC_LORD_INFO,
             ScreenType.PNC_CASTLE_SELECTION,
         }:
@@ -91,6 +92,7 @@ class LoginTask(BaseAutomationTask):
         if after.screen_type in {
             ScreenType.PNC_HOME_CITY,
             ScreenType.PNC_MORE_MENU,
+            ScreenType.PNC_SETTINGS,
             ScreenType.PNC_LORD_INFO,
             ScreenType.PNC_CASTLE_SELECTION,
         }:
@@ -112,6 +114,8 @@ class LoginTask(BaseAutomationTask):
                 return TaskResult.replan("Login reached home city and still needs Lord Info or Manage Char verification.")
             if after.screen_type == ScreenType.PNC_MORE_MENU:
                 return TaskResult.replan("Login opened the More menu and still needs Manage Char verification.")
+            if after.screen_type == ScreenType.PNC_SETTINGS:
+                return TaskResult.replan("Login opened Settings and still needs Manage Char verification.")
             return TaskResult.failure("Login reached a verification screen without usable character evidence.")
         if after.screen_type in {ScreenType.PNC_LOADING, ScreenType.PNC_ACCOUNT_SWITCH}:
             return TaskResult.replan("Login is still resolving through a bootstrap transition.")
@@ -166,7 +170,11 @@ class LoginTask(BaseAutomationTask):
             return TaskResult.success("Login verified through the Manage Char roster.")
         if observation.screen_type == ScreenType.PNC_LORD_INFO:
             return TaskResult.success("Login verified through the current Lord Info screen.")
-        if observation.screen_type in {ScreenType.PNC_HOME_CITY, ScreenType.PNC_MORE_MENU} and observation.current_castle is not None:
+        if observation.screen_type in {
+            ScreenType.PNC_HOME_CITY,
+            ScreenType.PNC_MORE_MENU,
+            ScreenType.PNC_SETTINGS,
+        } and observation.current_castle is not None:
             return TaskResult.success("Login verified through carried current-character evidence.")
         return None
 
@@ -203,6 +211,8 @@ class LoginTask(BaseAutomationTask):
                 return context.flows.open_castle_selection(observation)
             return context.flows.open_lord_info(observation)
         if observation.screen_type == ScreenType.PNC_MORE_MENU:
+            return context.flows.open_castle_selection(observation)
+        if observation.screen_type == ScreenType.PNC_SETTINGS:
             return context.flows.open_castle_selection(observation)
         if observation.screen_type in {ScreenType.PNC_LORD_INFO, ScreenType.PNC_CASTLE_SELECTION}:
             return []

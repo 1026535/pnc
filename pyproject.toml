@@ -6,6 +6,8 @@ requires-python = ">=3.13"
 dependencies = [
     "PyYAML>=6.0.3,<7.0.0",
     "Pillow>=12.1.1,<13.0.0",
+    "numpy>=2.4.2,<3.0.0",
+    "opencv-python>=4.13.0.92,<5.0.0",
     "rapidocr_onnxruntime>=1.2.3,<2.0.0",
     "tzdata>=2026.3,<2027.0",
 ]
@@ -21,5 +23,5 @@ include-package-data = true
 include = ["pnc_automation*"]
 
 [tool.setuptools.package-data]
-"pnc_automation" = ["py.typed"]
-"pnc_automation.app.pnc.vision" = ["data/*.yaml"]
+"pnc_automation" = ["py.typed", "templates/pnc/*.png"]
+"pnc_automation.app.pnc.vision" = ["data/*.yaml", "data/*.json", "data/screen_anchors/*.png"]

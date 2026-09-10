@@ -98,12 +98,22 @@ class AutomationRunner:
         step_budget = self.policy.max_replans_per_step if max_steps is None else max_steps
         if step_budget < 0:
             raise ValueError("AutomationRunner.execute_flow_until max_steps cannot be negative.")
-        for step_index in range(step_budget + 1):
+        step_index = 0
+        while step_index <= step_budget:
+            recovered = self.action_executor.recover_interruption_if_required(
+                current,
+                label_prefix=f"{label_prefix}_interruption",
+                observe=lambda label, request=None: self.observation_service.observe(
+                    f"{label_prefix}_{label}",
+                    request=request,
+                ),
+            )
+            if recovered is not None:
+                current = recovered
+                continue
             if done(current):
                 return current
-            if current.blocking_popup or current.screen_type == ScreenType.PNC_POPUP:
-                actions = self.flow_planner.close_blocking_popup(current)
-            elif current.screen_type == ScreenType.UNKNOWN:
+            if current.screen_type == ScreenType.UNKNOWN:
                 actions = self.flow_planner.recover_unknown_game_screen(
                     current,
                     reason=f"{label_prefix}_recover_unknown",
@@ -124,6 +134,7 @@ class AutomationRunner:
                     request=request,
                 ),
             ).observation
+            step_index += 1
         raise SelectorResolutionError(
             "Automation runner could not prove the requested flow state within the configured budget.",
             screen_type=current.screen_type.value,
@@ -319,7 +330,7 @@ class AutomationRunner:
     ) -> Observation:
         """Proves the task-declared entry state once before the task body begins executing."""
 
-        recovered = self.action_executor.recover_update_if_required(
+        recovered = self.action_executor.recover_interruption_if_required(
             before,
             label_prefix=f"{step.task.value}_preflight_update",
             observe=lambda label, request=None: self.observation_service.observe(
@@ -335,6 +346,17 @@ class AutomationRunner:
         current = before
         attempts = 0
         while not self._task_preflight_is_satisfied(requirement, current):
+            recovered = self.action_executor.recover_interruption_if_required(
+                current,
+                label_prefix=f"{step.task.value}_preflight_interruption",
+                observe=lambda label, request=None: self.observation_service.observe(
+                    f"{step.task.value}_{label}",
+                    request=request,
+                ),
+            )
+            if recovered is not None:
+                current = recovered
+                continue
             attempts += 1
             if attempts > self.policy.max_replans_per_step:
                 self._raise_task_verification_error(
@@ -343,26 +365,6 @@ class AutomationRunner:
                     observation=current,
                     screen_type=current.screen_type,
                     label=f"{step.task.value}_failure_preflight",
-                    preflight=requirement.value,
-                )
-            if current.screen_type == ScreenType.PNC_POPUP or current.blocking_popup:
-                recovered = self.action_executor.recover_update_if_required(
-                    current,
-                    label_prefix=f"{step.task.value}_preflight_update",
-                    observe=lambda label, request=None: self.observation_service.observe(
-                        f"{step.task.value}_{label}",
-                        request=request,
-                    ),
-                )
-                if recovered is not None:
-                    current = recovered
-                    continue
-                self._raise_task_verification_error(
-                    "A blocking popup interrupted task preflight outside bootstrap.",
-                    task_id=step.task,
-                    observation=current,
-                    screen_type=current.screen_type,
-                    label=f"{step.task.value}_failure_preflight_popup",
                     preflight=requirement.value,
                 )
             if self._task_preflight_is_satisfied(requirement, current):

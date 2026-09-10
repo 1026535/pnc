@@ -47,7 +47,7 @@ def verify_canary_identity(
         "Canary identity verification requires the canonical observed action executor."
     )
     current = observer.observe("canary_identity_start")
-    recovered = actions.recover_update_if_required(
+    recovered = actions.recover_interruption_if_required(
         current,
         label_prefix="canary_identity_update",
         observe=lambda label, request=None: observer.observe(label, request=request),
@@ -74,6 +74,14 @@ def verify_canary_identity(
     )
     unknown_reobservations = 0
     for index in range(8):
+        recovered = actions.recover_interruption_if_required(
+            current,
+            label_prefix=f"canary_identity_{index}_interruption",
+            observe=lambda label, request=None: observer.observe(label, request=request),
+        )
+        if recovered is not None:
+            current = recovered
+            continue
         if current.screen_type == ScreenType.UNKNOWN:
             if unknown_reobservations >= 2:
                 raise ValueError("Canary identity remained unclassified after bounded capture retries.")
@@ -91,6 +99,7 @@ def verify_canary_identity(
         elif current.screen_type in {
             ScreenType.PNC_HOME_CITY,
             ScreenType.PNC_MORE_MENU,
+            ScreenType.PNC_SETTINGS,
             ScreenType.PNC_QUEST_DAILY,
             ScreenType.PNC_MIGHT_RANK,
             ScreenType.PNC_EVENT_CENTER,
@@ -130,6 +139,7 @@ def verify_canary_identity(
             UiElementId.PNC_BOTTOM_NAV_MORE,
             UiElementId.PNC_MORE_SETTINGS,
             UiElementId.PNC_MORE_MANAGE_CHAR,
+            UiElementId.PNC_MORE_OVERLAY_MANAGE_CHAR,
             UiElementId.PNC_WORLD_HOME_NAV,
             UiElementId.PNC_POPUP_CLOSE_BUTTON,
             UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON,

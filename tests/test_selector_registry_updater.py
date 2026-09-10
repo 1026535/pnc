@@ -245,7 +245,7 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                 selectors=(
                     SelectorCatalogEntry(
                         id="PNC_MORE_MANAGE_CHAR",
-                        screens=("PNC_MORE_MENU",),
+                        screens=("PNC_SETTINGS",),
                         status="click_mapped",
                         detection_kind="planned",
                         relative_bounds=SelectorCatalogRelativeBounds(
@@ -264,7 +264,7 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                         "selectors": [
                             {
                                 "id": "PNC_MORE_MANAGE_CHAR",
-                                "screens": ["PNC_MORE_MENU"],
+                                "screens": ["PNC_SETTINGS"],
                                 "status": "click_mapped",
                                 "detection_kind": "planned",
                                 "materialize_relative_bounds": False,

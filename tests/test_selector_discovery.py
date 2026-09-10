@@ -14,14 +14,14 @@ from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.app.pnc.domain.observation import Bounds, Observation, VisibleElement, VisibleElementSourceKind
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
-from pnc_automation.app.pnc.vision.observation_builder import ObservationBuilder, PillowSelectorEngine
+from pnc_automation.app.pnc.vision.observation_builder import ObservationBuilder, ImageSelectorEngine
 from pnc_automation.core.vision.ocr.ocr_service import UnavailableOcrService
 from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservationEnricher
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
 from pnc_automation.app.pnc.vision.selector_catalog import SelectorCatalogDocument, SelectorCatalogEntry
 from pnc_automation.app.pnc.vision.selector_discovery import SelectorDiscoveryAnalyzer, load_artifact_paths
 from pnc_automation.app.pnc.vision.selectors import SelectorRegistry
-from pnc_automation.core.vision.template.template_matcher import PillowTemplateMatcher
+from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
 from tests.test_capture_and_vision import _FakeOcrService, _FakeScreenshotSession, _encode_png, _ocr_line
 from tests.test_support import make_observation
 
@@ -288,7 +288,7 @@ class SelectorDiscoveryTests(unittest.TestCase):
                 selectors=(
                     SelectorCatalogEntry(
                         id="PNC_MORE_LORD_INFO",
-                        screens=("PNC_MORE_MENU",),
+                        screens=("PNC_SETTINGS",),
                         status="planned",
                         detection_kind="planned",
                     ),
@@ -296,7 +296,7 @@ class SelectorDiscoveryTests(unittest.TestCase):
             ),
         )
         observation = Observation(
-            screen_type=ScreenType.PNC_MORE_MENU,
+            screen_type=ScreenType.PNC_SETTINGS,
             visible_elements={
                 UiElementId.PNC_MORE_LORD_INFO: VisibleElement(
                     selector_id=UiElementId.PNC_MORE_LORD_INFO,
@@ -529,8 +529,8 @@ class SelectorDiscoveryTests(unittest.TestCase):
         ocr_service = _FakeOcrService(lines=lines)
         observation_builder = ObservationBuilder(
             selector_registry=SelectorRegistry(selectors=()),
-            selector_engine=PillowSelectorEngine(
-                template_matcher=PillowTemplateMatcher(),
+            selector_engine=ImageSelectorEngine(
+                template_matcher=OpenCvTemplateMatcher(),
                 ocr_service=UnavailableOcrService(),
             ),
             screen_classifier=ScreenClassifier(),

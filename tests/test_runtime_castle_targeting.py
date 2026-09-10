@@ -337,7 +337,7 @@ class RuntimeCastleTargetingTests(unittest.TestCase):
                     current_castle_name="Wrong",
                 ),
                 make_observation(
-                    ScreenType.PNC_MORE_MENU,
+                    ScreenType.PNC_SETTINGS,
                     visible_ids=(UiElementId.PNC_MORE_MANAGE_CHAR,),
                     current_castle_name="Wrong",
                 ),

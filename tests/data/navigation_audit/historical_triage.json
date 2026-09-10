@@ -1,0 +1,950 @@
+{
+  "version": 1,
+  "method": "118 frames stratified across 29 artifact directories; visual triage only, no transition inference or accuracy estimate. Original images are local-only.",
+  "samples": [
+    {
+      "index": 0,
+      "image": "artifacts\\2026-06-06\\serious_stuff\\20260606T160556Z_ensure_game_running_before.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_POPUP",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 1,
+      "image": "artifacts\\2026-06-06\\serious_stuff\\20260606T160803Z_live_serpentine_direct_world_map_preflight_start.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_POPUP",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 2,
+      "image": "artifacts\\2026-06-06\\serious_stuff\\20260606T160841Z_live_serpentine_direct_world_map_preflight_step_8_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_HOME_CITY",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 3,
+      "image": "artifacts\\2026-06-06\\serious_stuff\\20260606T160921Z_live_serpentine_direct_world_map_preflight_step_17_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_POPUP",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 4,
+      "image": "artifacts\\2026-06-06\\serious_stuff\\20260606T164436Z_live_serpentine_restart_confirm_step_0_failure_51.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_WORLD_MAP",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 5,
+      "image": "artifacts\\2026-06-07\\serious_stuff\\20260607T175233Z_ensure_game_running_before.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_HOME_CITY",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 6,
+      "image": "artifacts\\2026-06-07\\serious_stuff\\20260607T175323Z_popup_recovery_before.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_POPUP",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 7,
+      "image": "artifacts\\2026-06-07\\serious_stuff\\20260607T175429Z_manual_probe.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_HOME_CITY",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 8,
+      "image": "artifacts\\2026-06-07\\serious_stuff\\20260607T201715Z_live_serpentine_after_y_truncation_fix_1cp_start_probe.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "UNKNOWN",
+      "review_note": "Tutorial chapter objectives overlay; no dedicated modeled state.",
+      "reference_eligible": false
+    },
+    {
+      "index": 9,
+      "image": "artifacts\\2026-06-07\\serious_stuff\\20260607T201814Z_manual_close_campaign_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_CASH_MALL",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 10,
+      "image": "artifacts\\2026-06-08\\testing\\20260608T181425Z_ensure_game_running_before.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_POPUP",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 11,
+      "image": "artifacts\\2026-06-08\\testing\\20260608T181433Z_ensure_game_running_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_POPUP",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 12,
+      "image": "artifacts\\2026-06-08\\testing\\20260608T181445Z_ensure_game_running_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_POPUP",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 13,
+      "image": "artifacts\\2026-06-08\\testing\\20260608T182511Z_live_serpentine_entry_jump_after_plan_2cp_preflight_retry_start.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "UNKNOWN",
+      "review_note": "Hell Fortress target popup; do not conflate with gathering node.",
+      "reference_eligible": false
+    },
+    {
+      "index": 14,
+      "image": "artifacts\\2026-06-08\\testing\\20260608T182530Z_live_serpentine_entry_jump_after_plan_2cp_retry_move_0_failure.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_WORLD_COORDINATE_DIALOG",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 15,
+      "image": "artifacts\\2026-06-13\\serious_stuff\\20260613T221547Z_preview_world_map_search_route_step_0_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_HOME_CITY",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 16,
+      "image": "artifacts\\2026-06-13\\serious_stuff\\20260613T221656Z_preview_world_map_search_route_step_2_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_HOME_CITY",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 17,
+      "image": "artifacts\\2026-06-13\\serious_stuff\\20260613T221803Z_preview_world_map_search_route_step_4_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_HOME_CITY",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 18,
+      "image": "artifacts\\2026-06-13\\serious_stuff\\20260613T221906Z_preview_world_map_search_route_step_6_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_HOME_CITY",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 19,
+      "image": "artifacts\\2026-06-13\\serious_stuff\\20260613T222933Z_live_fast_serpentine_3cp_retry_move_0_failure.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_WORLD_COORDINATE_DIALOG",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 20,
+      "image": "artifacts\\2026-06-14\\serious_stuff\\20260614T172843Z_live_fast_serpentine_3cp_after_dialog_fix_preflight_start.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_HOME_CITY",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 21,
+      "image": "artifacts\\2026-06-14\\serious_stuff\\20260614T172856Z_live_fast_serpentine_3cp_after_dialog_fix_preflight_step_1_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_HOME_CITY",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 22,
+      "image": "artifacts\\2026-06-14\\serious_stuff\\20260614T172908Z_live_fast_serpentine_3cp_after_dialog_fix_preflight_step_3_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_HOME_CITY",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 23,
+      "image": "artifacts\\2026-06-14\\serious_stuff\\20260614T172922Z_live_fast_serpentine_3cp_after_dialog_fix_preflight_step_5_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_HOME_CITY",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 24,
+      "image": "artifacts\\2026-06-14\\serious_stuff\\20260614T180708Z_live_fast_serpentine_3cp_english_after_dialog_fix_move_0_failure.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_WORLD_COORDINATE_DIALOG",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 25,
+      "image": "artifacts\\2026-06-15\\serious_stuff\\20260615T210317Z_live_default_stride6_preflight_step_0_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_WORLD_MAP",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 26,
+      "image": "artifacts\\2026-06-15\\serious_stuff\\20260615T213626Z_row_segment_benchmark_entry_failure.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_POPUP",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 27,
+      "image": "artifacts\\2026-06-17\\serious_stuff\\20260617T182205Z_row_segment_benchmark_retry_preflight_start.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "UNKNOWN",
+      "review_note": "BlueStacks storefront outside the game; retain as an unknown negative.",
+      "reference_eligible": false
+    },
+    {
+      "index": 28,
+      "image": "artifacts\\2026-06-17\\serious_stuff\\20260617T182742Z_android_home_reentry_after_fix_step_0_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_LOADING",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 29,
+      "image": "artifacts\\2026-06-17\\serious_stuff\\20260617T183336Z_loading_wait_reentry_after_fix_step_19_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_POPUP",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 30,
+      "image": "artifacts\\2026-06-17\\serious_stuff\\20260617T183551Z_loading_wait_reentry_after_fix_step_42_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_POPUP",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 31,
+      "image": "artifacts\\2026-06-17\\serious_stuff\\20260617T184441Z_ensure_game_running_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_POPUP",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 32,
+      "image": "artifacts\\2026-06-17\\testing\\20260617T232301Z_english_account_benchmark_split_after_fix_1_move_0_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_WORLD_MAP",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 33,
+      "image": "artifacts\\2026-06-17\\testing\\20260617T232307Z_english_account_benchmark_split_after_fix_1_move_refresh_0_0.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_WORLD_MAP",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 34,
+      "image": "artifacts\\2026-06-17\\testing\\20260617T232311Z_english_account_benchmark_split_after_fix_1_move_refresh_0_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_WORLD_MAP",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 35,
+      "image": "artifacts\\2026-07-06\\serious_stuff\\20260706T171524Z_ensure_game_running_before.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "UNKNOWN",
+      "review_note": "Returning-player tutorial overlay.",
+      "reference_eligible": false
+    },
+    {
+      "index": 36,
+      "image": "artifacts\\2026-07-06\\serious_stuff\\20260706T171541Z_popup_recovery_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "UNKNOWN",
+      "review_note": "Returning-player tutorial overlay.",
+      "reference_eligible": false
+    },
+    {
+      "index": 37,
+      "image": "artifacts\\2026-07-06\\serious_stuff\\20260706T171547Z_serious_stuff_segment_coverage_first_3cp_preflight_start.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "UNKNOWN",
+      "review_note": "Returning-player tutorial overlay.",
+      "reference_eligible": false
+    },
+    {
+      "index": 38,
+      "image": "artifacts\\2026-08-05\\3xx_spies\\20260805T220640Z_castle_targets_validation_3xx_spies_current.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "UNKNOWN",
+      "review_note": "Account SDK overlay; excluded from dataset image copies.",
+      "reference_eligible": false
+    },
+    {
+      "index": 39,
+      "image": "artifacts\\2026-08-21\\testing\\20260821T213326Z_build_plan_live_before_settle.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "UNKNOWN",
+      "review_note": "BlueStacks storefront outside the game; retain as an unknown negative.",
+      "reference_eligible": false
+    },
+    {
+      "index": 40,
+      "image": "artifacts\\2026-08-21\\testing\\20260821T213344Z_build_plan_live_settle_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "UNKNOWN",
+      "review_note": "BlueStacks storefront outside the game; retain as an unknown negative.",
+      "reference_eligible": false
+    },
+    {
+      "index": 41,
+      "image": "artifacts\\2026-08-21\\testing\\20260821T213434Z_build_plan_live_foreground_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_LOADING",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 42,
+      "image": "artifacts\\2026-08-21\\testing\\20260821T221155Z_build_plan_resume_queue_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_BUILD_QUEUE",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 43,
+      "image": "artifacts\\2026-08-21\\testing\\20260821T221156Z_build_plan_resume_queue_post_action_1_runtime_retry.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_BUILD_QUEUE",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 44,
+      "image": "artifacts\\2026-08-22\\testing\\20260822T031549Z_building_construct_queue_classifier_after_fix.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "UNKNOWN",
+      "review_note": "BlueStacks storefront outside the game; retain as an unknown negative.",
+      "reference_eligible": false
+    },
+    {
+      "index": 45,
+      "image": "artifacts\\2026-08-22\\testing\\20260822T031632Z_building_construct_before_foreground.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "UNKNOWN",
+      "review_note": "BlueStacks storefront outside the game; retain as an unknown negative.",
+      "reference_eligible": false
+    },
+    {
+      "index": 46,
+      "image": "artifacts\\2026-08-22\\testing\\20260822T032525Z_building_construct_store_recovery_before.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "UNKNOWN",
+      "review_note": "BlueStacks storefront outside the game; retain as an unknown negative.",
+      "reference_eligible": false
+    },
+    {
+      "index": 47,
+      "image": "artifacts\\2026-08-22\\testing\\20260822T032615Z_building_construct_loading_before_wait.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_LOADING",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 48,
+      "image": "artifacts\\2026-08-22\\testing\\20260822T032632Z_building_construct_loading_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_LOADING",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 49,
+      "image": "artifacts\\2026-08-23\\testing\\20260823T212117Z_ensure_game_running_before.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "UNKNOWN",
+      "review_note": "BlueStacks storefront outside the game; retain as an unknown negative.",
+      "reference_eligible": false
+    },
+    {
+      "index": 50,
+      "image": "artifacts\\2026-08-23\\testing\\20260823T212249Z_ensure_game_running_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_LOADING",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 51,
+      "image": "artifacts\\2026-08-23\\testing\\20260823T213732Z_building_construct_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_BUILDING_CONSTRUCTION",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 52,
+      "image": "artifacts\\2026-08-23\\testing\\20260823T213751Z_building_construct_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_BUILDING_CONSTRUCTION",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 53,
+      "image": "artifacts\\2026-08-23\\testing\\20260823T214546Z_building_construct_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_BUILD_MENU_SMALL_SLOT",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 54,
+      "image": "artifacts\\2026-08-25\\testing\\20260825T142031Z_open_building_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_BUILD_MENU_SMALL_SLOT",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 55,
+      "image": "artifacts\\2026-08-25\\testing\\20260825T144530Z_open_building_before.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_CASH_MALL",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 56,
+      "image": "artifacts\\2026-08-25\\testing\\20260825T144757Z_open_building_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_CASH_MALL",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 57,
+      "image": "artifacts\\2026-08-25\\testing\\20260825T163531Z_building_upgrade_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_BUILD_SPEEDUP_CONFIRM",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 58,
+      "image": "artifacts\\2026-08-25\\testing\\20260825T163949Z_phase1_upgrade_survey_home_step_1_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_WAREHOUSE",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 59,
+      "image": "artifacts\\2026-08-28\\157_farm\\20260828T214244Z_daily_plan_157_launch_baseline.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "UNKNOWN",
+      "review_note": "BlueStacks storefront outside the game; retain as an unknown negative.",
+      "reference_eligible": false
+    },
+    {
+      "index": 60,
+      "image": "artifacts\\2026-08-28\\mega_old_acc\\20260828T202807Z_daily_plan_npc2_quest_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_QUEST_MAIN",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 61,
+      "image": "artifacts\\2026-08-28\\mega_old_acc\\20260828T223420Z_daily_plan_npc2_open_quest_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_QUEST_DAILY",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 62,
+      "image": "artifacts\\2026-08-28\\mega_old_acc\\20260828T224250Z_daily_plan_npc2_inventory_7_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_QUEST_DAILY",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 63,
+      "image": "artifacts\\2026-08-28\\mega_old_acc\\20260828T230845Z_daily_plan_npc2_arena_scroll_top_3_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_QUEST_DAILY",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 64,
+      "image": "artifacts\\2026-08-28\\mega_old_acc\\20260828T235900Z_daily_plan_npc2_campaign_stage5_close_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_CAMPAIGN_MAP",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 65,
+      "image": "artifacts\\2026-08-28\\testing\\20260828T173248Z_ensure_game_running_before.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "UNKNOWN",
+      "review_note": "BlueStacks storefront outside the game; retain as an unknown negative.",
+      "reference_eligible": false
+    },
+    {
+      "index": 66,
+      "image": "artifacts\\2026-08-28\\testing\\20260828T175949Z_daily_inventory_scroll_2_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_DAILY_TO_DO",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 67,
+      "image": "artifacts\\2026-08-28\\testing\\20260828T180448Z_daily_list_inventory_scroll_4_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_QUEST_DAILY",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 68,
+      "image": "artifacts\\2026-08-28\\testing\\20260828T181031Z_daily_reopen_inventory_scroll_2_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_QUEST_DAILY",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 69,
+      "image": "artifacts\\2026-08-28\\testing\\20260828T181358Z_daily_inventory_final_tail_4_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_QUEST_DAILY",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 70,
+      "image": "artifacts\\2026-08-29\\mega_old_acc\\20260829T000553Z_daily_plan_npc2_campaign_stage4_close_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_CAMPAIGN_MAP",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 71,
+      "image": "artifacts\\2026-08-29\\mega_old_acc\\20260829T014308Z_daily_plan_npc2_hero_hall_search_1_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_QUEST_DAILY",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 72,
+      "image": "artifacts\\2026-08-29\\mega_old_acc\\20260829T022433Z_daily_plan_npc2_horus_reset_cancel_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_HERO_DETAIL_UPGRADE",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 73,
+      "image": "artifacts\\2026-08-29\\mega_old_acc\\20260829T031729Z_daily_plan_npc2_saurgil_go.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "UNKNOWN",
+      "review_note": "Summon Saurgil screen; no dedicated modeled state.",
+      "reference_eligible": false
+    },
+    {
+      "index": 74,
+      "image": "artifacts\\2026-08-29\\mega_old_acc\\20260829T113125Z_daily_plan_npc2_gear_enhance_open.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "UNKNOWN",
+      "review_note": "Enhance Gear screen; no dedicated modeled state.",
+      "reference_eligible": false
+    },
+    {
+      "index": 75,
+      "image": "artifacts\\2026-08-30\\mega_old_acc\\20260830T002538Z_daily_plan_npc2_gear_enhance_back.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "UNKNOWN",
+      "review_note": "Enhance Gear screen; no dedicated modeled state.",
+      "reference_eligible": false
+    },
+    {
+      "index": 76,
+      "image": "artifacts\\2026-08-30\\mega_old_acc\\20260830T131855Z_daily_plan_npc2_gold_node_detail_retry.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_GATHER_NODE",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 77,
+      "image": "artifacts\\2026-08-30\\mega_old_acc\\20260830T142335Z_daily_plan_npc2_alliance_shop_open.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "UNKNOWN",
+      "review_note": "Alliance Shop weekly offers; no dedicated modeled state.",
+      "reference_eligible": false
+    },
+    {
+      "index": 78,
+      "image": "artifacts\\2026-08-30\\mega_old_acc\\20260830T143301Z_daily_plan_npc2_alliance_shop_speedup_tab.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "UNKNOWN",
+      "review_note": "Alliance Shop item category tab; no dedicated modeled state.",
+      "reference_eligible": false
+    },
+    {
+      "index": 79,
+      "image": "artifacts\\2026-08-30\\mega_old_acc\\20260830T151730Z_daily_plan_npc2_trial_shop_lower_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "UNKNOWN",
+      "review_note": "Multi-currency Shop; no dedicated modeled state.",
+      "reference_eligible": false
+    },
+    {
+      "index": 80,
+      "image": "artifacts\\2026-08-30\\serious_stuff\\20260830T210018Z_daily_plan_serious_quest_open.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_QUEST_DAILY",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 81,
+      "image": "artifacts\\2026-08-30\\serious_stuff\\20260830T213301Z_daily_plan_serious_daily_claimed_before_next.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_QUEST_DAILY",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 82,
+      "image": "artifacts\\2026-08-30\\serious_stuff\\20260830T213545Z_daily_plan_serious_upscan_rows_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_QUEST_DAILY",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 83,
+      "image": "artifacts\\2026-08-30\\serious_stuff\\20260830T213912Z_daily_plan_serious_upscan_6_before.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_QUEST_DAILY",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 84,
+      "image": "artifacts\\2026-08-30\\serious_stuff\\20260830T233011Z_daily_plan_serious_showdown_after_white_loading.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "UNKNOWN",
+      "review_note": "BlueStacks storefront outside the game; retain as an unknown negative.",
+      "reference_eligible": false
+    },
+    {
+      "index": 85,
+      "image": "artifacts\\2026-08-31\\mega_old_acc\\20260831T224908Z_daily_plan_npc2_home_before_lostland_quest.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "UNKNOWN",
+      "review_note": "Alliance Gift list; no dedicated modeled state.",
+      "reference_eligible": false
+    },
+    {
+      "index": 86,
+      "image": "artifacts\\2026-08-31\\serious_stuff\\20260831T120644Z_daily_plan_serious_bluestacks_store_revalidate.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "UNKNOWN",
+      "review_note": "BlueStacks storefront outside the game; retain as an unknown negative.",
+      "reference_eligible": false
+    },
+    {
+      "index": 87,
+      "image": "artifacts\\2026-08-31\\serious_stuff\\20260831T160946Z_daily_plan_serious_ch10_map_home_guard.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_CAMPAIGN_MAP",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 88,
+      "image": "artifacts\\2026-08-31\\serious_stuff\\20260831T164342Z_daily_plan_serious_newday_topscroll4_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_QUEST_DAILY",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 89,
+      "image": "artifacts\\2026-08-31\\serious_stuff\\20260831T170736Z_daily_plan_serious_quest_for_gather_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_QUEST_DAILY",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 90,
+      "image": "artifacts\\2026-08-31\\serious_stuff\\20260831T180029Z_daily_plan_serious_gather_no_cavalry_back_guard.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_MARCH_CONFIRM",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 91,
+      "image": "artifacts\\2026-09-01\\mega_old_acc\\20260901T133901Z_select_castle_post_action_2.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_LOADING",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 92,
+      "image": "artifacts\\2026-09-01\\mega_old_acc\\20260901T133910Z_select_castle_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_LOADING",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 93,
+      "image": "artifacts\\2026-09-01\\mega_old_acc\\20260901T134219Z_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_HERO_SHOWDOWN_ELEMENTAL_INTRO",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 94,
+      "image": "artifacts\\2026-09-01\\mega_old_acc\\20260901T134301Z_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_HERO_FORMATION",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 95,
+      "image": "artifacts\\2026-09-01\\mega_old_acc\\20260901T134334Z_arena_audit_20260901_formation_fresh_no_change.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_HERO_FORMATION",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 96,
+      "image": "artifacts\\2026-09-04\\testing\\20260904T231403Z_ensure_game_running_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_LOADING",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 97,
+      "image": "artifacts\\2026-09-04\\testing\\20260904T231413Z_ensure_game_running_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_LOADING",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 98,
+      "image": "artifacts\\2026-09-04\\testing\\20260904T231421Z_ensure_game_running_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_LOADING",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 99,
+      "image": "artifacts\\2026-09-04\\testing\\20260904T231431Z_ensure_game_running_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "UNKNOWN",
+      "review_note": "Tutorial character overlay covering a reward screen; no dedicated modeled state.",
+      "reference_eligible": false
+    },
+    {
+      "index": 100,
+      "image": "artifacts\\2026-09-08\\serious_stuff\\20260908T175730Z_daily_return_home_start.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_BAG",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 101,
+      "image": "artifacts\\2026-09-09\\serious_stuff\\20260909T172045Z_canary_identity_start.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "UNKNOWN",
+      "review_note": "BlueStacks storefront outside the game; retain as an unknown negative.",
+      "reference_eligible": false
+    },
+    {
+      "index": 102,
+      "image": "artifacts\\2026-09-09\\serious_stuff\\20260909T172102Z_canary_identity_unknown_retry_2.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "UNKNOWN",
+      "review_note": "BlueStacks storefront outside the game; retain as an unknown negative.",
+      "reference_eligible": false
+    },
+    {
+      "index": 103,
+      "image": "artifacts\\2026-09-09\\serious_stuff\\20260909T172203Z_ensure_game_running_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_LOADING",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 104,
+      "image": "artifacts\\2026-09-09\\serious_stuff\\20260909T172403Z_hero_hall_open_start.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_HOME_CITY",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 105,
+      "image": "artifacts\\2026-09-09\\serious_stuff\\20260909T172647Z_hero_hall_open_step_1_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_TRIAL_CHALLENGE",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 106,
+      "image": "artifacts\\2026-09-10\\mega_old_acc\\20260910T145847Z_daily_return_home_start.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_BAG",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 107,
+      "image": "artifacts\\2026-09-10\\mega_old_acc\\20260910T151754Z_daily_return_home_start.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_HERO_HALL",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 108,
+      "image": "artifacts\\2026-09-10\\serious_stuff\\20260910T133139Z_canary_identity_0_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_EVENT_CENTER",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 109,
+      "image": "artifacts\\2026-09-10\\serious_stuff\\20260910T133201Z_canary_identity_unknown_retry_2.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_EVENT_CENTER",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 110,
+      "image": "artifacts\\2026-09-10\\serious_stuff\\20260910T142120Z_hero_hall_open_step_0_post_action_2.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_GODDESS_STATUE",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 111,
+      "image": "artifacts\\2026-09-10\\serious_stuff\\20260910T143015Z_daily_return_home_start.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_HERO_HALL",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 112,
+      "image": "artifacts\\2026-09-10\\serious_stuff\\20260910T143811Z_daily_return_home_start.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_HERO_HALL",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 113,
+      "image": "artifacts\\2026-09-10\\testing\\20260910T183916Z_recognition_exploration_retry.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "UNKNOWN",
+      "review_note": "BlueStacks storefront outside the game; retain as an unknown negative.",
+      "reference_eligible": false
+    },
+    {
+      "index": 114,
+      "image": "artifacts\\2026-09-10\\testing\\20260910T195149Z_visual_20260910T194959Z_bf9d5bf9_5_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_SETTINGS",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 115,
+      "image": "artifacts\\2026-09-10\\testing\\20260910T195857Z_visual_20260910T195757Z_cfa84a53_6_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_SETTINGS",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 116,
+      "image": "artifacts\\2026-09-10\\testing\\20260910T203346Z_visual_20260910T203309Z_36134e9b_5_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_SETTINGS",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    },
+    {
+      "index": 117,
+      "image": "artifacts\\2026-09-10\\testing\\20260910T203607Z_visual_20260910T203532Z_d8dbf0bc_5_post_action_1.png",
+      "historical_prediction": "UNKNOWN",
+      "reviewed_screen": "PNC_SETTINGS",
+      "review_note": "Visual triage of contact sheet; full-resolution review required before promoting a runtime template.",
+      "reference_eligible": false
+    }
+  ]
+}

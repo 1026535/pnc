@@ -83,9 +83,7 @@ _HOME_ACTION_SELECTOR_BY_TEXT_ANCHOR = {
 }
 _MORE_OVERLAY_SELECTOR_BY_TEXT = {
     "SETTINGS": UiElementId.PNC_MORE_SETTINGS,
-}
-_MORE_MENU_SELECTOR_BY_TEXT = {
-    "MANAGECHAR": UiElementId.PNC_MORE_MANAGE_CHAR,
+    "MANAGECHAR": UiElementId.PNC_MORE_OVERLAY_MANAGE_CHAR,
     "LORDINFO": UiElementId.PNC_MORE_LORD_INFO,
     "VIP": UiElementId.PNC_MORE_VIP,
     "IMPROVEMIGHT": UiElementId.PNC_MORE_IMPROVE_MIGHT,
@@ -148,6 +146,9 @@ _VIP_SUPPORT_TEXTS = frozenset(
         "VIP2",
     }
 )
+_MORE_SETTINGS_MENU_SELECTOR_BY_TEXT = {
+    "MANAGECHAR": UiElementId.PNC_MORE_MANAGE_CHAR,
+}
 _VIP_DAILY_RESET_SUPPORT_TEXTS = frozenset(
     {
         "LOGINEVERYDAYTOGETVIPPTS",
@@ -1759,6 +1760,37 @@ class PncObservationEnricher:
     selector_registry: SelectorRegistry | None = None
     text_anchor_detector: TextAnchorDetector = field(default_factory=TextAnchorDetector)
 
+    def detect_interruption(
+        self, image: Image.Image, *, owned_dismiss_bounds: tuple[Bounds, ...] = (),
+    ) -> ObservationAdditions:
+        """Run global guards without using OCR to select a content screen.
+
+        A visually recognized modal owns its measured close control. Excluding
+        that exact X from the generic-X heuristic never suppresses text guards
+        for updates, disconnects, or another popup layered above that modal.
+        """
+        visual = _build_visual_popup_close_additions(image=image)
+        if visual is not None:
+            close = visual.visible_elements[UiElementId.PNC_POPUP_CLOSE_BUTTON].bounds
+            x, y = close.center()
+            owned = any(
+                bounds.x <= x <= bounds.x + bounds.width
+                and bounds.y <= y <= bounds.y + bounds.height
+                and bounds.width >= close.width * 0.8
+                and bounds.height >= close.height * 0.8
+                for bounds in owned_dismiss_bounds
+            )
+            if not owned:
+                return visual
+        result = self.ocr_service.read_result(image)
+        lines = tuple(sorted(result.lines, key=lambda line: (line.bounds.y, line.bounds.x)))
+        anchors = self.text_anchor_detector.detect(result)
+        popup = _build_popup_additions(image=image, lines=lines, anchors=anchors)
+        if popup is not None:
+            return popup
+        loading = _build_loading_additions(image=image, lines=lines)
+        return loading if loading is not None else ObservationAdditions()
+
     def enrich(
         self,
         image: Image.Image,
@@ -1906,6 +1938,13 @@ class PncObservationEnricher:
             improve_might = _build_improve_might_additions(image=image, lines=lines)
             if improve_might is not None:
                 return improve_might
+        if request.allows_screen(ScreenType.PNC_GIFT_CENTER) and can_attempt_screen_family_ocr(
+            request_screen=ScreenType.PNC_GIFT_CENTER,
+            observed_screen=screen_type,
+        ):
+            gift_center = _build_gift_center_additions(image=image, lines=lines)
+            if gift_center is not None:
+                return gift_center
         if request.allows_screen(ScreenType.PNC_EVENT_CENTER) and can_attempt_screen_family_ocr(
             request_screen=ScreenType.PNC_EVENT_CENTER,
             observed_screen=screen_type,
@@ -1913,13 +1952,17 @@ class PncObservationEnricher:
             event_center = _build_event_center_additions(image=image, lines=lines)
             if event_center is not None:
                 return event_center
+        if request.allows_screen(ScreenType.PNC_SETTINGS) and can_attempt_screen_family_ocr(
+            request_screen=ScreenType.PNC_SETTINGS,
+            observed_screen=screen_type,
+        ):
+            settings = _build_more_settings_menu_additions(image=image, lines=lines)
+            if settings is not None:
+                return settings
         if request.allows_screen(ScreenType.PNC_MORE_MENU) and can_attempt_screen_family_ocr(
             request_screen=ScreenType.PNC_MORE_MENU,
             observed_screen=screen_type,
         ):
-            more_settings_menu = _build_more_settings_menu_additions(image=image, lines=lines)
-            if more_settings_menu is not None:
-                return more_settings_menu
             more_menu = _build_more_menu_additions(image=image, lines=lines, anchors=anchors)
             if more_menu is not None:
                 return more_menu
@@ -2972,6 +3015,55 @@ def _build_might_rank_additions(
         },
         list_entries=entries,
         screen_evidence=(ScreenEvidence(ScreenType.PNC_MIGHT_RANK, "ocr_might_rank"),),
+    )
+
+
+def _build_gift_center_additions(
+    *, image: Image.Image, lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Recognize Gift Center and read its large banner titles without claiming rewards."""
+    header = _find_line_with_normalized_text(
+        lines=lines, normalized_text="GIFTCENTER", max_y=int(image.height * 0.08),
+    )
+    if header is None:
+        return None
+    title_lines = tuple(
+        line for line in lines
+        if line.bounds.x >= image.width * 0.4
+        and line.bounds.height >= image.height * 0.02
+        and not normalize_ocr_text(line.text).startswith("EXPIRES")
+    )
+    entries = _extract_grouped_named_rows(
+        image=image, lines=title_lines, kind=ListEntryKind.GIFT_ENTRY,
+        min_y=int(image.height * 0.08), excluded_texts=frozenset({"GIFTCENTER"}),
+        action_x_ratio=0.7, max_title_x_ratio=1.0,
+    )
+    if not entries:
+        return None
+    entries = tuple(
+        replace(entry, title_text=" ".join(
+            line.text.strip()
+            for line in sorted(title_lines, key=lambda item: (item.bounds.y, item.bounds.x))
+            if entry.bounds.y <= line.bounds.y < entry.bounds.y + entry.bounds.height
+        ))
+        for entry in entries
+    )
+    return ObservationAdditions(
+        visible_elements={
+            UiElementId.PNC_GIFT_CENTER_ENTRY_ROW: _make_visible_from_entry(
+                selector_id=UiElementId.PNC_GIFT_CENTER_ENTRY_ROW, entry=entries[0],
+            ),
+            UiElementId.PNC_GIFT_CENTER_ENTRY_TITLE_REGION: _make_visible_from_entry(
+                selector_id=UiElementId.PNC_GIFT_CENTER_ENTRY_TITLE_REGION, entry=entries[0],
+            ),
+            UiElementId.PNC_BACK_BUTTON_TOP_LEFT: _make_visible(
+                selector_id=UiElementId.PNC_BACK_BUTTON_TOP_LEFT, x=0, y=0,
+                width=max(1, int(image.width * 0.16)), height=max(1, int(image.height * 0.055)),
+                source_kind=VisibleElementSourceKind.GEOMETRY,
+            ),
+        },
+        list_entries=entries,
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_GIFT_CENTER, "ocr_gift_center"),),
     )
 
 
@@ -4236,6 +4328,7 @@ def _extract_grouped_named_rows(
     ignored_title_texts: frozenset[str] = frozenset(),
     action_texts: frozenset[str] = frozenset(),
     normalize_title: Callable[[str], str | None] | None = None,
+    max_title_x_ratio: float = 0.62,
 ) -> tuple[DetectedListEntry, ...]:
     """Extracts one named entry per grouped row for OCR-heavy list screens."""
 
@@ -4253,6 +4346,7 @@ def _extract_grouped_named_rows(
             image=image,
             row_lines=row_lines,
             ignored_title_texts=ignored_title_texts,
+            max_title_x_ratio=max_title_x_ratio,
         )
         if title_line is None:
             continue
@@ -4300,13 +4394,14 @@ def _find_grouped_row_title_line(
     image: Image.Image,
     row_lines: list[OcrLine],
     ignored_title_texts: frozenset[str],
+    max_title_x_ratio: float = 0.62,
 ) -> OcrLine | None:
     """Returns the best title-bearing OCR line for one grouped named-row cluster."""
 
     title_candidates = [
         line
         for line in sorted(row_lines, key=lambda item: (item.bounds.x, item.bounds.y))
-        if line.bounds.x <= int(image.width * 0.62)
+        if line.bounds.x <= int(image.width * max_title_x_ratio)
         and _is_viable_grouped_row_title(line, ignored_title_texts=ignored_title_texts)
     ]
     if not title_candidates:
@@ -5324,7 +5419,9 @@ def _build_more_menu_additions(
             selector_id=selector_id,
             line=line,
         )
-    for normalized_text, selector_id in _MORE_MENU_SELECTOR_BY_TEXT.items():
+    for normalized_text, selector_id in _MORE_OVERLAY_SELECTOR_BY_TEXT.items():
+        if normalized_text == "SETTINGS":
+            continue
         line = _find_line_with_normalized_text(lines=lines, normalized_text=normalized_text)
         if line is None:
             continue
@@ -5386,7 +5483,7 @@ def _build_more_settings_menu_additions(
             height=max(1, int(image.height * 0.1)),
         )
     }
-    for normalized_text, selector_id in _MORE_MENU_SELECTOR_BY_TEXT.items():
+    for normalized_text, selector_id in _MORE_SETTINGS_MENU_SELECTOR_BY_TEXT.items():
         line = _find_line_with_normalized_text(lines=lines, normalized_text=normalized_text)
         if line is None:
             continue
@@ -5394,7 +5491,7 @@ def _build_more_settings_menu_additions(
     return ObservationAdditions(
         visible_elements=visible_elements,
         suppress_geometry_selector_ids=frozenset({UiElementId.PNC_BOTTOM_NAV_MORE}),
-        screen_evidence=(ScreenEvidence(ScreenType.PNC_MORE_MENU, "ocr_more_settings_menu"),),
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_SETTINGS, "ocr_more_settings_menu"),),
     )
 
 

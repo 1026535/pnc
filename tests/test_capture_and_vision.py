@@ -44,7 +44,7 @@ from pnc_automation.app.pnc.vision.observation_builder import (
     ObservationBuilder,
     ObservationDebugArtifactCollector,
     ObservationService,
-    PillowSelectorEngine,
+    ImageSelectorEngine,
 )
 from pnc_automation.app.pnc.vision.image_models import SelectorMatch
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
@@ -80,7 +80,7 @@ from pnc_automation.app.pnc.vision.selectors import (
     SelectorStatus,
     build_default_selector_registry,
 )
-from pnc_automation.core.vision.template.template_matcher import PillowTemplateMatcher
+from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
 from tests.local_fixture_artifacts import require_local_fixture_artifact
 from tests.test_support import FakeObservationService, FakeSession, build_logger, build_png_bytes, make_observation
 
@@ -328,8 +328,8 @@ def _build_chat_observation_from_ocr_fallback(
     )
     builder = ObservationBuilder(
         selector_registry=registry,
-        selector_engine=PillowSelectorEngine(
-            template_matcher=PillowTemplateMatcher(),
+        selector_engine=ImageSelectorEngine(
+            template_matcher=OpenCvTemplateMatcher(),
             ocr_service=UnavailableOcrService(),
         ),
         screen_classifier=ScreenClassifier(),
@@ -455,8 +455,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=registry,
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -495,8 +495,8 @@ class CaptureAndVisionTests(unittest.TestCase):
                 ),
             )
             registry = build_default_selector_registry(catalog_path=catalog_path, template_root=root)
-            selector_engine = PillowSelectorEngine(
-                template_matcher=PillowTemplateMatcher(),
+            selector_engine = ImageSelectorEngine(
+                template_matcher=OpenCvTemplateMatcher(),
                 ocr_service=_FakeOcrService(
                     lines=(
                         _ocr_line("Daily Sale", x=12, y=22, width=32, height=12),
@@ -519,8 +519,8 @@ class CaptureAndVisionTests(unittest.TestCase):
         """Does not mark world-map OCR selectors visible when their crop only contains unrelated home-city text."""
 
         registry = build_default_selector_registry()
-        selector_engine = PillowSelectorEngine(
-            template_matcher=PillowTemplateMatcher(),
+        selector_engine = ImageSelectorEngine(
+            template_matcher=OpenCvTemplateMatcher(),
             ocr_service=_FakeOcrService(
                 lines=(
                     _ocr_line("Build", x=18, y=47, width=46, height=14),
@@ -541,8 +541,8 @@ class CaptureAndVisionTests(unittest.TestCase):
         """Uses the coordinate bar's blue-text-isolated OCR path so background castle labels do not block world-map proof."""
 
         registry = build_default_selector_registry()
-        selector_engine = PillowSelectorEngine(
-            template_matcher=PillowTemplateMatcher(),
+        selector_engine = ImageSelectorEngine(
+            template_matcher=OpenCvTemplateMatcher(),
             ocr_service=_CoordinateBarFilteringOcrService(
                 raw_text="X:272-kV.498",
                 filtered_text="X:272 Y:498",
@@ -571,8 +571,8 @@ class CaptureAndVisionTests(unittest.TestCase):
 
         builder = ObservationBuilder(
             selector_registry=build_default_selector_registry(),
-            selector_engine=PillowSelectorEngine(
-                template_matcher=PillowTemplateMatcher(),
+            selector_engine=ImageSelectorEngine(
+                template_matcher=OpenCvTemplateMatcher(),
                 ocr_service=_FakeOcrService(
                     lines=(
                         _ocr_line("Build", x=18, y=47, width=46, height=14),
@@ -630,8 +630,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=build_default_selector_registry(),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -679,8 +679,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=build_default_selector_registry(),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -716,8 +716,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=build_default_selector_registry(),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -757,8 +757,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=build_default_selector_registry(),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -796,8 +796,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=build_default_selector_registry(),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -961,8 +961,8 @@ class CaptureAndVisionTests(unittest.TestCase):
         ocr_service = _RecordingOcrService(lines=())
         builder = ObservationBuilder(
             selector_registry=registry,
-            selector_engine=PillowSelectorEngine(
-                template_matcher=PillowTemplateMatcher(),
+            selector_engine=ImageSelectorEngine(
+                template_matcher=OpenCvTemplateMatcher(),
                 ocr_service=ocr_service,
             ),
             screen_classifier=ScreenClassifier(),
@@ -1022,8 +1022,8 @@ class CaptureAndVisionTests(unittest.TestCase):
         )
         builder = ObservationBuilder(
             selector_registry=registry,
-            selector_engine=PillowSelectorEngine(
-                template_matcher=PillowTemplateMatcher(),
+            selector_engine=ImageSelectorEngine(
+                template_matcher=OpenCvTemplateMatcher(),
                 ocr_service=UnavailableOcrService(),
             ),
             screen_classifier=ScreenClassifier(),
@@ -1062,8 +1062,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -1096,8 +1096,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -1129,8 +1129,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -1155,7 +1155,8 @@ class CaptureAndVisionTests(unittest.TestCase):
 
             self.assertEqual(observation.screen_type, ScreenType.PNC_MORE_MENU)
             self.assertTrue(observation.has(UiElementId.PNC_MORE_SETTINGS))
-            self.assertTrue(observation.has(UiElementId.PNC_MORE_MANAGE_CHAR))
+            self.assertTrue(observation.has(UiElementId.PNC_MORE_OVERLAY_MANAGE_CHAR))
+            self.assertFalse(observation.has(UiElementId.PNC_MORE_MANAGE_CHAR))
             self.assertTrue(observation.has(UiElementId.PNC_MORE_LORD_INFO))
             self.assertTrue(observation.has(UiElementId.PNC_MORE_VIP))
             self.assertTrue(observation.has(UiElementId.PNC_MORE_IMPROVE_MIGHT))
@@ -1174,8 +1175,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -1195,9 +1196,11 @@ class CaptureAndVisionTests(unittest.TestCase):
 
             observation = builder.build(screenshot)
 
-            self.assertEqual(observation.screen_type, ScreenType.PNC_MORE_MENU)
+            self.assertEqual(observation.screen_type, ScreenType.PNC_SETTINGS)
             self.assertTrue(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
             self.assertTrue(observation.has(UiElementId.PNC_MORE_MANAGE_CHAR))
+            self.assertFalse(observation.has(UiElementId.PNC_MORE_SETTINGS))
+            self.assertFalse(observation.has(UiElementId.PNC_MORE_OVERLAY_MANAGE_CHAR))
             self.assertFalse(observation.has(UiElementId.PNC_BOTTOM_NAV_MORE))
 
     def test_observation_builder_classifies_lord_info_and_extracts_displayed_name(self) -> None:
@@ -1213,8 +1216,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -1257,8 +1260,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -1293,8 +1296,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertEqual(observation.current_castle_name, "pine cobaye 1")
             self.assertTrue(observation.current_castle_match(target_castle, roster=roster).matches)
 
-    def test_home_city_follow_up_still_classifies_full_screen_settings_as_more_menu(self) -> None:
-        """Keeps More > Settings identifiable during home-city follow-ups from Manage Char."""
+    def test_home_city_follow_up_classifies_full_screen_settings_separately(self) -> None:
+        """Keeps full-screen Settings identifiable during home-city follow-ups from Manage Char."""
 
         with tempfile.TemporaryDirectory() as temp_directory:
             root = Path(temp_directory)
@@ -1306,8 +1309,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -1327,12 +1330,16 @@ class CaptureAndVisionTests(unittest.TestCase):
 
             observation = builder.build(
                 screenshot,
-                request=ObservationRequest.home_city_follow_up(ScreenType.PNC_CASTLE_SELECTION),
+                request=ObservationRequest.home_city_follow_up(
+                    ScreenType.PNC_CASTLE_SELECTION,
+                    ScreenType.PNC_SETTINGS,
+                ),
             )
 
-            self.assertEqual(observation.screen_type, ScreenType.PNC_MORE_MENU)
+            self.assertEqual(observation.screen_type, ScreenType.PNC_SETTINGS)
             self.assertTrue(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
             self.assertTrue(observation.has(UiElementId.PNC_MORE_MANAGE_CHAR))
+            self.assertFalse(observation.has(UiElementId.PNC_MORE_SETTINGS))
 
     def test_world_map_overview_exit_follow_up_classifies_manage_char_instead_of_overview(self) -> None:
         """Keeps overview-exit follow-ups on Manage Char when that screen appears unexpectedly."""
@@ -1347,8 +1354,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=build_default_selector_registry(),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -1392,8 +1399,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -1438,8 +1445,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -1475,8 +1482,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -1510,8 +1517,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -1549,8 +1556,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -1584,8 +1591,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -1617,8 +1624,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -1652,8 +1659,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -1697,8 +1704,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -1739,8 +1746,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -1777,8 +1784,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -1822,8 +1829,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -1856,8 +1863,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -1891,8 +1898,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -1924,8 +1931,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -1965,8 +1972,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -2026,8 +2033,8 @@ class CaptureAndVisionTests(unittest.TestCase):
                 )
                 builder = ObservationBuilder(
                     selector_registry=SelectorRegistry(selectors=()),
-                    selector_engine=PillowSelectorEngine(
-                        template_matcher=PillowTemplateMatcher(),
+                    selector_engine=ImageSelectorEngine(
+                        template_matcher=OpenCvTemplateMatcher(),
                         ocr_service=UnavailableOcrService(),
                     ),
                     screen_classifier=ScreenClassifier(),
@@ -2056,8 +2063,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=build_default_selector_registry(),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -2097,8 +2104,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=build_default_selector_registry(),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -2139,8 +2146,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=build_default_selector_registry(),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -2182,8 +2189,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=build_default_selector_registry(),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -2230,8 +2237,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -2272,8 +2279,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -2309,8 +2316,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=build_default_selector_registry(),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -2373,8 +2380,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=registry,
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -2404,8 +2411,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             registry = build_default_selector_registry()
             builder = ObservationBuilder(
                 selector_registry=registry,
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -2465,8 +2472,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=registry,
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -2521,8 +2528,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=registry,
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -2572,8 +2579,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             registry = build_default_selector_registry()
             builder = ObservationBuilder(
                 selector_registry=registry,
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=ocr_service,
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -2616,8 +2623,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             registry = build_default_selector_registry()
             builder = ObservationBuilder(
                 selector_registry=registry,
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=ocr_service,
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -2676,8 +2683,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=registry,
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -2745,8 +2752,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=registry,
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -2783,8 +2790,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=build_default_selector_registry(),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -2849,8 +2856,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=registry,
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=ocr_service,
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -2896,8 +2903,8 @@ class CaptureAndVisionTests(unittest.TestCase):
         )
         builder = ObservationBuilder(
             selector_registry=registry,
-            selector_engine=PillowSelectorEngine(
-                template_matcher=PillowTemplateMatcher(),
+            selector_engine=ImageSelectorEngine(
+                template_matcher=OpenCvTemplateMatcher(),
                 ocr_service=ocr_service,
             ),
             screen_classifier=ScreenClassifier(),
@@ -2943,8 +2950,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=registry,
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -2987,8 +2994,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             registry = build_default_selector_registry()
             builder = ObservationBuilder(
                 selector_registry=registry,
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=ocr_service,
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -3035,8 +3042,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             registry = build_default_selector_registry()
             builder = ObservationBuilder(
                 selector_registry=registry,
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=ocr_service,
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -3087,8 +3094,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=build_default_selector_registry(),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -3540,8 +3547,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=build_default_selector_registry(),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -3578,8 +3585,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=build_default_selector_registry(),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -3620,8 +3627,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=build_default_selector_registry(),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -3661,8 +3668,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=build_default_selector_registry(),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -3791,8 +3798,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=build_default_selector_registry(),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -3915,8 +3922,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
             builder = ObservationBuilder(
                 selector_registry=build_default_selector_registry(),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -3933,8 +3940,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             shifted_builder = ObservationBuilder(
                 selector_registry=build_default_selector_registry(),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -4001,8 +4008,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -4044,8 +4051,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -4086,8 +4093,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -4145,8 +4152,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -4181,8 +4188,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -4216,8 +4223,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -4253,8 +4260,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -4289,8 +4296,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -4330,8 +4337,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             ocr_service = _RecordingOcrService(lines=())
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -4365,8 +4372,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -4395,8 +4402,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -4426,8 +4433,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             ocr_service = _RecordingOcrService(lines=())
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -4459,8 +4466,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -4499,8 +4506,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -4535,8 +4542,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -4572,8 +4579,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -4605,8 +4612,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=build_default_selector_registry(),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -4642,8 +4649,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -4677,8 +4684,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -4716,8 +4723,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -4748,8 +4755,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -4816,8 +4823,8 @@ class CaptureAndVisionTests(unittest.TestCase):
                 )
                 builder = ObservationBuilder(
                     selector_registry=SelectorRegistry(selectors=()),
-                    selector_engine=PillowSelectorEngine(
-                        template_matcher=PillowTemplateMatcher(),
+                    selector_engine=ImageSelectorEngine(
+                        template_matcher=OpenCvTemplateMatcher(),
                         ocr_service=UnavailableOcrService(),
                     ),
                     screen_classifier=ScreenClassifier(),
@@ -5046,8 +5053,8 @@ class CaptureAndVisionTests(unittest.TestCase):
         ocr_service = _RecordingOcrService(lines=())
         builder = ObservationBuilder(
             selector_registry=SelectorRegistry(selectors=()),
-            selector_engine=PillowSelectorEngine(
-                template_matcher=PillowTemplateMatcher(),
+            selector_engine=ImageSelectorEngine(
+                template_matcher=OpenCvTemplateMatcher(),
                 ocr_service=ocr_service,
             ),
             screen_classifier=ScreenClassifier(),
@@ -5163,8 +5170,8 @@ class CaptureAndVisionTests(unittest.TestCase):
         ocr_service = _RecordingOcrService(lines=())
         builder = ObservationBuilder(
             selector_registry=SelectorRegistry(selectors=()),
-            selector_engine=PillowSelectorEngine(
-                template_matcher=PillowTemplateMatcher(),
+            selector_engine=ImageSelectorEngine(
+                template_matcher=OpenCvTemplateMatcher(),
                 ocr_service=ocr_service,
             ),
             screen_classifier=ScreenClassifier(),
@@ -5379,8 +5386,8 @@ class CaptureAndVisionTests(unittest.TestCase):
                     image.putpixel((x, y), (40, 200, 70))
             observation_builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -5442,8 +5449,8 @@ class CaptureAndVisionTests(unittest.TestCase):
                     image.putpixel((x, y), (40, 200, 70))
             observation_builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
-                selector_engine=PillowSelectorEngine(
-                    template_matcher=PillowTemplateMatcher(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
@@ -5494,7 +5501,10 @@ class CaptureAndVisionTests(unittest.TestCase):
                     observations=[
                         make_observation(ScreenType.PNC_LORD_INFO, current_castle_name="K304554ca2797"),
                         make_observation(ScreenType.PNC_HOME_CITY, visible_ids=(UiElementId.PNC_BOTTOM_NAV_MORE,)),
-                        make_observation(ScreenType.PNC_MORE_MENU, visible_ids=(UiElementId.PNC_MORE_MANAGE_CHAR,)),
+                        make_observation(
+                            ScreenType.PNC_MORE_MENU,
+                            visible_ids=(UiElementId.PNC_MORE_OVERLAY_MANAGE_CHAR,),
+                        ),
                         make_observation(
                             ScreenType.PNC_CASTLE_SELECTION,
                             current_castle=CastleIdentity(kingdom="K313", castle_name="K313alpha"),
@@ -5532,7 +5542,10 @@ class CaptureAndVisionTests(unittest.TestCase):
                     observations=[
                         make_observation(ScreenType.PNC_CASTLE_SELECTION, current_castle=selected_castle),
                         make_observation(ScreenType.PNC_HOME_CITY, visible_ids=(UiElementId.PNC_BOTTOM_NAV_MORE,)),
-                        make_observation(ScreenType.PNC_MORE_MENU, visible_ids=(UiElementId.PNC_MORE_MANAGE_CHAR,)),
+                        make_observation(
+                            ScreenType.PNC_MORE_MENU,
+                            visible_ids=(UiElementId.PNC_MORE_OVERLAY_MANAGE_CHAR,),
+                        ),
                         make_observation(ScreenType.PNC_WORLD_MAP),
                     ]
                 ),
@@ -5659,8 +5672,8 @@ class CaptureAndVisionTests(unittest.TestCase):
                     )
                     builder = ObservationBuilder(
                         selector_registry=registry,
-                        selector_engine=PillowSelectorEngine(
-                            template_matcher=PillowTemplateMatcher(),
+                        selector_engine=ImageSelectorEngine(
+                            template_matcher=OpenCvTemplateMatcher(),
                             ocr_service=UnavailableOcrService(),
                         ),
                         screen_classifier=ScreenClassifier(),
@@ -5742,8 +5755,8 @@ def _build_observation_from_ocr_lines(lines: tuple[OcrLine, ...]) -> Observation
     registry = build_default_selector_registry()
     builder = ObservationBuilder(
         selector_registry=registry,
-        selector_engine=PillowSelectorEngine(
-            template_matcher=PillowTemplateMatcher(),
+        selector_engine=ImageSelectorEngine(
+            template_matcher=OpenCvTemplateMatcher(),
             ocr_service=UnavailableOcrService(),
         ),
         screen_classifier=ScreenClassifier(),

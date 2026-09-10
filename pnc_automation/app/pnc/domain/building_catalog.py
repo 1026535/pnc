@@ -154,6 +154,12 @@ class HomeCityObjectDefinition:
     supported_actions: tuple[BuildingAction, ...] = ()
     upgradeable: bool = False
     map_coordinate: "HomeCityMapCoordinate | None" = None
+    label_tap_offset_y_ratio: float = 0.0
+
+    def __post_init__(self) -> None:
+        """Keep reviewed label-relative click offsets bounded to the nearby object."""
+        if not -0.25 <= self.label_tap_offset_y_ratio <= 0.25:
+            raise ValueError("Home-city label tap offset must be between -0.25 and 0.25.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -504,7 +510,8 @@ _HOME_CITY_OBJECT_DEFINITIONS = (
             BuildingAction.OPEN_HERO_HALL_EXCHANGE_TAB,
             BuildingAction.EXCHANGE_HERO_FRAGMENTS,
         ),
-        map_coordinate=HomeCityMapCoordinate(x=1001, y=1216),
+        # The September 2026 live audit disproved the former (1001, 1216)
+        # target. Use the canonical visual scan until this landmark is recalibrated.
     ),
     HomeCityObjectDefinition(
         id=HomeCityObjectId.SANCTUM,
@@ -560,6 +567,8 @@ _HOME_CITY_OBJECT_DEFINITIONS = (
         ),
         upgradeable=True,
         map_coordinate=HomeCityMapCoordinate(x=1046, y=985),
+        # Its nameplate can be outside the statue's hitbox after a camera pan.
+        label_tap_offset_y_ratio=-0.09,
     ),
     HomeCityObjectDefinition(
         id=HomeCityObjectId.SACRED_TREE,
