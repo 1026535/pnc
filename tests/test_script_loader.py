@@ -54,18 +54,10 @@ class ScriptLoaderTests(unittest.TestCase):
             self.assertEqual(script.steps[3].task, TaskId.SEND_ALLIANCE_CHAT_MESSAGE)
             self.assertEqual(script.steps[3].params["message"], "bot shall invade")
 
-    def test_daily_maintenance_contains_only_live_promoted_building_upgrade(self) -> None:
-        """Keeps unimplemented feature tasks out of the unattended nightly routine."""
+    def test_daily_maintenance_is_not_a_recursive_authored_script(self) -> None:
+        """Keeps the application-level coordinator out of the task-script executor."""
 
-        script = load_run_script("scripts/routines/daily_castle_maintenance.yaml")
-
-        self.assertEqual(
-            [step.task for step in script.steps],
-            [TaskId.ENSURE_GAME_RUNNING, TaskId.LOGIN, TaskId.BUILDING_UPGRADE],
-        )
-        building_step = script.steps[-1]
-        assert isinstance(building_step, ScriptStep)
-        self.assertFalse(building_step.params["allow_speedups"])
+        self.assertFalse(Path("scripts/routines/daily_castle_maintenance.yaml").exists())
 
     def test_load_run_script_rejects_unknown_tasks(self) -> None:
         """Fails fast when the script references an unsupported task id."""

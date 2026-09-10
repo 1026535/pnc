@@ -115,6 +115,15 @@ class ScreenFlowPlanner:
 
         if not observation.blocking_popup and observation.screen_type != ScreenType.PNC_POPUP:
             return []
+        if observation.has(UiElementId.PNC_UPDATE_CONFIRM_BUTTON):
+            return [
+                TapAction(
+                    selector_id=UiElementId.PNC_UPDATE_CONFIRM_BUTTON,
+                    reason="confirm_required_game_update",
+                    observe_after=True,
+                    follow_up_request=ObservationRequest.full_runtime_default(),
+                )
+            ]
         if observation.has(UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON):
             return [
                 TapAction(
@@ -225,6 +234,7 @@ class ScreenFlowPlanner:
                 ]
         if observation.screen_type in {
             ScreenType.PNC_BAG,
+            ScreenType.PNC_QUEST_MAIN,
             ScreenType.PNC_QUEST_DAILY,
             ScreenType.PNC_HERO_LIST,
             ScreenType.PNC_HERO_DETAIL_UPGRADE,

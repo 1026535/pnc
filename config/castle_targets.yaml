@@ -4,22 +4,31 @@ accounts:
       main:
         kingdom: K287
         castle_name: K287e40c0a989
-      hopeful_npc_k323:
-        kingdom: K323
-        castle_name: Hopeful NPC
-        castle_level: 16
-      cute_zenpc:
+        castle_level: 10
+      k314e66ab29777:
+        kingdom: K314
+        castle_name: K314e66ab29777
+        castle_level: 4
+      cold_duke_of_the_north:
+        kingdom: K313
+        castle_name: ColdDukeOfTheNorth
+        castle_level: 2
+      k304554ca2797:
+        kingdom: K304
+        castle_name: K304554ca2797
+        castle_level: 5
+      nox_simp:
+        kingdom: K253
+        castle_name: Nox simp
+        castle_level: 4
+      k199c0c5983668:
+        kingdom: K199
+        castle_name: K199c0c5983668
+        castle_level: 1
+      k157f69a736769:
         kingdom: K157
-        castle_name: Cute ZeNPC
-        castle_level: 22
-      k30213bfcc8584:
-        kingdom: K302
-        castle_name: K30213bfcc8584
-        castle_level: 1
-      k301116f4e4654:
-        kingdom: K301
-        castle_name: K301116f4e4654
-        castle_level: 1
+        castle_name: K157f69a736769
+        castle_level: 3
 
   - account_id: serious_stuff
     castle_targets:
@@ -67,10 +76,10 @@ accounts:
         kingdom: K256
         castle_name: K2562a7a977843
         castle_level: 5
-      who_is_u:
+      free_cookies:
         kingdom: K226
-        castle_name: who is u
-        castle_level: 15
+        castle_name: free cookies
+        castle_level: 17
 
   - account_id: main
     castle_targets:
@@ -113,38 +122,40 @@ accounts:
         kingdom: K314
         castle_name: K314a4452b3900
         castle_level: 1
-      sticker_npc:
+      npc_2:
         kingdom: K157
-        castle_name: 0 sticker NPC
-        castle_level: 15
+        castle_name: NPC 2
+        castle_level: 22
 
   - account_id: 3xx_spies
     castle_targets:
       main:
-        kingdom: K287
-        castle_name: K287e40c0a989
-        castle_level: 9
-      k314e66ab29777:
-        kingdom: K314
-        castle_name: K314e66ab29777
-        castle_level: 4
-      cold_duke_of_the_north:
-        kingdom: K313
-        castle_name: ColdDukeOfTheNorth
-        castle_level: 2
-      k304554ca2797:
-        kingdom: K304
-        castle_name: K304554ca2797
+        kingdom: K322
+        castle_name: smoll & cringe
         castle_level: 5
-      nox_simp:
-        kingdom: K253
-        castle_name: Nox simp
-        castle_level: 4
-      k199c0c5983668:
-        kingdom: K199
-        castle_name: K199c0c5983668
-        castle_level: 1
-      k157f69a736769:
-        kingdom: K157
-        castle_name: K157f69a736769
+      small_arms_dino:
+        kingdom: K325
+        castle_name: SmallArmsDino
         castle_level: 3
+      k3217ef93e7321:
+        kingdom: K321
+        castle_name: K3217ef93e7321
+        castle_level: 5
+      k320c86f763319:
+        kingdom: K320
+        castle_name: K320c86f763319
+        castle_level: 5
+      k3197f6186576:
+        kingdom: K319
+        castle_name: K3197f6186576
+        castle_level: 5
+      k318438a066255:
+        kingdom: K318
+        castle_name: K318438a066255
+        castle_level: 5
+      k31520587b5634:
+        kingdom: K315
+        castle_name: K31520587b5634
+        castle_level: 4
+      # K303 is partially obscured by the emulator overlay; verify exact name
+      # through the canonical roster refresh before adding an actionable alias.

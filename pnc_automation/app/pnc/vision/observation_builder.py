@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Protocol
@@ -304,6 +305,11 @@ class ObservationBuilder:
             spatial_surface=additions.spatial_surface,
             artifact_path=_screenshot_artifact_path(screenshot),
             image_size=screenshot.image.size,
+            frame_fingerprint=hashlib.sha256(
+                payload
+                if (payload := getattr(screenshot, "payload", None)) is not None
+                else screenshot.image.tobytes()
+            ).hexdigest(),
             captured_at=_screenshot_captured_at(screenshot),
             blocking_popup=screen_type in {ScreenType.PNC_POPUP, ScreenType.PNC_VIP_DAILY_RESET}
             or UiElementId.PNC_POPUP_CLOSE_BUTTON in visible_elements

@@ -1,0 +1,43 @@
+# Authored intentions, not evidence of successful live testing.
+automatic_runs_enabled: false
+maintenance_timezone: America/Toronto
+maintenance_hour_local: 2
+game_reset_hour_utc: 0
+
+canary_targets:
+  - account_id: mega_old_acc
+    castle_ref: npc_2
+    # Authored canary policies, not authorization to run automatic Dailies.
+    enabled_capabilities: [use_resource_item, hero_hall, summon_saurgil, wishes, trial_shop]
+    wishes: {target_total: 5, game_day_limit: 50, max_diamond_spend: null}
+    trial_shop: {kind: one_speedup_then_gem, maximum_quantity: 1}
+  - account_id: serious_stuff
+    castle_ref: free_cookies
+    enabled_capabilities: [use_resource_item, hero_hall, summon_saurgil, wishes, trial_shop]
+    wishes: {target_total: 5, game_day_limit: 50, max_diamond_spend: null}
+    trial_shop: {kind: one_star_gem_essence, maximum_quantity: 1}
+
+# All seven screenshot-confirmed testing castles, in displayed order.
+# Finish ALL canary evaluations first; then enable only validated features.
+targets:
+  - account_id: testing
+    castle_ref: k314e66ab29777
+    enabled_capabilities: []
+  - account_id: testing
+    castle_ref: cold_duke_of_the_north
+    enabled_capabilities: []
+  - account_id: testing
+    castle_ref: k304554ca2797
+    enabled_capabilities: []
+  - account_id: testing
+    castle_ref: main
+    enabled_capabilities: []
+  - account_id: testing
+    castle_ref: nox_simp
+    enabled_capabilities: []
+  - account_id: testing
+    castle_ref: k199c0c5983668
+    enabled_capabilities: []
+  - account_id: testing
+    castle_ref: k157f69a736769
+    enabled_capabilities: []

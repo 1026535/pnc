@@ -188,6 +188,7 @@ def make_observation(
     chat_draft_text: str | None = None,
     artifact_path: Path | None = None,
     image_size: tuple[int, int] = (200, 100),
+    frame_fingerprint: str | None = None,
 ) -> Observation:
     """Builds a typed observation with synthetic visible elements."""
 
@@ -226,6 +227,7 @@ def make_observation(
         chat_draft_text=chat_draft_text,
         artifact_path=artifact_path,
         image_size=image_size,
+        frame_fingerprint=frame_fingerprint or f"synthetic:{screen_type.value}:{','.join(item.value for item in visible_ids)}",
     )
 
 

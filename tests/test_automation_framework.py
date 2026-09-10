@@ -243,6 +243,95 @@ class AutomationFrameworkTests(unittest.TestCase):
         self.assertEqual(fake_observer.labels, ["ensure_game_running_before", "ensure_game_running_post_action_1"])
         self.assertEqual(fake_session.taps, [(5, 5)])
 
+    def test_runner_recovers_required_update_before_proving_task_preflight(self) -> None:
+        """Makes required-update recovery available to every runner task before task planning."""
+
+        registry = TaskRegistry(tasks=(_HomeCityPreflightTask(),))
+        script = registry.prepare_script(
+            RunScript(
+                name="update_before_preflight",
+                path=Path("update_before_preflight.yaml"),
+                steps=(ScriptStep(task=TaskId.ENSURE_GAME_RUNNING),),
+            )
+        )
+        fake_observer = FakeObservationService(
+            observations=[
+                make_observation(
+                    ScreenType.PNC_POPUP,
+                    visible_ids=(UiElementId.PNC_UPDATE_CONFIRM_BUTTON,),
+                    blocking_popup=True,
+                ),
+                make_observation(ScreenType.PNC_LOADING),
+                make_observation(ScreenType.PNC_HOME_CITY),
+            ]
+        )
+        fake_session = FakeSession()
+        runner = AutomationRunner(
+            defaults=self.defaults,
+            observation_service=fake_observer,
+            action_executor=_make_observed_action_executor(fake_session),
+            task_registry=registry,
+            flow_planner=ScreenFlowPlanner(),
+            logger=build_logger(),
+        )
+
+        result = runner.run(self.account, script)
+
+        self.assertEqual(result.steps[0].status.value, "success")
+        self.assertEqual(fake_session.taps, [(5, 5)])
+        self.assertEqual(
+            fake_observer.labels,
+            [
+                "ensure_game_running_before",
+                "ensure_game_running_ensure_game_running_preflight_update_wait_1",
+                "ensure_game_running_ensure_game_running_preflight_update_wait_2",
+            ],
+        )
+
+    def test_runner_does_not_replay_task_action_interrupted_by_required_update(self) -> None:
+        """Returns Home but fails an ambiguous task increment instead of replaying its action."""
+
+        registry = TaskRegistry(tasks=(_TrivialTapTask(),))
+        script = registry.prepare_script(
+            RunScript(
+                name="update_after_action",
+                path=Path("update_after_action.yaml"),
+                steps=(ScriptStep(task=TaskId.ENSURE_GAME_RUNNING),),
+            )
+        )
+        fake_observer = FakeObservationService(
+            observations=[
+                make_observation(
+                    ScreenType.PNC_HOME_CITY,
+                    visible_ids=(UiElementId.PNC_HOME_BUILD_BUTTON,),
+                ),
+                make_observation(
+                    ScreenType.PNC_POPUP,
+                    visible_ids=(UiElementId.PNC_UPDATE_CONFIRM_BUTTON,),
+                    blocking_popup=True,
+                ),
+                make_observation(ScreenType.PNC_LOADING),
+                make_observation(
+                    ScreenType.PNC_HOME_CITY,
+                    artifact_path=Path("update-recovered-home.png"),
+                ),
+            ]
+        )
+        fake_session = FakeSession()
+        runner = AutomationRunner(
+            defaults=self.defaults,
+            observation_service=fake_observer,
+            action_executor=_make_observed_action_executor(fake_session),
+            task_registry=registry,
+            flow_planner=ScreenFlowPlanner(),
+            logger=build_logger(),
+        )
+
+        with self.assertRaisesRegex(TaskVerificationError, "will not be replayed"):
+            runner.run(self.account, script)
+
+        self.assertEqual(fake_session.taps, [(5, 5), (5, 5)])
+
     def test_runner_proves_world_map_preflight_from_coarse_world_root_before_task_body_starts(self) -> None:
         """Uses the shared runner preflight to refine one coarse world-map root into an exact world map."""
 
@@ -403,8 +492,8 @@ class AutomationFrameworkTests(unittest.TestCase):
         self.assertEqual(result.screen_type, ScreenType.PNC_WORLD_MAP)
         self.assertEqual(fake_session.taps, [(5, 5)])
 
-    def test_popup_recovery_uses_the_same_retry_loop_as_normal_steps(self) -> None:
-        """Routes popup recovery through the shared retry loop before continuing the step."""
+    def test_bootstrap_owns_popup_recovery_inside_the_canonical_task_loop(self) -> None:
+        """Keeps visual-X recovery in bootstrap rather than intercepting every task."""
 
         registry = build_default_task_registry()
         script = registry.prepare_script(
@@ -416,11 +505,6 @@ class AutomationFrameworkTests(unittest.TestCase):
         )
         fake_observer = FakeObservationService(
             observations=[
-                make_observation(
-                    ScreenType.PNC_HOME_CITY,
-                    visible_ids=(UiElementId.PNC_POPUP_CLOSE_BUTTON,),
-                    blocking_popup=True,
-                ),
                 make_observation(
                     ScreenType.PNC_HOME_CITY,
                     visible_ids=(UiElementId.PNC_POPUP_CLOSE_BUTTON,),
@@ -446,10 +530,41 @@ class AutomationFrameworkTests(unittest.TestCase):
             fake_observer.labels,
             [
                 "ensure_game_running_before",
-                "popup_recovery_post_action_1",
-                "popup_recovery_retry_1",
+                "ensure_game_running_post_action_1",
             ],
         )
+        self.assertEqual(fake_session.taps, [(5, 5)])
+
+    def test_bootstrap_never_taps_the_same_popup_fingerprint_twice(self) -> None:
+        """Fails closed when one visual bootstrap popup remains after its single X tap."""
+
+        registry = build_default_task_registry()
+        script = registry.prepare_script(
+            RunScript(
+                name="popup_fingerprint_guard",
+                path=Path("popup_fingerprint_guard.yaml"),
+                steps=(ScriptStep(task=TaskId.ENSURE_GAME_RUNNING),),
+            )
+        )
+        popup = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            visible_ids=(UiElementId.PNC_POPUP_CLOSE_BUTTON,),
+            blocking_popup=True,
+            frame_fingerprint="same-popup",
+        )
+        fake_session = FakeSession()
+        runner = AutomationRunner(
+            defaults=self.defaults,
+            observation_service=FakeObservationService(observations=[popup, popup]),
+            action_executor=_make_observed_action_executor(fake_session),
+            task_registry=registry,
+            flow_planner=ScreenFlowPlanner(),
+            logger=build_logger(),
+        )
+
+        with self.assertRaisesRegex(SelectorResolutionError, "already consumed"):
+            runner.run(self.account, script)
+
         self.assertEqual(fake_session.taps, [(5, 5)])
 
     def test_ensure_game_running_waits_through_unknown_launch_splash_without_relaunching(self) -> None:
@@ -1406,6 +1521,189 @@ class AutomationFrameworkTests(unittest.TestCase):
         self.assertEqual(fake_session.taps, [(5, 5)])
         self.assertEqual(execution.observation.screen_type, ScreenType.PNC_POPUP)
         self.assertFalse(execution.selector_interactions[0].fallback_attempted)
+
+    def test_observed_action_executor_recovers_initial_required_update_without_running_planned_action(self) -> None:
+        """Confirms an initial update once, waits through loading, and skips the stale action plan."""
+
+        before = make_observation(
+            ScreenType.PNC_POPUP,
+            visible_ids=(UiElementId.PNC_UPDATE_CONFIRM_BUTTON,),
+            blocking_popup=True,
+        )
+        fake_observer = FakeObservationService(
+            observations=[
+                make_observation(ScreenType.PNC_LOADING),
+                make_observation(ScreenType.PNC_HOME_CITY),
+            ]
+        )
+        fake_session = FakeSession()
+        executor = _make_observed_action_executor(fake_session)
+
+        execution = executor.execute_actions(
+            (
+                TapAction(
+                    selector_id=UiElementId.PNC_HOME_BUILD_BUTTON,
+                    reason="stale_pre_update_plan",
+                ),
+            ),
+            before,
+            observe=fake_observer.observe,
+        )
+
+        self.assertTrue(execution.update_recovered)
+        self.assertEqual(execution.observation.screen_type, ScreenType.PNC_HOME_CITY)
+        self.assertEqual(fake_session.taps, [(5, 5)])
+        self.assertEqual(
+            fake_observer.requests,
+            [
+                ObservationRequest.full_runtime_default(),
+                ObservationRequest.full_runtime_default(),
+            ],
+        )
+
+    def test_observed_action_executor_relaunches_once_when_update_returns_to_android_home(self) -> None:
+        """Relaunches P&C once when the installer returns to Android Home before game loading."""
+
+        before = make_observation(
+            ScreenType.PNC_POPUP,
+            visible_ids=(UiElementId.PNC_UPDATE_CONFIRM_BUTTON,),
+            blocking_popup=True,
+        )
+        fake_observer = FakeObservationService(
+            observations=[
+                make_observation(ScreenType.ANDROID_HOME),
+                make_observation(ScreenType.PNC_LOADING),
+                make_observation(ScreenType.PNC_HOME_CITY),
+            ]
+        )
+        fake_session = FakeSession()
+        executor = _make_observed_action_executor(fake_session)
+
+        execution = executor.execute_actions((), before, observe=fake_observer.observe)
+
+        self.assertTrue(execution.update_recovered)
+        self.assertEqual(execution.observation.screen_type, ScreenType.PNC_HOME_CITY)
+        self.assertEqual(fake_session.taps, [(5, 5)])
+        self.assertEqual(fake_session.launches, 1)
+
+    def test_observed_action_executor_closes_post_update_offer_before_home(self) -> None:
+        """Dismisses a startup offer only through its typed close control while waiting for Home."""
+
+        before = make_observation(
+            ScreenType.PNC_POPUP,
+            visible_ids=(UiElementId.PNC_UPDATE_CONFIRM_BUTTON,),
+            blocking_popup=True,
+        )
+        fake_observer = FakeObservationService(
+            observations=[
+                make_observation(ScreenType.PNC_LOADING),
+                make_observation(
+                    ScreenType.PNC_POPUP,
+                    visible_ids=(UiElementId.PNC_POPUP_CLOSE_BUTTON,),
+                    blocking_popup=True,
+                    frame_fingerprint="post-update-offer",
+                ),
+                make_observation(ScreenType.PNC_HOME_CITY),
+            ]
+        )
+        fake_session = FakeSession()
+        executor = _make_observed_action_executor(fake_session)
+
+        execution = executor.execute_actions((), before, observe=fake_observer.observe)
+
+        self.assertTrue(execution.update_recovered)
+        self.assertEqual(execution.observation.screen_type, ScreenType.PNC_HOME_CITY)
+        self.assertEqual(fake_session.taps, [(5, 5), (5, 5)])
+
+    def test_observed_action_executor_never_closes_same_post_update_popup_twice(self) -> None:
+        """Fails closed when a post-update popup survives its single safe close tap."""
+
+        before = make_observation(
+            ScreenType.PNC_POPUP,
+            visible_ids=(UiElementId.PNC_UPDATE_CONFIRM_BUTTON,),
+            blocking_popup=True,
+        )
+        offer = make_observation(
+            ScreenType.PNC_POPUP,
+            visible_ids=(UiElementId.PNC_POPUP_CLOSE_BUTTON,),
+            blocking_popup=True,
+            frame_fingerprint="same-post-update-offer",
+        )
+        fake_observer = FakeObservationService(observations=[offer, offer])
+        fake_session = FakeSession()
+        executor = _make_observed_action_executor(fake_session)
+
+        with self.assertRaisesRegex(SelectorResolutionError, "remained after"):
+            executor.execute_actions((), before, observe=fake_observer.observe)
+
+        self.assertEqual(fake_session.taps, [(5, 5), (5, 5)])
+
+    def test_observed_action_executor_recovers_update_before_follow_up_validation(self) -> None:
+        """Runs update recovery before rejecting a normal action's interrupted follow-up."""
+
+        registry = self._make_selector_registry(interaction_kind=SelectorInteractionKind.ACTION)
+        before = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            visible_ids=(UiElementId.PNC_BOTTOM_NAV_MORE,),
+        )
+        fake_observer = FakeObservationService(
+            observations=[
+                make_observation(
+                    ScreenType.PNC_POPUP,
+                    visible_ids=(UiElementId.PNC_UPDATE_CONFIRM_BUTTON,),
+                    blocking_popup=True,
+                ),
+                make_observation(ScreenType.PNC_LOADING),
+                make_observation(ScreenType.PNC_HOME_CITY),
+            ]
+        )
+        fake_session = FakeSession()
+        executor = _make_observed_action_executor(fake_session, registry=registry)
+
+        execution = executor.execute_actions(
+            (
+                TapAction(
+                    selector_id=UiElementId.PNC_BOTTOM_NAV_MORE,
+                    reason="interrupted_action",
+                    observe_after=True,
+                ),
+            ),
+            before,
+            observe=fake_observer.observe,
+        )
+
+        self.assertTrue(execution.update_recovered)
+        self.assertEqual(execution.observation.screen_type, ScreenType.PNC_HOME_CITY)
+        self.assertEqual(fake_session.taps, [(5, 5), (5, 5)])
+
+    def test_observed_action_executor_bounds_required_update_wait(self) -> None:
+        """Fails with the freshest evidence when the update exceeds its configured wait budget."""
+
+        before = make_observation(
+            ScreenType.PNC_POPUP,
+            visible_ids=(UiElementId.PNC_UPDATE_CONFIRM_BUTTON,),
+            blocking_popup=True,
+        )
+        fake_observer = FakeObservationService(
+            observations=[
+                make_observation(ScreenType.PNC_LOADING),
+                make_observation(ScreenType.PNC_LOADING, artifact_path=Path("still_loading.png")),
+            ]
+        )
+        fake_session = FakeSession()
+        executor = _make_observed_action_executor(
+            fake_session,
+            policy=ObservedActionExecutionPolicy(
+                update_poll_interval_seconds=1,
+                update_max_wait_seconds=2,
+            ),
+        )
+
+        with self.assertRaisesRegex(SelectorResolutionError, "ten-minute recovery budget") as error_context:
+            executor.execute_actions((), before, observe=fake_observer.observe)
+
+        self.assertEqual(fake_session.taps, [(5, 5)])
+        self.assertEqual(error_context.exception.details["artifact_path"], "still_loading.png")
 
     def test_observed_action_executor_waits_for_a_settled_same_screen_miss_before_ocr_retry(self) -> None:
         """Avoids OCR retry while the post-tap state is still transitional and only promotes after it settles."""

@@ -1,35 +1,52 @@
-$ErrorActionPreference = "Continue"
+param(
+    [string]$ConfigPath = "config\accounts.yaml",
+    [string]$DailyConfigPath = "config\daily_maintenance.yaml",
+    [Parameter(Mandatory = $true)]
+    [string]$AcknowledgementPath
+)
+
+$ErrorActionPreference = "Stop"
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
-$routinePath = Join-Path $repositoryRoot "scripts\routines\daily_castle_maintenance.yaml"
-$configPath = Join-Path $repositoryRoot "config\accounts.yaml"
-$failed = $false
+$mutex = [System.Threading.Mutex]::new($false, "Local\PNC-Daily-Castle-Maintenance")
+$ownsMutex = $false
 
-Push-Location $repositoryRoot
 try {
-    & py -m pnc_automation.app.entrypoints.cli run `
-        --config $configPath `
-        --account testing `
-        --script $routinePath `
-        --castle-ref main `
-        --castle-ref hopeful_npc_k323
-    if ($LASTEXITCODE -ne 0) {
-        $failed = $true
+    $ownsMutex = $mutex.WaitOne(0)
+    if (-not $ownsMutex) {
+        Write-Error "Another daily-maintenance process already owns the process lock."
+        exit 2
     }
-
-    & py -m pnc_automation.app.entrypoints.cli run `
-        --config $configPath `
-        --account serious_stuff `
-        --script $routinePath `
-        --castle-ref main
-    if ($LASTEXITCODE -ne 0) {
-        $failed = $true
+    if ((Get-TimeZone).Id -ne "Eastern Standard Time") {
+        Write-Error "Daily maintenance requires Windows timezone 'Eastern Standard Time'."
+        exit 3
+    }
+    $resolvedAcknowledgementPath = (Resolve-Path -LiteralPath $AcknowledgementPath).Path
+    $acknowledgements = @(Get-Content -LiteralPath $resolvedAcknowledgementPath -Raw | ConvertFrom-Json)
+    if ($acknowledgements.Count -eq 0) {
+        Write-Error "The acknowledgement file must contain a non-empty JSON array."
+        exit 4
+    }
+    $arguments = @(
+        "-m", "pnc_automation.app.entrypoints.cli", "daily-maintenance",
+        "--config", $ConfigPath,
+        "--daily-config", $DailyConfigPath
+    )
+    foreach ($acknowledgement in $acknowledgements) {
+        $arguments += "--acknowledgement"
+        $arguments += ($acknowledgement | ConvertTo-Json -Compress)
+    }
+    Push-Location $repositoryRoot
+    try {
+        & py @arguments
+        exit $LASTEXITCODE
+    }
+    finally {
+        Pop-Location
     }
 }
 finally {
-    Pop-Location
+    if ($ownsMutex) {
+        $mutex.ReleaseMutex()
+    }
+    $mutex.Dispose()
 }
-
-if ($failed) {
-    exit 1
-}
-exit 0

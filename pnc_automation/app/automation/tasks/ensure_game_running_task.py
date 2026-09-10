@@ -10,6 +10,8 @@ from pnc_automation.app.automation.engine.task_context import TaskContext
 from pnc_automation.app.pnc.domain.action_requests import ActionRequest, WaitAction
 from pnc_automation.app.pnc.domain.observation import Observation
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
+from pnc_automation.core.errors import SelectorResolutionError
 
 _MAX_LAUNCH_WAIT_ATTEMPTS = 12
 _MAX_UNKNOWN_RECOVERY_ATTEMPTS = 2
@@ -42,6 +44,24 @@ class EnsureGameRunningTask(BaseAutomationTask):
     def plan(self, context: TaskContext, observation: Observation) -> list[ActionRequest]:
         """Foregrounds P&C only when the observation is not already inside the game."""
 
+        if observation.screen_type == ScreenType.PNC_POPUP or observation.blocking_popup:
+            if not any(observation.has(selector_id) for selector_id in {
+                UiElementId.PNC_POPUP_CLOSE_BUTTON,
+                UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON,
+                UiElementId.PNC_UPDATE_CONFIRM_BUTTON,
+            }):
+                raise SelectorResolutionError(
+                    "Bootstrap popup has no freshly detected visual close control; Android Back is forbidden."
+                )
+            fingerprint = observation.frame_fingerprint
+            if fingerprint is None:
+                raise SelectorResolutionError("Bootstrap popup recovery requires a visual frame fingerprint.")
+            consumed = set(context.runtime_state.get("bootstrap_popup_fingerprints", ()))
+            if fingerprint in consumed:
+                raise SelectorResolutionError("Bootstrap popup visual fingerprint was already consumed.")
+            consumed.add(fingerprint)
+            context.runtime_state["bootstrap_popup_fingerprints"] = tuple(sorted(consumed))
+            return context.flows.close_blocking_popup(observation)
         if observation.screen_type == ScreenType.UNKNOWN and _launch_in_progress(context):
             return [WaitAction(milliseconds=1500, reason="wait_for_pnc_launch", observe_after=True)]
         if observation.screen_type == ScreenType.UNKNOWN:
@@ -56,6 +76,8 @@ class EnsureGameRunningTask(BaseAutomationTask):
     def verify(self, context: TaskContext, before: Observation, after: Observation) -> TaskResult:
         """Succeeds once the run is no longer on Android home or unknown state."""
 
+        if after.screen_type == ScreenType.PNC_POPUP or after.blocking_popup:
+            return TaskResult.replan("Bootstrap popup recovery is still in progress.")
         if after.screen_type not in {ScreenType.ANDROID_HOME, ScreenType.UNKNOWN}:
             _clear_launch_state(context)
             _clear_unknown_recovery_state(context)
