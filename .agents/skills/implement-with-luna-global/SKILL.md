@@ -7,11 +7,12 @@ description: Orchestrate substantial repository implementation through GPT-5.6 L
 
 Use Luna for substantial implementation while the invoking agent (the **root**) remains responsible for intent, architecture, coordination, review, and the user conversation. Follow the active repository's instructions and established workflows; this skill does not replace them.
 
-## Configure the invocation
+## Configure Delegation
 
-- Spawn implementers with `model: gpt-5.6-luna` and `reasoning_effort: xhigh` by default.
-- If the user explicitly supplies a supported Luna reasoning effort, use it for every worker unless scoped more narrowly. Ask about an unsupported value instead of silently changing it.
-- Use `fork_context: false` with a focused implementation packet by default. Enable a small amount of prior context only when it materially reduces restatement without importing irrelevant context.
+- Use the current Codex subagent or collaboration tools, not a separate user-owned task or `create_thread`.
+- Spawn implementers with model `gpt-5.6-luna` and `xhigh` reasoning by default, using the parameter names exposed by the current tool. If that model or effort is unavailable, report the limitation instead of substituting another model.
+- If the user explicitly supplies a supported Luna reasoning effort, apply it to every worker unless scoped more narrowly.
+- Send a focused implementation packet without inherited conversation history when the tool supports that choice. Include prior context only when it changes implementation decisions.
 
 Natural language such as `use $implement-with-luna-global at high reasoning` is sufficient; do not create a separate configuration artifact.
 
@@ -31,7 +32,7 @@ The root may make a small mechanical integration or contained correction when an
 
 Use an approved plan or execution record when the repository or user provides one. Otherwise, confirmed conversation intent is enough when it resolves material behavior, ownership, interfaces, migration, and acceptance criteria. Do not create planning or tracking artifacts solely for this workflow.
 
-Before dispatching, read and honor applicable repository instructions such as `AGENTS.md`, contribution guidance, design documents, task-specific plans, and the PNC skills that govern the work. For ordinary implementation, use `skills/write-code`; for formal review, use `skills/review-code`; for live emulator validation, use `skills/test-bluestacks-live`; and for any explicitly authorized resource-spending test, use `skills/write-code-live`. If implementation evidence challenges an approved decision, pause the affected work, resolve the decision with the user when necessary, and then steer Luna with the result.
+Before dispatching, read and honor applicable repository instructions such as `AGENTS.md`, contribution guidance, design documents, task-specific plans, and the PNC skills that govern the work. For ordinary implementation, use [write-code](../write-code/SKILL.md); for formal review, use [review-code](../review-code/SKILL.md); for live emulator validation, use [test-bluestacks-live](../test-bluestacks-live/SKILL.md); and for explicitly authorized resource-spending tests, use [write-code-live](../write-code-live/SKILL.md). If implementation evidence challenges an approved decision, pause the affected work, resolve the decision with the user when necessary, and then steer Luna with the result.
 
 ## Send an authoritative packet
 
@@ -83,7 +84,7 @@ Do not take over substantial implementation merely because the first attempt fai
 
 1. Have the implementer self-review the complete diff, run proportionate validation, update required documentation, and follow the repository's commit policy.
 2. Verify that one authoritative branch, commit, or diff contains the complete integrated result.
-3. The root formally reviews that result against the approved intent and repository rules using `skills/review-code`.
+3. The root formally reviews that result against the approved intent and repository rules using [review-code](../review-code/SKILL.md).
 4. Send substantive findings back to the persistent Luna implementer. The root may fix a truly small contained item when that is cheaper and clearer.
 5. Re-review the corrected authoritative result and continue only while concrete findings remain.
 6. Finish when review has no actionable findings, required validation is satisfactory, and the result is on the intended branch or worktree.

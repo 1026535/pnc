@@ -24,6 +24,7 @@ Run live emulator validation only when the fidelity is worth the cost. Use offli
 2. Select the smallest live smoke that proves the risky boundary:
    - `PNC_RUN_LIVE_SMOKE=1` for shared account navigation and spatial-surface smoke tests.
    - `PNC_RUN_LIVE_CHAT_SMOKE=1` for chat workflow validation.
+   - `PNC_RUN_LIVE_DAILY_TASK_SMOKE=1` for daily-task workflow validation.
    - `PNC_RUN_LIVE_HOME_CITY_MAP_SMOKE=1` for home-city atlas/building navigation.
    - `PNC_RUN_LIVE_WORLD_MAP_MOVEMENT_CALIBRATION=1` for movement calibration.
 3. Prefer the configured `testing` account and whichever castle is currently active on that instance when no castle target is specified. Verify the active identity and do not select or switch castles unless the user explicitly names and authorizes one.
@@ -48,6 +49,7 @@ Use commands that match the target smoke:
 ```powershell
 $env:PNC_RUN_LIVE_SMOKE="1"; py -m unittest tests.test_live_account_navigation_smoke
 $env:PNC_RUN_LIVE_CHAT_SMOKE="1"; py -m unittest tests.test_live_chat_workflow_smoke
+$env:PNC_RUN_LIVE_DAILY_TASK_SMOKE="1"; py -m unittest tests.test_live_daily_task_smoke
 $env:PNC_RUN_LIVE_HOME_CITY_MAP_SMOKE="1"; py -m unittest tests.test_live_home_city_map_smoke
 $env:PNC_RUN_LIVE_WORLD_MAP_MOVEMENT_CALIBRATION="1"; py -m unittest tests.test_live_world_map_movement_calibration_smoke
 ```

@@ -1,6 +1,6 @@
 ---
 name: create-plan
-description: Create rigorous implementation plans, architecture plans, migration plans, project plans, subplans, and planning documents before execution, requiring bounded live-evidence gathering from a configured BlueStacks instance when material screenshots or current runtime UI state are not already evidenced. Use when the user asks Codex to create, draft, review, improve, or save a plan; asks for a roadmap, implementation strategy, phased breakdown, design plan, execution plan, or plan file; or wants a deep planning pass before code or operational work with a ChatGPT Pro second opinion followed by Codex review.
+description: Create or improve repository-grounded implementation, architecture, migration, and execution plans. Use for plans, roadmaps, phased strategies, or saved planning documents; in PNC, obtain required bounded live evidence and a ChatGPT Pro second opinion before Codex final review.
 ---
 
 # Create Plan
