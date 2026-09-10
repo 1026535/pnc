@@ -1,0 +1,7 @@
+interface:
+  display_name: "Implement with Luna (Global)"
+  short_description: "Delegate repository implementation to Luna"
+  default_prompt: "Use $implement-with-luna-global to implement this repository change with Luna workers."
+
+policy:
+  allow_implicit_invocation: false

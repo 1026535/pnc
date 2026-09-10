@@ -1,0 +1,7 @@
+interface:
+  display_name: "Control In-App Browser"
+  short_description: "Navigate and inspect browser pages"
+  default_prompt: "Use $control-in-app-browser to interact with a browser page."
+
+policy:
+  allow_implicit_invocation: true

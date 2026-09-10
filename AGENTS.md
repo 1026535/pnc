@@ -1,136 +1,130 @@
 # PNC Automation Agent Guide
 
-## Mission
+## Scope And Priorities
 
-Work only in this `pnc` repository. Treat each task as done only when the requested behavior is implemented, verified at the right level, and explained clearly. For feature requests, do not stop at a plan unless the user explicitly asks for planning only.
+- Limit edits to this `pnc` repository unless the user explicitly requests another location. Reading required skills and external documentation is allowed.
+- Let the user's requested outcome and explicit constraints define the task. Make reasonable assumptions for reversible, in-scope decisions; ask only when a choice would materially change behavior, the live target, resource spending, or a destructive action.
+- For action requests, continue through implementation and appropriate verification. Stop at a plan only when the user asks for planning or the applicable planning skill requires a reviewable plan before implementation.
+- Preserve unrelated user changes. Never expand a task merely because adjacent cleanup is possible.
 
-## Operating Workflow
+## Working Method
 
-1. Understand the task and current architecture before editing. Read the relevant code, tests, configs, scripts, prompts, artifacts, and prior plans.
-2. Use internet research when current external behavior matters, especially for OpenAI/Codex, BlueStacks, Android/ADB, test strategy, library APIs, security, or platform-specific behavior. Prefer official docs and cite sources in the final answer when they shaped the work.
-3. For non-trivial work, make a compact implementation plan internally or in the conversation, then execute it. Save a Markdown plan only when the user asks for a plan document or the task is too large to complete safely in one pass.
-4. Implement in small, coherent slices. After each risky or live-relevant slice, run the smallest useful validation before continuing.
-   Live validation is an iterative engineering loop: classify failures from their
-   artifacts, patch the implementation or regression fixture, and rerun the bounded
-   proof. Do not end the feature at the first engineering failure. Stop only on a
-   confirmed postcondition, approved applicability skip, exhausted authorization, or
-   a precise user-input/external-blocker disposition.
-5. Before saying "done", run the required offline tests and, for live/runtime changes, the smallest relevant live validation path. If live validation cannot run, state the exact blocker and command that remains.
+1. Inspect the smallest relevant set of code, tests, configs, scripts, artifacts, and prior plans needed to understand ownership and behavior.
+2. Research current external behavior when it can affect correctness, especially OpenAI/Codex, BlueStacks, Android/ADB, library APIs, platform behavior, or security. Prefer primary or official sources and cite sources that materially shape the result.
+3. For non-trivial work, state or keep a compact plan with explicit acceptance checks. Save a plan document only when requested or required by the planning workflow.
+4. Implement in small, coherent slices. After a risky slice, run the narrowest check that can expose the likely failure before continuing.
+5. Treat validation as an engineering loop: inspect failure evidence, classify the cause, fix the implementation or fixture, and rerun the bounded proof. Stop only on a confirmed postcondition or a precise authorization, user-input, or external-state blocker.
+6. Report the outcome, changed files, validation commands and results, and any remaining risk or blocked live command.
 
-## Architecture Rules
+## Architecture And Implementation
 
-- Keep one canonical implementation per concept.
-- Avoid duplicated logic, predicates, parsers, formatters, selectors, workflow steps, and config schemas.
-- Prefer refactoring ownership when requirements shift instead of adding compatibility shims or parallel APIs.
-- Fail fast on invalid configuration, unexpected screen state, malformed artifacts, or unsupported content.
-- Prefer precise typed models, dataclasses, enums, and well-defined interfaces over ad hoc dictionaries or string conventions.
-- Reuse existing application runner, script runner, observation, selector, navigation, storage, BlueStacks, ADB, and artifact abstractions.
-- Delete obsolete code paths after migrations. Do not preserve legacy serializations unless the user explicitly asks and the plan explains why.
+- Keep one canonical owner for each concept. Do not duplicate predicates, parsers, formatters, selectors, workflows, or config schemas.
+- Reuse the existing application runner, script runner, observation, selector, navigation, storage, BlueStacks, ADB, and artifact abstractions.
+- Prefer typed models, dataclasses, enums, and explicit interfaces over ad hoc dictionaries or string conventions.
+- Reject invalid configuration, malformed artifacts, and unsupported content with actionable errors. For transient emulator or screen state, use bounded waits or existing recovery paths, then fail with captured evidence.
+- When requirements change, migrate callers to the canonical interface and remove obsolete paths. Keep compatibility behavior only when the task requires it, and test the compatibility contract.
+- Keep changes focused. Do not combine feature work with unrelated refactors.
 
-## Coding Style
+## Python Style
 
-- Python targets 3.13+ and follows PEP 8 with 4-space indentation and type hints.
-- Keep imports at the top, grouped standard library, third-party, then local `pnc_automation` imports.
+- Target Python 3.13+ and follow PEP 8 with 4-space indentation and type hints.
+- Keep imports at the top, grouped as standard library, third-party, then local `pnc_automation` imports.
 - Prefer `pathlib.Path` for filesystem paths.
-- Keep functions focused and readable. Use comprehensions, pattern matching, decorators, or functional tools only when they improve clarity.
-- Handle `None` explicitly with guard clauses, early returns, or exceptions.
-- Do not guess among multiple possible field, attribute, or key names. Use the precise intended symbol or a defined interface.
-- Add concise docstrings for every class or function you add or modify, including private helpers with meaningful logic.
+- Keep functions focused and names explicit. Use comprehensions, pattern matching, decorators, or functional tools only when they improve clarity.
+- Handle `None` and error cases explicitly. Do not guess among multiple possible field, attribute, or key names; use the defined interface.
+- Add concise docstrings to public APIs and to helpers whose contract or reasoning is not obvious. Avoid docstring churn in unrelated code.
 - Add comments only for non-obvious intent, invariants, or constraints.
 
 ## Repository Map
 
-- Runtime package code: `pnc_automation/`
+- Runtime package: `pnc_automation/`
 - Offline tests and fakes: `tests/`
-- Live/manual tools: `tools/`
+- Live and manual tools: `tools/`
 - Authored automation YAML: `scripts/`
-- Reusable run script guidance: `scripts/README.md`
-- User config examples: `config/*.example.yaml`
-- Real local config: `config/accounts.yaml`, `config/castles.yaml`, `config/castle_targets.yaml`
+- Script authoring guide: `scripts/README.md`
+- Config templates: `config/*.example.yaml`
 - Runtime evidence: `artifacts/`
 - Reviewed plans and implementation reviews: `reviewed_plans/`
 - Local workflow skills: `skills/`
-- Prompt templates: `prompts/`
+- Shared browser/session instructions: `instructions/`
+- Legacy prompt references: `prompts/`
+- Package metadata and Python requirement: `pyproject.toml`
 
 ## Config And Secrets
 
-- Treat `config/*.example.yaml` as documented templates.
-- Do not overwrite real local config files unless the user explicitly asks.
-- Do not paste credentials, tokens, or account secrets into final answers.
-- When validating configs, prefer typed loaders and existing validation helpers over string parsing.
-- For `castle_targets.yaml`, validate against `accounts.yaml`, `castles.yaml`, and, when relevant, live BlueStacks roster evidence.
+- Treat `config/*.example.yaml` as the documented templates.
+- `config/accounts.yaml`, `config/castles.yaml`, `config/daily_maintenance.yaml`, and `tests/data/local_fixture_artifacts.json` are local files. Do not modify them unless the user explicitly requests it.
+- `config/castle_targets.yaml` is tracked authored config. Change it only when the task requires target-catalog changes.
+- Never echo or paste credentials, tokens, account secrets, or sensitive local config values into prompts, patches, commands, logs, artifacts, or final responses. Redact such values if they already appear in captured output.
+- Use typed loaders and existing validation helpers. Validate `castle_targets.yaml` against `accounts.yaml`, `castles.yaml`, and relevant live BlueStacks roster evidence when target identities change.
 
-## Testing Strategy
+## Offline Testing
 
-- Tests use Python `unittest`. On this Windows workspace, prefer `py` when the `python` alias is unavailable.
-- Full offline suite: `py -m unittest discover -s tests`.
-- Targeted tests: `py -m unittest tests.test_world_map_search` or `py -m unittest tests.test_flows_and_tasks.SomeTestClass.test_specific_case`.
-- Keep normal tests offline/headless. They must not require BlueStacks, ADB, live game state, network access, or credentials.
-- Use saved screenshots, authored YAML, fake sessions, and explicit fixtures for deterministic integration-style coverage.
-- When a live screenshot exposes a bug, add a regression test. Prefer a committed deterministic fixture when safe and reasonably sized; otherwise use `tests/data/local_fixture_artifacts.json` copied from the example.
+- Tests use `unittest`. On Windows, use `py` when the `python` alias is unavailable.
+- Start with the smallest relevant command, such as `py -m unittest tests.test_world_map_search` or a specific test method.
+- Run `py -m unittest discover -s tests` for cross-cutting changes, shared interfaces, config schemas, authored workflows, test infrastructure, or any change whose regression surface is broader than the targeted tests. For a genuinely isolated low-risk change, targeted validation may be sufficient; explain that choice in the final response.
+- Keep ordinary tests offline and headless. They must not require BlueStacks, ADB, live game state, network access, or credentials.
+- Use saved screenshots, authored YAML, fake sessions, and explicit fixtures for deterministic integration coverage.
+- When live evidence exposes a bug, add a deterministic regression test when safe and reasonably sized. Otherwise use the local fixture mechanism based on `tests/data/local_fixture_artifacts.example.json`.
 - Screenshot-backed tests must skip clearly when local-only fixtures are not configured.
-- Test shape should follow risk: many fast unit tests, fewer integration tests, and a narrow set of high-value live smoke tests for real emulator behavior.
+- Do not add tests for documentation-only edits or reversible formatting changes that have no behavioral contract.
+
+## Validation By Change Type
+
+- Documentation or skill-only changes: run the relevant validator when one exists; otherwise run `git diff --check`.
+- Selector or navigation changes: run targeted offline tests and `py tools/validate_navigation_selectors.py`. Run registry discovery or update tools only when the task requires regenerating selector data.
+- World-map movement calibration changes: run relevant offline tests, then `py tools/run_world_map_movement_calibration.py` or the opt-in live calibration smoke when live access is available.
+- Runtime, selector, screen-classification, navigation, ADB/emulator, and authored live-workflow changes require the smallest relevant live proof when a configured BlueStacks target is available.
+- Once required checks pass, broaden or repeat them only when the change, a failure, or an unresolved risk justifies it.
 
 ## Live BlueStacks Validation
 
-Live smoke tests are opt-in modules named `tests/test_live_*_smoke.py`.
+Use `skills/test-bluestacks-live` for live validation. Available opt-in smoke flags are:
 
-- Shared account navigation and spatial surface: `PNC_RUN_LIVE_SMOKE=1`
+- Account navigation and shared spatial surface: `PNC_RUN_LIVE_SMOKE=1`
 - Chat workflow: `PNC_RUN_LIVE_CHAT_SMOKE=1`
-- Home-city atlas/building navigation: `PNC_RUN_LIVE_HOME_CITY_MAP_SMOKE=1`
+- Daily-task workflow: `PNC_RUN_LIVE_DAILY_TASK_SMOKE=1`
+- Home-city atlas and building navigation: `PNC_RUN_LIVE_HOME_CITY_MAP_SMOKE=1`
 - World-map movement calibration: `PNC_RUN_LIVE_WORLD_MAP_MOVEMENT_CALIBRATION=1`
 
-Before live validation:
+Before and during a live run:
 
-- Confirm the requested account, castle target, and BlueStacks display name exist in `config/`.
-- Let the canonical runtime launch the configured BlueStacks instance when it is not already running.
-- Verify ADB reaches the resolved instance before continuing.
-- Use the configured `adb_path` and `bluestacks_config_path`; do not hard-code ports or device ids.
-- If no live target is specified, use the currently active castle on the configured `testing` BlueStacks instance. Do not select or switch castles unless the user explicitly names a castle and authorizes that navigation.
+- Confirm the account, castle target, and BlueStacks display name in `config/`. Let the canonical runtime launch the configured instance when needed and verify ADB connectivity through the resolved instance.
+- Use configured `adb_path` and `bluestacks_config_path`; never hard-code ports or device IDs.
+- If no live target is named, use the currently active castle on the configured `testing` instance. Do not select or switch castles unless the user names a castle and authorizes that navigation.
+- Default to read-only or non-spending proof. Any live validation that can spend in-game resources requires the exact action, target, and budget to be explicitly authorized and must use `skills/write-code-live`.
+- Start with the smallest smoke path that proves the risky boundary. Use observation-based waits and existing runner/navigation abstractions.
+- On failure, inspect screenshots, OCR JSON, logs, and observation artifacts under `artifacts/` before changing code. Preserve relevant artifact paths in the final response.
 
-During live validation:
+## Local Skills
 
-- Start with the smallest smoke path that proves the risky boundary.
-- Use observation-based waits and existing runner/navigation abstractions.
-- Inspect generated screenshots, OCR JSON, logs, and observation artifacts under `artifacts/` before changing code after a live failure.
-- Preserve artifact paths in the final answer when they explain a result or failure.
-- Treat live validation as required for completion when a configured BlueStacks account is available and the change touches live runtime behavior, selectors, screen classification, navigation, ADB/emulator integration, or authored live workflows.
+Read the applicable `SKILL.md` completely before taking the actions it governs.
 
-## Validation Requirements
+- `skills/create-plan`: substantial plans and roadmaps.
+- `skills/review-plan-live`: plan audits that require repository and bounded live evidence.
+- `skills/write-code`: production implementation, fixes, refactors, tests, and scripts.
+- `skills/review-code`: code, diff, commit, branch, or implementation reviews.
+- `skills/test-bluestacks-live`: live emulator validation and diagnosis.
+- `skills/write-code-live`: implementation with explicitly authorized in-game resource spending; never invoke it implicitly.
+- `skills/control-in-app-browser`: browser automation through the selected browser surface.
+- `skills/consult-chatgpt-pro`: explicit, repository-grounded consultation with ChatGPT Pro.
+- `skills/implement-with-luna-global`: explicit delegation of substantial implementation to Luna workers.
 
-- Pure code changes: run `py -m unittest discover -s tests` before finishing.
-- Narrow changes: run the most relevant targeted test first, then the full offline suite.
-- Selector or navigation changes: run relevant offline tests and consider `py tools/validate_navigation_selectors.py`, `py tools/update_selector_registry.py`, `py tools/discover_selector_registry.py`, or `tools/run_selector_discovery_workflow.bat`.
-- World-map movement calibration changes: run relevant offline tests, then use `py tools/run_world_map_movement_calibration.py` or the live calibration smoke flag when live access is available.
-- Skill-only or documentation-only changes: run the relevant validator when one exists; otherwise run `git diff --check`.
-- Always report commands run and whether they passed, failed, or were skipped.
+Treat `prompts/` as legacy inspiration, not as a substitute for the applicable skill or current best practice. If a skill creates a blocker or conflicts with the requested outcome, identify the exact instruction and explain the impact instead of silently changing scope.
 
-## Planning, Review, And Skills
+## Code Review Rules
 
-- Use `skills/create-plan` for substantial implementation plans.
-- Use `skills/review-plan-live` to audit plan assumptions against repository evidence and bounded live BlueStacks observations.
-- Use `skills/write-code` for implementation-heavy work.
-- Use `skills/review-code` for review requests or commit/diff audits.
-- Use `skills/test-bluestacks-live` for live BlueStacks validation.
-- Treat `prompts/` as legacy/local inspiration, not as a reason to skip current best practice.
-- For reviews, findings come first, ordered by severity, with file and line references. If no issues are found, say so and name remaining risk.
+- Lead with actionable findings ordered by severity, with file and line references and the cleanest fix direction.
+- Review correctness, ownership, duplication, migration completeness, test quality, security, and behavioral regressions. Omit style-only findings unless they obscure correctness or maintainability.
+- If no findings remain, say so and identify residual test gaps or assumptions.
 
 ## Working Tree Safety
 
-- The working tree may already be dirty. Never revert or overwrite user changes unless explicitly asked.
-- If unrelated changes exist, ignore them. If they affect the requested task, work with them and mention the interaction.
-- Do not use destructive commands such as `git reset --hard` or `git checkout --` unless the user clearly requests that operation.
+- Inspect the working tree before editing. Do not revert, overwrite, or reformat unrelated user changes.
+- If existing changes overlap the task, preserve them and work with the resulting state; mention the interaction in the final response.
+- Do not use destructive Git or filesystem commands unless the user clearly requests the operation and the exact target has been verified.
 - Clean only generated evidence needed for reruns. Never remove authored config, scripts, reviewed plans, or user work as test cleanup.
 
-## Done Checklist
+## Completion Criteria
 
-Before final response:
-
-- Confirm the implementation matches the requested behavior, not only the plan.
-- Confirm exactly one canonical implementation exists for each concept touched.
-- Confirm no duplicated predicates, parsers, formatters, selectors, workflows, or config schemas were introduced.
-- Confirm obsolete code paths/interfaces were removed or migrated.
-- Confirm naming reflects ownership.
-- Confirm offline validation passed or explain failures.
-- Confirm live validation passed for live/runtime changes, or state the exact blocker and remaining command.
-- Summarize changed files and important artifacts without exposing secrets.
+Before finishing, confirm that the requested behavior is implemented, the architecture has one canonical path per touched concept, obsolete paths were migrated or intentionally retained, and verification matches the actual risk. Report every validation command as passed, failed, or skipped. For required live validation that cannot run, state the exact blocker and the command that remains. Do not expose secrets in the handoff.

@@ -1,0 +1,7 @@
+interface:
+  display_name: "Consult ChatGPT Pro"
+  short_description: "Confer with Pro using exact repository context"
+  default_prompt: "Use $consult-chatgpt-pro to ask ChatGPT Pro for a repository-grounded second opinion on this task."
+
+policy:
+  allow_implicit_invocation: true
