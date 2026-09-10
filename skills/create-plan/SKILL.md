@@ -1,6 +1,6 @@
 ---
 name: create-plan
-description: Create rigorous implementation plans, architecture plans, migration plans, project plans, subplans, and planning documents before execution, requiring bounded live-evidence gathering from a configured BlueStacks instance when material screenshots or current runtime UI state are not already evidenced. Use when the user asks Codex to create, draft, review, improve, or save a plan; asks for a roadmap, implementation strategy, phased breakdown, design plan, execution plan, or plan file; or wants a deep planning pass before code or operational work, optionally with a ChatGPT Pro second opinion followed by Codex review.
+description: Create rigorous implementation plans, architecture plans, migration plans, project plans, subplans, and planning documents before execution, requiring bounded live-evidence gathering from a configured BlueStacks instance when material screenshots or current runtime UI state are not already evidenced. Use when the user asks Codex to create, draft, review, improve, or save a plan; asks for a roadmap, implementation strategy, phased breakdown, design plan, execution plan, or plan file; or wants a deep planning pass before code or operational work with a ChatGPT Pro second opinion followed by Codex review.
 ---
 
 # Create Plan
@@ -9,15 +9,17 @@ description: Create rigorous implementation plans, architecture plans, migration
 
 Create plans that are specific enough to execute, review, and verify. Favor deep context gathering, one canonical design per concept, explicit tradeoffs, clear work breakdown, and concrete validation over generic task lists.
 
-## Optional ChatGPT Pro Consultation And Codex Review
+## ChatGPT Pro Consultation And Codex Review
 
-Use this path only when the user explicitly requests ChatGPT Pro for the planning task or explicitly opts into Pro-assisted planning. The consultation sends selected repository context to an external ChatGPT session and consumes the user's Pro usage; selecting `create-plan` alone is not authorization to open that session.
+This is a required part of every planning task handled by this skill. The consultation sends selected repository context to an external ChatGPT session and consumes the user's Pro usage. Do not silently skip it because the plan seems small or because local reasoning appears sufficient.
 
 1. Complete the local context-gathering and live-evidence gates before consulting Pro. Establish the repository state, identify the smallest authoritative context, and record the evidence questions that could change the plan.
 2. Invoke [consult-chatgpt-pro](../consult-chatgpt-pro/SKILL.md) with the exact planning objective, verified repository baseline, relevant paths or symbols, known constraints, and decision-oriented questions. The consultation must stay in Chat mode and explicitly use GPT-6 Pro; never use ChatGPT Work, Work cloud, Codex mode, or a fallback model.
 3. Treat the Pro response as advisory input rather than authority. The active Codex task must review every material recommendation against the current repository, applicable `AGENTS.md` files, tests, authored plans, and live evidence. Label agreements, corrections, unsupported claims, and unresolved unknowns.
 4. Incorporate only conclusions that survive the Codex review. Preserve productive disagreement and do not present a Pro claim as repository fact unless the local evidence or the verified GitHub baseline supports it.
 5. Finish the normal workflow and quality gate below. For plans that require a formal live-plan audit, use [review-plan-live](../review-plan-live/SKILL.md) after the draft is assembled; that review and the active Codex audit are authoritative over the external consultation.
+
+If the exact GitHub baseline, Chat mode, or GPT-6 Pro selection is unavailable, or the consultation returns `CONTEXT_BLOCKED` without a recoverable path, stop and report the blocker instead of finalizing an unreviewed plan. Proceed without Pro only if the user explicitly changes this requirement in the current planning task.
 
 ## Workflow
 
