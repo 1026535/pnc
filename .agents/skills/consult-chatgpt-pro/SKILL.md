@@ -1,6 +1,6 @@
 ---
 name: consult-chatgpt-pro
-description: "Consult ChatGPT Pro in Chat mode with GPT-6 Pro and return a repository-grounded second opinion from a verified GitHub commit plus narrowly scoped local context. Use when the user explicitly requests Pro consultation or when the create-plan skill requires it; otherwise do not spend Pro usage or disclose repository context merely because more reasoning may help."
+description: "Consult ChatGPT Pro in Chat mode with GPT-6 Pro and return a repository-grounded second opinion from a verified GitHub commit plus narrowly scoped local context. Use when the user explicitly requests Pro consultation or when the create-plan-with-chatgpt-pro skill requires it; otherwise do not spend Pro usage or disclose repository context merely because more reasoning may help."
 ---
 
 # Consult ChatGPT Pro
@@ -11,7 +11,7 @@ Obtain a high-quality Pro consultation without copying the repository into a pro
 
 ## Scope And Safety
 
-- Treat an explicit invocation, a plain request to consult ChatGPT Pro, or required routing from `create-plan` as authorization to open one consultation chat and send the requested task plus clearly relevant repository context. This satisfies the browser skill's action-time authorization for the consultation message, so do not request a redundant confirmation before sending once the final checks pass.
+- Treat an explicit invocation, a plain request to consult ChatGPT Pro, or required routing from `create-plan-with-chatgpt-pro` as authorization to open one consultation chat and send the requested task plus clearly relevant repository context. This satisfies the browser skill's action-time authorization for the consultation message, so do not request a redundant confirmation before sending once the final checks pass.
 - Keep connected systems read-only. Do not let ChatGPT modify GitHub or another external system.
 - Do not commit, push, install or connect a plugin, share a Project/chat, change account settings, or upload unrelated files without separate user authorization.
 - Never send credentials, tokens, `.env` contents, personal data, proprietary third-party assets, build output, or unrelated repository content.
