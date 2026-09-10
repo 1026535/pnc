@@ -49,7 +49,7 @@ class CanaryIdentityRecoveryTests(unittest.TestCase):
         observer = Mock()
         observer.observe.return_value = vip_reset
         actions = Mock()
-        actions.recover_update_if_required.return_value = None
+        actions.recover_interruption_if_required.return_value = None
         actions.execute_actions.side_effect = (
             SimpleNamespace(observation=home),
             SimpleNamespace(observation=castle_selection),
@@ -115,7 +115,7 @@ class CanaryIdentityRecoveryTests(unittest.TestCase):
         observer = Mock()
         observer.observe.return_value = world_map
         actions = Mock()
-        actions.recover_update_if_required.return_value = None
+        actions.recover_interruption_if_required.return_value = None
         actions.execute_actions.side_effect = (
             SimpleNamespace(observation=home),
             SimpleNamespace(observation=castle_selection),

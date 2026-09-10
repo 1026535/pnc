@@ -1,0 +1,209 @@
+{
+  "version": 1,
+  "annotation": "Direct visual review by the implementing agent. References are never counted as holdout. Same-session and same-layout frames remain correlated; no statistical reliability claim.",
+  "samples": [
+    {
+      "image": "hero_hall.png",
+      "screen": "PNC_HERO_HALL",
+      "split": "reference",
+      "group": "2026-09-10/mega_old_acc",
+      "sha256": "af34dd70e21944d27d7b70a2be2b0b2a82bb6d01d39cdaf048dc39f819813869"
+    },
+    {
+      "image": "event_center.png",
+      "screen": "PNC_EVENT_CENTER",
+      "split": "reference",
+      "group": "2026-09-10/serious_stuff",
+      "sha256": "118f5028b5469b50fe0fad8ab0e846c287a91e1a8225fbbb5a0774ec2383b94e"
+    },
+    {
+      "image": "quest_daily.png",
+      "screen": "PNC_QUEST_DAILY",
+      "split": "reference",
+      "group": "2026-09-08/serious_stuff",
+      "sha256": "495954f85a46db08a895a679f03aa2697c5161743dcd504c47d229bde7a2acb8"
+    },
+    {
+      "image": "quest_main.png",
+      "screen": "PNC_QUEST_MAIN",
+      "split": "reference",
+      "group": "2026-09-08/serious_stuff",
+      "sha256": "8ba7a53f31f85a18ed2f56f4f3d50312d16f1af472dbdb374c93b3943f928eb5"
+    },
+    {
+      "image": "bag.png",
+      "screen": "PNC_BAG",
+      "split": "reference",
+      "group": "2026-08-30/mega_old_acc",
+      "sha256": "d3ce42390b9f26c69879a717784be75e998227882bdfff7804ed9a17d060eab7"
+    },
+    {
+      "image": "settings.png",
+      "screen": "PNC_SETTINGS",
+      "split": "reference",
+      "group": "2026-09-10/testing",
+      "sha256": "0969e37144b3ac398c18671925db76b11b72eddfe484f20d29192fdd9b4b4d19"
+    },
+    {
+      "image": "more_overlay.png",
+      "screen": "PNC_MORE_MENU",
+      "split": "reference",
+      "group": "2026-09-10/testing",
+      "sha256": "d1bb8cd85bbd55d38995002eea106ce408ff1fe8ac3734068a4515f5eb6433a4"
+    },
+    {
+      "image": "manage_char.png",
+      "screen": "PNC_CASTLE_SELECTION",
+      "split": "reference",
+      "group": "2026-09-10/testing",
+      "sha256": "3034a4d12e3716c4cdaaa0edcf21b0e389821d82b0cfc18161effe4514cf5caa"
+    },
+    {
+      "image": "alliance_invitation.png",
+      "screen": "PNC_POPUP",
+      "split": "reference",
+      "group": "2026-09-10/testing",
+      "sha256": "962bda7f6119a34ce7ba0baa3bc46f43e3e470bd585c432b2f09386a317878f2"
+    },
+    {
+      "image": "hero_hall_aug29.png",
+      "screen": "PNC_HERO_HALL",
+      "split": "holdout",
+      "group": "2026-08-29/mega_old_acc",
+      "sha256": "9006d372fd4c0f7a796880ffe466399398d757a5aa789ebf7e03dbb5a3fc76d6"
+    },
+    {
+      "image": "quest_main_sep09.png",
+      "screen": "PNC_QUEST_MAIN",
+      "split": "holdout",
+      "group": "2026-09-09/serious_stuff",
+      "sha256": "47648110587784c34cb2deee1e3799e09fb76199efcb0dc137d8312dc8249ed8"
+    },
+    {
+      "image": "quest_daily_sep09.png",
+      "screen": "PNC_QUEST_DAILY",
+      "split": "holdout",
+      "group": "2026-09-09/serious_stuff",
+      "sha256": "8fa253e273c77341e5d86b31a63b6051e179d350dc8fac98ef1fabdd268e8c25"
+    },
+    {
+      "image": "update_over_bag.png",
+      "screen": "PNC_POPUP",
+      "split": "holdout",
+      "group": "2026-09-09/serious_stuff",
+      "sha256": "8b7acd8b210ba21e2606dc0856255cc1ed646ce94b09cc98bf1e8332366015ab"
+    },
+    {
+      "image": "more_sep04.png",
+      "screen": "PNC_MORE_MENU",
+      "split": "holdout",
+      "group": "2026-09-04/testing",
+      "sha256": "e2357c7e5e2d8e0ebd4035326f57ba896416b567bec022925c62820aceec0649"
+    },
+    {
+      "image": "more_sep01.png",
+      "screen": "PNC_MORE_MENU",
+      "split": "holdout",
+      "group": "2026-09-01/mega_old_acc",
+      "sha256": "9281e8309436a38d56626d3d3f3c80816ccf57a89852c705647564b0b035f1a5"
+    },
+    {
+      "image": "home_negative.png",
+      "screen": "PNC_HOME_CITY",
+      "split": "validation",
+      "group": "2026-09-10/testing",
+      "sha256": "a2969f72a5453efe2374bee3d1df3edaf0a53194d2423b41b8d811a1bfb5c6fd"
+    },
+    {
+      "image": "store_negative.png",
+      "screen": "UNKNOWN",
+      "split": "validation",
+      "group": "2026-09-10/testing",
+      "sha256": "e08bad9204078d13296d3def1052a5811b2fe39543624aada75d42e8a6a89855"
+    },
+    {
+      "image": "disconnect_negative.png",
+      "screen": "PNC_POPUP",
+      "split": "holdout",
+      "group": "data/world_map",
+      "sha256": "9b65cfed5cfe8870a200aa5848ae815c0fc0058be6180bc1ac5ac95b5a9e94cf"
+    },
+    {
+      "image": "institute_audit.png",
+      "screen": "PNC_INSTITUTE",
+      "split": "reference",
+      "group": "2026-09-10/testing",
+      "sha256": "109aaff4e6a7df3997b777ef3e13c55a025c58de96b9cb32cb3c53a92352fd7b"
+    },
+    {
+      "image": "goddess_statue_audit.png",
+      "screen": "PNC_GODDESS_STATUE",
+      "split": "reference",
+      "group": "2026-09-10/testing",
+      "sha256": "fa2a28eb5b5f88ee46bbc319e7474fcef47df389ab007d508759951a13c80b7a"
+    },
+    {
+      "image": "warehouse_audit.png",
+      "screen": "PNC_WAREHOUSE",
+      "split": "reference",
+      "group": "2026-09-10/testing",
+      "sha256": "cbe6b90ded86cb757765cbd3f3db08d71ae873d867285ecbd8c3101ac0932eb9"
+    },
+    {
+      "image": "home_city_core.png",
+      "screen": "PNC_HOME_CITY",
+      "split": "reference",
+      "group": "2026-09-10/testing",
+      "sha256": "c5d14dc40865df81c7ee617ef6281c56b1a0a5d6feb6daa12e1d0b8cb6a71438"
+    },
+    {
+      "image": "world_map_core.png",
+      "screen": "PNC_WORLD_MAP",
+      "split": "reference",
+      "group": "2026-09-10/testing",
+      "sha256": "60cf6fae1568c3951186c4885939959e3a3b0966aa6768f5e674f93baa663afb"
+    },
+    {
+      "image": "coordinate_dialog_core.png",
+      "screen": "PNC_WORLD_COORDINATE_DIALOG",
+      "split": "reference",
+      "group": "2026-09-10/testing",
+      "sha256": "c389e165cc5e3e60e02ced947d3ceb77bf59fa7811c3235ecbd12f2ac5ebbac5"
+    },
+    {
+      "image": "world_overview_core.png",
+      "screen": "PNC_WORLD_MAP_OVERVIEW",
+      "split": "reference",
+      "group": "2026-09-10/testing",
+      "sha256": "7d8ba05e945cf2e0361e3d86b2a8e48bbe18fd25840de54550f472d4deaef1bf"
+    },
+    {
+      "image": "home_city_core_animation_regression.png",
+      "screen": "PNC_HOME_CITY",
+      "split": "validation",
+      "group": "2026-09-10/testing",
+      "sha256": "586accc8c900c67b2bc805bba015e31659326ef173b17e00305f78c7499b9234"
+    },
+    {
+      "image": "world_expanded_core.png",
+      "screen": "PNC_WORLD_MAP_EXPANDED",
+      "split": "reference",
+      "group": "2026-09-10/testing",
+      "sha256": "59420307fee2ae190a758adb3507f22ba0087802182f549cfc25e5ba01501036"
+    },
+    {
+      "image": "research_queue_core.png",
+      "screen": "PNC_RESEARCH_QUEUE",
+      "split": "reference",
+      "group": "2026-09-10/testing",
+      "sha256": "51e2e0c3a0cc327694825f84a53fa4b9a1e1706c12f0d443698878965d0ba528"
+    },
+    {
+      "image": "home_city_panned_core.png",
+      "screen": "PNC_HOME_CITY",
+      "split": "validation",
+      "group": "2026-09-10/testing",
+      "sha256": "48ebe749a36c5f118659aac3b38e46ba51b34af38dab138aabbb1864238f2726"
+    }
+  ]
+}

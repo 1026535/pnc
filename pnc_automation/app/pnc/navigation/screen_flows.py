@@ -113,7 +113,10 @@ class ScreenFlowPlanner:
     def close_blocking_popup(self, observation: Observation) -> list[ActionRequest]:
         """Plans one popup dismissal action."""
 
-        if not observation.blocking_popup and observation.screen_type != ScreenType.PNC_POPUP:
+        if not observation.blocking_popup and observation.screen_type not in {
+            ScreenType.PNC_POPUP,
+            ScreenType.PNC_VIP_DAILY_RESET,
+        }:
             return []
         if observation.has(UiElementId.PNC_UPDATE_CONFIRM_BUTTON):
             return [
@@ -134,7 +137,10 @@ class ScreenFlowPlanner:
             ]
         if observation.has(UiElementId.PNC_POPUP_CLOSE_BUTTON):
             return [TapAction(selector_id=UiElementId.PNC_POPUP_CLOSE_BUTTON, reason="close_popup", observe_after=True)]
-        return [KeyEventAction(key_code="KEYCODE_BACK", reason="dismiss_popup_with_back", observe_after=True)]
+        raise SelectorResolutionError(
+            "Blocking popup has no typed safe close or update action; Android Back is forbidden.",
+            screen_type=observation.screen_type,
+        )
 
     def _return_to_world_map(self, observation: Observation) -> list[ActionRequest] | None:
         """Returns one canonical unwind step for transient world-map overlays, or `None` when the current screen is not world-map-adjacent."""
@@ -205,29 +211,31 @@ class ScreenFlowPlanner:
             return world_map_unwind
         if observation.screen_type == ScreenType.PNC_POPUP or observation.blocking_popup:
             return self.close_blocking_popup(observation)
+        if observation.screen_type == ScreenType.PNC_SETTINGS:
+            settings_exit_follow_up = ObservationRequest.home_city_follow_up(ScreenType.PNC_SETTINGS)
+            if observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT):
+                return [
+                    TapAction(
+                        selector_id=UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+                        reason="leave_settings_menu",
+                        observe_after=True,
+                        follow_up_request=settings_exit_follow_up,
+                    )
+                ]
+            return [
+                KeyEventAction(
+                    key_code="KEYCODE_BACK",
+                    reason="leave_settings_menu",
+                    observe_after=True,
+                    follow_up_request=settings_exit_follow_up,
+                )
+            ]
         if observation.screen_type == ScreenType.PNC_MORE_MENU:
             if observation.has(UiElementId.PNC_MORE_SETTINGS) and observation.has(UiElementId.PNC_BOTTOM_NAV_MORE):
                 return [
                     TapAction(
                         selector_id=UiElementId.PNC_BOTTOM_NAV_MORE,
                         reason="close_more_menu",
-                        observe_after=True,
-                        follow_up_request=ObservationRequest.home_city_follow_up(ScreenType.PNC_MORE_MENU),
-                    )
-                ]
-            if observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT):
-                return [
-                    TapAction(
-                        selector_id=UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
-                        reason="leave_more_submenu",
-                        observe_after=True,
-                    )
-                ]
-            if observation.has(UiElementId.PNC_MORE_MANAGE_CHAR):
-                return [
-                    KeyEventAction(
-                        key_code="KEYCODE_BACK",
-                        reason="leave_settings_menu",
                         observe_after=True,
                         follow_up_request=ObservationRequest.home_city_follow_up(ScreenType.PNC_MORE_MENU),
                     )
@@ -398,21 +406,12 @@ class ScreenFlowPlanner:
                 )
             ]
         if observation.screen_type != ScreenType.PNC_MORE_MENU:
+            if observation.screen_type == ScreenType.PNC_SETTINGS:
+                return self.return_to_safe_root_screen(observation)
             raise SelectorResolutionError(
                 "Lord Info navigation requires home city, the More overlay, or the Lord Info screen itself.",
                 screen_type=observation.screen_type,
             )
-        settings_exit_follow_up = ObservationRequest.home_city_follow_up(ScreenType.PNC_MORE_MENU)
-        has_manage_char = observation.has(UiElementId.PNC_MORE_MANAGE_CHAR)
-        if has_manage_char and observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT):
-            return [
-                TapAction(
-                    selector_id=UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
-                    reason="leave_settings_menu",
-                    observe_after=True,
-                    follow_up_request=settings_exit_follow_up,
-                )
-            ]
         if observation.has(UiElementId.PNC_MORE_SETTINGS) and observation.has(UiElementId.PNC_BOTTOM_NAV_MORE):
             return [
                 TapAction(
@@ -426,15 +425,6 @@ class ScreenFlowPlanner:
                     observe_after=True,
                 ),
             ]
-        if has_manage_char:
-            return [
-                KeyEventAction(
-                    key_code="KEYCODE_BACK",
-                    reason="leave_settings_menu",
-                    observe_after=True,
-                    follow_up_request=settings_exit_follow_up,
-                )
-            ]
         raise SelectorResolutionError(
             "More-menu navigation cannot locate a safe path back to the home-city Lord Info shortcut.",
             screen_type=observation.screen_type,
@@ -445,7 +435,7 @@ class ScreenFlowPlanner:
 
         if observation.screen_type == ScreenType.PNC_CASTLE_SELECTION:
             return []
-        if observation.screen_type == ScreenType.PNC_MORE_MENU:
+        if observation.screen_type == ScreenType.PNC_SETTINGS:
             if observation.has(UiElementId.PNC_MORE_MANAGE_CHAR):
                 return [
                     TapAction(
@@ -454,6 +444,11 @@ class ScreenFlowPlanner:
                         observe_after=True,
                     )
                 ]
+            raise SelectorResolutionError(
+                "Settings is open but Manage Char is not visible.",
+                screen_type=observation.screen_type,
+            )
+        if observation.screen_type == ScreenType.PNC_MORE_MENU:
             if observation.has(UiElementId.PNC_MORE_SETTINGS):
                 return [
                     TapAction(
@@ -466,6 +461,14 @@ class ScreenFlowPlanner:
                         reason="open_castle_selection",
                         observe_after=True,
                     ),
+                ]
+            if observation.has(UiElementId.PNC_MORE_OVERLAY_MANAGE_CHAR):
+                return [
+                    TapAction(
+                        selector_id=UiElementId.PNC_MORE_OVERLAY_MANAGE_CHAR,
+                        reason="open_castle_selection",
+                        observe_after=True,
+                    )
                 ]
             raise SelectorResolutionError(
                 "More menu is open but neither Settings nor Manage Char is visible.",
@@ -493,7 +496,7 @@ class ScreenFlowPlanner:
                 TapAction(selector_id=UiElementId.PNC_MORE_MANAGE_CHAR, reason="open_castle_selection", observe_after=True),
             ]
         raise SelectorResolutionError(
-            "Castle selection flow requires home city, the More menu, or the Manage Char roster.",
+            "Castle selection flow requires home city, the More menu, Settings, or the Manage Char roster.",
             screen_type=observation.screen_type,
         )
 
@@ -1111,7 +1114,7 @@ class ScreenFlowPlanner:
         if selected_entry is not None and selected_entry.selected:
             return []
         actions: list[ActionRequest] = []
-        if observation.screen_type in {ScreenType.PNC_HOME_CITY, ScreenType.PNC_MORE_MENU}:
+        if observation.screen_type in {ScreenType.PNC_HOME_CITY, ScreenType.PNC_MORE_MENU, ScreenType.PNC_SETTINGS}:
             return self.open_castle_selection(observation)
         elif observation.screen_type != ScreenType.PNC_CASTLE_SELECTION:
             raise SelectorResolutionError(

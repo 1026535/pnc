@@ -42,6 +42,39 @@ from tests.test_support import FakeSession, build_logger, make_observation
 class NavigationSelectorValidatorTests(unittest.TestCase):
     """Validates live navigation-selector report building and source preparation logic."""
 
+    def test_world_return_accepts_live_city_without_character_template(self) -> None:
+        """The September 10 city frame has bottom controls but no portrait match."""
+        outcomes = build_default_selector_registry().require(UiElementId.PNC_WORLD_HOME_NAV).click_outcomes
+        visible = (UiElementId.PNC_HOME_WORLD_SWITCH, UiElementId.PNC_BOTTOM_NAV_QUEST, UiElementId.PNC_BOTTOM_NAV_BAG)
+        matched, missing = match_reviewed_navigation_outcome(
+            make_observation(ScreenType.PNC_HOME_CITY, visible_ids=visible), outcomes,
+        )
+        self.assertIsNotNone(matched)
+        self.assertEqual(missing, ())
+        for screen, controls in (
+            (ScreenType.PNC_WORLD_MAP, visible),
+            (ScreenType.PNC_HOME_CITY, (UiElementId.PNC_HOME_WORLD_SWITCH,)),
+        ):
+            with self.subTest(screen=screen, controls=controls):
+                matched, _ = match_reviewed_navigation_outcome(
+                    make_observation(screen, visible_ids=controls), outcomes,
+                )
+                self.assertIsNone(matched)
+
+    def test_quest_entry_requires_a_quest_screen_and_both_tab_controls(self) -> None:
+        outcomes = build_default_selector_registry().require(UiElementId.PNC_BOTTOM_NAV_QUEST).click_outcomes
+        controls = (UiElementId.PNC_QUEST_TAB_MAIN, UiElementId.PNC_QUEST_TAB_DAILY)
+        for screen in (ScreenType.PNC_QUEST_MAIN, ScreenType.PNC_QUEST_DAILY):
+            self.assertIsNotNone(match_reviewed_navigation_outcome(
+                make_observation(screen, visible_ids=controls), outcomes,
+            )[0])
+        self.assertIsNone(match_reviewed_navigation_outcome(
+            make_observation(ScreenType.PNC_HOME_CITY, visible_ids=controls), outcomes,
+        )[0])
+        self.assertIsNone(match_reviewed_navigation_outcome(
+            make_observation(ScreenType.PNC_QUEST_DAILY, visible_ids=controls[:1]), outcomes,
+        )[0])
+
     def test_build_navigation_validation_cases_emits_one_case_per_navigation_screen(self) -> None:
         """Builds one validation case per reviewed navigation host screen and skips non-navigation selectors."""
 
@@ -111,14 +144,14 @@ class NavigationSelectorValidatorTests(unittest.TestCase):
                 ),
             )
 
-    def test_validator_prepares_more_menu_substate_before_clicking_manage_char(self) -> None:
-        """Uses the reviewed More-menu preparation step before validating selectors hidden behind Settings."""
+    def test_validator_prepares_settings_substate_before_clicking_manage_char(self) -> None:
+        """Uses the reviewed More → Settings path before validating Manage Char."""
 
         registry = SelectorRegistry(
             selectors=(
                 SelectorDefinition(
                     id=UiElementId.PNC_MORE_MANAGE_CHAR,
-                    screens=(ScreenType.PNC_MORE_MENU,),
+                    screens=(ScreenType.PNC_SETTINGS,),
                     detection_kind=DetectionKind.PLANNED,
                     status=SelectorStatus.CLICK_MAPPED,
                     interaction_kind=SelectorInteractionKind.NAVIGATION,
@@ -152,7 +185,7 @@ class NavigationSelectorValidatorTests(unittest.TestCase):
                 ),
                 _make_captured_observation(
                     make_observation(
-                        ScreenType.PNC_MORE_MENU,
+                        ScreenType.PNC_SETTINGS,
                         visible_ids=(UiElementId.PNC_MORE_MANAGE_CHAR,),
                         artifact_path=Path("more_settings.png"),
                     ),
@@ -407,7 +440,7 @@ class NavigationSelectorValidatorTests(unittest.TestCase):
         self.assertEqual(report.results[0].destination_screen, ScreenType.PNC_WORLD_MAP)
         self.assertEqual(session.taps, [(5, 5), (5, 5)])
         self.assertIn(
-            "navigation_validation_1_settle_popup_1_post_action_1_settle_1",
+            "navigation_validation_1_tap_pnc_home_world_switch_post_action_1_interruption_popup_1_settle_1",
             capture_service.labels,
         )
 

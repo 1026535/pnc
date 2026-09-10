@@ -1,0 +1,513 @@
+[
+  {
+    "asset": "screen_anchors/core_home_city_identity_0.png",
+    "source": "artifacts\\2026-09-10\\testing\\20260910T214846Z_replacement_core_baseline.png",
+    "source_sha256": "c2d7dc85d6e1f31fa6a13489aff433c2d82446da17b0994b58755a1f14f4c0c1",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      15,
+      932,
+      74,
+      954
+    ]
+  },
+  {
+    "asset": "screen_anchors/core_home_city_identity_1.png",
+    "source": "artifacts\\2026-09-10\\testing\\20260910T214846Z_replacement_core_baseline.png",
+    "source_sha256": "c2d7dc85d6e1f31fa6a13489aff433c2d82446da17b0994b58755a1f14f4c0c1",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      15,
+      213,
+      54,
+      229
+    ]
+  },
+  {
+    "asset": "screen_anchors/core_world_map_identity_0.png",
+    "source": "artifacts\\2026-09-10\\testing\\20260910T210114Z_audit_20260910T210108Z_map_1_baseline.png",
+    "source_sha256": "b58c128ad10076d452dbc5bdf664a24d15f389fcb2fbdd2cd334ac8b28690df4",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      23,
+      931,
+      80,
+      954
+    ]
+  },
+  {
+    "asset": "screen_anchors/core_world_map_identity_1.png",
+    "source": "artifacts\\2026-09-10\\testing\\20260910T210114Z_audit_20260910T210108Z_map_1_baseline.png",
+    "source_sha256": "b58c128ad10076d452dbc5bdf664a24d15f389fcb2fbdd2cd334ac8b28690df4",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      11,
+      801,
+      45,
+      832
+    ]
+  },
+  {
+    "asset": "screen_anchors/core_quest_daily_pnc_quest_tab_main.png",
+    "source": "tests\\data\\screen_recognition\\quest_daily.png",
+    "source_sha256": "5f7d8bc3eb7d3853b4760f9e5e4f88217910e207831cef2ac38b644d8bfb5b02",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      37,
+      75,
+      147,
+      96
+    ]
+  },
+  {
+    "asset": "screen_anchors/core_quest_daily_pnc_back_button_top_left.png",
+    "source": "tests\\data\\screen_recognition\\quest_daily.png",
+    "source_sha256": "5f7d8bc3eb7d3853b4760f9e5e4f88217910e207831cef2ac38b644d8bfb5b02",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      25,
+      11,
+      77,
+      43
+    ]
+  },
+  {
+    "asset": "screen_anchors/core_quest_main_pnc_quest_tab_daily.png",
+    "source": "tests\\data\\screen_recognition\\quest_main.png",
+    "source_sha256": "18057c0e414fd91a404d25f90f5855ba15b6dcae15412c1186cf21f254503d06",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      215,
+      75,
+      323,
+      96
+    ]
+  },
+  {
+    "asset": "screen_anchors/core_quest_main_pnc_back_button_top_left.png",
+    "source": "tests\\data\\screen_recognition\\quest_main.png",
+    "source_sha256": "18057c0e414fd91a404d25f90f5855ba15b6dcae15412c1186cf21f254503d06",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      25,
+      11,
+      77,
+      43
+    ]
+  },
+  {
+    "asset": "screen_anchors/core_bag_pnc_back_button_top_left.png",
+    "source": "tests\\data\\screen_recognition\\bag.png",
+    "source_sha256": "348d1ba637b8e69b599f912a5d9fa15d31857e97e2999f55c4ebb14f72f1f236",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      25,
+      11,
+      77,
+      43
+    ]
+  },
+  {
+    "asset": "screen_anchors/core_home_city_pnc_home_world_switch.png",
+    "source": "artifacts\\2026-09-10\\testing\\20260910T214846Z_replacement_core_baseline.png",
+    "source_sha256": "c2d7dc85d6e1f31fa6a13489aff433c2d82446da17b0994b58755a1f14f4c0c1",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      15,
+      932,
+      74,
+      954
+    ]
+  },
+  {
+    "asset": "screen_anchors/core_home_city_pnc_bottom_nav_quest.png",
+    "source": "artifacts\\2026-09-10\\testing\\20260910T214846Z_replacement_core_baseline.png",
+    "source_sha256": "c2d7dc85d6e1f31fa6a13489aff433c2d82446da17b0994b58755a1f14f4c0c1",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      204,
+      905,
+      234,
+      936
+    ]
+  },
+  {
+    "asset": "screen_anchors/core_home_city_pnc_bottom_nav_bag.png",
+    "source": "artifacts\\2026-09-10\\testing\\20260910T214846Z_replacement_core_baseline.png",
+    "source_sha256": "c2d7dc85d6e1f31fa6a13489aff433c2d82446da17b0994b58755a1f14f4c0c1",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      276,
+      904,
+      304,
+      935
+    ]
+  },
+  {
+    "asset": "screen_anchors/core_world_map_pnc_world_home_nav.png",
+    "source": "artifacts\\2026-09-10\\testing\\20260910T210114Z_audit_20260910T210108Z_map_1_baseline.png",
+    "source_sha256": "b58c128ad10076d452dbc5bdf664a24d15f389fcb2fbdd2cd334ac8b28690df4",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      23,
+      931,
+      80,
+      954
+    ]
+  },
+  {
+    "asset": "screen_anchors/core_coordinate_dialog_identity_0.png",
+    "source": "artifacts\\2026-09-10\\testing\\20260910T210258Z_audit_20260910T210108Z_map_6_post_action_1.png",
+    "source_sha256": "33e674f0fa6a2ce397176040cda84b3a76ed66863c7266bab3e130fab04ec7b2",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      74,
+      397,
+      103,
+      425
+    ]
+  },
+  {
+    "asset": "screen_anchors/core_coordinate_dialog_identity_1.png",
+    "source": "artifacts\\2026-09-10\\testing\\20260910T210258Z_audit_20260910T210108Z_map_6_post_action_1.png",
+    "source_sha256": "33e674f0fa6a2ce397176040cda84b3a76ed66863c7266bab3e130fab04ec7b2",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      202,
+      397,
+      228,
+      425
+    ]
+  },
+  {
+    "asset": "screen_anchors/core_coordinate_dialog_identity_2.png",
+    "source": "artifacts\\2026-09-10\\testing\\20260910T210258Z_audit_20260910T210108Z_map_6_post_action_1.png",
+    "source_sha256": "33e674f0fa6a2ce397176040cda84b3a76ed66863c7266bab3e130fab04ec7b2",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      470,
+      310,
+      507,
+      348
+    ]
+  },
+  {
+    "asset": "screen_anchors/core_world_overview_identity_0.png",
+    "source": "artifacts\\2026-09-10\\testing\\20260910T210334Z_audit_20260910T210108Z_map_8_post_action_1.png",
+    "source_sha256": "062f19fbc264725048e93ef9161084efdeb4c660937a9fe7e58ad0f354da9ea6",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      241,
+      796,
+      349,
+      817
+    ]
+  },
+  {
+    "asset": "screen_anchors/core_world_overview_identity_1.png",
+    "source": "artifacts\\2026-09-10\\testing\\20260910T210334Z_audit_20260910T210108Z_map_8_post_action_1.png",
+    "source_sha256": "062f19fbc264725048e93ef9161084efdeb4c660937a9fe7e58ad0f354da9ea6",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      241,
+      834,
+      301,
+      856
+    ]
+  },
+  {
+    "asset": "screen_anchors/core_settings_pnc_back_button_top_left.png",
+    "source": "tests\\data\\screen_recognition\\settings.png",
+    "source_sha256": "594225169609a56f564b4da181164c5a53cc25ccae00427eb978a7f9a9f1ace5",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      25,
+      11,
+      77,
+      43
+    ]
+  },
+  {
+    "asset": "screen_anchors/core_more_overlay_pnc_more_settings.png",
+    "source": "tests\\data\\screen_recognition\\more_overlay.png",
+    "source_sha256": "650a6c7fd12ff295e0a69ad625f5c669b219389902a49511f975b40ca2c966ef",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      463,
+      858,
+      526,
+      884
+    ]
+  },
+  {
+    "asset": "screen_anchors/core_institute_pnc_back_button_top_left.png",
+    "source": "tests\\data\\screen_recognition\\institute_audit.png",
+    "source_sha256": "109aaff4e6a7df3997b777ef3e13c55a025c58de96b9cb32cb3c53a92352fd7b",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      25,
+      11,
+      77,
+      43
+    ]
+  },
+  {
+    "asset": "screen_anchors/core_home_city_pnc_bottom_nav_more.png",
+    "source": "artifacts\\2026-09-10\\testing\\20260910T214846Z_replacement_core_baseline.png",
+    "source_sha256": "c2d7dc85d6e1f31fa6a13489aff433c2d82446da17b0994b58755a1f14f4c0c1",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      490,
+      905,
+      515,
+      935
+    ]
+  },
+  {
+    "asset": "screen_anchors/core_home_city_pnc_home_research_button.png",
+    "source": "artifacts\\2026-09-10\\testing\\20260910T214846Z_replacement_core_baseline.png",
+    "source_sha256": "c2d7dc85d6e1f31fa6a13489aff433c2d82446da17b0994b58755a1f14f4c0c1",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      7,
+      280,
+      65,
+      293
+    ],
+    "mask": "near-white text ink (min RGB > 180, channel spread < 35) plus a one-pixel stroke border; ignore translucent background"
+  },
+  {
+    "asset": "screen_anchors/core_world_map_pnc_world_coordinate_bar.png",
+    "source": "artifacts\\2026-09-10\\testing\\20260910T210114Z_audit_20260910T210108Z_map_1_baseline.png",
+    "source_sha256": "b58c128ad10076d452dbc5bdf664a24d15f389fcb2fbdd2cd334ac8b28690df4",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      188,
+      84,
+      216,
+      110
+    ]
+  },
+  {
+    "asset": "screen_anchors/core_coordinate_dialog_pnc_world_coordinate_dialog_close_button.png",
+    "source": "artifacts\\2026-09-10\\testing\\20260910T210258Z_audit_20260910T210108Z_map_6_post_action_1.png",
+    "source_sha256": "33e674f0fa6a2ce397176040cda84b3a76ed66863c7266bab3e130fab04ec7b2",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      470,
+      310,
+      507,
+      348
+    ]
+  },
+  {
+    "asset": "screen_anchors/core_world_overview_pnc_world_overview_close_button.png",
+    "source": "artifacts\\2026-09-10\\testing\\20260910T210334Z_audit_20260910T210108Z_map_8_post_action_1.png",
+    "source_sha256": "062f19fbc264725048e93ef9161084efdeb4c660937a9fe7e58ad0f354da9ea6",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      480,
+      17,
+      524,
+      59
+    ]
+  },
+  {
+    "asset": "screen_anchors/core_world_map_overview_entry.png",
+    "source": "artifacts\\2026-09-10\\testing\\20260910T210114Z_audit_20260910T210108Z_map_1_baseline.png",
+    "source_sha256": "b58c128ad10076d452dbc5bdf664a24d15f389fcb2fbdd2cd334ac8b28690df4",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      17,
+      672,
+      55,
+      710
+    ]
+  },
+  {
+    "asset": "screen_anchors/core_world_map_hud_toggle.png",
+    "source": "artifacts\\2026-09-10\\testing\\20260910T210114Z_audit_20260910T210108Z_map_1_baseline.png",
+    "source_sha256": "b58c128ad10076d452dbc5bdf664a24d15f389fcb2fbdd2cd334ac8b28690df4",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      11,
+      801,
+      45,
+      833
+    ]
+  },
+  {
+    "asset": "screen_anchors/core_world_expanded_hud_toggle.png",
+    "source": "artifacts\\2026-09-10\\testing\\20260910T221206Z_replacement_20260910T221012Z_core_57955107_21_core_4_after_6.png",
+    "source_sha256": "9303c8e13221500958f7158788b11f7bafc545b53486a6a54b2f46cdf3f939d0",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      11,
+      867,
+      45,
+      900
+    ]
+  },
+  {
+    "asset": "screen_anchors/core_world_expanded_overview_entry.png",
+    "source": "artifacts\\2026-09-10\\testing\\20260910T221206Z_replacement_20260910T221012Z_core_57955107_21_core_4_after_6.png",
+    "source_sha256": "9303c8e13221500958f7158788b11f7bafc545b53486a6a54b2f46cdf3f939d0",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      16,
+      733,
+      56,
+      772
+    ]
+  },
+  {
+    "asset": "screen_anchors/core_research_queue_header.png",
+    "source": "C:\\Users\\lebel\\pnc\\artifacts\\2026-09-10\\testing\\20260910T223525Z_city_20260910T223510Z_3_core_1_after_0.png",
+    "source_sha256": "d80bb82d21faa821c18a72d034d6fa23932a1af9e2d7080b39ad799e6383adf6",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      170,
+      256,
+      374,
+      283
+    ]
+  },
+  {
+    "asset": "screen_anchors/core_research_queue_row.png",
+    "source": "C:\\Users\\lebel\\pnc\\artifacts\\2026-09-10\\testing\\20260910T223525Z_city_20260910T223510Z_3_core_1_after_0.png",
+    "source_sha256": "d80bb82d21faa821c18a72d034d6fa23932a1af9e2d7080b39ad799e6383adf6",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      127,
+      324,
+      303,
+      345
+    ]
+  },
+  {
+    "asset": "screen_anchors/core_research_queue_go.png",
+    "source": "C:\\Users\\lebel\\pnc\\artifacts\\2026-09-10\\testing\\20260910T223525Z_city_20260910T223510Z_3_core_1_after_0.png",
+    "source_sha256": "d80bb82d21faa821c18a72d034d6fa23932a1af9e2d7080b39ad799e6383adf6",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      416,
+      343,
+      455,
+      365
+    ]
+  },
+  {
+    "asset": "screen_anchors/core_research_queue_close.png",
+    "source": "C:\\Users\\lebel\\pnc\\artifacts\\2026-09-10\\testing\\20260910T223525Z_city_20260910T223510Z_3_core_1_after_0.png",
+    "source_sha256": "d80bb82d21faa821c18a72d034d6fa23932a1af9e2d7080b39ad799e6383adf6",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      471,
+      253,
+      505,
+      285
+    ]
+  }
+]

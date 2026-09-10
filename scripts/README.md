@@ -140,12 +140,21 @@ observed Home City Hero Hall building; the Hero Hall canary does not click its D
 The connected runtime recognizes the exact `New version detected. Tap Confirm to
 update.` modal from any canonical workflow. It presses that modal's typed Confirm
 control once, allows up to ten minutes for installation/restart, relaunches P&C once
-if Android Home appears, and resumes only after typed Home is observed. It does not
-use this authority for generic popups. If the update interrupts an already-dispatched
-task action, that task fails as ambiguous instead of replaying the action; journaled
-Daily operations reconcile from a freshly reopened Daily or Resource screen.
-Post-update offers may be closed only through typed non-purchase close controls, with
-one attempt per visual fingerprint and a six-popup bound.
+if Android Home appears, and resumes only after typed Home is observed. Other
+confidently detected transient offers (including generic upper-right-X offers,
+VIP daily/login notices, and account-switch/game-open offers) are recovered across
+workflow boundaries by the shared observed-action executor. Recovery may use only
+`PNC_POPUP_CLOSE_BUTTON` or `PNC_VIP_DAILY_RESET_CLOSE_BUTTON`, requires a fresh
+frame fingerprint, taps each fingerprint at most once, and stops after six distinct
+popups. Missing or unrecognized popup controls fail with captured diagnostics;
+Android Back is never used as a generic-popup fallback. Task-owned confirm, claim,
+purchase, and mutation controls remain with their task.
+
+If an exact update interrupts an already-dispatched task action, that task fails as
+ambiguous instead of replaying the action; journaled Daily operations reconcile from
+a freshly reopened Daily or Resource screen. Transient popup dismissal does not
+consume task replan/retry budgets, and closing a transient popup never replays the
+action that preceded it.
 
 For every new daily feature:
 

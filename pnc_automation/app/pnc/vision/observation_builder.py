@@ -46,7 +46,8 @@ from pnc_automation.core.vision.ocr.ocr_service import OcrLine, OcrService
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier, ScreenEvidence
 from pnc_automation.app.pnc.vision.selectors import DetectionKind, SelectorRegistry
 from pnc_automation.app.pnc.vision.world_map_coordinates import read_world_coordinate_bar_text, world_coordinate_text_matches
-from pnc_automation.core.vision.template.template_matcher import PillowTemplateMatcher
+from pnc_automation.app.pnc.vision.visual_screen_recognizer import VisualRecognition, VisualScreenRecognizer
+from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
 
 class ObservationEnricher(Protocol):
     """Adds higher-level facts after basic selector detection."""
@@ -184,10 +185,10 @@ class ObservationDebugArtifactCollector:
 
 
 @dataclass(slots=True)
-class PillowSelectorEngine:
+class ImageSelectorEngine:
     """Detects selectors using template matching and optional OCR."""
 
-    template_matcher: PillowTemplateMatcher
+    template_matcher: OpenCvTemplateMatcher
     ocr_service: OcrService
 
     def detect(
@@ -257,11 +258,21 @@ class ObservationBuilder:
     screen_classifier: ScreenClassifier
     enricher: ObservationEnricher = field(default_factory=DefaultObservationEnricher)
     debug_artifact_collector: ObservationDebugArtifactCollector | None = None
+    visual_recognizer: VisualScreenRecognizer | None = None
 
     def build(self, screenshot: CapturedScreenshot, *, request: ObservationRequest | None = None) -> Observation:
         """Builds one observation from a captured screenshot."""
 
         active_request = request or ObservationRequest.full_runtime_default()
+        visual = (
+            VisualRecognition()
+            if self.visual_recognizer is None or active_request.world_map_coordinate_only
+            else self.visual_recognizer.recognize(screenshot.image)
+        )
+        # An undimmed header can survive an update dialog. Visual identity never
+        # bypasses the independent global popup/loading guard, even in a scoped read.
+        if visual.evidence:
+            active_request = replace(active_request, include_popup_guard=True, include_loading_guard=True)
         detection_plan = self._selector_detection_plan(active_request)
         probe_matches = self.selector_engine.detect(
             screenshot.image,
@@ -283,8 +294,24 @@ class ObservationBuilder:
             visible_elements,
             active_request,
         )
+        overlay_screens = {ScreenType.PNC_POPUP, ScreenType.PNC_VIP_DAILY_RESET, ScreenType.PNC_BUILDING_UPGRADE_WARNING}
+        overlay_evidence = tuple(item for item in additions.screen_evidence if item.screen_type in overlay_screens)
+        combined_evidence = (*additions.screen_evidence, *visual.evidence)
+        if overlay_evidence:
+            # Only the topmost blocking surface owns actionable controls.
+            visible_elements = {}
+            combined_evidence = overlay_evidence
+        elif any(item.screen_type in overlay_screens for item in visual.evidence):
+            visible_elements = {}
+            additions = ObservationAdditions()
+            combined_evidence = tuple(item for item in visual.evidence if item.screen_type in overlay_screens)
         visible_elements = _merge_visible_element_maps(visible_elements, additions.visible_elements)
-        screen_type = self.screen_classifier.classify(visible_elements, additions.screen_evidence)
+        screen_type = self.screen_classifier.classify(visible_elements, combined_evidence)
+        if visual.ambiguous and not overlay_evidence:
+            screen_type = ScreenType.UNKNOWN
+        if screen_type == ScreenType.UNKNOWN and visual.evidence:
+            visible_elements = {}
+            additions = ObservationAdditions()
         if (
             additions.visible_elements
             or additions.screen_evidence
@@ -295,7 +322,7 @@ class ObservationBuilder:
                 screenshot=screenshot,
                 visible_elements=visible_elements,
                 screen_type=screen_type,
-                evidence=additions.screen_evidence,
+                evidence=combined_evidence,
                 suppress_geometry_selector_ids=additions.suppress_geometry_selector_ids,
             )
         return Observation(
