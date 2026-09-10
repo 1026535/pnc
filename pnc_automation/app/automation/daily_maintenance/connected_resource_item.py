@@ -58,7 +58,7 @@ class ConnectedResourceItemSession:
     def focus_item(self, item: ResourceItem) -> ResourceItem:
         """Moves back through the proved inventory and freshly resolves the chosen item."""
 
-        current = self._stable("resource_focus_start")
+        current = self._stable("resource_focus_start", extra_retries=3)
         for index in range(self.max_viewports):
             selected = next((candidate for candidate in self._items(current) if candidate.identity == item.identity), None)
             if selected is not None:
@@ -200,17 +200,20 @@ class ConnectedResourceItemSession:
             raise AssertionError("Required-update recovery returned no observation for a detected Confirm control.")
         return recovered
 
-    def _stable(self, label: str) -> Observation:
-        """Requires two agreeing semantic/geometry frames before a scan or scroll decision."""
+    def _stable(self, label: str, *, extra_retries: int = 0) -> Observation:
+        """Requires two agreeing frames, with bounded retries for transient live overlays."""
 
         before = self._observe(f"{label}_first")
         after = self._observe(f"{label}_second")
-        if self._signature(before) != self._signature(after):
+        for attempt in range(extra_retries + 1):
+            if self._signature(before) == self._signature(after):
+                return after
             before = after
-            after = self._observe(f"{label}_settled")
-        if self._signature(before) != self._signature(after):
-            raise ValueError("Resource inventory geometry or stock is unstable.")
-        return after
+            suffix = "settled" if attempt == 0 else f"settled_{attempt + 1}"
+            after = self._observe(f"{label}_{suffix}")
+        if self._signature(before) == self._signature(after):
+            return after
+        raise ValueError("Resource inventory geometry or stock is unstable.")
 
     def _scroll(
         self,
