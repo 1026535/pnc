@@ -53,6 +53,7 @@ from pnc_automation.core.vision.ocr.ocr_service import OcrLine, OcrResult, Rapid
 from pnc_automation.app.pnc.vision.pnc_observation_enricher import (
     PncObservationEnricher,
     _build_popup_additions,
+    _build_visual_popup_close_additions,
     _build_world_map_search_button_element,
     _find_world_map_root_coordinate_line,
 )
@@ -4325,14 +4326,15 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertTrue(observation.blocking_popup)
             self.assertTrue(observation.has(UiElementId.PNC_POPUP_CLOSE_BUTTON))
 
-    def test_observation_builder_classifies_generic_upper_right_popup_x_without_ocr(self) -> None:
-        """Recognizes the shared bright popup X and uses its detected center without an OCR dependency."""
+    def test_observation_builder_classifies_generic_upper_right_popup_x_without_popup_ocr(self) -> None:
+        """Recognizes the shared bright popup X when the one global OCR pass has no popup lines."""
 
         with tempfile.TemporaryDirectory() as temp_directory:
             root = Path(temp_directory)
             screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
             image = Image.new("RGB", (900, 1600), (15, 28, 68))
             drawing = ImageDraw.Draw(image)
+            drawing.rectangle((25, 250, 860, 1000), fill=(25, 33, 50), outline=(65, 82, 110), width=4)
             drawing.line((794, 302, 832, 340), fill=(255, 247, 218), width=8)
             drawing.line((832, 302, 794, 340), fill=(255, 247, 218), width=8)
             screenshot = screenshot_service.capture(
@@ -4359,7 +4361,46 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertEqual(close_button.source_kind, VisibleElementSourceKind.GEOMETRY)
             self.assertAlmostEqual(close_button.action_point[0] / image.width, 0.903, delta=0.02)
             self.assertAlmostEqual(close_button.action_point[1] / image.height, 0.201, delta=0.02)
-            self.assertEqual(ocr_service.read_result_calls, 0)
+            self.assertEqual(ocr_service.read_result_calls, 1)
+
+    def test_visual_popup_close_fixtures_require_surface_and_emit_action_points(self) -> None:
+        """Accepts both sanitized real modal layouts through the surface-owned X fallback."""
+
+        fixture_directory = Path(__file__).parent / "data" / "screen_recognition"
+        for fixture_name in ("generic_popup_quit_real_sanitized.png", "generic_popup_offer_real_sanitized.png"):
+            with self.subTest(fixture=fixture_name), Image.open(fixture_directory / fixture_name) as source:
+                additions = _build_visual_popup_close_additions(image=source.convert("RGB"))
+
+            self.assertIsNotNone(additions)
+            assert additions is not None
+            close_button = additions.visible_elements[UiElementId.PNC_POPUP_CLOSE_BUTTON]
+            self.assertEqual(VisibleElementSourceKind.GEOMETRY, close_button.source_kind)
+            self.assertEqual("visual_upper_right_close_x", additions.screen_evidence[0].reason)
+            self.assertGreater(close_button.action_point[0], 0)
+            self.assertGreater(close_button.action_point[1], 0)
+
+    def test_recognized_update_popup_wins_over_generic_x_fallback(self) -> None:
+        """Keeps the typed update control when the same frame also contains a generic X."""
+
+        image = Image.new("RGB", (540, 960), (15, 28, 68))
+        drawing = ImageDraw.Draw(image)
+        drawing.rectangle((25, 100, 515, 780), fill=(25, 33, 50), outline=(65, 82, 110), width=4)
+        drawing.line((476, 46, 504, 74), fill=(255, 247, 218), width=7)
+        drawing.line((504, 46, 476, 74), fill=(255, 247, 218), width=7)
+        enricher = PncObservationEnricher(
+            ocr_service=_FakeOcrService(
+                lines=(
+                    _ocr_line("New version detected. Tap Confirm to update.", x=58, y=300, width=420, height=28),
+                    _ocr_line("Confirm", x=221, y=531, width=90, height=27),
+                )
+            )
+        )
+
+        additions = enricher.detect_interruption(image)
+
+        self.assertIn(UiElementId.PNC_UPDATE_CONFIRM_BUTTON, additions.visible_elements)
+        self.assertNotIn(UiElementId.PNC_POPUP_CLOSE_BUTTON, additions.visible_elements)
+        self.assertEqual("ocr_update_required_popup", additions.screen_evidence[0].reason)
 
     def test_observation_builder_rejects_bright_x_outside_popup_close_zone(self) -> None:
         """Avoids treating crossed artwork left of the guarded upper-right close band as a popup."""

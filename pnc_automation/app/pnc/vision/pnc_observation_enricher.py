@@ -1769,6 +1769,12 @@ class PncObservationEnricher:
         that exact X from the generic-X heuristic never suppresses text guards
         for updates, disconnects, or another popup layered above that modal.
         """
+        result = self.ocr_service.read_result(image)
+        lines = tuple(sorted(result.lines, key=lambda line: (line.bounds.y, line.bounds.x)))
+        anchors = self.text_anchor_detector.detect(result)
+        popup = _build_popup_additions(image=image, lines=lines, anchors=anchors)
+        if popup is not None:
+            return popup
         visual = _build_visual_popup_close_additions(image=image)
         if visual is not None:
             close = visual.visible_elements[UiElementId.PNC_POPUP_CLOSE_BUTTON].bounds
@@ -1782,12 +1788,6 @@ class PncObservationEnricher:
             )
             if not owned:
                 return visual
-        result = self.ocr_service.read_result(image)
-        lines = tuple(sorted(result.lines, key=lambda line: (line.bounds.y, line.bounds.x)))
-        anchors = self.text_anchor_detector.detect(result)
-        popup = _build_popup_additions(image=image, lines=lines, anchors=anchors)
-        if popup is not None:
-            return popup
         loading = _build_loading_additions(image=image, lines=lines)
         return loading if loading is not None else ObservationAdditions()
 
@@ -1804,10 +1804,6 @@ class PncObservationEnricher:
             building_warning = _build_visual_building_upgrade_warning_additions(image=image)
             if building_warning is not None:
                 return building_warning
-        if request.include_popup_guard:
-            visual_popup = _build_visual_popup_close_additions(image=image)
-            if visual_popup is not None:
-                return visual_popup
         chat_geometry = self._build_chat_geometry_additions(
             image=image,
             screen_type=screen_type,
@@ -1850,6 +1846,9 @@ class PncObservationEnricher:
             popup = _build_popup_additions(image=image, lines=lines, anchors=anchors)
             if popup is not None:
                 return popup
+            visual_popup = _build_visual_popup_close_additions(image=image)
+            if visual_popup is not None:
+                return visual_popup
         if request.include_loading_guard and screen_type in {ScreenType.UNKNOWN, ScreenType.PNC_LOADING}:
             loading = _build_loading_additions(image=image, lines=lines)
             if loading is not None:
@@ -4568,10 +4567,10 @@ def _build_update_required_popup_additions(
 
 
 def _build_visual_popup_close_additions(*, image: Image.Image) -> ObservationAdditions | None:
-    """Returns a generic popup close selector when upper-right image geometry contains a bright X."""
+    """Returns a generic popup close selector when an X owns a coherent popup surface."""
 
     close_bounds = _find_visual_popup_close_bounds(image=image)
-    if close_bounds is None:
+    if close_bounds is None or not _has_visual_popup_surface(image=image, close_bounds=close_bounds):
         return None
     return ObservationAdditions(
         visible_elements={
@@ -4587,6 +4586,72 @@ def _build_visual_popup_close_additions(*, image: Image.Image) -> ObservationAdd
         },
         screen_evidence=(ScreenEvidence(ScreenType.PNC_POPUP, "visual_upper_right_close_x"),),
     )
+
+
+def _has_visual_popup_surface(*, image: Image.Image, close_bounds: Bounds) -> bool:
+    """Requires dimmed or panel-backed surface support below the generic close X."""
+
+    rgb_image = image.convert("RGB")
+    left = int(image.width * 0.08)
+    right = int(image.width * 0.96)
+    top = min(image.height - 1, close_bounds.y + close_bounds.height + max(12, int(image.height * 0.02)))
+    bottom = min(image.height, top + max(48, int(image.height * 0.20)))
+    if right <= left or bottom <= top:
+        return False
+
+    luminances: list[float] = []
+    for y in range(top, bottom):
+        for x in range(left, right):
+            red, green, blue = rgb_image.getpixel((x, y))
+            luminances.append((red + green + blue) / 3)
+    mean = sum(luminances) / len(luminances)
+    if mean > 105:
+        return False
+
+    # A broad surface must have both side boundaries; an isolated X on a flat
+    # background has no panel edge to establish popup ownership.
+    left_edge = _vertical_surface_edge_contrast(
+        rgb_image=rgb_image,
+        start=max(5, int(image.width * 0.02)),
+        end=max(6, int(image.width * 0.14)),
+        top=top,
+        bottom=bottom,
+        direction=1,
+    )
+    right_edge = _vertical_surface_edge_contrast(
+        rgb_image=rgb_image,
+        start=min(image.width - 7, int(image.width * 0.86)),
+        end=min(image.width - 6, int(image.width * 0.98)),
+        top=top,
+        bottom=bottom,
+        direction=-1,
+    )
+    return left_edge >= 8 and right_edge >= 8
+
+
+def _vertical_surface_edge_contrast(
+    *,
+    rgb_image: Image.Image,
+    start: int,
+    end: int,
+    top: int,
+    bottom: int,
+    direction: int,
+) -> float:
+    """Returns the strongest mean luminance edge in one candidate panel band."""
+
+    strongest = 0.0
+    for x in range(start, end):
+        neighbor = x - 5 if direction > 0 else x + 5
+        differences = []
+        for y in range(top, bottom):
+            red, green, blue = rgb_image.getpixel((x, y))
+            neighbor_red, neighbor_green, neighbor_blue = rgb_image.getpixel((neighbor, y))
+            differences.append(
+                abs((red + green + blue) - (neighbor_red + neighbor_green + neighbor_blue)) / 3
+            )
+        strongest = max(strongest, sum(differences) / len(differences))
+    return strongest
 
 
 def _build_visual_building_upgrade_warning_additions(*, image: Image.Image) -> ObservationAdditions | None:
