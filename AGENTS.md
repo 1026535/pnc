@@ -113,6 +113,10 @@ Read the applicable `SKILL.md` completely before taking the actions it governs.
 
 Treat `prompts/` as legacy inspiration, not as a substitute for the applicable skill or current best practice. If a skill creates a blocker or conflicts with the requested outcome, identify the exact instruction and explain the impact instead of silently changing scope.
 
+## Replacement Workflow Ports
+
+Before adding or migrating a workflow onto the replacement navigation core, read [`instructions/CORE_WORKFLOW_PORTING.md`](instructions/CORE_WORKFLOW_PORTING.md). It defines the canonical runtime, typed parser, effect gate, constrained context, offline checks, bounded non-spending proof, final Home evidence, and the existing authorizer/executor/journal boundary for future resource-changing work.
+
 ## Code Review Rules
 
 - Lead with actionable findings ordered by severity, with file and line references and the cleanest fix direction.
