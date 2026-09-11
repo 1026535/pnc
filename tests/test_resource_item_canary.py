@@ -12,6 +12,7 @@ from pnc_automation.app.automation.daily_maintenance.resource_item import (
 )
 from pnc_automation.app.pnc.domain.resource_items import (
     ResourceInventory,
+    ResourceInventoryStatus,
     ResourceItem,
     smallest_resource_item,
 )
@@ -95,6 +96,21 @@ class ResourceItemCanaryTests(unittest.TestCase):
         executor = ResourceItemExecutor(session, JournaledMutationDispatcher(self.store))
         _, result = executor.execute(checkpoint=self.checkpoint, allow_empty_skip=False)
         self.assertEqual(DailyTargetOutcomeStatus.PENDING_CLARIFICATION, result.status)
+        session.use_one.assert_not_called()
+
+    def test_unknown_inventory_status_remains_pending_without_selecting_a_pack(self) -> None:
+        """Visible unresolved cards cannot be reinterpreted as an empty or spendable inventory."""
+
+        session = Mock()
+        session.scan_inventory.return_value = ResourceInventory(
+            (), False, ("unknown.png",), ResourceInventoryStatus.UNKNOWN, ("clipped_card",)
+        )
+        executor = ResourceItemExecutor(session, JournaledMutationDispatcher(self.store))
+
+        _, result = executor.execute(checkpoint=self.checkpoint, allow_empty_skip=True)
+
+        self.assertEqual(DailyTargetOutcomeStatus.PENDING_CLARIFICATION, result.status)
+        session.focus_item.assert_not_called()
         session.use_one.assert_not_called()
 
     def test_unchanged_inventory_cannot_pass_or_replay(self) -> None:

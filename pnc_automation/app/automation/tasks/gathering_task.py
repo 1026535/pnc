@@ -32,6 +32,10 @@ class GatheringTask(BaseAutomationTask):
     id = TaskId.GATHERING
     castle_target_policy = CastleTargetPolicy.OPTIONAL
     preflight = TaskPreflight.WORLD_MAP
+    required_recognition_selectors = (
+        UiElementId.PNC_GATHER_BUTTON,
+        UiElementId.PNC_MARCH_CONFIRM_BUTTON,
+    )
 
     def parse_params(self, params: Mapping[str, Any]) -> GatheringPolicy:
         """Builds the typed gathering policy."""

@@ -12,15 +12,15 @@ from pnc_automation.core.infra.storage.artifact_store import ArtifactStore
 from pnc_automation.core.infra.capture.screenshot_service import ScreenshotService
 from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.app.pnc.domain.observation import Bounds, Observation, VisibleElement, VisibleElementSourceKind
+from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict, ScreenDecision, ScreenEvidence
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.observation_builder import ObservationBuilder, ImageSelectorEngine
-from pnc_automation.core.vision.ocr.ocr_service import UnavailableOcrService
 from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservationEnricher
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
 from pnc_automation.app.pnc.vision.selector_catalog import SelectorCatalogDocument, SelectorCatalogEntry
 from pnc_automation.app.pnc.vision.selector_discovery import SelectorDiscoveryAnalyzer, load_artifact_paths
-from pnc_automation.app.pnc.vision.selectors import SelectorRegistry
+from pnc_automation.app.pnc.vision.selectors import SelectorRegistry, build_default_selector_registry
 from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
 from tests.test_capture_and_vision import _FakeOcrService, _FakeScreenshotSession, _encode_png, _ocr_line
 from tests.test_support import make_observation
@@ -82,7 +82,8 @@ class SelectorDiscoveryTests(unittest.TestCase):
                             id="PNC_INSTITUTE_ECONOMY_BUTTON",
                             screens=("PNC_INSTITUTE",),
                             status="screenshot_seeded",
-                            detection_kind="template",
+                            detection_kind="semantic",
+                        materialize_relative_bounds=False,
                         ),
                     ),
                 ),
@@ -115,7 +116,7 @@ class SelectorDiscoveryTests(unittest.TestCase):
             draft_by_id = {draft.id: draft for draft in snapshot.draft_selectors}
 
             self.assertEqual(snapshot.screen_type, ScreenType.PNC_RESEARCH_TREE)
-            self.assertEqual(draft_by_id["PNC_RESEARCH_NODE_ENTRY"].detection_kind, "collection")
+            self.assertEqual(draft_by_id["PNC_RESEARCH_NODE_ENTRY"].detection_kind, "semantic")
             self.assertEqual(draft_by_id["PNC_RESEARCH_NODE_ENTRY"].status, "screenshot_seeded")
 
     def test_build_probe_draft_promotes_click_mapping_for_existing_selector(self) -> None:
@@ -129,7 +130,8 @@ class SelectorDiscoveryTests(unittest.TestCase):
                         id="PNC_BOTTOM_NAV_BAG",
                         screens=("PNC_HOME_CITY",),
                         status="screenshot_seeded",
-                        detection_kind="template",
+                        detection_kind="semantic",
+                        materialize_relative_bounds=False,
                     ),
                 ),
             ),
@@ -151,7 +153,7 @@ class SelectorDiscoveryTests(unittest.TestCase):
         self.assertIsNotNone(probe.draft_selector)
         self.assertEqual(probe.destination_screen_type, ScreenType.PNC_BAG)
         self.assertEqual(probe.draft_selector.status, "click_mapped")
-        self.assertEqual(probe.draft_selector.detection_kind, "template")
+        self.assertEqual(probe.draft_selector.detection_kind, "semantic")
         self.assertEqual(probe.draft_selector.interaction_kind, "navigation")
         self.assertIsNotNone(probe.draft_selector.relative_bounds)
         self.assertEqual(probe.draft_selector.relative_bounds.x_ratio, 0.0)
@@ -174,7 +176,8 @@ class SelectorDiscoveryTests(unittest.TestCase):
                         id="PNC_BOTTOM_NAV_BAG",
                         screens=("PNC_HOME_CITY",),
                         status="screenshot_seeded",
-                        detection_kind="template",
+                        detection_kind="semantic",
+                        materialize_relative_bounds=False,
                     ),
                 ),
             ),
@@ -202,7 +205,8 @@ class SelectorDiscoveryTests(unittest.TestCase):
                         id="PNC_BOTTOM_NAV_BAG",
                         screens=("PNC_HOME_CITY",),
                         status="screenshot_seeded",
-                        detection_kind="template",
+                        detection_kind="semantic",
+                        materialize_relative_bounds=False,
                     ),
                 ),
             ),
@@ -243,15 +247,16 @@ class SelectorDiscoveryTests(unittest.TestCase):
                     SelectorCatalogEntry(
                         id="PNC_VIP_HEADER",
                         screens=("PNC_VIP",),
-                        status="screenshot_seeded",
-                        detection_kind="planned",
+                        status="planned",
+                        detection_kind="semantic",
+                        materialize_relative_bounds=False,
                         interaction_kind="label",
                     ),
                 ),
             ),
         )
         observation = Observation(
-            screen_type=ScreenType.PNC_VIP,
+            decision=ScreenDecision(base_screen=ScreenType.PNC_VIP, effective_screen=ScreenType.PNC_VIP, guard=GuardVerdict.CLEAR, evidence=(ScreenEvidence(ScreenType.PNC_VIP, 'test'),)),
             visible_elements={
                 UiElementId.PNC_VIP_HEADER: VisibleElement(
                     selector_id=UiElementId.PNC_VIP_HEADER,
@@ -290,13 +295,14 @@ class SelectorDiscoveryTests(unittest.TestCase):
                         id="PNC_MORE_LORD_INFO",
                         screens=("PNC_SETTINGS",),
                         status="planned",
-                        detection_kind="planned",
+                        detection_kind="semantic",
+                        materialize_relative_bounds=False,
                     ),
                 ),
             ),
         )
         observation = Observation(
-            screen_type=ScreenType.PNC_SETTINGS,
+            decision=ScreenDecision(base_screen=ScreenType.PNC_SETTINGS, effective_screen=ScreenType.PNC_SETTINGS, guard=GuardVerdict.CLEAR, evidence=(ScreenEvidence(ScreenType.PNC_SETTINGS, 'test'),)),
             visible_elements={
                 UiElementId.PNC_MORE_LORD_INFO: VisibleElement(
                     selector_id=UiElementId.PNC_MORE_LORD_INFO,
@@ -318,7 +324,7 @@ class SelectorDiscoveryTests(unittest.TestCase):
 
         self.assertEqual(len(drafts), 1)
         self.assertEqual(drafts[0].status, "screenshot_seeded")
-        self.assertEqual(drafts[0].detection_kind, "planned")
+        self.assertEqual(drafts[0].detection_kind, "semantic")
         self.assertIsNotNone(drafts[0].relative_bounds)
         self.assertAlmostEqual(drafts[0].relative_bounds.x_ratio, 0.1)
         self.assertAlmostEqual(drafts[0].relative_bounds.y_ratio, 0.1)
@@ -341,19 +347,21 @@ class SelectorDiscoveryTests(unittest.TestCase):
                         id="PNC_CASH_MALL_ENTRY_TITLE_REGION",
                         screens=("PNC_CASH_MALL",),
                         status="planned",
-                        detection_kind="planned",
+                        detection_kind="semantic",
+                        materialize_relative_bounds=False,
                     ),
                     SelectorCatalogEntry(
                         id="PNC_CASH_MALL_ENTRY_TIMER_REGION",
                         screens=("PNC_CASH_MALL",),
                         status="planned",
-                        detection_kind="planned",
+                        detection_kind="semantic",
+                        materialize_relative_bounds=False,
                     ),
                 ),
             ),
         )
         observation = Observation(
-            screen_type=ScreenType.PNC_CASH_MALL,
+            decision=ScreenDecision(base_screen=ScreenType.PNC_CASH_MALL, effective_screen=ScreenType.PNC_CASH_MALL, guard=GuardVerdict.CLEAR, evidence=(ScreenEvidence(ScreenType.PNC_CASH_MALL, 'test'),)),
             visible_elements={
                 UiElementId.PNC_CASH_MALL_ENTRY_ROW: VisibleElement(
                     selector_id=UiElementId.PNC_CASH_MALL_ENTRY_ROW,
@@ -399,25 +407,28 @@ class SelectorDiscoveryTests(unittest.TestCase):
                         id="PNC_GIFT_CENTER_ENTRY_TITLE_REGION",
                         screens=("PNC_GIFT_CENTER",),
                         status="planned",
-                        detection_kind="planned",
+                        detection_kind="semantic",
+                        materialize_relative_bounds=False,
                     ),
                     SelectorCatalogEntry(
                         id="PNC_GIFT_CENTER_ENTRY_SUBTITLE_REGION",
                         screens=("PNC_GIFT_CENTER",),
                         status="planned",
-                        detection_kind="planned",
+                        detection_kind="semantic",
+                        materialize_relative_bounds=False,
                     ),
                     SelectorCatalogEntry(
                         id="PNC_GIFT_CENTER_ENTRY_EXPIRY_REGION",
                         screens=("PNC_GIFT_CENTER",),
                         status="planned",
-                        detection_kind="planned",
+                        detection_kind="semantic",
+                        materialize_relative_bounds=False,
                     ),
                 ),
             ),
         )
         observation = Observation(
-            screen_type=ScreenType.PNC_GIFT_CENTER,
+            decision=ScreenDecision(base_screen=ScreenType.PNC_GIFT_CENTER, effective_screen=ScreenType.PNC_GIFT_CENTER, guard=GuardVerdict.CLEAR, evidence=(ScreenEvidence(ScreenType.PNC_GIFT_CENTER, 'test'),)),
             visible_elements={
                 UiElementId.PNC_GIFT_CENTER_ENTRY_ROW: VisibleElement(
                     selector_id=UiElementId.PNC_GIFT_CENTER_ENTRY_ROW,
@@ -460,19 +471,21 @@ class SelectorDiscoveryTests(unittest.TestCase):
                         id="PNC_EVENT_CENTER_ENTRY_TITLE_REGION",
                         screens=("PNC_EVENT_CENTER",),
                         status="planned",
-                        detection_kind="planned",
+                        detection_kind="semantic",
+                        materialize_relative_bounds=False,
                     ),
                     SelectorCatalogEntry(
                         id="PNC_EVENT_CENTER_ENTRY_TIMER_REGION",
                         screens=("PNC_EVENT_CENTER",),
                         status="planned",
-                        detection_kind="planned",
+                        detection_kind="semantic",
+                        materialize_relative_bounds=False,
                     ),
                 ),
             ),
         )
         observation = Observation(
-            screen_type=ScreenType.PNC_EVENT_CENTER,
+            decision=ScreenDecision(base_screen=ScreenType.PNC_EVENT_CENTER, effective_screen=ScreenType.PNC_EVENT_CENTER, guard=GuardVerdict.CLEAR, evidence=(ScreenEvidence(ScreenType.PNC_EVENT_CENTER, 'test'),)),
             visible_elements={
                 UiElementId.PNC_EVENT_CENTER_EVENT_ROW: VisibleElement(
                     selector_id=UiElementId.PNC_EVENT_CENTER_EVENT_ROW,
@@ -527,18 +540,18 @@ class SelectorDiscoveryTests(unittest.TestCase):
         """Builds one analyzer with a deterministic OCR-backed observation pipeline."""
 
         ocr_service = _FakeOcrService(lines=lines)
+        runtime_registry = build_default_selector_registry()
         observation_builder = ObservationBuilder(
-            selector_registry=SelectorRegistry(selectors=()),
+            selector_registry=runtime_registry,
             selector_engine=ImageSelectorEngine(
                 template_matcher=OpenCvTemplateMatcher(),
-                ocr_service=UnavailableOcrService(),
             ),
             screen_classifier=ScreenClassifier(),
-            enricher=PncObservationEnricher(ocr_service=ocr_service),
+            enricher=PncObservationEnricher(selector_registry=runtime_registry),
+            ocr_service=ocr_service,
         )
         return SelectorDiscoveryAnalyzer(
             observation_builder=observation_builder,
-            ocr_service=ocr_service,
             catalog=SelectorCatalogDocument(selectors=()) if catalog is None else catalog,
         )
 

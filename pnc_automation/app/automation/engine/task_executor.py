@@ -12,7 +12,7 @@ from pnc_automation.app.pnc.domain.observation import Observation
 from pnc_automation.app.pnc.vision.observation_builder import ObservationService
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.app.runtime.observation_artifacts import ObservationArtifactKind, observation_artifact_selection
-from pnc_automation.core.errors import TaskVerificationError
+from pnc_automation.core.errors import SelectorResolutionError, TaskVerificationError
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,6 +43,7 @@ class TaskExecutor:
     ) -> TaskExecutionResult:
         """Executes one already-preflighted task with global required-update recovery."""
 
+        self._require_recognition_support(task=task)
         attempts = 0
         replans = 0
         current_before = before
@@ -129,6 +130,28 @@ class TaskExecutor:
                 message=result.message,
                 label=f"{task.id.value}_failure_result",
             )
+
+    def _require_recognition_support(
+        self,
+        *,
+        task: AutomationTask,
+    ) -> None:
+        """Reject tasks with unsupported mandatory selectors before any recovery or input."""
+
+        for selector_id in task.required_recognition_selectors:
+            try:
+                self.action_executor.action_executor.selector_registry.require_supported(selector_id)
+            except SelectorResolutionError as error:
+                reason = error.details.get("reason", str(error))
+                raise TaskVerificationError(
+                    (
+                        f"Task '{task.id.value}' requires unsupported recognition selector "
+                        f"'{selector_id.value}'."
+                    ),
+                    task_id=task.id,
+                    selector_id=selector_id,
+                    catalog_reason=reason,
+                ) from error
 
     def _raise_failure(
         self,

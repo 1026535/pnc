@@ -18,10 +18,7 @@ from pnc_automation.app.pnc.domain.observation import (
 )
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
-from pnc_automation.app.pnc.vision.selector_catalog import (
-    SelectorCatalogDocument,
-    load_selector_catalog_document,
-)
+from pnc_automation.app.pnc.vision.selector_catalog import SelectorCatalogEntry, load_selector_catalog_document
 from pnc_automation.app.pnc.vision.selector_interaction_kind import SelectorInteractionKind
 
 
@@ -29,10 +26,10 @@ class DetectionKind(StrEnum):
     """Supported selector detection mechanisms."""
 
     TEMPLATE = "template"
+    GUARDED_GEOMETRY = "guarded_geometry"
     OCR_REGION = "ocr_region"
-    ANCHORED_REGION = "anchored_region"
-    COLLECTION = "collection"
-    PLANNED = "planned"
+    SEMANTIC = "semantic"
+    UNSUPPORTED = "unsupported"
 
 
 class SelectorStatus(StrEnum):
@@ -137,6 +134,9 @@ class SelectorDefinition:
     materialize_relative_bounds: bool = True
     click_outcomes: tuple[ClickOutcome, ...] = ()
     notes: tuple[str, ...] = ()
+    template_reference_size: tuple[int, int] | None = None
+    template_search_region: Bounds | None = None
+    template_mask: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -209,6 +209,20 @@ class SelectorRegistry:
                 return selector
         raise SelectorResolutionError(f"Unknown selector '{selector_id}'.", selector_id=selector_id)
 
+    def require_supported(self, selector_id: UiElementId) -> SelectorDefinition:
+        """Returns a selector only when its declared strategy can resolve it at runtime."""
+
+        selector = self.require(selector_id)
+        if selector.detection_kind == DetectionKind.UNSUPPORTED:
+            reason = "; ".join(selector.notes) or "the catalog supplied no implementation reason"
+            raise SelectorResolutionError(
+                f"Selector '{selector_id.value}' is explicitly unsupported: {reason}",
+                selector_id=selector_id,
+                detection_kind=selector.detection_kind.value,
+                notes=selector.notes,
+            )
+        return selector
+
     def for_screen(self, screen_type: ScreenType) -> tuple[SelectorDefinition, ...]:
         """Returns selectors that can appear on the requested screen."""
 
@@ -245,58 +259,38 @@ class SelectorRegistry:
             if (
                 selector.relative_bounds is not None
                 and selector.materialize_relative_bounds
-                and selector.detection_kind != DetectionKind.OCR_REGION
+                and selector.detection_kind == DetectionKind.GUARDED_GEOMETRY
                 and selector.id not in exclude_selector_ids
             )
         )
 
 
 def build_default_selector_registry(
-    template_root: Path | None = None,
     *,
     catalog_path: Path | None = None,
+    asset_root: Path | None = None,
+    validate_assets: bool = True,
 ) -> SelectorRegistry:
     """Builds the static selector registry described by the implementation plan."""
 
-    if template_root is None and catalog_path is None:
-        return _build_packaged_selector_registry()
-    root = template_root or default_selector_template_root()
-    catalog = load_selector_catalog_document(catalog_path)
-    return _build_selector_registry(root=root, catalog=catalog)
-
-
-@cache
-def _build_packaged_selector_registry() -> SelectorRegistry:
-    """Builds the immutable packaged registry once per process."""
-
-    return _build_selector_registry(
-        root=default_selector_template_root(),
-        catalog=load_selector_catalog_document(None),
+    catalog = load_selector_catalog_document(
+        catalog_path,
+        asset_root=asset_root,
+        validate_assets=validate_assets,
     )
-
-
-def _build_selector_registry(*, root: Path, catalog: SelectorCatalogDocument) -> SelectorRegistry:
-    """Builds one registry from validated catalog data and its template root."""
-
+    resolved_asset_root = catalog.asset_root
+    if resolved_asset_root is None:
+        raise SelectorResolutionError("Selector catalog did not provide its canonical asset root.")
     return SelectorRegistry(
         selectors=tuple(
-            _create_selector_from_catalog_entry(selector=selector, root=root)
+            _create_selector_from_catalog_entry(selector=selector, asset_root=resolved_asset_root)
             for selector in catalog.selectors
         ),
-        surfaces=tuple(
-            _create_surface_from_catalog_entry(surface=surface)
-            for surface in catalog.surfaces
-        ),
+        surfaces=tuple(_create_surface_from_catalog_entry(surface=surface) for surface in catalog.surfaces),
     )
 
 
-def default_selector_template_root() -> Path:
-    """Returns the canonical package-root-relative template directory for selector assets."""
-
-    return Path(__file__).resolve().parents[3] / "templates" / "pnc"
-
-
-def _create_selector_from_catalog_entry(*, selector: object, root: Path) -> SelectorDefinition:
+def _create_selector_from_catalog_entry(*, selector: SelectorCatalogEntry, asset_root: Path) -> SelectorDefinition:
     """Builds one runtime selector from one raw catalog entry."""
 
     interaction_kind = _create_interaction_kind(
@@ -306,7 +300,21 @@ def _create_selector_from_catalog_entry(*, selector: object, root: Path) -> Sele
     return _create_selector(
         selector_id=_require_selector_id(selector.id),
         screens=tuple(_require_screen_type(screen) for screen in selector.screens),
-        root=root,
+        template_path=(asset_root / selector.template_asset.path).resolve() if selector.template_asset is not None else None,
+        template_reference_size=selector.template_asset.reference_size if selector.template_asset is not None else None,
+        template_search_region=(
+            Bounds(
+                x=selector.template_asset.search_region.x,
+                y=selector.template_asset.search_region.y,
+                width=selector.template_asset.search_region.width,
+                height=selector.template_asset.search_region.height,
+            )
+            if selector.template_asset is not None
+            and selector.template_asset.search_region is not None
+            else None
+        ),
+        template_mask=selector.template_asset.mask if selector.template_asset is not None else None,
+        threshold=selector.template_asset.threshold if selector.template_asset is not None else 0.98,
         detection_kind=_require_detection_kind(selector.detection_kind),
         status=_require_selector_status(selector.status),
         interaction_kind=interaction_kind,
@@ -340,7 +348,11 @@ def _create_selector(
     *,
     selector_id: UiElementId,
     screens: tuple[ScreenType, ...],
-    root: Path,
+    template_path: Path | None,
+    template_reference_size: tuple[int, int] | None,
+    template_search_region: Bounds | None,
+    template_mask: str | None,
+    threshold: float,
     detection_kind: DetectionKind,
     status: SelectorStatus,
     interaction_kind: SelectorInteractionKind,
@@ -352,48 +364,22 @@ def _create_selector(
 ) -> SelectorDefinition:
     """Creates one default selector definition with canonical metadata defaults."""
 
-    if status == SelectorStatus.PLANNED:
-        return SelectorDefinition(
-            id=selector_id,
-            screens=screens,
-            detection_kind=DetectionKind.PLANNED,
-            status=status,
-            interaction_kind=interaction_kind,
-            template_path=None,
-            click=click,
-            relative_bounds=relative_bounds,
-            materialize_relative_bounds=materialize_relative_bounds,
-            click_outcomes=click_outcomes,
-            notes=notes,
-        )
-
-    if detection_kind == DetectionKind.OCR_REGION:
-        return SelectorDefinition(
-            id=selector_id,
-            screens=screens,
-            detection_kind=DetectionKind.OCR_REGION,
-            status=status,
-            interaction_kind=interaction_kind,
-            template_path=None,
-            click=click,
-            relative_bounds=relative_bounds,
-            materialize_relative_bounds=materialize_relative_bounds,
-            click_outcomes=click_outcomes,
-            notes=notes,
-        )
-
     return SelectorDefinition(
         id=selector_id,
         screens=screens,
         detection_kind=detection_kind,
         status=status,
         interaction_kind=interaction_kind,
-        template_path=(root / f"{selector_id.value.lower()}.png") if detection_kind in {DetectionKind.TEMPLATE, DetectionKind.COLLECTION} else None,
+        template_path=template_path,
+        threshold=threshold,
         click=click,
         relative_bounds=relative_bounds,
         materialize_relative_bounds=materialize_relative_bounds,
         click_outcomes=click_outcomes,
         notes=notes,
+        template_reference_size=template_reference_size,
+        template_search_region=template_search_region,
+        template_mask=template_mask,
     )
 
 
@@ -449,7 +435,7 @@ def _create_click_definition(
     if interaction_kind == SelectorInteractionKind.LABEL:
         return None
     detection_kind = _require_detection_kind(detection_kind_name)
-    if detection_kind in {DetectionKind.OCR_REGION, DetectionKind.PLANNED}:
+    if detection_kind in {DetectionKind.OCR_REGION, DetectionKind.SEMANTIC, DetectionKind.UNSUPPORTED}:
         return None
     return ClickDefinition()
 

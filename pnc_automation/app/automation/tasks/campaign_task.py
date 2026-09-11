@@ -29,6 +29,7 @@ class CampaignTask(BaseAutomationTask):
     id = TaskId.CAMPAIGN
     castle_target_policy = CastleTargetPolicy.OPTIONAL
     preflight = TaskPreflight.HOME_CITY
+    required_recognition_selectors = (UiElementId.PNC_CAMPAIGN_BATTLE_BUTTON,)
 
     def parse_params(self, params: Mapping[str, Any]) -> CampaignPolicy:
         """Builds the typed campaign policy."""

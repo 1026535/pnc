@@ -13,6 +13,7 @@ from pnc_automation.app.automation.daily_maintenance.mutation_dispatcher import 
 from pnc_automation.app.automation.engine.observed_action_executor import ObservedActionExecutor
 from pnc_automation.app.pnc.domain.action_requests import TapListEntryAction
 from pnc_automation.app.pnc.domain.daily_maintenance import (
+    CoordinateProvenance,
     DailyQuestId,
     DailyQuestRow,
     DailyQuestRowState,
@@ -20,7 +21,7 @@ from pnc_automation.app.pnc.domain.daily_maintenance import (
     DailyTargetOutcomeStatus,
     DailyTaskCheckpoint,
 )
-from pnc_automation.app.pnc.domain.observation import ListEntryKind, Observation
+from pnc_automation.app.pnc.domain.observation import ListEntryKind, Observation, RowRecognitionStatus
 
 
 @dataclass(slots=True)
@@ -46,6 +47,12 @@ class JournaledDailyClaimExecutor:
     ) -> tuple[DailyTaskCheckpoint, DailyTargetOutcome]:
         """Dispatches one visual Claim and accepts only a proved row-state transition."""
 
+        if row.row_status != RowRecognitionStatus.COMPLETE:
+            raise RuntimeError("Daily Claim requires a complete visually resolved row.")
+        if row.state != DailyQuestRowState.CLAIM:
+            raise RuntimeError("Daily Claim requires a row currently in Claim state.")
+        if row.coordinate_provenance != CoordinateProvenance.VISUAL_GEOMETRY:
+            raise RuntimeError("Daily Claim requires visually materialized row geometry.")
         claim_count = sum(
             intent.quest_id == DailyQuestId.CLAIM_COMPLETED
             for intent in checkpoint.mutation_intents
@@ -66,6 +73,9 @@ class JournaledDailyClaimExecutor:
                 if entry.metadata.get("observation_fingerprint") == row.observation_fingerprint
                 and entry.metadata.get("quest_id") == row.quest_id.value
                 and entry.metadata.get("row_state") == DailyQuestRowState.CLAIM.value
+                and entry.row_status == RowRecognitionStatus.COMPLETE
+                and entry.action_point is not None
+                and entry.action_bounds is not None
             )
             if len(matching) != 1:
                 raise RuntimeError("Daily Claim row changed before dispatch; no tap was sent.")

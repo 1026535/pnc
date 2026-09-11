@@ -1,0 +1,518 @@
+{
+  "version": 1,
+  "reviewed_at": "2026-09-10T23:51:05Z",
+  "samples": [
+    {
+      "image": "settings_live_b0.png",
+      "screen": "PNC_SETTINGS",
+      "state": "clear",
+      "group": "testing/live_b0/20260910T225832Z_8b55e757",
+      "source_artifact": "C:/Users/lebel/pnc/artifacts/2026-09-10/testing/20260910T225901Z_visual_20260910T225832Z_8b55e757_3_post_action_1.png",
+      "dimensions": [
+        900,
+        1600
+      ],
+      "decoded_sha256": "dbcf1183f17c94705bab30d601accc7a5d741d21b6de2a3f3879e3066899932e",
+      "reviewed_at": "2026-09-10T23:51:05Z",
+      "build": "5.2.76_5.0.203.233",
+      "locale": null,
+      "boxes": {
+        "ManageChar": [
+          464,
+          121,
+          406,
+          108
+        ],
+        "Back": [
+          34,
+          13,
+          101,
+          62
+        ]
+      },
+      "control_selector_ids": {
+        "ManageChar": "PNC_MORE_MANAGE_CHAR",
+        "Back": "PNC_BACK_BUTTON_TOP_LEFT"
+      }
+    },
+    {
+      "image": "more_live_b0.png",
+      "screen": "PNC_MORE_MENU",
+      "state": "clear",
+      "group": "testing/live_b0/20260910T225832Z_8b55e757",
+      "source_artifact": "C:/Users/lebel/pnc/artifacts/2026-09-10/testing/20260910T225854Z_visual_20260910T225832Z_8b55e757_2_post_action_1.png",
+      "dimensions": [
+        900,
+        1600
+      ],
+      "decoded_sha256": "fbed40ac2c64974b2536f4e4ac63524783442a02e996f7360d26ebd2d5e17463",
+      "reviewed_at": "2026-09-10T23:51:05Z",
+      "build": "5.2.76_5.0.203.233",
+      "locale": null,
+      "boxes": {
+        "Settings": [
+          754,
+          1363,
+          136,
+          114
+        ],
+        "bottomMore": [
+          783,
+          1489,
+          117,
+          109
+        ]
+      },
+      "control_selector_ids": {
+        "Settings": "PNC_MORE_SETTINGS",
+        "bottomMore": "PNC_BOTTOM_NAV_MORE"
+      }
+    },
+    {
+      "image": "bag_current_testing.png",
+      "screen": "PNC_BAG",
+      "state": "clear",
+      "group": "testing/planning_bag/20260910T203309Z_36134e9b",
+      "source_artifact": "C:/Users/lebel/pnc/artifacts/2026-09-10/testing/20260910T203402Z_visual_20260910T203309Z_36134e9b_8_post_action_1.png",
+      "dimensions": [
+        900,
+        1600
+      ],
+      "decoded_sha256": "a3429776d752d40f707439024cb5373705257bf742faef3763af18b1532de385",
+      "reviewed_at": "2026-09-10T23:51:05Z",
+      "build": null,
+      "locale": null,
+      "rows": [
+        {
+          "title": "1K Food",
+          "owned": 2011,
+          "card": [
+            10,
+            287,
+            880,
+            201
+          ],
+          "Use": [
+            649,
+            314,
+            214,
+            65
+          ],
+          "bulk_present": true,
+          "expected_kind": "resource_item",
+          "expected_metadata": {
+            "item_id": "food:1000:normal",
+            "resource": "food",
+            "amount": 1000,
+            "owned": 2011
+          }
+        },
+        {
+          "title": "10K Food",
+          "owned": 72,
+          "card": [
+            10,
+            506,
+            880,
+            201
+          ],
+          "Use": [
+            649,
+            534,
+            214,
+            65
+          ],
+          "bulk_present": true,
+          "expected_kind": "resource_item",
+          "expected_metadata": {
+            "item_id": "food:10000:normal",
+            "resource": "food",
+            "amount": 10000,
+            "owned": 72
+          }
+        },
+        {
+          "title": "10K Food (Safe)",
+          "owned": 29,
+          "card": [
+            10,
+            725,
+            880,
+            201
+          ],
+          "Use": [
+            649,
+            752,
+            214,
+            65
+          ],
+          "bulk_present": true,
+          "expected_kind": "resource_item",
+          "expected_metadata": {
+            "item_id": "food:10000:safe",
+            "resource": "food",
+            "amount": 10000,
+            "owned": 29
+          }
+        },
+        {
+          "title": "150K Food",
+          "owned": 1,
+          "card": [
+            10,
+            945,
+            880,
+            200
+          ],
+          "Use": [
+            649,
+            1014,
+            214,
+            65
+          ],
+          "bulk_present": false,
+          "expected_kind": "resource_item",
+          "expected_metadata": {
+            "item_id": "food:150000:normal",
+            "resource": "food",
+            "amount": 150000,
+            "owned": 1
+          }
+        },
+        {
+          "title": "1K Wood",
+          "owned": 1963,
+          "card": [
+            10,
+            1164,
+            880,
+            201
+          ],
+          "Use": [
+            649,
+            1190,
+            214,
+            65
+          ],
+          "bulk_present": true,
+          "expected_kind": "resource_item",
+          "expected_metadata": {
+            "item_id": "wood:1000:normal",
+            "resource": "wood",
+            "amount": 1000,
+            "owned": 1963
+          }
+        },
+        {
+          "title": "10K Wood",
+          "owned": 66,
+          "card": [
+            10,
+            1383,
+            880,
+            200
+          ],
+          "Use": [
+            649,
+            1409,
+            214,
+            65
+          ],
+          "bulk_present": true,
+          "expected_kind": "resource_item",
+          "expected_metadata": {
+            "item_id": "wood:10000:normal",
+            "resource": "wood",
+            "amount": 10000,
+            "owned": 66
+          }
+        }
+      ]
+    },
+    {
+      "image": "quest_daily.png",
+      "screen": "PNC_QUEST_DAILY",
+      "state": "clear",
+      "group": "2026-09-08/serious_stuff",
+      "source_artifact": "C:/Users/lebel/pnc/tests/data/screen_recognition/quest_daily.png",
+      "dimensions": [
+        540,
+        960
+      ],
+      "decoded_sha256": "8c55e463e878ac66ebdd9689b2596feedc402c5db1cdc7478a33647a82f4ae0a",
+      "reviewed_at": "2026-09-10T23:51:05Z",
+      "build": null,
+      "locale": null,
+      "expected_daily_rows": 5,
+      "rows": [
+        {
+          "title": "Use resource item x1",
+          "progress": [
+            1,
+            1
+          ],
+          "state": "claim",
+          "card": [
+            10,
+            373,
+            517,
+            99
+          ],
+          "action": [
+            388,
+            397,
+            131,
+            45
+          ],
+          "expected_kind": "daily_quest",
+          "expected_metadata": {
+            "quest_id": "use_resource_item",
+            "progress_current": 1,
+            "progress_required": 1,
+            "row_state": "claim"
+          }
+        },
+        {
+          "title": "Upgrade building 1x",
+          "progress": [
+            0,
+            1
+          ],
+          "state": "go",
+          "card": [
+            10,
+            488,
+            517,
+            99
+          ],
+          "action": [
+            388,
+            512,
+            131,
+            45
+          ],
+          "expected_kind": "daily_quest",
+          "expected_metadata": {
+            "quest_id": "upgrade_building",
+            "progress_current": 0,
+            "progress_required": 1,
+            "row_state": "go"
+          }
+        },
+        {
+          "title": "Challenge 3x in Hero Arena",
+          "progress": [
+            0,
+            3
+          ],
+          "state": "go",
+          "card": [
+            10,
+            602,
+            517,
+            99
+          ],
+          "action": [
+            388,
+            627,
+            131,
+            45
+          ],
+          "expected_kind": "daily_quest",
+          "expected_metadata": {
+            "quest_id": "hero_arena",
+            "progress_current": 0,
+            "progress_required": 3,
+            "row_state": "go"
+          }
+        },
+        {
+          "title": "Upgrade tech 1x",
+          "progress": [
+            0,
+            1
+          ],
+          "state": "go",
+          "card": [
+            10,
+            717,
+            517,
+            99
+          ],
+          "action": [
+            388,
+            741,
+            131,
+            46
+          ],
+          "expected_kind": "daily_quest",
+          "expected_metadata": {
+            "quest_id": "upgrade_research",
+            "progress_current": 0,
+            "progress_required": 1,
+            "row_state": "go"
+          }
+        },
+        {
+          "title": "Train Infantry x250",
+          "progress": [
+            0,
+            250
+          ],
+          "state": "go",
+          "card": [
+            10,
+            832,
+            517,
+            99
+          ],
+          "action": [
+            388,
+            856,
+            131,
+            45
+          ],
+          "expected_kind": "daily_quest",
+          "expected_metadata": {
+            "quest_id": "train_infantry",
+            "progress_current": 0,
+            "progress_required": 250,
+            "row_state": "go"
+          }
+        }
+      ],
+      "clipped_bottom": [
+        0,
+        947,
+        540,
+        13
+      ]
+    },
+    {
+      "image": "quest_main.png",
+      "screen": "PNC_QUEST_MAIN",
+      "state": "clear",
+      "group": "2026-09-08/serious_stuff",
+      "source_artifact": "C:/Users/lebel/pnc/tests/data/screen_recognition/quest_main.png",
+      "dimensions": [
+        540,
+        960
+      ],
+      "decoded_sha256": "7a6df26369f500c500c1eeab8deb01ee1e52699abf0c95ad8aabd42cedbf2bf7",
+      "reviewed_at": "2026-09-10T23:51:05Z",
+      "build": null,
+      "locale": null,
+      "expected_daily_rows": 0
+    },
+    {
+      "image": "update_over_bag.png",
+      "screen": "PNC_POPUP",
+      "state": "blocked",
+      "group": "2026-09-09/serious_stuff",
+      "source_artifact": "C:/Users/lebel/pnc/tests/data/screen_recognition/update_over_bag.png",
+      "dimensions": [
+        540,
+        960
+      ],
+      "decoded_sha256": "b70bb431e6544f172602ea737a04ddf7e7aa6ccd943fd8082f26b379fbe599eb",
+      "reviewed_at": "2026-09-10T23:51:05Z",
+      "build": null,
+      "locale": null,
+      "boxes": {
+        "Confirm": [
+          178,
+          521,
+          184,
+          53
+        ]
+      },
+      "forbidden_background": [
+        "PNC_BAG_USE_BUTTON",
+        "PNC_BAG_SUBTAB_RESOURCE"
+      ],
+      "canary_inputs": 0,
+      "control_selector_ids": {
+        "Confirm": "PNC_UPDATE_CONFIRM_BUTTON"
+      }
+    },
+    {
+      "image": "upgrade_warning_aug28.png",
+      "screen": "PNC_BUILDING_UPGRADE_WARNING",
+      "state": "blocked",
+      "group": "2026-08-28/testing",
+      "source_artifact": "C:/Users/lebel/pnc/artifacts/2026-08-28/testing/20260828T175502Z_building_upgrade_post_action_2.png",
+      "dimensions": [
+        900,
+        1600
+      ],
+      "decoded_sha256": "36e55d466ebaa9f0364ac9dd7f4e84598d0267d72ad14be3fde96ffcf8c6cbc3",
+      "reviewed_at": "2026-09-10T23:51:05Z",
+      "build": null,
+      "locale": null,
+      "boxes": {
+        "Confirm": [
+          495,
+          836,
+          307,
+          89
+        ]
+      },
+      "canary_inputs": 0,
+      "control_selector_ids": {
+        "Confirm": "PNC_BUILDING_UPGRADE_WARNING_CONFIRM_BUTTON"
+      }
+    },
+    {
+      "image": "alliance_home_aug30.png",
+      "screen": "PNC_ALLIANCE_HOME",
+      "state": "clear",
+      "group": "2026-08-30/mega_old_acc",
+      "source_artifact": "C:/Users/lebel/pnc/artifacts/2026-08-30/mega_old_acc/20260830T142225Z_daily_plan_npc2_alliance_open_for_shop.png",
+      "dimensions": [
+        900,
+        1600
+      ],
+      "decoded_sha256": "b599564706d9ad00abd548122276be8f265d0a9bc382e8a48d3d2c4fe03745dc",
+      "reviewed_at": "2026-09-10T23:51:05Z",
+      "build": null,
+      "locale": null,
+      "historical_only": true
+    },
+    {
+      "image": "castle_aug25.png",
+      "screen": "PNC_CASTLE",
+      "state": "clear",
+      "group": "2026-08-25/testing",
+      "source_artifact": "C:/Users/lebel/pnc/artifacts/2026-08-25/testing/20260825T142114Z_phase1_upgrade_entry_castle.png",
+      "dimensions": [
+        900,
+        1600
+      ],
+      "decoded_sha256": "15df16a6d5aca4a99cbcfd40d0a3ca2c5c4b1ab1c2df397acf97a886fd70db85",
+      "reviewed_at": "2026-09-10T23:51:05Z",
+      "build": null,
+      "locale": null,
+      "boxes": {
+        "Upgrade": [
+          638,
+          422,
+          215,
+          75
+        ],
+        "Back": [
+          37,
+          15,
+          99,
+          63
+        ]
+      },
+      "historical_only": true,
+      "level": 1,
+      "control_selector_ids": {
+        "Upgrade": "PNC_CASTLE_UPGRADE_BUTTON",
+        "Back": "PNC_BACK_BUTTON_TOP_LEFT"
+      }
+    }
+  ],
+  "semantic_annotation_note": "Canonical identifiers attached to the already manually reviewed labels; image groups, hashes, labels and intended boxes unchanged."
+}

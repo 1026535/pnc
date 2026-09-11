@@ -127,61 +127,61 @@ def main() -> None:
                 label=arguments.label,
             )
 
-            payloads, adb_bytes_ms = _benchmark_adb_bytes(session=session, iterations=arguments.iterations)
-            png_decode_ms = _benchmark_png_decode(payloads)
-            artifact_persist_ms = _benchmark_artifact_persist(
-                screenshot_service=screenshot_service,
-                account_artifact_directory=account.artifact_directory_name,
-                label=arguments.label,
-                payloads=payloads,
-            )
-            ocr_screenshots, screenshot_capture_no_persist_ms = _benchmark_screenshot_capture(
-                screenshot_service=screenshot_service,
-                session=session,
-                account_artifact_directory=account.artifact_directory_name,
-                label=arguments.label,
-                iterations=arguments.iterations,
-                persist=False,
-            )
-            _persisted_screenshots, screenshot_capture_persist_ms = _benchmark_screenshot_capture(
-                screenshot_service=screenshot_service,
-                session=session,
-                account_artifact_directory=account.artifact_directory_name,
-                label=arguments.label,
-                iterations=arguments.iterations,
-                persist=True,
-            )
-            coordinate_ocr_ms = _benchmark_coordinate_ocr(
-                screenshots=ocr_screenshots,
-                coordinate_bar_selector=coordinate_bar_selector,
-                ocr_service=builder.enricher.ocr_service,
-            )
-            builder_screenshots, _builder_input_capture_ms = _benchmark_screenshot_capture(
-                screenshot_service=screenshot_service,
-                session=session,
-                account_artifact_directory=account.artifact_directory_name,
-                label=f"{arguments.label}_builder_input",
-                iterations=arguments.iterations,
-                persist=False,
-            )
-            coordinate_builder_ms = _benchmark_builder(
-                builder=builder,
-                screenshots=builder_screenshots,
-                request=request,
-            )
-            p2_builder_ms = _benchmark_builder(
-                builder=builder,
-                screenshots=builder_screenshots,
-                request=ObservationRequest.world_map_checkpoint_analysis(expected_coordinate=coordinate),
-            )
-            service_timings = _benchmark_observation_service(
-                service=service,
-                request=request,
-                artifact_selection=artifact_selection,
-                label=arguments.label,
-                iterations=arguments.iterations,
-            )
-            service_total_mean = statistics.mean(service_timings["total_ms"])
+    payloads, adb_bytes_ms = _benchmark_adb_bytes(session=session, iterations=arguments.iterations)
+    png_decode_ms = _benchmark_png_decode(payloads)
+    artifact_persist_ms = _benchmark_artifact_persist(
+        screenshot_service=screenshot_service,
+        account_artifact_directory=account.artifact_directory_name,
+        label=arguments.label,
+        payloads=payloads,
+    )
+    ocr_screenshots, screenshot_capture_no_persist_ms = _benchmark_screenshot_capture(
+        screenshot_service=screenshot_service,
+        session=session,
+        account_artifact_directory=account.artifact_directory_name,
+        label=arguments.label,
+        iterations=arguments.iterations,
+        persist=False,
+    )
+    _persisted_screenshots, screenshot_capture_persist_ms = _benchmark_screenshot_capture(
+        screenshot_service=screenshot_service,
+        session=session,
+        account_artifact_directory=account.artifact_directory_name,
+        label=arguments.label,
+        iterations=arguments.iterations,
+        persist=True,
+    )
+    coordinate_ocr_ms = _benchmark_coordinate_ocr(
+        screenshots=ocr_screenshots,
+        coordinate_bar_selector=coordinate_bar_selector,
+        ocr_service=builder.ocr_service,
+    )
+    builder_screenshots, _builder_input_capture_ms = _benchmark_screenshot_capture(
+        screenshot_service=screenshot_service,
+        session=session,
+        account_artifact_directory=account.artifact_directory_name,
+        label=f"{arguments.label}_builder_input",
+        iterations=arguments.iterations,
+        persist=False,
+    )
+    coordinate_builder_ms = _benchmark_builder(
+        builder=builder,
+        screenshots=builder_screenshots,
+        request=request,
+    )
+    p2_builder_ms = _benchmark_builder(
+        builder=builder,
+        screenshots=builder_screenshots,
+        request=ObservationRequest.world_map_checkpoint_analysis(expected_coordinate=coordinate),
+    )
+    service_timings = _benchmark_observation_service(
+        service=service,
+        request=request,
+        artifact_selection=artifact_selection,
+        label=arguments.label,
+        iterations=arguments.iterations,
+    )
+    service_total_mean = statistics.mean(service_timings["total_ms"])
 
             print(
                 json.dumps(

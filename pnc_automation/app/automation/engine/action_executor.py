@@ -5,10 +5,12 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Callable, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 
 from pnc_automation.core.infra.emulator.session import BlueStacksSession
-from pnc_automation.core.errors import SelectorResolutionError
+from pnc_automation.core.errors import FrameProvenanceError, SelectorResolutionError
+from pnc_automation.app.automation.engine.read_only_policy import ReadOnlyProbePolicy
 from pnc_automation.app.pnc.domain.chat import chat_channel_selector_id
 from pnc_automation.app.pnc.domain.mail import multiline_text_field_selector_ids
 from pnc_automation.app.pnc.domain.action_requests import (
@@ -19,6 +21,7 @@ from pnc_automation.app.pnc.domain.action_requests import (
     LaunchAppAction,
     SelectChatChannelAction,
     SwipeAction,
+    SwipePurpose,
     TapAction,
     TapListEntryAction,
     TapPointAction,
@@ -29,13 +32,18 @@ from pnc_automation.app.pnc.domain.action_requests import (
 from pnc_automation.app.pnc.domain.observation import (
     DetectedListEntry,
     DetectedSpatialObject,
+    ListEntryKind,
     Observation,
+    RowRecognitionStatus,
     SpatialSurfaceType,
+    VisibleElement,
     list_entry_matches,
 )
+from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
+from pnc_automation.app.pnc.vision.selectors import SelectorRegistry
 
 
 @dataclass(slots=True)
@@ -43,6 +51,7 @@ class ActionExecutor:
     """Executes action requests against one emulator session."""
 
     session: BlueStacksSession
+    selector_registry: SelectorRegistry
     stable_click_delay_ms: int
     post_action_observe_delay_ms: int
     chat_stable_click_delay_ms: int
@@ -51,6 +60,10 @@ class ActionExecutor:
     world_map_movement_stable_click_delay_ms: int = 300
     world_map_movement_post_action_observe_delay_ms: int = 800
     sleep: Callable[[float], None] = time.sleep
+    read_only_policy: ReadOnlyProbePolicy = ReadOnlyProbePolicy()
+    max_input_attempts: int | None = None
+    input_attempts: int = 0
+    input_attempt_deadline: float | None = None
 
     def execute_actions(
         self,
@@ -106,19 +119,38 @@ class ActionExecutor:
 
         self.logger.info("Executing action.", extra={"action_type": type(action).__name__, "screen_type": observation.screen_type})
         if isinstance(action, TapAction):
+            self.selector_registry.require_supported(action.selector_id)
             element = observation.require(action.selector_id)
+            self._validate_visible_element_provenance(element, observation, action)
             target = element.action_point if element.action_point is not None else element.bounds.center()
-            self.session.tap_point(*target)
+            with self._authorized_input(action, observation):
+                self._record_input_attempt(action, observation)
+                self.session.tap_point(*target)
             self._sleep_ms(self._stable_delay_ms_for(action))
             return True
         if isinstance(action, TapPointAction):
-            self.session.tap_point(action.x, action.y)
+            with self._authorized_input(action, observation):
+                self._record_input_attempt(action, observation)
+                self.session.tap_point(action.x, action.y)
             self._sleep_ms(self._stable_delay_ms_for(action))
             return True
         if isinstance(action, TapListEntryAction):
             entry = self._require_entry(action, observation)
-            target = entry.action_point if action.use_action_point and entry.action_point is not None else entry.bounds.center()
-            self.session.tap_point(*target)
+            self._validate_list_entry_provenance(entry, observation, action)
+            if entry.kind in {
+                ListEntryKind.DAILY_QUEST,
+                ListEntryKind.RESOURCE_ITEM,
+                ListEntryKind.RESOURCE_INVENTORY_EXCLUSION,
+                ListEntryKind.RESOURCE_INVENTORY_UNRESOLVED,
+            }:
+                self._validate_protected_row_geometry(entry, action)
+                assert entry.action_point is not None
+                target = entry.action_point
+            else:
+                target = entry.action_point if action.use_action_point and entry.action_point is not None else entry.bounds.center()
+            with self._authorized_input(action, observation):
+                self._record_input_attempt(action, observation)
+                self.session.tap_point(*target)
             self._sleep_ms(self._stable_delay_ms_for(action))
             return True
         if isinstance(action, TapSpatialObjectAction):
@@ -130,7 +162,9 @@ class ActionExecutor:
                     if action.use_action_point and object_.action_point is not None
                     else object_.bounds.center()
                 )
-            self.session.tap_point(*target)
+            with self._authorized_input(action, observation):
+                self._record_input_attempt(action, observation)
+                self.session.tap_point(*target)
             self._sleep_ms(self._stable_delay_ms_for(action))
             return True
         if isinstance(action, SelectChatChannelAction):
@@ -141,30 +175,47 @@ class ActionExecutor:
                 )
             if observation.is_chat_channel_active(action.channel):
                 return False
-            element = observation.require(chat_channel_selector_id(action.channel))
+            selector_id = chat_channel_selector_id(action.channel)
+            self.selector_registry.require_supported(selector_id)
+            element = observation.require(selector_id)
+            self._validate_visible_element_provenance(element, observation, action)
             target = element.action_point if element.action_point is not None else element.bounds.center()
-            self.session.tap_point(*target)
+            with self._authorized_input(action, observation):
+                self._record_input_attempt(action, observation)
+                self.session.tap_point(*target)
             self._sleep_ms(self._stable_delay_ms_for(action))
             return True
         if isinstance(action, InputTextAction):
             if action.selector_id is not None:
+                self.selector_registry.require_supported(action.selector_id)
                 element = observation.require(action.selector_id)
+                self._validate_visible_element_provenance(element, observation, action)
                 x, y = element.action_point if element.action_point is not None else element.bounds.center()
-                self.session.tap_point(x, y)
-                self._sleep_ms(self._stable_delay_ms_for(action))
-                self._clear_existing_text(action, observation)
-            self._input_text(action, observation)
+            else:
+                x = y = 0
+            with self._authorized_input(action, observation):
+                if action.selector_id is not None:
+                    self._record_input_attempt(action, observation)
+                    self.session.tap_point(x, y)
+                    self._sleep_ms(self._stable_delay_ms_for(action))
+                    self._clear_existing_text(action, observation)
+                self._input_text(action, observation)
             self._sleep_ms(self._stable_delay_ms_for(action))
             return True
         if isinstance(action, KeyEventAction):
-            self.session.press_key(action.key_code)
+            with self._authorized_input(action, observation):
+                self._record_input_attempt(action, observation)
+                self.session.press_key(action.key_code)
             self._sleep_ms(self._stable_delay_ms_for(action))
             return True
         if isinstance(action, WaitAction):
+            self._validate_read_only_action(action, observation)
             self._sleep_ms(action.milliseconds)
             return True
         if isinstance(action, LaunchAppAction):
-            self.session.launch_app()
+            with self._authorized_input(action, observation):
+                self._record_input_attempt(action, observation)
+                self.session.launch_app()
             self._sleep_ms(self._stable_delay_ms_for(action))
             return True
         if isinstance(action, SwipeAction):
@@ -176,15 +227,17 @@ class ActionExecutor:
                 height=height,
                 action=action,
             )
-            self.session.swipe(
-                start_x,
-                start_y,
-                end_x,
-                end_y,
-                duration_ms=action.duration_ms,
-                input_source=action.input_source.value,
-                gesture_primitive=action.gesture_primitive.value,
-            )
+            with self._authorized_input(action, observation):
+                self._record_input_attempt(action, observation)
+                self.session.swipe(
+                    start_x,
+                    start_y,
+                    end_x,
+                    end_y,
+                    duration_ms=action.duration_ms,
+                    input_source=action.input_source.value,
+                    gesture_primitive=action.gesture_primitive.value,
+                )
             self._sleep_ms(self._stable_delay_ms_for(action))
             return True
         raise SelectorResolutionError(f"Unsupported action type '{type(action).__name__}'.", action_type=type(action).__name__)
@@ -214,15 +267,28 @@ class ActionExecutor:
     def _require_entry(self, action: TapListEntryAction, observation: Observation) -> DetectedListEntry:
         """Returns the matching list entry for one dynamic-entry tap."""
 
-        for entry in observation.entries(action.entry_kind):
+        matches = [
+            entry
+            for entry in observation.entries(action.entry_kind)
             if list_entry_matches(
                 entry,
                 title_text=action.title_text,
                 metadata_key=action.metadata_key,
                 metadata_value=action.metadata_value,
                 selected=action.selected,
-            ):
-                return entry
+            )
+        ]
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            raise SelectorResolutionError(
+                "The requested list entry tap target is ambiguous; semantic identity matched multiple rows.",
+                entry_kind=action.entry_kind,
+                title_text=action.title_text,
+                metadata_key=action.metadata_key,
+                metadata_value=action.metadata_value,
+                match_count=len(matches),
+            )
         raise SelectorResolutionError(
             "Could not resolve the requested list entry tap target.",
             entry_kind=action.entry_kind,
@@ -230,6 +296,201 @@ class ActionExecutor:
             metadata_key=action.metadata_key,
             metadata_value=action.metadata_value,
         )
+
+    @contextmanager
+    def _authorized_input(self, action: ActionRequest, observation: Observation):
+        """Holds one session provenance lock through the complete logical input."""
+
+        self._validate_read_only_action(action, observation)
+
+        if observation.decision.coordinate_only:
+            if not (
+                isinstance(action, SwipeAction)
+                and action.purpose == SwipePurpose.WORLD_MAP_MOVEMENT
+                and observation.screen_type == ScreenType.PNC_WORLD_MAP
+                and observation.spatial_surface is not None
+                and observation.spatial_surface.surface_type == SpatialSurfaceType.WORLD_MAP
+                and observation.spatial_surface.viewport.coordinate is not None
+            ):
+                raise SelectorResolutionError(
+                    "Coordinate-only observations authorize only typed world-map movement swipes.",
+                    action_type=type(action).__name__,
+                    screen_type=observation.screen_type,
+                )
+        elif not observation.decision.action_eligible:
+            raise SelectorResolutionError(
+                "UI input requires a clear or independently blocked screen decision.",
+                action_type=type(action).__name__,
+                screen_type=observation.screen_type,
+                guard=observation.decision.guard,
+            )
+        elif observation.decision.guard == GuardVerdict.BLOCKED and not (
+            isinstance(action, (TapAction, TapListEntryAction))
+            or (isinstance(action, InputTextAction) and action.selector_id is not None)
+        ):
+            raise SelectorResolutionError(
+                "A blocked screen authorizes only controls proved on the blocking overlay; raw input is denied.",
+                action_type=type(action).__name__,
+                screen_type=observation.screen_type,
+            )
+
+        frame_ref = observation.frame_ref
+        if frame_ref is None:
+            raise SelectorResolutionError(
+                "UI input requires a screenshot with session provenance; unverified observations cannot dispatch.",
+                action_type=type(action).__name__,
+                screen_type=observation.screen_type,
+            )
+        try:
+            with self.session.authorized_input(frame_ref):
+                yield
+        except FrameProvenanceError as error:
+            raise SelectorResolutionError(
+                "UI input proof was rejected by the session provenance guard.",
+                action_type=type(action).__name__,
+                screen_type=observation.screen_type,
+                provenance_error=error.message,
+                provenance_error_type=type(error).__name__,
+                provenance_details=error.details,
+            ) from error
+
+    def _validate_visible_element_provenance(
+        self,
+        element: object,
+        observation: Observation,
+        action: ActionRequest,
+    ) -> None:
+        """Rejects selector geometry that was not published for this exact decision and frame."""
+
+        if observation.frame_ref is None:
+            raise SelectorResolutionError(
+                "UI input requires a screenshot with session provenance; unverified observations cannot dispatch.",
+                action_type=type(action).__name__,
+                screen_type=observation.screen_type,
+            )
+        if not isinstance(element, VisibleElement):
+            # The map is typed by Observation; this branch protects malformed fakes.
+            raise SelectorResolutionError("Selector target has an invalid runtime type.", action_type=type(action).__name__)
+        if element.frame_ref != observation.frame_ref or element.source_screen != observation.screen_type:
+            raise SelectorResolutionError(
+                "Selector target provenance does not match the current observation.",
+                action_type=type(action).__name__,
+                selector_id=element.selector_id,
+                screen_type=observation.screen_type,
+            )
+        if element.source_layout_id != observation.decision.layout_id:
+            raise SelectorResolutionError(
+                "Selector target layout does not match the current screen decision.",
+                action_type=type(action).__name__,
+                selector_id=element.selector_id,
+                screen_type=observation.screen_type,
+            )
+
+    def _validate_list_entry_provenance(
+        self,
+        entry: DetectedListEntry,
+        observation: Observation,
+        action: ActionRequest,
+    ) -> None:
+        """Rejects list-row geometry that came from another frame or source layout."""
+
+        if observation.frame_ref is None:
+            raise SelectorResolutionError(
+                "UI input requires a screenshot with session provenance; unverified observations cannot dispatch.",
+                action_type=type(action).__name__,
+                screen_type=observation.screen_type,
+            )
+        if entry.frame_ref != observation.frame_ref or entry.source_screen != observation.screen_type:
+            raise SelectorResolutionError(
+                "List entry provenance does not match the current observation.",
+                action_type=type(action).__name__,
+                entry_kind=entry.kind,
+            )
+        if entry.source_layout_id != observation.decision.layout_id:
+            raise SelectorResolutionError(
+                "List entry layout does not match the current screen decision.",
+                action_type=type(action).__name__,
+                entry_kind=entry.kind,
+            )
+
+    @staticmethod
+    def _validate_protected_row_geometry(
+        entry: DetectedListEntry,
+        action: TapListEntryAction,
+    ) -> None:
+        """Require independently materialized action geometry for protected row families."""
+
+        if not action.use_action_point:
+            raise SelectorResolutionError(
+                "Protected row taps must explicitly request the observed action point.",
+                entry_kind=entry.kind,
+            )
+        if entry.kind in {
+            ListEntryKind.RESOURCE_INVENTORY_EXCLUSION,
+            ListEntryKind.RESOURCE_INVENTORY_UNRESOLVED,
+        }:
+            raise SelectorResolutionError(
+                "Excluded or unresolved inventory rows are never actionable.",
+                entry_kind=entry.kind,
+            )
+        if entry.row_status != RowRecognitionStatus.COMPLETE:
+            raise SelectorResolutionError(
+                "Protected row taps require a complete visual row.",
+                entry_kind=entry.kind,
+                row_status=entry.row_status,
+            )
+        if entry.action_point is None or entry.action_bounds is None:
+            raise SelectorResolutionError(
+                "Protected row taps require an action point and independently detected action bounds.",
+                entry_kind=entry.kind,
+            )
+        if not entry.bounds.contains_bounds(entry.action_bounds):
+            raise SelectorResolutionError(
+                "Protected row action bounds must remain inside the row bounds.",
+                entry_kind=entry.kind,
+            )
+        if not entry.action_bounds.contains_point(entry.action_point):
+            raise SelectorResolutionError(
+                "Protected row action point must lie inside its action bounds.",
+                entry_kind=entry.kind,
+            )
+
+    def _validate_read_only_action(self, action: ActionRequest, observation: Observation) -> None:
+        """Checks the explicit source-state action policy before any dispatch."""
+
+        self.read_only_policy.validate(action, observation)
+
+    def _record_input_attempt(self, action: ActionRequest, observation: Observation) -> None:
+        """Counts one imminent low-level input and enforces a bounded probe budget."""
+
+        self.input_attempts += 1
+        if self.input_attempt_deadline is not None and time.monotonic() > self.input_attempt_deadline:
+            raise SelectorResolutionError(
+                "Read-only probe exhausted its duration budget before input dispatch.",
+                input_deadline=self.input_attempt_deadline,
+                input_attempts=self.input_attempts,
+                action_type=type(action).__name__,
+                screen_type=observation.screen_type,
+            )
+        if self.max_input_attempts is not None and self.input_attempts > self.max_input_attempts:
+            raise SelectorResolutionError(
+                "Read-only probe exhausted its low-level input-attempt budget.",
+                max_input_attempts=self.max_input_attempts,
+                input_attempts=self.input_attempts,
+                action_type=type(action).__name__,
+                screen_type=observation.screen_type,
+            )
+
+    def configure_input_attempt_budget(self, max_inputs: int | None, *, duration_seconds: float | None = None) -> None:
+        """Sets and resets the optional low-level input budget for a bounded probe."""
+
+        if max_inputs is not None and max_inputs <= 0:
+            raise ValueError("Input-attempt budget must be positive when configured.")
+        if duration_seconds is not None and duration_seconds <= 0:
+            raise ValueError("Input-attempt duration budget must be positive when configured.")
+        self.max_input_attempts = max_inputs
+        self.input_attempts = 0
+        self.input_attempt_deadline = None if duration_seconds is None else time.monotonic() + duration_seconds
 
     def _require_spatial_object(self, action: TapSpatialObjectAction, observation: Observation) -> DetectedSpatialObject:
         """Returns the matching visible spatial object for one spatial-object tap."""
@@ -276,8 +537,10 @@ class ActionExecutor:
                 if observation.chat_draft_empty:
                     return
                 delete_budget = _delete_budget(observation.chat_draft_text)
+                self._record_input_attempt(action, observation)
                 self.session.press_key("KEYCODE_MOVE_END")
                 for _ in range(delete_budget):
+                    self._record_input_attempt(action, observation)
                     self.session.press_key("KEYCODE_DEL")
                 self._sleep_ms(self._stable_delay_ms_for(action))
                 return
@@ -288,8 +551,10 @@ class ActionExecutor:
             )
         if field_state.empty:
             return
+        self._record_input_attempt(action, observation)
         self.session.press_key("KEYCODE_MOVE_END")
         for _ in range(_delete_budget(field_state.text)):
+            self._record_input_attempt(action, observation)
             self.session.press_key("KEYCODE_DEL")
         self._sleep_ms(self._stable_delay_ms_for(action))
 
@@ -297,6 +562,7 @@ class ActionExecutor:
         """Inputs text through the shared single-line or multiline field policy."""
 
         if "\n" not in action.text and "\r" not in action.text:
+            self._record_input_attempt(action, observation)
             self.session.input_text(action.text)
             return
         if action.selector_id is None:
@@ -309,9 +575,11 @@ class ActionExecutor:
             )
         normalized_lines = action.text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
         for index, line in enumerate(normalized_lines):
+            self._record_input_attempt(action, observation)
             self.session.input_text(line)
             if index == len(normalized_lines) - 1:
                 continue
+            self._record_input_attempt(action, observation)
             self.session.press_key("KEYCODE_ENTER")
 
     def _matches_follow_up_request(
@@ -369,6 +637,8 @@ class ActionExecutor:
             or surface.surface_type != SpatialSurfaceType.WORLD_MAP
             or surface.viewport.coordinate is None
         )
+
+
 def _delete_budget(draft_text: str | None) -> int:
     """Returns a conservative delete count for one observed reusable text field."""
 

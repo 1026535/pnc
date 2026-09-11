@@ -33,12 +33,11 @@ from pnc_automation.app.pnc.vision.observation_builder import (
     ObservationDebugArtifactCollector,
     ImageSelectorEngine,
 )
-from pnc_automation.core.vision.ocr.ocr_service import CachedOcrService, RapidOcrService
+from pnc_automation.core.vision.ocr.ocr_service import RapidOcrService
 from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservationEnricher
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
 from pnc_automation.app.pnc.vision.selectors import SelectorRegistry, build_default_selector_registry
 from pnc_automation.app.pnc.vision.visual_screen_recognizer import load_visual_screen_recognizer
-from pnc_automation.bluestacks_management.instance_lease import InstanceLeaseBundle
 from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
 
 
@@ -182,20 +181,19 @@ def build_application_runner(
 def build_observation_builder(selector_registry: SelectorRegistry) -> ObservationBuilder:
     """Builds one independently owned observation pipeline and OCR engine."""
 
-    ocr_service = CachedOcrService(RapidOcrService())
+    ocr_service = RapidOcrService()
     template_matcher = OpenCvTemplateMatcher()
     return ObservationBuilder(
         selector_registry=selector_registry,
         selector_engine=ImageSelectorEngine(
             template_matcher=template_matcher,
-            ocr_service=ocr_service,
         ),
         screen_classifier=ScreenClassifier(),
+        ocr_service=ocr_service,
         enricher=PncObservationEnricher(
-            ocr_service=ocr_service,
             selector_registry=selector_registry,
         ),
-        debug_artifact_collector=ObservationDebugArtifactCollector(ocr_service=ocr_service),
+        debug_artifact_collector=ObservationDebugArtifactCollector(),
         visual_recognizer=load_visual_screen_recognizer(matcher=template_matcher),
     )
 

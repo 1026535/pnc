@@ -19,7 +19,6 @@ from pnc_automation.app.pnc.domain.observation import (
 )
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
-from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 
 
 def home_city_object_query(home_city_object_id: HomeCityObjectId) -> SpatialObjectQuery:
@@ -80,9 +79,7 @@ def requested_home_city_object_observation_matches(observation: Observation, tar
         and observation.has(build_menu_option_selector)
     ):
         return True
-    if target != HomeCityObjectId.SANCTUM:
-        return False
-    return observation.has(UiElementId.PNC_SANCTUM_ARTIFACT_BUTTON) and observation.has(UiElementId.PNC_SANCTUM_RELIC_BUTTON)
+    return False
 
 
 def plan_focus_requested_home_city_object(

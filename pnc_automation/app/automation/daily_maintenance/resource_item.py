@@ -14,7 +14,10 @@ from pnc_automation.app.pnc.domain.daily_maintenance import (
     DailyTargetOutcomeStatus, DailyTaskCheckpoint, MutationIntent, MutationIntentState,
 )
 from pnc_automation.app.pnc.domain.resource_items import (
-    ResourceInventory, ResourceItem, smallest_resource_item,
+    ResourceInventory,
+    ResourceInventoryStatus,
+    ResourceItem,
+    smallest_resource_item,
 )
 
 
@@ -79,6 +82,13 @@ class ResourceItemExecutor:
                 artifact_paths=_intent_artifacts(prior),
             )
         inventory = self.session.scan_inventory()
+        if inventory.status != ResourceInventoryStatus.COMPLETE:
+            return checkpoint, DailyTargetOutcome(
+                DailyQuestId.USE_RESOURCE_ITEM,
+                DailyTargetOutcomeStatus.PENDING_CLARIFICATION,
+                "Resource inventory status is unknown; no pack was selected.",
+                artifact_paths=inventory.artifact_paths,
+            )
         selected = smallest_resource_item(inventory)
         if selected is None:
             return checkpoint, DailyTargetOutcome(
@@ -132,6 +142,22 @@ class ResourceItemExecutor:
 
         item_id, expected_owned = _parse_resource_precondition(intent.expected_precondition)
         inventory = self.session.scan_inventory()
+        if inventory.status != ResourceInventoryStatus.COMPLETE:
+            result = self.dispatcher.reconcile_existing(
+                checkpoint=checkpoint,
+                operation_id=intent.operation_id,
+                reconcile=lambda: MutationReconciliation(
+                    postcondition_proven=False,
+                    original_precondition_proven=False,
+                    artifact_paths=inventory.artifact_paths,
+                ),
+            )
+            return result.checkpoint, DailyTargetOutcome(
+                DailyQuestId.USE_RESOURCE_ITEM,
+                DailyTargetOutcomeStatus.PENDING_CLARIFICATION,
+                "Previously dispatched resource use remains unresolved; inventory status is unknown.",
+                artifact_paths=result.artifact_paths,
+            )
         observed = next((item for item in inventory.items if item.item_id == item_id), None)
         consumed_one = observed is not None and observed.owned == expected_owned - 1
         complete = consumed_one and self.session.daily_requirement_completed()

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -21,8 +22,10 @@ from pnc_automation.app.pnc.domain.daily_maintenance import (
     NormalizedBounds,
 )
 from pnc_automation.app.pnc.domain.observation import Bounds, DetectedListEntry, ListEntryKind, Observation
+from pnc_automation.app.pnc.domain.observation import RowRecognitionStatus
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.persistence.daily_run_journal_store import DailyRunJournalStore
+from tests.test_support import make_observation
 
 
 class DailyClaimExecutorTests(unittest.TestCase):
@@ -48,6 +51,7 @@ class DailyClaimExecutorTests(unittest.TestCase):
             progress_current=1,
             progress_required=1,
             coordinate_provenance=CoordinateProvenance.VISUAL_GEOMETRY,
+            row_status=RowRecognitionStatus.COMPLETE,
         )
 
     def tearDown(self) -> None:
@@ -98,6 +102,18 @@ class DailyClaimExecutorTests(unittest.TestCase):
         )
         self.assertEqual(MutationIntentState.DISPATCHED, persisted.mutation_intents[0].state)
 
+    def test_incomplete_row_is_rejected_before_claim_journal_or_dispatch(self) -> None:
+        """Clipped or ambiguous Daily rows cannot enter the mutation path."""
+
+        session = _ClaimSession((_observation("claim"),))
+        action_executor = Mock()
+        with self.assertRaisesRegex(RuntimeError, "complete visually resolved"):
+            self._executor(session, action_executor).claim(
+                row=replace(self.row, row_status=RowRecognitionStatus.CLIPPED),
+                checkpoint=self.checkpoint,
+            )
+        action_executor.execute_action.assert_not_called()
+
     def _executor(self, session, action_executor) -> JournaledDailyClaimExecutor:
         """Builds one claim executor around the test journal."""
 
@@ -127,15 +143,16 @@ class _ClaimSession:
 def _observation(state: str, *, fingerprint: str = "fingerprint") -> Observation:
     """Builds one typed Daily row observation."""
 
-    return Observation(
-        screen_type=ScreenType.PNC_QUEST_DAILY,
-        visible_elements={},
+    return make_observation(
+        ScreenType.PNC_QUEST_DAILY,
         list_entries=(
             DetectedListEntry(
                 kind=ListEntryKind.DAILY_QUEST,
                 bounds=Bounds(9, 372, 518, 99),
                 title_text="Upgrade Building",
                 action_point=(454, 421),
+                action_bounds=Bounds(430, 400, 60, 40),
+                row_status=RowRecognitionStatus.COMPLETE,
                 metadata={
                     "quest_id": DailyQuestId.UPGRADE_BUILDING.value,
                     "row_state": state,
@@ -151,12 +168,7 @@ def _observation(state: str, *, fingerprint: str = "fingerprint") -> Observation
 def _empty_observation() -> Observation:
     """Builds a typed Daily observation where the source row is absent."""
 
-    return Observation(
-        screen_type=ScreenType.PNC_QUEST_DAILY,
-        visible_elements={},
-        list_entries=(),
-        image_size=(540, 960),
-    )
+    return make_observation(ScreenType.PNC_QUEST_DAILY, image_size=(540, 960))
 
 
 if __name__ == "__main__":

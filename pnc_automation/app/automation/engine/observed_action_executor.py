@@ -10,8 +10,18 @@ from pathlib import Path
 from typing import Protocol
 
 from pnc_automation.app.automation.engine.action_executor import ActionExecutor
+from pnc_automation.app.automation.engine.read_only_policy import ReadOnlyProbePolicy
 from pnc_automation.core.errors import SelectorResolutionError
-from pnc_automation.app.pnc.domain.action_requests import ActionRequest, LaunchAppAction, TapAction
+from pnc_automation.app.pnc.domain.action_requests import (
+    ActionRequest,
+    InputTextAction,
+    LaunchAppAction,
+    SelectChatChannelAction,
+    TapPointAction,
+    TapSpatialObjectAction,
+    TapAction,
+)
+from pnc_automation.app.pnc.domain.chat import chat_channel_selector_id
 from pnc_automation.app.pnc.domain.observation import Observation, VisibleElement, VisibleElementSourceKind
 from pnc_automation.app.pnc.domain.popup import (
     PopupControlKind,
@@ -51,6 +61,7 @@ class ObservedActionExecutionPolicy:
     update_poll_interval_seconds: int = 10
     update_max_wait_seconds: int = 600
     update_max_popup_dismissals: int = 6
+    read_only_policy: ReadOnlyProbePolicy = ReadOnlyProbePolicy()
 
     def __post_init__(self) -> None:
         """Rejects invalid negative settle budgets."""
@@ -89,6 +100,20 @@ class ObservedActionExecutionResult:
     selector_interactions: tuple[SelectorInteractionResult, ...] = ()
     update_recovered: bool = False
 
+    @property
+    def screen_type(self) -> ScreenType:
+        """Exposes the final screen for callers migrated from raw observations."""
+
+        return self.observation.screen_type
+
+
+@dataclass(frozen=True, slots=True)
+class _InterruptionRecoveryResult:
+    """Carries one recovered observation and whether an exact update was involved."""
+
+    observation: Observation | None
+    update_recovered: bool = False
+
 
 @dataclass(frozen=True, slots=True)
 class _InterruptionRecoveryResult:
@@ -116,11 +141,66 @@ class ObservedActionExecutor:
     logger: logging.LoggerAdapter
     policy: ObservedActionExecutionPolicy = field(default_factory=ObservedActionExecutionPolicy)
     sleep: Callable[[float], None] = time.sleep
+    canonical_observe: ObservationCallback | None = None
 
-    def execute_action(self, action: ActionRequest, observation: Observation) -> bool:
-        """Executes one action without observing, for callers that own follow-up capture timing."""
+    def __post_init__(self) -> None:
+        """Propagates the shared source-state policy to the low-level dispatcher."""
 
-        return self.action_executor.execute_action(action, observation)
+        self.action_executor.read_only_policy = self.policy.read_only_policy
+
+    def configure_read_only_probe_mode(
+        self,
+        *,
+        allowed_selectors: frozenset[UiElementId],
+        allowed_selector_screens: tuple[tuple[UiElementId, frozenset[ScreenType]], ...] = (),
+        allow_launch: bool = False,
+        allow_swipe: bool = False,
+        allowed_back_screens: frozenset[ScreenType] = frozenset(),
+        allowed_swipe_screens: frozenset[ScreenType] = frozenset(),
+        allowed_launch_screens: frozenset[ScreenType] = frozenset(),
+        max_wait_ms: int = 1000,
+    ) -> None:
+        """Enables the explicit read-only action and recovery boundary for one probe."""
+
+        self.policy = ObservedActionExecutionPolicy(
+            max_settle_observations=self.policy.max_settle_observations,
+            update_poll_interval_seconds=self.policy.update_poll_interval_seconds,
+            update_max_wait_seconds=self.policy.update_max_wait_seconds,
+            update_max_popup_dismissals=self.policy.update_max_popup_dismissals,
+            read_only_policy=ReadOnlyProbePolicy(
+                enabled=True,
+                allowed_selectors=allowed_selectors,
+                allowed_selector_screens=allowed_selector_screens,
+                allow_launch=allow_launch,
+                allow_swipe=allow_swipe,
+                allowed_back_screens=allowed_back_screens,
+                allowed_swipe_screens=allowed_swipe_screens,
+                allowed_launch_screens=allowed_launch_screens,
+                max_wait_ms=max_wait_ms,
+            ),
+        )
+        self.__post_init__()
+
+    def execute_action(
+        self,
+        action: ActionRequest,
+        observation: Observation,
+        *,
+        observe: ObservationCallback | None = None,
+    ) -> bool:
+        """Executes one action and refreshes one stale proof through the bound observer."""
+
+        callback = observe or self.canonical_observe
+        if callback is None:
+            return self.action_executor.execute_action(action, observation)
+        executed, _ = self._execute_action_with_refresh(
+            action=action,
+            observation=observation,
+            label_prefix="single_action_provenance_refresh",
+            observe=callback,
+            expected_element=self._selector_source_element(action, observation),
+        )
+        return executed
 
     def execute_actions(
         self,
@@ -177,7 +257,13 @@ class ObservedActionExecutor:
                 executed_any_action = True
                 observed_after_action = True
                 continue
-            action_executed = self.action_executor.execute_action(action, current_observation)
+            action_executed, current_observation = self._execute_action_with_refresh(
+                action=action,
+                observation=current_observation,
+                label_prefix=f"pre_action_{index + 1}_provenance_refresh",
+                observe=observe,
+                expected_element=self._selector_source_element(action, current_observation),
+            )
             executed_any_action = executed_any_action or action_executed
             if getattr(action, "observe_after", False) and action_executed:
                 current_observation = self.action_executor.observe_action_follow_up(
@@ -263,6 +349,12 @@ class ObservedActionExecutor:
         )
         if decision is None or decision.control_kind != PopupControlKind.UPDATE_CONFIRM:
             return None
+        if self.policy.read_only_policy.enabled:
+            raise SelectorResolutionError(
+                "Read-only probe refuses required-update recovery because Confirm would mutate the game state.",
+                selector_id=UiElementId.PNC_UPDATE_CONFIRM_BUTTON,
+                screen_type=observation.screen_type,
+            )
         return self._recover_required_update(
             observation,
             label_prefix=label_prefix,
@@ -287,6 +379,12 @@ class ObservedActionExecutor:
         if decision is None or decision.control_kind != PopupControlKind.UPDATE_CONFIRM:
             if not self._is_popup_observation(observation):
                 return _InterruptionRecoveryResult(None)
+            if self.policy.read_only_policy.enabled:
+                # Read-only probes must not infer or dispatch an interruption
+                # dismissal.  An explicitly requested, allowlisted overlay
+                # control still goes through the normal low-level provenance
+                # and source policy checks below the observed executor.
+                return _InterruptionRecoveryResult(None)
             return self._recover_transient_popups(
                 observation,
                 label_prefix=label_prefix,
@@ -308,6 +406,12 @@ class ObservedActionExecutor:
     ) -> Observation:
         """Confirms one detected game update and polls until typed Home is restored."""
 
+        if self.policy.read_only_policy.enabled:
+            raise SelectorResolutionError(
+                "Read-only probe refuses required-update recovery because Confirm would mutate the game state.",
+                selector_id=UiElementId.PNC_UPDATE_CONFIRM_BUTTON,
+                screen_type=observation.screen_type,
+            )
         if not self._has_typed_popup_control(observation, PopupControlKind.UPDATE_CONFIRM):
             raise self._transient_recovery_error(
                 "Required game update confirmation lacks exact typed popup evidence.",
@@ -494,6 +598,11 @@ class ObservedActionExecutor:
     ) -> _InterruptionRecoveryResult:
         """Dismisses only newly fingerprinted safe transient popups in one bounded episode."""
 
+        if self.policy.read_only_policy.enabled:
+            raise SelectorResolutionError(
+                "Read-only probe refuses transient-popup recovery because dismissal would mutate the game state.",
+                screen_type=observation.screen_type,
+            )
         current = observation
         dismissed_fingerprints: set[str] = set()
         dismissed_identities: set[tuple[object, ...]] = set()
@@ -811,6 +920,75 @@ class ObservedActionExecutor:
         details.setdefault("screen_type", observation.screen_type)
         return SelectorResolutionError(message, **details)
 
+    def _execute_action_with_refresh(
+        self,
+        *,
+        action: ActionRequest,
+        observation: Observation,
+        label_prefix: str,
+        observe: ObservationCallback,
+        expected_element: VisibleElement | None = None,
+    ) -> tuple[bool, Observation]:
+        """Retries only a stale-proof dispatch after one compatible canonical recapture."""
+
+        try:
+            return self.action_executor.execute_action(action, observation), observation
+        except SelectorResolutionError as error:
+            if error.details.get("provenance_error_type") != "FrameProvenanceError":
+                raise
+            refreshed = observe(label_prefix, request=ObservationRequest.full_runtime_default())
+            if refreshed.screen_type != observation.screen_type:
+                raise SelectorResolutionError(
+                    "Stale action proof refreshed onto a different source screen; refusing to retarget the action.",
+                    action_type=type(action).__name__,
+                    action_reason=action.reason,
+                    label_prefix=label_prefix,
+                    before_screen_type=observation.screen_type,
+                    refreshed_screen_type=refreshed.screen_type,
+                ) from error
+            if isinstance(action, TapPointAction) or (
+                isinstance(action, TapSpatialObjectAction) and action.target_point is not None
+            ):
+                raise SelectorResolutionError(
+                    "Stale coordinate proof cannot be refreshed by reusing the old point; recompute a typed target.",
+                    action_type=type(action).__name__,
+                    screen_type=refreshed.screen_type,
+                ) from error
+            if expected_element is not None:
+                refreshed_element = refreshed.get(expected_element.selector_id)
+                if (
+                    refreshed_element is None
+                    or refreshed_element.bounds != expected_element.bounds
+                    or refreshed_element.action_point != expected_element.action_point
+                    or refreshed_element.source_kind != expected_element.source_kind
+                    or refreshed_element.source_screen != expected_element.source_screen
+                    or refreshed_element.source_layout_id != expected_element.source_layout_id
+                ):
+                    raise SelectorResolutionError(
+                        "Stale navigation proof refreshed onto a changed selector layout; refusing to retarget.",
+                        selector_id=expected_element.selector_id,
+                        screen_type=refreshed.screen_type,
+                    ) from error
+            return self.action_executor.execute_action(action, refreshed), refreshed
+
+    def _selector_source_element(
+        self,
+        action: ActionRequest,
+        observation: Observation,
+    ) -> VisibleElement | None:
+        """Returns the concrete selector evidence whose layout must remain stable on refresh."""
+
+        selector_id: UiElementId | None = None
+        if isinstance(action, TapAction):
+            selector_id = action.selector_id
+        elif isinstance(action, InputTextAction):
+            selector_id = action.selector_id
+        elif isinstance(action, SelectChatChannelAction):
+            selector_id = chat_channel_selector_id(action.channel)
+        if selector_id is None:
+            return None
+        return observation.get(selector_id)
+
     def _resolve_observed_navigation_tap(
         self,
         action: ActionRequest,
@@ -851,7 +1029,13 @@ class ObservedActionExecutor:
         """Executes one geometry-backed navigation tap through the shared primary-to-OCR flow."""
 
         follow_up_request = action.follow_up_request or ObservationRequest.navigation_follow_up(candidate.reviewed_outcomes)
-        self.action_executor.execute_action(action, before)
+        _, _ = self._execute_action_with_refresh(
+            action=action,
+            observation=before,
+            label_prefix=f"{label_prefix}_provenance_refresh",
+            observe=observe,
+            expected_element=candidate.source_element,
+        )
         self._sleep_for_observe(action)
         first_after = observe(label_prefix, request=follow_up_request)
         first_recovery = self._recover_interruption_if_required(
@@ -903,7 +1087,13 @@ class ObservedActionExecutor:
             if retry_element is not None and retry_element.source_kind == VisibleElementSourceKind.OCR:
                 fallback_used = True
                 fallback_source_kind = retry_element.source_kind
-                self.action_executor.execute_action(action, retry_source)
+                self._execute_action_with_refresh(
+                    action=action,
+                    observation=retry_source,
+                    label_prefix=f"{label_prefix}_ocr_retry_provenance_refresh",
+                    observe=observe,
+                    expected_element=retry_element,
+                )
                 self._sleep_for_observe(action)
                 retry_after = observe(f"{label_prefix}_ocr_retry_after", request=follow_up_request)
                 final_after = settle_reviewed_navigation_observation(

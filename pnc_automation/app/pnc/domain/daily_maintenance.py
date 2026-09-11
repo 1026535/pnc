@@ -8,6 +8,7 @@ from enum import StrEnum
 from typing import Any
 
 from pnc_automation.app.authoring.config.models import CastleIdentity
+from pnc_automation.app.pnc.domain.observation import RowRecognitionStatus
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 
 
@@ -112,6 +113,7 @@ class DailyQuestRow:
     progress_current: int | None = None
     progress_required: int | None = None
     coordinate_provenance: CoordinateProvenance = CoordinateProvenance.DYNAMIC_ENTRY_GEOMETRY
+    row_status: RowRecognitionStatus = RowRecognitionStatus.NOT_EVALUATED
 
     def __post_init__(self) -> None:
         """Rejects partial progress and OCR-derived action geometry."""
