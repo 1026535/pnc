@@ -110,6 +110,7 @@ Read the applicable `SKILL.md` completely before taking the actions it governs.
 - `.agents/skills/control-in-app-browser`: browser automation through the selected browser surface.
 - `.agents/skills/consult-chatgpt-pro`: explicit or planning-required, repository-grounded consultation with ChatGPT Pro.
 - `.agents/skills/implement-with-luna-global`: explicit delegation of substantial implementation to Luna workers.
+- `.agents/skills/manage-source-control`: feature branches, worktrees, rebases, merges, conflict resolution, pushes, and branch cleanup.
 
 Treat `prompts/` as legacy inspiration, not as a substitute for the applicable skill or current best practice. If a skill creates a blocker or conflicts with the requested outcome, identify the exact instruction and explain the impact instead of silently changing scope.
 
@@ -122,6 +123,15 @@ Before adding or migrating a workflow onto the replacement navigation core, read
 - Lead with actionable findings ordered by severity, with file and line references and the cleanest fix direction.
 - Review correctness, ownership, duplication, migration completeness, test quality, security, and behavioral regressions. Omit style-only findings unless they obscure correctness or maintainability.
 - If no findings remain, say so and identify residual test gaps or assumptions.
+
+## Source Control Workflow
+
+Use `.agents/skills/manage-source-control` for new feature branches, branch synchronization, rebases, merges, cherry-picks, conflict resolution, pushes to a base branch, and branch or worktree cleanup.
+
+- Start every new endeavor from the freshly fetched remote target-branch head. When the current checkout contains unrelated changes, conflicts, or an interrupted Git operation, preserve it and create an isolated `codex/` feature worktree from that remote commit.
+- Before integrating, inspect the merge base and commits and diffs unique to both the feature and target branches. Resolve overlaps according to the intent, tests, and canonical ownership of both changesets; never select one side wholesale merely to clear conflicts.
+- Prefer rebasing a local or private feature branch onto the latest target. Do not rewrite a published or shared branch without explicit authorization; merge the target into it when shared history must be preserved.
+- Review and validate the combined result, fetch the target again immediately before landing, and repeat synchronization if it moved. Never force-push the default or a protected branch.
 
 ## Working Tree Safety
 
