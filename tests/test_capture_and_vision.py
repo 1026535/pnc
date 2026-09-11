@@ -9,6 +9,7 @@ import tempfile
 import unittest
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from unittest.mock import Mock
 
 from PIL import Image, ImageDraw
 
@@ -19,6 +20,9 @@ from pnc_automation.app.pnc.persistence.castle_roster_store import CastleRosterS
 from pnc_automation.app.authoring.config.models import CastleIdentity, PncAccountCastleRosterConfig
 from pnc_automation.app.automation.engine.action_executor import ActionExecutor
 from pnc_automation.app.automation.engine.observed_action_executor import ObservedActionExecutor
+from pnc_automation.app.automation.engine.task_executor import TaskExecutor
+from pnc_automation.app.automation.tasks.ensure_game_running_task import EnsureGameRunningTask
+from pnc_automation.app.pnc.domain.action_requests import TapPointAction
 from pnc_automation.core.errors import ScreenClassificationError, SelectorResolutionError
 from pnc_automation.app.pnc.domain.chat import ChatChannel
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
@@ -1256,6 +1260,84 @@ class CaptureAndVisionTests(unittest.TestCase):
 
             self.assertEqual(observation.screen_type, ScreenType.PNC_LOADING)
             self.assertTrue(observation.has(UiElementId.PNC_LOADING_RECONNECT_BUTTON))
+
+    def test_loading_builder_output_is_passive_for_recovery_and_ineligible_for_input(self) -> None:
+        """Keeps production loading guards out of popup dismissal while denying input."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                artifact_directory="k230_loading_guarded",
+                label="loading_guarded",
+            )
+            builder = ObservationBuilder(
+                selector_registry=_minimal_runtime_registry(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(),
+                ocr_service=_FakeOcrService(
+                    lines=(_ocr_line("Loading", x=100, y=100, width=120, height=32),)
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_LOADING)
+            self.assertEqual(observation.decision.guard, GuardVerdict.BLOCKED)
+            self.assertFalse(observation.blocking_popup)
+            self.assertFalse(observation.decision.action_eligible)
+
+            session = FakeSession()
+            registry = build_default_selector_registry()
+            low_level_executor = ActionExecutor(
+                session=session,
+                selector_registry=registry,
+                stable_click_delay_ms=0,
+                post_action_observe_delay_ms=0,
+                chat_stable_click_delay_ms=0,
+                chat_post_action_observe_delay_ms=0,
+                logger=build_logger(),
+                sleep=lambda _: None,
+            )
+            observed_executor = ObservedActionExecutor(
+                selector_registry=registry,
+                action_executor=low_level_executor,
+                logger=build_logger(),
+                sleep=lambda _: None,
+            )
+
+            task_result = TaskExecutor(
+                observation_service=Mock(),
+                action_executor=observed_executor,
+                logger=build_logger(),
+                max_replans_per_step=1,
+                max_retries_per_step=0,
+            ).execute(
+                task=EnsureGameRunningTask(),
+                context=Mock(),
+                before=observation,
+            )
+            self.assertTrue(task_result.result.succeeded)
+            self.assertEqual([], session.taps)
+            self.assertIsNone(
+                observed_executor.recover_interruption_if_required(
+                    observation,
+                    label_prefix="loading_guarded",
+                    observe=lambda *_args, **_kwargs: self.fail(
+                        "loading recovery must not capture or dismiss a popup"
+                    ),
+                )
+            )
+            with self.assertRaises(SelectorResolutionError):
+                low_level_executor.execute_action(
+                    TapPointAction(x=10, y=10, reason="loading_guard"),
+                    observation,
+                )
+            self.assertEqual([], session.taps)
 
     def test_observation_builder_classifies_loading_splash_from_live_like_ocr(self) -> None:
         """Recognizes the branded game splash as a loading transition during castle switching or launch."""

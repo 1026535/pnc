@@ -474,9 +474,16 @@ class Observation:
 
     @property
     def blocking_popup(self) -> bool:
-        """Returns the derived global guard state for this observation."""
+        """Returns whether the observation exposes a dismissible blocking overlay.
 
-        return self.decision.guard == GuardVerdict.BLOCKED or self.screen_type in BLOCKING_SCREEN_TYPES
+        Loading is still guard-blocked for dispatch, but it is a transient
+        state that must settle passively rather than enter popup dismissal.
+        """
+
+        return (
+            self.screen_type != ScreenType.PNC_LOADING
+            and (self.decision.guard == GuardVerdict.BLOCKED or self.screen_type in BLOCKING_SCREEN_TYPES)
+        )
 
     @property
     def current_castle_name(self) -> str | None:
