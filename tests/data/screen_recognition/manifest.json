@@ -190,6 +190,20 @@
       "split": "reference",
       "group": "2026-09-10/testing",
       "sha256": "59420307fee2ae190a758adb3507f22ba0087802182f549cfc25e5ba01501036"
+    },
+    {
+      "image": "research_queue_core.png",
+      "screen": "PNC_RESEARCH_QUEUE",
+      "split": "reference",
+      "group": "2026-09-10/testing",
+      "sha256": "51e2e0c3a0cc327694825f84a53fa4b9a1e1706c12f0d443698878965d0ba528"
+    },
+    {
+      "image": "home_city_panned_core.png",
+      "screen": "PNC_HOME_CITY",
+      "split": "validation",
+      "group": "2026-09-10/testing",
+      "sha256": "48ebe749a36c5f118659aac3b38e46ba51b34af38dab138aabbb1864238f2726"
     }
   ]
 }

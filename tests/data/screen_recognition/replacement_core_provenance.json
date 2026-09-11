@@ -158,10 +158,10 @@
       960
     ],
     "crop": [
-      199,
-      940,
-      245,
-      957
+      204,
+      905,
+      234,
+      936
     ]
   },
   {
@@ -173,10 +173,10 @@
       960
     ],
     "crop": [
-      270,
-      940,
-      303,
-      957
+      276,
+      904,
+      304,
+      935
     ]
   },
   {
@@ -323,10 +323,10 @@
       960
     ],
     "crop": [
-      477,
-      940,
-      523,
-      957
+      490,
+      905,
+      515,
+      935
     ]
   },
   {
@@ -339,10 +339,11 @@
     ],
     "crop": [
       7,
-      275,
+      280,
       65,
-      295
-    ]
+      293
+    ],
+    "mask": "near-white text ink (min RGB > 180, channel spread < 35) plus a one-pixel stroke border; ignore translucent background"
   },
   {
     "asset": "screen_anchors/core_world_map_pnc_world_coordinate_bar.png",
@@ -447,6 +448,66 @@
       733,
       56,
       772
+    ]
+  },
+  {
+    "asset": "screen_anchors/core_research_queue_header.png",
+    "source": "C:\\Users\\lebel\\pnc\\artifacts\\2026-09-10\\testing\\20260910T223525Z_city_20260910T223510Z_3_core_1_after_0.png",
+    "source_sha256": "d80bb82d21faa821c18a72d034d6fa23932a1af9e2d7080b39ad799e6383adf6",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      170,
+      256,
+      374,
+      283
+    ]
+  },
+  {
+    "asset": "screen_anchors/core_research_queue_row.png",
+    "source": "C:\\Users\\lebel\\pnc\\artifacts\\2026-09-10\\testing\\20260910T223525Z_city_20260910T223510Z_3_core_1_after_0.png",
+    "source_sha256": "d80bb82d21faa821c18a72d034d6fa23932a1af9e2d7080b39ad799e6383adf6",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      127,
+      324,
+      303,
+      345
+    ]
+  },
+  {
+    "asset": "screen_anchors/core_research_queue_go.png",
+    "source": "C:\\Users\\lebel\\pnc\\artifacts\\2026-09-10\\testing\\20260910T223525Z_city_20260910T223510Z_3_core_1_after_0.png",
+    "source_sha256": "d80bb82d21faa821c18a72d034d6fa23932a1af9e2d7080b39ad799e6383adf6",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      416,
+      343,
+      455,
+      365
+    ]
+  },
+  {
+    "asset": "screen_anchors/core_research_queue_close.png",
+    "source": "C:\\Users\\lebel\\pnc\\artifacts\\2026-09-10\\testing\\20260910T223525Z_city_20260910T223510Z_3_core_1_after_0.png",
+    "source_sha256": "d80bb82d21faa821c18a72d034d6fa23932a1af9e2d7080b39ad799e6383adf6",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      471,
+      253,
+      505,
+      285
     ]
   }
 ]

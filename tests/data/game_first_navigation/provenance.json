@@ -1,0 +1,227 @@
+{
+  "method": "Manual live-game exploration before adding routes; no historical screenshots used.",
+  "assets": [
+    {
+      "image": "screen_anchors/game_first_back.png",
+      "live_preview": "C:\\Users\\lebel\\pnc\\artifacts\\replacement_core\\game_first\\20260910T231240242550Z_more_settings_after.png",
+      "crop_540x960": [
+        26,
+        12,
+        76,
+        42
+      ]
+    },
+    {
+      "image": "screen_anchors/game_first_settings_preferences_0.png",
+      "live_preview": "C:\\Users\\lebel\\pnc\\artifacts\\replacement_core\\game_first\\20260910T231403211301Z_settings_preferences_after.png",
+      "crop_540x960": [
+        108,
+        8,
+        229,
+        41
+      ]
+    },
+    {
+      "image": "screen_anchors/game_first_settings_preferences_1.png",
+      "live_preview": "C:\\Users\\lebel\\pnc\\artifacts\\replacement_core\\game_first\\20260910T231403211301Z_settings_preferences_after.png",
+      "crop_540x960": [
+        198,
+        72,
+        342,
+        94
+      ]
+    },
+    {
+      "image": "screen_anchors/game_first_notifications_0.png",
+      "live_preview": "C:\\Users\\lebel\\pnc\\artifacts\\replacement_core\\game_first\\20260910T231507622817Z_settings_notifications_after.png",
+      "crop_540x960": [
+        108,
+        8,
+        292,
+        41
+      ]
+    },
+    {
+      "image": "screen_anchors/game_first_notifications_1.png",
+      "live_preview": "C:\\Users\\lebel\\pnc\\artifacts\\replacement_core\\game_first\\20260910T231507622817Z_settings_notifications_after.png",
+      "crop_540x960": [
+        196,
+        471,
+        347,
+        494
+      ]
+    },
+    {
+      "image": "screen_anchors/game_first_rank_hub_0.png",
+      "live_preview": "C:\\Users\\lebel\\pnc\\artifacts\\replacement_core\\game_first\\20260910T231333020943Z_settings_rank_after.png",
+      "crop_540x960": [
+        108,
+        8,
+        184,
+        41
+      ]
+    },
+    {
+      "image": "screen_anchors/game_first_rank_hub_1.png",
+      "live_preview": "C:\\Users\\lebel\\pnc\\artifacts\\replacement_core\\game_first\\20260910T231333020943Z_settings_rank_after.png",
+      "crop_540x960": [
+        181,
+        67,
+        361,
+        90
+      ]
+    },
+    {
+      "image": "screen_anchors/game_first_kingdom_list_0.png",
+      "live_preview": "C:\\Users\\lebel\\pnc\\artifacts\\replacement_core\\game_first\\20260910T231920780680Z_kingdoms_settled_before.png",
+      "crop_540x960": [
+        108,
+        8,
+        295,
+        41
+      ]
+    },
+    {
+      "image": "screen_anchors/game_first_kingdom_list_1.png",
+      "live_preview": "C:\\Users\\lebel\\pnc\\artifacts\\replacement_core\\game_first\\20260910T231920780680Z_kingdoms_settled_before.png",
+      "crop_540x960": [
+        18,
+        98,
+        317,
+        116
+      ]
+    },
+    {
+      "image": "screen_anchors/game_first_pnc_more_manage_char.png",
+      "live_preview": "C:\\Users\\lebel\\pnc\\artifacts\\replacement_core\\game_first\\20260910T231240242550Z_more_settings_after.png",
+      "crop_540x960": [
+        374,
+        93,
+        495,
+        115
+      ]
+    },
+    {
+      "image": "screen_anchors/game_first_pnc_settings_rank.png",
+      "live_preview": "C:\\Users\\lebel\\pnc\\artifacts\\replacement_core\\game_first\\20260910T231240242550Z_more_settings_after.png",
+      "crop_540x960": [
+        374,
+        173,
+        425,
+        195
+      ]
+    },
+    {
+      "image": "screen_anchors/game_first_pnc_settings_preferences.png",
+      "live_preview": "C:\\Users\\lebel\\pnc\\artifacts\\replacement_core\\game_first\\20260910T231240242550Z_more_settings_after.png",
+      "crop_540x960": [
+        110,
+        253,
+        184,
+        275
+      ]
+    },
+    {
+      "image": "screen_anchors/game_first_pnc_settings_notifications.png",
+      "live_preview": "C:\\Users\\lebel\\pnc\\artifacts\\replacement_core\\game_first\\20260910T231240242550Z_more_settings_after.png",
+      "crop_540x960": [
+        373,
+        334,
+        495,
+        356
+      ]
+    },
+    {
+      "image": "screen_anchors/game_first_pnc_more_rank.png",
+      "live_preview": "C:\\Users\\lebel\\pnc\\artifacts\\replacement_core\\game_first\\20260910T231605914945Z_city_more_rank_route_after.png",
+      "crop_540x960": [
+        398,
+        831,
+        432,
+        860
+      ]
+    },
+    {
+      "image": "screen_anchors/game_first_pnc_bottom_nav_more.png",
+      "live_preview": "C:\\Users\\lebel\\pnc\\artifacts\\replacement_core\\game_first\\20260910T231722973256Z_world_settled_before.png",
+      "crop_540x960": [
+        490,
+        905,
+        516,
+        935
+      ]
+    },
+    {
+      "image": "screen_anchors/game_first_pnc_world_overview_world_icon.png",
+      "live_preview": "C:\\Users\\lebel\\pnc\\artifacts\\replacement_core\\game_first\\20260910T231838422766Z_world_overview_after.png",
+      "crop_540x960": [
+        33,
+        887,
+        74,
+        928
+      ]
+    }
+  ],
+  "fixtures": [
+    {
+      "file": "settings_preferences_after.png",
+      "screen": "PNC_SETTINGS_PREFERENCES",
+      "live_preview": "C:\\Users\\lebel\\pnc\\artifacts\\replacement_core\\game_first\\20260910T231403211301Z_settings_preferences_after.png",
+      "redacted_content": false
+    },
+    {
+      "file": "settings_notifications_after.png",
+      "screen": "PNC_NOTIFICATIONS",
+      "live_preview": "C:\\Users\\lebel\\pnc\\artifacts\\replacement_core\\game_first\\20260910T231507622817Z_settings_notifications_after.png",
+      "redacted_content": false
+    },
+    {
+      "file": "settings_rank_after.png",
+      "screen": "PNC_RANK_HUB",
+      "live_preview": "C:\\Users\\lebel\\pnc\\artifacts\\replacement_core\\game_first\\20260910T231333020943Z_settings_rank_after.png",
+      "redacted_content": true
+    },
+    {
+      "file": "more_rank_after.png",
+      "screen": "PNC_RANK_HUB",
+      "live_preview": "C:\\Users\\lebel\\pnc\\artifacts\\replacement_core\\game_first\\20260910T231625504170Z_more_rank_after.png",
+      "redacted_content": true
+    },
+    {
+      "file": "world_more_rank_after.png",
+      "screen": "PNC_RANK_HUB",
+      "live_preview": "C:\\Users\\lebel\\pnc\\artifacts\\replacement_core\\game_first\\20260910T232056611083Z_world_more_rank_after.png",
+      "redacted_content": true
+    },
+    {
+      "file": "kingdoms_settled_before.png",
+      "screen": "PNC_WORLD_KINGDOM_LIST",
+      "live_preview": "C:\\Users\\lebel\\pnc\\artifacts\\replacement_core\\game_first\\20260910T231920780680Z_kingdoms_settled_before.png",
+      "redacted_content": true
+    },
+    {
+      "file": "settings_manage_after.png",
+      "screen": "PNC_CASTLE_SELECTION",
+      "live_preview": "C:\\Users\\lebel\\pnc\\artifacts\\replacement_core\\game_first\\20260910T231256260505Z_settings_manage_after.png",
+      "redacted_content": true
+    },
+    {
+      "file": "more_settings_after.png",
+      "screen": "PNC_SETTINGS",
+      "live_preview": "C:\\Users\\lebel\\pnc\\artifacts\\replacement_core\\game_first\\20260910T231240242550Z_more_settings_after.png",
+      "redacted_content": false
+    },
+    {
+      "file": "world_more_after.png",
+      "screen": "PNC_MORE_MENU",
+      "live_preview": "C:\\Users\\lebel\\pnc\\artifacts\\replacement_core\\game_first\\20260910T231738745308Z_world_more_after.png",
+      "redacted_content": false
+    },
+    {
+      "file": "world_settled_before.png",
+      "screen": "PNC_WORLD_MAP",
+      "live_preview": "C:\\Users\\lebel\\pnc\\artifacts\\replacement_core\\game_first\\20260910T231722973256Z_world_settled_before.png",
+      "redacted_content": false
+    }
+  ]
+}

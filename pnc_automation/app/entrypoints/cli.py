@@ -39,7 +39,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     arguments = list(sys.argv[1:] if argv is None else argv)
     if arguments and arguments[0] not in {
         "run", "login", "build", "construct", "open-building", "send-mail", "run-mail-schedules",
-        "daily-maintenance",
+        "daily-maintenance", "daily-quest-status",
     }:
         arguments.insert(0, "run")
 
@@ -98,6 +98,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     _add_common_arguments(run_mail_schedules_parser)
     _add_run_mail_schedules_arguments(run_mail_schedules_parser)
+
+    daily_status_parser = subparsers.add_parser(
+        "daily-quest-status",
+        help="Read the currently visible Daily Quest viewport without scrolling or mutation.",
+    )
+    _add_common_arguments(daily_status_parser)
 
     daily_parser = subparsers.add_parser(
         "daily-maintenance",
@@ -180,6 +186,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             scheduled_for_utc=_parse_optional_scheduled_for_utc(parser, parsed.scheduled_for_utc),
         )
         print(_serialize_run_result(result))
+        return 0
+    if parsed.command == "daily-quest-status":
+        result = application.run_daily_quest_status(account_id=parsed.account)
+        print(json.dumps(asdict(result), indent=2, default=str))
         return 0
     castle = _parse_optional_castle(parser, parsed)
     if castle is not None:

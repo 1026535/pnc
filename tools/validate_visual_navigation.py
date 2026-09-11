@@ -20,14 +20,14 @@ except ModuleNotFoundError:
 ensure_repo_root_on_path()
 
 from pnc_automation.app import build_application_runner
-from pnc_automation.app.automation.engine.navigation_core import NavigationCore, reviewed_navigation_edges
+from pnc_automation.app.automation.engine.core_runtime import build_core_runtime
+from pnc_automation.app.automation.engine.navigation_core import NavigationCore
 from pnc_automation.app.pnc.domain.action_requests import ActionRequest, KeyEventAction, TapAction, WaitAction
 from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
 from pnc_automation.app.pnc.domain.observation import Observation
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
-from pnc_automation.app.pnc.vision.navigation_perception import NavigationPerception
 from pnc_automation.app.runtime.observation_mode import ObservationMode
 
 
@@ -187,54 +187,41 @@ def main() -> int:
     parser.add_argument("--account", default="testing")
     parser.add_argument("--output-dir", type=Path, default=Path("artifacts/screen_recognition/live"))
     parser.add_argument("--replacement-core", action="store_true", help="Prove identity, then exercise the independent visual navigation core.")
+    parser.add_argument("--game-first-routes", action="store_true", help="With --replacement-core, prove newly explored menus and their actual return parents.")
     arguments = parser.parse_args()
-    probe = run_replacement_probe if arguments.replacement_core else run_probe
-    print(probe(arguments.config, arguments.account, arguments.output_dir))
+    if arguments.game_first_routes and not arguments.replacement_core:
+        parser.error("--game-first-routes requires --replacement-core")
+    if arguments.replacement_core:
+        result = run_replacement_probe(arguments.config, arguments.account, arguments.output_dir, game_first=arguments.game_first_routes)
+    else:
+        result = run_probe(arguments.config, arguments.account, arguments.output_dir)
+    print(result)
     return 0
 
 
-def run_replacement_probe(config: Path, account_id: str, output_root: Path) -> Path:
-    """Use legacy identity preflight, then navigate with no legacy perception/retries."""
+def run_replacement_probe(config: Path, account_id: str, output_root: Path, *, game_first: bool = False) -> Path:
+    """Verify active identity and prove navigation with independent perception/completion."""
     logging.disable(logging.CRITICAL)
     directory = output_root / (datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ") + "_core_" + uuid4().hex[:8])
     directory.mkdir(parents=True, exist_ok=False)
     app = build_application_runner(config, observation_mode=ObservationMode.DEBUG)
-    runtime = app.script_runner.build_connected_runtime(account=app.script_runner.config.require_account(account_id))
-    observer = runtime.observation_service
-    recognizer = observer.observation_builder.visual_recognizer
-    if recognizer is None:
-        raise RuntimeError("Replacement core requires the reviewed visual catalog.")
-    perception = NavigationPerception(recognizer, observer.observation_builder.enricher)
-    counter = 0
     trace = directory / "trace.jsonl"
-
-    def record(entry: dict[str, object]) -> None:
-        with trace.open("a", encoding="utf-8") as stream:
-            stream.write(json.dumps(entry) + "\n")
-
-    def observe(label: str, *, include_content: bool = False) -> Observation:
-        nonlocal counter
-        counter += 1
-        screenshot = observer.screenshot_service.capture(
-            runtime.session, artifact_directory=observer.artifact_directory,
-            label=f"replacement_{directory.name}_{counter}_{label}", persist=True,
-        )
-        started = monotonic()
-        observation = perception.build(screenshot, include_content=include_content)
-        record({"event": "perception", "seconds": monotonic() - started, "state": summarize(observation)})
-        return observation
-
-    core = NavigationCore(
-        runtime.require_observed_action_executor("Core probe requires the connected actuator.").action_executor,
-        observe, reviewed_navigation_edges(), record=record,
+    account = app.script_runner.config.require_account(account_id)
+    core_runtime = build_core_runtime(
+        app.script_runner,
+        account,
+        account.artifact_directory_name,
+        trace_path=trace,
     )
+    core = core_runtime.navigation
     summary: dict[str, object] = {"status": "running", "targets": []}
     try:
-        # Return from a recognized map/modal through the new core before using
-        # the retained identity parser. No target selection is part of either path.
-        core.navigate(ScreenType.PNC_HOME_CITY)
-        preflight = run_probe(config, account_id, output_root / "identity")
-        summary["identity_preflight"] = str(preflight)
+        core_runtime.preflight_active_castle_identity()
+        summary["active_identity_verified"] = True
+        if game_first:
+            current = run_game_first_routes(core)
+            summary.update(status="passed", tour="game_first", final=summarize(current))
+            return directory / "summary.json"
         for target in (
             ScreenType.PNC_WORLD_MAP, ScreenType.PNC_WORLD_MAP_EXPANDED,
             ScreenType.PNC_WORLD_COORDINATE_DIALOG,
@@ -242,14 +229,20 @@ def run_replacement_probe(config: Path, account_id: str, output_root: Path) -> P
             ScreenType.PNC_QUEST_DAILY, ScreenType.PNC_QUEST_MAIN,
             ScreenType.PNC_HOME_CITY, ScreenType.PNC_BAG, ScreenType.PNC_HOME_CITY,
             ScreenType.PNC_SETTINGS, ScreenType.PNC_HOME_CITY,
-            ScreenType.PNC_INSTITUTE, ScreenType.PNC_HOME_CITY,
         ):
             current = core.navigate(target)
             summary["targets"].append(target.name)
             print(f"Core confirmed {target.name}", flush=True)
-        current = core.open_visible_building(
+        current = core.open_building(
+            HomeCityObjectId.INSTITUTE,
+            observe_content=lambda label: core_runtime.observe(label, include_content=True),
+        )
+        summary["targets"].append(current.screen_type.name)
+        print(f"Core confirmed observed building {current.screen_type.name}", flush=True)
+        core.navigate(ScreenType.PNC_HOME_CITY)
+        current = core.open_building(
             HomeCityObjectId.GODDESS_STATUE,
-            observe_content=lambda label: observe(label, include_content=True),
+            observe_content=lambda label: core_runtime.observe(label, include_content=True),
         )
         summary["targets"].append(current.screen_type.name)
         print(f"Core confirmed observed building {current.screen_type.name}", flush=True)
@@ -261,6 +254,41 @@ def run_replacement_probe(config: Path, account_id: str, output_root: Path) -> P
     finally:
         (directory / "summary.json").write_text(json.dumps(summary, indent=2))
     return directory / "summary.json"
+
+
+def run_game_first_routes(core: NavigationCore) -> Observation:
+    """Replay only manually explored routes, checking the context-specific parent."""
+    screen, selector = ScreenType, UiElementId
+    cases = (
+        (screen.PNC_SETTINGS, selector.PNC_MORE_MANAGE_CHAR, screen.PNC_CASTLE_SELECTION),
+        (screen.PNC_CASTLE_SELECTION, selector.PNC_BACK_BUTTON_TOP_LEFT, screen.PNC_SETTINGS),
+        (screen.PNC_SETTINGS, selector.PNC_SETTINGS_PREFERENCES, screen.PNC_SETTINGS_PREFERENCES),
+        (screen.PNC_SETTINGS_PREFERENCES, selector.PNC_BACK_BUTTON_TOP_LEFT, screen.PNC_SETTINGS),
+        (screen.PNC_SETTINGS, selector.PNC_SETTINGS_NOTIFICATIONS, screen.PNC_NOTIFICATIONS),
+        (screen.PNC_NOTIFICATIONS, selector.PNC_BACK_BUTTON_TOP_LEFT, screen.PNC_SETTINGS),
+        (screen.PNC_SETTINGS, selector.PNC_SETTINGS_RANK, screen.PNC_RANK_HUB),
+        (screen.PNC_RANK_HUB, selector.PNC_BACK_BUTTON_TOP_LEFT, screen.PNC_SETTINGS),
+        (screen.PNC_SETTINGS, selector.PNC_BACK_BUTTON_TOP_LEFT, screen.PNC_HOME_CITY),
+        (screen.PNC_MORE_MENU, selector.PNC_MORE_RANK, screen.PNC_RANK_HUB),
+        (screen.PNC_RANK_HUB, selector.PNC_BACK_BUTTON_TOP_LEFT, screen.PNC_HOME_CITY),
+        (screen.PNC_WORLD_MAP, selector.PNC_BOTTOM_NAV_MORE, screen.PNC_MORE_MENU),
+        (screen.PNC_MORE_MENU, selector.PNC_MORE_SETTINGS, screen.PNC_SETTINGS),
+        (screen.PNC_SETTINGS, selector.PNC_BACK_BUTTON_TOP_LEFT, screen.PNC_WORLD_MAP),
+        (screen.PNC_WORLD_MAP, selector.PNC_BOTTOM_NAV_MORE, screen.PNC_MORE_MENU),
+        (screen.PNC_MORE_MENU, selector.PNC_MORE_RANK, screen.PNC_RANK_HUB),
+        (screen.PNC_RANK_HUB, selector.PNC_BACK_BUTTON_TOP_LEFT, screen.PNC_WORLD_MAP),
+        (screen.PNC_WORLD_MAP_OVERVIEW, selector.PNC_WORLD_OVERVIEW_WORLD_ICON, screen.PNC_WORLD_KINGDOM_LIST),
+        (screen.PNC_WORLD_KINGDOM_LIST, selector.PNC_BACK_BUTTON_TOP_LEFT, screen.PNC_WORLD_MAP_OVERVIEW),
+        (screen.PNC_WORLD_MAP_OVERVIEW, selector.PNC_WORLD_OVERVIEW_CLOSE_BUTTON, screen.PNC_WORLD_MAP),
+    )
+    for source, control, expected in cases:
+        core.navigate(source)
+        edge = next(edge for edge in core.edges if edge.source == source and edge.selector == control)
+        current = core.transition(edge)
+        if current.screen_type != expected:
+            raise RuntimeError(f"Live return-parent mismatch: expected {expected.name}, observed {current.screen_type.name}.")
+        print(f"Game-first confirmed {source.name} -> {current.screen_type.name}", flush=True)
+    return core.navigate(screen.PNC_HOME_CITY)
 
 
 if __name__ == "__main__":
