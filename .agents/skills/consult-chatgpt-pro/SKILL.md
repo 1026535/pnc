@@ -17,8 +17,8 @@ Obtain a high-quality Pro consultation without copying the repository into a pro
 - Never send credentials, tokens, `.env` contents, personal data, proprietary third-party assets, build output, or unrelated repository content.
 - Allow code examples and snippets when useful or requested. This is not a planning-only workflow.
 - If potentially sensitive local-only content is material, explain exactly what would be sent and obtain confirmation immediately before uploading it.
-- Use Chat mode only for the consultation. Never use ChatGPT Work, Work local or cloud execution, Codex mode, or a ChatGPT Work cloud destination. If Chat mode is unavailable, stop and report the limitation.
-- Use GPT-6 Pro only. Do not substitute another model or a generic Pro selection. If GPT-6 Pro is unavailable or quota-limited in Chat mode, stop and report the limitation.
+- Use Chat mode only for the consultation. Never use ChatGPT Work, Work local or cloud execution, Codex mode, or a ChatGPT Work cloud destination. If Chat mode is unavailable, end the consultation attempt and return a `failed` status with the limitation.
+- Use GPT-6 Pro only. Do not substitute another model or a generic Pro selection. If GPT-6 Pro is unavailable or quota-limited in Chat mode, end the consultation attempt and return a `failed` status with the limitation.
 
 ## Required Browser Surface
 
@@ -121,11 +121,19 @@ Do not create duplicate chats or resend after a slow response unless the first s
 - Ask the user when Pro requests a product, design, disclosure, or scope decision that local evidence cannot resolve.
 - Use at most two focused follow-ups to correct missing context or obtain the requested deliverable. Do not spend usage on open-ended conversational loops.
 
-### 6. Audit And Return The Result
+### 6. Classify, Audit, And Return The Result
 
 Do not relay the response blindly. Check it against the local repository and the user's request.
 
-The consultation succeeds only when:
+Classify the attempt before returning control to the caller:
+
+- `complete`: the final response satisfies every success condition below;
+- `partial`: the prompt was submitted with Chat mode, GPT-6 Pro, GitHub, and the intended baseline verified, and visible intermediate or incomplete output contains useful repository-grounded findings, but the final response was interrupted or ended in a provider/UI error; or
+- `failed`: no trustworthy repository-grounded recommendation was produced, or a required pre-send condition was unavailable.
+
+A provider or UI failure ends only the consultation attempt. It must not block a caller's planning, implementation, or review task unless that caller independently lacks evidence required to proceed. Preserve usable intermediate findings as `partial`, audit them normally, and never represent them as a complete Pro review.
+
+A `complete` consultation requires:
 
 - Chat mode was visibly selected for the conversation;
 - GPT-6 Pro was visibly selected and verified at send time;
@@ -136,11 +144,12 @@ The consultation succeeds only when:
 
 Return:
 
-1. the Pro recommendation or ideas, faithfully summarized;
-2. Codex's repository-grounded audit, including agreements, corrections, and material caveats;
-3. the exact commit and any local overlay used;
-4. unresolved decisions that genuinely require the user;
-5. the ChatGPT chat left open in the selected browser as the deliverable.
+1. the `complete`, `partial`, or `failed` status and failure stage when applicable;
+2. the complete or partial Pro recommendation, faithfully summarized without reconstructing missing output;
+3. Codex's repository-grounded audit, including agreements, corrections, unsupported claims, and material caveats;
+4. the exact commit and any local overlay used or attempted;
+5. unresolved decisions that genuinely require the user; and
+6. the ChatGPT chat left open in the selected browser as the deliverable.
 
 Do not imply that Pro inspected files or a commit unless the response provides evidence it did. Keep implementation responsibility with the active Codex task unless the user asks for a different handoff.
 
@@ -149,8 +158,8 @@ Do not imply that Pro inspected files or a commit unless the response provides e
 - **Project missing:** Ask before creating a replacement Project; do not create similarly named duplicates.
 - **Wrong product mode:** If the interface shows Work mode, Codex, or another non-Chat surface, stop and do not send until Chat mode is visibly selected.
 - **Signed out or connector unauthorized:** Pause for the user to complete authentication or repository authorization.
-- **Exact commit inaccessible:** Retry once with the full repository name and SHA. If it remains inaccessible, stop and ask the user how to expose a GitHub baseline; never replace the baseline with a standalone packet.
-- **GPT-6 Pro unavailable:** Report the limitation and never silently substitute another model or reasoning level.
-- **Visible response error:** Click the visible `Retry`/`Retry response` control once and monitor that request. If it is unavailable or the retry fails, do not loop; use at most the existing focused follow-up limit when it can correct missing context or obtain the requested deliverable, then report the consultation as failed if no grounded answer is produced.
+- **Exact commit inaccessible:** Retry once with the full repository name and SHA. If it remains inaccessible, return `failed` with the missing baseline; never replace the baseline with a standalone packet.
+- **GPT-6 Pro unavailable:** Return `failed` with the limitation and never silently substitute another model or reasoning level.
+- **Visible response error:** Click the visible `Retry`/`Retry response` control once when available and monitor that request. If retry is unavailable or also fails, do not loop or consume follow-ups merely to recover from a provider error. Preserve and audit any visible repository-grounded intermediate findings as `partial`; otherwise return `failed`. In both cases, return control to the caller so its primary task can continue from local evidence.
 - **Response is generic or based on the wrong revision:** Supply the missing path/SHA evidence in one focused follow-up; otherwise report the failed consultation rather than presenting it as grounded advice.
 - **Browser UI changed:** Reinspect visible semantic state and follow the Browser skill. Never guess selectors from stale UI.
