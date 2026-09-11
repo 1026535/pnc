@@ -56,7 +56,11 @@ class SelectCastleTask(BaseAutomationTask):
         if not _is_castle_selection_root_screen(observation.screen_type):
             return context.flows.ensure_home_city(observation)
         if current_match.matches:
-            if observation.screen_type in {ScreenType.PNC_MORE_MENU, ScreenType.PNC_CASTLE_SELECTION}:
+            if observation.screen_type in {
+                ScreenType.PNC_MORE_MENU,
+                ScreenType.PNC_SETTINGS,
+                ScreenType.PNC_CASTLE_SELECTION,
+            }:
                 return context.flows.return_to_safe_root_screen(observation)
             return []
         if observation.screen_type == ScreenType.PNC_CASTLE_SELECTION:
@@ -80,6 +84,10 @@ class SelectCastleTask(BaseAutomationTask):
 
         target_castle = context.require_target_castle()
         current_match = after.current_castle_match(target_castle, roster=context.castle_roster)
+        if after.screen_type == ScreenType.PNC_ALLIANCE_JOIN:
+            return TaskResult.replan(
+                "Castle switching landed on the join-alliance screen; returning to Home before continuing."
+            )
         if not _is_castle_selection_root_screen(before.screen_type):
             if after.screen_type == ScreenType.PNC_POPUP or after.blocking_popup:
                 return TaskResult.replan("Castle switching reached a blocking popup and needs centralized recovery.")
@@ -105,6 +113,8 @@ class SelectCastleTask(BaseAutomationTask):
             if current_match.ambiguous:
                 return TaskResult.replan(_ambiguous_current_castle_message(screen_type=after.screen_type))
             return TaskResult.replan("Castle navigation is at the More menu and still needs the next validation or Manage Char action.")
+        if after.screen_type == ScreenType.PNC_SETTINGS:
+            return TaskResult.replan("Castle navigation is at Settings and still needs Manage Char.")
         if after.screen_type == ScreenType.PNC_LORD_INFO:
             if current_match.ambiguous:
                 return TaskResult.replan(_ambiguous_current_castle_message(screen_type=after.screen_type))
@@ -164,6 +174,7 @@ def _is_castle_selection_root_screen(screen_type: ScreenType) -> bool:
     return screen_type in {
         ScreenType.PNC_HOME_CITY,
         ScreenType.PNC_MORE_MENU,
+        ScreenType.PNC_SETTINGS,
         ScreenType.PNC_LORD_INFO,
         ScreenType.PNC_VIP,
         ScreenType.PNC_IMPROVE_MIGHT,

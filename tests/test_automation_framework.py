@@ -493,7 +493,7 @@ class AutomationFrameworkTests(unittest.TestCase):
         self.assertEqual(fake_session.taps, [(5, 5)])
 
     def test_bootstrap_owns_popup_recovery_inside_the_canonical_task_loop(self) -> None:
-        """Keeps visual-X recovery in bootstrap rather than intercepting every task."""
+        """Keeps visual-X recovery in the executor-owned preflight boundary."""
 
         registry = build_default_task_registry()
         script = registry.prepare_script(
@@ -530,7 +530,7 @@ class AutomationFrameworkTests(unittest.TestCase):
             fake_observer.labels,
             [
                 "ensure_game_running_before",
-                "ensure_game_running_post_action_1",
+                "ensure_game_running_ensure_game_running_preflight_update_popup_1",
             ],
         )
         self.assertEqual(fake_session.taps, [(5, 5)])
@@ -562,7 +562,7 @@ class AutomationFrameworkTests(unittest.TestCase):
             logger=build_logger(),
         )
 
-        with self.assertRaisesRegex(SelectorResolutionError, "already consumed"):
+        with self.assertRaisesRegex(SelectorResolutionError, "(?:already consumed|unchanged visual fingerprint)"):
             runner.run(self.account, script)
 
         self.assertEqual(fake_session.taps, [(5, 5)])
@@ -1514,12 +1514,16 @@ class AutomationFrameworkTests(unittest.TestCase):
                     ScreenType.PNC_POPUP,
                     visible_ids=(UiElementId.PNC_POPUP_CLOSE_BUTTON,),
                     blocking_popup=True,
+                    frame_fingerprint="navigation-popup",
                 ),
+                make_observation(ScreenType.PNC_MORE_MENU, visible_ids=(UiElementId.PNC_MORE_SETTINGS,)),
             ),
         )
 
-        self.assertEqual(fake_session.taps, [(5, 5)])
-        self.assertEqual(execution.observation.screen_type, ScreenType.PNC_POPUP)
+        # One navigation tap plus one safe popup-close tap; the original
+        # navigation action is not retried after interruption recovery.
+        self.assertEqual(fake_session.taps, [(5, 5), (5, 5)])
+        self.assertEqual(execution.observation.screen_type, ScreenType.PNC_MORE_MENU)
         self.assertFalse(execution.selector_interactions[0].fallback_attempted)
 
     def test_observed_action_executor_recovers_initial_required_update_without_running_planned_action(self) -> None:
@@ -1820,14 +1824,15 @@ class AutomationFrameworkTests(unittest.TestCase):
             ),
         )
 
-        self.assertEqual(fake_session.taps, [(5, 5), (5, 5)])
-        self.assertEqual(execution.observation.screen_type, ScreenType.PNC_POPUP)
+        self.assertEqual(fake_session.taps, [(5, 5), (5, 5), (5, 5)])
+        self.assertEqual(execution.observation.screen_type, ScreenType.PNC_MORE_MENU)
         self.assertEqual(
             fake_observer.labels,
             [
                 "post_action_1",
                 "post_action_1_ocr_retry_source",
                 "post_action_1_ocr_retry_after",
+                "post_action_1_update_popup_1",
             ],
         )
 

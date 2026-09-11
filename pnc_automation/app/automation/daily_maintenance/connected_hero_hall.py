@@ -48,7 +48,7 @@ class ConnectedHeroHallSession:
         )
 
     def observe_hero_hall(self, label: str, *, allow_home: bool = False) -> Observation:
-        """Captures typed Hero Hall evidence and reopens it after required-update recovery."""
+        """Captures typed Hero Hall evidence and delegates interruption recovery to the shared executor."""
 
         observation = self.observation_service.observe(
             label,
@@ -59,16 +59,14 @@ class ConnectedHeroHallSession:
             ),
         )
         self._remember_artifact(observation)
-        if observation.has(UiElementId.PNC_UPDATE_CONFIRM_BUTTON):
-            recovered = self.action_executor.recover_update_if_required(
-                observation,
-                label_prefix=f"{label}_update",
-                observe=lambda follow_up_label, request=None: self.observation_service.observe(
-                    f"{label}_{follow_up_label}", request=request,
-                ),
-            )
-            if recovered is None:
-                raise AssertionError("Required-update recovery returned no Hero Hall observation.")
+        recovered = self.action_executor.recover_interruption_if_required(
+            observation,
+            label_prefix=f"{label}_update",
+            observe=lambda follow_up_label, request=None: self.observation_service.observe(
+                f"{label}_{follow_up_label}", request=request,
+            ),
+        )
+        if recovered is not None:
             observation = recovered
             self._remember_artifact(observation)
         if observation.screen_type == ScreenType.PNC_HERO_HALL:
@@ -148,6 +146,7 @@ class ConnectedHeroHallSession:
             ScreenType.PNC_QUEST_DAILY,
             ScreenType.PNC_QUEST_MAIN,
             ScreenType.PNC_MORE_MENU,
+            ScreenType.PNC_SETTINGS,
         }:
             return self.flows.ensure_home_city(observation)
         raise SelectorResolutionError(

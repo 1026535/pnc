@@ -25,7 +25,7 @@ class ConnectedResourceItemTests(unittest.TestCase):
 
         observer = Mock()
         observer.observe.return_value = _observation("fresh")
-        actions = Mock()
+        actions = _actions()
         session = ConnectedResourceItemSession(observer, actions, Mock(), Mock())
         session.use_one(ResourceItem("gold:50:normal", "gold", 50, 277, "fresh"))
         action, source = actions.execute_action.call_args.args
@@ -40,7 +40,7 @@ class ConnectedResourceItemTests(unittest.TestCase):
 
         observer = Mock()
         observer.observe.return_value = _observation("changed")
-        actions = Mock()
+        actions = _actions()
         session = ConnectedResourceItemSession(observer, actions, Mock(), Mock())
         with self.assertRaisesRegex(ValueError, "fingerprint"):
             session.use_one(ResourceItem("gold:50:normal", "gold", 50, 277, "stale"))
@@ -51,7 +51,7 @@ class ConnectedResourceItemTests(unittest.TestCase):
 
         observer = Mock()
         observer.observe.return_value = Observation(ScreenType.UNKNOWN, {})
-        actions = Mock()
+        actions = _actions()
         session = ConnectedResourceItemSession(observer, actions, Mock(), Mock())
         with self.assertRaisesRegex(ValueError, "Bag"):
             session.use_one(ResourceItem("gold:50:normal", "gold", 50, 277, "fresh"))
@@ -62,7 +62,7 @@ class ConnectedResourceItemTests(unittest.TestCase):
 
         observer = Mock()
         observer.observe.return_value = _observation("fresh", provenance="ocr")
-        actions = Mock()
+        actions = _actions()
         session = ConnectedResourceItemSession(observer, actions, Mock(), Mock())
         with self.assertRaisesRegex(ValueError, "visual"):
             session.use_one(ResourceItem("gold:50:normal", "gold", 50, 277, "fresh"))
@@ -78,7 +78,7 @@ class ConnectedResourceItemTests(unittest.TestCase):
         )
         observer = Mock()
         observer.observe.side_effect = (moving, settled, settled)
-        session = ConnectedResourceItemSession(observer, Mock(), Mock(), Mock())
+        session = ConnectedResourceItemSession(observer, _actions(), Mock(), Mock())
         self.assertEqual(settled, session._stable("bounce"))
         self.assertEqual(3, observer.observe.call_count)
 
@@ -93,7 +93,7 @@ class ConnectedResourceItemTests(unittest.TestCase):
         )
         observer = Mock()
         observer.observe.side_effect = frames
-        actions = Mock()
+        actions = _actions()
         session = ConnectedResourceItemSession(observer, actions, Mock(), Mock())
         with self.assertRaisesRegex(ValueError, "unstable"):
             session._stable("moving")
@@ -112,14 +112,14 @@ class ConnectedResourceItemTests(unittest.TestCase):
         bag = _observation("after-update")
         observer = Mock()
         observer.observe.side_effect = (update, bag, bag)
-        actions = Mock()
-        actions.recover_update_if_required.return_value = home
+        actions = _actions()
+        actions.recover_interruption_if_required.side_effect = (home, None, None)
         session = ConnectedResourceItemSession(observer, actions, Mock(), Mock())
 
         result = session._observe("resource_reconcile")
 
         self.assertEqual(result, bag)
-        actions.recover_update_if_required.assert_called_once()
+        self.assertEqual(actions.recover_interruption_if_required.call_count, 3)
         self.assertEqual(3, observer.observe.call_count)
 
 
@@ -137,3 +137,11 @@ def _observation(fingerprint: str, *, provenance: str = "visual_geometry") -> Ob
             },
         ),),
     )
+
+
+def _actions() -> Mock:
+    """Creates an executor mock whose interruption probe defaults to no recovery."""
+
+    actions = Mock()
+    actions.recover_interruption_if_required.return_value = None
+    return actions

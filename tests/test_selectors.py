@@ -80,7 +80,16 @@ class SelectorRegistryTests(unittest.TestCase):
         self.assertEqual(login_submit_button.interaction_kind, SelectorInteractionKind.ACTION)
         self.assertIsNotNone(login_submit_button.relative_bounds)
         self.assertAlmostEqual(login_submit_button.relative_bounds.width_ratio, 0.388888888889, places=9)
-        self.assertFalse(registry.require(UiElementId.PNC_MORE_MANAGE_CHAR).materialize_relative_bounds)
+        settings_manage_char = registry.require(UiElementId.PNC_MORE_MANAGE_CHAR)
+        self.assertEqual(settings_manage_char.screens, (ScreenType.PNC_SETTINGS,))
+        self.assertFalse(settings_manage_char.materialize_relative_bounds)
+        overlay_manage_char = registry.require(UiElementId.PNC_MORE_OVERLAY_MANAGE_CHAR)
+        self.assertEqual(overlay_manage_char.screens, (ScreenType.PNC_MORE_MENU,))
+        self.assertFalse(overlay_manage_char.materialize_relative_bounds)
+        back_button = registry.require(UiElementId.PNC_BACK_BUTTON_TOP_LEFT)
+        self.assertNotIn(ScreenType.PNC_HOME_CITY, back_button.screens)
+        self.assertIn(ScreenType.PNC_MIGHT_RANK, back_button.screens)
+        self.assertIsNotNone(back_button.relative_bounds)
         self.assertEqual(
             registry.require(UiElementId.PNC_LORD_INFO_HEADER).interaction_kind,
             SelectorInteractionKind.LABEL,

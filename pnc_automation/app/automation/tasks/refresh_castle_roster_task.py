@@ -69,6 +69,7 @@ class RefreshCastleRosterTask(BaseAutomationTask):
         return observation.screen_type in {
             ScreenType.PNC_HOME_CITY,
             ScreenType.PNC_MORE_MENU,
+            ScreenType.PNC_SETTINGS,
             ScreenType.PNC_LORD_INFO,
             ScreenType.PNC_VIP,
             ScreenType.PNC_IMPROVE_MIGHT,
@@ -165,6 +166,7 @@ def _verify_navigation_to_roster(after: Observation) -> TaskResult:
     if after.screen_type in {
         ScreenType.PNC_HOME_CITY,
         ScreenType.PNC_MORE_MENU,
+        ScreenType.PNC_SETTINGS,
         ScreenType.PNC_LORD_INFO,
         ScreenType.PNC_VIP,
         ScreenType.PNC_IMPROVE_MIGHT,

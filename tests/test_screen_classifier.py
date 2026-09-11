@@ -83,6 +83,30 @@ class ScreenClassifierTests(unittest.TestCase):
 
         self.assertEqual(screen_type, ScreenType.PNC_DAILY_TO_DO)
 
+    def test_classify_settings_from_back_and_manage_char_without_promoting_more_overlay(self) -> None:
+        """Treats the full-screen Settings control set as distinct from the More overlay."""
+
+        classifier = ScreenClassifier()
+
+        settings = classifier.classify(
+            {
+                UiElementId.PNC_BACK_BUTTON_TOP_LEFT: make_visible(UiElementId.PNC_BACK_BUTTON_TOP_LEFT),
+                UiElementId.PNC_MORE_MANAGE_CHAR: make_visible(UiElementId.PNC_MORE_MANAGE_CHAR),
+            }
+        )
+        overlay = classifier.classify(
+            {
+                UiElementId.PNC_BOTTOM_NAV_MORE: make_visible(UiElementId.PNC_BOTTOM_NAV_MORE),
+                UiElementId.PNC_MORE_SETTINGS: make_visible(UiElementId.PNC_MORE_SETTINGS),
+                UiElementId.PNC_MORE_OVERLAY_MANAGE_CHAR: make_visible(
+                    UiElementId.PNC_MORE_OVERLAY_MANAGE_CHAR
+                ),
+            }
+        )
+
+        self.assertEqual(settings, ScreenType.PNC_SETTINGS)
+        self.assertEqual(overlay, ScreenType.UNKNOWN)
+
     def test_classify_elemental_fluctuation_intro_from_header(self) -> None:
         """Recognizes the informational Hero Showdown intro from its unique heading."""
 

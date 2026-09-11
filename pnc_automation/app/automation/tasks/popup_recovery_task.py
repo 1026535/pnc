@@ -30,12 +30,13 @@ class PopupRecoveryTask(BaseAutomationTask):
         return True
 
     def plan(self, context: TaskContext, observation: Observation) -> list[ActionRequest]:
-        """Delegates popup dismissal to the canonical flow planner."""
+        """Returns no task-owned action; the observed executor recovers interruptions before planning."""
 
-        return context.flows.close_blocking_popup(observation)
+        del context, observation
+        return []
 
     def verify(self, context: TaskContext, before: Observation, after: Observation) -> TaskResult:
-        """Succeeds only when the popup is no longer blocking the UI."""
+        """Retains the authored compatibility task while recovery remains executor-owned."""
 
         if not after.blocking_popup:
             return TaskResult.success("Blocking popup dismissed.")

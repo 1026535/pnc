@@ -84,7 +84,7 @@ class ConnectedDailyQuestSession:
 
         start = self._observe_with_update_recovery(
             "daily_return_home_start",
-            request=ObservationRequest.daily_quest_follow_up(),
+            request=ObservationRequest.full_runtime_default(),
         )
         self.runner.execute_flow_until(
             label_prefix="daily_return_home",
@@ -100,12 +100,10 @@ class ConnectedDailyQuestSession:
         *,
         request: ObservationRequest,
     ) -> Observation:
-        """Captures one frame and globally recovers an exact required-update popup."""
+        """Captures one frame and delegates interruption recovery to the shared executor."""
 
         observation = self.observation_service.observe(label, request=request)
-        if not observation.has(UiElementId.PNC_UPDATE_CONFIRM_BUTTON):
-            return observation
-        recovered = self.action_executor.recover_update_if_required(
+        recovered = self.action_executor.recover_interruption_if_required(
             observation,
             label_prefix=f"{label}_update",
             observe=lambda follow_up_label, request=None: self.observation_service.observe(
@@ -114,7 +112,7 @@ class ConnectedDailyQuestSession:
             ),
         )
         if recovered is None:
-            raise AssertionError("Required-update recovery returned no observation for a detected Confirm control.")
+            return observation
         return recovered
 
     @staticmethod

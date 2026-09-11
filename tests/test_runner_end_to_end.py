@@ -105,7 +105,7 @@ class RunnerEndToEndTests(unittest.TestCase):
                 visible_ids=(UiElementId.PNC_BOTTOM_NAV_MORE, UiElementId.PNC_MORE_SETTINGS),
             ),
             make_observation(
-                ScreenType.PNC_MORE_MENU,
+                ScreenType.PNC_SETTINGS,
                 visible_ids=(UiElementId.PNC_MORE_MANAGE_CHAR,),
             ),
             make_observation(
@@ -160,6 +160,29 @@ class RunnerEndToEndTests(unittest.TestCase):
                     metadata={"active_build_timer_text": "00:48:33"},
                 ),
                 current_castle_name="Main",
+            ),
+            make_observation(
+                ScreenType.PNC_HOME_CITY,
+                visible_ids=(
+                    UiElementId.PNC_HOME_WORLD_SWITCH,
+                    UiElementId.PNC_BOTTOM_NAV_MORE,
+                    UiElementId.PNC_HOME_LORD_INFO_SHORTCUT,
+                    UiElementId.PNC_HOME_BUILD_BUTTON,
+                    UiElementId.PNC_HOME_RESEARCH_BUTTON,
+                    UiElementId.PNC_HOME_CAMPAIGN_ENTRY,
+                ),
+                current_castle_name="Main",
+            ),
+            make_observation(
+                ScreenType.PNC_BUILD_QUEUE,
+                list_entries=(
+                    make_entry(
+                        ListEntryKind.BUILDING,
+                        title="Castle",
+                        timer_text="00:48:33",
+                        metadata={"queue_state": "upgrading"},
+                    ),
+                ),
             ),
             make_observation(
                 ScreenType.PNC_HOME_CITY,
