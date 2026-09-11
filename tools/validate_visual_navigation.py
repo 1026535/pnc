@@ -877,13 +877,11 @@ def run_probe(
                 body="unused_read_only_probe_body",
             )
             reach(
-                ScreenType.PNC_MAILBOX_LIST,
-                lambda observation: runtime.flow_planner.open_mailbox(observation, MailboxType.PLAYER),
+                ScreenType.PNC_MAIL_HUB,
+                runtime.flow_planner.open_mail_hub,
             )
             mail_source = current.screen_type
-            if current.mailbox_type != MailboxType.PLAYER:
-                raise RuntimeError("Mail-compose route did not produce the typed PLAYER mailbox.")
-            if current.mailbox_empty is True:
+            if MailboxType.PLAYER in current.empty_mailboxes:
                 route_status = "applicability_skip"
                 summary["applicability"] = {
                     "predicate": "observed_empty_player_mailbox",
@@ -893,8 +891,20 @@ def run_probe(
                     "source_screen": mail_source.name,
                     "destination_screen": None,
                     "reason": "player_mailbox_empty",
+                    "source_evidence": summarize(
+                        current,
+                        ocr_context=None if current_capture is None else current_capture.ocr_context,
+                    ),
                 }
+                reach(ScreenType.PNC_HOME_CITY, runtime.flow_planner.ensure_home_city)
             else:
+                reach(
+                    ScreenType.PNC_MAILBOX_LIST,
+                    lambda observation: runtime.flow_planner.open_mailbox(observation, MailboxType.PLAYER),
+                )
+                if current.mailbox_type != MailboxType.PLAYER:
+                    raise RuntimeError("Mail-compose route did not produce the typed PLAYER mailbox.")
+                compose_source = current.screen_type
                 compose_actions = runtime.flow_planner.open_mail_compose(current, mail_params)
                 if len(compose_actions) != 1:
                     raise RuntimeError("Mail-compose route requires one canonical compose-entry action.")
@@ -902,7 +912,8 @@ def run_probe(
                 if current.screen_type != ScreenType.PNC_MAIL_COMPOSE_POPUP:
                     raise RuntimeError("Mail-compose route did not produce the typed compose popup.")
                 summary["mail_compose"] = {
-                    "source_screen": mail_source.name,
+                    "source_screen": compose_source.name,
+                    "hub_source_screen": mail_source.name,
                     "destination_screen": current.screen_type.name,
                     "entry_selector": (
                         compose_actions[0].selector_id.value
@@ -923,7 +934,7 @@ def run_probe(
                 step(close_actions[0])
                 if current.screen_type not in {ScreenType.PNC_MAIL_HUB, ScreenType.PNC_MAILBOX_LIST}:
                     raise RuntimeError("Mail-compose close did not return to a typed mail navigation screen.")
-            reach(ScreenType.PNC_HOME_CITY, runtime.flow_planner.ensure_home_city)
+                reach(ScreenType.PNC_HOME_CITY, runtime.flow_planner.ensure_home_city)
             summary["mail_compose"]["return_screen"] = current.screen_type.name
         elif selected_route == ProbeRoute.WORLD_OVERVIEW:
             reach(ScreenType.PNC_WORLD_MAP, runtime.flow_planner.ensure_world_map_ready)
