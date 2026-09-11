@@ -7,6 +7,7 @@ from enum import StrEnum
 from typing import Generic, Protocol, TypeVar
 
 from pnc_automation.app.automation.engine.core_runtime import CoreRuntime
+from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
 from pnc_automation.app.pnc.domain.observation import Observation
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 
@@ -103,6 +104,19 @@ class WorkflowContext:
             raise RuntimeError(
                 f"Workflow content reached unexpected screen '{observation.screen_type.name}'."
             )
+        self._last_navigation_count = self._runtime.observation_count
+        self._last_observation = observation
+        return observation
+
+    def open_building(self, target: HomeCityObjectId) -> Observation:
+        """Opens one exact building through NavigationCore and records its fresh endpoint."""
+
+        if not isinstance(target, HomeCityObjectId):
+            raise ValueError("Building navigation requires a known HomeCityObjectId target.")
+        observation = self._runtime.navigation.open_building(
+            target,
+            observe_content=lambda label: self._runtime.observe(label, include_content=True),
+        )
         self._last_navigation_count = self._runtime.observation_count
         self._last_observation = observation
         return observation

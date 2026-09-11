@@ -18,6 +18,10 @@ from pnc_automation.app.automation.daily_maintenance.daily_quest_status import (
     DailyQuestStatusResult,
     DailyQuestStatusWorkflow,
 )
+from pnc_automation.app.automation.open_building import (
+    OpenBuildingResult,
+    build_open_building_workflow,
+)
 from pnc_automation.app.authoring.scripts.registry import build_default_task_registry
 from pnc_automation.core.infra.storage.artifact_store import ArtifactStore
 from pnc_automation.app.pnc.persistence.chat_archive_store import ChatArchiveStore
@@ -132,6 +136,29 @@ class ApplicationRunner:
         try:
             core_runtime.preflight_active_castle_identity()
             return CoreWorkflowRunner[DailyQuestStatusResult](core_runtime).run(DailyQuestStatusWorkflow())
+        finally:
+            core_runtime.close()
+
+    def run_open_building(
+        self,
+        *,
+        account_id: str,
+        building: str,
+        required_role: LiveAutomationRole | None = None,
+    ) -> CoreWorkflowResult[OpenBuildingResult]:
+        """Prevalidates and opens one modeled building through the replacement core."""
+
+        workflow = build_open_building_workflow({"building": building})
+        account = self.script_runner.config.require_account(account_id)
+        core_runtime = build_core_runtime(
+            self.script_runner,
+            account,
+            account.artifact_directory_name,
+            required_role=required_role,
+        )
+        try:
+            core_runtime.preflight_active_castle_identity()
+            return CoreWorkflowRunner[OpenBuildingResult](core_runtime).run(workflow)
         finally:
             core_runtime.close()
 

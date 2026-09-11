@@ -10,9 +10,11 @@ from typing import Any
 
 from pnc_automation.app.runtime.observation_mode import ObservationMode
 from pnc_automation.app import ApplicationRunner, build_application_runner
+from pnc_automation.app.automation.engine.core_workflow import CoreWorkflowResult
 from pnc_automation.app.automation.engine.runner import RunResult, StepRunResult
 from pnc_automation.app.automation.engine.script_runner import require_successful_preparation
 from pnc_automation.app.automation.engine.task import TaskId
+from pnc_automation.app.automation.open_building import OpenBuildingResult
 from pnc_automation.app.authoring.config.models import CastleIdentity
 from pnc_automation.app.pnc.domain.building_priority_input import resolve_building_priority_values
 from pnc_automation.bluestacks_management.instance_lease import InstanceLeaseBundle
@@ -167,7 +169,7 @@ class AutomationSession:
 
         return self.api.building_construct(account_id=self.account_id, building=building)
 
-    def open_building(self, *, building: str) -> StepRunResult:
+    def open_building(self, *, building: str) -> CoreWorkflowResult[OpenBuildingResult]:
         """Runs one direct open-building step against the prepared session."""
 
         return self.api.open_building(account_id=self.account_id, building=building)
@@ -375,13 +377,12 @@ class AutomationApi:
         *,
         account_id: str | None = None,
         building: str,
-    ) -> StepRunResult:
+    ) -> CoreWorkflowResult[OpenBuildingResult]:
         """Runs one direct open-building step using current-castle semantics."""
 
-        return self.run_task(
+        return self.application.run_open_building(
             account_id=self._resolve_account_id(account_id),
-            task_id=TaskId.OPEN_BUILDING,
-            params={"building": building},
+            building=building,
         )
 
     def research(
@@ -665,7 +666,9 @@ def building_construct(*, account_id: str | None = None, building: str) -> StepR
     return _default_api().building_construct(account_id=account_id, building=building)
 
 
-def open_building(*, account_id: str | None = None, building: str) -> StepRunResult:
+def open_building(
+    *, account_id: str | None = None, building: str
+) -> CoreWorkflowResult[OpenBuildingResult]:
     """Runs one direct open-building step through the default application facade."""
 
     return _default_api().open_building(account_id=account_id, building=building)

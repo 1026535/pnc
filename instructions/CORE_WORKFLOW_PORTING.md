@@ -87,6 +87,8 @@ This guide describes the bounded path for moving one workflow onto the reviewed 
 
 ## Current boundary
 
+The direct `open-building` CLI and Python entry points use the replacement core. Authored scripts with `TaskId.OPEN_BUILDING` remain a legacy compatibility boundary until core script dispatch is available.
+
 `DailyQuestStatusWorkflow` reports one `visible_viewport` from the fresh Daily screen. It does not scroll, claim, acknowledge, select a castle, infer unseen rows, or claim full-screen coverage. It fails when both recognized rows and unknown titles are absent. Known safe popup recovery belongs to the connected runtime and shared observed-action executor; the workflow has no generic popup dismissal policy. Navigation does not retry a tap, replay a failed workflow, or use the legacy observer as a fallback. A task-owned dialog or popup without an explicit safe selector still stops the route.
 
 Active-castle preflight currently sees only the selected row that is visible in the Manage Characters viewport. A separate read-only roster setup may prepare that viewport, but the replacement workflow does not automate roster search or scrolling yet.
