@@ -632,7 +632,7 @@ class MailWorkflowTests(unittest.TestCase):
         self.assertEqual(actions[0].follow_up_request, ObservationRequest.mail_compose_follow_up())
 
     def test_open_mail_compose_from_player_mailbox_only_taps_compose(self) -> None:
-        """Uses one compose-opening increment from the player mailbox so the compose popup is observed before target entry."""
+        """Uses the reviewed Player mailbox compose control before target entry."""
 
         params = SendMailParams(
             recipient_kind=MailRecipientKind.PLAYER,
@@ -655,6 +655,22 @@ class MailWorkflowTests(unittest.TestCase):
         self.assertIsInstance(actions[0], TapAction)
         self.assertEqual(actions[0].selector_id, UiElementId.PNC_MAIL_COMPOSE_BUTTON)
         self.assertEqual(actions[0].follow_up_request, ObservationRequest.mail_compose_follow_up())
+
+    def test_open_other_mailbox_from_player_mailbox_returns_to_hub_with_back(self) -> None:
+        """Uses Android Back to return from one mailbox category before opening another."""
+
+        actions = self.flows.open_mailbox(
+            make_observation(ScreenType.PNC_MAILBOX_LIST, mailbox_type=MailboxType.PLAYER),
+            MailboxType.ALLIANCE,
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], KeyEventAction)
+        self.assertEqual(actions[0].key_code, "KEYCODE_BACK")
+        self.assertEqual(
+            actions[0].follow_up_request,
+            ObservationRequest.mail_navigation_follow_up(ScreenType.PNC_MAIL_HUB),
+        )
 
     def test_send_mail_verify_replans_when_direct_player_compose_target_still_needs_manual_entry(self) -> None:
         """Replans for target entry instead of failing as soon as the direct-player compose popup opens."""
@@ -1245,34 +1261,32 @@ class MailWorkflowTests(unittest.TestCase):
             ]
         )
 
-        with self.assertRaises(SelectorResolutionError):
-            executor.execute_actions(
-                [
-                    TapAction(
-                        selector_id=UiElementId.PNC_MAIL_COMPOSE_BUTTON,
-                        reason="open_player_mail_compose",
-                        observe_after=True,
-                        follow_up_request=ObservationRequest.mail_compose_follow_up(),
-                    ),
-                    InputTextAction(
-                        selector_id=UiElementId.PNC_MAIL_COMPOSE_TARGET_FIELD,
-                        text="Enemy Bob",
-                        replace_existing=True,
-                    ),
-                ],
-                make_observation(
-                    ScreenType.PNC_MAILBOX_LIST,
-                    mailbox_type=MailboxType.PLAYER,
-                    visible_ids=(UiElementId.PNC_MAIL_COMPOSE_BUTTON,),
+        result = executor.execute_actions(
+            [
+                TapAction(
+                    selector_id=UiElementId.PNC_MAIL_COMPOSE_BUTTON,
+                    reason="open_player_mail_compose",
+                    observe_after=True,
+                    follow_up_request=ObservationRequest.mail_compose_follow_up(),
                 ),
-                observe=fake_observer.observe,
-            )
+                InputTextAction(
+                    selector_id=UiElementId.PNC_MAIL_COMPOSE_TARGET_FIELD,
+                    text="Enemy Bob",
+                    replace_existing=True,
+                ),
+            ],
+            make_observation(
+                ScreenType.PNC_MAILBOX_LIST,
+                mailbox_type=MailboxType.PLAYER,
+                visible_ids=(UiElementId.PNC_MAIL_COMPOSE_BUTTON,),
+            ),
+            observe=fake_observer.observe,
+        )
 
-        self.assertEqual(executor.session.taps, [])
+        self.assertEqual(result.screen_type, ScreenType.PNC_MAILBOX_LIST)
+        self.assertEqual(len(executor.session.taps), 1)
         self.assertEqual(executor.session.texts, [])
-        # Selector support is validated before follow-up observation, so an
-        # unsupported compose control cannot trigger an observer request.
-        self.assertEqual(fake_observer.requests, [])
+        self.assertEqual(len(fake_observer.requests), 1)
 
     def test_mail_compose_follow_up_keeps_compose_origin_screens_visible_on_compose_miss(self) -> None:
         """Lets compose-entry follow-ups preserve every supported source screen when the popup does not open."""

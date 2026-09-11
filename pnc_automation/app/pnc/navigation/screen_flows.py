@@ -850,6 +850,12 @@ class ScreenFlowPlanner:
                 )
             ]
         if params.player_name is not None:
+            if observation.screen_type == ScreenType.PNC_MAIL_HUB and MailboxType.PLAYER in observation.empty_mailboxes:
+                raise SelectorResolutionError(
+                    "Direct player-mail compose requires an available Player mailbox; the hub reports No report yet.",
+                    mailbox=MailboxType.PLAYER.value,
+                    mailbox_empty=True,
+                )
             if observation.screen_type != ScreenType.PNC_MAILBOX_LIST or observation.mailbox_type != MailboxType.PLAYER:
                 return self.open_mailbox(observation, MailboxType.PLAYER)
             return [

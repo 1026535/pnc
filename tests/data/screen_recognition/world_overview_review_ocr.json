@@ -1,0 +1,85 @@
+{
+  "artifact_path": "C:\\Users\\lebel\\pnc\\artifacts\\2026-09-11\\testing\\20260911T171532Z_review_overview_post_action_1_runtime_retry.png",
+  "screen_type": "unknown",
+  "captured_at": "2026-09-11T17:15:32.146084+00:00",
+  "recognized_text_hints": [],
+  "unidentified_ocr_lines": [
+    {
+      "text": "K:287 Flame0fUnity",
+      "normalized_text": "K287FLAME0FUNITY",
+      "bounds": {
+        "x": 249,
+        "y": 50,
+        "width": 400,
+        "height": 45
+      },
+      "confidence": 0.865684123415696
+    },
+    {
+      "text": "Ruler: ~Dragon King",
+      "normalized_text": "RULERDRAGONKING",
+      "bounds": {
+        "x": 284,
+        "y": 106,
+        "width": 309,
+        "height": 34
+      },
+      "confidence": 0.8780455112457275
+    },
+    {
+      "text": "Peaceful Status 7d 16:44:24",
+      "normalized_text": "PEACEFULSTATUS7D164424",
+      "bounds": {
+        "x": 240,
+        "y": 154,
+        "width": 424,
+        "height": 28
+      },
+      "confidence": 0.841717358146395
+    },
+    {
+      "text": "MyTerritory",
+      "normalized_text": "MYTERRITORY",
+      "bounds": {
+        "x": 403,
+        "y": 1328,
+        "width": 151,
+        "height": 31
+      },
+      "confidence": 0.8387081821759542
+    },
+    {
+      "text": "Leader",
+      "normalized_text": "LEADER",
+      "bounds": {
+        "x": 402,
+        "y": 1393,
+        "width": 98,
+        "height": 30
+      },
+      "confidence": 0.8421971031597683
+    },
+    {
+      "text": "AllianceMember",
+      "normalized_text": "ALLIANCEMEMBER",
+      "bounds": {
+        "x": 403,
+        "y": 1459,
+        "width": 148,
+        "height": 21
+      },
+      "confidence": 0.912234882513682
+    },
+    {
+      "text": "AllianceFort",
+      "normalized_text": "ALLIANCEFORT",
+      "bounds": {
+        "x": 405,
+        "y": 1519,
+        "width": 156,
+        "height": 24
+      },
+      "confidence": 0.8837986588478088
+    }
+  ]
+}

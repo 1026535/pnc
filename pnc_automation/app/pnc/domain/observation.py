@@ -461,6 +461,7 @@ class Observation:
     profile_player_name: str | None = None
     mailbox_type: MailboxType | None = None
     mailbox_empty: bool | None = None
+    empty_mailboxes: frozenset[MailboxType] = frozenset()
     text_field_states: Mapping[UiElementId, ObservedTextFieldState] = field(default_factory=dict)
     chat_draft_empty: bool | None = None
     chat_draft_text: str | None = None

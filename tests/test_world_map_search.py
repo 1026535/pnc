@@ -67,7 +67,7 @@ from pnc_automation.app.pnc.navigation.world_map_survey_recorder import WorldMap
 from pnc_automation.app.pnc.navigation.world_map_sweep import WorldMapSweepPolicy
 from pnc_automation.app.pnc.persistence.world_map_survey_debug_store import WorldMapSurveyDebugStore
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
-from pnc_automation.app.pnc.vision.selectors import DetectionKind, SelectorRegistry, build_default_selector_registry
+from pnc_automation.app.pnc.vision.selectors import SelectorRegistry, build_default_selector_registry
 from pnc_automation.app.runtime.observation_artifacts import ObservationArtifactKind, observation_artifact_selection
 from pnc_automation.core.errors import SelectorResolutionError
 from tests.test_support import (
@@ -2008,7 +2008,7 @@ class WorldMapSearchTests(unittest.TestCase):
                     return replace(capture.observation)
             raise AssertionError("P2 received a screenshot that P1 did not capture.")
 
-        test_registry = _world_map_test_registry()
+        test_registry = build_default_selector_registry()
         service = WorldMapSearchService(
             screen_flows=flows,
             observation_service=observer,
@@ -2468,7 +2468,7 @@ class WorldMapSearchTests(unittest.TestCase):
                     return replace(capture.observation)
             raise AssertionError("P2 received a screenshot that P1 did not capture.")
 
-        test_registry = _world_map_test_registry()
+        test_registry = build_default_selector_registry()
         service = WorldMapSearchService(
             screen_flows=self.flows,
             observation_service=observer,
@@ -2492,20 +2492,6 @@ class WorldMapSearchTests(unittest.TestCase):
         )
         return service, observer, session
 
-
-def _world_map_test_registry() -> SelectorRegistry:
-    """Provide an explicit synthetic strategy for the reviewed overview fixture's Expand control."""
-
-    canonical = build_default_selector_registry()
-    expand = replace(
-        canonical.require(UiElementId.PNC_WORLD_EXPAND_BUTTON),
-        detection_kind=DetectionKind.GUARDED_GEOMETRY,
-        notes=("Synthetic unit-test strategy; production catalog remains fail-closed.",),
-    )
-    return SelectorRegistry(
-        selectors=tuple(expand if selector.id == expand.id else selector for selector in canonical.all()),
-        surfaces=canonical.all_surfaces(),
-    )
 
 
 class _CountingScreenFlowPlanner(ScreenFlowPlanner):
