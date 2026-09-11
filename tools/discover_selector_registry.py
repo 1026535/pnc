@@ -13,6 +13,7 @@ from _script_bootstrap import ensure_repo_root_on_path
 root = ensure_repo_root_on_path()
 
 from pnc_automation.app import ApplicationRunner, build_application_runner
+from pnc_automation.app.authoring.config.models import LiveAutomationRole
 from pnc_automation.app.automation.engine.observed_action_executor import ObservedActionExecutor
 from pnc_automation.app.pnc.domain.action_requests import ActionRequest, KeyEventAction, TapAction
 from pnc_automation.app.pnc.domain.observation import Observation
@@ -187,7 +188,10 @@ def _run_live_discovery(
 
     script_runner = runtime.application.script_runner
     account = script_runner.config.require_account(account_id)
-    connected_runtime = script_runner.build_connected_runtime(account=account)
+    connected_runtime = script_runner.build_connected_runtime(
+        account=account,
+        required_role=LiveAutomationRole.LIVE_TESTING,
+    )
     session = connected_runtime.session
     observation_service = connected_runtime.observation_service
     action_executor = connected_runtime.require_observed_action_executor(

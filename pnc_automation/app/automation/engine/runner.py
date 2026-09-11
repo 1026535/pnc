@@ -82,6 +82,27 @@ class AutomationRunner:
     world_map_survey_recorder: WorldMapSurveyRecorder | None = None
     world_map_search_service: WorldMapSearchService | None = None
     policy: StepExecutionPolicy = field(default_factory=StepExecutionPolicy)
+    close_callback: Callable[[], None] | None = field(default=None, repr=False)
+    _closed: bool = field(default=False, init=False, repr=False)
+
+    def close(self) -> None:
+        """Releases any connected session owned by this runner."""
+
+        if self._closed:
+            return
+        self._closed = True
+        if self.close_callback is not None:
+            self.close_callback()
+
+    def __enter__(self) -> "AutomationRunner":
+        """Enters an explicitly scoped automation runner."""
+
+        return self
+
+    def __exit__(self, _exception_type: object, _exception: object, _traceback: object) -> None:
+        """Releases the runner's connected session on exit."""
+
+        self.close()
 
     def execute_flow_until(
         self,

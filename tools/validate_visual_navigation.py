@@ -20,6 +20,7 @@ except ModuleNotFoundError:
 ensure_repo_root_on_path()
 
 from pnc_automation.app import build_application_runner
+from pnc_automation.app.authoring.config.models import LiveAutomationRole
 from pnc_automation.app.automation.engine.core_runtime import build_core_runtime
 from pnc_automation.app.automation.engine.navigation_core import NavigationCore
 from pnc_automation.app.pnc.domain.action_requests import ActionRequest, KeyEventAction, TapAction, WaitAction
@@ -95,7 +96,10 @@ def run_probe(config: Path, account_id: str, output_root: Path) -> Path:
         app = build_application_runner(config, observation_mode=ObservationMode.DEBUG)
         logging.disable(logging.CRITICAL)
         account = app.script_runner.config.require_account(account_id)
-        bundle = app.script_runner.build_connected_runtime_bundle(account=account)
+        bundle = app.script_runner.build_connected_runtime_bundle(
+            account=account,
+            required_role=LiveAutomationRole.LIVE_TESTING,
+        )
         runtime = bundle.runtime
         observer = runtime.observation_service
         # Identity can be observed without changing the user's local roster config.
@@ -211,6 +215,7 @@ def run_replacement_probe(config: Path, account_id: str, output_root: Path, *, g
         app.script_runner,
         account,
         account.artifact_directory_name,
+        required_role=LiveAutomationRole.LIVE_TESTING,
         trace_path=trace,
     )
     core = core_runtime.navigation

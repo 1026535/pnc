@@ -11,6 +11,7 @@ from _script_bootstrap import ensure_repo_root_on_path
 root = ensure_repo_root_on_path()
 
 from pnc_automation.app import build_application_runner
+from pnc_automation.app.authoring.config.models import LiveAutomationRole
 from pnc_automation.app.automation.engine.task import TaskPreflight
 from pnc_automation.app.pnc.navigation.world_map_search import (
     TraversalRotation,
@@ -86,7 +87,10 @@ def main() -> int:
     application = build_application_runner(Path(arguments.config), verbose=arguments.verbose)
     script_runner = application.script_runner
     account = script_runner.config.require_account(arguments.account)
-    connected = script_runner.build_connected_runtime_bundle(account=account)
+    connected = script_runner.build_connected_runtime_bundle(
+        account=account,
+        required_role=LiveAutomationRole.LIVE_TESTING,
+    )
     observation = connected.runner.prove_preflight_state(
         account,
         TaskPreflight.WORLD_MAP,

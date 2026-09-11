@@ -25,7 +25,7 @@ class PreviewWorldMapSearchRouteTests(unittest.TestCase):
         application = SimpleNamespace(
             script_runner=SimpleNamespace(
                 config=SimpleNamespace(require_account=lambda account_id: account_id),
-                build_connected_runtime_bundle=lambda account: connected,
+                build_connected_runtime_bundle=lambda account, required_role=None: connected,
             )
         )
 

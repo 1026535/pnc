@@ -12,6 +12,8 @@ from _script_bootstrap import ensure_repo_root_on_path
 ensure_repo_root_on_path()
 
 from pnc_automation.app import build_application_runner
+from pnc_automation.app.authoring.config.models import LiveAutomationRole
+from pnc_automation.app.automation.engine.script_runner import require_successful_preparation
 from pnc_automation.app.automation.daily_maintenance.coordinator import DailyMaintenanceCoordinator
 from pnc_automation.app.automation.daily_maintenance.live_session import ConnectedDailyQuestSession
 from pnc_automation.app.authoring.config.loader import load_app_config
@@ -34,24 +36,35 @@ def main() -> int:
         parser.error(f"Account '{arguments.account}' has no authored castle targets.")
     castle = target_catalog.require(arguments.castle_ref)
     application = build_application_runner(arguments.config)
-    application.prepare_account_session(account_id=arguments.account, castle=castle)
-    bundle = application.script_runner.build_connected_runtime_bundle(account=account)
-    action_executor = bundle.runtime.require_observed_action_executor(
-        "Daily survey requires the canonical selector-backed action executor."
-    )
-    session = ConnectedDailyQuestSession(
-        runner=bundle.runner,
-        observation_service=bundle.runtime.observation_service,
-        action_executor=action_executor,
-    )
-    coordinator = DailyMaintenanceCoordinator.for_read_only(
-        session=session,
-        journal_store=DailyRunJournalStore(app_config.artifact_root),
-        catalog=DailyQuestCatalog(),
-    )
-    survey = coordinator.survey_read_only()
-    print(json.dumps(asdict(survey), indent=2, default=str))
-    return 0
+    account.require_live_role(LiveAutomationRole.DAILY_CANARY)
+    with application.script_runner.reserve_accounts((arguments.account,)):
+        require_successful_preparation(
+            application.prepare_account_session(
+                account_id=arguments.account,
+                castle=castle,
+                required_role=LiveAutomationRole.DAILY_CANARY,
+            )
+        )
+        with application.script_runner.build_connected_runtime_bundle(
+            account=account,
+            required_role=LiveAutomationRole.DAILY_CANARY,
+        ) as bundle:
+            action_executor = bundle.runtime.require_observed_action_executor(
+                "Daily survey requires the canonical selector-backed action executor."
+            )
+            session = ConnectedDailyQuestSession(
+                runner=bundle.runner,
+                observation_service=bundle.runtime.observation_service,
+                action_executor=action_executor,
+            )
+            coordinator = DailyMaintenanceCoordinator.for_read_only(
+                session=session,
+                journal_store=DailyRunJournalStore(app_config.artifact_root),
+                catalog=DailyQuestCatalog(),
+            )
+            survey = coordinator.survey_read_only()
+            print(json.dumps(asdict(survey), indent=2, default=str))
+            return 0
 
 
 if __name__ == "__main__":

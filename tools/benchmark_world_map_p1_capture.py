@@ -18,6 +18,8 @@ from _script_bootstrap import ensure_repo_root_on_path
 root = ensure_repo_root_on_path()
 
 from pnc_automation.app import build_application_runner
+from pnc_automation.app.authoring.config.models import LiveAutomationRole
+from pnc_automation.app.automation.engine.script_runner import require_successful_preparation
 from pnc_automation.app.automation.engine.task import TaskPreflight
 from pnc_automation.app.pnc.domain.observation import SpatialSurfaceType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
@@ -77,142 +79,150 @@ def main() -> None:
         raise ValueError("iterations must be positive.")
 
     application = build_application_runner(Path(arguments.config))
-    if not arguments.skip_prepare:
-        prepare_result = application.script_runner.prepare_account_session(account_id=arguments.account)
-        if not all(step.status.value == "success" for step in prepare_result.steps):
-            raise AssertionError(f"Preparation failed: {prepare_result.steps}")
     account = application.script_runner.config.require_account(arguments.account)
-    connected = application.script_runner.build_connected_runtime_bundle(account=account)
-    runtime = connected.runtime
-    service = runtime.observation_service
-    screenshot_service = service.screenshot_service
-    builder = service.observation_builder
-    session = runtime.session
+    account.require_live_role(LiveAutomationRole.LIVE_TESTING)
+    with application.script_runner.reserve_accounts((arguments.account,)):
+        if not arguments.skip_prepare:
+            require_successful_preparation(
+                application.script_runner.prepare_account_session(
+                    account_id=arguments.account,
+                    required_role=LiveAutomationRole.LIVE_TESTING,
+                )
+            )
+        with application.script_runner.build_connected_runtime_bundle(
+            account=account,
+            required_role=LiveAutomationRole.LIVE_TESTING,
+        ) as connected:
+            runtime = connected.runtime
+            service = runtime.observation_service
+            screenshot_service = service.screenshot_service
+            builder = service.observation_builder
+            session = runtime.session
 
-    start = connected.runner.prove_preflight_state(
-        account,
-        TaskPreflight.WORLD_MAP,
-        label_prefix=f"{arguments.label}_preflight",
-        max_steps=20,
-    )
-    coordinate = start.require_spatial_surface(SpatialSurfaceType.WORLD_MAP).viewport.coordinate
-    if coordinate is None:
-        raise AssertionError("World-map preflight did not expose a coordinate-addressable viewport.")
+            start = connected.runner.prove_preflight_state(
+                account,
+                TaskPreflight.WORLD_MAP,
+                label_prefix=f"{arguments.label}_preflight",
+                max_steps=20,
+            )
+            coordinate = start.require_spatial_surface(SpatialSurfaceType.WORLD_MAP).viewport.coordinate
+            if coordinate is None:
+                raise AssertionError("World-map preflight did not expose a coordinate-addressable viewport.")
 
-    request = ObservationRequest.world_map_movement_proof_follow_up()
-    artifact_selection = resolve_routine_artifact_selection(
-        mode=service.mode,
-        routine=ObservationArtifactRoutine.WORLD_MAP_MOVEMENT_PROOF,
-    )
-    coordinate_bar_selector = builder.selector_registry.require(UiElementId.PNC_WORLD_COORDINATE_BAR)
-    if coordinate_bar_selector.relative_bounds is None:
-        raise AssertionError("Coordinate-bar selector must define relative bounds.")
+            request = ObservationRequest.world_map_movement_proof_follow_up()
+            artifact_selection = resolve_routine_artifact_selection(
+                mode=service.mode,
+                routine=ObservationArtifactRoutine.WORLD_MAP_MOVEMENT_PROOF,
+            )
+            coordinate_bar_selector = builder.selector_registry.require(UiElementId.PNC_WORLD_COORDINATE_BAR)
+            if coordinate_bar_selector.relative_bounds is None:
+                raise AssertionError("Coordinate-bar selector must define relative bounds.")
 
-    _warm_live_paths(
-        account_artifact_directory=account.artifact_directory_name,
-        builder=builder,
-        request=request,
-        screenshot_service=screenshot_service,
-        session=session,
-        label=arguments.label,
-    )
+            _warm_live_paths(
+                account_artifact_directory=account.artifact_directory_name,
+                builder=builder,
+                request=request,
+                screenshot_service=screenshot_service,
+                session=session,
+                label=arguments.label,
+            )
 
-    payloads, adb_bytes_ms = _benchmark_adb_bytes(session=session, iterations=arguments.iterations)
-    png_decode_ms = _benchmark_png_decode(payloads)
-    artifact_persist_ms = _benchmark_artifact_persist(
-        screenshot_service=screenshot_service,
-        account_artifact_directory=account.artifact_directory_name,
-        label=arguments.label,
-        payloads=payloads,
-    )
-    ocr_screenshots, screenshot_capture_no_persist_ms = _benchmark_screenshot_capture(
-        screenshot_service=screenshot_service,
-        session=session,
-        account_artifact_directory=account.artifact_directory_name,
-        label=arguments.label,
-        iterations=arguments.iterations,
-        persist=False,
-    )
-    _persisted_screenshots, screenshot_capture_persist_ms = _benchmark_screenshot_capture(
-        screenshot_service=screenshot_service,
-        session=session,
-        account_artifact_directory=account.artifact_directory_name,
-        label=arguments.label,
-        iterations=arguments.iterations,
-        persist=True,
-    )
-    coordinate_ocr_ms = _benchmark_coordinate_ocr(
-        screenshots=ocr_screenshots,
-        coordinate_bar_selector=coordinate_bar_selector,
-        ocr_service=builder.enricher.ocr_service,
-    )
-    builder_screenshots, _builder_input_capture_ms = _benchmark_screenshot_capture(
-        screenshot_service=screenshot_service,
-        session=session,
-        account_artifact_directory=account.artifact_directory_name,
-        label=f"{arguments.label}_builder_input",
-        iterations=arguments.iterations,
-        persist=False,
-    )
-    coordinate_builder_ms = _benchmark_builder(
-        builder=builder,
-        screenshots=builder_screenshots,
-        request=request,
-    )
-    p2_builder_ms = _benchmark_builder(
-        builder=builder,
-        screenshots=builder_screenshots,
-        request=ObservationRequest.world_map_checkpoint_analysis(expected_coordinate=coordinate),
-    )
-    service_timings = _benchmark_observation_service(
-        service=service,
-        request=request,
-        artifact_selection=artifact_selection,
-        label=arguments.label,
-        iterations=arguments.iterations,
-    )
-    service_total_mean = statistics.mean(service_timings["total_ms"])
+            payloads, adb_bytes_ms = _benchmark_adb_bytes(session=session, iterations=arguments.iterations)
+            png_decode_ms = _benchmark_png_decode(payloads)
+            artifact_persist_ms = _benchmark_artifact_persist(
+                screenshot_service=screenshot_service,
+                account_artifact_directory=account.artifact_directory_name,
+                label=arguments.label,
+                payloads=payloads,
+            )
+            ocr_screenshots, screenshot_capture_no_persist_ms = _benchmark_screenshot_capture(
+                screenshot_service=screenshot_service,
+                session=session,
+                account_artifact_directory=account.artifact_directory_name,
+                label=arguments.label,
+                iterations=arguments.iterations,
+                persist=False,
+            )
+            _persisted_screenshots, screenshot_capture_persist_ms = _benchmark_screenshot_capture(
+                screenshot_service=screenshot_service,
+                session=session,
+                account_artifact_directory=account.artifact_directory_name,
+                label=arguments.label,
+                iterations=arguments.iterations,
+                persist=True,
+            )
+            coordinate_ocr_ms = _benchmark_coordinate_ocr(
+                screenshots=ocr_screenshots,
+                coordinate_bar_selector=coordinate_bar_selector,
+                ocr_service=builder.enricher.ocr_service,
+            )
+            builder_screenshots, _builder_input_capture_ms = _benchmark_screenshot_capture(
+                screenshot_service=screenshot_service,
+                session=session,
+                account_artifact_directory=account.artifact_directory_name,
+                label=f"{arguments.label}_builder_input",
+                iterations=arguments.iterations,
+                persist=False,
+            )
+            coordinate_builder_ms = _benchmark_builder(
+                builder=builder,
+                screenshots=builder_screenshots,
+                request=request,
+            )
+            p2_builder_ms = _benchmark_builder(
+                builder=builder,
+                screenshots=builder_screenshots,
+                request=ObservationRequest.world_map_checkpoint_analysis(expected_coordinate=coordinate),
+            )
+            service_timings = _benchmark_observation_service(
+                service=service,
+                request=request,
+                artifact_selection=artifact_selection,
+                label=arguments.label,
+                iterations=arguments.iterations,
+            )
+            service_total_mean = statistics.mean(service_timings["total_ms"])
 
-    print(
-        json.dumps(
-            {
-                "account": arguments.account,
-                "iterations": arguments.iterations,
-                "preflight_coordinate": coordinate,
-                "movement_proof_artifact_selection": sorted(kind.value for kind in artifact_selection),
-                "adb_capture_screenshot_bytes": _summary(adb_bytes_ms),
-                "png_decode_existing_payload": _summary(png_decode_ms),
-                "artifact_persist_existing_payload_debug_only": _summary(artifact_persist_ms),
-                "screenshot_service_capture_no_persist": _summary(screenshot_capture_no_persist_ms),
-                "screenshot_service_capture_with_persist_debug_only": _summary(screenshot_capture_persist_ms),
-                "coordinate_bar_ocr_only_existing_screenshot": _summary(coordinate_ocr_ms),
-                "observation_builder_coordinate_only_existing_screenshot": _summary(coordinate_builder_ms),
-                "p2_checkpoint_builder_existing_screenshot": _summary(p2_builder_ms),
-                "observation_service_capture_total": _summary(service_timings["total_ms"]),
-                "observation_service_internal_screenshot_capture": _summary(service_timings["screenshot_ms"]),
-                "observation_service_internal_builder": _summary(service_timings["builder_ms"]),
-                "observation_service_residual_side_effects": _summary(service_timings["residual_ms"]),
-                "mean_percent_of_service_total": {
-                    "screenshot_capture": round(
-                        statistics.mean(service_timings["screenshot_ms"]) / service_total_mean * 100,
-                        1,
-                    ),
-                    "builder": round(
-                        statistics.mean(service_timings["builder_ms"]) / service_total_mean * 100,
-                        1,
-                    ),
-                    "residual_side_effects": round(
-                        statistics.mean(service_timings["residual_ms"]) / service_total_mean * 100,
-                        1,
-                    ),
-                },
-                "service_coordinates": service_timings["coordinates"],
-                "service_artifact_paths": service_timings["artifact_paths"],
-            },
-            indent=2,
-            sort_keys=True,
-        )
-    )
+            print(
+                json.dumps(
+                    {
+                        "account": arguments.account,
+                        "iterations": arguments.iterations,
+                        "preflight_coordinate": coordinate,
+                        "movement_proof_artifact_selection": sorted(kind.value for kind in artifact_selection),
+                        "adb_capture_screenshot_bytes": _summary(adb_bytes_ms),
+                        "png_decode_existing_payload": _summary(png_decode_ms),
+                        "artifact_persist_existing_payload_debug_only": _summary(artifact_persist_ms),
+                        "screenshot_service_capture_no_persist": _summary(screenshot_capture_no_persist_ms),
+                        "screenshot_service_capture_with_persist_debug_only": _summary(screenshot_capture_persist_ms),
+                        "coordinate_bar_ocr_only_existing_screenshot": _summary(coordinate_ocr_ms),
+                        "observation_builder_coordinate_only_existing_screenshot": _summary(coordinate_builder_ms),
+                        "p2_checkpoint_builder_existing_screenshot": _summary(p2_builder_ms),
+                        "observation_service_capture_total": _summary(service_timings["total_ms"]),
+                        "observation_service_internal_screenshot_capture": _summary(service_timings["screenshot_ms"]),
+                        "observation_service_internal_builder": _summary(service_timings["builder_ms"]),
+                        "observation_service_residual_side_effects": _summary(service_timings["residual_ms"]),
+                        "mean_percent_of_service_total": {
+                            "screenshot_capture": round(
+                                statistics.mean(service_timings["screenshot_ms"]) / service_total_mean * 100,
+                                1,
+                            ),
+                            "builder": round(
+                                statistics.mean(service_timings["builder_ms"]) / service_total_mean * 100,
+                                1,
+                            ),
+                            "residual_side_effects": round(
+                                statistics.mean(service_timings["residual_ms"]) / service_total_mean * 100,
+                                1,
+                            ),
+                        },
+                        "service_coordinates": service_timings["coordinates"],
+                        "service_artifact_paths": service_timings["artifact_paths"],
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
 
 
 def _warm_live_paths(

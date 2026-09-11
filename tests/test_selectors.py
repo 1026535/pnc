@@ -25,6 +25,11 @@ from pnc_automation.app.pnc.vision.selectors import DetectionKind, build_default
 class SelectorRegistryTests(unittest.TestCase):
     """Validates canonical selector-registry construction."""
 
+    def test_default_registry_reuses_immutable_packaged_catalog(self) -> None:
+        """Avoids reparsing the same packaged selector catalog for every caller."""
+
+        self.assertIs(build_default_selector_registry(), build_default_selector_registry())
+
     def test_build_default_selector_registry_merges_shared_selector_ids(self) -> None:
         """Builds the default registry without duplicate selector ids and preserves shared screens."""
 

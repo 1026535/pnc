@@ -11,7 +11,11 @@ from _script_bootstrap import ensure_repo_root_on_path
 root = ensure_repo_root_on_path()
 
 from pnc_automation.app import build_application_runner
-from pnc_automation.app.automation.engine.script_runner import configure_world_map_movement_budget
+from pnc_automation.app.authoring.config.models import LiveAutomationRole
+from pnc_automation.app.automation.engine.script_runner import (
+    configure_world_map_movement_budget,
+    require_successful_preparation,
+)
 from pnc_automation.app.automation.engine.task import TaskPreflight
 from pnc_automation.app.pnc.domain.observation import SpatialObjectKind, SpatialObjectQuery, SpatialSurfaceType
 from pnc_automation.app.pnc.navigation.world_map_search import (
@@ -47,55 +51,63 @@ def main() -> None:
         raise ValueError("radius, spacing, and max-checkpoints must be positive.")
 
     application = build_application_runner(Path(arguments.config))
-    prepare_result = application.script_runner.prepare_account_session(account_id=arguments.account)
-    if not all(step.status.value == "success" for step in prepare_result.steps):
-        raise AssertionError(f"Preparation failed: {prepare_result.steps}")
     account = application.script_runner.config.require_account(arguments.account)
-    connected = application.script_runner.build_connected_runtime_bundle(account=account)
-    runtime = connected.runtime
-    configure_world_map_movement_budget(runtime, movement_step_budget=12)
-    start = connected.runner.prove_preflight_state(
-        account,
-        TaskPreflight.WORLD_MAP,
-        label_prefix=f"{arguments.label}_preflight",
-        max_steps=20,
-    )
-    coordinate = start.require_spatial_surface(SpatialSurfaceType.WORLD_MAP).viewport.coordinate
-    if coordinate is None:
-        raise AssertionError("Production sweep requires a coordinate-addressable world-map viewport.")
-    bounds = WorldMapCoordinateDomain.puzzles_and_conquest().local_bounds_around(
-        coordinate,
-        radius=arguments.radius,
-    )
-    result = runtime.world_map_search_service.execute_search(
-        WorldMapSearchRequest(
-            matcher=SpatialObjectQuery(
-                surface_type=SpatialSurfaceType.WORLD_MAP,
-                kind=SpatialObjectKind.RESOURCE_NODE,
-            ),
-            stop_policy=WorldMapSearchStopPolicy(max_checkpoints=arguments.max_checkpoints),
-            pattern=WorldMapSearchPattern.serpentine_row_sweep(),
-            traversal_stride_policy=TraversalStridePolicy.symmetric(arguments.spacing),
-            origin=WorldMapSearchOrigin.explicit_coordinate(coordinate),
-            boundary=WorldMapSearchBoundary.rectangle(
-                min_coordinate=(bounds.min_x, bounds.min_y),
-                max_coordinate=(bounds.max_x, bounds.max_y),
-            ),
-            sweep_policy=(
-                WorldMapSweepPolicy.debug_exact_checkpoint()
-                if arguments.diagnostic_synchronous_p2
-                else WorldMapSweepPolicy.production_full_map(
-                    max_pending_p2_items=arguments.max_pending_p2,
-                )
-            ),
-        ),
-        label_prefix=arguments.label,
-        start_observation=start,
-        runtime_state={},
-    )
-    if result.execution_profile is None:
-        raise AssertionError("Production sweep did not produce an execution profile.")
-    print(json.dumps(result.execution_profile.to_document(), indent=2, sort_keys=True))
+    account.require_live_role(LiveAutomationRole.LIVE_TESTING)
+    with application.script_runner.reserve_accounts((arguments.account,)):
+        prepare_result = require_successful_preparation(
+            application.script_runner.prepare_account_session(
+                account_id=arguments.account,
+                required_role=LiveAutomationRole.LIVE_TESTING,
+            )
+        )
+        with application.script_runner.build_connected_runtime_bundle(
+            account=account,
+            required_role=LiveAutomationRole.LIVE_TESTING,
+        ) as connected:
+            runtime = connected.runtime
+            configure_world_map_movement_budget(runtime, movement_step_budget=12)
+            start = connected.runner.prove_preflight_state(
+                account,
+                TaskPreflight.WORLD_MAP,
+                label_prefix=f"{arguments.label}_preflight",
+                max_steps=20,
+            )
+            coordinate = start.require_spatial_surface(SpatialSurfaceType.WORLD_MAP).viewport.coordinate
+            if coordinate is None:
+                raise AssertionError("Production sweep requires a coordinate-addressable world-map viewport.")
+            bounds = WorldMapCoordinateDomain.puzzles_and_conquest().local_bounds_around(
+                coordinate,
+                radius=arguments.radius,
+            )
+            result = runtime.world_map_search_service.execute_search(
+                WorldMapSearchRequest(
+                    matcher=SpatialObjectQuery(
+                        surface_type=SpatialSurfaceType.WORLD_MAP,
+                        kind=SpatialObjectKind.RESOURCE_NODE,
+                    ),
+                    stop_policy=WorldMapSearchStopPolicy(max_checkpoints=arguments.max_checkpoints),
+                    pattern=WorldMapSearchPattern.serpentine_row_sweep(),
+                    traversal_stride_policy=TraversalStridePolicy.symmetric(arguments.spacing),
+                    origin=WorldMapSearchOrigin.explicit_coordinate(coordinate),
+                    boundary=WorldMapSearchBoundary.rectangle(
+                        min_coordinate=(bounds.min_x, bounds.min_y),
+                        max_coordinate=(bounds.max_x, bounds.max_y),
+                    ),
+                    sweep_policy=(
+                        WorldMapSweepPolicy.debug_exact_checkpoint()
+                        if arguments.diagnostic_synchronous_p2
+                        else WorldMapSweepPolicy.production_full_map(
+                            max_pending_p2_items=arguments.max_pending_p2,
+                        )
+                    ),
+                ),
+                label_prefix=arguments.label,
+                start_observation=start,
+                runtime_state={},
+            )
+            if result.execution_profile is None:
+                raise AssertionError("Production sweep did not produce an execution profile.")
+            print(json.dumps(result.execution_profile.to_document(), indent=2, sort_keys=True))
 
 
 if __name__ == "__main__":

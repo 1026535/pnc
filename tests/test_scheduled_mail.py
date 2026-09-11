@@ -17,6 +17,7 @@ from pnc_automation.app.authoring.config.loader import load_app_config
 from pnc_automation.app.authoring.config.models import (
     BlueStacksInstanceConfig,
     CastleIdentity,
+    LiveAutomationRole,
 )
 from pnc_automation.app.authoring.mail.loader import (
     build_generated_send_mail_script,
@@ -664,17 +665,30 @@ class _FakeApplicationRunner:
     prepare_calls: list[tuple[str, CastleIdentity | None]] = field(default_factory=list)
     task_calls: list[tuple[TaskId, str, dict[str, object] | None]] = field(default_factory=list)
     mail_schedule_calls: list[tuple[str, list[str] | None, datetime | None]] = field(default_factory=list)
+    script_runner: object = field(init=False)
+
+    def __post_init__(self) -> None:
+        """Provides the canonical CLI role-check surface."""
+
+        self.script_runner = _FakeScriptRunner()
+
+    def reserve_accounts(self, account_ids: tuple[str, ...]) -> "_FakeReservation":
+        """Provides the canonical scoped reservation surface without live state."""
+
+        del account_ids
+        return _FakeReservation()
 
     def prepare_account_session(
         self,
         *,
         account_id: str,
         castle: CastleIdentity | None = None,
+        required_role: LiveAutomationRole | None = None,
     ) -> RunResult:
         """Records one session-preparation request and returns a synthetic success result."""
 
         self.prepare_calls.append((account_id, castle))
-        return _make_run_result(script_name="prepare_account_session")
+        return _make_preparation_result()
 
     def run_task(
         self,
@@ -682,6 +696,7 @@ class _FakeApplicationRunner:
         account_id: str,
         task_id: TaskId,
         params: dict[str, object] | None = None,
+        required_role: LiveAutomationRole | None = None,
     ) -> StepRunResult:
         """Records one direct task call and returns a synthetic success result."""
 
@@ -699,11 +714,56 @@ class _FakeApplicationRunner:
         account_id: str,
         schedule_ids: list[str] | None = None,
         scheduled_for_utc: datetime | None = None,
+        required_role: LiveAutomationRole | None = None,
     ) -> RunResult:
         """Records one scheduled-mail run request and returns a synthetic success result."""
 
         self.mail_schedule_calls.append((account_id, schedule_ids, scheduled_for_utc))
         return _make_run_result(script_name="generated_mail_schedule_20260331T050000Z")
+
+
+class _FakeScriptRunner:
+    """Provides the canonical configuration surface used by CLI role checks."""
+
+    def __init__(self) -> None:
+        """Initializes one permissive role fixture."""
+
+        self.config = self
+
+    def require_account(self, account_id: str):
+        """Returns an account-shaped role fixture."""
+
+        del account_id
+        return self
+
+    def require_live_role(self, required_role: LiveAutomationRole) -> None:
+        """Accepts the requested role for routing tests."""
+
+        del required_role
+
+
+class _FakeReservation:
+    """Implements the closable context contract for offline routing tests."""
+
+    def __init__(self) -> None:
+        """Starts open."""
+
+        self.closed = False
+
+    def __enter__(self) -> "_FakeReservation":
+        """Returns this reservation for a scoped call."""
+
+        return self
+
+    def __exit__(self, _exc_type: object, _exc: object, _traceback: object) -> None:
+        """Closes the reservation at scope exit."""
+
+        self.close()
+
+    def close(self) -> None:
+        """Releases the fake reservation idempotently."""
+
+        self.closed = True
 
 
 @dataclass(slots=True)
@@ -737,9 +797,10 @@ class _FakeInstanceResolver:
     resolved_instance: BlueStacksInstance
     requested_configs: list[BlueStacksInstanceConfig] = field(default_factory=list)
 
-    def resolve(self, config: BlueStacksInstanceConfig) -> BlueStacksInstance:
+    def resolve(self, config: BlueStacksInstanceConfig, *, allow_launch: bool = True) -> BlueStacksInstance:
         """Records one resolve request and returns the seeded runtime instance."""
 
+        del allow_launch
         self.requested_configs.append(config)
         return self.resolved_instance
 
@@ -837,6 +898,26 @@ def _make_run_result(*, script_name: str) -> RunResult:
         account_id="account_a",
         script_name=script_name,
         steps=(),
+        started_at=now,
+        finished_at=now,
+    )
+
+
+def _make_preparation_result() -> RunResult:
+    """Builds a preparation result with an explicit successful step."""
+
+    now = datetime.now(tz=UTC)
+    return RunResult(
+        account_id="account_a",
+        script_name="prepare_account_session",
+        steps=(
+            StepRunResult(
+                task_id=TaskId.LOGIN,
+                status=TaskResult.success("ok").status,
+                attempts=1,
+                message="ok",
+            ),
+        ),
         started_at=now,
         finished_at=now,
     )

@@ -9,7 +9,7 @@ from pathlib import Path
 
 from pnc_automation.app.runtime.observation_mode import ObservationMode
 from pnc_automation.app.authoring.config.loader import load_app_config
-from pnc_automation.app.authoring.config.models import CastleRosterOrdering, CredentialSource
+from pnc_automation.app.authoring.config.models import CastleRosterOrdering, CredentialSource, LiveAutomationRole
 from pnc_automation.core.errors import ConfigurationError
 
 
@@ -45,6 +45,7 @@ class ConfigLoaderTests(unittest.TestCase):
                       - id: account_a
                         instance_id: bs-main
                         pnc_account_id: user
+                        live_roles: [smoke_test]
                         username_env: TEST_USER
                         password_env: TEST_PASS
                     """
@@ -64,9 +65,136 @@ class ConfigLoaderTests(unittest.TestCase):
             self.assertEqual(config.artifact_root, (root / "artifacts").resolve())
             self.assertEqual(config.archive_root, (root / "archives").resolve())
             self.assertEqual(config.runtime.observation_mode, ObservationMode.DEBUG)
+            self.assertFalse(config.runtime.bluestacks_memory.enabled)
+            self.assertEqual(
+                config.runtime.bluestacks_memory.restart_roles,
+                frozenset({
+                    LiveAutomationRole.SMOKE_TEST,
+                    LiveAutomationRole.LIVE_TESTING,
+                    LiveAutomationRole.DAILY_CANARY,
+                }),
+            )
             self.assertEqual(config.require_account("account_a").credentials.username, "user")
+            self.assertEqual(
+                config.require_account("account_a").live_roles,
+                frozenset({LiveAutomationRole.SMOKE_TEST}),
+            )
             self.assertEqual(config.require_instance("bs-main").display_name, "serious_stuff")
             self.assertEqual(config.defaults.bluestacks_config_path, (root / "fixtures" / "bluestacks.conf").resolve())
+
+    def test_load_app_config_rejects_unknown_live_role(self) -> None:
+        """Fails closed instead of silently enabling a misspelled live workflow role."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            config_path = Path(temp_directory) / "accounts.yaml"
+            config_path.write_text(
+                textwrap.dedent(
+                    """
+                    instances:
+                      - id: bs-main
+                        display_name: serious_stuff
+                        app_package: com.global.tmslg
+                    accounts:
+                      - id: account_a
+                        instance_id: bs-main
+                        pnc_account_id: inline_user
+                        live_roles: [testng]
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ConfigurationError, "Unsupported live role"):
+                load_app_config(config_path)
+
+    def test_load_app_config_loads_bluestacks_memory_policy(self) -> None:
+        """Loads explicit sustained-memory thresholds into the typed runtime policy."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            config_path = Path(temp_directory) / "accounts.yaml"
+            config_path.write_text(
+                textwrap.dedent(
+                    """
+                    runtime:
+                      bluestacks_memory:
+                        enabled: true
+                        max_working_set_mb: 4096
+                        consecutive_over_limit_samples: 4
+                        sample_interval_seconds: 30
+                        restart_cooldown_seconds: 900
+                        restart_roles: [live_testing]
+                    instances: []
+                    accounts: []
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+
+            policy = load_app_config(config_path).runtime.bluestacks_memory
+
+            self.assertTrue(policy.enabled)
+            self.assertEqual(policy.max_working_set_mb, 4096)
+            self.assertEqual(policy.consecutive_over_limit_samples, 4)
+            self.assertEqual(policy.sample_interval_seconds, 30)
+            self.assertEqual(policy.restart_cooldown_seconds, 900)
+            self.assertEqual(policy.restart_roles, frozenset({LiveAutomationRole.LIVE_TESTING}))
+
+    def test_load_app_config_rejects_read_only_with_active_automation_role(self) -> None:
+        """Fails closed when one account could otherwise be used for both observation and input."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            config_path = Path(temp_directory) / "accounts.yaml"
+            config_path.write_text(
+                textwrap.dedent(
+                    """
+                    instances:
+                      - id: bs-main
+                        display_name: main
+                        app_package: com.global.tmslg
+                    accounts:
+                      - id: account_a
+                        instance_id: bs-main
+                        pnc_account_id: inline_user
+                        live_roles: [read_only, live_testing]
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ConfigurationError, "cannot combine read_only"):
+                load_app_config(config_path)
+
+    def test_role_reassignment_changes_runtime_capabilities_without_code_changes(self) -> None:
+        """Derives read-only and active host capabilities from the current YAML on every load."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            config_path = Path(temp_directory) / "accounts.yaml"
+            base = textwrap.dedent(
+                """
+                instances:
+                  - id: bs-main
+                    display_name: main
+                    app_package: com.global.tmslg
+                accounts:
+                  - id: account_a
+                    instance_id: bs-main
+                    pnc_account_id: inline_user
+                    live_roles: [{role}]
+                """
+            )
+            config_path.write_text(base.format(role="read_only").strip(), encoding="utf-8")
+            read_only_config = load_app_config(config_path)
+            self.assertFalse(read_only_config.require_account("account_a").bluestacks_capabilities.allow_input)
+            self.assertFalse(
+                read_only_config.require_account("account_a").bluestacks_capabilities.allow_instance_launch
+            )
+
+            config_path.write_text(base.format(role="live_testing").strip(), encoding="utf-8")
+            active_config = load_app_config(config_path)
+            self.assertTrue(active_config.require_account("account_a").bluestacks_capabilities.allow_input)
+            self.assertTrue(
+                active_config.require_account("account_a").bluestacks_capabilities.allow_instance_launch
+            )
 
     def test_load_app_config_resolves_repo_style_config_artifacts_outside_config_directory(self) -> None:
         """Resolves ``config/accounts.yaml`` artifact roots at the workspace root, not inside ``config``."""

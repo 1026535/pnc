@@ -8,6 +8,7 @@ import shutil
 import tempfile
 import unittest
 from dataclasses import dataclass, field
+from functools import cache
 from pathlib import Path
 
 from PIL import Image, ImageDraw
@@ -53,6 +54,8 @@ from pnc_automation.core.vision.ocr.ocr_service import OcrLine, OcrResult, Rapid
 from pnc_automation.app.pnc.vision.pnc_observation_enricher import (
     PncObservationEnricher,
     _build_popup_additions,
+    _build_reconnect_popup_additions,
+    _build_visual_popup_close_additions,
     _build_world_map_search_button_element,
     _find_world_map_root_coordinate_line,
 )
@@ -85,6 +88,23 @@ from pnc_automation.app.pnc.vision.selectors import (
 from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
 from tests.local_fixture_artifacts import require_local_fixture_artifact
 from tests.test_support import FakeObservationService, FakeSession, build_logger, build_png_bytes, make_observation
+
+
+@cache
+def _shared_rapid_ocr_service() -> RapidOcrService:
+    """Returns one stateless RapidOCR engine shared by image-backed tests."""
+
+    return RapidOcrService()
+
+
+def _require_rapid_ocr_service(test_case: unittest.TestCase) -> RapidOcrService:
+    """Returns shared RapidOCR support or skips when the optional backend is unavailable."""
+
+    try:
+        return _shared_rapid_ocr_service()
+    except ScreenClassificationError as error:
+        test_case.skipTest(str(error))
+        raise AssertionError("skipTest must stop the current test") from error
 
 
 class _FakeScreenshotSession:
@@ -2565,10 +2585,7 @@ class CaptureAndVisionTests(unittest.TestCase):
             "world_coordinate_dialog_zero_fields_live_20260613",
             default_repo_relative_path="tests/data/world_map/world_coordinate_dialog_zero_fields_live_20260613.png",
         )
-        try:
-            ocr_service = RapidOcrService()
-        except ScreenClassificationError as error:
-            self.skipTest(str(error))
+        ocr_service = _require_rapid_ocr_service(self)
         with tempfile.TemporaryDirectory() as temp_directory:
             root = Path(temp_directory)
             screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
@@ -2609,10 +2626,7 @@ class CaptureAndVisionTests(unittest.TestCase):
             "world_coordinate_dialog_missing_y_label_live_20260614",
             default_repo_relative_path="tests/data/world_map/world_coordinate_dialog_missing_y_label_live_20260614.png",
         )
-        try:
-            ocr_service = RapidOcrService()
-        except ScreenClassificationError as error:
-            self.skipTest(str(error))
+        ocr_service = _require_rapid_ocr_service(self)
         with tempfile.TemporaryDirectory() as temp_directory:
             root = Path(temp_directory)
             screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
@@ -2980,10 +2994,7 @@ class CaptureAndVisionTests(unittest.TestCase):
             "world_coordinate_bar_live_edge_failure_20260606",
             default_repo_relative_path="tests/data/world_map/world_coordinate_bar_live_edge_failure_20260606.png",
         )
-        try:
-            ocr_service = RapidOcrService()
-        except ScreenClassificationError as error:
-            self.skipTest(str(error))
+        ocr_service = _require_rapid_ocr_service(self)
         with tempfile.TemporaryDirectory() as temp_directory:
             root = Path(temp_directory)
             screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
@@ -3028,10 +3039,7 @@ class CaptureAndVisionTests(unittest.TestCase):
             "world_coordinate_bar_live_y_truncation_20260607",
             default_repo_relative_path="tests/data/world_map/world_coordinate_bar_live_y_truncation_20260607.png",
         )
-        try:
-            ocr_service = RapidOcrService()
-        except ScreenClassificationError as error:
-            self.skipTest(str(error))
+        ocr_service = _require_rapid_ocr_service(self)
         with tempfile.TemporaryDirectory() as temp_directory:
             root = Path(temp_directory)
             screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
@@ -4118,6 +4126,81 @@ class CaptureAndVisionTests(unittest.TestCase):
             close_button = observation.require(UiElementId.PNC_RECONNECT_CONFIRM_BUTTON)
             self.assertEqual(close_button.extracted_text, "Confirm")
             self.assertEqual(close_button.action_point, (284, 550))
+            additions = _build_reconnect_popup_additions(
+                image=image,
+                lines=(
+                    _ocr_line("Disconnected. Reconnect now?[-10013]", x=47, y=382, width=422, height=35),
+                    _ocr_line("Confirm", x=231, y=533, width=107, height=34),
+                ),
+            )
+            self.assertIsNotNone(additions)
+            assert additions is not None
+            self.assertEqual("ocr_reconnect_popup", additions.screen_evidence[0].reason)
+
+    def test_valiant_conquest_fixture_uses_ocr_ownership_and_measured_close_x(self) -> None:
+        """Recognizes the real event modal only when OCR and its close X agree."""
+
+        fixture_path = Path(__file__).parent / "data" / "screen_recognition" / "valiant_conquest_popup_real_sanitized.png"
+        with Image.open(fixture_path) as source:
+            image = source.convert("RGB")
+        lines = (
+            _ocr_line("Valiant Conquest is about to start.", x=45, y=809, width=808, height=45),
+            _ocr_line("Valiant Conquest is about to begin!", x=168, y=986, width=564, height=30),
+            _ocr_line("Earn points by defeating enemies and", x=144, y=1022, width=613, height=34),
+            _ocr_line("Activate shields", x=77, y=1220, width=235, height=27),
+            _ocr_line("Event Details", x=77, y=1328, width=195, height=30),
+        )
+
+        additions = _build_popup_additions(image=image, lines=lines, anchors=())
+
+        self.assertIsNotNone(additions)
+        assert additions is not None
+        close_button = additions.visible_elements[UiElementId.PNC_POPUP_CLOSE_BUTTON]
+        self.assertEqual(VisibleElementSourceKind.GEOMETRY, close_button.source_kind)
+        self.assertEqual("ocr_valiant_conquest_popup", additions.screen_evidence[0].reason)
+        self.assertEqual((812, 322), close_button.action_point)
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            screenshot = ScreenshotService(
+                artifact_store=ArtifactStore(root=Path(temp_directory) / "artifacts")
+            ).capture(
+                _FakeScreenshotSession(_encode_png(image)),
+                artifact_directory="valiant_conquest_popup",
+                label="known_event_popup",
+            )
+            observation = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(ocr_service=_FakeOcrService(lines=lines)),
+            ).build(screenshot)
+
+        self.assertEqual(ScreenType.PNC_POPUP, observation.screen_type)
+        self.assertTrue(observation.blocking_popup)
+        self.assertEqual(
+            (812, 322),
+            observation.require(UiElementId.PNC_POPUP_CLOSE_BUTTON).action_point,
+        )
+
+    def test_valiant_conquest_requires_supporting_ocr_and_measured_close_x(self) -> None:
+        """Rejects title-like fragments when modal support or the measured X is absent."""
+
+        fixture_path = Path(__file__).parent / "data" / "screen_recognition" / "valiant_conquest_popup_real_sanitized.png"
+        with Image.open(fixture_path) as source:
+            image = source.convert("RGB")
+        title = _ocr_line("Valiant Conquest is about to start.", x=45, y=809, width=808, height=45)
+        support = _ocr_line("Event Details", x=77, y=1328, width=195, height=30)
+
+        self.assertIsNone(_build_popup_additions(image=image, lines=(title,), anchors=()))
+
+        without_x = image.copy()
+        ImageDraw.Draw(without_x).rectangle((775, 275, 850, 365), fill=(26, 39, 76))
+        self.assertIsNone(
+            _build_popup_additions(image=without_x, lines=(title, support), anchors=())
+        )
 
     def test_popup_classifier_materializes_exact_app_update_confirm(self) -> None:
         """Exposes Confirm only when OCR proves the exact required-update modal."""
@@ -4455,6 +4538,43 @@ class CaptureAndVisionTests(unittest.TestCase):
             self.assertFalse(observation.has(UiElementId.PNC_POPUP_CLOSE_BUTTON))
             self.assertEqual(ocr_service.read_result_calls, 1)
 
+    def test_observation_builder_classifies_generic_upper_right_popup_x_without_popup_ocr(self) -> None:
+        """Recognizes the shared bright popup X when the one global OCR pass has no popup lines."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            image = Image.new("RGB", (900, 1600), (15, 28, 68))
+            drawing = ImageDraw.Draw(image)
+            drawing.rectangle((25, 250, 860, 1000), fill=(25, 33, 50), outline=(65, 82, 110), width=4)
+            drawing.line((794, 302, 832, 340), fill=(255, 247, 218), width=8)
+            drawing.line((832, 302, 794, 340), fill=(255, 247, 218), width=8)
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(image)),
+                artifact_directory="generic_visual_popup",
+                label="upper_right_close_x",
+            )
+            ocr_service = _RecordingOcrService(lines=())
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(ocr_service=ocr_service),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_POPUP)
+            self.assertTrue(observation.blocking_popup)
+            close_button = observation.require(UiElementId.PNC_POPUP_CLOSE_BUTTON)
+            self.assertEqual(close_button.source_kind, VisibleElementSourceKind.GEOMETRY)
+            self.assertAlmostEqual(close_button.action_point[0] / image.width, 0.903, delta=0.02)
+            self.assertAlmostEqual(close_button.action_point[1] / image.height, 0.201, delta=0.02)
+            self.assertEqual(ocr_service.read_result_calls, 1)
+
     def test_observation_builder_accepts_shifted_x_owned_by_modal_text_cluster(self) -> None:
         """Finds a measured X after a compact message and primary action prove modal ownership."""
 
@@ -4541,6 +4661,45 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
         close_button = additions.visible_elements[UiElementId.PNC_POPUP_CLOSE_BUTTON]
         self.assertLess(close_button.action_point[0], int(image.width * 0.86))
+
+    def test_visual_popup_close_fixtures_require_surface_and_emit_action_points(self) -> None:
+        """Accepts both sanitized real modal layouts through the surface-owned X fallback."""
+
+        fixture_directory = Path(__file__).parent / "data" / "screen_recognition"
+        for fixture_name in ("generic_popup_quit_real_sanitized.png", "generic_popup_offer_real_sanitized.png"):
+            with self.subTest(fixture=fixture_name), Image.open(fixture_directory / fixture_name) as source:
+                additions = _build_visual_popup_close_additions(image=source.convert("RGB"))
+
+            self.assertIsNotNone(additions)
+            assert additions is not None
+            close_button = additions.visible_elements[UiElementId.PNC_POPUP_CLOSE_BUTTON]
+            self.assertEqual(VisibleElementSourceKind.GEOMETRY, close_button.source_kind)
+            self.assertEqual("visual_upper_right_close_x", additions.screen_evidence[0].reason)
+            self.assertGreater(close_button.action_point[0], 0)
+            self.assertGreater(close_button.action_point[1], 0)
+
+    def test_recognized_update_popup_wins_over_generic_x_fallback(self) -> None:
+        """Keeps the typed update control when the same frame also contains a generic X."""
+
+        image = Image.new("RGB", (540, 960), (15, 28, 68))
+        drawing = ImageDraw.Draw(image)
+        drawing.rectangle((25, 100, 515, 780), fill=(25, 33, 50), outline=(65, 82, 110), width=4)
+        drawing.line((476, 46, 504, 74), fill=(255, 247, 218), width=7)
+        drawing.line((504, 46, 476, 74), fill=(255, 247, 218), width=7)
+        enricher = PncObservationEnricher(
+            ocr_service=_FakeOcrService(
+                lines=(
+                    _ocr_line("New version detected. Tap Confirm to update.", x=58, y=300, width=420, height=28),
+                    _ocr_line("Confirm", x=221, y=531, width=90, height=27),
+                )
+            )
+        )
+
+        additions = enricher.detect_interruption(image)
+
+        self.assertIn(UiElementId.PNC_UPDATE_CONFIRM_BUTTON, additions.visible_elements)
+        self.assertNotIn(UiElementId.PNC_POPUP_CLOSE_BUTTON, additions.visible_elements)
+        self.assertEqual("ocr_update_required_popup", additions.screen_evidence[0].reason)
 
     def test_observation_builder_rejects_bright_x_outside_popup_close_zone(self) -> None:
         """Avoids treating crossed artwork left of the guarded upper-right close band as a popup."""

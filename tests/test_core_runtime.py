@@ -18,6 +18,7 @@ from pnc_automation.app.pnc.domain.observation import CurrentCastleEvidenceKind,
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.navigation_perception import NavigationPerception
 from pnc_automation.app.pnc.vision.observation_builder import ObservationAdditions
+from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenEvidence
 from pnc_automation.app.pnc.vision.visual_screen_recognizer import VisualRecognition
 from pnc_automation.app.authoring.config.models import CastleIdentity
@@ -142,6 +143,64 @@ class CoreRuntimeTests(unittest.TestCase):
             self.assertIn('"event": "capture"', lines[0])
             self.assertIn('"artifact": "private_identity.png"', lines[0])
             self.assertNotIn("parser failed", lines[0])
+
+    def test_observation_boundary_recovers_popup_through_connected_executor(self) -> None:
+        """Recovery captures a fresh frame through CoreRuntime and preserves content mode."""
+
+        captured_at = datetime(2026, 9, 10, 12, 0, tzinfo=UTC)
+        screenshots = [
+            CapturedScreenshot(
+                artifact=ArtifactRecord(
+                    path=Path("popup.png"), captured_at=captured_at,
+                    size_bytes=1, sha256="popup", label="popup",
+                ),
+                image=Image.new("RGB", (2, 2)), image_format="PNG",
+            ),
+            CapturedScreenshot(
+                artifact=ArtifactRecord(
+                    path=Path("home.png"), captured_at=captured_at + timedelta(seconds=1),
+                    size_bytes=1, sha256="home", label="home",
+                ),
+                image=Image.new("RGB", (2, 2)), image_format="PNG",
+            ),
+        ]
+        screenshot_service = Mock()
+        screenshot_service.capture.side_effect = screenshots
+        observation_service = SimpleNamespace(screenshot_service=screenshot_service)
+        popup = _frame_at(ScreenType.PNC_POPUP, captured_at, blocking_popup=True)
+        home = _frame_at(ScreenType.PNC_HOME_CITY, captured_at + timedelta(seconds=1))
+        perception = Mock()
+        perception.build.side_effect = [popup, home]
+        executor = Mock()
+
+        def recover(observation, *, label_prefix, observe):
+            self.assertIs(popup, observation)
+            self.assertIn("interruption", label_prefix)
+            return observe("followup", request=ObservationRequest.full_runtime_default())
+
+        executor.recover_interruption_if_required.side_effect = recover
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            trace_path = Path(temporary_directory) / "trace.jsonl"
+            runtime = CoreRuntime(
+                runtime=SimpleNamespace(session=object(), observation_service=observation_service),
+                navigation=Mock(),
+                artifact_directory="account",
+                trace_path=trace_path,
+                _perception=perception,
+                _run_id="run",
+                _observed_action_executor=executor,
+            )
+
+            result = runtime.observe("entry", include_content=True)
+
+            self.assertIs(home, result)
+            self.assertEqual(2, runtime.observation_count)
+            self.assertEqual([True, True], [call.kwargs["include_content"] for call in perception.build.call_args_list])
+            self.assertEqual(2, screenshot_service.capture.call_count)
+            self.assertTrue(all(call.kwargs["persist"] for call in screenshot_service.capture.call_args_list))
+            trace = trace_path.read_text(encoding="utf-8")
+            self.assertEqual(2, trace.count('"event": "capture"'))
+            self.assertEqual(2, trace.count('"event": "observation"'))
 
     def test_application_preflights_identity_before_workflow_and_blocks_failure(self) -> None:
         """Application wiring runs identity preflight before constructing workflow execution."""

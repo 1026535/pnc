@@ -11,6 +11,7 @@ class AutomationErrorKind(StrEnum):
     """Categorizes fail-fast automation errors."""
 
     CONFIGURATION = "configuration"
+    INSTANCE_BUSY = "instance_busy"
     DEVICE_CONNECTION = "device_connection"
     GAME_LAUNCH = "game_launch"
     SCREENSHOT_CAPTURE = "screenshot_capture"
@@ -39,6 +40,13 @@ class ConfigurationError(AutomationError):
 
     def __init__(self, message: str, **details: Any) -> None:
         super().__init__(message=message, kind=AutomationErrorKind.CONFIGURATION, details=details)
+
+
+class InstanceBusyError(AutomationError):
+    """Raised when another PNC process owns the selected emulator instance."""
+
+    def __init__(self, message: str, **details: Any) -> None:
+        super().__init__(message=message, kind=AutomationErrorKind.INSTANCE_BUSY, details=details)
 
 
 class DeviceConnectionError(AutomationError):

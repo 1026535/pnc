@@ -11,6 +11,7 @@ ensure_repo_root_on_path()
 
 from pnc_automation.app import build_application_runner
 from pnc_automation.app.automation.engine.runner import AutomationRunner
+from pnc_automation.app.authoring.config.models import LiveAutomationRole
 from pnc_automation.app.pnc.domain.action_requests import TapAction
 from pnc_automation.app.pnc.domain.building_catalog import (
     HomeCityObjectId,
@@ -26,7 +27,7 @@ from pnc_automation.app.pnc.domain.observation import (
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.core.errors import SelectorResolutionError
-from tests.live_smoke_support import build_live_automation_runner, execute_live_flow_until
+from tests.live_smoke_support import execute_live_flow_until
 
 UpgradeResult = tuple[str, str, bool, bool, str]
 
@@ -122,7 +123,10 @@ def main() -> int:
     targets = frozenset(HomeCityObjectId(value.strip()) for value in args.targets.split(",") if value.strip())
     application = build_application_runner(args.config)
     account = application.script_runner.config.require_account(args.account)
-    runner = build_live_automation_runner(config_account=account, script_runner=application.script_runner)
+    runner = application.script_runner.build_connected_automation_runner(
+        account=account,
+        required_role=LiveAutomationRole.LIVE_TESTING,
+    )
     observation = execute_live_flow_until(
         runner=runner,
         label_prefix="phase1_upgrade_survey_home",

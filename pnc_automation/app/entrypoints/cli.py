@@ -21,9 +21,10 @@ from pnc_automation.app.automation.daily_maintenance.connected_runner import (
     ConnectedClaimOnlyRunnerFactory,
 )
 from pnc_automation.app.automation.engine.task import TaskId
+from pnc_automation.app.automation.engine.script_runner import require_successful_preparation
 from pnc_automation.app.runtime.observation_mode import ObservationMode
-from pnc_automation.app import build_application_runner
-from pnc_automation.app.authoring.config.models import CastleIdentity
+from pnc_automation.app import ApplicationRunner, build_application_runner
+from pnc_automation.app.authoring.config.models import CastleIdentity, LiveAutomationRole
 from pnc_automation.app.authoring.config.loader import load_app_config
 from pnc_automation.app.authoring.config.daily_maintenance import load_daily_maintenance_config
 from pnc_automation.app.authoring.config.mutation_acknowledgement import parse_mutation_acknowledgement
@@ -131,11 +132,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         verbose=parsed.verbose,
         observation_mode=None if parsed.observation_mode is None else ObservationMode(parsed.observation_mode),
     )
+    required_role = (
+        LiveAutomationRole.DAILY_CANARY
+        if parsed.command == "daily-quest-status"
+        else LiveAutomationRole.LIVE_TESTING
+    )
+    _require_cli_live_role(application, account_id=parsed.account, required_role=required_role)
     if parsed.command == "run":
         result = application.run(
             account_id=parsed.account,
             script_path=parsed.script,
             castle_refs=parsed.castle_ref,
+            required_role=required_role,
         )
         print(_serialize_run_result(result))
         return 0
@@ -143,40 +151,65 @@ def main(argv: Sequence[str] | None = None) -> int:
         result = application.prepare_account_session(
             account_id=parsed.account,
             castle=_parse_optional_castle(parser, parsed),
+            required_role=required_role,
         )
         print(_serialize_run_result(result))
         return 0
     if parsed.command == "open-building":
         castle = _parse_optional_castle(parser, parsed)
-        if castle is not None:
-            application.prepare_account_session(account_id=parsed.account, castle=castle)
-        step_result = application.run_task(
-            account_id=parsed.account,
-            task_id=TaskId.OPEN_BUILDING,
-            params={"building": parsed.building},
-        )
+        with application.reserve_accounts((parsed.account,)):
+            if castle is not None:
+                require_successful_preparation(
+                    application.prepare_account_session(
+                        account_id=parsed.account,
+                        castle=castle,
+                        required_role=required_role,
+                    )
+                )
+            step_result = application.run_task(
+                account_id=parsed.account,
+                task_id=TaskId.OPEN_BUILDING,
+                params={"building": parsed.building},
+                required_role=required_role,
+            )
         print(_serialize_step_result(account_id=parsed.account, step_result=step_result))
         return 0
     if parsed.command == "construct":
         castle = _parse_optional_castle(parser, parsed)
-        if castle is not None:
-            application.prepare_account_session(account_id=parsed.account, castle=castle)
-        step_result = application.run_task(
-            account_id=parsed.account,
-            task_id=TaskId.BUILDING_CONSTRUCT,
-            params={"building": parsed.building},
-        )
+        with application.reserve_accounts((parsed.account,)):
+            if castle is not None:
+                require_successful_preparation(
+                    application.prepare_account_session(
+                        account_id=parsed.account,
+                        castle=castle,
+                        required_role=required_role,
+                    )
+                )
+            step_result = application.run_task(
+                account_id=parsed.account,
+                task_id=TaskId.BUILDING_CONSTRUCT,
+                params={"building": parsed.building},
+                required_role=required_role,
+            )
         print(_serialize_step_result(account_id=parsed.account, step_result=step_result))
         return 0
     if parsed.command == "send-mail":
         castle = _parse_optional_castle(parser, parsed)
-        if castle is not None:
-            application.prepare_account_session(account_id=parsed.account, castle=castle)
-        step_result = application.run_task(
-            account_id=parsed.account,
-            task_id=TaskId.SEND_MAIL,
-            params=_build_send_mail_cli_params(parser, parsed),
-        )
+        with application.reserve_accounts((parsed.account,)):
+            if castle is not None:
+                require_successful_preparation(
+                    application.prepare_account_session(
+                        account_id=parsed.account,
+                        castle=castle,
+                        required_role=required_role,
+                    )
+                )
+            step_result = application.run_task(
+                account_id=parsed.account,
+                task_id=TaskId.SEND_MAIL,
+                params=_build_send_mail_cli_params(parser, parsed),
+                required_role=required_role,
+            )
         print(_serialize_step_result(account_id=parsed.account, step_result=step_result))
         return 0
     if parsed.command == "run-mail-schedules":
@@ -184,6 +217,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             account_id=parsed.account,
             schedule_ids=parsed.schedule_id,
             scheduled_for_utc=_parse_optional_scheduled_for_utc(parser, parsed.scheduled_for_utc),
+            required_role=required_role,
         )
         print(_serialize_run_result(result))
         return 0
@@ -192,19 +226,27 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(json.dumps(asdict(result), indent=2, default=str))
         return 0
     castle = _parse_optional_castle(parser, parsed)
-    if castle is not None:
-        application.prepare_account_session(account_id=parsed.account, castle=castle)
-    priority = resolve_building_priority_values(priority=parsed.priority, priority_file=parsed.priority_file)
-    step_result = application.run_task(
-        account_id=parsed.account,
-        task_id=TaskId.BUILDING_UPGRADE,
-        params={
-            "priority": priority,
-            "allow_speedups": parsed.allow_speedups,
-            "prerequisite_mode": parsed.prerequisite_mode,
-            "allow_premium_material_purchases": parsed.allow_premium_material_purchases,
-        },
-    )
+    with application.reserve_accounts((parsed.account,)):
+        if castle is not None:
+            require_successful_preparation(
+                application.prepare_account_session(
+                    account_id=parsed.account,
+                    castle=castle,
+                    required_role=required_role,
+                )
+            )
+        priority = resolve_building_priority_values(priority=parsed.priority, priority_file=parsed.priority_file)
+        step_result = application.run_task(
+            account_id=parsed.account,
+            task_id=TaskId.BUILDING_UPGRADE,
+            params={
+                "priority": priority,
+                "allow_speedups": parsed.allow_speedups,
+                "prerequisite_mode": parsed.prerequisite_mode,
+                "allow_premium_material_purchases": parsed.allow_premium_material_purchases,
+            },
+            required_role=required_role,
+        )
     print(_serialize_step_result(account_id=parsed.account, step_result=step_result))
     return 0
 
@@ -229,6 +271,7 @@ def _run_daily_maintenance(parsed: argparse.Namespace) -> int:
     acknowledgements = tuple(parse_mutation_acknowledgement(value) for value in parsed.acknowledgement)
     authorizer = DailyMutationAuthorizer(acknowledgements)
     for target in daily_config.targets:
+        app_config.require_account(target.account_id).require_live_role(LiveAutomationRole.DAILY_CANARY)
         if target.capabilities:
             labels = ", ".join(policy.quest_id.value for policy in target.capabilities)
             parser_error = (
@@ -255,6 +298,17 @@ def _run_daily_maintenance(parsed: argparse.Namespace) -> int:
     summary = service.run(boundary=boundary)
     print(json.dumps(asdict(summary), indent=2, default=str))
     return 0 if summary.succeeded else 1
+
+
+def _require_cli_live_role(
+    application: ApplicationRunner,
+    *,
+    account_id: str,
+    required_role: LiveAutomationRole,
+) -> None:
+    """Enforces CLI workflow roles through the canonical application graph before runtime construction."""
+
+    application.script_runner.config.require_account(account_id).require_live_role(required_role)
 
 
 def _add_common_arguments(parser: argparse.ArgumentParser) -> None:

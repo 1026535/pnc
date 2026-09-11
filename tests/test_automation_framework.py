@@ -1526,6 +1526,37 @@ class AutomationFrameworkTests(unittest.TestCase):
         self.assertEqual(execution.observation.screen_type, ScreenType.PNC_MORE_MENU)
         self.assertFalse(execution.selector_interactions[0].fallback_attempted)
 
+    def test_observed_action_executor_recovers_known_disconnect_and_valiant_popups_once(self) -> None:
+        """Known OCR-backed popups use one explicit close tap and never Android Back."""
+
+        for popup_name in ("disconnect", "valiant_conquest"):
+            with self.subTest(popup=popup_name):
+                popup = make_observation(
+                    ScreenType.PNC_POPUP,
+                    visible_ids=(UiElementId.PNC_POPUP_CLOSE_BUTTON,),
+                    visible_texts={UiElementId.PNC_POPUP_CLOSE_BUTTON: "Confirm" if popup_name == "disconnect" else None},
+                    blocking_popup=True,
+                    frame_fingerprint=f"{popup_name}-popup",
+                )
+                home = make_observation(ScreenType.PNC_HOME_CITY)
+                fake_observer = FakeObservationService(observations=[home])
+                fake_session = FakeSession()
+                executor = _make_observed_action_executor(fake_session)
+
+                recovered = executor.recover_interruption_if_required(
+                    popup,
+                    label_prefix=f"known_{popup_name}",
+                    observe=fake_observer.observe,
+                )
+
+                self.assertIsNotNone(recovered)
+                assert recovered is not None
+                self.assertEqual(ScreenType.PNC_HOME_CITY, recovered.screen_type)
+                self.assertEqual([(5, 5)], fake_session.taps)
+                self.assertEqual([], fake_session.key_events)
+                self.assertEqual(0, fake_session.launches)
+                self.assertEqual([ObservationRequest.full_runtime_default()], fake_observer.requests)
+
     def test_observed_action_executor_recovers_initial_required_update_without_running_planned_action(self) -> None:
         """Confirms an initial update once, waits through loading, and skips the stale action plan."""
 

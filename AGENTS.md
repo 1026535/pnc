@@ -93,6 +93,14 @@ Before and during a live run:
 - Confirm the account, castle target, and BlueStacks display name in `config/`. Let the canonical runtime launch the configured instance when needed and verify ADB connectivity through the resolved instance.
 - Use configured `adb_path` and `bluestacks_config_path`; never hard-code ports or device IDs.
 - If no live target is named, use the currently active castle on the configured `testing` instance. Do not select or switch castles unless the user names a castle and authorizes that navigation.
+- Preserve castle inventories for every configured account independently of live execution eligibility. `accounts[].live_roles` is the authority and assignments may be reassigned; names such as `testing`/`smoke_test`, `serious_stuff`/`live_testing`, `mega_old_acc`/`daily_canary`, and `main`/`read_only` describe the current roster examples, not immutable workflow rules. Validate the intended role before constructing a live runtime.
+- Every PNC process must acquire the canonical process-scoped lease for each BlueStacks display name before connecting through ADB. Keep the reservation across preparation, all dependent work, and cleanup. Acquisition waits are bounded. Multi-instance work must declare the complete bundle up front so the lease manager can acquire it in canonical order without hold-and-wait deadlocks.
+- Multi-step live workflows must use one scoped reservation for their entire sequence: `with api.use_account(...)` for one prepared account, or `with api.reserve_accounts((...))` when several accounts/instances are involved. One-shot direct calls may use an isolated lease, but do not release and reacquire between dependent steps. The active API scope rejects calls for accounts outside its declared bundle.
+- The host-management CLI reads only host bindings, roles, metadata, and memory policy; it must remain usable without credentials or castle files. It reloads valid host authority on every monitor sample and again under lease before destructive mutation. Pending recovery intent and cooldown are durable, with at most 3 launch attempts per pass and 9 persisted attempts total; role or identity revocation blocks pending launches.
+- Run `py -m pnc_automation.bluestacks_management monitor --watch` under host supervision when automatic leak recovery is desired. It uses working set, repeated samples, durable intent, and a cooldown; it may restart only an idle instance after acquiring its canonical lease. It skips busy instances and must never auto-restart an account carrying `read_only`. Watch mode continues monitoring peers after per-instance failures, while fatal host/configuration failures exit nonzero and are emitted through the bounded rotating state log without raw secrets.
+- Register the Windows supervisor with `tools/register_bluestacks_memory_monitor_task.ps1`. Its action must run the resolved windowless Python interpreter directly, not a PowerShell or `py` launcher wrapper: stopping a wrapper task can leave the actual monitor orphaned.
+- Run `py -m pnc_automation.bluestacks_management restart-open --require-maintenance-window --include-read-only` only for the explicit 01:55 America/Toronto open-instance maintenance boundary. The legacy Python tool paths remain compatibility shims.
+- The daily 01:55 America/Toronto maintenance boundary may restart every configured instance that is open at its initial snapshot, including an open `main`. It must acquire that complete open-instance bundle before stopping anything and must leave configured closed instances closed.
 - Default to read-only or non-spending proof. Any live validation that can spend in-game resources requires the exact action, target, and budget from the current request or a user-approved execution plan and must use `.agents/skills/write-code-live`. Do not request duplicate confirmation when those details are complete.
 - Start with the smallest smoke path that proves the risky boundary. Use observation-based waits and existing runner/navigation abstractions.
 - On failure, inspect screenshots, OCR JSON, logs, and observation artifacts under `artifacts/` before changing code. Preserve relevant artifact paths in the final response.
@@ -111,6 +119,7 @@ Read the applicable `SKILL.md` completely before taking the actions it governs.
 - `.agents/skills/control-in-app-browser`: browser automation through the selected browser surface.
 - `.agents/skills/consult-chatgpt-pro`: explicit or create-plan-with-chatgpt-pro-required, repository-grounded consultation with ChatGPT Pro.
 - `.agents/skills/implement-with-luna-global`: explicit delegation of substantial implementation to Luna workers.
+- `.agents/skills/manage-source-control`: feature branches, worktrees, rebases, merges, conflict resolution, pushes, and branch cleanup.
 
 Treat `prompts/` as legacy inspiration, not as a substitute for the applicable skill or current best practice. If a skill creates a blocker or conflicts with the requested outcome, identify the exact instruction and explain the impact instead of silently changing scope.
 
@@ -123,6 +132,15 @@ Before adding or migrating a workflow onto the replacement navigation core, read
 - Lead with actionable findings ordered by severity, with file and line references and the cleanest fix direction.
 - Review correctness, ownership, duplication, migration completeness, test quality, security, and behavioral regressions. Omit style-only findings unless they obscure correctness or maintainability.
 - If no findings remain, say so and identify residual test gaps or assumptions.
+
+## Source Control Workflow
+
+Use `.agents/skills/manage-source-control` for new feature branches, branch synchronization, rebases, merges, cherry-picks, conflict resolution, pushes to a base branch, and branch or worktree cleanup.
+
+- Start every new endeavor from the freshly fetched remote target-branch head. When the current checkout contains unrelated changes, conflicts, or an interrupted Git operation, preserve it and create an isolated `codex/` feature worktree from that remote commit.
+- Before integrating, inspect the merge base and commits and diffs unique to both the feature and target branches. Resolve overlaps according to the intent, tests, and canonical ownership of both changesets; never select one side wholesale merely to clear conflicts.
+- Prefer rebasing a local or private feature branch onto the latest target. Do not rewrite a published or shared branch without explicit authorization; merge the target into it when shared history must be preserved.
+- Review and validate the combined result, fetch the target again immediately before landing, and repeat synchronization if it moved. Never force-push the default or a protected branch.
 
 ## Working Tree Safety
 

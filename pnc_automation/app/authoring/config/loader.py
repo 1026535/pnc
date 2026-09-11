@@ -19,11 +19,19 @@ from pnc_automation.app.authoring.config.models import (
     CredentialSource,
     DEFAULT_BLUESTACKS_CONFIG_PATH,
     DefaultsConfig,
+    LiveAutomationRole,
     PncAccountCastleRosterConfig,
     ResolvedCredentials,
     RuntimeConfig,
 )
 from pnc_automation.app.runtime.observation_mode import ObservationMode
+from pnc_automation.core.config.host import (
+    BlueStacksMemoryPolicy,
+    parse_account_binding,
+    parse_bluestacks_metadata_path,
+    parse_instance_binding,
+    parse_memory_policy,
+)
 from pnc_automation.app.authoring.config.validation import validate_app_config
 from pnc_automation.app.authoring.config.yaml_helpers import (
     load_castle_identity,
@@ -94,9 +102,10 @@ def _load_defaults(raw_defaults: Any, *, workspace_root: Path) -> DefaultsConfig
     raw = require_mapping(raw_defaults or {}, context="defaults")
     return DefaultsConfig(
         adb_path=require_string(raw.get("adb_path", "adb"), context="defaults.adb_path"),
-        bluestacks_config_path=_load_bluestacks_config_path(
+        bluestacks_config_path=parse_bluestacks_metadata_path(
             raw.get("bluestacks_config_path", str(DEFAULT_BLUESTACKS_CONFIG_PATH)),
             workspace_root=workspace_root,
+            context="defaults.bluestacks_config_path",
         ),
         screenshot_format=require_string(raw.get("screenshot_format", "png"), context="defaults.screenshot_format"),
         stable_click_delay_ms=require_int(
@@ -166,7 +175,10 @@ def _load_runtime(raw_runtime: Any) -> RuntimeConfig:
         context="runtime.observation_mode",
     )
     try:
-        return RuntimeConfig(observation_mode=ObservationMode(observation_mode))
+        return RuntimeConfig(
+            observation_mode=ObservationMode(observation_mode),
+            bluestacks_memory=_load_bluestacks_memory_policy(raw.get("bluestacks_memory")),
+        )
     except ValueError as error:
         raise ConfigurationError(
             f"Expected runtime.observation_mode to be one of {[mode.value for mode in ObservationMode]}.",
@@ -175,13 +187,10 @@ def _load_runtime(raw_runtime: Any) -> RuntimeConfig:
         ) from error
 
 
-def _load_bluestacks_config_path(raw_path: Any, *, workspace_root: Path) -> Path:
-    """Loads the canonical BlueStacks host-metadata path used for runtime port resolution."""
+def _load_bluestacks_memory_policy(value: Any) -> BlueStacksMemoryPolicy:
+    """Loads the conservative host-side BlueStacks memory recovery policy."""
 
-    path = Path(require_string(raw_path, context="defaults.bluestacks_config_path"))
-    if path.is_absolute():
-        return path
-    return (workspace_root / path).resolve()
+    return parse_memory_policy(value, context="runtime.bluestacks_memory")
 
 
 def _load_instances(raw_instances: Any) -> tuple[BlueStacksInstanceConfig, ...]:
@@ -192,10 +201,11 @@ def _load_instances(raw_instances: Any) -> tuple[BlueStacksInstanceConfig, ...]:
     for index, item in enumerate(items):
         raw = require_mapping(item, context=f"instances[{index}]")
         _reject_legacy_instance_device_id(raw, index=index)
+        binding = parse_instance_binding(item, context=f"instances[{index}]")
         instances.append(
             BlueStacksInstanceConfig(
-                id=require_string(raw.get("id"), context=f"instances[{index}].id"),
-                display_name=require_string(raw.get("display_name"), context=f"instances[{index}].display_name"),
+                id=binding.id,
+                display_name=binding.display_name,
                 app_package=require_string(raw.get("app_package"), context=f"instances[{index}].app_package"),
             )
         )
@@ -221,13 +231,15 @@ def _load_accounts(raw_accounts: Any, env: Mapping[str, str]) -> tuple[AccountCo
     for index, item in enumerate(items):
         raw = require_mapping(item, context=f"accounts[{index}]")
         _reject_legacy_selected_castle(raw, index=index)
+        binding = parse_account_binding(item, context=f"accounts[{index}]")
         credentials = _load_credentials(raw, env, index=index)
         accounts.append(
             AccountConfig(
-                id=require_string(raw.get("id"), context=f"accounts[{index}].id"),
-                instance_id=require_string(raw.get("instance_id"), context=f"accounts[{index}].instance_id"),
+                id=binding.id,
+                instance_id=binding.instance_id,
                 pnc_account_id=require_string(raw.get("pnc_account_id"), context=f"accounts[{index}].pnc_account_id"),
                 credentials=credentials,
+                live_roles=binding.live_roles,
             )
         )
     return tuple(accounts)

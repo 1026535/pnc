@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import date
 from typing import Protocol
@@ -71,6 +72,9 @@ class DailyCastleRunnerFactory(Protocol):
     def build(self, *, instance_id: str) -> DailyCastleRunner:
         """Builds one instance-bound runner."""
 
+    def reserve_instances(self, instance_ids: tuple[str, ...]) -> AbstractContextManager[object]:
+        """Reserves the complete physical instance bundle for the worker pool lifetime."""
+
 
 @dataclass(slots=True)
 class DailyMaintenanceApplicationService:
@@ -91,27 +95,28 @@ class DailyMaintenanceApplicationService:
             (target.account_id, target.castle_ref): index
             for index, target in enumerate(self.daily_config.targets)
         }
-        with ThreadPoolExecutor(max_workers=len(groups), thread_name_prefix="daily-instance") as executor:
-            futures = {
-                executor.submit(self._run_instance, instance_id, targets, boundary): instance_id
-                for instance_id, targets in groups.items()
-            }
-            for future in as_completed(futures):
-                instance_id = futures[future]
-                try:
-                    summaries = future.result()
-                except Exception as error:  # Instance construction failures are isolated and reported.
-                    summaries = tuple(
-                        DailyCastleRunSummary(
-                            account_id=target.account_id,
-                            castle_ref=target.castle_ref,
-                            succeeded=False,
-                            message=f"Instance worker '{instance_id}' failed: {error}",
+        with self.runner_factory.reserve_instances(tuple(groups)):
+            with ThreadPoolExecutor(max_workers=len(groups), thread_name_prefix="daily-instance") as executor:
+                futures = {
+                    executor.submit(self._run_instance, instance_id, targets, boundary): instance_id
+                    for instance_id, targets in groups.items()
+                }
+                for future in as_completed(futures):
+                    instance_id = futures[future]
+                    try:
+                        summaries = future.result()
+                    except Exception as error:  # Instance construction failures are isolated and reported.
+                        summaries = tuple(
+                            DailyCastleRunSummary(
+                                account_id=target.account_id,
+                                castle_ref=target.castle_ref,
+                                succeeded=False,
+                                message=f"Instance worker '{instance_id}' failed: {error}",
+                            )
+                            for target in groups[instance_id]
                         )
-                        for target in groups[instance_id]
-                    )
-                for summary in summaries:
-                    collected[indexed_targets[(summary.account_id, summary.castle_ref)]] = summary
+                    for summary in summaries:
+                        collected[indexed_targets[(summary.account_id, summary.castle_ref)]] = summary
         return DailyApplicationRunSummary(
             boundary=boundary,
             castles=tuple(collected[index] for index in sorted(collected)),

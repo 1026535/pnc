@@ -3,72 +3,31 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
-from typing import Any, Protocol
+from typing import Any
 
 from pnc_automation.app.authoring.config.models import CastleIdentity
 from pnc_automation.core.errors import ConfigurationError
+from pnc_automation.core.config.yaml_helpers import (
+    ErrorBuilder,
+    require_int,
+    require_list,
+    require_mapping,
+    require_string,
+)
 
 _KINGDOM_ID_PATTERN = re.compile(r"^K\d{1,4}$")
 
 
-class ErrorBuilder(Protocol):
-    """Builds one fail-fast typed exception for invalid authored content."""
-
-    def __call__(self, message: str, **details: Any) -> Exception:
-        """Returns one exception instance carrying structured validation details."""
-
-
-def require_mapping(
-    value: Any,
-    *,
-    context: str,
-    error_builder: ErrorBuilder = ConfigurationError,
-) -> Mapping[str, Any]:
-    """Returns one authored mapping or raises the provided validation error."""
-
-    if not isinstance(value, Mapping):
-        raise error_builder(f"Expected {context} to be a mapping.", context=context)
-    return value
-
-
-def require_list(
-    value: Any,
-    *,
-    context: str,
-    error_builder: ErrorBuilder = ConfigurationError,
-) -> list[Any]:
-    """Returns one authored list or raises the provided validation error."""
-
-    if not isinstance(value, list):
-        raise error_builder(f"Expected {context} to be a list.", context=context)
-    return value
-
-
-def require_string(
-    value: Any,
-    *,
-    context: str,
-    error_builder: ErrorBuilder = ConfigurationError,
-) -> str:
-    """Returns one non-empty authored string or raises the provided validation error."""
-
-    if not isinstance(value, str) or value.strip() == "":
-        raise error_builder(f"Expected {context} to be a non-empty string.", context=context)
-    return value
-
-
-def require_int(
-    value: Any,
-    *,
-    context: str,
-    error_builder: ErrorBuilder = ConfigurationError,
-) -> int:
-    """Returns one authored integer or raises the provided validation error."""
-
-    if not isinstance(value, int) or isinstance(value, bool):
-        raise error_builder(f"Expected {context} to be an integer.", context=context)
-    return value
+__all__ = [
+    "ErrorBuilder",
+    "build_castle_identity",
+    "load_castle_identity",
+    "require_int",
+    "require_kingdom_identifier",
+    "require_list",
+    "require_mapping",
+    "require_string",
+]
 
 
 def require_kingdom_identifier(

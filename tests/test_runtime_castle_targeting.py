@@ -16,7 +16,13 @@ from pnc_automation.app.automation.engine.observed_action_executor import Observ
 from pnc_automation.app.automation.engine.runner import AutomationRunner, RunResult, StepRunResult
 from pnc_automation.app.authoring.scripts.models import CastleRefRepeatBlock, RunScript, ScriptStep
 from pnc_automation.app.authoring.scripts.registry import TaskRegistry, build_default_task_registry
-from pnc_automation.app.automation.engine.task import BaseAutomationTask, CastleTargetPolicy, TaskId, TaskResult
+from pnc_automation.app.automation.engine.task import (
+    BaseAutomationTask,
+    CastleTargetPolicy,
+    TaskId,
+    TaskResult,
+    TaskStatus,
+)
 from pnc_automation.app.automation.engine.task_context import TaskContext
 from pnc_automation.app.automation.tasks.popup_recovery_task import PopupRecoveryTask
 from pnc_automation.app.automation.tasks.select_castle_task import SelectCastleTask
@@ -28,10 +34,13 @@ from pnc_automation.app.authoring.config.models import (
     CastleTargetDefinition,
     CredentialSource,
     DefaultsConfig,
+    LiveAutomationRole,
     PncAccountCastleRosterConfig,
     ResolvedCredentials,
 )
 from pnc_automation.core.errors import ScriptValidationError
+from pnc_automation.core.errors import InstanceBusyError
+from pnc_automation.bluestacks_management.instance_lease import InstanceLeaseRegistry
 from pnc_automation.app.pnc.domain.action_requests import ActionRequest
 from pnc_automation.app.pnc.domain.observation import ListEntryKind, Observation
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
@@ -449,6 +458,108 @@ class RuntimeCastleTargetingTests(unittest.TestCase):
 
         self.assertEqual(fake_runner.prepare_calls, [("account_a", self.target_castle)])
 
+    def test_python_use_account_releases_reservation_when_preparation_reports_failure(self) -> None:
+        """Closes the physical reservation when preparation returns a failed step result."""
+
+        fake_runner = _FakeApplicationRunner(preparation_result=_make_failed_run_result())
+        api = AutomationApi(application=fake_runner)
+
+        with self.assertRaisesRegex(RuntimeError, "preparation failed"):
+            with api.use_account("account_a"):
+                self.fail("failed preparation must not expose an active session")
+
+        self.assertEqual(len(fake_runner.reservations), 1)
+        self.assertTrue(fake_runner.reservations[0].closed)
+
+    def test_python_use_account_holds_real_lease_through_prepare_and_action(self) -> None:
+        """Exercises the public API scope against a real temp lease and competing registry."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            application = _RealLeaseApplicationRunner(Path(temp_directory))
+            api = AutomationApi(application=application)
+
+            with api.use_account("account_a") as session:
+                session.research(priority=["economy"])
+
+            application.probe_after_scope()
+            self.assertTrue(application.competitor_acquired_after_scope)
+
+    def test_python_use_account_holds_real_lease_between_dependent_actions(self) -> None:
+        """Prevents another process-shaped registry from entering between two dependent actions."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            application = _RealLeaseApplicationRunner(Path(temp_directory))
+            api = AutomationApi(application=application)
+
+            with api.use_account("account_a") as session:
+                session.research(priority=["economy"])
+                session.building_construct(building="farm")
+
+            application.probe_after_scope()
+            self.assertTrue(application.competitor_acquired_after_scope)
+
+    def test_python_reserve_accounts_holds_scope_for_multi_step_workflow(self) -> None:
+        """Provides an explicit reservation for dependent calls without account preparation helpers."""
+
+        fake_runner = _FakeApplicationRunner()
+        api = AutomationApi(application=fake_runner)
+
+        with api.reserve_accounts(("account_a",)):
+            api.research(priority=["economy"])
+            api.building_construct(building="farm")
+
+        self.assertEqual(len(fake_runner.reservations), 1)
+        self.assertTrue(fake_runner.reservations[0].closed)
+        self.assertEqual(
+            fake_runner.task_calls,
+            [
+                (TaskId.RESEARCH, "account_a", {"priority": ["economy"]}),
+                (TaskId.BUILDING_CONSTRUCT, "account_a", {"building": "farm"}),
+            ],
+        )
+
+    def test_python_reservation_rejects_account_outside_declared_bundle(self) -> None:
+        """Fails before execution when a workflow tries to escape its declared account bundle."""
+
+        fake_runner = _FakeApplicationRunner()
+        api = AutomationApi(application=fake_runner)
+
+        with api.reserve_accounts(("account_a",)):
+            with self.assertRaisesRegex(RuntimeError, "outside the active workflow reservation"):
+                api.research(account_id="account_b")
+
+        self.assertTrue(fake_runner.reservations[0].closed)
+        self.assertEqual(fake_runner.task_calls, [])
+
+    def test_python_reservation_rejects_incremental_bundle_expansion(self) -> None:
+        """Requires all accounts to be declared before a workflow acquires its first instance."""
+
+        fake_runner = _FakeApplicationRunner()
+        api = AutomationApi(application=fake_runner)
+
+        with api.reserve_accounts(("account_a",)):
+            with self.assertRaisesRegex(RuntimeError, "Cannot expand an active workflow reservation"):
+                with api.reserve_accounts(("account_a", "account_b")):
+                    pass
+
+        self.assertEqual(len(fake_runner.reservations), 1)
+        self.assertTrue(fake_runner.reservations[0].closed)
+
+    def test_python_use_account_failed_preparation_releases_real_lease(self) -> None:
+        """Allows a competitor to acquire immediately after a failed public API preparation."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            application = _RealLeaseApplicationRunner(Path(temp_directory), preparation_failed=True)
+            api = AutomationApi(application=application)
+
+            with self.assertRaisesRegex(RuntimeError, "preparation failed"):
+                with api.use_account("account_a"):
+                    self.fail("failed preparation must not enter the API scope")
+
+            application.probe_after_scope()
+            self.assertTrue(application.competitor_acquired_after_scope)
+
+
     def test_python_use_account_exit_performs_no_cleanup(self) -> None:
         """Leaves the live session untouched on context exit by default."""
 
@@ -690,6 +801,34 @@ class RuntimeCastleTargetingTests(unittest.TestCase):
             ],
         )
 
+    def test_cli_prepare_then_action_releases_reservation_when_preparation_reports_failure(self) -> None:
+        """Rejects a failed preparation result before running the dependent CLI task."""
+
+        fake_runner = _FakeApplicationRunner(preparation_result=_make_failed_run_result())
+        with patch("pnc_automation.app.entrypoints.cli.build_application_runner", return_value=fake_runner):
+            with self.assertRaisesRegex(RuntimeError, "preparation failed"):
+                cli_main(
+                    [
+                        "build",
+                        "--account",
+                        "account_a",
+                        "--config",
+                        "config/accounts.yaml",
+                        "--kingdom",
+                        "K230",
+                        "--castle-name",
+                        "Main",
+                        "--castle-level",
+                        "8",
+                        "--priority",
+                        "institute",
+                    ]
+                )
+
+        self.assertEqual(len(fake_runner.reservations), 1)
+        self.assertTrue(fake_runner.reservations[0].closed)
+        self.assertEqual(fake_runner.task_calls, [])
+
     def test_cli_legacy_run_flags_still_route_through_the_shared_run_path(self) -> None:
         """Keeps the flag-only legacy invocation shape while executing the canonical run command path."""
 
@@ -757,6 +896,83 @@ class RuntimeCastleTargetingTests(unittest.TestCase):
         self.assertEqual(build_runner.call_args.kwargs["observation_mode"], ObservationMode.LIGHT)
 
 
+class _RealLeaseApplicationRunner:
+    """Exercises public API reservation calls with a real temp-root registry."""
+
+    def __init__(self, root: Path, *, preparation_failed: bool = False) -> None:
+        """Initializes one account-to-display binding and a competing registry probe."""
+
+        self.registry = InstanceLeaseRegistry(root=root / "leases")
+        self.preparation_failed = preparation_failed
+        self.competitor_acquired_after_scope = False
+
+    def reserve_accounts(self, account_ids: tuple[str, ...]):
+        """Returns the real scoped bundle used by the public API entrypoint."""
+
+        self.assertEqual_account_ids(account_ids)
+        bundle = self.registry.acquire_bundle(("serious_stuff",))
+        self.assert_competitor_blocked()
+        return bundle
+
+    def prepare_account_session(
+        self,
+        *,
+        account_id: str,
+        castle: CastleIdentity | None = None,
+        required_role: LiveAutomationRole | None = None,
+    ) -> RunResult:
+        """Probes lease ownership during preparation and returns the configured result."""
+
+        del castle, required_role
+        self.assertEqual_account_ids((account_id,))
+        self.assert_competitor_blocked()
+        return _make_failed_run_result() if self.preparation_failed else _make_run_result(
+            script_name="prepare_account_session"
+        )
+
+    def run_task(
+        self,
+        *,
+        account_id: str,
+        task_id: TaskId,
+        params: dict[str, object] | None = None,
+        required_role: LiveAutomationRole | None = None,
+    ) -> StepRunResult:
+        """Probes lease ownership while the dependent API action is running."""
+
+        del params, required_role
+        self.assertEqual_account_ids((account_id,))
+        self.assert_competitor_blocked()
+        return StepRunResult(task_id=task_id, status=TaskStatus.SUCCESS, attempts=1, message="ok")
+
+    def assert_competitor_blocked(self) -> None:
+        """Requires a separate registry to remain excluded during the public API scope."""
+
+        competitor = InstanceLeaseRegistry(root=self.registry.root, wait_timeout_seconds=0)
+        try:
+            competitor.acquire(display_name="serious_stuff")
+        except InstanceBusyError:
+            return
+        finally:
+            competitor.release_all()
+        raise AssertionError("The public API did not hold the account lease during dependent work.")
+
+    def assertEqual_account_ids(self, account_ids: tuple[str, ...]) -> None:
+        """Keeps the fake binding explicit instead of silently accepting another account."""
+
+        if account_ids != ("account_a",):
+            raise AssertionError(f"unexpected account ids: {account_ids}")
+
+    def probe_after_scope(self) -> None:
+        """Confirms the competitor can enter once the public API scope exits."""
+
+        competitor = InstanceLeaseRegistry(root=self.registry.root, wait_timeout_seconds=0)
+        try:
+            competitor.acquire(display_name="serious_stuff")
+            self.competitor_acquired_after_scope = True
+        finally:
+            competitor.release_all()
+
 @dataclass(slots=True)
 class _FakeApplicationRunner:
     """Records Python API and CLI calls without constructing the full runtime."""
@@ -764,6 +980,22 @@ class _FakeApplicationRunner:
     run_calls: list[tuple[str, str, list[str] | None]] = field(default_factory=list)
     prepare_calls: list[tuple[str, CastleIdentity | None]] = field(default_factory=list)
     task_calls: list[tuple[TaskId, str, dict[str, object] | None]] = field(default_factory=list)
+    preparation_result: RunResult | None = None
+    reservations: list["_FakeReservation"] = field(default_factory=list)
+    script_runner: object = field(init=False)
+
+    def __post_init__(self) -> None:
+        """Provides the canonical role-check surface expected by the CLI."""
+
+        self.script_runner = _FakeScriptRunner()
+
+    def reserve_accounts(self, account_ids: tuple[str, ...]):
+        """Provides the application reservation boundary without live instance state."""
+
+        del account_ids
+        reservation = _FakeReservation()
+        self.reservations.append(reservation)
+        return reservation
 
     def run(
         self,
@@ -771,6 +1003,7 @@ class _FakeApplicationRunner:
         account_id: str,
         script_path: str,
         castle_refs: list[str] | None = None,
+        required_role: LiveAutomationRole | None = None,
     ) -> RunResult:
         """Records one CLI/script run request and returns a synthetic success result."""
 
@@ -782,11 +1015,12 @@ class _FakeApplicationRunner:
         *,
         account_id: str,
         castle: CastleIdentity | None = None,
+        required_role: LiveAutomationRole | None = None,
     ) -> RunResult:
         """Records one session-preparation request and returns a synthetic success result."""
 
         self.prepare_calls.append((account_id, castle))
-        return _make_run_result(script_name="prepare_account_session")
+        return self.preparation_result or _make_run_result(script_name="prepare_account_session")
 
     def run_task(
         self,
@@ -794,6 +1028,7 @@ class _FakeApplicationRunner:
         account_id: str,
         task_id: TaskId,
         params: dict[str, object] | None = None,
+        required_role: LiveAutomationRole | None = None,
     ) -> StepRunResult:
         """Records one direct task call and returns a synthetic success result."""
 
@@ -804,6 +1039,50 @@ class _FakeApplicationRunner:
             attempts=1,
             message="ok",
         )
+
+
+class _FakeScriptRunner:
+    """Provides the canonical configuration surface used by CLI role checks."""
+
+    def __init__(self) -> None:
+        """Initializes one permissive account-role fixture."""
+
+        self.config = self
+
+    def require_account(self, account_id: str):
+        """Returns a configured account-shaped role fixture."""
+
+        del account_id
+        return self
+
+    def require_live_role(self, required_role: LiveAutomationRole) -> None:
+        """Accepts the requested role for command-routing tests."""
+
+        del required_role
+
+
+class _FakeReservation:
+    """Implements the closable/context-managed reservation contract for offline fakes."""
+
+    def __init__(self) -> None:
+        """Starts the fake reservation open."""
+
+        self.closed = False
+
+    def __enter__(self) -> "_FakeReservation":
+        """Returns the fake reservation for a scoped CLI call."""
+
+        return self
+
+    def __exit__(self, _exc_type: object, _exc: object, _traceback: object) -> None:
+        """Closes the fake reservation at the end of a scoped call."""
+
+        self.close()
+
+    def close(self) -> None:
+        """Records release while remaining idempotent."""
+
+        self.closed = True
 
 
 class _OptionalCastleTask(BaseAutomationTask):
@@ -850,6 +1129,26 @@ def _make_run_result(*, script_name: str) -> RunResult:
                 status=TaskResult.success("ok").status,
                 attempts=1,
                 message="ok",
+            ),
+        ),
+        started_at=now,
+        finished_at=now,
+    )
+
+
+def _make_failed_run_result() -> RunResult:
+    """Builds one failed preparation result for scoped-entrypoint tests."""
+
+    now = datetime.now(tz=UTC)
+    return RunResult(
+        account_id="account_a",
+        script_name="prepare_account_session",
+        steps=(
+            StepRunResult(
+                task_id=TaskId.LOGIN,
+                status=TaskStatus.FAILED,
+                attempts=1,
+                message="failed",
             ),
         ),
         started_at=now,

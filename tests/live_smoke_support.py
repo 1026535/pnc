@@ -12,19 +12,25 @@ from pnc_automation.app.automation.engine.script_runner import (
 )
 from pnc_automation.app.pnc.domain.action_requests import ActionRequest
 from pnc_automation.app.pnc.domain.observation import Observation
-from pnc_automation.app.authoring.config.models import AccountConfig
+from pnc_automation.app.authoring.config.models import AccountConfig, LiveAutomationRole
 
 
 def build_live_runtime(*, config_account: AccountConfig, script_runner: ScriptRunner) -> ConnectedAccountRuntime:
     """Builds the canonical connected live runtime used by smoke tests."""
 
-    return script_runner.build_connected_runtime(account=config_account)
+    return script_runner.build_connected_runtime(
+        account=config_account,
+        required_role=LiveAutomationRole.SMOKE_TEST,
+    )
 
 
 def build_live_automation_runner(*, config_account: AccountConfig, script_runner: ScriptRunner) -> AutomationRunner:
     """Builds one connected automation runner from the authoritative script-runner wiring."""
 
-    return script_runner.build_connected_automation_runner(account=config_account)
+    return script_runner.build_connected_automation_runner(
+        account=config_account,
+        required_role=LiveAutomationRole.SMOKE_TEST,
+    )
 
 
 def build_live_runtime_bundle(
@@ -34,7 +40,10 @@ def build_live_runtime_bundle(
 ) -> ConnectedAutomationRuntime:
     """Builds one shared live runtime plus runner graph for smoke tests that pass observations between them."""
 
-    return script_runner.build_connected_runtime_bundle(account=config_account)
+    return script_runner.build_connected_runtime_bundle(
+        account=config_account,
+        required_role=LiveAutomationRole.SMOKE_TEST,
+    )
 
 
 def execute_live_flow_until(

@@ -123,7 +123,7 @@ def _build_row_entry(
         if bounds.y <= line.bounds.y + line.bounds.height // 2 <= bounds.y + bounds.height
     )
     definition, title_text = _resolve_title(row_lines=row_lines, image_width=image.width, catalog=catalog)
-    state = _resolve_row_state(row_lines)
+    state = _resolve_row_state(image=image, row_bounds=bounds, row_lines=row_lines)
     progress = _resolve_progress(row_lines)
     action_x = int(image.width * 0.84)
     action_y = bounds.y + bounds.height // 2
@@ -170,7 +170,12 @@ def _resolve_title(
     return None, strongest.text
 
 
-def _resolve_row_state(row_lines: tuple[OcrLine, ...]) -> DailyQuestRowState:
+def _resolve_row_state(
+    *,
+    image: Image.Image,
+    row_bounds: Bounds,
+    row_lines: tuple[OcrLine, ...],
+) -> DailyQuestRowState:
     """Classifies action semantics without allowing OCR bounds to drive a tap."""
 
     normalized = {normalize_ocr_text(line.text) for line in row_lines}
@@ -182,7 +187,42 @@ def _resolve_row_state(row_lines: tuple[OcrLine, ...]) -> DailyQuestRowState:
         return DailyQuestRowState.COMPLETED
     if any("REQUIRED" in item or item == "COMPLETED" for item in normalized):
         return DailyQuestRowState.REQUIREMENT
+    if _looks_like_blue_go_button(image=image, row_bounds=row_bounds):
+        return DailyQuestRowState.GO
     return DailyQuestRowState.UNKNOWN_ACTION
+
+
+def _looks_like_blue_go_button(*, image: Image.Image, row_bounds: Bounds) -> bool:
+    """Recognizes a wide blue action button only inside the row's right action region."""
+
+    left = max(row_bounds.x, int(image.width * 0.70))
+    right = min(row_bounds.x + row_bounds.width, int(image.width * 0.976))
+    top = row_bounds.y + int(row_bounds.height * 0.18)
+    bottom = row_bounds.y + int(row_bounds.height * 0.82)
+    if right <= left or bottom <= top:
+        return False
+
+    width = right - left
+    height = bottom - top
+    blue_pixels = 0
+    blue_columns = [0] * width
+    blue_rows = [0] * height
+    rgb_image = image.convert("RGB")
+    for y in range(top, bottom):
+        for x in range(left, right):
+            red, green, blue = rgb_image.getpixel((x, y))
+            if blue < 100 or blue < red + 20 or blue < green - 20:
+                continue
+            blue_pixels += 1
+            blue_columns[x - left] += 1
+            blue_rows[y - top] += 1
+
+    region_area = width * height
+    if blue_pixels / region_area < 0.45:
+        return False
+    wide_columns = sum(count >= height * 0.40 for count in blue_columns)
+    filled_rows = sum(count >= width * 0.40 for count in blue_rows)
+    return wide_columns / width >= 0.60 and filled_rows / height >= 0.50
 
 
 def _resolve_progress(row_lines: tuple[OcrLine, ...]) -> tuple[int, int] | None:

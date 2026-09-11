@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 import threading
 import time
+from pathlib import Path
+import tempfile
 import unittest
 from dataclasses import replace
 from datetime import date
@@ -26,6 +29,8 @@ from pnc_automation.app.authoring.config.models import (
     RuntimeConfig,
 )
 from pnc_automation.core.infra.emulator.models import BlueStacksInstanceConfig
+from pnc_automation.bluestacks_management.instance_lease import InstanceLeaseRegistry
+from pnc_automation.core.errors import InstanceBusyError
 
 
 class DailyApplicationServiceTests(unittest.TestCase):
@@ -65,6 +70,22 @@ class DailyApplicationServiceTests(unittest.TestCase):
         self.assertFalse(summary.castles[0].succeeded)
         self.assertFalse(summary.castles[1].succeeded)
         self.assertTrue(summary.castles[2].succeeded)
+
+    def test_multi_instance_pool_reserves_complete_bundle_before_workers(self) -> None:
+        """Keeps competitors excluded while the service-owned bundle spans worker execution."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            registry = InstanceLeaseRegistry(root=Path(temp_directory) / "leases", wait_timeout_seconds=0)
+            factory = _RecordingFactory(lease_registry=registry)
+            service = self._service(factory)
+
+            summary = service.run(
+                boundary=DailyRunBoundary(date(2026, 9, 4), "reset-2026-09-04")
+            )
+
+        self.assertTrue(summary.succeeded)
+        self.assertEqual(factory.reserved_instance_ids, ("i1", "i2"))
+        self.assertEqual(factory.competitor_blocked, {"One", "Two"})
 
     @staticmethod
     def _service(factory: _RecordingFactory) -> DailyMaintenanceApplicationService:
@@ -106,10 +127,19 @@ class DailyApplicationServiceTests(unittest.TestCase):
 class _RecordingFactory:
     """Builds fake instance runners and records concurrency invariants."""
 
-    def __init__(self, failing_instance: str | None = None) -> None:
+    def __init__(
+        self,
+        failing_instance: str | None = None,
+        *,
+        lease_registry: InstanceLeaseRegistry | None = None,
+    ) -> None:
         """Initializes synchronized recording state."""
 
         self.failing_instance = failing_instance
+        self.lease_registry = lease_registry
+        self.instance_display_names = {"i1": "One", "i2": "Two"}
+        self.reserved_instance_ids: tuple[str, ...] = ()
+        self.competitor_blocked: set[str] = set()
         self.lock = threading.Lock()
         self.active_instances = 0
         self.active_by_instance: dict[str, int] = {}
@@ -123,6 +153,31 @@ class _RecordingFactory:
         if instance_id == self.failing_instance:
             raise RuntimeError("factory failure")
         return _RecordingRunner(self, instance_id)
+
+    def reserve_instances(self, instance_ids: tuple[str, ...]):
+        """Provides the typed fleet reservation boundary for offline worker tests."""
+
+        self.reserved_instance_ids = instance_ids
+        if self.lease_registry is not None:
+            return self.lease_registry.acquire_bundle(
+                tuple(self.instance_display_names[instance_id] for instance_id in instance_ids)
+            )
+        return nullcontext()
+
+    def verify_competitor_blocked(self, instance_id: str) -> None:
+        """Confirms a second registry cannot enter while the service bundle is held."""
+
+        if self.lease_registry is None:
+            return
+        display_name = self.instance_display_names[instance_id]
+        competitor = InstanceLeaseRegistry(root=self.lease_registry.root, wait_timeout_seconds=0)
+        try:
+            competitor.acquire(display_name=display_name)
+        except InstanceBusyError:
+            with self.lock:
+                self.competitor_blocked.add(display_name)
+        else:
+            competitor.release_all()
 
 
 class _RecordingRunner:
@@ -138,6 +193,7 @@ class _RecordingRunner:
         """Records concurrency, waits briefly, and returns success."""
 
         del boundary
+        self.factory.verify_competitor_blocked(self.instance_id)
         with self.factory.lock:
             self.factory.active_instances += 1
             active = self.factory.active_by_instance.get(self.instance_id, 0) + 1
