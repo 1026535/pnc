@@ -59,7 +59,12 @@ The separate explicit `recover_to_home` follow-up after the selector tool left D
 - **Done when:** the saved City frame is recognized as unblocked, real popup fixtures remain blocked, and a live recovery confirms two fresh City observations.
 - **Evidence:** `C:/Users/lebel/pnc/artifacts/2026-09-11/serious_stuff/20260911T011403Z_core_20260911T011349Z_39a36a1a_0004_core_1_after_1.png` and `C:/Users/lebel/pnc/artifacts/2026-09-11/serious_stuff/20260911T011349Z_39a36a1a_core_trace.jsonl`.
 
-These issues block a merge-readiness claim. They do not invalidate the successful read-only Daily content capture and Home return recorded above.
+Both defects now have deterministic offline regressions. The Daily parser recognizes a
+visually clear blue Go button only after known OCR states, and the generic-X fallback
+requires popup-surface ownership after recognized popup handling. The sanitized City
+frame remains unblocked Home, while two sanitized real popup layouts retain measured
+close controls. Fresh live acceptance remains blocked by concurrent control of the
+configured emulator, so these fixes are not yet promoted to a live-passed verdict.
 
 ## Validation commands and disposition (2026-09-11 UTC)
 
@@ -73,5 +78,15 @@ These issues block a merge-readiness claim. They do not invalidate the successfu
 - **Superseded alternate-target history:** the earlier `testing` expected-stop and competing-probe records above remain valid safety evidence, but they are superseded for the final status verdict by the authorized `serious_stuff` run. The first `serious_stuff` identity attempt also stopped when its selected row was outside the visible viewport; a separate one-scroll read-only roster setup then made the row visible without castle selection.
 - **Passed final status proof:** `py -m pnc_automation.app.entrypoints.cli daily-quest-status --config C:/Users/lebel/pnc/config/accounts.yaml --account serious_stuff` returned success, five visible rows, no unknown titles, and final `pnc_home_city`. Four row states are `go`; one is `unknown_action` because visible Go OCR was unresolved. This is an explicit uncertainty, not a complete action-state claim. Result: `C:/Users/lebel/pnc/artifacts/replacement_core/core_port_serious_live_final.log`.
 - **Passed selector check:** `py tools/validate_navigation_selectors.py --config C:/Users/lebel/pnc/config/accounts.yaml --account serious_stuff --selector PNC_BOTTOM_NAV_QUEST --output-dir C:/Users/lebel/pnc/artifacts/replacement_core/core_port_selectors`; one passed, zero failed, zero skipped. Report: `C:/Users/lebel/pnc/artifacts/replacement_core/core_port_selectors/20260911T011301Z_serious_stuff_navigation_validation.yaml`.
+
+## Remaining-issues implementation validation
+
+- **Passed:** `py -m unittest tests.test_daily_quest_vision`: 8 tests, no failures.
+- **Passed:** `py -m unittest tests.test_capture_and_vision tests.test_navigation_core tests.test_core_runtime tests.test_core_workflow tests.test_popup_recovery`: 193 tests, 2 expected local-fixture skips, no failures.
+- **Passed:** `py -m unittest discover -s tests`: 1,064 tests, 19 expected skips, no failures, after rebasing onto the latest `origin/main`. The additional skip is the explicitly opt-in live recovery smoke.
+- **Passed:** `py -m unittest tests.test_live_core_workflow_smoke`: 1 expected opt-in skip with live execution disabled.
+- **Passed:** `git diff --check`.
+- **Blocked by concurrent emulator control:** the fresh selector validation report `C:/Users/lebel/pnc/artifacts/replacement_core/core_port_selectors/20260911T202732Z_serious_stuff_navigation_validation.yaml` recorded a Home-to-VIP-to-Home sequence instead of a Quest destination. During the following Daily proof, independently generated `navigation_validation_30` through `navigation_validation_38` artifacts continued appearing for the same instance. The Daily command stopped on its changed-source guard before a workflow action. No resource-changing action or castle selection occurred.
+- **Required rerun with exclusive instance access:** the Daily status command and `PNC_RUN_LIVE_SMOKE=1` recovery smoke from the remaining-issues plan. Neither live matrix row is marked passed from the contended session.
 
 The live emulator was already running and the configured game was foregrounded. Its ADB connection was resolved through the configured runtime and verified responsive. The separate roster setup used one read-only scroll and no castle selection; the final status command sent no resource-changing action. The Daily content extraction and Home return are confirmed for the authorized `serious_stuff` run. The separate recovery proof after the selector tool failed closed on the popup false positive described above; no additional taps were sent.

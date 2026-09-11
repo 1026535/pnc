@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "samples": {
+    "generic_popup_quit_real_sanitized.png": {
+      "source": "artifact:2026-06-07/popup_recovery_before.png",
+      "source_sha256": "ce2c83efe2f4b74995e84c58c9a3675f5edfc4250d93284f9b158f810a16ee34",
+      "transform": "Replaced the full frame with a neutral dark field; retained the real centered dialog crop x=20..519, y=305..599 including its upper-right X and panel edges. No account/resource text was retained outside the dialog.",
+      "layout": "centered_dialog"
+    },
+    "generic_popup_offer_real_sanitized.png": {
+      "source": "artifact:2026-08-31/popup_recovery_before.png",
+      "source_sha256": "aae5c1ad08a4156fd7615b82c7a70f325b16c08dfd8e8900d60de0fdaa78b95d",
+      "transform": "Replaced the frame and modal interior with neutral fields; retained the real offer-modal rectangle x=18..521, y=16..889 and the real upper-right X crop x=475..529, y=42..107. Hero, price, reward, account, and resource content was removed.",
+      "layout": "full_height_offer_modal"
+    },
+    "home_city_popup_x_regression.png": {
+      "source": "artifact:2026-09-11/city_popup_x_frame.png",
+      "source_sha256": "a659e35eceefda058ecfc9e159f36559a78da345429e46b1db5fdadd25f7178f",
+      "transform": "Masked the full top resource/profile band y=0..129, left profile/resource values y=130..274, and bottom chat text y=850..904 with neutral fills; preserved Home City visual anchors, HUD geometry, and false-positive upper-right sparkle/X area at x=508..533, y=267..296.",
+      "layout": "home_city_false_positive"
+    }
+  }
+}
