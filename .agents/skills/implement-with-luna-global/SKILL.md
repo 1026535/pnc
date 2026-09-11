@@ -24,7 +24,7 @@ The root owns:
 - design, architecture, canonical ownership, public contracts, and task decomposition;
 - worker assignment, steering, integration decisions, formal review, and the final answer.
 
-Luna owns substantial concrete coding, tests, documentation, cleanup, validation, and review corrections within approved intent. Luna may make ordinary low-level choices that preserve that intent and the repository's rules.
+Luna owns only substantial concrete implementation within approved intent, including the code changes and narrowly necessary test, documentation, or cleanup edits that are part of implementing that intent. Luna may make ordinary low-level choices that preserve the approved design and repository rules, but must not own requirements interpretation, architecture changes, integration decisions, acceptance, formal review, or review findings.
 
 The root may make a small mechanical integration or contained correction when another handoff would cost more than the work. Do not edit the same worktree while a worker is writing. Return substantial work or architectural decisions to Luna only after the root resolves the intended design.
 
@@ -45,7 +45,7 @@ Give each worker only information that changes implementation decisions:
 - acceptance evidence and proportionate validation commands;
 - PNC-specific validation expectations: targeted `unittest` coverage followed by the full offline suite when the change is cross-cutting, plus the smallest relevant opt-in BlueStacks smoke path for live behavior;
 - escalation conditions for changes to ownership, public API, invariant, architecture, scope, or validation intent;
-- the completion contract: self-review, validation results, changed files, commit or diff state, divergences, and unresolved issues.
+- the completion contract: changed files, implementation status, commands run if any, commit or diff state, divergences, and unresolved implementation issues. Do not request a review verdict from Luna.
 
 Link authoritative local material instead of copying it. Do not ask Luna to redesign settled architecture or repeat research already completed by the root.
 
@@ -82,12 +82,12 @@ Do not take over substantial implementation merely because the first attempt fai
 
 ## Complete, review, and correct
 
-1. Have the implementer self-review the complete diff, run proportionate validation, update required documentation, and follow the repository's commit policy.
-2. Verify that one authoritative branch, commit, or diff contains the complete integrated result.
-3. The root formally reviews that result against the approved intent and repository rules using [review-code](../review-code/SKILL.md).
-4. Send substantive findings back to the persistent Luna implementer. The root may fix a truly small contained item when that is cheaper and clearer.
-5. Re-review the corrected authoritative result and continue only while concrete findings remain.
-6. Finish when review has no actionable findings, required validation is satisfactory, and the result is on the intended branch or worktree.
+1. Have Luna return the implementation diff, changed files, commands it ran, divergences, and unresolved implementation issues. Treat any Luna self-assessment as implementation context, not as review or acceptance.
+2. The root verifies that one authoritative branch, commit, or diff contains the complete integrated result and runs the proportionate validation required by the governing repository instructions.
+3. The root formally reviews that result against the approved intent and repository rules using [review-code](../review-code/SKILL.md). The root owns the review verdict and all acceptance decisions.
+4. Send precise, bounded correction instructions back to the persistent Luna implementer when findings require implementation changes. Luna implements those corrections only; it does not decide whether the finding is valid or whether the result is accepted.
+5. The root re-reviews the corrected authoritative result and repeats the implementation/review loop only while concrete findings remain.
+6. Finish when the root's review has no actionable findings, required validation is satisfactory, and the result is on the intended branch or worktree.
 
 Ask the user only for a material unresolved choice, new authority, or genuine external blocker. Never push, publish, deploy, or perform another externally consequential action unless the user or governing repository workflow explicitly authorizes it.
 
