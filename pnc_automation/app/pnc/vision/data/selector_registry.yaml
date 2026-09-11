@@ -1247,7 +1247,7 @@ selectors:
   screens:
   - PNC_MAILBOX_LIST
   status: planned
-  detection_kind: unsupported
+  detection_kind: guarded_geometry
   interaction_kind: action
   relative_bounds:
     x_ratio: 0.86
@@ -1256,9 +1256,9 @@ selectors:
     height_ratio: 0.06
     action_x_ratio: 0.91
     action_y_ratio: 0.15
-  materialize_relative_bounds: false
+  materialize_relative_bounds: true
   notes:
-  - 'Proposed unsupported strategy: No compose-button producer.'
+  - Fixed compose control belongs to a proved Player mailbox; suppressed on other mailbox types and absent from the Mail hub.
 - id: PNC_MAILBOX_EMPTY_LABEL
   screens:
   - PNC_MAILBOX_LIST
@@ -1770,7 +1770,7 @@ selectors:
   screens:
   - PNC_WORLD_MAP
   status: screenshot_seeded
-  detection_kind: unsupported
+  detection_kind: guarded_geometry
   interaction_kind: action
   relative_bounds:
     x_ratio: 0.0
@@ -1779,9 +1779,9 @@ selectors:
     height_ratio: 0.11
     action_x_ratio: 0.065
     action_y_ratio: 0.74
-  materialize_relative_bounds: false
+  materialize_relative_bounds: true
   notes:
-  - 'Proposed unsupported strategy: No world-map expand producer.'
+  - Fixed overview-entry map icon on the proved world-map screen; global guards and reviewed viewports are required.
 - id: PNC_WORLD_COORDINATE_DIALOG_HEADER
   screens:
   - PNC_WORLD_COORDINATE_DIALOG

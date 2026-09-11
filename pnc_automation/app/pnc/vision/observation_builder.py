@@ -115,6 +115,7 @@ class ObservationAdditions:
     profile_player_name: str | None = None
     mailbox_type: MailboxType | None = None
     mailbox_empty: bool | None = None
+    empty_mailboxes: frozenset[MailboxType] = frozenset()
     text_field_states: Mapping[UiElementId, ObservedTextFieldState] = field(default_factory=dict)
     chat_draft_empty: bool | None = None
     chat_draft_text: str | None = None
@@ -679,6 +680,7 @@ class ObservationBuilder:
             profile_player_name=additions.profile_player_name,
             mailbox_type=additions.mailbox_type,
             mailbox_empty=additions.mailbox_empty,
+            empty_mailboxes=additions.empty_mailboxes,
             text_field_states=additions.text_field_states,
             chat_draft_empty=additions.chat_draft_empty,
             chat_draft_text=additions.chat_draft_text,
@@ -1177,6 +1179,7 @@ def _merge_observation_additions(
         active_chat_channel=primary.active_chat_channel or fallback.active_chat_channel,
         profile_player_name=primary.profile_player_name or fallback.profile_player_name,
         mailbox_type=primary.mailbox_type or fallback.mailbox_type,
+        empty_mailboxes=primary.empty_mailboxes | fallback.empty_mailboxes,
         mailbox_empty=(
             primary.mailbox_empty
             if primary.mailbox_empty is not None

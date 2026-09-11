@@ -18,7 +18,7 @@ from pnc_automation.app.pnc.domain.building_catalog import (
     home_city_object_definition_for_label,
     is_upgradeable_primary_screen,
 )
-from pnc_automation.app.pnc.domain.mail import MailboxType, compose_text_field_selector_ids
+from pnc_automation.app.pnc.domain.mail import MailboxType, compose_text_field_selector_ids, mailbox_category_selector_id
 from pnc_automation.app.pnc.domain.observation import (
     Bounds,
     CurrentCastleEvidenceKind,
@@ -1887,7 +1887,15 @@ class PncObservationEnricher:
                 popup,
                 guard_verdict=GuardVerdict.UNRESOLVED if weak_popup else GuardVerdict.BLOCKED,
             )
-        visual_popup = _build_visual_popup_close_additions(image=image)
+        overview_close_bounds = _world_map_overview_close_exclusion_bounds(
+            image=image,
+            lines=lines,
+            selector_registry=self.selector_registry,
+        )
+        visual_popup = _build_visual_popup_close_additions(
+            image=image,
+            excluded_bounds=overview_close_bounds,
+        )
         if visual_popup is not None:
             if lines:
                 return replace(
@@ -2326,6 +2334,19 @@ class PncObservationEnricher:
             alliance_region=alliance_region,
         )
         if active_chat_channel is None:
+            return None
+        # Appearance settings reuse gold tabs and a dark footer, so those
+        # pixels cannot overrule its explicit non-chat title and tab label.
+        header_lines = ocr_context.read_lines(
+            image, purpose=OcrReadPurpose.CONTENT, detail="chat_geometry_conflicting_header"
+        )
+        if (
+            _find_header_line(lines=header_lines, header_texts=frozenset({"CHANGE"}), max_y=int(image.height * 0.08))
+            is not None
+            and _find_line_with_normalized_text(
+                lines=header_lines, normalized_text="CHATDECORATION", max_y=int(image.height * 0.14)
+            ) is not None
+        ):
             return None
         chat_state = self._build_proven_chat_state_additions(
             image=image,
@@ -2923,6 +2944,17 @@ def _build_mail_hub_additions(
     return ObservationAdditions(
         visible_elements=visible_elements,
         screen_evidence=(ScreenEvidence(ScreenType.PNC_MAIL_HUB, "ocr_mail_hub"),),
+        empty_mailboxes=frozenset(
+            mailbox
+            for mailbox in (MailboxType.PLAYER, MailboxType.ALLIANCE)
+            if (category := visible_elements.get(mailbox_category_selector_id(mailbox))) is not None
+            and any(
+                normalize_ocr_text(line.text) == _MAILBOX_EMPTY_TEXT
+                and line.bounds.x >= int(image.width * 0.65)
+                and category.bounds.contains_bounds(line.bounds)
+                for line in lines
+            )
+        ),
     )
 
 
@@ -3084,6 +3116,11 @@ def _build_mailbox_additions(
         visible_elements=visible_elements,
         list_entries=thread_entries,
         screen_evidence=(ScreenEvidence(ScreenType.PNC_MAILBOX_LIST, "ocr_mailbox_list"),),
+        suppress_geometry_selector_ids=(
+            frozenset()
+            if mailbox_type == MailboxType.PLAYER
+            else frozenset({UiElementId.PNC_MAIL_COMPOSE_BUTTON})
+        ),
         mailbox_type=mailbox_type,
         mailbox_empty=empty_line is not None,
     )
@@ -4757,11 +4794,15 @@ def _build_update_required_popup_additions(
     )
 
 
-def _build_visual_popup_close_additions(*, image: Image.Image) -> ObservationAdditions | None:
-    """Returns a generic popup close selector when an X owns a coherent popup surface."""
+def _build_visual_popup_close_additions(
+    *,
+    image: Image.Image,
+    excluded_bounds: Bounds | None = None,
+) -> ObservationAdditions | None:
+    """Returns a generic popup close selector when upper-right image geometry contains a bright X."""
 
-    close_bounds = _find_visual_popup_close_bounds(image=image)
-    if close_bounds is None or not _has_visual_popup_surface(image=image, close_bounds=close_bounds):
+    close_bounds = _find_visual_popup_close_bounds(image=image, excluded_bounds=excluded_bounds)
+    if close_bounds is None:
         return None
     return ObservationAdditions(
         visible_elements={
@@ -4830,7 +4871,48 @@ def _build_exact_building_upgrade_warning_additions(
     )
 
 
-def _find_visual_popup_close_bounds(*, image: Image.Image) -> Bounds | None:
+def _world_map_overview_close_exclusion_bounds(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+    selector_registry: SelectorRegistry | None,
+) -> Bounds | None:
+    """Returns the canonical overview close region only after independent overview chrome is proven."""
+
+    if selector_registry is None or not _world_map_overview_chrome_proven(image=image, lines=lines):
+        return None
+    selector = selector_registry.require(UiElementId.PNC_WORLD_OVERVIEW_CLOSE_BUTTON)
+    if selector.relative_bounds is None:
+        return None
+    return selector.relative_bounds.materialize_region(image_size=image.size)
+
+
+def _world_map_overview_chrome_proven(*, image: Image.Image, lines: tuple[OcrLine, ...]) -> bool:
+    """Requires the header, ruler status, and all four lower overview legend labels."""
+
+    if _find_world_map_overview_header_line(image=image, lines=lines) is None:
+        return False
+    if not any(
+        "RULER" in normalize_ocr_text(line.text) and line.bounds.y <= int(image.height * 0.2)
+        for line in lines
+    ):
+        return False
+    legend_texts = ("MYTERRITORY", "LEADER", "ALLIANCEMEMBER", "ALLIANCEFORT")
+    return all(
+        any(
+            legend_text in normalize_ocr_text(line.text)
+            and line.bounds.y >= int(image.height * 0.72)
+            for line in lines
+        )
+        for legend_text in legend_texts
+    )
+
+
+def _find_visual_popup_close_bounds(
+    *,
+    image: Image.Image,
+    excluded_bounds: Bounds | None = None,
+) -> Bounds | None:
     """Finds a square two-diagonal bright component in the normalized popup-close search area."""
 
     rgb_image = image.convert("RGB")
@@ -4866,6 +4948,8 @@ def _find_visual_popup_close_bounds(*, image: Image.Image) -> Bounds | None:
                 component.append(neighbor)
         bounds = _visual_close_component_bounds(image=image, component=component)
         if bounds is not None:
+            if excluded_bounds is not None and excluded_bounds.contains_bounds(bounds):
+                continue
             candidates.append(bounds)
     if not candidates:
         return None

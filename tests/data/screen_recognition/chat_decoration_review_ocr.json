@@ -1,0 +1,74 @@
+{
+  "artifact_path": "C:\\Users\\lebel\\pnc\\artifacts\\2026-09-11\\testing\\20260911T170803Z_review_compose_post_action_1_runtime_retry.png",
+  "screen_type": "pnc_chat",
+  "captured_at": "2026-09-11T17:08:03.370943+00:00",
+  "recognized_text_hints": [],
+  "unidentified_ocr_lines": [
+    {
+      "text": "Change",
+      "normalized_text": "CHANGE",
+      "bounds": {
+        "x": 182,
+        "y": 22,
+        "width": 181,
+        "height": 51
+      },
+      "confidence": 0.8553216797964913
+    },
+    {
+      "text": "Chat Decoration",
+      "normalized_text": "CHATDECORATION",
+      "bounds": {
+        "x": 104,
+        "y": 114,
+        "width": 245,
+        "height": 32
+      },
+      "confidence": 0.9106046482920647
+    },
+    {
+      "text": "Background",
+      "normalized_text": "BACKGROUND",
+      "bounds": {
+        "x": 583,
+        "y": 114,
+        "width": 185,
+        "height": 34
+      },
+      "confidence": 0.8992970206520774
+    },
+    {
+      "text": "EffectPreview",
+      "normalized_text": "EFFECTPREVIEW",
+      "bounds": {
+        "x": 354,
+        "y": 212,
+        "width": 194,
+        "height": 29
+      },
+      "confidence": 0.8684008121490479
+    },
+    {
+      "text": "\"S11234567\"",
+      "normalized_text": "S11234567",
+      "bounds": {
+        "x": 548,
+        "y": 310,
+        "width": 181,
+        "height": 32
+      },
+      "confidence": 0.8406859586636225
+    },
+    {
+      "text": "\"ABCABCABCABCABC\"",
+      "normalized_text": "ABCABCABCABCABC",
+      "bounds": {
+        "x": 388,
+        "y": 389,
+        "width": 269,
+        "height": 26
+      },
+      "confidence": 0.9091688361432817
+    }
+  ]
+}
