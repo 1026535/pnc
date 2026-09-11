@@ -21,6 +21,7 @@ from pnc_automation.app.authoring.config.models import (
     AppConfig,
     CastleIdentity,
     DefaultsConfig,
+    LiveAutomationRole,
     RuntimeConfig,
 )
 from pnc_automation.app.entrypoints.cli import _run_daily_maintenance
@@ -120,7 +121,14 @@ def _app_config() -> AppConfig:
         defaults=DefaultsConfig(),
         runtime=RuntimeConfig(),
         instances=(BlueStacksInstanceConfig("instance", "Instance", "game"),),
-        accounts=(AccountConfig("account", "instance", "pnc"),),
+        accounts=(
+            AccountConfig(
+                "account",
+                "instance",
+                "pnc",
+                live_roles=frozenset({LiveAutomationRole.DAILY_CANARY}),
+            ),
+        ),
     )
 
 

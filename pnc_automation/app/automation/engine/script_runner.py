@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -17,7 +17,7 @@ from pnc_automation.app.automation.engine.runner import AutomationRunner, RunRes
 from pnc_automation.app.authoring.scripts.loader import load_run_script
 from pnc_automation.app.authoring.scripts.models import RunScript, ScriptStep
 from pnc_automation.app.authoring.scripts.registry import TaskRegistry
-from pnc_automation.app.automation.engine.task import TaskId
+from pnc_automation.app.automation.engine.task import TaskId, TaskStatus
 from pnc_automation.app.pnc.domain.action_requests import SwipeGesturePrimitive
 from pnc_automation.app.pnc.domain.observation import Observation
 from pnc_automation.app.authoring.mail.loader import (
@@ -32,7 +32,13 @@ from pnc_automation.core.infra.capture.screenshot_service import CapturedScreens
 from pnc_automation.app.pnc.persistence.castle_roster_store import CastleRosterStore
 from pnc_automation.app.pnc.persistence.world_map_movement_calibration_store import WorldMapMovementCalibrationStore
 from pnc_automation.app.pnc.persistence.world_map_survey_debug_store import WorldMapSurveyDebugStore
-from pnc_automation.app.authoring.config.models import AccountConfig, AppConfig, CastleIdentity, PncAccountCastleRosterConfig
+from pnc_automation.app.authoring.config.models import (
+    AccountConfig,
+    AppConfig,
+    CastleIdentity,
+    LiveAutomationRole,
+    PncAccountCastleRosterConfig,
+)
 from pnc_automation.core.infra.emulator.bluestacks_instance import BlueStacksInstance
 from pnc_automation.core.infra.emulator.bluestacks_instance_resolver import BlueStacksInstanceResolver
 from pnc_automation.app.pnc.navigation.world_map_movement_calibration import WorldMapMovementCalibrationService
@@ -43,6 +49,12 @@ from pnc_automation.app.pnc.navigation.world_map_search import (
 )
 from pnc_automation.app.pnc.navigation.world_map_survey_recorder import WorldMapSurveyRecorder
 from pnc_automation.core.infra.emulator.session import BlueStacksSession
+from pnc_automation.bluestacks_management.instance_lease import (
+    PROCESS_INSTANCE_LEASES,
+    InstanceLeaseBundle,
+    InstanceLeaseRegistry,
+    ProcessInstanceLease,
+)
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
 from pnc_automation.app.pnc.vision.observation_builder import ObservationBuilder, ObservationService
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
@@ -61,6 +73,21 @@ class ConnectedAccountRuntime:
     world_map_movement_calibration_store: WorldMapMovementCalibrationStore
     observed_action_executor: ObservedActionExecutor | None
 
+    def close(self) -> None:
+        """Releases the connected session's operation lease."""
+
+        self.session.close()
+
+    def __enter__(self) -> "ConnectedAccountRuntime":
+        """Enters an explicitly scoped connected runtime."""
+
+        return self
+
+    def __exit__(self, _exception_type: object, _exception: object, _traceback: object) -> None:
+        """Releases the connected runtime on normal or exceptional exit."""
+
+        self.close()
+
     def require_observed_action_executor(self, reason: str) -> ObservedActionExecutor:
         """Returns the selector-backed executor required by live connected-runtime operations."""
 
@@ -75,6 +102,21 @@ class ConnectedAutomationRuntime:
 
     runtime: ConnectedAccountRuntime
     runner: AutomationRunner
+
+    def close(self) -> None:
+        """Releases the shared connected runtime and its operation lease."""
+
+        self.runtime.close()
+
+    def __enter__(self) -> "ConnectedAutomationRuntime":
+        """Enters an explicitly scoped connected runtime bundle."""
+
+        return self
+
+    def __exit__(self, _exception_type: object, _exception: object, _traceback: object) -> None:
+        """Releases the connected runtime bundle on exit."""
+
+        self.close()
 
 
 @dataclass(slots=True)
@@ -92,6 +134,29 @@ class ScriptRunner:
     instance_resolver: BlueStacksInstanceResolver
     logger: logging.LoggerAdapter
     p2_observation_builder_factory: Callable[[], ObservationBuilder] | None = None
+    instance_lease_registry: InstanceLeaseRegistry = field(
+        default_factory=lambda: PROCESS_INSTANCE_LEASES,
+        repr=False,
+    )
+
+    def reserve_accounts(
+        self,
+        account_ids: tuple[str, ...],
+        *,
+        timeout_seconds: float | None = None,
+    ) -> InstanceLeaseBundle:
+        """Reserves a complete multi-instance bundle before any account session connects."""
+
+        display_names = tuple(
+            dict.fromkeys(
+                self.config.require_instance(self.config.require_account(account_id).instance_id).display_name
+                for account_id in account_ids
+            )
+        )
+        return self.instance_lease_registry.acquire_bundle(
+            display_names,
+            timeout_seconds=timeout_seconds,
+        )
 
     def run(
         self,
@@ -99,6 +164,7 @@ class ScriptRunner:
         account_id: str,
         script_path: str,
         castle_refs: list[str] | None = None,
+        required_role: LiveAutomationRole | None = None,
     ) -> RunResult:
         """Executes the selected script for one account and optional ordered castle aliases."""
 
@@ -106,6 +172,7 @@ class ScriptRunner:
             account_id=account_id,
             script=load_run_script(script_path),
             castle_refs=castle_refs,
+            required_role=required_role,
         )
 
     def run_script(
@@ -114,11 +181,17 @@ class ScriptRunner:
         account_id: str,
         script: RunScript,
         castle_refs: list[str] | None = None,
+        required_role: LiveAutomationRole | None = None,
     ) -> RunResult:
         """Executes one loaded script for an account and optional ordered castle aliases."""
 
         account = self.config.require_account(account_id)
-        return self._run_script_for_account(account=account, script=script, castle_refs=castle_refs)
+        return self._run_script_for_account(
+            account=account,
+            script=script,
+            castle_refs=castle_refs,
+            required_role=required_role,
+        )
 
     def _run_script_for_account(
         self,
@@ -126,6 +199,7 @@ class ScriptRunner:
         account: AccountConfig,
         script: RunScript,
         castle_refs: list[str] | None = None,
+        required_role: LiveAutomationRole | None = None,
     ) -> RunResult:
         """Executes one already-loaded run script for one already-resolved account target."""
 
@@ -134,21 +208,25 @@ class ScriptRunner:
             castle_targets=self.config.find_castle_targets(account.id),
             castle_refs=castle_refs,
         )
-        runner, castle_roster_provider = self._build_runner(account)
-        return runner.run(
-            account,
-            prepared_script,
-            castle_roster_provider=castle_roster_provider,
-            castle_roster_store=self.castle_roster_store,
-            mail_archive_store=self.mail_archive_store,
-            chat_archive_store=self.chat_archive_store,
-        )
+        runner, castle_roster_provider = self._build_runner(account, required_role=required_role)
+        try:
+            return runner.run(
+                account,
+                prepared_script,
+                castle_roster_provider=castle_roster_provider,
+                castle_roster_store=self.castle_roster_store,
+                mail_archive_store=self.mail_archive_store,
+                chat_archive_store=self.chat_archive_store,
+            )
+        finally:
+            runner.close()
 
     def prepare_account_session(
         self,
         *,
         account_id: str,
         castle: CastleIdentity | None = None,
+        required_role: LiveAutomationRole | None = None,
     ) -> RunResult:
         """Runs the canonical session-preparation path for one account and optional castle target."""
 
@@ -159,6 +237,7 @@ class ScriptRunner:
                 path=Path("<generated:prepare_account_session>"),
                 steps=_prepare_account_session_steps(castle),
             ),
+            required_role=required_role,
         )
 
     def run_task(
@@ -167,6 +246,7 @@ class ScriptRunner:
         account_id: str,
         task_id: TaskId,
         params: dict[str, Any] | None = None,
+        required_role: LiveAutomationRole | None = None,
     ) -> StepRunResult:
         """Runs one task step against the selected account using current-castle semantics."""
 
@@ -177,6 +257,7 @@ class ScriptRunner:
                 path=Path(f"<generated:{task_id.value}>"),
                 steps=(ScriptStep(task=task_id, params={} if params is None else params),),
             ),
+            required_role=required_role,
         )
         return result.steps[0]
 
@@ -186,6 +267,7 @@ class ScriptRunner:
         account_id: str,
         schedule_ids: list[str] | None = None,
         scheduled_for_utc: datetime | None = None,
+        required_role: LiveAutomationRole | None = None,
     ) -> RunResult:
         """Resolves the due authored mail schedules and executes them as canonical send-mail steps."""
 
@@ -208,17 +290,39 @@ class ScriptRunner:
                 scheduled_hour_utc=scheduled_hour,
                 due_mail_dispatches=due_mail_dispatches,
             ),
+            required_role=required_role,
         )
 
-    def build_connected_runtime(self, *, account: AccountConfig) -> ConnectedAccountRuntime:
+    def build_connected_runtime(
+        self,
+        *,
+        account: AccountConfig,
+        required_role: LiveAutomationRole | None = None,
+    ) -> ConnectedAccountRuntime:
         """Builds the canonical connected session plus observation-owned runtime helpers for one configured account."""
 
+        if required_role is not None:
+            account.require_live_role(required_role)
         return self._build_connected_runtime_services(account=account)
 
     def _build_connected_runtime_services(self, *, account: AccountConfig) -> ConnectedAccountRuntime:
         """Builds the canonical connected runtime service graph shared by tooling and automation runs."""
 
         session = self.build_connected_session(account=account)
+        try:
+            return self._build_connected_runtime_services_for_session(account=account, session=session)
+        except BaseException:
+            session.close()
+            raise
+
+    def _build_connected_runtime_services_for_session(
+        self,
+        *,
+        account: AccountConfig,
+        session: BlueStacksSession,
+    ) -> ConnectedAccountRuntime:
+        """Builds service helpers for a session whose lease is already owned by this operation."""
+
         observation_service = self._build_observation_service(account=account, session=session)
         flow_planner = ScreenFlowPlanner()
         world_map_survey_recorder = WorldMapSurveyRecorder(
@@ -273,15 +377,27 @@ class ScriptRunner:
             observed_action_executor=observed_executor,
         )
 
-    def build_connected_automation_runner(self, *, account: AccountConfig) -> AutomationRunner:
+    def build_connected_automation_runner(
+        self,
+        *,
+        account: AccountConfig,
+        required_role: LiveAutomationRole | None = None,
+    ) -> AutomationRunner:
         """Builds one connected automation runner through the same canonical runtime wiring used by `run_script()`."""
 
-        runner, _ = self._build_runner(account)
+        runner, _ = self._build_runner(account, required_role=required_role)
         return runner
 
-    def build_connected_runtime_bundle(self, *, account: AccountConfig) -> ConnectedAutomationRuntime:
+    def build_connected_runtime_bundle(
+        self,
+        *,
+        account: AccountConfig,
+        required_role: LiveAutomationRole | None = None,
+    ) -> ConnectedAutomationRuntime:
         """Builds feature services and an automation runner that share one connected service graph."""
 
+        if required_role is not None:
+            account.require_live_role(required_role)
         connected_runtime = self._build_connected_runtime_services(account=account)
         return ConnectedAutomationRuntime(
             runtime=connected_runtime,
@@ -294,6 +410,8 @@ class ScriptRunner:
     def _build_runner(
         self,
         account: AccountConfig,
+        *,
+        required_role: LiveAutomationRole | None = None,
     ) -> tuple[AutomationRunner, Callable[[], PncAccountCastleRosterConfig | None]]:
         """Builds one connected runtime runner and roster provider for a specific account."""
 
@@ -304,6 +422,8 @@ class ScriptRunner:
                 return self.castle_roster_store.get(account.pnc_account_id)
             return self.config.find_castle_roster(account.pnc_account_id)
 
+        if required_role is not None:
+            account.require_live_role(required_role)
         connected_runtime = self._build_connected_runtime_services(account=account)
         return (
             self._build_automation_runner_from_services(
@@ -321,25 +441,43 @@ class ScriptRunner:
     ) -> AutomationRunner:
         """Builds a runner over an already-created connected service graph."""
 
-        observed_action_executor = connected_runtime.require_observed_action_executor(
-            "Automation runner requires an observation builder exposing selector_registry."
-        )
-        shared_extra = self._build_shared_extra(account=account, instance=connected_runtime.session.instance)
-        return AutomationRunner(
-            defaults=self.config.defaults,
-            observation_service=connected_runtime.observation_service,
-            world_map_survey_recorder=connected_runtime.world_map_survey_recorder,
-            world_map_search_service=connected_runtime.world_map_search_service,
-            action_executor=observed_action_executor,
-            task_registry=self.task_registry,
-            flow_planner=connected_runtime.flow_planner,
-            logger=logging.LoggerAdapter(self.logger.logger, extra={**self.logger.extra, **shared_extra}),
-        )
+        try:
+            observed_action_executor = connected_runtime.require_observed_action_executor(
+                "Automation runner requires an observation builder exposing selector_registry."
+            )
+            shared_extra = self._build_shared_extra(account=account, instance=connected_runtime.session.instance)
+            return AutomationRunner(
+                defaults=self.config.defaults,
+                observation_service=connected_runtime.observation_service,
+                world_map_survey_recorder=connected_runtime.world_map_survey_recorder,
+                world_map_search_service=connected_runtime.world_map_search_service,
+                action_executor=observed_action_executor,
+                task_registry=self.task_registry,
+                flow_planner=connected_runtime.flow_planner,
+                logger=logging.LoggerAdapter(self.logger.logger, extra={**self.logger.extra, **shared_extra}),
+                close_callback=connected_runtime.close,
+            )
+        except BaseException:
+            connected_runtime.close()
+            raise
 
-    def build_connected_session(self, *, account: AccountConfig) -> BlueStacksSession:
+    def build_connected_session(
+        self,
+        *,
+        account: AccountConfig,
+        required_role: LiveAutomationRole | None = None,
+    ) -> BlueStacksSession:
         """Resolves, logs, connects, and validates one canonical BlueStacks session for the selected account."""
 
-        instance = self._resolve_instance(account=account)
+        if required_role is not None:
+            account.require_live_role(required_role)
+        instance_config = self.config.require_instance(account.instance_id)
+        instance_lease = self.instance_lease_registry.acquire(display_name=instance_config.display_name)
+        try:
+            instance = self._resolve_instance(account=account)
+        except BaseException:
+            instance_lease.release()
+            raise
         logging.LoggerAdapter(
             self.logger.logger,
             extra={
@@ -351,9 +489,19 @@ class ScriptRunner:
         ).info(
             f"Resolved BlueStacks instance '{instance.display_name}' to '{instance.device_id}'.",
         )
-        session = BlueStacksSession(adb_client=self.adb_client, instance=instance)
-        session.connect()
-        session.ensure_responsive()
+        session = BlueStacksSession(
+            adb_client=self.adb_client,
+            instance=instance,
+            lease_registry=self.instance_lease_registry,
+            capabilities=account.bluestacks_capabilities,
+            instance_lease=instance_lease,
+        )
+        try:
+            session.connect()
+            session.ensure_responsive()
+        except BaseException:
+            session.close()
+            raise
         return session
 
     def _build_observation_service(
@@ -378,7 +526,10 @@ class ScriptRunner:
         """Resolves the configured BlueStacks display name for one account into a live runtime target."""
 
         instance_config = self.config.require_instance(account.instance_id)
-        return self.instance_resolver.resolve(instance_config)
+        return self.instance_resolver.resolve(
+            instance_config,
+            allow_launch=account.bluestacks_capabilities.allow_instance_launch,
+        )
 
     def _build_shared_extra(self, *, account: AccountConfig, instance: BlueStacksInstance) -> dict[str, str]:
         """Builds the shared structured log context for one account-bound runtime session."""
@@ -386,7 +537,6 @@ class ScriptRunner:
         return {
             "account_id": account.id,
             "instance_id": instance.id,
-            "pnc_account_id": account.pnc_account_id,
         }
 
     def _build_observed_action_executor(
@@ -424,6 +574,15 @@ def configure_world_map_movement_budget(runtime: ConnectedAccountRuntime, moveme
         raise ValueError("World-map movement step budget must be positive.")
     runtime.world_map_movement_calibration_service.movement_step_budget = movement_step_budget
     runtime.world_map_search_service.movement_step_budget = movement_step_budget
+
+
+def require_successful_preparation(result: RunResult) -> RunResult:
+    """Requires every preparation step to finish successfully or be safely skipped."""
+
+    accepted_statuses = {TaskStatus.SUCCESS, TaskStatus.SKIPPED}
+    if not result.steps or any(step.status not in accepted_statuses for step in result.steps):
+        raise RuntimeError(f"Account session preparation failed: {result.steps}")
+    return result
 
 
 def configure_world_map_movement_granularity(

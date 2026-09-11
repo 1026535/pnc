@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from uuid import uuid4
 
-from pnc_automation.app.authoring.config.models import AccountConfig, CastleIdentity
+from pnc_automation.app.authoring.config.models import AccountConfig, CastleIdentity, LiveAutomationRole
 from pnc_automation.app.pnc.domain.observation import CurrentCastleEvidenceKind, Observation
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.vision.navigation_perception import NavigationPerception
@@ -33,6 +33,21 @@ class CoreRuntime:
     _run_id: str
     _capture_count: int = 0
     _last_observation: Observation | None = None
+
+    def close(self) -> None:
+        """Releases the connected runtime owned by this replacement-core operation."""
+
+        self.runtime.close()
+
+    def __enter__(self) -> "CoreRuntime":
+        """Enters an explicitly scoped replacement-core runtime."""
+
+        return self
+
+    def __exit__(self, _exception_type: object, _exception: object, _traceback: object) -> None:
+        """Releases the replacement-core runtime on exit."""
+
+        self.close()
 
     @property
     def observation_count(self) -> int:
@@ -147,12 +162,41 @@ def build_core_runtime(
     policy: NavigationPolicy | None = None,
     *,
     trace_path: Path | None = None,
+    required_role: LiveAutomationRole | None = None,
 ) -> CoreRuntime:
     """Builds exactly one connected runtime graph for replacement-core work."""
 
     if not artifact_directory.strip():
         raise ValueError("Core runtime artifact_directory cannot be empty.")
-    connected_runtime = script_runner.build_connected_runtime(account=account)
+    connected_runtime = script_runner.build_connected_runtime(
+        account=account,
+        required_role=required_role,
+    )
+    try:
+        return _assemble_core_runtime(
+            script_runner=script_runner,
+            connected_runtime=connected_runtime,
+            account=account,
+            artifact_directory=artifact_directory,
+            policy=policy,
+            trace_path=trace_path,
+        )
+    except BaseException:
+        connected_runtime.close()
+        raise
+
+
+def _assemble_core_runtime(
+    *,
+    script_runner: ScriptRunner,
+    connected_runtime: ConnectedAccountRuntime,
+    account: AccountConfig,
+    artifact_directory: str,
+    policy: NavigationPolicy | None,
+    trace_path: Path | None,
+) -> CoreRuntime:
+    """Assembles replacement-core services while the caller owns the connected runtime."""
+
     executor = connected_runtime.require_observed_action_executor(
         "Replacement navigation requires the canonical selector-backed action executor."
     )

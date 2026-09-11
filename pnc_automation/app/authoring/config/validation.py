@@ -13,6 +13,7 @@ from pnc_automation.app.authoring.config.models import (
     PncAccountCastleRosterConfig,
     castle_identity_key,
 )
+from pnc_automation.core.config.host import validate_live_roles
 from pnc_automation.core.errors import ConfigurationError
 
 
@@ -72,6 +73,7 @@ def _validate_account(account: AccountConfig, instance_ids: set[str]) -> None:
             account_id=account.id,
             instance_id=account.instance_id,
         )
+    validate_live_roles(account.live_roles, account_id=account.id)
     if account.pnc_account_id.strip() == "":
         raise ConfigurationError(
             f"Account '{account.id}' has an empty P&C account identifier.",

@@ -25,7 +25,7 @@ from pnc_automation.app.pnc.persistence.mail_archive_store import MailArchiveSto
 from pnc_automation.core.infra.capture.screenshot_service import ScreenshotService
 from pnc_automation.app.pnc.persistence.castle_roster_store import CastleRosterStore
 from pnc_automation.app.authoring.config.loader import load_app_config
-from pnc_automation.app.authoring.config.models import AppConfig, CastleIdentity
+from pnc_automation.app.authoring.config.models import AppConfig, CastleIdentity, LiveAutomationRole
 from pnc_automation.core.infra.diagnostics.logging_setup import configure_logging
 from pnc_automation.core.infra.emulator.bluestacks_instance_resolver import BlueStacksInstanceResolver
 from pnc_automation.app.pnc.vision.observation_builder import (
@@ -38,6 +38,7 @@ from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservatio
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
 from pnc_automation.app.pnc.vision.selectors import SelectorRegistry, build_default_selector_registry
 from pnc_automation.app.pnc.vision.visual_screen_recognizer import load_visual_screen_recognizer
+from pnc_automation.bluestacks_management.instance_lease import InstanceLeaseBundle
 from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
 
 
@@ -47,12 +48,18 @@ class ApplicationRunner:
 
     script_runner: ScriptRunner
 
+    def reserve_accounts(self, account_ids: tuple[str, ...]) -> InstanceLeaseBundle:
+        """Reserves every physical instance used by the supplied accounts."""
+
+        return self.script_runner.reserve_accounts(account_ids)
+
     def run(
         self,
         *,
         account_id: str,
         script_path: str,
         castle_refs: list[str] | None = None,
+        required_role: LiveAutomationRole | None = None,
     ) -> RunResult:
         """Executes one script for an account and optional ordered castle aliases."""
 
@@ -60,6 +67,7 @@ class ApplicationRunner:
             account_id=account_id,
             script_path=script_path,
             castle_refs=castle_refs,
+            required_role=required_role,
         )
 
     def prepare_account_session(
@@ -67,10 +75,15 @@ class ApplicationRunner:
         *,
         account_id: str,
         castle: CastleIdentity | None = None,
+        required_role: LiveAutomationRole | None = None,
     ) -> RunResult:
         """Runs the canonical login-and-optional-castle-alignment preparation path."""
 
-        return self.script_runner.prepare_account_session(account_id=account_id, castle=castle)
+        return self.script_runner.prepare_account_session(
+            account_id=account_id,
+            castle=castle,
+            required_role=required_role,
+        )
 
     def run_task(
         self,
@@ -78,10 +91,16 @@ class ApplicationRunner:
         account_id: str,
         task_id: TaskId,
         params: dict[str, object] | None = None,
+        required_role: LiveAutomationRole | None = None,
     ) -> StepRunResult:
         """Runs one direct task call against the current live session state."""
 
-        return self.script_runner.run_task(account_id=account_id, task_id=task_id, params=params)
+        return self.script_runner.run_task(
+            account_id=account_id,
+            task_id=task_id,
+            params=params,
+            required_role=required_role,
+        )
 
     def run_mail_schedules(
         self,
@@ -89,6 +108,7 @@ class ApplicationRunner:
         account_id: str,
         schedule_ids: list[str] | None = None,
         scheduled_for_utc: datetime | None = None,
+        required_role: LiveAutomationRole | None = None,
     ) -> RunResult:
         """Runs the authored scheduled-mail expansion path for one account."""
 
@@ -96,6 +116,7 @@ class ApplicationRunner:
             account_id=account_id,
             schedule_ids=schedule_ids,
             scheduled_for_utc=scheduled_for_utc,
+            required_role=required_role,
         )
 
     def run_daily_quest_status(self, *, account_id: str) -> CoreWorkflowResult[DailyQuestStatusResult]:
@@ -106,9 +127,13 @@ class ApplicationRunner:
             self.script_runner,
             account,
             account.artifact_directory_name,
+            required_role=LiveAutomationRole.DAILY_CANARY,
         )
-        core_runtime.preflight_active_castle_identity()
-        return CoreWorkflowRunner[DailyQuestStatusResult](core_runtime).run(DailyQuestStatusWorkflow())
+        try:
+            core_runtime.preflight_active_castle_identity()
+            return CoreWorkflowRunner[DailyQuestStatusResult](core_runtime).run(DailyQuestStatusWorkflow())
+        finally:
+            core_runtime.close()
 
 
 def build_application_runner(

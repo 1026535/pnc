@@ -11,9 +11,11 @@ from typing import Any
 from pnc_automation.app.runtime.observation_mode import ObservationMode
 from pnc_automation.app import ApplicationRunner, build_application_runner
 from pnc_automation.app.automation.engine.runner import RunResult, StepRunResult
+from pnc_automation.app.automation.engine.script_runner import require_successful_preparation
 from pnc_automation.app.automation.engine.task import TaskId
 from pnc_automation.app.authoring.config.models import CastleIdentity
 from pnc_automation.app.pnc.domain.building_priority_input import resolve_building_priority_values
+from pnc_automation.bluestacks_management.instance_lease import InstanceLeaseBundle
 
 _ACTIVE_SESSION: ContextVar["_ActiveSession | None"] = ContextVar("pnc_automation_active_session", default=None)
 _DEFAULT_API: "AutomationApi | None" = None
@@ -35,22 +37,40 @@ class AutomationSession:
     account_id: str
     castle: CastleIdentity | None = None
     preparation_result: RunResult | None = None
+    _reservation: InstanceLeaseBundle | None = field(default=None, init=False, repr=False)
     _token: Token[_ActiveSession | None] | None = field(default=None, init=False, repr=False)
 
     def __enter__(self) -> "AutomationSession":
         """Prepares the account session and exposes it as the active direct-call scope."""
 
-        self.preparation_result = self.api.prepare_account_session(account_id=self.account_id, castle=self.castle)
-        self._token = _ACTIVE_SESSION.set(_ActiveSession(api=self.api, account_id=self.account_id))
-        return self
+        reservation = self.api.application.reserve_accounts((self.account_id,))
+        try:
+            self.preparation_result = require_successful_preparation(
+                self.api.prepare_account_session(
+                    account_id=self.account_id,
+                    castle=self.castle,
+                )
+            )
+            self._reservation = reservation
+            self._token = _ACTIVE_SESSION.set(_ActiveSession(api=self.api, account_id=self.account_id))
+            return self
+        except BaseException:
+            reservation.close()
+            raise
 
     def __exit__(self, exc_type: object, exc: object, traceback: object) -> None:
         """Leaves the active scope without logging out or restoring a previous castle."""
 
         del exc_type, exc, traceback
-        if self._token is not None:
-            _ACTIVE_SESSION.reset(self._token)
-            self._token = None
+        try:
+            if self._token is not None:
+                _ACTIVE_SESSION.reset(self._token)
+                self._token = None
+        finally:
+            reservation = self._reservation
+            self._reservation = None
+            if reservation is not None:
+                reservation.close()
 
     def building_upgrade(
         self,

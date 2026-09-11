@@ -11,6 +11,7 @@ from _script_bootstrap import ensure_repo_root_on_path
 root = ensure_repo_root_on_path()
 
 from pnc_automation.app import build_application_runner
+from pnc_automation.app.authoring.config.models import LiveAutomationRole
 from pnc_automation.app.automation.engine.script_runner import ConnectedAccountRuntime, ScriptRunner
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.navigation_selector_validator import (
@@ -54,7 +55,10 @@ def main() -> int:
     )
     script_runner = application.script_runner
     account = script_runner.config.require_account(arguments.account)
-    runtime = script_runner.build_connected_runtime(account=account)
+    runtime = script_runner.build_connected_runtime(
+        account=account,
+        required_role=LiveAutomationRole.LIVE_TESTING,
+    )
     validator = _build_navigation_selector_validator(script_runner=script_runner, runtime=runtime)
     report = validator.validate(
         selector_ids=None if not arguments.selector else tuple(_require_ui_element_id(item) for item in arguments.selector)

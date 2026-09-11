@@ -6,6 +6,15 @@ archives:
 
 runtime:
   observation_mode: debug
+  # A supervised monitor may restart only idle, role-eligible instances after
+  # sustained working-set growth. Accounts with read_only are always excluded.
+  bluestacks_memory:
+    enabled: false
+    max_working_set_mb: 3072
+    consecutive_over_limit_samples: 3
+    sample_interval_seconds: 60
+    restart_cooldown_seconds: 1800
+    restart_roles: [smoke_test, live_testing, daily_canary]
 
 defaults:
   adb_path: adb
@@ -25,6 +34,8 @@ accounts:
   - id: primary-account
     instance_id: bs-main
     pnc_account_id: your_pnc_account_id
+    # Explicit workflow eligibility; omit both roles for inventory/manual-only accounts.
+    live_roles: [smoke_test]
     username: your-email@example.com
     password: your-password
 
