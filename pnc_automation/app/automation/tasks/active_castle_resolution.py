@@ -73,7 +73,11 @@ def plan_active_castle_resolution(
     )
     if resolved is not None:
         return []
-    if observation.screen_type in {ScreenType.PNC_HOME_CITY, ScreenType.PNC_MORE_MENU}:
+    if observation.screen_type in {
+        ScreenType.PNC_HOME_CITY,
+        ScreenType.PNC_MORE_MENU,
+        ScreenType.PNC_SETTINGS,
+    }:
         return context.flows.open_lord_info(observation)
     if observation.screen_type == ScreenType.PNC_LORD_INFO:
         if observation.current_castle_name is None or observation.current_castle_name.strip() == "":

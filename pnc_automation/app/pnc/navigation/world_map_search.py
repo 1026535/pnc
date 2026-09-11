@@ -137,6 +137,15 @@ class WorldMapObservedActionExecutor(Protocol):
     ) -> Any:
         """Executes actions and returns an object exposing the freshest observation."""
 
+    def recover_interruption_if_required(
+        self,
+        observation: Observation,
+        *,
+        label_prefix: str,
+        observe: Any,
+    ) -> Observation | None:
+        """Recovers an exact update or safe transient popup through the shared executor owner."""
+
 
 class WorldMapSearchOriginKind(StrEnum):
     """Defines the supported origin-resolution modes for one search request."""
@@ -2379,15 +2388,18 @@ class ObservationBackedWorldMapCastleInspector:
         """Returns a world-map-ready observation through the canonical shared screen-flow entry seam."""
 
         current = observation
-        for step_index in range(self.movement_step_budget):
-            if current.blocking_popup or current.screen_type == ScreenType.PNC_POPUP:
-                actions = self.screen_flows.close_blocking_popup(current)
-                if not actions:
-                    raise SelectorResolutionError(
-                        "Castle inspection could not derive a popup-dismissal action while returning to world map.",
-                        screen_type=current.screen_type,
-                    )
-                current = self._execute_actions(actions, current, label_prefix=f"{label_prefix}_close_popup_{step_index}")
+        step_index = 0
+        while step_index < self.movement_step_budget:
+            recovered = self.action_executor.recover_interruption_if_required(
+                current,
+                label_prefix=f"{label_prefix}_interruption",
+                observe=lambda label, request=None: self.observation_service.observe(
+                    f"{label_prefix}_{label}",
+                    request=request,
+                ),
+            )
+            if recovered is not None:
+                current = recovered
                 continue
             if current.screen_type == ScreenType.UNKNOWN:
                 actions = self.screen_flows.recover_unknown_game_screen(
@@ -2414,6 +2426,7 @@ class ObservationBackedWorldMapCastleInspector:
                     screen_type=current.screen_type,
                 )
             current = self._execute_actions(actions, current, label_prefix=f"{label_prefix}_{step_index}")
+            step_index += 1
         raise SelectorResolutionError(
             "Castle inspection exhausted its bounded world-map return budget.",
             screen_type=current.screen_type,

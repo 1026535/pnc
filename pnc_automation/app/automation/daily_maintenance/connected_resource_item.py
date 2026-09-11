@@ -137,6 +137,7 @@ class ConnectedResourceItemSession:
                 )
             elif current.screen_type in {
                 ScreenType.PNC_MORE_MENU,
+                ScreenType.PNC_SETTINGS,
                 ScreenType.PNC_CASTLE_SELECTION,
                 ScreenType.PNC_QUEST_DAILY,
             }:
@@ -183,12 +184,10 @@ class ConnectedResourceItemSession:
         label: str,
         request: ObservationRequest | None = None,
     ) -> Observation:
-        """Captures one frame and globally recovers an exact required-update popup."""
+        """Captures one frame and delegates interruption recovery to the shared executor."""
 
         observation = self.observation_service.observe(label, request=request)
-        if not observation.has(UiElementId.PNC_UPDATE_CONFIRM_BUTTON):
-            return observation
-        recovered = self.action_executor.recover_update_if_required(
+        recovered = self.action_executor.recover_interruption_if_required(
             observation,
             label_prefix=f"{label}_update",
             observe=lambda follow_up_label, request=None: self.observation_service.observe(
@@ -197,7 +196,7 @@ class ConnectedResourceItemSession:
             ),
         )
         if recovered is None:
-            raise AssertionError("Required-update recovery returned no observation for a detected Confirm control.")
+            return observation
         return recovered
 
     def _stable(self, label: str, *, extra_retries: int = 0) -> Observation:

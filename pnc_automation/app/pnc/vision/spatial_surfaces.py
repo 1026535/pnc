@@ -798,6 +798,12 @@ def _classify_home_city_object(
     viewport_offset_ratio = _bounds_center_offset_ratio(bounds=bounds, viewport_bounds=viewport_bounds)
     object_definition = home_city_object_definition_for_label(line.text)
     if object_definition is not None:
+        action_x, action_y = bounds.center()
+        action_y += round(image.height * object_definition.label_tap_offset_y_ratio)
+        if object_definition.label_tap_offset_y_ratio and not image.height * 0.18 <= action_y <= image.height * 0.82:
+            # The label alone cannot authorize a tap when the reviewed body point
+            # would fall under persistent HUD chrome.
+            return None
         metadata = build_home_city_object_metadata(object_definition.id)
         metadata["home_city_label"] = line.text.strip()
         return DetectedSpatialObject(
@@ -805,7 +811,7 @@ def _classify_home_city_object(
             bounds=bounds,
             relationship=SpatialObjectRelationship.SELF,
             name_text=line.text.strip(),
-            action_point=bounds.center(),
+            action_point=(action_x, action_y),
             viewport_offset=viewport_offset,
             viewport_offset_ratio=viewport_offset_ratio,
             metadata=metadata,

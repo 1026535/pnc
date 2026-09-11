@@ -437,7 +437,13 @@ class NavigationSelectorValidator:
                     label_prefix=f"{popup_label_prefix}_post_action_1",
                 )
                 continue
-            return latest_capture
+            # The executor may already have dismissed the popup and returned its
+            # transitional loading frame. Settle that frame before judging the route.
+            return self._settle_destination_capture(
+                case,
+                latest_capture,
+                label_prefix=f"navigation_validation_{case_index}_settle_destination",
+            )
         return latest_capture
 
     def _settle_destination_capture(
@@ -575,6 +581,11 @@ def _plan_navigation_source_actions(
         return screen_flows.ensure_home_city(observation)
     if case.source_screen == ScreenType.PNC_WORLD_MAP:
         return screen_flows.open_world_map(observation)
+    if case.source_screen == ScreenType.PNC_SETTINGS:
+        if observation.screen_type == ScreenType.PNC_SETTINGS:
+            return []
+        actions = screen_flows.open_castle_selection(observation)
+        return actions[:1]
     if case.source_screen != ScreenType.PNC_MORE_MENU:
         raise SelectorResolutionError(
             "Navigation selector validation does not support the declared source screen yet.",
@@ -585,14 +596,6 @@ def _plan_navigation_source_actions(
         return screen_flows.open_more_menu(observation)
     if observation.has(case.selector_id):
         return []
-    if observation.has(UiElementId.PNC_MORE_SETTINGS) and case.selector_id != UiElementId.PNC_MORE_SETTINGS:
-        return [
-            TapAction(
-                selector_id=UiElementId.PNC_MORE_SETTINGS,
-                reason="expose_more_menu_selector",
-                observe_after=True,
-            )
-        ]
     return []
 
 

@@ -1,0 +1,794 @@
+{
+  "version": 1,
+  "reference_size": [
+    540,
+    960
+  ],
+  "profiles": [
+    {
+      "id": "hero_hall",
+      "screen": "PNC_HERO_HALL",
+      "anchors": [
+        {
+          "image": "screen_anchors/hero_hall_0.png",
+          "search_region": [
+            105,
+            3,
+            174,
+            43
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/hero_hall_1.png",
+          "search_region": [
+            85,
+            63,
+            181,
+            43
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/core_institute_pnc_back_button_top_left.png",
+            "search_region": [
+              22,
+              8,
+              58,
+              38
+            ],
+            "threshold": 0.93
+          }
+        }
+      ]
+    },
+    {
+      "id": "event_center",
+      "screen": "PNC_EVENT_CENTER",
+      "anchors": [
+        {
+          "image": "screen_anchors/event_center_0.png",
+          "search_region": [
+            98,
+            3,
+            199,
+            40
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/event_center_1.png",
+          "search_region": [
+            7,
+            40,
+            310,
+            27
+          ],
+          "threshold": 0.93
+        }
+      ]
+    },
+    {
+      "id": "quest_daily",
+      "screen": "PNC_QUEST_DAILY",
+      "anchors": [
+        {
+          "image": "screen_anchors/quest_daily_0.png",
+          "search_region": [
+            96,
+            2,
+            105,
+            43
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/quest_daily_1.png",
+          "search_region": [
+            188,
+            67,
+            148,
+            39
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_QUEST_TAB_MAIN",
+          "anchor": {
+            "image": "screen_anchors/core_quest_daily_pnc_quest_tab_main.png",
+            "search_region": [
+              34,
+              72,
+              116,
+              27
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/core_quest_daily_pnc_back_button_top_left.png",
+            "search_region": [
+              22,
+              8,
+              58,
+              38
+            ],
+            "threshold": 0.93
+          }
+        }
+      ]
+    },
+    {
+      "id": "quest_main",
+      "screen": "PNC_QUEST_MAIN",
+      "anchors": [
+        {
+          "image": "screen_anchors/quest_main_0.png",
+          "search_region": [
+            96,
+            2,
+            105,
+            43
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/quest_main_1.png",
+          "search_region": [
+            12,
+            67,
+            148,
+            39
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_QUEST_TAB_DAILY",
+          "anchor": {
+            "image": "screen_anchors/core_quest_main_pnc_quest_tab_daily.png",
+            "search_region": [
+              212,
+              72,
+              114,
+              27
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/core_quest_main_pnc_back_button_top_left.png",
+            "search_region": [
+              22,
+              8,
+              58,
+              38
+            ],
+            "threshold": 0.93
+          }
+        }
+      ]
+    },
+    {
+      "id": "bag",
+      "screen": "PNC_BAG",
+      "anchors": [
+        {
+          "image": "screen_anchors/bag_0.png",
+          "search_region": [
+            99,
+            3,
+            68,
+            43
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/bag_1.png",
+          "search_region": [
+            300,
+            69,
+            220,
+            39
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/core_bag_pnc_back_button_top_left.png",
+            "search_region": [
+              22,
+              8,
+              58,
+              38
+            ],
+            "threshold": 0.93
+          }
+        }
+      ]
+    },
+    {
+      "id": "settings",
+      "screen": "PNC_SETTINGS",
+      "anchors": [
+        {
+          "image": "screen_anchors/settings_0.png",
+          "search_region": [
+            98,
+            3,
+            147,
+            43
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/settings_1.png",
+          "search_region": [
+            297,
+            81,
+            211,
+            49
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/core_settings_pnc_back_button_top_left.png",
+            "search_region": [
+              22,
+              8,
+              58,
+              38
+            ],
+            "threshold": 0.93
+          }
+        }
+      ]
+    },
+    {
+      "id": "more_overlay",
+      "screen": "PNC_MORE_MENU",
+      "anchors": [
+        {
+          "image": "screen_anchors/more_overlay_0.png",
+          "search_region": [
+            245,
+            825,
+            61,
+            56
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/more_overlay_1.png",
+          "search_region": [
+            465,
+            825,
+            56,
+            56
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "occludes": [
+        "PNC_HOME_CITY",
+        "PNC_WORLD_MAP"
+      ],
+      "controls": [
+        {
+          "selector": "PNC_MORE_SETTINGS",
+          "anchor": {
+            "image": "screen_anchors/core_more_overlay_pnc_more_settings.png",
+            "search_region": [
+              460,
+              855,
+              69,
+              32
+            ],
+            "threshold": 0.93
+          }
+        }
+      ]
+    },
+    {
+      "id": "manage_char",
+      "screen": "PNC_CASTLE_SELECTION",
+      "anchors": [
+        {
+          "image": "screen_anchors/manage_char_0.png",
+          "search_region": [
+            98,
+            3,
+            218,
+            43
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/manage_char_1.png",
+          "search_region": [
+            15,
+            3,
+            63,
+            43
+          ],
+          "threshold": 0.93
+        }
+      ]
+    },
+    {
+      "id": "alliance_invitation",
+      "screen": "PNC_POPUP",
+      "anchors": [
+        {
+          "image": "screen_anchors/alliance_invitation_0.png",
+          "search_region": [
+            189,
+            388,
+            297,
+            49
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/alliance_invitation_1.png",
+          "search_region": [
+            199,
+            532,
+            121,
+            31
+          ],
+          "threshold": 0.93
+        }
+      ]
+    },
+    {
+      "id": "institute",
+      "screen": "PNC_INSTITUTE",
+      "anchors": [
+        {
+          "image": "screen_anchors/institute_0.png",
+          "search_region": [
+            106,
+            9,
+            125,
+            34
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/institute_1.png",
+          "search_region": [
+            278,
+            142,
+            245,
+            40
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/core_institute_pnc_back_button_top_left.png",
+            "search_region": [
+              22,
+              8,
+              58,
+              38
+            ],
+            "threshold": 0.93
+          }
+        }
+      ]
+    },
+    {
+      "id": "goddess_statue",
+      "screen": "PNC_GODDESS_STATUE",
+      "anchors": [
+        {
+          "image": "screen_anchors/goddess_statue_0.png",
+          "search_region": [
+            106,
+            9,
+            228,
+            34
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/goddess_statue_1.png",
+          "search_region": [
+            278,
+            142,
+            239,
+            42
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/core_institute_pnc_back_button_top_left.png",
+            "search_region": [
+              22,
+              8,
+              58,
+              38
+            ],
+            "threshold": 0.93
+          }
+        }
+      ]
+    },
+    {
+      "id": "warehouse",
+      "screen": "PNC_WAREHOUSE",
+      "anchors": [
+        {
+          "image": "screen_anchors/warehouse_0.png",
+          "search_region": [
+            106,
+            9,
+            169,
+            34
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/warehouse_1.png",
+          "search_region": [
+            278,
+            142,
+            240,
+            36
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/core_institute_pnc_back_button_top_left.png",
+            "search_region": [
+              22,
+              8,
+              58,
+              38
+            ],
+            "threshold": 0.93
+          }
+        }
+      ]
+    },
+    {
+      "id": "home_city",
+      "screen": "PNC_HOME_CITY",
+      "anchors": [
+        {
+          "image": "screen_anchors/core_home_city_identity_0.png",
+          "search_region": [
+            12,
+            929,
+            65,
+            28
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/core_home_city_identity_1.png",
+          "search_region": [
+            12,
+            210,
+            45,
+            22
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_HOME_WORLD_SWITCH",
+          "anchor": {
+            "image": "screen_anchors/core_home_city_pnc_home_world_switch.png",
+            "search_region": [
+              12,
+              929,
+              65,
+              28
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_BOTTOM_NAV_QUEST",
+          "anchor": {
+            "image": "screen_anchors/core_home_city_pnc_bottom_nav_quest.png",
+            "search_region": [
+              196,
+              937,
+              52,
+              23
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_BOTTOM_NAV_BAG",
+          "anchor": {
+            "image": "screen_anchors/core_home_city_pnc_bottom_nav_bag.png",
+            "search_region": [
+              267,
+              937,
+              39,
+              23
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_BOTTOM_NAV_MORE",
+          "anchor": {
+            "image": "screen_anchors/core_home_city_pnc_bottom_nav_more.png",
+            "search_region": [
+              474,
+              937,
+              52,
+              23
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_HOME_RESEARCH_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/core_home_city_pnc_home_research_button.png",
+            "search_region": [
+              4,
+              272,
+              64,
+              26
+            ],
+            "threshold": 0.93
+          }
+        }
+      ]
+    },
+    {
+      "id": "world_map",
+      "screen": "PNC_WORLD_MAP",
+      "anchors": [
+        {
+          "image": "screen_anchors/core_world_map_identity_0.png",
+          "search_region": [
+            20,
+            928,
+            63,
+            29
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/core_world_map_identity_1.png",
+          "search_region": [
+            8,
+            798,
+            40,
+            37
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_WORLD_HOME_NAV",
+          "anchor": {
+            "image": "screen_anchors/core_world_map_pnc_world_home_nav.png",
+            "search_region": [
+              20,
+              928,
+              63,
+              29
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_WORLD_COORDINATE_BAR",
+          "anchor": {
+            "image": "screen_anchors/core_world_map_pnc_world_coordinate_bar.png",
+            "search_region": [
+              185,
+              81,
+              34,
+              32
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_WORLD_EXPAND_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/core_world_map_overview_entry.png",
+            "search_region": [
+              14,
+              669,
+              44,
+              44
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_WORLD_HUD_TOGGLE",
+          "anchor": {
+            "image": "screen_anchors/core_world_map_hud_toggle.png",
+            "search_region": [
+              8,
+              798,
+              40,
+              38
+            ],
+            "threshold": 0.93
+          }
+        }
+      ]
+    },
+    {
+      "id": "coordinate_dialog",
+      "screen": "PNC_WORLD_COORDINATE_DIALOG",
+      "anchors": [
+        {
+          "image": "screen_anchors/core_coordinate_dialog_identity_0.png",
+          "search_region": [
+            71,
+            394,
+            35,
+            34
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/core_coordinate_dialog_identity_1.png",
+          "search_region": [
+            199,
+            394,
+            32,
+            34
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/core_coordinate_dialog_identity_2.png",
+          "search_region": [
+            467,
+            307,
+            43,
+            44
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_WORLD_COORDINATE_DIALOG_CLOSE_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/core_coordinate_dialog_pnc_world_coordinate_dialog_close_button.png",
+            "search_region": [
+              467,
+              307,
+              43,
+              44
+            ],
+            "threshold": 0.93
+          },
+          "dismisses_surface": true
+        }
+      ]
+    },
+    {
+      "id": "world_overview",
+      "screen": "PNC_WORLD_MAP_OVERVIEW",
+      "anchors": [
+        {
+          "image": "screen_anchors/core_world_overview_identity_0.png",
+          "search_region": [
+            238,
+            793,
+            114,
+            27
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/core_world_overview_identity_1.png",
+          "search_region": [
+            238,
+            831,
+            66,
+            28
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_WORLD_OVERVIEW_CLOSE_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/core_world_overview_pnc_world_overview_close_button.png",
+            "search_region": [
+              477,
+              14,
+              50,
+              48
+            ],
+            "threshold": 0.93
+          },
+          "dismisses_surface": true
+        }
+      ]
+    },
+    {
+      "id": "world_expanded",
+      "screen": "PNC_WORLD_MAP_EXPANDED",
+      "anchors": [
+        {
+          "image": "screen_anchors/core_world_expanded_hud_toggle.png",
+          "search_region": [
+            8,
+            864,
+            40,
+            39
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/core_world_expanded_overview_entry.png",
+          "search_region": [
+            13,
+            730,
+            46,
+            45
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_WORLD_HUD_TOGGLE",
+          "anchor": {
+            "image": "screen_anchors/core_world_expanded_hud_toggle.png",
+            "search_region": [
+              8,
+              864,
+              40,
+              39
+            ],
+            "threshold": 0.93
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -8,6 +8,7 @@ import tempfile
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from threading import Lock
+from time import sleep
 from typing import Any
 
 from pnc_automation.app.authoring.config.models import CastleIdentity
@@ -27,6 +28,28 @@ _ALLOWED_TRANSITIONS = {
     MutationIntentState.DISPATCHED: MutationIntentState.RECONCILED,
     MutationIntentState.RECONCILED: MutationIntentState.COMMITTED,
 }
+
+_WINDOWS_REPLACE_RETRY_DELAYS = (0.01, 0.02, 0.04, 0.08, 0.16, 0.32)
+
+
+def _replace_checkpoint_file(source: Path, destination: Path) -> None:
+    """Retry transient Windows denial of replacement without rewriting the payload.
+
+    Open handles can briefly deny replacement even with valid file permissions.
+    Keep the old journal intact and retry only the same flushed temporary file;
+    persistent denials and other I/O errors must still stop mutation dispatch.
+    """
+    for attempt in range(len(_WINDOWS_REPLACE_RETRY_DELAYS) + 1):
+        try:
+            os.replace(source, destination)
+            return
+        except OSError as error:
+            if (
+                getattr(error, "winerror", None) not in {5, 32, 33}
+                or attempt == len(_WINDOWS_REPLACE_RETRY_DELAYS)
+            ):
+                raise
+            sleep(_WINDOWS_REPLACE_RETRY_DELAYS[attempt])
 
 
 @dataclass(slots=True)
@@ -115,7 +138,7 @@ class DailyRunJournalStore:
                     handle.write(payload)
                     handle.flush()
                     os.fsync(handle.fileno())
-                os.replace(temporary_path, path)
+                _replace_checkpoint_file(temporary_path, path)
             finally:
                 if temporary_path is not None and temporary_path.exists():
                     temporary_path.unlink()

@@ -11,6 +11,7 @@ _HOME_CITY_ADJACENT_SCREENS = frozenset(
         ScreenType.PNC_HOME_CITY_ROOT,
         ScreenType.PNC_HOME_CITY,
         ScreenType.PNC_MORE_MENU,
+        ScreenType.PNC_SETTINGS,
     }
 )
 _HOME_CITY_BUILDING_FLOW_SCREENS = _HOME_CITY_ADJACENT_SCREENS | frozenset({ScreenType.PNC_BUILDING_DETAILS})
@@ -43,6 +44,7 @@ _SCREEN_FAMILY_OBSERVED_SCREENS = {
             ScreenType.PNC_MIGHT_RANK,
         }
     ),
+    ScreenType.PNC_GIFT_CENTER: frozenset({ScreenType.UNKNOWN, ScreenType.PNC_HOME_CITY, ScreenType.PNC_GIFT_CENTER}),
     ScreenType.PNC_WORLD_MAP: frozenset({ScreenType.UNKNOWN, ScreenType.PNC_WORLD_MAP_ROOT, ScreenType.PNC_WORLD_MAP}),
     ScreenType.PNC_WORLD_COORDINATE_DIALOG: frozenset(
         {
@@ -96,6 +98,14 @@ _SCREEN_FAMILY_OBSERVED_SCREENS = {
         }
     ),
     ScreenType.PNC_MORE_MENU: frozenset({ScreenType.UNKNOWN, ScreenType.PNC_HOME_CITY, ScreenType.PNC_MORE_MENU}),
+    ScreenType.PNC_SETTINGS: frozenset(
+        {
+            ScreenType.UNKNOWN,
+            ScreenType.PNC_HOME_CITY,
+            ScreenType.PNC_MORE_MENU,
+            ScreenType.PNC_SETTINGS,
+        }
+    ),
     ScreenType.PNC_BUILDING_DETAILS: _HOME_CITY_BUILDING_FLOW_SCREENS,
     ScreenType.PNC_BUILD_SPEEDUP: _HOME_CITY_BUILDING_FLOW_SCREENS | frozenset({ScreenType.PNC_BUILD_SPEEDUP}),
     ScreenType.PNC_BUILD_SPEEDUP_CONFIRM: _HOME_CITY_BUILDING_FLOW_SCREENS
@@ -148,7 +158,13 @@ _SCREEN_FAMILY_OBSERVED_SCREENS = {
     ScreenType.PNC_BUILD_QUEUE: _HOME_CITY_QUEUE_SCREENS,
     ScreenType.PNC_POPUP: _HOME_CITY_QUEUE_SCREENS,
     ScreenType.PNC_BAG: frozenset(
-        {ScreenType.UNKNOWN, ScreenType.PNC_CASTLE_SELECTION, ScreenType.PNC_HOME_CITY, ScreenType.PNC_MORE_MENU}
+        {
+            ScreenType.UNKNOWN,
+            ScreenType.PNC_CASTLE_SELECTION,
+            ScreenType.PNC_HOME_CITY,
+            ScreenType.PNC_MORE_MENU,
+            ScreenType.PNC_SETTINGS,
+        }
     ),
     ScreenType.PNC_QUEST_MAIN: frozenset(
         {ScreenType.UNKNOWN, ScreenType.PNC_HOME_CITY, ScreenType.PNC_QUEST_MAIN, ScreenType.PNC_QUEST_DAILY}
@@ -157,7 +173,13 @@ _SCREEN_FAMILY_OBSERVED_SCREENS = {
         {ScreenType.UNKNOWN, ScreenType.PNC_HOME_CITY, ScreenType.PNC_QUEST_MAIN, ScreenType.PNC_QUEST_DAILY}
     ),
     ScreenType.PNC_ALLIANCE_JOIN: frozenset(
-        {ScreenType.UNKNOWN, ScreenType.PNC_CASTLE_SELECTION, ScreenType.PNC_HOME_CITY, ScreenType.PNC_MORE_MENU}
+        {
+            ScreenType.UNKNOWN,
+            ScreenType.PNC_CASTLE_SELECTION,
+            ScreenType.PNC_HOME_CITY,
+            ScreenType.PNC_MORE_MENU,
+            ScreenType.PNC_SETTINGS,
+        }
     ),
     ScreenType.PNC_CHAT: frozenset(
         {
@@ -177,14 +199,32 @@ _SCREEN_FAMILY_OBSERVED_SCREENS = {
         {ScreenType.UNKNOWN, ScreenType.PNC_ALLIANCE_MEMBER_LIST, ScreenType.PNC_ALLIANCE_MEMBER_MANAGE_POPUP}
     ),
     ScreenType.PNC_DAILY_TO_DO: frozenset(
-        {ScreenType.UNKNOWN, ScreenType.PNC_CASTLE_SELECTION, ScreenType.PNC_HOME_CITY, ScreenType.PNC_MORE_MENU}
+        {
+            ScreenType.UNKNOWN,
+            ScreenType.PNC_CASTLE_SELECTION,
+            ScreenType.PNC_HOME_CITY,
+            ScreenType.PNC_MORE_MENU,
+            ScreenType.PNC_SETTINGS,
+        }
     ),
     ScreenType.PNC_MIGHT_RANK: frozenset({ScreenType.UNKNOWN, ScreenType.PNC_ALLIANCE_HOME, ScreenType.PNC_MIGHT_RANK}),
     ScreenType.PNC_RESEARCH_TREE: frozenset(
-        {ScreenType.UNKNOWN, ScreenType.PNC_CASTLE_SELECTION, ScreenType.PNC_HOME_CITY, ScreenType.PNC_MORE_MENU}
+        {
+            ScreenType.UNKNOWN,
+            ScreenType.PNC_CASTLE_SELECTION,
+            ScreenType.PNC_HOME_CITY,
+            ScreenType.PNC_MORE_MENU,
+            ScreenType.PNC_SETTINGS,
+        }
     ),
     ScreenType.PNC_CASTLE_SELECTION: frozenset(
-        {ScreenType.UNKNOWN, ScreenType.PNC_CASTLE_SELECTION, ScreenType.PNC_HOME_CITY, ScreenType.PNC_MORE_MENU}
+        {
+            ScreenType.UNKNOWN,
+            ScreenType.PNC_CASTLE_SELECTION,
+            ScreenType.PNC_HOME_CITY,
+            ScreenType.PNC_MORE_MENU,
+            ScreenType.PNC_SETTINGS,
+        }
     ),
     ScreenType.PNC_CAMPAIGN_MAP: _HOME_CITY_BUILDING_FLOW_SCREENS,
     ScreenType.PNC_CAMPAIGN_STAGE: _HOME_CITY_BUILDING_FLOW_SCREENS,

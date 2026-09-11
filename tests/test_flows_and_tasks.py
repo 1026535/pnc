@@ -1592,6 +1592,31 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertEqual(actions[0].reason, "guide_root_view_from_utility_view")
         self.assertEqual(actions[0].direction, "right")
 
+    def test_hero_hall_without_visible_label_does_not_use_disproved_atlas_tap(self) -> None:
+        """A Castle anchor must not authorize a blind tap at the former Hero Hall coordinate."""
+        observation = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            spatial_surface=make_spatial_surface(
+                SpatialSurfaceType.HOME_CITY_SURFACE,
+                objects=(make_spatial_object(
+                    SpatialObjectKind.HOME_BUILDING,
+                    name_text="Castle",
+                    metadata=build_home_city_object_metadata(HomeCityObjectId.CASTLE),
+                ),),
+            ),
+        )
+        actions = self.flows.open_home_city_object(
+            observation,
+            SpatialObjectQuery(
+                surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+                kind=SpatialObjectKind.HOME_BUILDING,
+                metadata_key="home_city_object_id", metadata_value="hero_hall",
+            ),
+            reason="open_hero_hall", runtime_state={},
+        )
+        self.assertTrue(actions)
+        self.assertTrue(all(isinstance(action, SwipeAction) for action in actions))
+
     def test_open_home_city_object_guides_hero_war_view_from_root(self) -> None:
         """Uses the deterministic root-to-hero-war transition before generic scan for the upper support band."""
 
@@ -2585,7 +2610,7 @@ class FlowAndTaskTests(unittest.TestCase):
             visible_ids=(UiElementId.PNC_MORE_SETTINGS,),
         )
         settings_observation = make_observation(
-            ScreenType.PNC_MORE_MENU,
+            ScreenType.PNC_SETTINGS,
             visible_ids=(UiElementId.PNC_MORE_MANAGE_CHAR,),
         )
 
@@ -2621,10 +2646,9 @@ class FlowAndTaskTests(unittest.TestCase):
             visible_ids=(UiElementId.PNC_BOTTOM_NAV_MORE, UiElementId.PNC_MORE_SETTINGS),
         )
         settings_observation = make_observation(
-            ScreenType.PNC_MORE_MENU,
+            ScreenType.PNC_SETTINGS,
             visible_ids=(
                 UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
-                UiElementId.PNC_MORE_SETTINGS,
                 UiElementId.PNC_MORE_MANAGE_CHAR,
             ),
         )
@@ -2826,7 +2850,11 @@ class FlowAndTaskTests(unittest.TestCase):
 
         observation = make_observation(
             ScreenType.PNC_MORE_MENU,
-            visible_ids=(UiElementId.PNC_BOTTOM_NAV_MORE, UiElementId.PNC_MORE_SETTINGS, UiElementId.PNC_MORE_MANAGE_CHAR),
+            visible_ids=(
+                UiElementId.PNC_BOTTOM_NAV_MORE,
+                UiElementId.PNC_MORE_SETTINGS,
+                UiElementId.PNC_MORE_OVERLAY_MANAGE_CHAR,
+            ),
         )
 
         actions = self.flows.return_to_safe_root_screen(observation)
@@ -2839,7 +2867,7 @@ class FlowAndTaskTests(unittest.TestCase):
         """Uses the visible top-left back target when the full-screen Settings page hides the More toggle."""
 
         observation = make_observation(
-            ScreenType.PNC_MORE_MENU,
+            ScreenType.PNC_SETTINGS,
             visible_ids=(UiElementId.PNC_BACK_BUTTON_TOP_LEFT, UiElementId.PNC_MORE_MANAGE_CHAR),
         )
 

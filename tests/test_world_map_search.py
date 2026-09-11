@@ -2067,6 +2067,11 @@ class WorldMapSearchTests(unittest.TestCase):
     def test_castle_inspector_ensure_world_map_closes_popup_before_reentering_world_map(self) -> None:
         """Uses the shared popup-dismissal flow before attempting world-map recovery during castle inspection."""
 
+        popup = make_observation(
+            ScreenType.PNC_POPUP,
+            visible_ids=(UiElementId.PNC_POPUP_CLOSE_BUTTON,),
+            blocking_popup=True,
+        )
         service, observer = self._build_runtime_service(
             observations=[
                 _make_world_map_observation(10, 0),
@@ -2080,11 +2085,7 @@ class WorldMapSearchTests(unittest.TestCase):
         )
 
         result = inspector._ensure_world_map(
-            make_observation(
-                ScreenType.PNC_POPUP,
-                visible_ids=(UiElementId.PNC_POPUP_CLOSE_BUTTON,),
-                blocking_popup=True,
-            ),
+            popup,
             label_prefix="popup_return_world",
         )
 

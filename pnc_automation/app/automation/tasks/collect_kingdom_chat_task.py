@@ -45,7 +45,12 @@ class CollectKingdomChatTask(BaseAutomationTask):
         if observation.screen_type == ScreenType.PNC_LOADING:
             return [WaitAction(milliseconds=1000, reason="wait_for_kingdom_chat_settle", observe_after=True)]
         if remember_active_castle_identity(context, observation) is None:
-            if observation.screen_type not in {ScreenType.PNC_HOME_CITY, ScreenType.PNC_MORE_MENU, ScreenType.PNC_LORD_INFO}:
+            if observation.screen_type not in {
+                ScreenType.PNC_HOME_CITY,
+                ScreenType.PNC_MORE_MENU,
+                ScreenType.PNC_SETTINGS,
+                ScreenType.PNC_LORD_INFO,
+            }:
                 return context.flows.ensure_home_city(observation)
             return plan_active_castle_resolution(
                 context,

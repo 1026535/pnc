@@ -58,6 +58,15 @@ class ScreenClassifier:
                 ),
             ),
             ClassificationRule(
+                screen_type=ScreenType.PNC_SETTINGS,
+                required_all=frozenset(
+                    {
+                        UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+                        UiElementId.PNC_MORE_MANAGE_CHAR,
+                    }
+                ),
+            ),
+            ClassificationRule(
                 screen_type=ScreenType.PNC_PLAYER_TERRITORY,
                 required_all=frozenset(
                     {

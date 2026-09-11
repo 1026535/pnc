@@ -140,12 +140,25 @@ observed Home City Hero Hall building; the Hero Hall canary does not click its D
 The connected runtime recognizes the exact `New version detected. Tap Confirm to
 update.` modal from any canonical workflow. It presses that modal's typed Confirm
 control once, allows up to ten minutes for installation/restart, relaunches P&C once
-if Android Home appears, and resumes only after typed Home is observed. It does not
-use this authority for generic popups. If the update interrupts an already-dispatched
-task action, that task fails as ambiguous instead of replaying the action; journaled
-Daily operations reconcile from a freshly reopened Daily or Resource screen.
-Post-update offers may be closed only through typed non-purchase close controls, with
-one attempt per visual fingerprint and a six-popup bound.
+if Android Home appears, and resumes only after typed Home is observed. Other
+confidently detected transient offers (including recognized upper-right-X offers,
+VIP daily/login notices, and account-switch/game-open offers) are recovered across
+workflow boundaries by the shared observed-action executor. Popup perception emits
+typed, measured candidates (including `CLOSE_X`, `CANCEL`, and `CLOSE_TEXT`) in a
+`popup_overlay`; the executor alone authorizes a candidate. Exact reconnect text
+emits `PNC_RECONNECT_CONFIRM_BUTTON` and `RECONNECT_CONFIRM`, never the generic
+close selector. Recovery requires a fresh full-runtime frame after every tap, taps
+each fingerprint at most once, and stops after six distinct popups. Missing or
+unrecognized popup controls fail with captured diagnostics; generic affirmative
+controls and Android Back are never used for recovery. Popup-local Back remains
+disabled pending reviewed evidence. Task-owned confirm, claim, purchase, and
+mutation controls remain with their task.
+
+If an exact update interrupts an already-dispatched task action, that task fails as
+ambiguous instead of replaying the action; journaled Daily operations reconcile from
+a freshly reopened Daily or Resource screen. Transient popup dismissal does not
+consume task replan/retry budgets, and closing a transient popup never replays the
+action that preceded it.
 
 For every new daily feature:
 

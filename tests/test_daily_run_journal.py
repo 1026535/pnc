@@ -2,15 +2,22 @@
 
 from __future__ import annotations
 
+import errno
 import tempfile
 import unittest
 from dataclasses import replace
 from datetime import date
 from pathlib import Path
+from unittest.mock import call, patch
 
 from pnc_automation.app.authoring.config.models import CastleIdentity
 from pnc_automation.app.authoring.config.mutation_acknowledgement import parse_mutation_acknowledgement
 from pnc_automation.app.authoring.config.daily_maintenance import DailyCapabilityPolicy
+from pnc_automation.app.automation.daily_maintenance.mutation_dispatcher import (
+    JournaledMutationDispatcher,
+    MutationOperation,
+    MutationReconciliation,
+)
 from pnc_automation.app.automation.engine.task import TaskId
 from pnc_automation.app.pnc.domain.daily_maintenance import (
     DailyQuestId,
@@ -19,6 +26,7 @@ from pnc_automation.app.pnc.domain.daily_maintenance import (
     MutationIntentState,
 )
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.pnc.persistence import daily_run_journal_store
 from pnc_automation.app.pnc.persistence.daily_run_journal_store import DailyRunJournalStore
 from pnc_automation.core.errors import ConfigurationError
 
@@ -98,6 +106,28 @@ class DailyRunJournalStoreTests(unittest.TestCase):
             last_typed_screen=ScreenType.PNC_HOME_CITY,
         )
 
+    @staticmethod
+    def _windows_replace_error(winerror: int) -> PermissionError:
+        """Builds a deterministic Windows replacement error on every test host."""
+
+        error = PermissionError(f"Windows replacement error {winerror}")
+        error.winerror = winerror
+        return error
+
+    def _journal_path(self) -> Path:
+        """Returns the isolated journal path used by the fixture checkpoint."""
+
+        return self.store.checkpoint_path(
+            game_reset_id=self.checkpoint.game_reset_id,
+            account_id=self.checkpoint.account_id,
+            castle=self.castle,
+        )
+
+    def _assert_no_temporary_journals(self, path: Path) -> None:
+        """Confirms failed atomic writes do not leave replacement payloads behind."""
+
+        self.assertEqual((), tuple(path.parent.glob("journal-*.tmp")))
+
     def test_persists_complete_operation_lifecycle(self) -> None:
         """Writes prepared, dispatched, reconciled, and committed states durably."""
 
@@ -139,6 +169,146 @@ class DailyRunJournalStoreTests(unittest.TestCase):
             account_id=self.checkpoint.account_id, castle=self.castle,
         )
         self.assertEqual("2026-09-05", loaded.maintenance_date)
+
+    def test_save_retries_transient_windows_replacement_and_persists_full_payload(self) -> None:
+        """Retries Windows access and sharing denials against the same flushed payload."""
+
+        path = self._journal_path()
+        self.store.save(self.checkpoint)
+        updated = replace(
+            self.checkpoint,
+            maintenance_date="2026-09-05",
+            current_quest_id=DailyQuestId.HERO_ARENA,
+            completed_quest_ids=(DailyQuestId.CLAIM_COMPLETED,),
+            mutation_intents=(
+                MutationIntent(
+                    operation_id="arena-1",
+                    quest_id=DailyQuestId.HERO_ARENA,
+                    state=MutationIntentState.PREPARED,
+                    expected_precondition="free attempt visible",
+                    expected_postcondition="Daily progress increased",
+                ),
+            ),
+            consumed_recovery_stages=("hero_arena:reread",),
+            last_typed_screen=ScreenType.PNC_SETTINGS,
+        )
+        real_replace = daily_run_journal_store.os.replace
+        transient_errors = [
+            self._windows_replace_error(5),
+            self._windows_replace_error(32),
+            self._windows_replace_error(33),
+        ]
+
+        def replace_with_transient_errors(source: Path, destination: Path) -> None:
+            if transient_errors:
+                raise transient_errors.pop(0)
+            real_replace(source, destination)
+
+        with (
+            patch.object(daily_run_journal_store.os, "replace", side_effect=replace_with_transient_errors) as replace_mock,
+            patch.object(daily_run_journal_store, "sleep") as sleep_mock,
+        ):
+            self.store.save(updated)
+
+        loaded = self.store.load(
+            game_reset_id=updated.game_reset_id,
+            account_id=updated.account_id,
+            castle=updated.castle,
+        )
+        self.assertEqual(updated, loaded)
+        self.assertEqual(4, replace_mock.call_count)
+        attempted_sources = {item.args[0] for item in replace_mock.call_args_list}
+        attempted_destinations = {item.args[1] for item in replace_mock.call_args_list}
+        self.assertEqual(1, len(attempted_sources))
+        self.assertEqual({path}, attempted_destinations)
+        self.assertFalse(transient_errors)
+        self.assertEqual(
+            [call(0.01), call(0.02), call(0.04)],
+            sleep_mock.call_args_list,
+        )
+        self._assert_no_temporary_journals(path)
+
+    def test_save_stops_after_seven_persistent_windows_denials_and_preserves_old_journal(self) -> None:
+        """Stops after the bounded retry budget while preserving the last complete journal."""
+
+        path = self._journal_path()
+        self.store.save(self.checkpoint)
+        old_payload = path.read_text(encoding="utf-8")
+        failure = self._windows_replace_error(5)
+
+        with (
+            patch.object(daily_run_journal_store.os, "replace", side_effect=failure) as replace_mock,
+            patch.object(daily_run_journal_store, "sleep") as sleep_mock,
+        ):
+            with self.assertRaises(PermissionError) as raised:
+                self.store.save(replace(self.checkpoint, maintenance_date="2026-09-05"))
+
+        self.assertEqual(5, raised.exception.winerror)
+        self.assertEqual(7, replace_mock.call_count)
+        self.assertEqual(
+            [call(0.01), call(0.02), call(0.04), call(0.08), call(0.16), call(0.32)],
+            sleep_mock.call_args_list,
+        )
+        self.assertEqual(old_payload, path.read_text(encoding="utf-8"))
+        self._assert_no_temporary_journals(path)
+
+    def test_save_propagates_non_windows_replacement_errors_without_retry(self) -> None:
+        """Propagates generic permission and disk failures without sleeping or retrying."""
+
+        path = self._journal_path()
+        self.store.save(self.checkpoint)
+        old_payload = path.read_text(encoding="utf-8")
+        failures = (
+            ("generic_permission", PermissionError("generic permission failure")),
+            ("disk_full", OSError(errno.ENOSPC, "disk full")),
+        )
+
+        for name, failure in failures:
+            with self.subTest(name=name):
+                with (
+                    patch.object(daily_run_journal_store.os, "replace", side_effect=failure) as replace_mock,
+                    patch.object(daily_run_journal_store, "sleep") as sleep_mock,
+                ):
+                    with self.assertRaises(type(failure)):
+                        self.store.save(replace(self.checkpoint, maintenance_date="2026-09-05"))
+
+                replace_mock.assert_called_once()
+                sleep_mock.assert_not_called()
+                self.assertEqual(old_payload, path.read_text(encoding="utf-8"))
+                self._assert_no_temporary_journals(path)
+
+    def test_persistent_journal_failure_blocks_dispatch_before_game_action(self) -> None:
+        """Refuses to dispatch when the prepared intent cannot be durably journaled."""
+
+        self.store.save(self.checkpoint)
+        dispatcher = JournaledMutationDispatcher(self.store)
+        operation = MutationOperation(
+            operation_id="arena-1",
+            quest_id=DailyQuestId.HERO_ARENA,
+            expected_precondition="free attempt visible",
+            expected_postcondition="Daily progress increased",
+        )
+        dispatch_count = 0
+
+        def dispatch() -> None:
+            nonlocal dispatch_count
+            dispatch_count += 1
+
+        with (
+            patch.object(daily_run_journal_store.os, "replace", side_effect=self._windows_replace_error(32)) as replace_mock,
+            patch.object(daily_run_journal_store, "sleep") as sleep_mock,
+        ):
+            with self.assertRaises(PermissionError):
+                dispatcher.execute(
+                    checkpoint=self.checkpoint,
+                    operation=operation,
+                    dispatch=dispatch,
+                    reconcile=lambda: MutationReconciliation(True, False),
+                )
+
+        self.assertEqual(0, dispatch_count)
+        self.assertEqual(7, replace_mock.call_count)
+        self.assertEqual(6, sleep_mock.call_count)
 
     def test_rejects_skipped_or_repeated_transitions(self) -> None:
         """Prevents blind replay or cyclic mutation state changes."""
