@@ -43,7 +43,7 @@ class TaskExecutor:
     ) -> TaskExecutionResult:
         """Executes one already-preflighted task with global required-update recovery."""
 
-        self._require_recognition_support(task=task)
+        self.require_recognition_support(task=task)
         attempts = 0
         replans = 0
         current_before = before
@@ -131,12 +131,12 @@ class TaskExecutor:
                 label=f"{task.id.value}_failure_result",
             )
 
-    def _require_recognition_support(
+    def require_recognition_support(
         self,
         *,
         task: AutomationTask,
     ) -> None:
-        """Reject tasks with unsupported mandatory selectors before any recovery or input."""
+        """Reject tasks with unsupported mandatory selectors before recovery or input."""
 
         for selector_id in task.required_recognition_selectors:
             try:
