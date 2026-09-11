@@ -10,8 +10,14 @@ from pathlib import Path
 from pnc_automation.core.infra.adb.client import AdbClient
 from pnc_automation.app.runtime.observation_mode import ObservationMode
 from pnc_automation.app.automation.engine.runner import RunResult, StepRunResult
+from pnc_automation.app.automation.engine.core_runtime import build_core_runtime
+from pnc_automation.app.automation.engine.core_workflow import CoreWorkflowResult, CoreWorkflowRunner
 from pnc_automation.app.automation.engine.script_runner import ScriptRunner
 from pnc_automation.app.automation.engine.task import TaskId
+from pnc_automation.app.automation.daily_maintenance.daily_quest_status import (
+    DailyQuestStatusResult,
+    DailyQuestStatusWorkflow,
+)
 from pnc_automation.app.authoring.scripts.registry import build_default_task_registry
 from pnc_automation.core.infra.storage.artifact_store import ArtifactStore
 from pnc_automation.app.pnc.persistence.chat_archive_store import ChatArchiveStore
@@ -91,6 +97,18 @@ class ApplicationRunner:
             schedule_ids=schedule_ids,
             scheduled_for_utc=scheduled_for_utc,
         )
+
+    def run_daily_quest_status(self, *, account_id: str) -> CoreWorkflowResult[DailyQuestStatusResult]:
+        """Preflights the active castle and reports one visible Daily Quest viewport."""
+
+        account = self.script_runner.config.require_account(account_id)
+        core_runtime = build_core_runtime(
+            self.script_runner,
+            account,
+            account.artifact_directory_name,
+        )
+        core_runtime.preflight_active_castle_identity()
+        return CoreWorkflowRunner[DailyQuestStatusResult](core_runtime).run(DailyQuestStatusWorkflow())
 
 
 def build_application_runner(

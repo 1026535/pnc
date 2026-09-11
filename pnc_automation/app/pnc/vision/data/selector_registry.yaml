@@ -125,6 +125,7 @@ selectors:
 - id: PNC_BOTTOM_NAV_MORE
   screens:
   - PNC_HOME_CITY
+  - PNC_WORLD_MAP
   - PNC_MORE_MENU
   status: click_mapped
   detection_kind: planned
@@ -266,6 +267,10 @@ selectors:
   - PNC_QUEST_DAILY
   - PNC_MIGHT_RANK
   - PNC_EVENT_CENTER
+  - PNC_SETTINGS_PREFERENCES
+  - PNC_NOTIFICATIONS
+  - PNC_RANK_HUB
+  - PNC_WORLD_KINGDOM_LIST
   status: screenshot_seeded
   detection_kind: template
   relative_bounds:
@@ -1496,6 +1501,37 @@ selectors:
   notes:
   - Four-arrow HUD toggle, distinct from the kingdom-overview entry.
   - Replacement-core visual controls own its observed bounds in each HUD layout.
+- id: PNC_RESEARCH_QUEUE_GO
+  screens:
+  - PNC_RESEARCH_QUEUE
+  status: screenshot_seeded
+  detection_kind: planned
+  interaction_kind: navigation
+  click:
+    anchor: center
+    outcomes:
+    - safe_to_click: true
+      monetized: false
+      target_screen: PNC_HOME_CITY
+      verification_selectors:
+      - PNC_HOME_WORLD_SWITCH
+  notes:
+  - Replacement core requires a current-frame match of the idle queue Go control.
+  - Go focuses Institute in the city; opening it requires a fresh object observation.
+- id: PNC_RESEARCH_QUEUE_CLOSE
+  screens:
+  - PNC_RESEARCH_QUEUE
+  status: screenshot_seeded
+  detection_kind: planned
+  interaction_kind: navigation
+  click:
+    anchor: center
+    outcomes:
+    - safe_to_click: true
+      monetized: false
+      target_screen: PNC_HOME_CITY
+      verification_selectors:
+      - PNC_HOME_WORLD_SWITCH
 - id: PNC_WORLD_COORDINATE_DIALOG_HEADER
   screens:
   - PNC_WORLD_COORDINATE_DIALOG
@@ -1602,16 +1638,26 @@ selectors:
 - id: PNC_WORLD_OVERVIEW_WORLD_ICON
   screens:
   - PNC_WORLD_MAP_OVERVIEW
-  status: planned
+  status: click_mapped
   detection_kind: planned
-  interaction_kind: action
+  interaction_kind: navigation
+  click:
+    anchor: center
+    outcomes:
+    - safe_to_click: true
+      monetized: false
+      target_screen: PNC_WORLD_KINGDOM_LIST
+      verification_selectors:
+      - PNC_WORLD_KINGDOM_LIST_HEADER
+  notes:
+  - Observed directly in the live game on 2026-09-10; opens Kingdom List without choosing a kingdom.
   relative_bounds:
-    x_ratio: 0.06
-    y_ratio: 0.88
-    width_ratio: 0.14
-    height_ratio: 0.09
-    action_x_ratio: 0.13
-    action_y_ratio: 0.925
+    x_ratio: 0.044444444444
+    y_ratio: 0.911458333333
+    width_ratio: 0.118518518519
+    height_ratio: 0.067708333333
+    action_x_ratio: 0.101851851852
+    action_y_ratio: 0.942708333333
 - id: PNC_WORLD_OVERVIEW_LEGEND_BUTTON
   screens:
   - PNC_WORLD_MAP_OVERVIEW
@@ -1972,6 +2018,70 @@ selectors:
   interaction_kind: action
   notes:
   - OCR materializes the exact Confirm control only when the new-version update message is present.
+- id: PNC_MORE_RANK
+  screens:
+  - PNC_MORE_MENU
+  status: click_mapped
+  detection_kind: planned
+  interaction_kind: navigation
+  click:
+    anchor: center
+    outcomes:
+    - safe_to_click: true
+      monetized: false
+      target_screen: PNC_RANK_HUB
+      verification_selectors:
+      - PNC_BACK_BUTTON_TOP_LEFT
+  notes:
+  - Measured visual control in screen_anchors.json; live game evidence from 2026-09-10.
+- id: PNC_SETTINGS_RANK
+  screens:
+  - PNC_SETTINGS
+  status: click_mapped
+  detection_kind: planned
+  interaction_kind: navigation
+  click:
+    anchor: center
+    outcomes:
+    - safe_to_click: true
+      monetized: false
+      target_screen: PNC_RANK_HUB
+      verification_selectors:
+      - PNC_BACK_BUTTON_TOP_LEFT
+  notes:
+  - Measured visual control in screen_anchors.json; Back returns to the actual entry parent.
+- id: PNC_SETTINGS_PREFERENCES
+  screens:
+  - PNC_SETTINGS
+  status: click_mapped
+  detection_kind: planned
+  interaction_kind: navigation
+  click:
+    anchor: center
+    outcomes:
+    - safe_to_click: true
+      monetized: false
+      target_screen: PNC_SETTINGS_PREFERENCES
+      verification_selectors:
+      - PNC_BACK_BUTTON_TOP_LEFT
+  notes:
+  - Opens sound, frame-rate and graphics preferences; the core exposes no setting toggles.
+- id: PNC_SETTINGS_NOTIFICATIONS
+  screens:
+  - PNC_SETTINGS
+  status: click_mapped
+  detection_kind: planned
+  interaction_kind: navigation
+  click:
+    anchor: center
+    outcomes:
+    - safe_to_click: true
+      monetized: false
+      target_screen: PNC_NOTIFICATIONS
+      verification_selectors:
+      - PNC_BACK_BUTTON_TOP_LEFT
+  notes:
+  - Opens notification preferences; the core exposes no notification toggles.
 surfaces:
 - id: PNC_WORLD_MAP_SURFACE
   surface_type: world_map

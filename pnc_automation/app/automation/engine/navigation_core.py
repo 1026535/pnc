@@ -119,6 +119,27 @@ class NavigationCore:
             before, frozenset({destination}), label,
         )
 
+    def open_building(
+        self, target: HomeCityObjectId, *, observe_content: Callable[[str], Observation],
+    ) -> Observation:
+        """Use a reviewed in-game focus route, then require an observed object.
+
+        The idle Research Queue Go control focuses Institute in the city. It
+        does not prove the building opened or authorize a predicted camera tap.
+        Other buildings currently require an already visible object.
+        """
+        if target == HomeCityObjectId.INSTITUTE:
+            self.navigate(ScreenType.PNC_RESEARCH_QUEUE)
+            focus = next((
+                edge for edge in self.edges
+                if edge.source == ScreenType.PNC_RESEARCH_QUEUE
+                and edge.selector == UiElementId.PNC_RESEARCH_QUEUE_GO
+            ), None)
+            if focus is None:
+                raise ValueError("Institute focus route is missing from the reviewed graph.")
+            self.transition(focus)
+        return self.open_visible_building(target, observe_content=observe_content)
+
     def _execute_and_confirm(
         self, action: ActionRequest, before: Observation,
         destinations: frozenset[ScreenType], label: str,
@@ -206,18 +227,34 @@ def reviewed_navigation_edges() -> tuple[NavigationEdge, ...]:
         NavigationEdge(screen.PNC_QUEST_MAIN, selector.PNC_QUEST_TAB_DAILY, frozenset({screen.PNC_QUEST_DAILY})),
         NavigationEdge(screen.PNC_QUEST_DAILY, selector.PNC_QUEST_TAB_MAIN, frozenset({screen.PNC_QUEST_MAIN})),
         NavigationEdge(screen.PNC_HOME_CITY, selector.PNC_BOTTOM_NAV_MORE, frozenset({screen.PNC_MORE_MENU})),
+        NavigationEdge(screen.PNC_WORLD_MAP, selector.PNC_BOTTOM_NAV_MORE, frozenset({screen.PNC_MORE_MENU})),
         NavigationEdge(screen.PNC_MORE_MENU, selector.PNC_MORE_SETTINGS, frozenset({screen.PNC_SETTINGS})),
-        NavigationEdge(screen.PNC_HOME_CITY, selector.PNC_HOME_RESEARCH_BUTTON, frozenset({screen.PNC_INSTITUTE})),
+        NavigationEdge(screen.PNC_MORE_MENU, selector.PNC_MORE_RANK, frozenset({screen.PNC_RANK_HUB})),
+        NavigationEdge(screen.PNC_SETTINGS, selector.PNC_MORE_MANAGE_CHAR, frozenset({screen.PNC_CASTLE_SELECTION})),
+        NavigationEdge(screen.PNC_SETTINGS, selector.PNC_SETTINGS_RANK, frozenset({screen.PNC_RANK_HUB})),
+        NavigationEdge(screen.PNC_SETTINGS, selector.PNC_SETTINGS_PREFERENCES, frozenset({screen.PNC_SETTINGS_PREFERENCES})),
+        NavigationEdge(screen.PNC_SETTINGS, selector.PNC_SETTINGS_NOTIFICATIONS, frozenset({screen.PNC_NOTIFICATIONS})),
+        NavigationEdge(screen.PNC_SETTINGS, selector.PNC_BACK_BUTTON_TOP_LEFT, frozenset({screen.PNC_HOME_CITY, screen.PNC_WORLD_MAP})),
+        NavigationEdge(screen.PNC_RANK_HUB, selector.PNC_BACK_BUTTON_TOP_LEFT, frozenset({screen.PNC_SETTINGS, screen.PNC_HOME_CITY, screen.PNC_WORLD_MAP})),
+        NavigationEdge(screen.PNC_HOME_CITY, selector.PNC_HOME_RESEARCH_BUTTON, frozenset({screen.PNC_RESEARCH_QUEUE})),
+        NavigationEdge(screen.PNC_RESEARCH_QUEUE, selector.PNC_RESEARCH_QUEUE_CLOSE, frozenset({screen.PNC_HOME_CITY})),
+        NavigationEdge(screen.PNC_RESEARCH_QUEUE, selector.PNC_RESEARCH_QUEUE_GO, frozenset({screen.PNC_HOME_CITY})),
         NavigationEdge(screen.PNC_WORLD_MAP, selector.PNC_WORLD_COORDINATE_BAR, frozenset({screen.PNC_WORLD_COORDINATE_DIALOG})),
         NavigationEdge(screen.PNC_WORLD_COORDINATE_DIALOG, selector.PNC_WORLD_COORDINATE_DIALOG_CLOSE_BUTTON, frozenset({screen.PNC_WORLD_MAP})),
         NavigationEdge(screen.PNC_WORLD_MAP, selector.PNC_WORLD_EXPAND_BUTTON, frozenset({screen.PNC_WORLD_MAP_OVERVIEW})),
         NavigationEdge(screen.PNC_WORLD_MAP_OVERVIEW, selector.PNC_WORLD_OVERVIEW_CLOSE_BUTTON, frozenset({screen.PNC_WORLD_MAP})),
+        NavigationEdge(screen.PNC_WORLD_MAP_OVERVIEW, selector.PNC_WORLD_OVERVIEW_WORLD_ICON, frozenset({screen.PNC_WORLD_KINGDOM_LIST})),
+        NavigationEdge(screen.PNC_WORLD_KINGDOM_LIST, selector.PNC_BACK_BUTTON_TOP_LEFT, frozenset({screen.PNC_WORLD_MAP_OVERVIEW})),
         NavigationEdge(screen.PNC_WORLD_MAP, selector.PNC_WORLD_HUD_TOGGLE, frozenset({screen.PNC_WORLD_MAP_EXPANDED})),
         NavigationEdge(screen.PNC_WORLD_MAP_EXPANDED, selector.PNC_WORLD_HUD_TOGGLE, frozenset({screen.PNC_WORLD_MAP})),
     ]
+    # Back returns to the actual parent. Rank and the Settings hub can have
+    # different parents; their measured destination is used for replanning.
+    for source in (screen.PNC_CASTLE_SELECTION, screen.PNC_SETTINGS_PREFERENCES, screen.PNC_NOTIFICATIONS):
+        edges.append(NavigationEdge(source, selector.PNC_BACK_BUTTON_TOP_LEFT, frozenset({screen.PNC_SETTINGS})))
     for source in (
         *sorted(quest, key=lambda value: value.name), screen.PNC_BAG,
-        screen.PNC_SETTINGS, screen.PNC_INSTITUTE, screen.PNC_GODDESS_STATUE,
+        screen.PNC_INSTITUTE, screen.PNC_GODDESS_STATUE,
         screen.PNC_WAREHOUSE, screen.PNC_HERO_HALL,
     ):
         edges.append(NavigationEdge(source, selector.PNC_BACK_BUTTON_TOP_LEFT, frozenset({screen.PNC_HOME_CITY})))

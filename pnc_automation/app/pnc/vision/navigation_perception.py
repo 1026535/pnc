@@ -78,6 +78,8 @@ class NavigationPerception:
         return replace(
             observation, list_entries=content.list_entries,
             spatial_surface=content.spatial_surface,
+            current_castle=content.current_castle,
+            current_castle_evidence=content.current_castle_evidence,
             text_field_states=content.text_field_states,
             available_march_slots=content.available_march_slots,
         )
