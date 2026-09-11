@@ -32,6 +32,7 @@ from pnc_automation.app.automation.daily_maintenance.resource_item import Resour
 from pnc_automation.app.authoring.config.daily_maintenance import load_daily_maintenance_config
 from pnc_automation.app.authoring.config.loader import load_app_config
 from pnc_automation.app.authoring.config.mutation_acknowledgement import parse_mutation_acknowledgement
+from pnc_automation.app.authoring.config.models import LiveAutomationRole
 from pnc_automation.app.pnc.domain.daily_maintenance import (
     DailyQuestId, DailyTargetOutcomeStatus, DailyTaskCheckpoint, MutationIntentState,
 )
@@ -79,6 +80,8 @@ def main() -> int:
     if len(matching) != 1:
         parser.error("Requested castle is not uniquely configured as a canary.")
     target = matching[0]
+    account = config.require_account(target.account_id)
+    account.require_live_role(LiveAutomationRole.DAILY_CANARY)
     policy = target.capability(DailyQuestId.USE_RESOURCE_ITEM)
     if policy is None or policy.max_mutations != 1 or policy.max_diamond_spend != 0:
         parser.error("Resource canary requires the configured one-item, zero-diamond policy.")
@@ -128,71 +131,73 @@ def main() -> int:
     # identifiers in generic framework console output; retain screenshot/journal evidence.
     logging.disable(logging.CRITICAL)
     application = build_application_runner(arguments.config)
-    bundle = application.script_runner.build_connected_runtime_bundle(
-        account=config.require_account(target.account_id),
-    )
-    connected = bundle.runtime
-    observer = connected.observation_service
-    actions = connected.require_observed_action_executor("Resource canary requires canonical observed actions.")
-    verify_canary_identity(
-        script_runner=application.script_runner,
-        connected=bundle,
-        target=target,
-    )
+    with application.script_runner.reserve_accounts((target.account_id,)):
+        with application.script_runner.build_connected_runtime_bundle(
+            account=account,
+            required_role=LiveAutomationRole.DAILY_CANARY,
+        ) as bundle:
+            connected = bundle.runtime
+            observer = connected.observation_service
+            actions = connected.require_observed_action_executor("Resource canary requires canonical observed actions.")
+            verify_canary_identity(
+                script_runner=application.script_runner,
+                connected=bundle,
+                target=target,
+            )
 
-    daily_session = ConnectedDailyQuestSession(bundle.runner, observer, actions)
-    coordinator = DailyMaintenanceCoordinator.for_read_only(
-        session=daily_session, journal_store=store, catalog=DailyQuestCatalog(),
-    )
-    session = ConnectedResourceItemSession(observer, actions, bundle.runner.flow_planner, coordinator)
-    if not arguments.execute and not arguments.reconcile_only:
-        inventory = session.scan_inventory()
-        selected = smallest_resource_item(inventory)
-        report = {
-            "mode": "read_only", "account_id": target.account_id, "castle_ref": target.castle_ref,
-            "inventory": asdict(inventory), "selected": None if selected is None else asdict(selected),
-            "live_canary_passed": False,
-        }
-        _write_report(config.artifact_root, target.account_id, report)
-        daily_session.return_to_home()
-        return 0
+            daily_session = ConnectedDailyQuestSession(bundle.runner, observer, actions)
+            coordinator = DailyMaintenanceCoordinator.for_read_only(
+                session=daily_session, journal_store=store, catalog=DailyQuestCatalog(),
+            )
+            session = ConnectedResourceItemSession(observer, actions, bundle.runner.flow_planner, coordinator)
+            if not arguments.execute and not arguments.reconcile_only:
+                inventory = session.scan_inventory()
+                selected = smallest_resource_item(inventory)
+                report = {
+                    "mode": "read_only", "account_id": target.account_id, "castle_ref": target.castle_ref,
+                    "inventory": asdict(inventory), "selected": None if selected is None else asdict(selected),
+                    "live_canary_passed": False,
+                }
+                _write_report(config.artifact_root, target.account_id, report)
+                daily_session.return_to_home()
+                return 0
 
-    checkpoint = checkpoint or store.load(
-        game_reset_id=reset_id, account_id=target.account_id, castle=target.castle,
-    ) or DailyTaskCheckpoint(
-        maintenance_date=local_date.isoformat(), game_reset_id=reset_id,
-        account_id=target.account_id, castle=target.castle,
-    )
-    if checkpoint.game_reset_id != reset_id:
-        raise ValueError("Journal reset identity conflicts; do not replay or discard existing receipts.")
-    checkpoint, outcome = ResourceItemExecutor(session, JournaledMutationDispatcher(store)).execute(
-        checkpoint=checkpoint, allow_empty_skip=role == CanaryRole.FREE_COOKIES,
-    )
-    if outcome.status == DailyTargetOutcomeStatus.SUCCESS and len(outcome.artifact_paths) >= 2:
-        result_kind, reason = CanaryOutcome.PASSED, CanaryReason.NONE
-    elif outcome.status == DailyTargetOutcomeStatus.APPLICABILITY_SKIP:
-        result_kind, reason = CanaryOutcome.APPLICABILITY_SKIP, CanaryReason.NO_INVENTORY
-    elif outcome.status == DailyTargetOutcomeStatus.SUCCESS:
-        result_kind, reason = CanaryOutcome.BLOCKED, CanaryReason.ALREADY_COMMITTED
-    else:
-        result_kind, reason = CanaryOutcome.BLOCKED, CanaryReason.UNPROVEN_POSTCONDITION
-    result = CanaryResult(
-        quest_id=case.quest_id, role=role, revision=_resource_revision(),
-        outcome=result_kind, reason=reason, artifact_paths=outcome.artifact_paths,
-    )
-    evidence_path = persist_canary_result(artifact_root=config.artifact_root, result=result)
-    _write_report(config.artifact_root, target.account_id, {
-        "mode": "reconcile_only" if arguments.reconcile_only else "execute",
-        "account_id": target.account_id, "castle_ref": target.castle_ref,
-        "castle": asdict(target.castle), "game_reset_id": reset_id,
-        "result": asdict(result), "outcome": asdict(outcome),
-        "canary_evidence_path": str(evidence_path),
-        "journal_path": str(store.checkpoint_path(
-            game_reset_id=checkpoint.game_reset_id,
-            account_id=target.account_id, castle=target.castle,
-        )),
-    })
-    return 0 if result_kind in {CanaryOutcome.PASSED, CanaryOutcome.APPLICABILITY_SKIP} else 1
+            checkpoint = checkpoint or store.load(
+                game_reset_id=reset_id, account_id=target.account_id, castle=target.castle,
+            ) or DailyTaskCheckpoint(
+                maintenance_date=local_date.isoformat(), game_reset_id=reset_id,
+                account_id=target.account_id, castle=target.castle,
+            )
+            if checkpoint.game_reset_id != reset_id:
+                raise ValueError("Journal reset identity conflicts; do not replay or discard existing receipts.")
+            checkpoint, outcome = ResourceItemExecutor(session, JournaledMutationDispatcher(store)).execute(
+                checkpoint=checkpoint, allow_empty_skip=role == CanaryRole.FREE_COOKIES,
+            )
+            if outcome.status == DailyTargetOutcomeStatus.SUCCESS and len(outcome.artifact_paths) >= 2:
+                result_kind, reason = CanaryOutcome.PASSED, CanaryReason.NONE
+            elif outcome.status == DailyTargetOutcomeStatus.APPLICABILITY_SKIP:
+                result_kind, reason = CanaryOutcome.APPLICABILITY_SKIP, CanaryReason.NO_INVENTORY
+            elif outcome.status == DailyTargetOutcomeStatus.SUCCESS:
+                result_kind, reason = CanaryOutcome.BLOCKED, CanaryReason.ALREADY_COMMITTED
+            else:
+                result_kind, reason = CanaryOutcome.BLOCKED, CanaryReason.UNPROVEN_POSTCONDITION
+            result = CanaryResult(
+                quest_id=case.quest_id, role=role, revision=_resource_revision(),
+                outcome=result_kind, reason=reason, artifact_paths=outcome.artifact_paths,
+            )
+            evidence_path = persist_canary_result(artifact_root=config.artifact_root, result=result)
+            _write_report(config.artifact_root, target.account_id, {
+                "mode": "reconcile_only" if arguments.reconcile_only else "execute",
+                "account_id": target.account_id, "castle_ref": target.castle_ref,
+                "castle": asdict(target.castle), "game_reset_id": reset_id,
+                "result": asdict(result), "outcome": asdict(outcome),
+                "canary_evidence_path": str(evidence_path),
+                "journal_path": str(store.checkpoint_path(
+                    game_reset_id=checkpoint.game_reset_id,
+                    account_id=target.account_id, castle=target.castle,
+                )),
+            })
+            return 0 if result_kind in {CanaryOutcome.PASSED, CanaryOutcome.APPLICABILITY_SKIP} else 1
 
 
 def _resource_revision() -> str:

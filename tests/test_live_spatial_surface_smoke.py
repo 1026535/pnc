@@ -3,10 +3,19 @@
 from __future__ import annotations
 
 import os
+import sys
+import tempfile
 import unittest
+from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 from pnc_automation.app import build_application_runner
+from pnc_automation.app.automation.engine.runner import RunResult, StepRunResult
+from pnc_automation.app.automation.engine.script_runner import require_successful_preparation
+from pnc_automation.app.automation.engine.task import TaskId, TaskStatus
+from pnc_automation.app.authoring.config.models import LiveAutomationRole
 from pnc_automation.app.pnc.domain.observation import Observation, SpatialSurfaceType
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.navigation.spatial_navigation import WorldCoordinate
@@ -33,11 +42,28 @@ class LiveSpatialSurfaceSmokeTests(unittest.TestCase):
         cls.application = build_application_runner(cls.config_path)
         cls.script_runner = cls.application.script_runner
         cls.account = cls.script_runner.config.require_account(cls.account_id)
-        cls.prepare_result = cls.script_runner.prepare_account_session(account_id=cls.account_id)
+        cls.account.require_live_role(LiveAutomationRole.SMOKE_TEST)
+        cls.lease_bundle = cls.script_runner.reserve_accounts((cls.account_id,))
+        cls.addClassCleanup(cls.lease_bundle.close)
+        cls.prepare_result = require_successful_preparation(
+            cls.script_runner.prepare_account_session(
+                account_id=cls.account_id,
+                required_role=LiveAutomationRole.SMOKE_TEST,
+            )
+        )
         cls.runner = build_live_automation_runner(
             config_account=cls.account,
             script_runner=cls.script_runner,
         )
+        cls.addClassCleanup(cls.runner.close)
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        """Releases the shared automation runner after the smoke suite."""
+
+        runner = getattr(cls, "runner", None)
+        if runner is not None:
+            runner.close()
 
     def test_live_spatial_smoke_preparation_reports_success(self) -> None:
         """Verifies the shared account-session preparation path completed without task failures."""
@@ -120,6 +146,86 @@ class LiveSpatialSurfaceSmokeTests(unittest.TestCase):
             observation.spatial_surface.surface_type == SpatialSurfaceType.WORLD_MAP
             and observation.spatial_surface.viewport.coordinate is not None
         )
+
+
+@unittest.skipIf(_live_smoke_enabled(), "Offline smoke setup proofs are disabled during live smoke runs.")
+class SpatialSurfaceSmokeSetupTests(unittest.TestCase):
+    """Proves smoke setup gates role and preparation before dependent runtime construction."""
+
+    def test_wrong_role_is_rejected_before_reservation_or_preparation(self) -> None:
+        """A role mismatch must not acquire a lease or prepare the account."""
+
+        self.addCleanup(LiveSpatialSurfaceSmokeTests.doClassCleanups)
+        account = SimpleNamespace(require_live_role=Mock(side_effect=PermissionError("wrong role")))
+        config = SimpleNamespace(require_account=Mock(return_value=account))
+        script_runner = SimpleNamespace(
+            config=config,
+            reserve_accounts=Mock(),
+            prepare_account_session=Mock(),
+        )
+        application = SimpleNamespace(script_runner=script_runner)
+
+        with tempfile.TemporaryDirectory() as directory:
+            missing_config = Path(directory) / "deliberately-missing-accounts.yaml"
+            with (
+                patch.dict(os.environ, {"PNC_LIVE_SMOKE_CONFIG": str(missing_config)}),
+                patch.object(sys.modules[__name__], "build_application_runner", return_value=application) as build,
+            ):
+                with self.assertRaises(PermissionError):
+                    LiveSpatialSurfaceSmokeTests.setUpClass()
+            build.assert_called_once_with(missing_config)
+
+        script_runner.reserve_accounts.assert_not_called()
+        script_runner.prepare_account_session.assert_not_called()
+
+    def test_failed_preparation_runs_class_cleanup_for_reservation(self) -> None:
+        """A preparation RunResult failure closes the class reservation immediately."""
+
+        self.addCleanup(LiveSpatialSurfaceSmokeTests.doClassCleanups)
+        class TrackedReservation:
+            def __init__(self) -> None:
+                self.closed = False
+
+            def close(self) -> None:
+                self.closed = True
+
+        reservation = TrackedReservation()
+        account = SimpleNamespace(require_live_role=Mock())
+        config = SimpleNamespace(require_account=Mock(return_value=account))
+        failed_result = RunResult(
+            account_id="testing",
+            script_name="prepare",
+            steps=(
+                StepRunResult(
+                    task_id=TaskId.LOGIN,
+                    status=TaskStatus.FAILED,
+                    attempts=1,
+                    message="offline fixture failure",
+                ),
+            ),
+            started_at=datetime.now(tz=UTC),
+            finished_at=datetime.now(tz=UTC),
+        )
+        script_runner = SimpleNamespace(
+            config=config,
+            reserve_accounts=Mock(return_value=reservation),
+            prepare_account_session=Mock(return_value=failed_result),
+        )
+        application = SimpleNamespace(script_runner=script_runner)
+
+        with tempfile.TemporaryDirectory() as directory:
+            missing_config = Path(directory) / "deliberately-missing-accounts.yaml"
+            with (
+                patch.dict(os.environ, {"PNC_LIVE_SMOKE_CONFIG": str(missing_config)}),
+                patch.object(sys.modules[__name__], "build_application_runner", return_value=application) as build,
+            ):
+                with self.assertRaises(RuntimeError):
+                    LiveSpatialSurfaceSmokeTests.setUpClass()
+            build.assert_called_once_with(missing_config)
+            LiveSpatialSurfaceSmokeTests.doClassCleanups()
+
+        self.assertTrue(reservation.closed)
+        script_runner.prepare_account_session.assert_called_once()
 
 
 if __name__ == "__main__":

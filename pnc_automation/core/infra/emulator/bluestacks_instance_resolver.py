@@ -25,7 +25,7 @@ _LIST_HD_PLAYER_PROCESSES_SCRIPT = rf"""
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 @(
     Get-CimInstance Win32_Process -Filter "Name = '{_HD_PLAYER_PROCESS_NAME}'" -ErrorAction Stop |
-    Select-Object ProcessId, CommandLine
+    Select-Object ProcessId, CommandLine, WorkingSetSize
 ) | ConvertTo-Json -Compress
 """.strip()
 
@@ -96,6 +96,7 @@ class BlueStacksRunningInstance:
     process_id: int
     instance_key: str
     command_line: str
+    working_set_bytes: int | None = None
 
 
 @dataclass(slots=True)
@@ -103,23 +104,31 @@ class PowerShellBlueStacksRunningInstanceSource:
     """Queries Windows process metadata for the authoritative set of running BlueStacks instances."""
 
     powershell_path: str = "powershell"
+    timeout_seconds: float = 15.0
 
     def list_running_instances(self) -> tuple[BlueStacksRunningInstance, ...]:
         """Returns the running BlueStacks player processes discovered through PowerShell CIM."""
 
-        completed = subprocess.run(
-            [self.powershell_path, "-NoProfile", "-Command", _LIST_HD_PLAYER_PROCESSES_SCRIPT],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            check=False,
-        )
+        try:
+            completed = subprocess.run(
+                [self.powershell_path, "-NoProfile", "-Command", _LIST_HD_PLAYER_PROCESSES_SCRIPT],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                check=False,
+                timeout=self.timeout_seconds,
+            )
+        except subprocess.TimeoutExpired as error:
+            raise ConfigurationError(
+                "Timed out while enumerating running BlueStacks player processes.",
+                failure_phase="discovery",
+                timeout_seconds=self.timeout_seconds,
+                timed_out=True,
+            ) from error
         if completed.returncode != 0:
             raise ConfigurationError(
                 "Failed to enumerate running BlueStacks player processes.",
-                command=(self.powershell_path, "-NoProfile", "-Command", _LIST_HD_PLAYER_PROCESSES_SCRIPT),
-                stdout=completed.stdout,
-                stderr=completed.stderr,
+                failure_phase="discovery",
                 returncode=completed.returncode,
             )
         return _parse_running_instances_json(completed.stdout)
@@ -270,7 +279,12 @@ class BlueStacksInstanceResolver:
             running_instances=self.running_instance_source.list_running_instances(),
         )
 
-    def resolve(self, config: BlueStacksInstanceConfig) -> BlueStacksInstance:
+    def resolve(
+        self,
+        config: BlueStacksInstanceConfig,
+        *,
+        allow_launch: bool = True,
+    ) -> BlueStacksInstance:
         """Resolves one authored BlueStacks display name to a live runtime instance target."""
 
         records = self.load_runtime_instances()
@@ -312,12 +326,34 @@ class BlueStacksInstanceResolver:
             )
         running_instance_keys = catalog.running_instance_keys()
         if match.instance_key not in running_instance_keys:
+            if not allow_launch:
+                raise ConfigurationError(
+                    f"BlueStacks display_name '{config.display_name}' is stopped and the current runtime "
+                    "capability policy does not allow launching it.",
+                    display_name=config.display_name,
+                    instance_id=config.id,
+                    instance_key=match.instance_key,
+                    bluestacks_config_path=str(self.config_path),
+                )
             catalog = self._launch_and_wait_for_instance(
                 config=config,
                 match=match,
-                records=records,
                 initial_running_instance_keys=running_instance_keys,
             )
+            refreshed_matches = tuple(
+                record
+                for record in catalog.records
+                if record.matches_display_name(config.display_name)
+            )
+            if len(refreshed_matches) != 1:
+                raise ConfigurationError(
+                    f"BlueStacks display_name '{config.display_name}' changed ambiguously during startup.",
+                    display_name=config.display_name,
+                    instance_id=config.id,
+                    instance_keys=tuple(record.instance_key for record in refreshed_matches),
+                    bluestacks_config_path=str(self.config_path),
+                )
+            match = refreshed_matches[0]
         matched_port = match.require_adb_port(config_path=self.config_path)
         matching_running_port_claims = tuple(
             record
@@ -345,7 +381,6 @@ class BlueStacksInstanceResolver:
         *,
         config: BlueStacksInstanceConfig,
         match: BlueStacksRuntimeInstanceRecord,
-        records: tuple[BlueStacksRuntimeInstanceRecord, ...],
         initial_running_instance_keys: frozenset[str],
     ) -> BlueStacksRuntimeCatalog:
         """Starts a configured inactive BlueStacks instance and waits for process metadata to confirm it."""
@@ -355,7 +390,7 @@ class BlueStacksInstanceResolver:
         for attempt_index in range(poll_attempts):
             if self.launch_poll_interval_seconds > 0:
                 self.sleep(self.launch_poll_interval_seconds)
-            catalog = self.load_runtime_catalog(records=records)
+            catalog = self.load_runtime_catalog()
             if match.instance_key in catalog.running_instance_keys():
                 return catalog
         raise ConfigurationError(
@@ -458,6 +493,7 @@ def _parse_running_instance(raw_instance: object, *, process_index: int) -> Blue
         )
     process_id = raw_instance.get("ProcessId")
     command_line = raw_instance.get("CommandLine")
+    working_set_bytes = raw_instance.get("WorkingSetSize")
     if not isinstance(process_id, int):
         raise ConfigurationError(
             "BlueStacks process enumeration returned a process without an integer ProcessId.",
@@ -471,10 +507,24 @@ def _parse_running_instance(raw_instance: object, *, process_index: int) -> Blue
             process_index=process_index,
             raw_instance=raw_instance,
         )
+    if isinstance(working_set_bytes, str) and working_set_bytes.isdecimal():
+        working_set_bytes = int(working_set_bytes)
+    if working_set_bytes is not None and (
+        not isinstance(working_set_bytes, int)
+        or isinstance(working_set_bytes, bool)
+        or working_set_bytes < 0
+    ):
+        raise ConfigurationError(
+            "BlueStacks process enumeration returned an invalid WorkingSetSize.",
+            process_id=process_id,
+            process_index=process_index,
+            working_set_bytes=working_set_bytes,
+        )
     return BlueStacksRunningInstance(
         process_id=process_id,
         instance_key=_parse_running_instance_key(command_line=command_line, process_id=process_id),
         command_line=command_line,
+        working_set_bytes=working_set_bytes,
     )
 
 

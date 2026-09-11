@@ -79,6 +79,24 @@ class _FakeInstanceLauncher:
         self.launched_instance_keys.append(instance_key)
 
 
+@dataclass(slots=True)
+class _UpdatingConfigInstanceLauncher:
+    """Models BlueStacks assigning the authoritative ADB port during startup."""
+
+    config_path: Path
+    updated_content: str
+    launched_instance_keys: list[str] = field(default_factory=list)
+
+    def launch_instance(self, instance_key: str) -> None:
+        """Records startup and replaces stale host metadata with its runtime values."""
+
+        self.launched_instance_keys.append(instance_key)
+        self.config_path.write_text(
+            textwrap.dedent(self.updated_content).strip() + "\n",
+            encoding="utf-8",
+        )
+
+
 class BlueStacksInstanceResolverTests(unittest.TestCase):
     """Validates runtime BlueStacks port discovery from the authoritative host config."""
 
@@ -236,6 +254,65 @@ class BlueStacksInstanceResolverTests(unittest.TestCase):
             self.assertEqual(launcher.launched_instance_keys, ["Nougat32"])
             self.assertEqual(running_source.calls, 2)
 
+    def test_resolve_allow_launch_false_rejects_stopped_instance_without_launching(self) -> None:
+        """Enforces the caller's read-only capability before any BlueStacks launch request."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            config_path = _write_bluestacks_config(
+                Path(temp_directory),
+                """
+                bst.instance.Nougat32.display_name="serious_stuff"
+                bst.instance.Nougat32.status.adb_port="5555"
+                """,
+            )
+            launcher = _FakeInstanceLauncher()
+            resolver = BlueStacksInstanceResolver(
+                config_path=config_path,
+                running_instance_source=_FakeRunningInstanceSource(),
+                instance_launcher=launcher,
+            )
+
+            with self.assertRaisesRegex(ConfigurationError, "does not allow launching"):
+                resolver.resolve(_make_instance_config(display_name="serious_stuff"), allow_launch=False)
+
+            self.assertEqual(launcher.launched_instance_keys, [])
+
+    def test_resolve_reloads_adb_port_assigned_during_instance_launch(self) -> None:
+        """Uses post-launch host metadata instead of connecting to a stale pre-launch port."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            config_path = _write_bluestacks_config(
+                Path(temp_directory),
+                """
+                bst.instance.Rvc64.display_name="157_farm"
+                bst.instance.Rvc64.status.adb_port="5557"
+                """,
+            )
+            running_source = _SequencedRunningInstanceSource(
+                snapshots=(
+                    (),
+                    (_make_running_instance(instance_key="Rvc64"),),
+                ),
+            )
+            launcher = _UpdatingConfigInstanceLauncher(
+                config_path=config_path,
+                updated_content="""
+                bst.instance.Rvc64.display_name="157_farm"
+                bst.instance.Rvc64.status.adb_port="5555"
+                """,
+            )
+            resolver = BlueStacksInstanceResolver(
+                config_path=config_path,
+                running_instance_source=running_source,
+                instance_launcher=launcher,
+                launch_poll_interval_seconds=0,
+            )
+
+            instance = resolver.resolve(_make_instance_config(display_name="157_farm"))
+
+            self.assertEqual(instance.device_id, "127.0.0.1:5555")
+            self.assertEqual(launcher.launched_instance_keys, ["Rvc64"])
+
     def test_resolve_rejects_matching_display_name_when_launch_does_not_start_instance(self) -> None:
         """Fails fast when BlueStacks launch returns but process metadata never exposes the target."""
 
@@ -367,6 +444,15 @@ class BlueStacksInstanceResolverTests(unittest.TestCase):
             running_instances,
             (_make_running_instance(instance_key="Nougat32_1"),),
         )
+
+    def test_parse_running_instances_json_loads_working_set_size(self) -> None:
+        """Carries CIM working-set bytes into the typed process snapshot for health monitoring."""
+
+        running_instances = _parse_running_instances_json(
+            '{"ProcessId":101,"CommandLine":"HD-Player.exe --instance Nougat32_1","WorkingSetSize":"1048576"}'
+        )
+
+        self.assertEqual(running_instances[0].working_set_bytes, 1048576)
 
 
 def _write_bluestacks_config(root: Path, content: str) -> Path:

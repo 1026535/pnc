@@ -7,10 +7,14 @@ import unittest
 from pathlib import Path
 
 from pnc_automation.app import build_application_runner
-from pnc_automation.app.automation.engine.script_runner import configure_world_map_movement_budget
+from pnc_automation.app.automation.engine.script_runner import (
+    configure_world_map_movement_budget,
+    require_successful_preparation,
+)
 from pnc_automation.app.pnc.domain.observation import Observation, SpatialSurfaceType
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.automation.engine.task import TaskPreflight
+from pnc_automation.app.authoring.config.models import LiveAutomationRole
 from pnc_automation.app.pnc.navigation.world_map_movement_calibration import (
     WorldMapLaneProbeRequest,
     WorldMapSwipeProbeClassification,
@@ -52,18 +56,35 @@ class LiveWorldMapMovementCalibrationSmokeTests(unittest.TestCase):
         """Prepares the selected live account and builds the shared runtime services once for the suite."""
 
         cls.config_path = Path(os.getenv("PNC_LIVE_WORLD_MAP_MOVEMENT_CONFIG", "config/accounts.yaml"))
-        cls.account_id = os.getenv("PNC_LIVE_WORLD_MAP_MOVEMENT_ACCOUNT", "mega_old_acc")
+        cls.account_id = os.getenv("PNC_LIVE_WORLD_MAP_MOVEMENT_ACCOUNT", "testing")
         cls.application = build_application_runner(cls.config_path)
         cls.script_runner = cls.application.script_runner
         cls.account = cls.script_runner.config.require_account(cls.account_id)
-        cls.prepare_result = cls.script_runner.prepare_account_session(account_id=cls.account_id)
+        cls.account.require_live_role(LiveAutomationRole.SMOKE_TEST)
+        cls.lease_bundle = cls.script_runner.reserve_accounts((cls.account_id,))
+        cls.addClassCleanup(cls.lease_bundle.close)
+        cls.prepare_result = require_successful_preparation(
+            cls.script_runner.prepare_account_session(
+                account_id=cls.account_id,
+                required_role=LiveAutomationRole.SMOKE_TEST,
+            )
+        )
         connected = build_live_runtime_bundle(
             config_account=cls.account,
             script_runner=cls.script_runner,
         )
         cls.runtime = connected.runtime
+        cls.addClassCleanup(connected.close)
         configure_world_map_movement_budget(cls.runtime, movement_step_budget=12)
         cls.runner = connected.runner
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        """Releases the connected runtime bundle after the calibration suite."""
+
+        runtime = getattr(cls, "runtime", None)
+        if runtime is not None:
+            runtime.close()
 
     def test_live_world_map_movement_preparation_reports_success(self) -> None:
         """Verifies the shared preparation flow succeeded before calibration smoke begins."""

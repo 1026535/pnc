@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 
 from pnc_automation.app import build_application_runner
+from pnc_automation.app.authoring.config.models import LiveAutomationRole
 from pnc_automation.app.authoring.scripts.loader import load_run_script
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from tests.live_smoke_support import build_live_runtime
@@ -32,6 +33,9 @@ class LiveAccountNavigationSmokeTests(unittest.TestCase):
         cls.application = build_application_runner(cls.config_path)
         cls.script_runner = cls.application.script_runner
         cls.account = cls.script_runner.config.require_account(cls.account_id)
+        cls.account.require_live_role(LiveAutomationRole.SMOKE_TEST)
+        cls.lease_bundle = cls.script_runner.reserve_accounts((cls.account_id,))
+        cls.addClassCleanup(cls.lease_bundle.close)
         cls.prepared_script = cls.script_runner.task_registry.prepare_script(
             load_run_script(cls.script_path),
             castle_targets=cls.script_runner.config.find_castle_targets(cls.account_id),
@@ -48,11 +52,25 @@ class LiveAccountNavigationSmokeTests(unittest.TestCase):
             config_account=cls.account,
             script_runner=cls.script_runner,
         )
+        cls.runtime = runtime
+        cls.addClassCleanup(cls.runtime.close)
         cls.session = runtime.session
         cls.observation_service = runtime.observation_service
         cls.before_observation = cls.observation_service.observe("live_smoke_account_navigation_before")
-        cls.run_result = cls.application.run(account_id=cls.account_id, script_path=str(cls.script_path))
+        cls.run_result = cls.application.run(
+            account_id=cls.account_id,
+            script_path=str(cls.script_path),
+            required_role=LiveAutomationRole.SMOKE_TEST,
+        )
         cls.after_observation = cls.observation_service.observe("live_smoke_account_navigation_after")
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        """Releases the shared connected runtime after the smoke suite."""
+
+        runtime = getattr(cls, "runtime", None)
+        if runtime is not None:
+            runtime.close()
 
     def test_live_smoke_run_reports_all_steps_successful(self) -> None:
         """Verifies the live minimal bootstrap script completed without task failures."""

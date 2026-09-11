@@ -11,7 +11,11 @@ from _script_bootstrap import ensure_repo_root_on_path
 root = ensure_repo_root_on_path()
 
 from pnc_automation.app import build_application_runner
-from pnc_automation.app.automation.engine.script_runner import configure_world_map_movement_budget
+from pnc_automation.app.authoring.config.models import LiveAutomationRole
+from pnc_automation.app.automation.engine.script_runner import (
+    configure_world_map_movement_budget,
+    require_successful_preparation,
+)
 from pnc_automation.app.automation.engine.runner import AutomationRunner
 from pnc_automation.app.automation.engine.task import TaskPreflight
 from pnc_automation.app.pnc.domain.observation import Observation, SpatialSurfaceType
@@ -49,11 +53,19 @@ def main() -> None:
     arguments = parser.parse_args()
 
     application = build_application_runner(Path(arguments.config))
-    prepare_result = application.script_runner.prepare_account_session(account_id=arguments.account)
-    if not all(step.status.value == "success" for step in prepare_result.steps):
-        raise AssertionError(f"Preparation failed: {prepare_result.steps}")
     account = application.script_runner.config.require_account(arguments.account)
-    connected = application.script_runner.build_connected_runtime_bundle(account=account)
+    account.require_live_role(LiveAutomationRole.LIVE_TESTING)
+    with application.script_runner.reserve_accounts((arguments.account,)):
+        prepare_result = require_successful_preparation(
+            application.script_runner.prepare_account_session(
+                account_id=arguments.account,
+                required_role=LiveAutomationRole.LIVE_TESTING,
+            )
+        )
+        connected = application.script_runner.build_connected_runtime_bundle(
+            account=account,
+            required_role=LiveAutomationRole.LIVE_TESTING,
+        )
     runtime = connected.runtime
     runner = connected.runner
     configure_world_map_movement_budget(runtime, movement_step_budget=12)
@@ -205,19 +217,22 @@ def main() -> None:
     except Exception as error:  # pragma: no cover - live-only fallback
         errors.append(f"fatal: {error}")
     finally:
-        document = _build_report_document(
-            calibration_matrix=calibration_matrix,
-            dead_zone_report=dead_zone_report,
-            lane_probe_reports=lane_probe_reports,
-            sweep_results=sweep_results,
-            errors=errors,
-        )
-        stored = runtime.world_map_movement_calibration_store.persist(
-            artifact_directory=runtime.observation_service.artifact_directory,
-            label=arguments.label,
-            captured_at=datetime.now(tz=UTC),
-            document=document,
-        )
+        try:
+            document = _build_report_document(
+                calibration_matrix=calibration_matrix,
+                dead_zone_report=dead_zone_report,
+                lane_probe_reports=lane_probe_reports,
+                sweep_results=sweep_results,
+                errors=errors,
+            )
+            stored = runtime.world_map_movement_calibration_store.persist(
+                artifact_directory=runtime.observation_service.artifact_directory,
+                label=arguments.label,
+                captured_at=datetime.now(tz=UTC),
+                document=document,
+            )
+        finally:
+            connected.close()
     print(stored.path)
     if errors:
         raise SystemExit(1)

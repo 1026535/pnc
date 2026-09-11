@@ -11,11 +11,17 @@ from typing import Any
 from pnc_automation.app.runtime.observation_mode import ObservationMode
 from pnc_automation.app import ApplicationRunner, build_application_runner
 from pnc_automation.app.automation.engine.runner import RunResult, StepRunResult
+from pnc_automation.app.automation.engine.script_runner import require_successful_preparation
 from pnc_automation.app.automation.engine.task import TaskId
 from pnc_automation.app.authoring.config.models import CastleIdentity
 from pnc_automation.app.pnc.domain.building_priority_input import resolve_building_priority_values
+from pnc_automation.bluestacks_management.instance_lease import InstanceLeaseBundle
 
 _ACTIVE_SESSION: ContextVar["_ActiveSession | None"] = ContextVar("pnc_automation_active_session", default=None)
+_ACTIVE_RESERVATION: ContextVar["_ActiveReservation | None"] = ContextVar(
+    "pnc_automation_active_reservation",
+    default=None,
+)
 _DEFAULT_API: "AutomationApi | None" = None
 
 
@@ -27,6 +33,71 @@ class _ActiveSession:
     account_id: str
 
 
+@dataclass(frozen=True, slots=True)
+class _ActiveReservation:
+    """Carries the account bundle protected by the current workflow scope."""
+
+    api: "AutomationApi"
+    account_ids: frozenset[str]
+
+
+@dataclass(slots=True)
+class AutomationReservation:
+    """Context manager that holds a complete account reservation across a workflow."""
+
+    api: "AutomationApi"
+    account_ids: tuple[str, ...]
+    _reservation: InstanceLeaseBundle | None = field(default=None, init=False, repr=False)
+    _token: Token[_ActiveReservation | None] | None = field(default=None, init=False, repr=False)
+
+    def __enter__(self) -> "AutomationReservation":
+        """Acquires the complete bundle before any workflow operation starts."""
+
+        if self._reservation is not None:
+            raise RuntimeError("An automation reservation cannot be entered twice without being closed.")
+        active_reservation = _ACTIVE_RESERVATION.get()
+        if active_reservation is not None:
+            if active_reservation.api is not self.api:
+                raise RuntimeError(
+                    "Live calls cannot switch AutomationApi instances while a workflow reservation is active."
+                )
+            undeclared_accounts = frozenset(self.account_ids) - active_reservation.account_ids
+            if undeclared_accounts:
+                names = ", ".join(sorted(undeclared_accounts))
+                raise RuntimeError(
+                    f"Cannot expand an active workflow reservation to undeclared accounts: {names}. "
+                    f"Declare the complete account bundle before entering the workflow."
+                )
+        reservation = self.api.application.reserve_accounts(self.account_ids)
+        try:
+            token = _ACTIVE_RESERVATION.set(
+                _ActiveReservation(api=self.api, account_ids=frozenset(self.account_ids))
+            )
+        except BaseException:
+            reservation.close()
+            raise
+        self._reservation = reservation
+        self._token = token
+        return self
+
+    def close(self) -> None:
+        """Restores the previous workflow scope and releases the physical reservation."""
+
+        token = self._token
+        self._token = None
+        if token is not None:
+            _ACTIVE_RESERVATION.reset(token)
+        reservation = self._reservation
+        self._reservation = None
+        if reservation is not None:
+            reservation.close()
+
+    def __exit__(self, _exception_type: object, _exception: object, _traceback: object) -> None:
+        """Releases the complete workflow reservation on normal or exceptional exit."""
+
+        self.close()
+
+
 @dataclass(slots=True)
 class AutomationSession:
     """Context manager that prepares one account session and exposes bound task helpers."""
@@ -35,22 +106,41 @@ class AutomationSession:
     account_id: str
     castle: CastleIdentity | None = None
     preparation_result: RunResult | None = None
+    _reservation: AutomationReservation | None = field(default=None, init=False, repr=False)
     _token: Token[_ActiveSession | None] | None = field(default=None, init=False, repr=False)
 
     def __enter__(self) -> "AutomationSession":
         """Prepares the account session and exposes it as the active direct-call scope."""
 
-        self.preparation_result = self.api.prepare_account_session(account_id=self.account_id, castle=self.castle)
-        self._token = _ACTIVE_SESSION.set(_ActiveSession(api=self.api, account_id=self.account_id))
-        return self
+        reservation = self.api.reserve_accounts((self.account_id,))
+        try:
+            reservation.__enter__()
+            self.preparation_result = require_successful_preparation(
+                self.api.prepare_account_session(
+                    account_id=self.account_id,
+                    castle=self.castle,
+                )
+            )
+            self._reservation = reservation
+            self._token = _ACTIVE_SESSION.set(_ActiveSession(api=self.api, account_id=self.account_id))
+            return self
+        except BaseException:
+            reservation.close()
+            raise
 
     def __exit__(self, exc_type: object, exc: object, traceback: object) -> None:
         """Leaves the active scope without logging out or restoring a previous castle."""
 
         del exc_type, exc, traceback
-        if self._token is not None:
-            _ACTIVE_SESSION.reset(self._token)
-            self._token = None
+        try:
+            if self._token is not None:
+                _ACTIVE_SESSION.reset(self._token)
+                self._token = None
+        finally:
+            reservation = self._reservation
+            self._reservation = None
+            if reservation is not None:
+                reservation.close()
 
     def building_upgrade(
         self,
@@ -209,7 +299,13 @@ class AutomationApi:
     ) -> RunResult:
         """Runs the shared session-preparation path for one account and optional castle target."""
 
+        self._require_account_in_active_reservation(account_id)
         return self.application.prepare_account_session(account_id=account_id, castle=castle)
+
+    def reserve_accounts(self, account_ids: tuple[str, ...]) -> AutomationReservation:
+        """Returns a scope that holds every physical instance used by a workflow."""
+
+        return AutomationReservation(api=self, account_ids=tuple(account_ids))
 
     def use_account(
         self,
@@ -472,6 +568,19 @@ class AutomationApi:
     def _resolve_account_id(self, account_id: str | None) -> str:
         """Returns an explicit account id or the currently active context-scoped account."""
 
+        active_reservation = _ACTIVE_RESERVATION.get()
+        if active_reservation is not None:
+            if account_id is not None:
+                self._require_account_in_active_reservation(account_id)
+                return account_id
+            active_session = _ACTIVE_SESSION.get()
+            if active_session is not None and active_session.api is self:
+                return active_session.account_id
+            if len(active_reservation.account_ids) == 1:
+                return next(iter(active_reservation.account_ids))
+            raise RuntimeError(
+                "A multi-account workflow reservation requires an explicit account_id for each live call."
+            )
         if account_id is not None:
             return account_id
         active_session = _ACTIVE_SESSION.get()
@@ -480,6 +589,22 @@ class AutomationApi:
                 "Direct task calls require either an explicit account_id or an active use_account(...) context."
             )
         return active_session.account_id
+
+    def _require_account_in_active_reservation(self, account_id: str) -> None:
+        """Rejects live calls that escape the currently declared workflow account bundle."""
+
+        active_reservation = _ACTIVE_RESERVATION.get()
+        if active_reservation is None:
+            return
+        if active_reservation.api is not self:
+            raise RuntimeError(
+                "Live calls cannot switch AutomationApi instances while a workflow reservation is active."
+            )
+        if account_id not in active_reservation.account_ids:
+            raise RuntimeError(
+                f"Account '{account_id}' is outside the active workflow reservation. "
+                f"Declare its complete account bundle before entering the workflow."
+            )
 
 
 def build_api(
@@ -505,6 +630,12 @@ def use_account(account_id: str, *, castle: CastleIdentity | None = None) -> Aut
     """Returns a context manager backed by the default application configuration."""
 
     return _default_api().use_account(account_id, castle=castle)
+
+
+def reserve_accounts(account_ids: tuple[str, ...]) -> AutomationReservation:
+    """Returns a workflow reservation backed by the default application facade."""
+
+    return _default_api().reserve_accounts(account_ids)
 
 
 def building_upgrade(

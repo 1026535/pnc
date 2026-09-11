@@ -8,7 +8,8 @@ import json
 from pathlib import Path
 from uuid import uuid4
 
-from pnc_automation.app.authoring.config.models import AccountConfig, CastleIdentity
+from pnc_automation.app.authoring.config.models import AccountConfig, CastleIdentity, LiveAutomationRole
+from pnc_automation.app.automation.engine.observed_action_executor import ObservedActionExecutor
 from pnc_automation.app.pnc.domain.observation import CurrentCastleEvidenceKind, Observation
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.vision.navigation_perception import NavigationPerception
@@ -31,8 +32,24 @@ class CoreRuntime:
     trace_path: Path
     _perception: NavigationPerception
     _run_id: str
+    _observed_action_executor: ObservedActionExecutor | None = None
     _capture_count: int = 0
     _last_observation: Observation | None = None
+
+    def close(self) -> None:
+        """Releases the connected runtime owned by this replacement-core operation."""
+
+        self.runtime.close()
+
+    def __enter__(self) -> "CoreRuntime":
+        """Enters an explicitly scoped replacement-core runtime."""
+
+        return self
+
+    def __exit__(self, _exception_type: object, _exception: object, _traceback: object) -> None:
+        """Releases the replacement-core runtime on exit."""
+
+        self.close()
 
     @property
     def observation_count(self) -> int:
@@ -47,7 +64,23 @@ class CoreRuntime:
         return self._last_observation
 
     def observe(self, label: str, *, include_content: bool = False) -> Observation:
-        """Captures and independently perceives one fresh frame without roster synchronization."""
+        """Captures one frame, then delegates safe interruption recovery to the connected executor."""
+
+        observation = self._observe_once(label, include_content=include_content)
+        if self._observed_action_executor is None:
+            return observation
+        recovered = self._observed_action_executor.recover_interruption_if_required(
+            observation,
+            label_prefix=f"core_{self._run_id}_{sanitize_artifact_segment(label)}_interruption",
+            observe=lambda recovery_label, request=None: self._observe_once(
+                recovery_label,
+                include_content=include_content,
+            ),
+        )
+        return recovered if recovered is not None else observation
+
+    def _observe_once(self, label: str, *, include_content: bool) -> Observation:
+        """Captures and perceives one frame without recursively entering popup recovery."""
 
         self._capture_count += 1
         capture_label = (
@@ -147,13 +180,42 @@ def build_core_runtime(
     policy: NavigationPolicy | None = None,
     *,
     trace_path: Path | None = None,
+    required_role: LiveAutomationRole | None = None,
 ) -> CoreRuntime:
     """Builds exactly one connected runtime graph for replacement-core work."""
 
     if not artifact_directory.strip():
         raise ValueError("Core runtime artifact_directory cannot be empty.")
-    connected_runtime = script_runner.build_connected_runtime(account=account)
-    executor = connected_runtime.require_observed_action_executor(
+    connected_runtime = script_runner.build_connected_runtime(
+        account=account,
+        required_role=required_role,
+    )
+    try:
+        return _assemble_core_runtime(
+            script_runner=script_runner,
+            connected_runtime=connected_runtime,
+            account=account,
+            artifact_directory=artifact_directory,
+            policy=policy,
+            trace_path=trace_path,
+        )
+    except BaseException:
+        connected_runtime.close()
+        raise
+
+
+def _assemble_core_runtime(
+    *,
+    script_runner: ScriptRunner,
+    connected_runtime: ConnectedAccountRuntime,
+    account: AccountConfig,
+    artifact_directory: str,
+    policy: NavigationPolicy | None,
+    trace_path: Path | None,
+) -> CoreRuntime:
+    """Assembles replacement-core services while the caller owns the connected runtime."""
+
+    observed_action_executor = connected_runtime.require_observed_action_executor(
         "Replacement navigation requires the canonical selector-backed action executor."
     )
     recognizer = connected_runtime.observation_service.observation_builder.visual_recognizer
@@ -183,7 +245,7 @@ def build_core_runtime(
         holder["runtime"].record(entry)
 
     navigation = NavigationCore(
-        executor.action_executor,
+        observed_action_executor.action_executor,
         observe,
         reviewed_navigation_edges(),
         policy=policy or NavigationPolicy(),
@@ -196,6 +258,7 @@ def build_core_runtime(
         trace_path=resolved_trace_path,
         _perception=perception,
         _run_id=run_id,
+        _observed_action_executor=observed_action_executor,
     )
     holder["runtime"] = result
     return result

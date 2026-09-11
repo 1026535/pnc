@@ -228,6 +228,31 @@ class NavigationPerceptionTests(unittest.TestCase):
         self.assertEqual(result.screen_type, ScreenType.PNC_HOME_CITY)
         self.assertFalse(result.has(UiElementId.PNC_BOTTOM_NAV_QUEST))
 
+    def test_sanitized_home_city_x_regression_keeps_home_controls_and_no_popup(self):
+        """Keeps the reviewed Home identity when a HUD sparkle resembles a popup X."""
+
+        ocr = Mock(spec=OcrService)
+        ocr.read_result.return_value = OcrResult(lines=(), words=())
+        with Image.open(Path('tests/data/screen_recognition/home_city_popup_x_regression.png')) as image:
+            capture = CapturedScreenshot(
+                None,
+                image.copy(),
+                'PNG',
+                ephemeral_captured_at=datetime.now(UTC),
+            )
+
+        result = NavigationPerception(
+            load_visual_screen_recognizer(),
+            PncObservationEnricher(ocr),
+        ).build(capture)
+
+        self.assertEqual(result.screen_type, ScreenType.PNC_HOME_CITY)
+        self.assertFalse(result.blocking_popup)
+        self.assertFalse(result.has(UiElementId.PNC_POPUP_CLOSE_BUTTON))
+        self.assertTrue(result.has(UiElementId.PNC_HOME_WORLD_SWITCH))
+        self.assertTrue(result.has(UiElementId.PNC_HOME_RESEARCH_BUTTON))
+        self.assertTrue(result.has(UiElementId.PNC_BOTTOM_NAV_MORE))
+
     def test_overlay_blocks_even_when_background_header_survives(self):
         result = NavigationPerception(load_visual_screen_recognizer(), Guard(ScreenType.PNC_POPUP)).build(self.capture('update_over_bag.png'))
         self.assertTrue(result.blocking_popup)

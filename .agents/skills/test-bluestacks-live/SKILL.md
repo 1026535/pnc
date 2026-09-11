@@ -17,6 +17,14 @@ Run live emulator validation only when the fidelity is worth the cost. Use offli
 4. Use the repo's configured `adb_path` and `bluestacks_config_path`; do not hard-code ADB ports or device IDs.
 5. Keep ADB local. Treat exposed ADB ports as sensitive because unauthenticated ADB access can control the emulator.
 6. Never overwrite real local config unless the user explicitly asks.
+7. Treat castle inventory and live execution eligibility as separate concerns. Keep every configured account's castle roster current even when that account is excluded from testing.
+8. Treat `accounts[].live_roles` as the live authority and validate the requested role before constructing a runtime. Account/display assignments such as `testing`/`smoke_test`, `serious_stuff`/`live_testing`, `mega_old_acc`/`daily_canary`, and `main`/`read_only` are current examples and may be reassigned; do not hard-code them as permanent workflow ownership.
+9. The host-management CLI loads only host bindings, roles, metadata, and memory policy, so it must not require credentials or castle files. It rereads valid host authority every monitor sample and again under the instance lease before destructive mutation. Durable recovery intent and cooldown survive process restarts; bound recovery to 3 launch attempts per pass and 9 persisted attempts total, and block pending launches after role or identity revocation.
+10. Do not bypass an instance-busy error. The process-scoped instance lease is the canonical ownership gate. Hold it across preparation, dependent work, and cleanup. Wait through its bounded acquisition policy; if the bound expires, choose another role-eligible instance or report the owner.
+11. A process that needs several instances must declare and acquire the complete instance bundle before touching any of them. Never acquire additional instances incrementally while retaining earlier leases.
+12. For multi-step Python live workflows, use one `with api.use_account(...)` or `with api.reserve_accounts((...))` scope for the complete sequence. Do not make separate one-shot calls for dependent steps, because another process may acquire the instance after an isolated call releases its lease. The active scope rejects accounts that were not declared in its bundle.
+13. Keep the configured BlueStacks working-set monitor running as a supervised host task. Watch mode continues monitoring other instances after a per-instance recovery failure and persists structured evidence; one-shot and fatal host/configuration errors are nonzero. Emit failures through the bounded rotating state log without raw secrets.
+14. The separately scheduled 01:55 America/Toronto fleet-maintenance boundary snapshots configured instances that are open, acquires their complete bundle, and restarts only that snapshot. It must not launch instances that were closed; use `restart-open --require-maintenance-window --include-read-only` for that explicit boundary.
 
 ## Workflow
 
@@ -27,7 +35,7 @@ Run live emulator validation only when the fidelity is worth the cost. Use offli
    - `PNC_RUN_LIVE_DAILY_TASK_SMOKE=1` for daily-task workflow validation.
    - `PNC_RUN_LIVE_HOME_CITY_MAP_SMOKE=1` for home-city atlas/building navigation.
    - `PNC_RUN_LIVE_WORLD_MAP_MOVEMENT_CALIBRATION=1` for movement calibration.
-3. Prefer the configured `testing` account and whichever castle is currently active on that instance when no castle target is specified. Verify the active identity and do not select or switch castles unless the user explicitly names and authorizes one.
+3. Acceptance smoke suites must use a configured account carrying the requested `smoke_test` role (currently `testing`) and whichever castle is currently active when no castle target is specified. General live investigations may use an account carrying `live_testing`, but must not silently substitute one into a smoke acceptance matrix. Verify the active identity and do not select or switch castles unless the user explicitly names and authorizes one.
 4. Run through the existing live helpers and smoke modules. Reuse `ScriptRunner`, `BlueStacksInstanceResolver`, `BlueStacksSession`, observation services, selector tools, and artifacts.
 5. Use observation-based waits and bounded retries. Avoid blind sleeps except for short, justified settle windows already modeled by the runner.
 6. On failure, inspect generated screenshots, OCR JSON, logs, and observation artifacts under `artifacts/` before changing code.
@@ -61,6 +69,8 @@ py tools/validate_navigation_selectors.py
 py tools/update_selector_registry.py
 py tools/discover_selector_registry.py
 py tools/run_world_map_movement_calibration.py
+py -m pnc_automation.bluestacks_management monitor --watch
+py -m pnc_automation.bluestacks_management restart-open --require-maintenance-window --include-read-only
 ```
 
 ## Quality Gate

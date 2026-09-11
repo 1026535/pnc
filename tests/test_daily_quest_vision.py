@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
 
 from PIL import Image, ImageDraw
 
@@ -63,6 +64,70 @@ class DailyQuestVisionTests(unittest.TestCase):
         self.assertIsNone(result.rows[0].metadata["quest_id"])
         self.assertEqual("Challenge in Hero Championship", result.rows[0].title_text)
 
+    def test_committed_daily_fixture_uses_blue_button_fallback_when_go_ocr_is_missing(self) -> None:
+        """Classifies a visually clear blue Go button when its OCR line is absent."""
+
+        result = parse_daily_quest_screen(
+            image=_fixture_daily_image("quest_daily.png"),
+            lines=_fixture_daily_lines(omit_last_go=True),
+        )
+
+        self.assertEqual(5, len(result.rows))
+        self.assertEqual(
+            [
+                DailyQuestRowState.CLAIM.value,
+                DailyQuestRowState.GO.value,
+                DailyQuestRowState.GO.value,
+                DailyQuestRowState.GO.value,
+                DailyQuestRowState.GO.value,
+            ],
+            [row.metadata["row_state"] for row in result.rows],
+        )
+
+    def test_visual_fallback_rejects_absent_or_small_blue_decoration(self) -> None:
+        """Does not turn a card background or isolated blue decoration into Go."""
+
+        image = _daily_image()
+        drawing = ImageDraw.Draw(image)
+        drawing.rectangle((430, 530, 450, 550), fill=(45, 110, 190))
+
+        result = parse_daily_quest_screen(
+            image=image,
+            lines=_daily_lines_without_actions(),
+        )
+
+        self.assertEqual(
+            [DailyQuestRowState.UNKNOWN_ACTION.value, DailyQuestRowState.UNKNOWN_ACTION.value],
+            [row.metadata["row_state"] for row in result.rows],
+        )
+
+    def test_visual_fallback_rejects_non_blue_right_side_decoration(self) -> None:
+        """Does not treat a broad warm-colored action-side decoration as a blue Go button."""
+
+        image = _daily_image()
+        drawing = ImageDraw.Draw(image)
+        drawing.rectangle((390, 390, 515, 452), fill=(172, 104, 38))
+
+        result = parse_daily_quest_screen(
+            image=image,
+            lines=_daily_lines_without_actions(),
+        )
+
+        self.assertEqual(
+            [DailyQuestRowState.UNKNOWN_ACTION.value, DailyQuestRowState.UNKNOWN_ACTION.value],
+            [row.metadata["row_state"] for row in result.rows],
+        )
+
+    def test_exact_claim_ocr_precedes_blue_visual_fallback(self) -> None:
+        """Keeps OCR semantic precedence when a Claim row also contains blue pixels."""
+
+        result = parse_daily_quest_screen(
+            image=_fixture_daily_image("quest_daily_sep09.png"),
+            lines=_fixture_daily_lines(omit_last_go=True, first_action="Claim"),
+        )
+
+        self.assertEqual(DailyQuestRowState.CLAIM.value, result.rows[0].metadata["row_state"])
+
 
 def _daily_image() -> Image.Image:
     """Builds a deterministic Quest screen with visually detectable row cards."""
@@ -92,6 +157,42 @@ def _daily_lines(*, go_x: int) -> tuple[OcrLine, ...]:
         _line("Claim", 438, 540, 60, 20),
         _line("(1/1)", 154, 565, 50, 20),
     )
+
+
+def _daily_lines_without_actions() -> tuple[OcrLine, ...]:
+    """Returns Quest chrome without action text for visual negative coverage."""
+
+    return (
+        _line("Quest", 110, 13, 83, 29),
+        _line("Main Quest", 37, 73, 108, 22),
+        _line("Daily Quest", 219, 75, 105, 19),
+        _line("Alliance Activity", 416, 66, 70, 38),
+    )
+
+
+def _fixture_daily_image(name: str) -> Image.Image:
+    """Loads one committed Daily fixture without using local artifact configuration."""
+
+    path = Path(__file__).parent / "data" / "screen_recognition" / name
+    return Image.open(path).convert("RGB")
+
+
+def _fixture_daily_lines(*, omit_last_go: bool, first_action: str = "Claim") -> tuple[OcrLine, ...]:
+    """Builds deterministic fixture OCR while selectively omitting one Go token."""
+
+    lines = [
+        _line("Quest", 110, 13, 83, 29),
+        _line("Main Quest", 37, 73, 108, 22),
+        _line("Daily Quest", 219, 75, 105, 19),
+        _line("Alliance Activity", 416, 66, 70, 38),
+        _line(first_action, 438, 420, 60, 20),
+        _line("Go", 438, 535, 30, 20),
+        _line("Go", 438, 650, 30, 20),
+        _line("Go", 438, 765, 30, 20),
+    ]
+    if not omit_last_go:
+        lines.append(_line("Go", 438, 880, 30, 20))
+    return tuple(lines)
 
 
 def _line(text: str, x: int, y: int, width: int, height: int) -> OcrLine:

@@ -8,6 +8,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from pnc_automation.app.runtime.observation_mode import ObservationMode
+from pnc_automation.core.config.host import (
+    BlueStacksCapabilities,
+    BlueStacksMemoryPolicy,
+    LiveAutomationRole,
+    capabilities_for_roles,
+    require_live_role,
+)
 from pnc_automation.core.errors import ConfigurationError
 from pnc_automation.core.infra.emulator.models import BlueStacksInstanceConfig
 from pnc_automation.core.infra.storage.artifact_naming import format_account_artifact_directory
@@ -16,7 +23,7 @@ if TYPE_CHECKING:
     from pnc_automation.app.authoring.mail.models import MailScheduleCatalog
 
 
-DEFAULT_BLUESTACKS_CONFIG_PATH = Path(r"C:\ProgramData\BlueStacks_nxt\bluestacks.conf")
+from pnc_automation.core.config.host import DEFAULT_BLUESTACKS_CONFIG_PATH
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,6 +46,7 @@ class RuntimeConfig:
     """Owns shared runtime policy toggles that are not tied to emulator timings."""
 
     observation_mode: ObservationMode = ObservationMode.DEBUG
+    bluestacks_memory: BlueStacksMemoryPolicy = field(default_factory=BlueStacksMemoryPolicy)
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,6 +133,7 @@ class AccountConfig:
     instance_id: str
     pnc_account_id: str
     credentials: ResolvedCredentials | None = None
+    live_roles: frozenset[LiveAutomationRole] = frozenset()
 
     @property
     def login_enabled(self) -> bool:
@@ -137,6 +146,17 @@ class AccountConfig:
         """Returns the canonical artifact directory name for this configured account target."""
 
         return format_account_artifact_directory(account_id=self.id)
+
+    @property
+    def bluestacks_capabilities(self) -> BlueStacksCapabilities:
+        """Returns the host/session capabilities derived from current YAML roles."""
+
+        return capabilities_for_roles(self.live_roles)
+
+    def require_live_role(self, role: LiveAutomationRole) -> None:
+        """Fails closed when this account is not eligible for the requested live workflow."""
+
+        require_live_role(self.live_roles, role, account_id=self.id)
 
 
 @dataclass(frozen=True, slots=True)

@@ -1781,7 +1781,7 @@ class PncObservationEnricher:
     def detect_interruption(
         self, image: Image.Image, *, owned_dismiss_bounds: tuple[Bounds, ...] = (),
     ) -> ObservationAdditions:
-        """Run conservative global interruption guards without selecting content."""
+        """Run global interruption guards without selecting content."""
         result = self.ocr_service.read_result(image)
         lines = tuple(sorted(result.lines, key=lambda line: (line.bounds.y, line.bounds.x)))
         anchors = self.text_anchor_detector.detect(result)
@@ -1793,6 +1793,19 @@ class PncObservationEnricher:
         )
         if popup is not None:
             return popup
+        visual = _build_visual_popup_close_additions(image=image)
+        if visual is not None:
+            close = visual.visible_elements[UiElementId.PNC_POPUP_CLOSE_BUTTON].bounds
+            x, y = close.center()
+            owned = any(
+                bounds.x <= x <= bounds.x + bounds.width
+                and bounds.y <= y <= bounds.y + bounds.height
+                and bounds.width >= close.width * 0.8
+                and bounds.height >= close.height * 0.8
+                for bounds in owned_dismiss_bounds
+            )
+            if not owned:
+                return visual
         loading = _build_loading_additions(image=image, lines=lines)
         return loading if loading is not None else ObservationAdditions()
 
@@ -1859,6 +1872,9 @@ class PncObservationEnricher:
             )
             if popup is not None:
                 return popup
+            visual_popup = _build_visual_popup_close_additions(image=image)
+            if visual_popup is not None:
+                return visual_popup
         if request.include_loading_guard and screen_type in {ScreenType.UNKNOWN, ScreenType.PNC_LOADING}:
             loading = _build_loading_additions(image=image, lines=lines)
             if loading is not None:
@@ -4558,6 +4574,9 @@ def _build_popup_additions(
     reconnect_popup = _build_reconnect_popup_additions(image=image, lines=lines)
     if reconnect_popup is not None:
         return reconnect_popup
+    valiant_conquest = _build_valiant_conquest_popup_additions(image=image, lines=lines)
+    if valiant_conquest is not None:
+        return valiant_conquest
     promotional_popup = _build_promotional_popup_additions(image=image, lines=lines)
     if promotional_popup is not None:
         return promotional_popup
@@ -4806,20 +4825,20 @@ def _build_update_required_popup_additions(
     horizontal_padding = max(28, confirm_line.bounds.width // 2)
     vertical_padding = max(16, confirm_line.bounds.height)
     confirm_element = _make_visible(
-                selector_id=UiElementId.PNC_UPDATE_CONFIRM_BUTTON,
-                x=max(0, confirm_line.bounds.x - horizontal_padding),
-                y=max(0, confirm_line.bounds.y - vertical_padding),
-                width=min(
-                    image.width - max(0, confirm_line.bounds.x - horizontal_padding),
-                    confirm_line.bounds.width + (horizontal_padding * 2),
-                ),
-                height=min(
-                    image.height - max(0, confirm_line.bounds.y - vertical_padding),
-                    confirm_line.bounds.height + (vertical_padding * 2),
-                ),
-                action_point=confirm_line.bounds.center(),
-                extracted_text=confirm_line.text,
-            )
+        selector_id=UiElementId.PNC_UPDATE_CONFIRM_BUTTON,
+        x=max(0, confirm_line.bounds.x - horizontal_padding),
+        y=max(0, confirm_line.bounds.y - vertical_padding),
+        width=min(
+            image.width - max(0, confirm_line.bounds.x - horizontal_padding),
+            confirm_line.bounds.width + (horizontal_padding * 2),
+        ),
+        height=min(
+            image.height - max(0, confirm_line.bounds.y - vertical_padding),
+            confirm_line.bounds.height + (vertical_padding * 2),
+        ),
+        action_point=confirm_line.bounds.center(),
+        extracted_text=confirm_line.text,
+    )
     return ObservationAdditions(
         visible_elements={UiElementId.PNC_UPDATE_CONFIRM_BUTTON: confirm_element},
         screen_evidence=(ScreenEvidence(ScreenType.PNC_POPUP, "ocr_update_required_popup"),),
@@ -4831,6 +4850,94 @@ def _build_update_required_popup_additions(
             reason="ocr_update_required_popup",
         ),
     )
+
+
+def _build_visual_popup_close_additions(*, image: Image.Image) -> ObservationAdditions | None:
+    """Returns a generic popup close selector when an X owns a coherent popup surface."""
+
+    close_bounds = _find_visual_popup_close_bounds(image=image)
+    if close_bounds is None or not _has_visual_popup_surface(image=image, close_bounds=close_bounds):
+        return None
+    return ObservationAdditions(
+        visible_elements={
+            UiElementId.PNC_POPUP_CLOSE_BUTTON: _make_visible(
+                selector_id=UiElementId.PNC_POPUP_CLOSE_BUTTON,
+                x=close_bounds.x,
+                y=close_bounds.y,
+                width=close_bounds.width,
+                height=close_bounds.height,
+                action_point=close_bounds.center(),
+                source_kind=VisibleElementSourceKind.GEOMETRY,
+            )
+        },
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_POPUP, "visual_upper_right_close_x"),),
+    )
+
+
+def _has_visual_popup_surface(*, image: Image.Image, close_bounds: Bounds) -> bool:
+    """Requires dimmed or panel-backed surface support below the generic close X."""
+
+    rgb_image = image.convert("RGB")
+    left = int(image.width * 0.08)
+    right = int(image.width * 0.96)
+    top = min(image.height - 1, close_bounds.y + close_bounds.height + max(12, int(image.height * 0.02)))
+    bottom = min(image.height, top + max(48, int(image.height * 0.20)))
+    if right <= left or bottom <= top:
+        return False
+
+    luminances: list[float] = []
+    for y in range(top, bottom):
+        for x in range(left, right):
+            red, green, blue = rgb_image.getpixel((x, y))
+            luminances.append((red + green + blue) / 3)
+    mean = sum(luminances) / len(luminances)
+    if mean > 105:
+        return False
+
+    # A broad surface must have both side boundaries; an isolated X on a flat
+    # background has no panel edge to establish popup ownership.
+    left_edge = _vertical_surface_edge_contrast(
+        rgb_image=rgb_image,
+        start=max(5, int(image.width * 0.02)),
+        end=max(6, int(image.width * 0.14)),
+        top=top,
+        bottom=bottom,
+        direction=1,
+    )
+    right_edge = _vertical_surface_edge_contrast(
+        rgb_image=rgb_image,
+        start=min(image.width - 7, int(image.width * 0.86)),
+        end=min(image.width - 6, int(image.width * 0.98)),
+        top=top,
+        bottom=bottom,
+        direction=-1,
+    )
+    return left_edge >= 8 and right_edge >= 8
+
+
+def _vertical_surface_edge_contrast(
+    *,
+    rgb_image: Image.Image,
+    start: int,
+    end: int,
+    top: int,
+    bottom: int,
+    direction: int,
+) -> float:
+    """Returns the strongest mean luminance edge in one candidate panel band."""
+
+    strongest = 0.0
+    for x in range(start, end):
+        neighbor = x - 5 if direction > 0 else x + 5
+        differences = []
+        for y in range(top, bottom):
+            red, green, blue = rgb_image.getpixel((x, y))
+            neighbor_red, neighbor_green, neighbor_blue = rgb_image.getpixel((neighbor, y))
+            differences.append(
+                abs((red + green + blue) - (neighbor_red + neighbor_green + neighbor_blue)) / 3
+            )
+        strongest = max(strongest, sum(differences) / len(differences))
+    return strongest
 
 
 def _build_visual_building_upgrade_warning_additions(*, image: Image.Image) -> ObservationAdditions | None:
@@ -4870,18 +4977,24 @@ def _build_visual_building_upgrade_warning_additions(*, image: Image.Image) -> O
     )
 
 
-def _find_visual_popup_close_bounds(*, image: Image.Image, modal_bounds: Bounds) -> Bounds | None:
+def _find_visual_popup_close_bounds(*, image: Image.Image, modal_bounds: Bounds | None = None) -> Bounds | None:
     """Find a bright X relative to a previously established modal boundary."""
 
     rgb_image = image.convert("RGB")
-    search_left = modal_bounds.x + int(modal_bounds.width * 0.5)
-    search_right = min(image.width, modal_bounds.x + modal_bounds.width + int(modal_bounds.width * 0.06))
-    search_top = modal_bounds.y
-    search_bottom = min(image.height, modal_bounds.y + int(modal_bounds.height * 0.4))
-    search_left = max(0, search_left)
-    search_right = min(image.width, max(search_left + 1, search_right))
-    search_top = max(0, search_top)
-    search_bottom = min(image.height, max(search_top + 1, search_bottom))
+    if modal_bounds is None:
+        search_left = int(image.width * 0.72)
+        search_right = int(image.width * 0.99)
+        search_top = int(image.height * 0.02)
+        search_bottom = int(image.height * 0.40)
+    else:
+        search_left = modal_bounds.x + int(modal_bounds.width * 0.5)
+        search_right = min(image.width, modal_bounds.x + modal_bounds.width + int(modal_bounds.width * 0.06))
+        search_top = modal_bounds.y
+        search_bottom = min(image.height, modal_bounds.y + int(modal_bounds.height * 0.4))
+        search_left = max(0, search_left)
+        search_right = min(image.width, max(search_left + 1, search_right))
+        search_top = max(0, search_top)
+        search_bottom = min(image.height, max(search_top + 1, search_bottom))
     bright_pixels = {
         (x, y)
         for y in range(search_top, search_bottom)
@@ -4909,8 +5022,14 @@ def _find_visual_popup_close_bounds(*, image: Image.Image, modal_bounds: Bounds)
                 pending.append(neighbor)
                 component.append(neighbor)
         bounds = _visual_close_component_bounds(image=image, component=component)
-        if bounds is not None and _is_modal_close_candidate(bounds=bounds, modal_bounds=modal_bounds):
-            candidates.append(bounds)
+        if bounds is None:
+            continue
+        if modal_bounds is not None and not _is_modal_close_candidate(
+            bounds=bounds,
+            modal_bounds=modal_bounds,
+        ):
+            continue
+        candidates.append(bounds)
     if not candidates:
         return None
     return max(candidates, key=lambda bounds: bounds.center()[0])
@@ -5049,6 +5168,69 @@ def _popup_text_lines_are_grouped(*, image: Image.Image, first: OcrLine, second:
     first_center_x = first.bounds.x + first.bounds.width // 2
     second_center_x = second.bounds.x + second.bounds.width // 2
     return abs(first_center_x - second_center_x) <= int(image.width * 0.45)
+
+
+def _build_valiant_conquest_popup_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Returns the known Valiant Conquest event modal and its measured close X.
+
+    The title alone is insufficient because event text can appear in other
+    surfaces.  Require one title/start line, one event-specific body/control
+    line, and an independently measured upper-right X before claiming popup
+    ownership.  This keeps the generic X detector conservative while allowing
+    the known event modal to use the shared safe-popup recovery path.
+    """
+
+    title_line = _find_line_matching(
+        lines=lines,
+        predicate=lambda line: (
+            "VALIANTCONQUEST" in normalize_ocr_text(line.text)
+            and (
+                "ABOUTTOSTART" in normalize_ocr_text(line.text)
+                or "ABOUTTOBEGIN" in normalize_ocr_text(line.text)
+            )
+        ),
+        min_y=int(image.height * 0.25),
+        max_y=int(image.height * 0.72),
+    )
+    if title_line is None:
+        return None
+
+    supporting_tokens = (
+        "EARNPOINTS",
+        "ACTIVATESHIELDS",
+        "EVENTDETAILS",
+        "YOUMAYCHOOSETO",
+    )
+    supporting_line = _find_line_matching(
+        lines=lines,
+        predicate=lambda line: any(
+            token in normalize_ocr_text(line.text) for token in supporting_tokens
+        ),
+        min_y=int(image.height * 0.35),
+        max_y=int(image.height * 0.92),
+    )
+    close_bounds = _find_visual_popup_close_bounds(image=image)
+    if supporting_line is None or close_bounds is None:
+        return None
+
+    return ObservationAdditions(
+        visible_elements={
+            UiElementId.PNC_POPUP_CLOSE_BUTTON: _make_visible(
+                selector_id=UiElementId.PNC_POPUP_CLOSE_BUTTON,
+                x=close_bounds.x,
+                y=close_bounds.y,
+                width=close_bounds.width,
+                height=close_bounds.height,
+                action_point=close_bounds.center(),
+                source_kind=VisibleElementSourceKind.GEOMETRY,
+            )
+        },
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_POPUP, "ocr_valiant_conquest_popup"),),
+    )
 
 
 def _build_vip_daily_reset_popup_additions(
