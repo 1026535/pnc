@@ -1,0 +1,416 @@
+"""Offline tests for replacement-core runtime composition and content preservation."""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from types import SimpleNamespace
+import tempfile
+import unittest
+from unittest.mock import Mock, patch
+
+from PIL import Image
+
+from pnc_automation.app.automation.engine.core_runtime import CoreRuntime, build_core_runtime
+from pnc_automation.app.automation.engine.navigation_core import NavigationPolicy
+from pnc_automation.app.entrypoints.app import ApplicationRunner
+from pnc_automation.app.pnc.domain.observation import CurrentCastleEvidenceKind, Observation, VisibleElement
+from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
+from pnc_automation.app.pnc.vision.navigation_perception import NavigationPerception
+from pnc_automation.app.pnc.vision.observation_builder import ObservationAdditions
+from pnc_automation.app.pnc.vision.screen_classifier import ScreenEvidence
+from pnc_automation.app.pnc.vision.visual_screen_recognizer import VisualRecognition
+from pnc_automation.app.authoring.config.models import CastleIdentity
+from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.core.infra.capture.screenshot_service import CapturedScreenshot
+from pnc_automation.core.infra.storage.artifact_store import ArtifactRecord
+from pnc_automation.core.vision.image.models import Bounds
+
+
+class CoreRuntimeTests(unittest.TestCase):
+    """Covers one-runtime composition and pure content identity preservation."""
+
+    def test_initial_settle_passively_waits_for_loading_then_known_stable_screen(self) -> None:
+        """Settling consumes loading frames and never invokes navigation actions."""
+
+        clock = _FakeClock()
+        navigation = _SettleNavigation(clock)
+        runtime = _SequencedCoreRuntime(
+            navigation,
+            [
+                _frame(ScreenType.PNC_LOADING, 0),
+                _frame(ScreenType.PNC_HOME_CITY, 1),
+                _frame(ScreenType.PNC_HOME_CITY, 2),
+            ],
+        )
+
+        settled = runtime._settle_initial_screen()
+
+        self.assertEqual(ScreenType.PNC_HOME_CITY, settled.screen_type)
+        self.assertEqual(3, runtime.observation_count)
+        self.assertEqual([], navigation.navigate_calls)
+        self.assertEqual(2, len(navigation.sleep_calls))
+
+    def test_initial_unknown_and_popup_stop_immediately_without_action(self) -> None:
+        """Unknown and interrupted startup frames fail closed before any passive wait."""
+
+        for interrupted in (_frame(ScreenType.UNKNOWN, 0), _frame(ScreenType.PNC_HOME_CITY, 0, blocking_popup=True)):
+            clock = _FakeClock()
+            navigation = _SettleNavigation(clock)
+            runtime = _SequencedCoreRuntime(navigation, [interrupted])
+
+            with self.assertRaisesRegex(RuntimeError, "unknown screen|blocking popup"):
+                runtime._settle_initial_screen()
+
+            self.assertEqual([], navigation.navigate_calls)
+            self.assertEqual([], navigation.sleep_calls)
+            self.assertEqual(1, runtime.observation_count)
+
+    def test_initial_settle_rejects_stale_frames(self) -> None:
+        """Passive settling requires strictly newer capture timestamps."""
+
+        clock = _FakeClock()
+        navigation = _SettleNavigation(clock)
+        runtime = _SequencedCoreRuntime(
+            navigation,
+            [_frame(ScreenType.PNC_HOME_CITY, 0), _frame(ScreenType.PNC_HOME_CITY, 0)],
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "stale capture"):
+            runtime._settle_initial_screen()
+
+        self.assertEqual(2, runtime.observation_count)
+        self.assertEqual([], navigation.navigate_calls)
+
+    def test_initial_settle_cannot_succeed_after_capture_exhausts_time_budget(self) -> None:
+        """A late capture is rejected even when it would complete stability."""
+
+        clock = _FakeClock()
+        navigation = _SettleNavigation(clock, max_seconds=1.0)
+        runtime = _SequencedCoreRuntime(
+            navigation,
+            [_frame(ScreenType.PNC_HOME_CITY, 0), _frame(ScreenType.PNC_HOME_CITY, 1)],
+            capture_delays=[0.0, 2.0],
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "budget exhausted"):
+            runtime._settle_initial_screen()
+
+        self.assertEqual(2, runtime.observation_count)
+        self.assertEqual([], navigation.navigate_calls)
+
+    def test_capture_event_is_retained_when_perception_raises(self) -> None:
+        """Persists the screenshot metadata before a parser exception can abort observation."""
+
+        captured_at = datetime(2026, 9, 10, 12, 0, tzinfo=UTC)
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            trace_path = Path(temporary_directory) / "trace.jsonl"
+            artifact_path = Path(temporary_directory) / "private_identity.png"
+            screenshot = CapturedScreenshot(
+                artifact=ArtifactRecord(
+                    path=artifact_path,
+                    label="capture",
+                    captured_at=captured_at,
+                    size_bytes=1,
+                    sha256="sha",
+                ),
+                image=Image.new("RGB", (2, 2)),
+                image_format="PNG",
+            )
+            screenshot_service = Mock()
+            screenshot_service.capture.return_value = screenshot
+            connected = SimpleNamespace(
+                session=object(),
+                observation_service=SimpleNamespace(screenshot_service=screenshot_service),
+            )
+            perception = Mock()
+            perception.build.side_effect = RuntimeError("parser failed")
+            runtime = CoreRuntime(
+                runtime=connected,
+                navigation=Mock(),
+                artifact_directory="account",
+                trace_path=trace_path,
+                _perception=perception,
+                _run_id="run",
+            )
+
+            with self.assertRaisesRegex(RuntimeError, "parser failed"):
+                runtime.observe("identity")
+
+            lines = trace_path.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(1, len(lines))
+            self.assertIn('"event": "capture"', lines[0])
+            self.assertIn('"artifact": "private_identity.png"', lines[0])
+            self.assertNotIn("parser failed", lines[0])
+
+    def test_application_preflights_identity_before_workflow_and_blocks_failure(self) -> None:
+        """Application wiring runs identity preflight before constructing workflow execution."""
+
+        account = SimpleNamespace(artifact_directory_name="account")
+        script_runner = Mock()
+        script_runner.config.require_account.return_value = account
+        core_runtime = Mock()
+        events: list[str] = []
+        core_runtime.preflight_active_castle_identity.side_effect = lambda: events.append("preflight")
+
+        class _Runner:
+            @classmethod
+            def __class_getitem__(cls, item):
+                del item
+                return cls
+
+            def __init__(self, runtime) -> None:
+                del runtime
+
+            def run(self, workflow):
+                del workflow
+                events.append("workflow")
+                return "result"
+
+        with (
+            patch("pnc_automation.app.entrypoints.app.build_core_runtime", return_value=core_runtime),
+            patch("pnc_automation.app.entrypoints.app.CoreWorkflowRunner", _Runner),
+        ):
+            result = ApplicationRunner(script_runner).run_daily_quest_status(account_id="account")
+
+        self.assertEqual("result", result)
+        self.assertEqual(["preflight", "workflow"], events)
+
+        core_runtime.preflight_active_castle_identity.side_effect = RuntimeError("identity absent")
+        with (
+            patch("pnc_automation.app.entrypoints.app.build_core_runtime", return_value=core_runtime),
+            patch("pnc_automation.app.entrypoints.app.CoreWorkflowRunner", side_effect=_Runner) as runner_factory,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "identity absent"):
+                ApplicationRunner(script_runner).run_daily_quest_status(account_id="account")
+        runner_factory.assert_not_called()
+
+    def test_identity_preflight_rejects_stale_or_blocked_content_before_return_home(self) -> None:
+        """Identity content must be fresh and unblocked relative to Manage Characters navigation."""
+
+        identity = Observation(
+            screen_type=ScreenType.PNC_CASTLE_SELECTION,
+            visible_elements={},
+            captured_at=datetime(2026, 9, 10, 12, 0, 1, tzinfo=UTC),
+            blocking_popup=False,
+            current_castle=CastleIdentity("K1", "Castle", 22),
+            current_castle_evidence=CurrentCastleEvidenceKind.EXACT,
+        )
+        for frame, error in (
+            (
+                _frame_at(ScreenType.PNC_CASTLE_SELECTION, datetime(2026, 9, 10, 12, 0, 1, tzinfo=UTC)),
+                "stale",
+            ),
+            (
+                _frame_at(ScreenType.PNC_CASTLE_SELECTION, datetime(2026, 9, 10, 11, 59, 59, tzinfo=UTC)),
+                "blocked",
+            ),
+        ):
+            identity_frame = identity if error == "stale" else Observation(
+                screen_type=identity.screen_type,
+                visible_elements={},
+                captured_at=identity.captured_at + timedelta(seconds=1),
+                blocking_popup=True,
+                current_castle=identity.current_castle,
+                current_castle_evidence=identity.current_castle_evidence,
+            )
+            navigation = Mock()
+            navigation.navigate.return_value = frame
+            runtime = CoreRuntime(
+                runtime=SimpleNamespace(session=Mock()),
+                navigation=navigation,
+                artifact_directory="account",
+                trace_path=Path("trace.jsonl"),
+                _perception=Mock(),
+                _run_id="run",
+            )
+
+            with (
+                patch.object(CoreRuntime, "_settle_initial_screen", return_value=_frame(ScreenType.PNC_HOME_CITY, 0)),
+                patch.object(CoreRuntime, "observe", autospec=True, return_value=identity_frame),
+            ):
+                with self.assertRaisesRegex(RuntimeError, error):
+                    runtime.preflight_active_castle_identity()
+
+            navigation.navigate.assert_called_once_with(ScreenType.PNC_CASTLE_SELECTION)
+
+
+    def test_factory_builds_one_connected_runtime_and_core_graph(self) -> None:
+        """Uses one ScriptRunner runtime and does not construct a legacy observer graph."""
+
+        connected = Mock()
+        connected.require_observed_action_executor.return_value = SimpleNamespace(action_executor=object())
+        connected.observation_service.observation_builder.visual_recognizer = object()
+        connected.observation_service.observation_builder.enricher = object()
+        script_runner = Mock()
+        script_runner.build_connected_runtime.return_value = connected
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            trace_path = Path(temporary_directory) / "trace.jsonl"
+            with (
+                patch("pnc_automation.app.automation.engine.core_runtime.NavigationPerception") as perception,
+                patch("pnc_automation.app.automation.engine.core_runtime.NavigationCore") as navigation,
+            ):
+                result = build_core_runtime(
+                    script_runner,
+                    SimpleNamespace(artifact_directory_name="account"),
+                    "account",
+                    trace_path=trace_path,
+                )
+
+        script_runner.build_connected_runtime.assert_called_once()
+        connected.require_observed_action_executor.assert_called_once()
+        perception.assert_called_once()
+        navigation.assert_called_once()
+        self.assertIs(result.runtime, connected)
+        self.assertEqual(trace_path, result.trace_path)
+
+    def test_navigation_perception_preserves_typed_castle_content(self) -> None:
+        """Content enrichment can provide identity without changing visual screen controls."""
+
+        identity = CastleIdentity("K1", "Castle", 22)
+
+        class _Recognizer:
+            reference_size = (20, 20)
+
+            def recognize(self, image: Image.Image) -> VisualRecognition:
+                del image
+                return VisualRecognition(
+                    evidence=(ScreenEvidence(ScreenType.PNC_CASTLE_SELECTION, "test"),),
+                    controls=(
+                        VisibleElement(
+                            selector_id=UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+                            bounds=Bounds(1, 1, 2, 2),
+                            confidence=1.0,
+                        ),
+                    ),
+                )
+
+        class _Guard:
+            def detect_interruption(self, image, *, owned_dismiss_bounds=()):
+                del image, owned_dismiss_bounds
+                return ObservationAdditions()
+
+            def enrich(self, image, screen_type, visible_elements, request):
+                del image, screen_type, visible_elements, request
+                return ObservationAdditions(
+                    current_castle=identity,
+                    current_castle_evidence=CurrentCastleEvidenceKind.EXACT,
+                )
+
+        screenshot = CapturedScreenshot(
+            artifact=None,
+            image=Image.new("RGB", (20, 20)),
+            image_format="PNG",
+            ephemeral_captured_at=datetime.now(tz=UTC),
+        )
+        observation = NavigationPerception(_Recognizer(), _Guard()).build(screenshot, include_content=True)
+
+        self.assertEqual(ScreenType.PNC_CASTLE_SELECTION, observation.screen_type)
+        self.assertEqual(identity, observation.current_castle)
+        self.assertEqual(CurrentCastleEvidenceKind.EXACT, observation.current_castle_evidence)
+        self.assertEqual(1, len(observation.visible_elements))
+
+
+class _FakeClock:
+    """Deterministic monotonic clock for passive-settle tests."""
+
+    def __init__(self) -> None:
+        self.value = 0.0
+
+    def clock(self) -> float:
+        return self.value
+
+    def sleep(self, seconds: float) -> None:
+        self.value += seconds
+
+    def advance(self, seconds: float) -> None:
+        self.value += seconds
+
+
+class _SettleNavigation:
+    """Navigation surface exposing only policy timing and action-call evidence."""
+
+    def __init__(self, clock: _FakeClock, *, max_seconds: float = 10.0) -> None:
+        self._clock = clock
+        self.policy = NavigationPolicy(
+            max_observations=4,
+            max_seconds=max_seconds,
+            poll_seconds=0.25,
+            stable_observations=2,
+        )
+        self.navigate_calls: list[ScreenType] = []
+        self.sleep_calls: list[float] = []
+
+    def clock(self) -> float:
+        return self._clock.clock()
+
+    def sleep(self, seconds: float) -> None:
+        self.sleep_calls.append(seconds)
+        self._clock.sleep(seconds)
+
+    def navigate(self, target: ScreenType) -> None:
+        self.navigate_calls.append(target)
+
+
+class _SequencedCoreRuntime(CoreRuntime):
+    """Core runtime with deterministic typed frames in place of screenshots."""
+
+    __slots__ = ("_frames", "_capture_delays", "_clock")
+
+    def __init__(
+        self,
+        navigation: _SettleNavigation,
+        frames: list[Observation],
+        *,
+        capture_delays: list[float] | None = None,
+    ) -> None:
+        super().__init__(
+            runtime=SimpleNamespace(),
+            navigation=navigation,
+            artifact_directory="account",
+            trace_path=Path("trace.jsonl"),
+            _perception=Mock(),
+            _run_id="test",
+        )
+        self._frames = list(frames)
+        self._capture_delays = list(capture_delays or [0.0] * len(frames))
+        self._clock = navigation._clock
+
+    def observe(self, label: str, *, include_content: bool = False) -> Observation:
+        del label, include_content
+        self._capture_count += 1
+        self._clock.advance(self._capture_delays.pop(0))
+        observation = self._frames.pop(0)
+        self._last_observation = observation
+        return observation
+
+
+def _frame(screen: ScreenType, seconds: int, *, blocking_popup: bool = False) -> Observation:
+    """Builds a minimal typed frame for runtime startup tests."""
+
+    return _frame_at(
+        screen,
+        datetime(2026, 9, 10, tzinfo=UTC) + timedelta(seconds=seconds),
+        blocking_popup=blocking_popup,
+    )
+
+
+def _frame_at(
+    screen: ScreenType,
+    captured_at: datetime,
+    *,
+    blocking_popup: bool = False,
+) -> Observation:
+    """Builds a minimal typed frame at an explicit capture time."""
+
+    return Observation(
+        screen_type=screen,
+        visible_elements={},
+        captured_at=captured_at,
+        blocking_popup=blocking_popup,
+    )
+
+
+if __name__ == "__main__":
+    unittest.main()

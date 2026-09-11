@@ -20,14 +20,14 @@ except ModuleNotFoundError:
 ensure_repo_root_on_path()
 
 from pnc_automation.app import build_application_runner
-from pnc_automation.app.automation.engine.navigation_core import NavigationCore, reviewed_navigation_edges
+from pnc_automation.app.automation.engine.core_runtime import build_core_runtime
+from pnc_automation.app.automation.engine.navigation_core import NavigationCore
 from pnc_automation.app.pnc.domain.action_requests import ActionRequest, KeyEventAction, TapAction, WaitAction
 from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
 from pnc_automation.app.pnc.domain.observation import Observation
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
-from pnc_automation.app.pnc.vision.navigation_perception import NavigationPerception
 from pnc_automation.app.runtime.observation_mode import ObservationMode
 
 
@@ -204,55 +204,23 @@ def run_replacement_probe(config: Path, account_id: str, output_root: Path, *, g
     directory = output_root / (datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ") + "_core_" + uuid4().hex[:8])
     directory.mkdir(parents=True, exist_ok=False)
     app = build_application_runner(config, observation_mode=ObservationMode.DEBUG)
-    runtime = app.script_runner.build_connected_runtime(account=app.script_runner.config.require_account(account_id))
-    observer = runtime.observation_service
-    observer.castle_roster_store = None
-    recognizer = observer.observation_builder.visual_recognizer
-    if recognizer is None:
-        raise RuntimeError("Replacement core requires the reviewed visual catalog.")
-    perception = NavigationPerception(recognizer, observer.observation_builder.enricher)
-    counter = 0
     trace = directory / "trace.jsonl"
-
-    def record(entry: dict[str, object]) -> None:
-        with trace.open("a", encoding="utf-8") as stream:
-            stream.write(json.dumps(entry) + "\n")
-
-    def observe(label: str, *, include_content: bool = False) -> Observation:
-        nonlocal counter
-        counter += 1
-        screenshot = observer.screenshot_service.capture(
-            runtime.session, artifact_directory=observer.artifact_directory,
-            label=f"replacement_{directory.name}_{counter}_{label}", persist=True,
-        )
-        started = monotonic()
-        observation = perception.build(screenshot, include_content=include_content)
-        record({"event": "perception", "seconds": monotonic() - started, "state": summarize(observation)})
-        return observation
-
-    core = NavigationCore(
-        runtime.require_observed_action_executor("Core probe requires the connected actuator.").action_executor,
-        observe, reviewed_navigation_edges(), record=record,
+    account = app.script_runner.config.require_account(account_id)
+    core_runtime = build_core_runtime(
+        app.script_runner,
+        account,
+        account.artifact_directory_name,
+        trace_path=trace,
     )
+    core = core_runtime.navigation
     summary: dict[str, object] = {"status": "running", "targets": []}
     try:
-        # Return from a recognized map/modal through the new core before using
-        # the retained identity parser. No target selection is part of either path.
-        core.navigate(ScreenType.PNC_HOME_CITY)
+        core_runtime.preflight_active_castle_identity()
+        summary["active_identity_verified"] = True
         if game_first:
-            # Navigation is already driven by the new core. The existing roster
-            # parser only verifies the active identity and cannot select a row.
-            core.navigate(ScreenType.PNC_CASTLE_SELECTION)
-            identity = observer.capture_observation(f"{directory.name}_identity_read_only").observation
-            if identity.current_castle is None:
-                raise RuntimeError("Active identity was not observed; no castle switch is allowed.")
-            summary["active_identity_verified"] = True
-            core.navigate(ScreenType.PNC_HOME_CITY)
             current = run_game_first_routes(core)
             summary.update(status="passed", tour="game_first", final=summarize(current))
             return directory / "summary.json"
-        preflight = run_probe(config, account_id, output_root / "identity")
-        summary["identity_preflight"] = str(preflight)
         for target in (
             ScreenType.PNC_WORLD_MAP, ScreenType.PNC_WORLD_MAP_EXPANDED,
             ScreenType.PNC_WORLD_COORDINATE_DIALOG,
@@ -266,14 +234,14 @@ def run_replacement_probe(config: Path, account_id: str, output_root: Path, *, g
             print(f"Core confirmed {target.name}", flush=True)
         current = core.open_building(
             HomeCityObjectId.INSTITUTE,
-            observe_content=lambda label: observe(label, include_content=True),
+            observe_content=lambda label: core_runtime.observe(label, include_content=True),
         )
         summary["targets"].append(current.screen_type.name)
         print(f"Core confirmed observed building {current.screen_type.name}", flush=True)
         core.navigate(ScreenType.PNC_HOME_CITY)
         current = core.open_building(
             HomeCityObjectId.GODDESS_STATUE,
-            observe_content=lambda label: observe(label, include_content=True),
+            observe_content=lambda label: core_runtime.observe(label, include_content=True),
         )
         summary["targets"].append(current.screen_type.name)
         print(f"Core confirmed observed building {current.screen_type.name}", flush=True)
