@@ -666,10 +666,10 @@ class VisualNavigationSafetyTests(unittest.TestCase):
         self.assertIn(UiElementId.PNC_WORLD_OVERVIEW_CLOSE_BUTTON, selectors)
         self.assertNotIn(UiElementId.PNC_WORLD_OVERVIEW_RECENTER_REGION, ALLOWED_TAPS)
 
-    def test_empty_player_mailbox_is_typed_applicability_skip_and_unwinds_home(self) -> None:
+    def test_empty_player_hub_category_is_typed_applicability_skip_without_category_tap(self) -> None:
         payload, runtime = _run_fake_probe(
             ProbeRoute.MAIL_COMPOSE,
-            mailbox_empty=True,
+            hub_empty=True,
             return_runtime=True,
         )
 
@@ -678,6 +678,24 @@ class VisualNavigationSafetyTests(unittest.TestCase):
         self.assertIsNone(payload["mail_compose"]["destination_screen"])
         self.assertEqual("PNC_HOME_CITY", payload["final"]["screen"])
         self.assertNotIn(
+            UiElementId.PNC_MAIL_ROW_PLAYER_MAIL,
+            [action.selector_id for action in runtime.action_executor.actions if isinstance(action, TapAction)],
+        )
+        self.assertNotIn(
+            UiElementId.PNC_MAIL_COMPOSE_BUTTON,
+            [action.selector_id for action in runtime.action_executor.actions if isinstance(action, TapAction)],
+        )
+
+    def test_empty_opened_player_mailbox_still_attempts_typed_compose(self) -> None:
+        payload, runtime = _run_fake_probe(
+            ProbeRoute.MAIL_COMPOSE,
+            mailbox_empty=True,
+            return_runtime=True,
+        )
+
+        self.assertEqual("passed", payload["status"])
+        self.assertEqual("PNC_MAIL_COMPOSE_POPUP", payload["mail_compose"]["destination_screen"])
+        self.assertIn(
             UiElementId.PNC_MAIL_COMPOSE_BUTTON,
             [action.selector_id for action in runtime.action_executor.actions if isinstance(action, TapAction)],
         )
@@ -687,6 +705,7 @@ def _run_fake_probe(
     route: ProbeRoute,
     *,
     mailbox_empty: bool = False,
+    hub_empty: bool = False,
     return_runtime: bool = False,
 ) -> dict[str, object] | tuple[dict[str, object], "_FakeRuntime"]:
     """Run one route against a typed fake runtime without creating a live session."""
@@ -714,25 +733,29 @@ def _run_fake_probe(
     if route == ProbeRoute.FIELDS:
         observations.extend((make_observation(ScreenType.PNC_LORD_INFO), weak_home))
     elif route == ProbeRoute.MAIL_COMPOSE:
-        observations.extend(
-            (
-                make_observation(ScreenType.PNC_MAIL_HUB),
-                make_observation(
-                    ScreenType.PNC_MAILBOX_LIST,
-                    mailbox_type=MailboxType.PLAYER,
-                    mailbox_empty=mailbox_empty,
-                ),
-                *(() if mailbox_empty else (
+        mail_hub = make_observation(ScreenType.PNC_MAIL_HUB)
+        if hub_empty:
+            mail_hub = replace(mail_hub, empty_mailboxes=frozenset({MailboxType.PLAYER}))
+        if hub_empty:
+            observations.extend((mail_hub, weak_home))
+        else:
+            observations.extend(
+                (
+                    mail_hub,
+                    make_observation(
+                        ScreenType.PNC_MAILBOX_LIST,
+                        mailbox_type=MailboxType.PLAYER,
+                        mailbox_empty=mailbox_empty,
+                    ),
                     make_observation(ScreenType.PNC_MAIL_COMPOSE_POPUP),
                     make_observation(
                         ScreenType.PNC_MAILBOX_LIST,
                         mailbox_type=MailboxType.PLAYER,
                         mailbox_empty=False,
                     ),
-                )),
-                weak_home,
+                    weak_home,
+                )
             )
-        )
     elif route == ProbeRoute.WORLD_OVERVIEW:
         observations.extend(
             (
