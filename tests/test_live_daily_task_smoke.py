@@ -13,6 +13,7 @@ from pnc_automation.app.automation.engine.task import TaskStatus
 from pnc_automation.app.authoring.config.mutation_acknowledgement import (
     parse_mutation_acknowledgement,
 )
+from pnc_automation.app.authoring.config.models import LiveAutomationRole
 
 
 def _live_daily_task_smoke_enabled() -> bool:
@@ -59,10 +60,15 @@ class LiveDailyTaskSmokeTests(unittest.TestCase):
                 "and current America/Toronto date."
             )
         cls.application = build_application_runner(config_path)
+        account = cls.application.script_runner.config.require_account(cls.account_id)
+        account.require_live_role(LiveAutomationRole.DAILY_CANARY)
+        cls.lease_bundle = cls.application.reserve_accounts((cls.account_id,))
+        cls.addClassCleanup(cls.lease_bundle.close)
         cls.run_result = cls.application.run(
             account_id=cls.account_id,
             script_path=str(cls.script_path),
             castle_refs=[castle_ref],
+            required_role=LiveAutomationRole.DAILY_CANARY,
         )
 
     def test_live_daily_task_smoke_completes_without_failure(self) -> None:

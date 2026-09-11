@@ -11,9 +11,11 @@ from _script_bootstrap import ensure_repo_root_on_path
 root = ensure_repo_root_on_path()
 
 from pnc_automation.app import build_application_runner
+from pnc_automation.app.authoring.config.models import LiveAutomationRole
 from pnc_automation.app.automation.engine.script_runner import (
     configure_world_map_movement_budget,
     configure_world_map_movement_granularity,
+    require_successful_preparation,
 )
 from pnc_automation.app.automation.engine.task import TaskPreflight
 from pnc_automation.app.pnc.domain.observation import SpatialSurfaceType
@@ -40,88 +42,96 @@ def main() -> None:
     arguments = parser.parse_args()
 
     application = build_application_runner(Path(arguments.config))
-    prepare_result = application.script_runner.prepare_account_session(account_id=arguments.account)
-    if not all(step.status.value == "success" for step in prepare_result.steps):
-        raise AssertionError(f"Preparation failed: {prepare_result.steps}")
     account = application.script_runner.config.require_account(arguments.account)
-    connected = application.script_runner.build_connected_runtime_bundle(account=account)
-    runtime = connected.runtime
-    runner = connected.runner
-    configure_world_map_movement_budget(runtime, movement_step_budget=arguments.movement_step_budget)
-
-    comparison_results: list[dict[str, object]] = []
-    errors: list[str] = []
-    for comparison_index, granularity in enumerate(_parse_granularities(arguments.granularities)):
-        configure_world_map_movement_granularity(runtime, max_axis_delta_per_leg=granularity)
-        runtime_state: dict[str, object] = {}
-        started_at = datetime.now(tz=UTC)
-        start = None
-        end = None
-        start_coordinate = None
-        requested_target = None
-        end_coordinate = None
-        error_message = None
-        try:
-            start = runner.prove_preflight_state(
-                account,
-                TaskPreflight.WORLD_MAP,
-                label_prefix=f"{arguments.label}_{comparison_index}_start",
-                max_steps=_WORLD_MAP_PREFLIGHT_MAX_STEPS,
+    account.require_live_role(LiveAutomationRole.LIVE_TESTING)
+    with application.script_runner.reserve_accounts((arguments.account,)):
+        prepare_result = require_successful_preparation(
+            application.script_runner.prepare_account_session(
+                account_id=arguments.account,
+                required_role=LiveAutomationRole.LIVE_TESTING,
             )
-            start_coordinate = start.require_spatial_surface(SpatialSurfaceType.WORLD_MAP).viewport.coordinate
-            if start_coordinate is None:
-                raise AssertionError("World-map granularity comparison requires a coordinate-addressable viewport.")
-            requested_target = (start_coordinate[0] + arguments.delta_x, start_coordinate[1] + arguments.delta_y)
-            end = runtime.world_map_search_service.coordinate_mover_for_runtime().move_to_coordinate(
-                start,
-                target_coordinate=requested_target,
-                label_prefix=f"{arguments.label}_{comparison_index}_move",
-                runtime_state=runtime_state,
-            )
-            end_coordinate = end.require_spatial_surface(SpatialSurfaceType.WORLD_MAP).viewport.coordinate
-        except Exception as error:  # pragma: no cover - live-only fallback
-            error_message = str(error)
-            errors.append(f"granularity={granularity}: {error}")
-        trace_document = world_map_movement_trace_document(runtime_state)
-        comparison_results.append(
-            {
-                "granularity": granularity,
-                "start_coordinate": (
-                    None if start_coordinate is None else [start_coordinate[0], start_coordinate[1]]
-                ),
-                "requested_target": (
-                    None if requested_target is None else [requested_target[0], requested_target[1]]
-                ),
-                "end_coordinate": None if end_coordinate is None else [end_coordinate[0], end_coordinate[1]],
-                "delta": (
-                    None
-                    if start_coordinate is None or end_coordinate is None
-                    else [end_coordinate[0] - start_coordinate[0], end_coordinate[1] - start_coordinate[1]]
-                ),
-                "start_artifact_path": None if start is None or start.artifact_path is None else str(start.artifact_path),
-                "end_artifact_path": None if end is None or end.artifact_path is None else str(end.artifact_path),
-                "captured_at": started_at.isoformat(),
-                "error": error_message,
-                "movement_trace": trace_document["step_traces"],
-            }
         )
+        with application.script_runner.build_connected_runtime_bundle(
+            account=account,
+            required_role=LiveAutomationRole.LIVE_TESTING,
+        ) as connected:
+            runtime = connected.runtime
+            runner = connected.runner
+            configure_world_map_movement_budget(runtime, movement_step_budget=arguments.movement_step_budget)
 
-    stored = runtime.world_map_movement_calibration_store.persist(
-        artifact_directory=runtime.observation_service.artifact_directory,
-        label=arguments.label,
-        captured_at=datetime.now(tz=UTC),
-        document={
-            "account_id": arguments.account,
-            "delta_x": arguments.delta_x,
-            "delta_y": arguments.delta_y,
-            "movement_step_budget": arguments.movement_step_budget,
-            "errors": errors,
-            "comparisons": comparison_results,
-        },
-    )
-    print(stored.path)
-    if errors:
-        raise SystemExit(1)
+            comparison_results: list[dict[str, object]] = []
+            errors: list[str] = []
+            for comparison_index, granularity in enumerate(_parse_granularities(arguments.granularities)):
+                configure_world_map_movement_granularity(runtime, max_axis_delta_per_leg=granularity)
+                runtime_state: dict[str, object] = {}
+                started_at = datetime.now(tz=UTC)
+                start = None
+                end = None
+                start_coordinate = None
+                requested_target = None
+                end_coordinate = None
+                error_message = None
+                try:
+                    start = runner.prove_preflight_state(
+                        account,
+                        TaskPreflight.WORLD_MAP,
+                        label_prefix=f"{arguments.label}_{comparison_index}_start",
+                        max_steps=_WORLD_MAP_PREFLIGHT_MAX_STEPS,
+                    )
+                    start_coordinate = start.require_spatial_surface(SpatialSurfaceType.WORLD_MAP).viewport.coordinate
+                    if start_coordinate is None:
+                        raise AssertionError("World-map granularity comparison requires a coordinate-addressable viewport.")
+                    requested_target = (start_coordinate[0] + arguments.delta_x, start_coordinate[1] + arguments.delta_y)
+                    end = runtime.world_map_search_service.coordinate_mover_for_runtime().move_to_coordinate(
+                        start,
+                        target_coordinate=requested_target,
+                        label_prefix=f"{arguments.label}_{comparison_index}_move",
+                        runtime_state=runtime_state,
+                    )
+                    end_coordinate = end.require_spatial_surface(SpatialSurfaceType.WORLD_MAP).viewport.coordinate
+                except Exception as error:  # pragma: no cover - live-only fallback
+                    error_message = str(error)
+                    errors.append(f"granularity={granularity}: {error}")
+                trace_document = world_map_movement_trace_document(runtime_state)
+                comparison_results.append(
+                    {
+                        "granularity": granularity,
+                        "start_coordinate": (
+                            None if start_coordinate is None else [start_coordinate[0], start_coordinate[1]]
+                        ),
+                        "requested_target": (
+                            None if requested_target is None else [requested_target[0], requested_target[1]]
+                        ),
+                        "end_coordinate": None if end_coordinate is None else [end_coordinate[0], end_coordinate[1]],
+                        "delta": (
+                            None
+                            if start_coordinate is None or end_coordinate is None
+                            else [end_coordinate[0] - start_coordinate[0], end_coordinate[1] - start_coordinate[1]]
+                        ),
+                        "start_artifact_path": None if start is None or start.artifact_path is None else str(start.artifact_path),
+                        "end_artifact_path": None if end is None or end.artifact_path is None else str(end.artifact_path),
+                        "captured_at": started_at.isoformat(),
+                        "error": error_message,
+                        "movement_trace": trace_document["step_traces"],
+                    }
+                )
+
+            stored = runtime.world_map_movement_calibration_store.persist(
+                artifact_directory=runtime.observation_service.artifact_directory,
+                label=arguments.label,
+                captured_at=datetime.now(tz=UTC),
+                document={
+                    "account_id": arguments.account,
+                    "delta_x": arguments.delta_x,
+                    "delta_y": arguments.delta_y,
+                    "movement_step_budget": arguments.movement_step_budget,
+                    "errors": errors,
+                    "comparisons": comparison_results,
+                },
+            )
+            print(stored.path)
+            if errors:
+                raise SystemExit(1)
 
 
 def _parse_granularities(raw_value: str) -> tuple[int | None, ...]:

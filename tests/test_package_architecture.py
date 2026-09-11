@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import ast
+import subprocess
+import sys
 import tempfile
 import textwrap
 import unittest
@@ -24,6 +26,48 @@ class PackageArchitectureTests(unittest.TestCase):
             forbidden_prefixes=("pnc_automation.app.",),
         )
         self.assertEqual(offenders, [])
+
+    def test_host_management_import_does_not_eagerly_load_application(self) -> None:
+        """Keeps a fresh host-management import free from OCR and application entrypoint imports."""
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "import sys; "
+                    "import pnc_automation.bluestacks_management.__main__; "
+                    "assert not any(name == 'pnc_automation.app' or name.startswith('pnc_automation.app.') "
+                    "for name in sys.modules), sorted(name for name in sys.modules if name.startswith('pnc_automation.app'))"
+                ),
+            ],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_top_level_application_exports_remain_lazy_and_compatible(self) -> None:
+        """Preserves the public from-import contract while deferring application loading."""
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "import sys; import pnc_automation; "
+                    "assert not any(name.startswith('pnc_automation.app') for name in sys.modules); "
+                    "from pnc_automation import AutomationApi; "
+                    "assert AutomationApi.__name__ == 'AutomationApi'"
+                ),
+            ],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_core_vision_does_not_import_pnc_application_types(self) -> None:
         """Keeps generic vision helpers free from P&C-specific meaning."""

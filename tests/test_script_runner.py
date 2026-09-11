@@ -5,9 +5,12 @@ from __future__ import annotations
 import tempfile
 import unittest
 from dataclasses import dataclass, field, replace
+from datetime import UTC, datetime
 from pathlib import Path
+from unittest.mock import patch
 
 from pnc_automation.core.infra.adb.command_result import CommandResult
+from pnc_automation.app.automation.engine.runner import RunResult, StepRunResult
 from pnc_automation.app.automation.engine.script_runner import ScriptRunner, configure_world_map_movement_granularity
 from pnc_automation.app.runtime.observation_artifacts import ObservationArtifactKind, observation_artifact_selection
 from pnc_automation.app.runtime.observation_mode import ObservationMode
@@ -21,6 +24,9 @@ from pnc_automation.app.authoring.config.models import (
 from pnc_automation.core.infra.capture.screenshot_service import ScreenshotService
 from pnc_automation.core.infra.emulator.bluestacks_instance import BlueStacksInstance
 from pnc_automation.core.infra.storage.artifact_store import ArtifactStore
+from pnc_automation.bluestacks_management.instance_lease import InstanceLeaseRegistry
+from pnc_automation.core.errors import InstanceBusyError
+from pnc_automation.app.automation.engine.task import TaskId, TaskStatus
 from pnc_automation.app.pnc.domain.observation import SpatialObjectKind, SpatialSurfaceType
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.navigation.world_map_search import WorldMapMovementMode
@@ -38,18 +44,23 @@ class _FakeAdbClient:
     state_calls: list[str] = field(default_factory=list)
     shell_calls: list[tuple[str, tuple[str, ...]]] = field(default_factory=list)
     exec_out_calls: list[tuple[str, tuple[str, ...]]] = field(default_factory=list)
+    connect_result: CommandResult | None = None
+    state_result: CommandResult | None = None
+    connect_error: BaseException | None = None
 
     def connect(self, device_id: str) -> CommandResult:
         """Records one ADB connect call and returns success."""
 
         self.connect_calls.append(device_id)
-        return _command_result(returncode=0, stdout_text="connected")
+        if self.connect_error is not None:
+            raise self.connect_error
+        return self.connect_result or _command_result(returncode=0, stdout_text="connected")
 
     def get_state(self, device_id: str) -> CommandResult:
         """Records one ADB get-state call and returns a ready device."""
 
         self.state_calls.append(device_id)
-        return _command_result(returncode=0, stdout_text="device")
+        return self.state_result or _command_result(returncode=0, stdout_text="device")
 
     def shell(self, device_id: str, *arguments: str, timeout_seconds: float | None = 10) -> CommandResult:
         """Records one shell command and returns a non-empty readiness response."""
@@ -72,11 +83,15 @@ class _FakeInstanceResolver:
 
     resolved_instance: BlueStacksInstance
     requested_configs: list[BlueStacksInstanceConfig] = field(default_factory=list)
+    resolve_error: BaseException | None = None
 
-    def resolve(self, config: BlueStacksInstanceConfig) -> BlueStacksInstance:
+    def resolve(self, config: BlueStacksInstanceConfig, *, allow_launch: bool = True) -> BlueStacksInstance:
         """Records the authored instance config and returns the seeded runtime instance."""
 
+        del allow_launch
         self.requested_configs.append(config)
+        if self.resolve_error is not None:
+            raise self.resolve_error
         return self.resolved_instance
 
 
@@ -118,15 +133,211 @@ class ScriptRunnerTests(unittest.TestCase):
                 adb_client=adb_client,
                 instance_resolver=resolver,
                 logger=build_logger(),
+                instance_lease_registry=InstanceLeaseRegistry(root=root / "leases"),
             )
 
-            session = script_runner.build_connected_session(account=account)
+            with script_runner.reserve_accounts((account.id,)):
+                session = script_runner.build_connected_session(account=account)
+            self.addCleanup(session.close)
 
             self.assertEqual(resolver.requested_configs, [authored_instance])
             self.assertEqual(session.instance.device_id, "127.0.0.1:5566")
             self.assertEqual(adb_client.connect_calls, ["127.0.0.1:5566"])
             self.assertEqual(adb_client.state_calls, ["127.0.0.1:5566"])
             self.assertEqual(adb_client.shell_calls, [("127.0.0.1:5566", ("getprop", "ro.product.model"))])
+            session.close()
+
+    def test_resolver_failure_releases_the_pre_resolution_lease(self) -> None:
+        """Releases ownership when host resolution fails after lease acquisition."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            authored_instance = BlueStacksInstanceConfig(
+                id="bs-main",
+                display_name="serious_stuff",
+                app_package="com.global.tmslg",
+            )
+            account = AccountConfig(id="account_a", instance_id="bs-main", pnc_account_id="inline_user")
+            registry = InstanceLeaseRegistry(root=root / "leases")
+            script_runner = self._make_runner(
+                root=root,
+                instance=authored_instance,
+                account=account,
+                resolver=_FakeInstanceResolver(
+                    resolved_instance=_runtime_instance(),
+                    resolve_error=RuntimeError("resolver failed"),
+                ),
+                instance_lease_registry=registry,
+            )
+
+            with self.assertRaisesRegex(RuntimeError, "resolver failed"):
+                script_runner.build_connected_session(account=account)
+            competitor = InstanceLeaseRegistry(root=root / "leases", wait_timeout_seconds=0)
+            try:
+                self.assertEqual(competitor.acquire(display_name="serious_stuff").display_name, "serious_stuff")
+            finally:
+                competitor.release_all()
+
+    def test_connect_failure_releases_the_pre_resolution_lease(self) -> None:
+        """Releases ownership when the resolved device cannot become ADB-ready."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            authored_instance = BlueStacksInstanceConfig(
+                id="bs-main",
+                display_name="serious_stuff",
+                app_package="com.global.tmslg",
+            )
+            account = AccountConfig(id="account_a", instance_id="bs-main", pnc_account_id="inline_user")
+            registry = InstanceLeaseRegistry(root=root / "leases")
+            script_runner = self._make_runner(
+                root=root,
+                instance=authored_instance,
+                account=account,
+                resolver=_FakeInstanceResolver(resolved_instance=_runtime_instance()),
+                adb_client=_FakeAdbClient(
+                    connect_error=RuntimeError("connect failed"),
+                ),
+                instance_lease_registry=registry,
+            )
+
+            with self.assertRaisesRegex(RuntimeError, "connect failed"):
+                script_runner.build_connected_session(account=account)
+            competitor = InstanceLeaseRegistry(root=root / "leases", wait_timeout_seconds=0)
+            try:
+                self.assertEqual(competitor.acquire(display_name="serious_stuff").display_name, "serious_stuff")
+            finally:
+                competitor.release_all()
+
+    def test_runtime_setup_failure_releases_the_connected_session_lease(self) -> None:
+        """Releases ownership when connected runtime service setup fails after ADB readiness."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            authored_instance = BlueStacksInstanceConfig(
+                id="bs-main",
+                display_name="serious_stuff",
+                app_package="com.global.tmslg",
+            )
+            account = AccountConfig(id="account_a", instance_id="bs-main", pnc_account_id="inline_user")
+            registry = InstanceLeaseRegistry(root=root / "leases")
+            script_runner = self._make_runner(
+                root=root,
+                instance=authored_instance,
+                account=account,
+                resolver=_FakeInstanceResolver(resolved_instance=_runtime_instance()),
+                instance_lease_registry=registry,
+            )
+
+            with patch.object(ScriptRunner, "_build_observation_service", side_effect=RuntimeError("setup failed")):
+                with self.assertRaisesRegex(RuntimeError, "setup failed"):
+                    script_runner.build_connected_runtime(account=account)
+            competitor = InstanceLeaseRegistry(root=root / "leases", wait_timeout_seconds=0)
+            try:
+                self.assertEqual(competitor.acquire(display_name="serious_stuff").display_name, "serious_stuff")
+            finally:
+                competitor.release_all()
+
+    def test_normal_session_completion_releases_its_operation_lease(self) -> None:
+        """Makes a cleanly closed session immediately reusable by another process-shaped owner."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            authored_instance = BlueStacksInstanceConfig(
+                id="bs-main",
+                display_name="serious_stuff",
+                app_package="com.global.tmslg",
+            )
+            account = AccountConfig(id="account_a", instance_id="bs-main", pnc_account_id="inline_user")
+            registry = InstanceLeaseRegistry(root=root / "leases")
+            script_runner = self._make_runner(
+                root=root,
+                instance=authored_instance,
+                account=account,
+                resolver=_FakeInstanceResolver(resolved_instance=_runtime_instance()),
+                instance_lease_registry=registry,
+            )
+
+            session = script_runner.build_connected_session(account=account)
+            session.close()
+            session.close()
+            competitor = InstanceLeaseRegistry(root=root / "leases", wait_timeout_seconds=0)
+            try:
+                self.assertEqual(competitor.acquire(display_name="serious_stuff").display_name, "serious_stuff")
+            finally:
+                competitor.release_all()
+
+    def test_reservation_excludes_competitor_between_preparation_and_operation(self) -> None:
+        """Holds one account lease continuously from preparation through its dependent operation."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            authored_instance = BlueStacksInstanceConfig(
+                id="bs-main",
+                display_name="serious_stuff",
+                app_package="com.global.tmslg",
+            )
+            account = AccountConfig(id="account_a", instance_id="bs-main", pnc_account_id="inline_user")
+            registry = InstanceLeaseRegistry(root=root / "leases")
+            script_runner = self._make_runner(
+                root=root,
+                instance=authored_instance,
+                account=account,
+                resolver=_FakeInstanceResolver(resolved_instance=_runtime_instance()),
+                instance_lease_registry=registry,
+            )
+            competitor = InstanceLeaseRegistry(root=root / "leases", wait_timeout_seconds=0)
+
+            try:
+                with script_runner.reserve_accounts((account.id,)):
+                    with patch.object(
+                        ScriptRunner,
+                        "prepare_account_session",
+                        return_value=_successful_preparation_result(),
+                    ) as prepare:
+                        prepare_result = script_runner.prepare_account_session(account_id=account.id)
+                    self.assertEqual(prepare_result.steps[0].status, TaskStatus.SUCCESS)
+                    with self.assertRaises(InstanceBusyError):
+                        competitor.acquire(display_name=authored_instance.display_name)
+
+                    with patch.object(ScriptRunner, "run_task", return_value=None) as operation:
+                        operation(account_id=account.id, task_id=TaskId.RESEARCH)
+                    with self.assertRaises(InstanceBusyError):
+                        competitor.acquire(display_name=authored_instance.display_name)
+            finally:
+                competitor.release_all()
+
+            self.assertEqual(
+                competitor.acquire(display_name=authored_instance.display_name).display_name,
+                "serious_stuff",
+            )
+            competitor.release_all()
+
+    @staticmethod
+    def _make_runner(
+        *,
+        root: Path,
+        instance: BlueStacksInstanceConfig,
+        account: AccountConfig,
+        resolver: _FakeInstanceResolver,
+        adb_client: _FakeAdbClient | None = None,
+        instance_lease_registry: InstanceLeaseRegistry | None = None,
+    ) -> ScriptRunner:
+        """Builds a minimal runner for deterministic lease-lifecycle failure tests."""
+
+        return ScriptRunner(
+            config=_make_app_config(root=root, instance=instance, account=account),
+            task_registry=object(),
+            screenshot_service=object(),
+            observation_builder=object(),
+            castle_roster_store=None,
+            mail_archive_store=None,
+            chat_archive_store=None,
+            adb_client=adb_client or _FakeAdbClient(),
+            instance_resolver=resolver,
+            logger=build_logger(),
+            instance_lease_registry=instance_lease_registry or InstanceLeaseRegistry(root=root / "leases"),
+        )
 
     def test_build_connected_runtime_exposes_the_canonical_session_and_observation_service(self) -> None:
         """Builds one reusable connected runtime bundle for tooling through the same canonical wiring."""
@@ -178,9 +389,12 @@ class ScriptRunnerTests(unittest.TestCase):
                 adb_client=adb_client,
                 instance_resolver=resolver,
                 logger=build_logger(),
+                instance_lease_registry=InstanceLeaseRegistry(root=root / "leases"),
             )
 
-            runtime = script_runner.build_connected_runtime(account=account)
+            with script_runner.reserve_accounts((account.id,)):
+                runtime = script_runner.build_connected_runtime(account=account)
+            self.addCleanup(runtime.close)
 
             self.assertEqual(runtime.session.instance.device_id, "127.0.0.1:5566")
             self.assertIs(runtime.observation_service.screenshot_service, screenshot_service)
@@ -209,6 +423,8 @@ class ScriptRunnerTests(unittest.TestCase):
             self.assertEqual(runtime.world_map_movement_calibration_store.root, root / "artifacts")
             runner = script_runner.build_connected_automation_runner(account=account)
             self.assertIs(runner.world_map_search_service.survey_recorder, runner.world_map_survey_recorder)
+            runner.close()
+            runtime.close()
 
     def test_configure_world_map_movement_granularity_caps_traverse_and_correction_legs(self) -> None:
         """Applies live benchmark granularity to the canonical movement policy used by both movement modes."""
@@ -247,14 +463,18 @@ class ScriptRunnerTests(unittest.TestCase):
                     )
                 ),
                 logger=build_logger(),
+                instance_lease_registry=InstanceLeaseRegistry(root=root / "leases"),
             )
-            runtime = script_runner.build_connected_runtime(account=account)
+            with script_runner.reserve_accounts((account.id,)):
+                runtime = script_runner.build_connected_runtime(account=account)
+            self.addCleanup(runtime.close)
 
             configure_world_map_movement_granularity(runtime, max_axis_delta_per_leg=6)
 
             policy = runtime.world_map_search_service.coordinate_mover_for_runtime().movement_policy
             self.assertEqual(policy.max_axis_delta_for_mode(WorldMapMovementMode.TRAVERSE), 6)
             self.assertEqual(policy.max_axis_delta_for_mode(WorldMapMovementMode.FINE_CORRECTION), 6)
+            runtime.close()
 
     def test_build_connected_runtime_bundle_shares_runtime_services_with_runner(self) -> None:
         """Builds one runtime-plus-runner graph when a live tool needs shared mutable service identity."""
@@ -296,9 +516,12 @@ class ScriptRunnerTests(unittest.TestCase):
                 adb_client=adb_client,
                 instance_resolver=resolver,
                 logger=build_logger(),
+                instance_lease_registry=InstanceLeaseRegistry(root=root / "leases"),
             )
 
-            connected = script_runner.build_connected_runtime_bundle(account=account)
+            with script_runner.reserve_accounts((account.id,)):
+                connected = script_runner.build_connected_runtime_bundle(account=account)
+            self.addCleanup(connected.close)
 
             self.assertEqual(resolver.requested_configs, [authored_instance])
             self.assertEqual(adb_client.connect_calls, ["127.0.0.1:5566"])
@@ -311,6 +534,7 @@ class ScriptRunnerTests(unittest.TestCase):
                 connected.runtime.world_map_movement_calibration_service.search_service,
                 connected.runtime.world_map_search_service,
             )
+            connected.close()
 
     def test_build_connected_runtime_wires_world_map_survey_recorder_through_real_runtime_capture(self) -> None:
         """Builds the recorder through ScriptRunner and persists one real runtime checkpoint dump under artifacts."""
@@ -352,9 +576,12 @@ class ScriptRunnerTests(unittest.TestCase):
                 adb_client=adb_client,
                 instance_resolver=resolver,
                 logger=build_logger(),
+                instance_lease_registry=InstanceLeaseRegistry(root=root / "leases"),
             )
 
-            runtime = script_runner.build_connected_runtime(account=account)
+            with script_runner.reserve_accounts((account.id,)):
+                runtime = script_runner.build_connected_runtime(account=account)
+            self.addCleanup(runtime.close)
             result = runtime.world_map_survey_recorder.capture_checkpoint(
                 "survey_step",
                 artifact_selection=observation_artifact_selection(ObservationArtifactKind.WORLD_MAP_SURVEY_STATE),
@@ -375,6 +602,7 @@ class ScriptRunnerTests(unittest.TestCase):
                 result.debug_dump.document["checkpoint"]["surface_type"],
                 SpatialSurfaceType.WORLD_MAP.value,
             )
+            runtime.close()
 
 
 @dataclass(slots=True)
@@ -435,6 +663,37 @@ def _make_app_config(
         runtime=RuntimeConfig(observation_mode=observation_mode),
         instances=(instance,),
         accounts=(account,),
+    )
+
+
+def _runtime_instance() -> BlueStacksInstance:
+    """Builds the runtime instance returned by the fake resolver."""
+
+    return BlueStacksInstance(
+        id="bs-main",
+        display_name="serious_stuff",
+        device_id="127.0.0.1:5566",
+        app_package="com.global.tmslg",
+    )
+
+
+def _successful_preparation_result() -> RunResult:
+    """Builds one explicit successful preparation result for lease-scope tests."""
+
+    now = datetime.now(tz=UTC)
+    return RunResult(
+        account_id="account_a",
+        script_name="prepare_account_session",
+        steps=(
+            StepRunResult(
+                task_id=TaskId.LOGIN,
+                status=TaskStatus.SUCCESS,
+                attempts=1,
+                message="ok",
+            ),
+        ),
+        started_at=now,
+        finished_at=now,
     )
 
 

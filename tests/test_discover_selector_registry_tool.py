@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.authoring.config.models import LiveAutomationRole
 from tests.test_support import make_observation
 
 
@@ -90,6 +91,7 @@ class DiscoverSelectorRegistryToolTests(unittest.TestCase):
 
         self.assertEqual(script_runner.config.requested_account_ids, ["testing"])
         self.assertEqual(script_runner.connected_runtime_accounts, [account])
+        self.assertEqual(script_runner.required_roles, [LiveAutomationRole.LIVE_TESTING])
         self.assertEqual(
             connected_runtime.require_reasons,
             ["Live selector discovery requires a connected observed-action executor."],
@@ -129,6 +131,7 @@ class DiscoverSelectorRegistryToolTests(unittest.TestCase):
             )
 
         self.assertEqual(observation_service.labels, [])
+        self.assertEqual(script_runner.required_roles, [LiveAutomationRole.LIVE_TESTING])
 
     def test_navigation_validation_tool_uses_connected_runtime_executor_and_flow_planner(self) -> None:
         """Builds the validator from the connected runtime executor and planner identities."""
@@ -229,11 +232,18 @@ class _FakeToolScriptRunner:
     config: _FakeToolConfig
     connected_runtime: object
     connected_runtime_accounts: list[object] = field(default_factory=list)
+    required_roles: list[LiveAutomationRole | None] = field(default_factory=list)
 
-    def build_connected_runtime(self, *, account: object) -> object:
+    def build_connected_runtime(
+        self,
+        *,
+        account: object,
+        required_role: LiveAutomationRole | None = None,
+    ) -> object:
         """Records the account used for connected-runtime construction and returns the seeded runtime."""
 
         self.connected_runtime_accounts.append(account)
+        self.required_roles.append(required_role)
         return self.connected_runtime
 
 

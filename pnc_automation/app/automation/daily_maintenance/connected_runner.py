@@ -16,8 +16,16 @@ from pnc_automation.app.automation.daily_maintenance.coordinator import (
 from pnc_automation.app.automation.daily_maintenance.live_session import ConnectedDailyQuestSession
 from pnc_automation.app.automation.daily_maintenance.mutation_dispatcher import JournaledMutationDispatcher
 from pnc_automation.app.authoring.config.daily_maintenance import DailyMaintenanceTargetConfig
-from pnc_automation.app.authoring.config.models import AppConfig
-from pnc_automation.app.automation.engine.script_runner import ScriptRunner
+from pnc_automation.app.authoring.config.models import AccountConfig, AppConfig, LiveAutomationRole
+from pnc_automation.app.automation.engine.script_runner import (
+    ConnectedAutomationRuntime,
+    ScriptRunner,
+    require_successful_preparation,
+)
+from pnc_automation.bluestacks_management.instance_lease import (
+    PROCESS_INSTANCE_LEASES,
+    InstanceLeaseBundle,
+)
 from pnc_automation.app.pnc.domain.daily_maintenance import (
     DailyQuestRow,
     DailyTargetOutcome,
@@ -50,6 +58,7 @@ class ConnectedClaimOnlyCastleRunner:
         account = self.app_config.require_account(target.account_id)
         if account.instance_id != self.instance_id:
             raise ValueError("Daily target was routed to the wrong instance worker.")
+        account.require_live_role(LiveAutomationRole.DAILY_CANARY)
         if target.capabilities:
             labels = ", ".join(policy.quest_id.value for policy in target.capabilities)
             raise PermissionError(f"Daily capabilities are not promoted for unattended execution: {labels}.")
@@ -59,15 +68,38 @@ class ConnectedClaimOnlyCastleRunner:
             maintenance_date=boundary.maintenance_date,
             max_claims=target.max_claims,
         )
-        preparation = self.script_runner.prepare_account_session(
-            account_id=target.account_id,
-            castle=target.castle,
-        )
-        failed_steps = tuple(step for step in preparation.steps if step.status.value == "failed")
-        if failed_steps:
-            raise RuntimeError(f"Daily session preparation failed: {failed_steps[-1].message}")
+        with self.script_runner.reserve_accounts((target.account_id,)):
+            preparation = require_successful_preparation(
+                self.script_runner.prepare_account_session(
+                    account_id=target.account_id,
+                    castle=target.castle,
+                    required_role=LiveAutomationRole.DAILY_CANARY,
+                )
+            )
 
-        bundle = self.script_runner.build_connected_runtime_bundle(account=account)
+            with self.script_runner.build_connected_runtime_bundle(
+                account=account,
+                required_role=LiveAutomationRole.DAILY_CANARY,
+            ) as bundle:
+                return self._run_connected_castle(
+                    target=target,
+                    boundary=boundary,
+                    account=account,
+                    acknowledgement=acknowledgement,
+                    bundle=bundle,
+                )
+
+    def _run_connected_castle(
+        self,
+        *,
+        target: DailyMaintenanceTargetConfig,
+        boundary: DailyRunBoundary,
+        account: AccountConfig,
+        acknowledgement: MutationAcknowledgement,
+        bundle: ConnectedAutomationRuntime,
+    ) -> DailyCastleRunSummary:
+        """Runs the connected portion while the caller owns its lease bundle."""
+
         connected = bundle.runtime
         action_executor = connected.require_observed_action_executor(
             "Daily claims require the canonical selector-backed action executor."
@@ -156,6 +188,15 @@ class ConnectedClaimOnlyRunnerFactory:
     app_config: AppConfig
     acknowledgements: tuple[MutationAcknowledgement, ...]
     verbose: bool = False
+
+    def reserve_instances(self, instance_ids: tuple[str, ...]) -> InstanceLeaseBundle:
+        """Reserves the configured display names for the complete daily worker pool."""
+
+        display_names = tuple(
+            self.app_config.require_instance(instance_id).display_name
+            for instance_id in instance_ids
+        )
+        return PROCESS_INSTANCE_LEASES.acquire_bundle(display_names)
 
     def build(self, *, instance_id: str) -> ConnectedClaimOnlyCastleRunner:
         """Builds one worker with an independently owned OCR and connected-runtime graph."""

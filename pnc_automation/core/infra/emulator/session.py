@@ -4,10 +4,16 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from pnc_automation.core.infra.adb.client import AdbClient
 from pnc_automation.core.infra.emulator.bluestacks_instance import BlueStacksInstance
+from pnc_automation.bluestacks_management.instance_lease import (
+    PROCESS_INSTANCE_LEASES,
+    InstanceLeaseRegistry,
+    ProcessInstanceLease,
+)
+from pnc_automation.core.config.host import BlueStacksCapabilities
 from pnc_automation.core.errors import DeviceConnectionError, GameLaunchError, ScreenshotCaptureError
 
 
@@ -20,37 +26,54 @@ class BlueStacksSession:
     sleep: Callable[[float], None] = time.sleep
     connect_attempts: int = 30
     connect_retry_delay_seconds: float = 2.0
+    lease_registry: InstanceLeaseRegistry = field(
+        default_factory=lambda: PROCESS_INSTANCE_LEASES,
+        repr=False,
+    )
+    capabilities: BlueStacksCapabilities = field(
+        default_factory=BlueStacksCapabilities.unrestricted,
+        repr=False,
+    )
+    instance_lease: ProcessInstanceLease | None = field(default=None, repr=False)
+    _instance_lease: ProcessInstanceLease | None = field(default=None, init=False, repr=False)
+    _closed: bool = field(default=False, init=False, repr=False)
 
     def connect(self) -> None:
         """Connects to the configured ADB endpoint and validates device readiness."""
 
-        attempts = max(1, self.connect_attempts)
-        last_connect_result = None
-        last_state_result = None
-        for attempt_index in range(attempts):
-            last_connect_result = self.adb_client.connect(self.instance.device_id)
-            if last_connect_result.succeeded:
-                last_state_result = self.adb_client.get_state(self.instance.device_id)
-                if last_state_result.succeeded and last_state_result.stdout_text.strip() == "device":
-                    return
-            if attempt_index < attempts - 1 and self.connect_retry_delay_seconds > 0:
-                self.sleep(self.connect_retry_delay_seconds)
-        if last_connect_result is not None and not last_connect_result.succeeded:
+        self._ensure_lease()
+        try:
+            attempts = max(1, self.connect_attempts)
+            last_connect_result = None
+            last_state_result = None
+            for attempt_index in range(attempts):
+                last_connect_result = self.adb_client.connect(self.instance.device_id)
+                if last_connect_result.succeeded:
+                    last_state_result = self.adb_client.get_state(self.instance.device_id)
+                    if last_state_result.succeeded and last_state_result.stdout_text.strip() == "device":
+                        return
+                if attempt_index < attempts - 1 and self.connect_retry_delay_seconds > 0:
+                    self.sleep(self.connect_retry_delay_seconds)
+            if last_connect_result is not None and not last_connect_result.succeeded:
+                raise DeviceConnectionError(
+                    f"Failed to connect to device '{self.instance.device_id}'.",
+                    device_id=self.instance.device_id,
+                    stderr=last_connect_result.stderr_text,
+                )
             raise DeviceConnectionError(
-                f"Failed to connect to device '{self.instance.device_id}'.",
+                f"Device '{self.instance.device_id}' is not ready.",
                 device_id=self.instance.device_id,
-                stderr=last_connect_result.stderr_text,
+                stdout="" if last_state_result is None else last_state_result.stdout_text,
+                stderr="" if last_state_result is None else last_state_result.stderr_text,
             )
-        raise DeviceConnectionError(
-            f"Device '{self.instance.device_id}' is not ready.",
-            device_id=self.instance.device_id,
-            stdout="" if last_state_result is None else last_state_result.stdout_text,
-            stderr="" if last_state_result is None else last_state_result.stderr_text,
-        )
+        except BaseException:
+            self.close()
+            raise
 
     def ensure_responsive(self) -> None:
         """Ensures the Android session responds to a trivial shell command."""
 
+        self._ensure_lease()
         attempts = max(1, self.connect_attempts)
         last_result = None
         for attempt_index in range(attempts):
@@ -69,6 +92,7 @@ class BlueStacksSession:
     def is_app_foregrounded(self) -> bool:
         """Returns whether the configured P&C package is the foreground app."""
 
+        self._ensure_lease()
         result = self.adb_client.shell(self.instance.device_id, "dumpsys", "window", "windows")
         if not result.succeeded:
             raise GameLaunchError(
@@ -83,11 +107,14 @@ class BlueStacksSession:
 
         if self.is_app_foregrounded():
             return
+        self._require_app_launch()
         self.launch_app()
 
     def launch_app(self) -> None:
         """Launches the configured Puzzles & Conquest package."""
 
+        self._ensure_lease()
+        self._require_app_launch()
         result = self.adb_client.shell(
             self.instance.device_id,
             "monkey",
@@ -108,6 +135,7 @@ class BlueStacksSession:
     def tap_point(self, x: int, y: int) -> None:
         """Sends one screen tap to the device."""
 
+        self._require_input()
         result = self.adb_client.shell(self.instance.device_id, "input", "tap", str(x), str(y))
         if not result.succeeded:
             raise DeviceConnectionError(
@@ -121,6 +149,7 @@ class BlueStacksSession:
     def input_text(self, text: str) -> None:
         """Inputs one text payload using Android's input subsystem."""
 
+        self._require_input()
         encoded = _encode_adb_text(text)
         result = self.adb_client.shell(self.instance.device_id, "input", "text", encoded)
         if not result.succeeded:
@@ -133,6 +162,7 @@ class BlueStacksSession:
     def press_key(self, key_code: str) -> None:
         """Sends one Android key event."""
 
+        self._require_input()
         result = self.adb_client.shell(self.instance.device_id, "input", "keyevent", key_code)
         if not result.succeeded:
             raise DeviceConnectionError(
@@ -155,6 +185,7 @@ class BlueStacksSession:
     ) -> None:
         """Sends one swipe-like drag through the requested Android input primitive."""
 
+        self._require_input()
         if gesture_primitive == "swipe":
             command = [
                 *_input_command_prefix(input_source=input_source, device_id=self.instance.device_id),
@@ -214,6 +245,7 @@ class BlueStacksSession:
     def capture_screenshot_bytes(self) -> bytes:
         """Captures a PNG screenshot through `adb exec-out screencap -p`."""
 
+        self._ensure_lease()
         result = self.adb_client.exec_out(self.instance.device_id, "screencap", "-p", timeout_seconds=20)
         if not result.succeeded or result.stdout == b"":
             raise ScreenshotCaptureError(
@@ -222,6 +254,58 @@ class BlueStacksSession:
                 stderr=result.stderr_text,
             )
         return result.stdout
+
+    def close(self) -> None:
+        """Releases the session's operation reference and prevents lease retention in long-lived workers."""
+
+        if self._closed:
+            return
+        self._closed = True
+        lease = self._instance_lease
+        self._instance_lease = None
+        if lease is not None:
+            lease.release()
+
+    def __enter__(self) -> "BlueStacksSession":
+        """Enters an explicitly scoped connected session."""
+
+        return self
+
+    def __exit__(self, _exception_type: object, _exception: object, _traceback: object) -> None:
+        """Releases the session lease on normal or exceptional exit."""
+
+        self.close()
+
+    def _ensure_lease(self) -> ProcessInstanceLease:
+        """Ensures every ADB operation is preceded by the configured display-name lease."""
+
+        if self._closed:
+            raise DeviceConnectionError(
+                "BlueStacks session is closed.",
+                display_name=self.instance.display_name,
+            )
+        if self._instance_lease is None:
+            self._instance_lease = self.instance_lease or self.lease_registry.acquire(
+                display_name=self.instance.display_name,
+            )
+        return self._instance_lease
+
+    def _require_app_launch(self) -> None:
+        """Rejects foreground/launch requests when the dynamic role policy forbids them."""
+
+        if not self.capabilities.allow_app_launch:
+            raise PermissionError(
+                f"BlueStacks account for '{self.instance.display_name}' cannot foreground or launch the app."
+            )
+
+    def _require_input(self) -> None:
+        """Rejects every input primitive when the dynamic role policy is read-only."""
+
+        self._ensure_lease()
+        if not self.capabilities.allow_input:
+            raise PermissionError(
+                f"BlueStacks account for '{self.instance.display_name}' is read-only and cannot send input."
+            )
 
 
 def _encode_adb_text(text: str) -> str:

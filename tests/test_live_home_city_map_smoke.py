@@ -8,6 +8,8 @@ import unittest
 from pathlib import Path
 
 from pnc_automation.app import build_application_runner
+from pnc_automation.app.automation.engine.script_runner import require_successful_preparation
+from pnc_automation.app.authoring.config.models import LiveAutomationRole
 from pnc_automation.app.automation.engine.task import TaskStatus
 from pnc_automation.app.automation.tasks.open_building_support import (
     home_city_object_query,
@@ -41,6 +43,23 @@ class LiveHomeCityMapSmokeTests(unittest.TestCase):
         cls.random_seed = int(os.getenv("PNC_LIVE_HOME_CITY_MAP_SMOKE_SEED", "29"))
         cls.application = build_application_runner(cls.config_path)
         cls.script_runner = cls.application.script_runner
+        account_ids = cls._live_account_ids()
+        for account_id in account_ids:
+            cls.script_runner.config.require_account(account_id).require_live_role(LiveAutomationRole.SMOKE_TEST)
+        cls.lease_bundle = cls.script_runner.reserve_accounts(account_ids)
+        cls.addClassCleanup(cls.lease_bundle.close)
+        cls.runners = []
+        cls.addClassCleanup(cls._close_runners)
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        """Releases every per-account runner and the complete multi-instance lease bundle."""
+
+        for runner in getattr(cls, "runners", ()):
+            runner.close()
+        bundle = getattr(cls, "lease_bundle", None)
+        if bundle is not None:
+            bundle.close()
 
     def test_live_home_city_map_preparation_reports_success(self) -> None:
         """Verifies each requested live account can complete the shared preparation flow."""
@@ -161,11 +180,22 @@ class LiveHomeCityMapSmokeTests(unittest.TestCase):
             config_account=account,
             script_runner=cls.script_runner,
         )
-        prepare_result = cls.application.prepare_account_session(
-            account_id=account_id,
-            castle=cls._main_castle_target(account_id),
+        cls.runners.append(runner)
+        prepare_result = require_successful_preparation(
+            cls.application.prepare_account_session(
+                account_id=account_id,
+                castle=cls._main_castle_target(account_id),
+                required_role=LiveAutomationRole.SMOKE_TEST,
+            )
         )
         return runner, prepare_result
+
+    @classmethod
+    def _close_runners(cls) -> None:
+        """Closes runners created before a later class setup step failed."""
+
+        for runner in cls.runners:
+            runner.close()
 
     @classmethod
     def _main_castle_target(cls, account_id: str) -> CastleIdentity | None:
@@ -178,7 +208,7 @@ class LiveHomeCityMapSmokeTests(unittest.TestCase):
     def _live_account_ids() -> tuple[str, ...]:
         """Returns the explicit live accounts requested for the smoke run."""
 
-        raw_value = os.getenv("PNC_LIVE_HOME_CITY_MAP_SMOKE_ACCOUNTS", "testing,mega_old_acc")
+        raw_value = os.getenv("PNC_LIVE_HOME_CITY_MAP_SMOKE_ACCOUNTS", "testing")
         return tuple(account_id.strip() for account_id in raw_value.split(",") if account_id.strip())
 
     @staticmethod

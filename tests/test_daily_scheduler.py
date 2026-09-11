@@ -42,6 +42,47 @@ class DailySchedulerTests(unittest.TestCase):
         self.assertNotIn("-05:00", script)
         self.assertNotIn("-04:00", script)
 
+    def test_memory_monitor_wrapper_is_supervised_non_overlapping_and_watch_mode(self) -> None:
+        """Requires the host wrapper to keep one continuous monitor process per machine."""
+
+        script = Path("tools/run_bluestacks_memory_monitor.ps1").read_text(encoding="utf-8")
+        for required in (
+            "Local\\PNC-BlueStacks-Memory-Monitor",
+            ".WaitOne(0)",
+            "pnc_automation.bluestacks_management monitor",
+            "--watch",
+            "exit $LASTEXITCODE",
+        ):
+            self.assertIn(required, script)
+        self.assertNotIn("PASSWORD", script.upper())
+        self.assertNotIn("TOKEN", script.upper())
+
+    def test_memory_monitor_registration_restarts_failures_without_overlap(self) -> None:
+        """Requires the explicit registration contract to supervise, not start, the monitor."""
+
+        script = Path("tools/register_bluestacks_memory_monitor_task.ps1").read_text(encoding="utf-8")
+        for required in (
+            "New-ScheduledTaskTrigger -AtLogOn",
+            '"pythonw.exe"',
+            '-Execute $windowlessPython',
+            'pnc_automation.bluestacks_management monitor --config $quotedConfig --watch',
+            "-StartWhenAvailable:$false",
+            "-WakeToRun:$false",
+            "-MultipleInstances IgnoreNew",
+            "-RestartCount 3",
+            "-RestartInterval (New-TimeSpan -Minutes 1)",
+            "-ExecutionTimeLimit ([TimeSpan]::Zero)",
+            "Register-ScheduledTask",
+            "-LogonType Interactive",
+        ):
+            self.assertIn(required, script)
+        self.assertNotIn("New-ScheduledTaskTrigger -AtStartup", script)
+        self.assertNotIn('-Execute "powershell.exe"', script)
+        self.assertNotIn("-File $quotedWrapper", script)
+        self.assertNotIn("Start-ScheduledTask", script)
+        self.assertNotIn("PASSWORD", script.upper())
+        self.assertNotIn("TOKEN", script.upper())
+
 
 if __name__ == "__main__":
     unittest.main()

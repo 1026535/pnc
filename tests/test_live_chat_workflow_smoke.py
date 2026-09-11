@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from pnc_automation.app import build_application_runner
+from pnc_automation.app.authoring.config.models import LiveAutomationRole
 from pnc_automation.app.pnc.domain.chat import ChatChannel
 from pnc_automation.app.pnc.domain.observation import Observation
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
@@ -45,10 +46,15 @@ class LiveChatWorkflowSmokeTests(unittest.TestCase):
         cls.application = build_application_runner(cls.config_path)
         cls.script_runner = cls.application.script_runner
         cls.account = cls.script_runner.config.require_account(cls.account_id)
+        cls.account.require_live_role(LiveAutomationRole.SMOKE_TEST)
+        cls.lease_bundle = cls.script_runner.reserve_accounts((cls.account_id,))
+        cls.addClassCleanup(cls.lease_bundle.close)
         runtime = build_live_runtime(
             config_account=cls.account,
             script_runner=cls.script_runner,
         )
+        cls.runtime = runtime
+        cls.addClassCleanup(cls.runtime.close)
         cls.session = runtime.session
         cls.observation_service = runtime.observation_service
         cls.flows = runtime.flow_planner
@@ -57,6 +63,14 @@ class LiveChatWorkflowSmokeTests(unittest.TestCase):
         )
         cls.alliance_result = cls._run_live_send(ChatChannel.ALLIANCE)
         cls.world_result = cls._run_live_send(ChatChannel.WORLD)
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        """Releases the shared connected runtime after the smoke suite."""
+
+        runtime = getattr(cls, "runtime", None)
+        if runtime is not None:
+            runtime.close()
 
     @classmethod
     def _run_live_send(cls, channel: ChatChannel) -> _LiveChatSendResult:
