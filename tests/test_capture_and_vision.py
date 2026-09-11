@@ -22,7 +22,10 @@ from pnc_automation.app.automation.engine.action_executor import ActionExecutor
 from pnc_automation.app.automation.engine.observed_action_executor import ObservedActionExecutor
 from pnc_automation.app.automation.engine.task_executor import TaskExecutor
 from pnc_automation.app.automation.tasks.ensure_game_running_task import EnsureGameRunningTask
-from pnc_automation.app.pnc.domain.action_requests import TapPointAction
+from pnc_automation.app.pnc.domain.action_requests import TapPointAction, WaitAction
+from pnc_automation.app.automation.engine.runner import AutomationRunner
+from pnc_automation.app.authoring.config.models import DefaultsConfig
+from pnc_automation.app.authoring.scripts.registry import TaskRegistry
 from pnc_automation.core.errors import ScreenClassificationError, SelectorResolutionError
 from pnc_automation.app.pnc.domain.chat import ChatChannel
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
@@ -1338,6 +1341,90 @@ class CaptureAndVisionTests(unittest.TestCase):
                     observation,
                 )
             self.assertEqual([], session.taps)
+
+    def test_loading_builder_output_settles_through_runner_without_input(self) -> None:
+        """Passively waits for a production loading observation before accepting Home."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                artifact_directory="k230_loading_runner_settle",
+                label="loading_runner_settle",
+            )
+            builder = ObservationBuilder(
+                selector_registry=_minimal_runtime_registry(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(),
+                ocr_service=_FakeOcrService(
+                    lines=(_ocr_line("Loading", x=100, y=100, width=120, height=32),)
+                ),
+            )
+            loading = builder.build(screenshot)
+            self.assertEqual(loading.screen_type, ScreenType.PNC_LOADING)
+            self.assertEqual(loading.decision.guard, GuardVerdict.BLOCKED)
+
+            session = FakeSession()
+            registry = build_default_selector_registry()
+            low_level_executor = ActionExecutor(
+                session=session,
+                selector_registry=registry,
+                stable_click_delay_ms=0,
+                post_action_observe_delay_ms=0,
+                chat_stable_click_delay_ms=0,
+                chat_post_action_observe_delay_ms=0,
+                logger=build_logger(),
+                sleep=lambda _: None,
+            )
+            observed_executor = ObservedActionExecutor(
+                selector_registry=registry,
+                action_executor=low_level_executor,
+                logger=build_logger(),
+                sleep=lambda _: None,
+            )
+            observer = FakeObservationService(observations=[make_observation(ScreenType.PNC_HOME_CITY)])
+            flow_planner = ScreenFlowPlanner()
+            planned_actions = []
+
+            def plan_home_city(observation):
+                """Records the canonical planner's loading action for this regression."""
+
+                actions = flow_planner.ensure_home_city(observation)
+                planned_actions.extend(actions)
+                return actions
+
+            runner = AutomationRunner(
+                defaults=DefaultsConfig(stable_click_delay_ms=0, post_action_observe_delay_ms=0),
+                observation_service=observer,
+                action_executor=observed_executor,
+                task_registry=TaskRegistry(tasks=()),
+                flow_planner=flow_planner,
+                logger=build_logger(),
+            )
+
+            settled = runner.execute_flow_until(
+                label_prefix="loading_runner_settle",
+                planner=plan_home_city,
+                done=lambda observation: observation.screen_type == ScreenType.PNC_HOME_CITY,
+                start_observation=loading,
+                max_steps=1,
+            )
+
+            self.assertEqual(ScreenType.PNC_HOME_CITY, settled.screen_type)
+            self.assertEqual(1, len(planned_actions))
+            self.assertIsInstance(planned_actions[0], WaitAction)
+            self.assertEqual(1000, planned_actions[0].milliseconds)
+            self.assertEqual(["loading_runner_settle_step_0_post_action_1"], observer.labels)
+            self.assertEqual([ObservationRequest.full_runtime_default()], observer.requests)
+            self.assertEqual([], session.taps)
+            self.assertEqual([], session.texts)
+            self.assertEqual([], session.key_events)
+            self.assertEqual([], session.swipes)
+            self.assertEqual(0, session.launches)
 
     def test_observation_builder_classifies_loading_splash_from_live_like_ocr(self) -> None:
         """Recognizes the branded game splash as a loading transition during castle switching or launch."""
