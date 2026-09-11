@@ -253,14 +253,13 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertEqual(actions[0].follow_up_request, ObservationRequest.full_runtime_default())
 
     def test_ensure_home_city_from_unknown_uses_in_game_recovery_without_relaunching(self) -> None:
-        """Keeps ambiguous states inside the bounded in-game recovery path instead of bouncing through Android home."""
+        """Keeps ambiguous states inside a passive bounded recovery path."""
 
         actions = self.flows.ensure_home_city(make_observation(ScreenType.UNKNOWN))
 
         self.assertEqual(len(actions), 1)
-        self.assertIsInstance(actions[0], KeyEventAction)
-        self.assertEqual(actions[0].key_code, "KEYCODE_BACK")
-        self.assertEqual(actions[0].reason, "recover_unknown_home_city")
+        self.assertIsInstance(actions[0], WaitAction)
+        self.assertEqual(actions[0].reason, "recover_unknown_home_city_passive_settle")
 
     def test_ensure_home_city_proves_coarse_home_city_root_before_treating_it_as_ready(self) -> None:
         """Refreshes a coarse home-city root into an exact home-city proof instead of treating it as already ready."""
@@ -319,22 +318,22 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertIsNone(actions[0].follow_up_request)
 
     def test_open_world_map_from_unknown_only_recovers_toward_home_city_first(self) -> None:
-        """Plans a single recovery increment from unknown instead of bundling a stale world-switch tail action."""
+        """Plans one passive recovery increment from unknown instead of guessing a Back action."""
 
         actions = self.flows.open_world_map(make_observation(ScreenType.UNKNOWN))
 
         self.assertEqual(len(actions), 1)
-        self.assertIsInstance(actions[0], KeyEventAction)
-        self.assertEqual(actions[0].key_code, "KEYCODE_BACK")
+        self.assertIsInstance(actions[0], WaitAction)
+        self.assertEqual(actions[0].reason, "recover_unknown_home_city_passive_settle")
 
     def test_open_chat_from_unknown_only_recovers_toward_home_city_first(self) -> None:
-        """Plans a single recovery increment from unknown instead of assuming the chat shortcut is already reachable."""
+        """Plans one passive recovery increment from unknown instead of assuming the chat shortcut is reachable."""
 
         actions = self.flows.open_chat(make_observation(ScreenType.UNKNOWN))
 
         self.assertEqual(len(actions), 1)
-        self.assertIsInstance(actions[0], KeyEventAction)
-        self.assertEqual(actions[0].key_code, "KEYCODE_BACK")
+        self.assertIsInstance(actions[0], WaitAction)
+        self.assertEqual(actions[0].reason, "recover_unknown_home_city_passive_settle")
 
     def test_open_chat_from_world_map_uses_shared_shortcut(self) -> None:
         """Uses the shared chat shortcut instead of forcing a return to home city first."""
@@ -1805,7 +1804,7 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertAlmostEqual(actions[0].start_x_ratio, 0.68)
         self.assertAlmostEqual(actions[0].end_x_ratio, 0.28)
         self.assertTrue(actions[0].observe_after)
-        self.assertEqual(actions[0].follow_up_request, ObservationRequest.world_map_movement_follow_up())
+        self.assertEqual(actions[0].follow_up_request, ObservationRequest.world_map_movement_proof_follow_up())
 
     def test_world_map_navigator_prefers_native_diagonal_profile_when_both_axes_are_unresolved(self) -> None:
         """Uses the reviewed diagonal swipe profile directly instead of decomposing diagonal movement into cardinals."""
@@ -1836,7 +1835,7 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertIsNotNone(actions[0].start_x_ratio)
         self.assertIsNotNone(actions[0].end_x_ratio)
         self.assertTrue(actions[0].observe_after)
-        self.assertEqual(actions[0].follow_up_request, ObservationRequest.world_map_movement_follow_up())
+        self.assertEqual(actions[0].follow_up_request, ObservationRequest.world_map_movement_proof_follow_up())
 
     def test_world_map_navigator_uses_live_backed_vertical_swipe_lane(self) -> None:
         """Keeps vertical world-map swipes on the reviewed X lane that moves reliably in live probing."""
@@ -1996,8 +1995,8 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertIsInstance(actions[0], SwipeAction)
         self.assertEqual(actions[0].gesture_primitive, SwipeGesturePrimitive.PRESS_MOVE_RELEASE)
 
-    def test_recover_unknown_game_screen_uses_back_without_relaunching(self) -> None:
-        """Uses one in-game back increment for unknown endpoint states instead of restarting the app."""
+    def test_recover_unknown_game_screen_uses_passive_settle_without_relaunching(self) -> None:
+        """Settles an unknown endpoint passively instead of dispatching unproved Back."""
 
         actions = self.flows.recover_unknown_game_screen(
             make_observation(ScreenType.UNKNOWN),
@@ -2005,9 +2004,8 @@ class FlowAndTaskTests(unittest.TestCase):
         )
 
         self.assertEqual(len(actions), 1)
-        self.assertIsInstance(actions[0], KeyEventAction)
-        self.assertEqual(actions[0].key_code, "KEYCODE_BACK")
-        self.assertEqual(actions[0].reason, "recover_unknown_endpoint")
+        self.assertIsInstance(actions[0], WaitAction)
+        self.assertEqual(actions[0].reason, "recover_unknown_endpoint_passive_settle")
 
     def test_ensure_game_running_waits_on_unknown_once_launch_is_in_progress(self) -> None:
         """Keeps waiting on the launch splash instead of bouncing back through Android home."""
@@ -2024,7 +2022,7 @@ class FlowAndTaskTests(unittest.TestCase):
         self.assertEqual(actions[0].reason, "wait_for_pnc_launch")
 
     def test_ensure_game_running_recovers_unknown_in_game_state_before_any_relaunch(self) -> None:
-        """Uses one bounded in-game recovery increment before the bootstrap task is allowed to relaunch anything."""
+        """Uses one passive observation before the bootstrap task is allowed to relaunch anything."""
 
         task = EnsureGameRunningTask()
         context = self._make_context(params=None)
@@ -2032,9 +2030,8 @@ class FlowAndTaskTests(unittest.TestCase):
         actions = task.plan(context, make_observation(ScreenType.UNKNOWN))
 
         self.assertEqual(len(actions), 1)
-        self.assertIsInstance(actions[0], KeyEventAction)
-        self.assertEqual(actions[0].key_code, "KEYCODE_BACK")
-        self.assertEqual(actions[0].reason, "recover_unknown_before_foreground")
+        self.assertIsInstance(actions[0], WaitAction)
+        self.assertEqual(actions[0].reason, "recover_unknown_before_foreground_passive_settle")
 
     def test_ensure_game_running_replans_when_launch_lands_on_unknown_splash(self) -> None:
         """Treats an unknown post-launch splash as in-progress foregrounding instead of immediate failure."""
@@ -2821,15 +2818,10 @@ class FlowAndTaskTests(unittest.TestCase):
             )
 
     def test_return_to_safe_root_screen_unwinds_build_speedup_confirmation(self) -> None:
-        """Dismisses an unconfirmed speedup popup with Android Back without consuming inventory."""
+        """Refuses an unconfirmed speedup popup without a typed, proved close control."""
 
-        actions = self.flows.return_to_safe_root_screen(
-            make_observation(ScreenType.PNC_BUILD_SPEEDUP_CONFIRM)
-        )
-
-        self.assertEqual(len(actions), 1)
-        self.assertIsInstance(actions[0], KeyEventAction)
-        self.assertEqual(actions[0].key_code, "KEYCODE_BACK")
+        with self.assertRaisesRegex(SelectorResolutionError, "typed safe close"):
+            self.flows.return_to_safe_root_screen(make_observation(ScreenType.PNC_BUILD_SPEEDUP_CONFIRM))
 
     def test_return_to_safe_root_screen_closes_more_overlay_without_triggering_exit_popup(self) -> None:
         """Closes the live More overlay with its own toggle instead of using Android back."""
@@ -3377,27 +3369,6 @@ class FlowAndTaskTests(unittest.TestCase):
 
         self.assertEqual(result.status, TaskStatus.SUCCESS)
         self.assertIn("Infantry Barracks", result.message)
-
-    def test_open_building_task_accepts_sanctum_icons_as_success(self) -> None:
-        """Accepts Sanctum's artifact-plus-relic controls as an open-screen proof even when classification lags."""
-
-        task = OpenBuildingTask()
-        context = self._make_context(
-            params=OpenBuildingPolicy(building=HomeCityObjectId.SANCTUM),
-            task_id=TaskId.OPEN_BUILDING,
-        )
-
-        result = task.verify(
-            context,
-            make_observation(ScreenType.PNC_HOME_CITY),
-            make_observation(
-                ScreenType.UNKNOWN,
-                visible_ids=(UiElementId.PNC_SANCTUM_ARTIFACT_BUTTON, UiElementId.PNC_SANCTUM_RELIC_BUTTON),
-            ),
-        )
-
-        self.assertEqual(result.status, TaskStatus.SUCCESS)
-        self.assertIn("Sanctum", result.message)
 
     def test_open_building_task_accepts_matching_build_menu_for_unbuilt_target(self) -> None:
         """Accepts the exact build-menu option as success when the requested building slot is not built yet."""

@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import io
 import logging
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from dataclasses import replace
+from datetime import UTC, datetime
+from itertools import count
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +16,8 @@ from PIL import Image
 
 from pnc_automation.core.infra.storage.artifact_store import ArtifactRecord
 from pnc_automation.core.infra.capture.screenshot_service import CapturedScreenshot
+from pnc_automation.core.infra.emulator.provenance import CapturedFrame, FrameRef
+from pnc_automation.core.errors import FrameProvenanceError
 from pnc_automation.app.authoring.config.models import CastleIdentity, PncAccountCastleRosterConfig
 from pnc_automation.app.pnc.domain.action_requests import SwipeGesturePrimitive, SwipeInputSource
 from pnc_automation.app.pnc.domain.chat import ChatChannel
@@ -34,6 +39,7 @@ from pnc_automation.app.pnc.domain.observation import (
     VisibleElement,
     VisibleElementSourceKind,
 )
+from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict, ScreenDecision, ScreenEvidence
 from pnc_automation.app.pnc.domain.popup import (
     PopupControlKind,
     PopupDismissCandidate,
@@ -50,6 +56,26 @@ from pnc_automation.app.runtime.observation_artifacts import (
     resolve_observation_artifact_selection,
 )
 from pnc_automation.app.runtime.observation_mode import ObservationMode
+
+
+_SYNTHETIC_FRAME_SEQUENCE = count(1)
+
+
+def make_captured_frame(payload: bytes, *, session_id: str = "synthetic-capture-session") -> CapturedFrame:
+    """Builds a unique explicit provenance frame for screenshot-service fakes."""
+
+    sequence = next(_SYNTHETIC_FRAME_SEQUENCE)
+    return CapturedFrame(
+        payload=payload,
+        frame_ref=FrameRef(
+            session_id=session_id,
+            session_epoch=1,
+            capture_sequence=sequence,
+            input_sequence=0,
+            captured_at=datetime.now(tz=UTC),
+            captured_monotonic=__import__("time").monotonic(),
+        ),
+    )
 
 
 def build_png_bytes(*, size: tuple[int, int] = (20, 20), color: tuple[int, int, int, int] = (255, 255, 255, 255)) -> bytes:
@@ -196,6 +222,8 @@ def make_observation(
     image_size: tuple[int, int] = (200, 100),
     frame_fingerprint: str | None = None,
     popup_overlay: PopupOverlayObservation | None = None,
+    frame_ref: FrameRef | None = None,
+    decision: ScreenDecision | None = None,
 ) -> Observation:
     """Builds a typed observation with synthetic visible elements."""
 
@@ -225,13 +253,44 @@ def make_observation(
                 ),
             ),
         )
+    resolved_frame_ref = frame_ref or FrameRef(
+        session_id="synthetic-test-session",
+        session_epoch=1,
+        capture_sequence=next(_SYNTHETIC_FRAME_SEQUENCE),
+        input_sequence=0,
+        captured_at=datetime.now(tz=UTC),
+    )
+    resolved_decision = decision or ScreenDecision(
+        base_screen=screen_type,
+        effective_screen=screen_type,
+        guard=GuardVerdict.BLOCKED if blocking_popup else (
+            GuardVerdict.UNRESOLVED if screen_type == ScreenType.UNKNOWN else GuardVerdict.CLEAR
+        ),
+        evidence=(ScreenEvidence(screen_type, "synthetic_fixture"),),
+    )
+    visible_elements = {
+        selector_id: replace(
+            element,
+            frame_ref=resolved_frame_ref,
+            source_screen=resolved_decision.effective_screen,
+            source_layout_id=resolved_decision.layout_id,
+        )
+        for selector_id, element in visible_elements.items()
+    }
+    resolved_entries = tuple(
+        replace(
+            entry,
+            frame_ref=resolved_frame_ref,
+            source_screen=resolved_decision.effective_screen,
+            source_layout_id=resolved_decision.layout_id,
+        )
+        for entry in list_entries
+    )
     return Observation(
-        screen_type=screen_type,
+        decision=resolved_decision,
         visible_elements=visible_elements,
-        list_entries=list_entries,
+        list_entries=resolved_entries,
         spatial_surface=spatial_surface,
-        blocking_popup=blocking_popup,
-        popup_overlay=popup_overlay,
         current_castle=current_castle or _make_current_castle(current_castle_name),
         current_castle_evidence=_resolve_current_castle_evidence(
             current_castle=current_castle,
@@ -252,6 +311,8 @@ def make_observation(
         artifact_path=artifact_path,
         image_size=image_size,
         frame_fingerprint=frame_fingerprint or f"synthetic:{screen_type.value}:{','.join(item.value for item in visible_ids)}",
+        popup_overlay=popup_overlay,
+        frame_ref=resolved_frame_ref,
     )
 
 
@@ -291,6 +352,22 @@ class FakeSession:
     swipes: list[tuple[int, int, int, int, int]] = field(default_factory=list)
     swipe_input_sources: list[SwipeInputSource] = field(default_factory=list)
     swipe_gesture_primitives: list[SwipeGesturePrimitive] = field(default_factory=list)
+    _consumed_frame_identity: tuple[str, int, int, int] | None = field(default=None, init=False, repr=False)
+
+    @contextmanager
+    def authorized_input(self, frame_ref: FrameRef):
+        """Models one explicit frame authorization transaction for offline tests."""
+
+        identity = (
+            frame_ref.session_id,
+            frame_ref.session_epoch,
+            frame_ref.capture_sequence,
+            frame_ref.input_sequence,
+        )
+        if self._consumed_frame_identity == identity:
+            raise FrameProvenanceError("Synthetic frame proof was replayed.")
+        self._consumed_frame_identity = identity
+        yield
 
     def tap_point(self, x: int, y: int) -> None:
         """Records one tap."""

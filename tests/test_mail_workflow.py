@@ -28,6 +28,7 @@ from pnc_automation.app.pnc.domain.action_requests import (
     SwipeInputSource,
     TapAction,
     TapPointAction,
+    WaitAction,
 )
 from pnc_automation.app.pnc.domain.chat import ChatEntryKind, visible_player_chat_entries, visible_unsupported_chat_entries
 from pnc_automation.app.pnc.domain.mail import (
@@ -47,6 +48,7 @@ from pnc_automation.app.pnc.domain.observation import (
     VisibleElement,
     VisibleElementSourceKind,
 )
+from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict, ScreenDecision, ScreenEvidence
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
@@ -58,7 +60,7 @@ from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
 from pnc_automation.app.pnc.vision.selectors import Region, build_default_selector_registry
 from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
 from tests.local_fixture_artifacts import require_local_fixture_artifact
-from tests.test_support import FakeObservationService, FakeSession, build_logger, build_png_bytes, make_entry, make_observation
+from tests.test_support import FakeObservationService, FakeSession, build_logger, build_png_bytes, make_captured_frame, make_entry, make_observation
 
 
 class MailWorkflowTests(unittest.TestCase):
@@ -181,6 +183,7 @@ class MailWorkflowTests(unittest.TestCase):
         """Uses the generic observed text-field state to replace mail subject content in place."""
 
         executor = ActionExecutor(
+            selector_registry=build_default_selector_registry(),
             session=FakeSession(),
             stable_click_delay_ms=0,
             post_action_observe_delay_ms=0,
@@ -218,6 +221,7 @@ class MailWorkflowTests(unittest.TestCase):
         """Uses the shared multiline policy for the compose body instead of rejecting newlines outright."""
 
         executor = ActionExecutor(
+            selector_registry=build_default_selector_registry(),
             session=FakeSession(),
             stable_click_delay_ms=0,
             post_action_observe_delay_ms=0,
@@ -292,8 +296,8 @@ class MailWorkflowTests(unittest.TestCase):
         actions = self.flows.open_mail_hub(make_observation(ScreenType.UNKNOWN))
 
         self.assertEqual(len(actions), 1)
-        self.assertIsInstance(actions[0], KeyEventAction)
-        self.assertEqual(actions[0].key_code, "KEYCODE_BACK")
+        self.assertIsInstance(actions[0], WaitAction)
+        self.assertEqual(actions[0].milliseconds, 250)
 
     def test_open_mailbox_from_mail_hub_taps_requested_category(self) -> None:
         """Uses the requested mailbox category row instead of duplicating hub-specific navigation logic."""
@@ -431,8 +435,8 @@ class MailWorkflowTests(unittest.TestCase):
         actions = self.flows.open_alliance_home(make_observation(ScreenType.UNKNOWN))
 
         self.assertEqual(len(actions), 1)
-        self.assertIsInstance(actions[0], KeyEventAction)
-        self.assertEqual(actions[0].key_code, "KEYCODE_BACK")
+        self.assertIsInstance(actions[0], WaitAction)
+        self.assertEqual(actions[0].milliseconds, 250)
 
     def test_open_alliance_home_uses_visible_bottom_nav_from_world_map(self) -> None:
         """Uses the visible Alliance bottom nav directly when world-adjacent screens already expose it."""
@@ -1020,7 +1024,12 @@ class MailWorkflowTests(unittest.TestCase):
             task_id=TaskId.SEND_MAIL,
         )
         after = Observation(
-            screen_type=ScreenType.UNKNOWN,
+            decision=ScreenDecision(
+                base_screen=ScreenType.UNKNOWN,
+                effective_screen=ScreenType.UNKNOWN,
+                guard=GuardVerdict.UNRESOLVED,
+                evidence=(ScreenEvidence(ScreenType.UNKNOWN, "test"),),
+            ),
             visible_elements={
                 UiElementId.PNC_STATUS_BANNER: VisibleElement(
                     selector_id=UiElementId.PNC_STATUS_BANNER,
@@ -1121,14 +1130,15 @@ class MailWorkflowTests(unittest.TestCase):
         actions = task.plan(context, make_observation(ScreenType.UNKNOWN))
 
         self.assertEqual(len(actions), 1)
-        self.assertIsInstance(actions[0], KeyEventAction)
-        self.assertEqual(actions[0].key_code, "KEYCODE_BACK")
-        self.assertEqual(actions[0].reason, "recover_unknown_mail_screen")
+        self.assertIsInstance(actions[0], WaitAction)
+        self.assertEqual(actions[0].milliseconds, 250)
+        self.assertEqual(actions[0].reason, "recover_unknown_mail_screen_passive_settle")
 
     def test_action_executor_uses_explicit_swipe_ratios_when_present(self) -> None:
         """Resolves selector-independent swipe geometry from explicit normalized start/end ratios when provided."""
 
         executor = ActionExecutor(
+            selector_registry=build_default_selector_registry(),
             session=FakeSession(),
             stable_click_delay_ms=0,
             post_action_observe_delay_ms=0,
@@ -1156,6 +1166,7 @@ class MailWorkflowTests(unittest.TestCase):
         """Forwards the requested swipe input source so profile-level gesture calibration survives execution."""
 
         executor = ActionExecutor(
+            selector_registry=build_default_selector_registry(),
             session=FakeSession(),
             stable_click_delay_ms=0,
             post_action_observe_delay_ms=0,
@@ -1184,6 +1195,7 @@ class MailWorkflowTests(unittest.TestCase):
         """Forwards the requested drag primitive so callers can opt into motion-event gestures."""
 
         executor = ActionExecutor(
+            selector_registry=build_default_selector_registry(),
             session=FakeSession(),
             stable_click_delay_ms=0,
             post_action_observe_delay_ms=0,
@@ -1215,6 +1227,7 @@ class MailWorkflowTests(unittest.TestCase):
         """Stops a multi-step mail action sequence when the previous observed follow-up missed its expected screen."""
 
         executor = ActionExecutor(
+            selector_registry=build_default_selector_registry(),
             session=FakeSession(),
             stable_click_delay_ms=0,
             post_action_observe_delay_ms=0,
@@ -1232,31 +1245,34 @@ class MailWorkflowTests(unittest.TestCase):
             ]
         )
 
-        result = executor.execute_actions(
-            [
-                TapAction(
-                    selector_id=UiElementId.PNC_MAIL_COMPOSE_BUTTON,
-                    reason="open_player_mail_compose",
-                    observe_after=True,
-                    follow_up_request=ObservationRequest.mail_compose_follow_up(),
+        with self.assertRaises(SelectorResolutionError):
+            executor.execute_actions(
+                [
+                    TapAction(
+                        selector_id=UiElementId.PNC_MAIL_COMPOSE_BUTTON,
+                        reason="open_player_mail_compose",
+                        observe_after=True,
+                        follow_up_request=ObservationRequest.mail_compose_follow_up(),
+                    ),
+                    InputTextAction(
+                        selector_id=UiElementId.PNC_MAIL_COMPOSE_TARGET_FIELD,
+                        text="Enemy Bob",
+                        replace_existing=True,
+                    ),
+                ],
+                make_observation(
+                    ScreenType.PNC_MAILBOX_LIST,
+                    mailbox_type=MailboxType.PLAYER,
+                    visible_ids=(UiElementId.PNC_MAIL_COMPOSE_BUTTON,),
                 ),
-                InputTextAction(
-                    selector_id=UiElementId.PNC_MAIL_COMPOSE_TARGET_FIELD,
-                    text="Enemy Bob",
-                    replace_existing=True,
-                ),
-            ],
-            make_observation(
-                ScreenType.PNC_MAILBOX_LIST,
-                mailbox_type=MailboxType.PLAYER,
-                visible_ids=(UiElementId.PNC_MAIL_COMPOSE_BUTTON,),
-            ),
-            observe=fake_observer.observe,
-        )
+                observe=fake_observer.observe,
+            )
 
-        self.assertEqual(result.screen_type, ScreenType.PNC_MAILBOX_LIST)
+        self.assertEqual(executor.session.taps, [])
         self.assertEqual(executor.session.texts, [])
-        self.assertEqual(fake_observer.requests, [ObservationRequest.mail_compose_follow_up()])
+        # Selector support is validated before follow-up observation, so an
+        # unsupported compose control cannot trigger an observer request.
+        self.assertEqual(fake_observer.requests, [])
 
     def test_mail_compose_follow_up_keeps_compose_origin_screens_visible_on_compose_miss(self) -> None:
         """Lets compose-entry follow-ups preserve every supported source screen when the popup does not open."""
@@ -1442,7 +1458,9 @@ class MailWorkflowTests(unittest.TestCase):
             observation.require_text_field_state(UiElementId.PNC_MAIL_COMPOSE_TARGET_FIELD).text,
             "Alliance Mail",
         )
-        self.assertTrue(observation.require_text_field_state(UiElementId.PNC_MAIL_COMPOSE_SUBJECT_FIELD).empty)
+        # No subject placeholder is visible in this centered capture; OCR
+        # absence is an unknown field state, not proof of emptiness.
+        self.assertIsNone(observation.require_text_field_state(UiElementId.PNC_MAIL_COMPOSE_SUBJECT_FIELD).empty)
         self.assertTrue(observation.require_text_field_state(UiElementId.PNC_MAIL_COMPOSE_BODY_FIELD).empty)
         self.assertTrue(observation.has(UiElementId.PNC_MAIL_COMPOSE_SEND_BUTTON))
 
@@ -1957,13 +1975,13 @@ class MailWorkflowTests(unittest.TestCase):
         )
 
         self.assertEqual(observation.screen_type, ScreenType.UNKNOWN)
-        self.assertTrue(observation.has(UiElementId.PNC_STATUS_BANNER))
+        self.assertFalse(observation.has(UiElementId.PNC_STATUS_BANNER))
 
     def test_observation_builder_keeps_chat_send_button_out_of_mail_compose_popup(self) -> None:
         """Does not treat the shared chat Send button as compose-popup evidence without a mail header."""
 
         observation = _build_observation(
-            request=ObservationRequest.runtime_default(),
+            request=ObservationRequest.full_runtime_default(),
             lines=(
                 _ocr_line("Chat", x=240, y=38, width=100, height=26),
                 _ocr_line("Kingdom", x=210, y=118, width=120, height=34),
@@ -2175,17 +2193,19 @@ def _build_observation(
             artifact_directory="mail_test",
             label="synthetic",
         )
+        ocr_service = _FakeOcrService(lines=lines)
         builder = ObservationBuilder(
             selector_registry=build_default_selector_registry(),
             selector_engine=ImageSelectorEngine(
                 template_matcher=OpenCvTemplateMatcher(),
-                ocr_service=UnavailableOcrService(),
+
             ),
             screen_classifier=ScreenClassifier(),
             enricher=PncObservationEnricher(
-                ocr_service=_FakeOcrService(lines=lines),
+
                 selector_registry=build_default_selector_registry(),
             ),
+            ocr_service=ocr_service,
         )
         return builder.build(screenshot, request=request)
 
@@ -2246,10 +2266,10 @@ class _FakeScreenshotSession:
 
         self._payload = payload
 
-    def capture_screenshot_bytes(self) -> bytes:
-        """Returns the pre-seeded screenshot bytes."""
+    def capture_screenshot_frame(self):
+        """Returns the pre-seeded screenshot bytes with explicit provenance."""
 
-        return self._payload
+        return make_captured_frame(self._payload)
 
 
 class _FakeOcrService:
@@ -2304,4 +2324,3 @@ def _encode_png(image: Image.Image) -> bytes:
 
 if __name__ == "__main__":
     unittest.main()
-

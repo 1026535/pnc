@@ -39,7 +39,8 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                             id="PNC_HOME_BUILD_BUTTON",
                             screens=("PNC_HOME_CITY",),
                             status="click_mapped",
-                            detection_kind="template",
+                            detection_kind="semantic",
+                            materialize_relative_bounds=False,
                         ),
                     ),
                 ),
@@ -48,7 +49,8 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                         id="PNC_HOME_BUILD_BUTTON",
                         screens=("PNC_HOME_CITY",),
                         status="screenshot_seeded",
-                        detection_kind="template",
+                        detection_kind="semantic",
+                        materialize_relative_bounds=False,
                         click=None,
                         update_click=False,
                         notes=(),
@@ -92,13 +94,13 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                                 "id": "PNC_HOME_BUILD_BUTTON",
                                 "screens": ["PNC_HOME_CITY"],
                                 "status": "screenshot_seeded",
-                                "detection_kind": "template",
+                                "detection_kind": "semantic",
                             },
                             {
                                 "id": "PNC_HOME_BUILD_BUTTON",
                                 "screens": ["PNC_BUILDING_DETAILS"],
                                 "status": "click_mapped",
-                                "detection_kind": "template",
+                                "detection_kind": "semantic",
                             },
                         ]
                     },
@@ -118,7 +120,8 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                                 id="PNC_HOME_BUILD_BUTTON",
                                 screens=("PNC_HOME_CITY",),
                                 status="screenshot_seeded",
-                                detection_kind="template",
+                                detection_kind="semantic",
+                                materialize_relative_bounds=False,
                             ),
                         ),
                     ),
@@ -138,13 +141,15 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                         id="PNC_HOME_BUILD_BUTTON",
                         screens=("PNC_HOME_CITY",),
                         status="screenshot_seeded",
-                        detection_kind="template",
+                        detection_kind="semantic",
+                        materialize_relative_bounds=False,
                     ),
                     SelectorCatalogEntry(
                         id="PNC_BUILDING_UPGRADE_BUTTON",
                         screens=("PNC_BUILDING_DETAILS",),
                         status="planned",
-                        detection_kind="template",
+                        detection_kind="semantic",
+                        materialize_relative_bounds=False,
                     ),
                 ),
             )
@@ -160,7 +165,7 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                                 "id": "PNC_HOME_BUILD_BUTTON",
                                 "screens": ["PNC_HOME_CITY", "PNC_BUILDING_DETAILS"],
                                 "status": "click_mapped",
-                                "detection_kind": "template",
+                                "detection_kind": "semantic",
                                 "interaction_kind": "navigation",
                                 "relative_bounds": {
                                     "x_ratio": 0.1,
@@ -184,7 +189,7 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                                 "id": "PNC_HOME_CASTLE_BUILDING",
                                 "screens": ["PNC_HOME_CITY"],
                                 "status": "screenshot_seeded",
-                                "detection_kind": "template",
+                                "detection_kind": "semantic",
                             },
                         ]
                     },
@@ -213,7 +218,7 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                 ["PNC_HOME_CITY", "PNC_BUILDING_DETAILS"],
             )
             self.assertEqual(selector_by_id["PNC_HOME_BUILD_BUTTON"]["status"], "click_mapped")
-            self.assertEqual(selector_by_id["PNC_HOME_BUILD_BUTTON"]["detection_kind"], "template")
+            self.assertEqual(selector_by_id["PNC_HOME_BUILD_BUTTON"]["detection_kind"], "semantic")
             self.assertEqual(selector_by_id["PNC_HOME_BUILD_BUTTON"]["interaction_kind"], "navigation")
             self.assertEqual(
                 selector_by_id["PNC_HOME_BUILD_BUTTON"]["relative_bounds"],
@@ -247,7 +252,8 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                         id="PNC_MORE_MANAGE_CHAR",
                         screens=("PNC_SETTINGS",),
                         status="click_mapped",
-                        detection_kind="planned",
+                        detection_kind="semantic",
+                        materialize_relative_bounds=False,
                         relative_bounds=SelectorCatalogRelativeBounds(
                             x_ratio=0.6,
                             y_ratio=0.1,
@@ -266,7 +272,7 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                                 "id": "PNC_MORE_MANAGE_CHAR",
                                 "screens": ["PNC_SETTINGS"],
                                 "status": "click_mapped",
-                                "detection_kind": "planned",
+                                "detection_kind": "semantic",
                                 "materialize_relative_bounds": False,
                             },
                         ]
@@ -298,7 +304,8 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                         id="PNC_HOME_BUILD_BUTTON",
                         screens=("PNC_HOME_CITY",),
                         status="click_mapped",
-                        detection_kind="template",
+                        detection_kind="semantic",
+                        materialize_relative_bounds=False,
                     ),
                 ),
             )
@@ -309,7 +316,7 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                 "  - id: PNC_HOME_BUILD_BUTTON\n"
                 "    screens: [PNC_HOME_CITY]\n"
                 "    status: click_mapped\n"
-                "    detection_kind: template\n"
+                "    detection_kind: semantic\n"
                 "    click: null\n",
                 encoding="utf-8",
                 newline="\n",
@@ -334,7 +341,8 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                         id="PNC_HOME_BUILD_BUTTON",
                         screens=("PNC_HOME_CITY",),
                         status="click_mapped",
-                        detection_kind="template",
+                        detection_kind="semantic",
+                        materialize_relative_bounds=False,
                         interaction_kind="action",
                         relative_bounds=SelectorCatalogRelativeBounds(
                             x_ratio=0.1,
@@ -352,7 +360,7 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                 "  - id: PNC_HOME_BUILD_BUTTON\n"
                 "    screens: [PNC_HOME_CITY]\n"
                 "    status: click_mapped\n"
-                "    detection_kind: template\n"
+                "    detection_kind: semantic\n"
                 "    relative_bounds: null\n",
                 encoding="utf-8",
                 newline="\n",
@@ -377,7 +385,8 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                         id="PNC_HOME_BUILD_BUTTON",
                         screens=("PNC_HOME_CITY",),
                         status="screenshot_seeded",
-                        detection_kind="template",
+                        detection_kind="semantic",
+                        materialize_relative_bounds=False,
                     ),
                 ),
             )
@@ -391,7 +400,7 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                                 "id": "PNC_HOME_BUILD_BUTTON",
                                 "screens": ["PNC_HOME_CITY"],
                                 "status": "screenshot_seeded",
-                                "detection_kind": "template",
+                                "detection_kind": "semantic",
                                 "interaction_kind": "not_supported",
                             }
                         ]
@@ -421,7 +430,8 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                         id="PNC_HOME_BUILD_BUTTON",
                         screens=("PNC_HOME_CITY",),
                         status="screenshot_seeded",
-                        detection_kind="template",
+                        detection_kind="semantic",
+                        materialize_relative_bounds=False,
                     ),
                 ),
             )
@@ -435,7 +445,7 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                                 "id": "PNC_HOME_BUILD_BUTTON",
                                 "screens": ["PNC_HOME_CITY"],
                                 "status": "click_mapped",
-                                "detection_kind": "template",
+                                "detection_kind": "semantic",
                                 "click": {
                                     "outcomes": [
                                         {
@@ -471,7 +481,8 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                         id="PNC_HOME_BUILD_BUTTON",
                         screens=("PNC_HOME_CITY",),
                         status="screenshot_seeded",
-                        detection_kind="template",
+                        detection_kind="semantic",
+                        materialize_relative_bounds=False,
                     ),
                 ),
             )
@@ -485,7 +496,7 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                                 "id": "PNC_HOME_BUILD_BUTTON",
                                 "screens": ["PNC_HOME_CITY", "PNC_BUILDING_DETAILS"],
                                 "status": "click_mapped",
-                                "detection_kind": "template",
+                                "detection_kind": "semantic",
                                 "click": {
                                     "outcomes": [
                                         {
@@ -522,7 +533,8 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                         id="PNC_CASH_MALL_ENTRY_TITLE_REGION",
                         screens=("PNC_CASH_MALL",),
                         status="planned",
-                        detection_kind="planned",
+                        detection_kind="semantic",
+                        materialize_relative_bounds=False,
                     ),
                 ),
             )
@@ -562,7 +574,8 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                         id="PNC_BOTTOM_NAV_BAG",
                         screens=("PNC_HOME_CITY",),
                         status="screenshot_seeded",
-                        detection_kind="template",
+                        detection_kind="semantic",
+                        materialize_relative_bounds=False,
                     ),
                 ),
             )
@@ -576,7 +589,7 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                                 "id": "PNC_BOTTOM_NAV_BAG",
                                 "screens": ["PNC_HOME_CITY"],
                                 "status": "click_mapped",
-                                "detection_kind": "template",
+                                "detection_kind": "semantic",
                                 "interaction_kind": "navigation",
                                 "click": {
                                     "outcomes": [
@@ -612,7 +625,8 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                         id="PNC_WORLD_COORDINATE_BAR",
                         screens=("PNC_WORLD_MAP",),
                         status="screenshot_seeded",
-                        detection_kind="planned",
+                        detection_kind="semantic",
+                        materialize_relative_bounds=False,
                     ),
                 ),
                 surfaces=(
@@ -633,7 +647,8 @@ class SelectorRegistryUpdaterTests(unittest.TestCase):
                     id="PNC_WORLD_COORDINATE_BAR",
                     screens=("PNC_WORLD_MAP",),
                     status="click_mapped",
-                    detection_kind="planned",
+                    detection_kind="semantic",
+                        materialize_relative_bounds=False,
                 ),
             ),
         )

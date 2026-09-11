@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import math
+import os
+from collections import OrderedDict
 from dataclasses import dataclass
 from numbers import Real
 from pathlib import Path
+from threading import RLock
+from typing import Callable
 
 import cv2
 import numpy as np
@@ -17,39 +21,176 @@ from pnc_automation.core.vision.image.models import Bounds, TemplateMatch
 _MAX_ASPECT_RATIO_ERROR = 0.01
 _MAX_COLOR_DELTA = 255.0
 _MAX_CANDIDATES_TO_CHECK = 256
+_DEFAULT_TEMPLATE_CACHE_SIZE = 128
 
 
 @dataclass(frozen=True, slots=True)
-class PreparedTemplateImage:
-    """Stores one normalized screenshot for a batch of template matches."""
+class PreparedFrame:
+    """An immutable RGB frame normalized to one matching coordinate space."""
 
-    source: np.ndarray
+    pixels: np.ndarray
     original_size: tuple[int, int]
-    reference_size: tuple[int, int] | None
+    reference_size: tuple[int, int]
+
+    def __post_init__(self) -> None:
+        pixels = np.asarray(self.pixels, dtype=np.uint8)
+        if pixels.ndim != 3 or pixels.shape[2] != 3:
+            raise ValueError("PreparedFrame pixels must have shape (height, width, 3)")
+        if (
+            len(self.original_size) != 2
+            or len(self.reference_size) != 2
+            or any(
+                isinstance(value, bool) or not isinstance(value, int) or value <= 0
+                for value in (*self.original_size, *self.reference_size)
+            )
+        ):
+            raise ValueError("PreparedFrame sizes must contain positive integer dimensions")
+        expected_shape = (self.reference_size[1], self.reference_size[0], 3)
+        if pixels.shape != expected_shape:
+            raise ValueError(
+                "PreparedFrame pixels do not match its reference_size "
+                f"({pixels.shape[:2]} != {expected_shape[:2]})"
+            )
+        contiguous = np.ascontiguousarray(pixels, dtype=np.uint8)
+        # A read-only NumPy view backed by immutable bytes cannot be made
+        # writeable again with ``setflags(write=True)``.
+        owned = np.frombuffer(contiguous.tobytes(), dtype=np.uint8).reshape(contiguous.shape)
+        owned.setflags(write=False)
+        object.__setattr__(self, "pixels", owned)
+
+
+@dataclass(frozen=True, slots=True)
+class _DecodedTemplate:
+    """Cached template channels and alpha mask, all owned and read-only."""
+
+    rgb: np.ndarray
+    alpha: np.ndarray
+
+    def __post_init__(self) -> None:
+        rgb = np.asarray(self.rgb, dtype=np.uint8)
+        alpha = np.asarray(self.alpha, dtype=np.uint8)
+        if rgb.ndim != 3 or rgb.shape[2] != 3:
+            raise ValueError("decoded template RGB data must have shape (height, width, 3)")
+        if alpha.shape != rgb.shape[:2]:
+            raise ValueError("decoded template alpha data must match RGB dimensions")
+        rgb_contiguous = np.ascontiguousarray(rgb, dtype=np.uint8)
+        alpha_contiguous = np.ascontiguousarray(alpha, dtype=np.uint8)
+        rgb_owned = np.frombuffer(rgb_contiguous.tobytes(), dtype=np.uint8).reshape(
+            rgb_contiguous.shape
+        )
+        alpha_owned = np.frombuffer(alpha_contiguous.tobytes(), dtype=np.uint8).reshape(
+            alpha_contiguous.shape
+        )
+        rgb_owned.setflags(write=False)
+        alpha_owned.setflags(write=False)
+        object.__setattr__(self, "rgb", rgb_owned)
+        object.__setattr__(self, "alpha", alpha_owned)
+
+
+class DecodedTemplateCache:
+    """Thread-safe bounded cache for successfully decoded template images."""
+
+    def __init__(self, max_size: int = _DEFAULT_TEMPLATE_CACHE_SIZE) -> None:
+        if isinstance(max_size, bool) or not isinstance(max_size, int) or max_size <= 0:
+            raise ValueError("template cache max_size must be a positive integer")
+        self._max_size = max_size
+        self._entries: OrderedDict[
+            tuple[Path, int, int], _DecodedTemplate
+        ] = OrderedDict()
+        self._lock = RLock()
+
+    def get(
+        self,
+        path: Path,
+        loader: Callable[[Path], _DecodedTemplate] = lambda path: _decode_template(path),
+    ) -> _DecodedTemplate:
+        """Return a decoded template, loading it once for its current file key."""
+
+        resolved = _validate_template_path(path)
+        stat = _stat_template(resolved)
+        key = (resolved, stat.st_mtime_ns, stat.st_size)
+        with self._lock:
+            cached = self._entries.get(key)
+            if cached is not None:
+                self._entries.move_to_end(key)
+                return cached
+            for old_key in tuple(self._entries):
+                if old_key[0] == resolved:
+                    del self._entries[old_key]
+            decoded = loader(resolved)
+            self._entries[key] = decoded
+            self._entries.move_to_end(key)
+            while len(self._entries) > self._max_size:
+                self._entries.popitem(last=False)
+            return decoded
+
+    def clear(self) -> None:
+        """Discard all decoded templates held by this cache."""
+
+        with self._lock:
+            self._entries.clear()
 
     @property
-    def working_size(self) -> tuple[int, int]:
-        """Returns the pixel dimensions used for matching and search regions."""
+    def max_size(self) -> int:
+        """Return the configured maximum number of cached templates."""
 
-        return self.reference_size or self.original_size
+        return self._max_size
 
 
 class OpenCvTemplateMatcher:
-    """Finds a template with normalized correlation and a color guard.
+    """Find templates with normalized correlation and an absolute-color guard.
 
-    The returned confidence is ``min(correlation, color_closeness)``.  The
-    correlation component comes from OpenCV's normalized correlation methods,
-    while color closeness is ``1 - mean(abs(candidate - template)) / 255``
-    over the template's non-transparent pixels.  A hit therefore needs both
-    the expected local texture and sufficiently close absolute colors; the
-    value is a deterministic similarity score, not a probability.  The color
-    guard evaluates the 256 highest-correlation candidate locations, so the
-    result is the best accepted candidate within that bounded set.
+    Confidence is ``min(correlation, color_closeness)``.  Correlation comes
+    from OpenCV's normalized methods; color closeness is ``1 - mean(abs(
+    candidate - template)) / 255`` over non-transparent pixels.  This is a
+    deterministic similarity score, not a probability.  The color guard
+    evaluates the 256 highest-correlation candidates, so the result is the
+    best accepted candidate within that bounded set.
     """
+
+    def __init__(self, template_cache: DecodedTemplateCache | None = None) -> None:
+        self._template_cache = template_cache or DecodedTemplateCache()
+
+    def prepare_frame(
+        self,
+        image: Image.Image,
+        *,
+        reference_size: tuple[int, int] | None = None,
+    ) -> PreparedFrame | None:
+        """Normalize ``image`` once for repeated template matching.
+
+        An aspect-ratio mismatch beyond one percent returns ``None`` before
+        any template path is inspected.  The normalized pixels are an owned,
+        read-only copy, so later mutation of the PIL image cannot change
+        matching results.
+        """
+
+        _validate_image(image)
+        normalized_reference_size = _validate_reference_size(reference_size)
+        original_size = image.size
+        if normalized_reference_size is not None and _aspect_ratio_error(
+            *original_size,
+            *normalized_reference_size,
+        ) > _MAX_ASPECT_RATIO_ERROR:
+            return None
+        working_image = image.convert("RGB")
+        if normalized_reference_size is not None and working_image.size != normalized_reference_size:
+            working_image = working_image.resize(
+                normalized_reference_size,
+                Image.Resampling.LANCZOS,
+            )
+        if normalized_reference_size is None:
+            normalized_reference_size = working_image.size
+        pixels = np.asarray(working_image, dtype=np.uint8)
+        return PreparedFrame(
+            pixels=pixels,
+            original_size=original_size,
+            reference_size=normalized_reference_size,
+        )
 
     def find_best_match(
         self,
-        image: Image.Image,
+        image: Image.Image | PreparedFrame,
         template_path: Path,
         *,
         threshold: float,
@@ -58,99 +199,44 @@ class OpenCvTemplateMatcher:
     ) -> TemplateMatch | None:
         """Return the best bounded candidate above ``threshold``.
 
-        ``reference_size`` gives the coordinate space in which the template
-        and optional ``search_region`` are authored.  The screenshot is
-        normalized to that size before matching and the result is projected
-        back to the screenshot's original pixels.  A reference and screenshot
-        whose aspect ratios differ by more than one percent are unsupported
-        and return no match.
+        PIL frames are normalized to ``reference_size`` before matching.  A
+        prepared frame reuses its existing normalization.  Search regions are
+        in reference coordinates, while returned bounds are in original
+        screenshot coordinates.  Unsupported aspect ratios return ``None``
+        before template decoding.
         """
 
         _validate_threshold(threshold)
-        prepared = self.prepare_image(image, reference_size=reference_size)
-        if prepared is None:
+        frame = self._coerce_frame(image, reference_size=reference_size)
+        if frame is None:
             return None
-
-        return self.find_best_match_prepared(
-            prepared,
-            template_path,
-            threshold=threshold,
-            search_region=search_region,
-        )
-
-    def prepare_image(
-        self,
-        image: Image.Image,
-        *,
-        reference_size: tuple[int, int] | None = None,
-    ) -> PreparedTemplateImage | None:
-        """Normalizes one screenshot once for a sequence of template matches."""
-
-        _validate_image(image)
-        normalized_reference_size = _validate_reference_size(reference_size)
-        original_width, original_height = image.size
-        if normalized_reference_size is not None and _aspect_ratio_error(
-            original_width,
-            original_height,
-            *normalized_reference_size,
-        ) > _MAX_ASPECT_RATIO_ERROR:
-            return None
-
-        working_image = image.convert("RGB")
-        if normalized_reference_size is not None:
-            if working_image.size != normalized_reference_size:
-                working_image = working_image.resize(
-                    normalized_reference_size,
-                    Image.Resampling.LANCZOS,
-                )
-        return PreparedTemplateImage(
-            source=np.asarray(working_image, dtype=np.uint8),
-            original_size=image.size,
-            reference_size=normalized_reference_size,
-        )
-
-    def find_best_match_prepared(
-        self,
-        prepared: PreparedTemplateImage,
-        template_path: Path,
-        *,
-        threshold: float,
-        search_region: Bounds | None = None,
-    ) -> TemplateMatch | None:
-        """Matches a template against a screenshot normalized by :meth:`prepare_image`."""
-
-        if not isinstance(prepared, PreparedTemplateImage):
-            raise TypeError("prepared must be a PreparedTemplateImage instance")
-        _validate_threshold(threshold)
-        template, alpha = _load_template(template_path)
-        reference_width, reference_height = prepared.working_size
-
         region = _validate_search_region(
             search_region,
-            width=reference_width,
-            height=reference_height,
+            width=frame.reference_size[0],
+            height=frame.reference_size[1],
         )
         if region is None:
-            region = Bounds(x=0, y=0, width=reference_width, height=reference_height)
-
-        template_width, template_height = template.size
+            region = Bounds(
+                x=0,
+                y=0,
+                width=frame.reference_size[0],
+                height=frame.reference_size[1],
+            )
+        decoded = self._template_cache.get(template_path)
+        template_height, template_width = decoded.rgb.shape[:2]
         if template_width > region.width or template_height > region.height:
             return None
 
-        source = prepared.source[
+        source = frame.pixels[
             region.y : region.y + region.height,
             region.x : region.x + region.width,
         ]
-        template_rgb = np.asarray(template, dtype=np.uint8)[..., :3]
-        alpha_values = np.asarray(alpha, dtype=np.uint8)
-        template_mask = alpha_values if not np.all(alpha_values == 255) else None
-
-        response = _correlation_response(source, template_rgb, template_mask)
+        response = _correlation_response(source, decoded.rgb, decoded.alpha)
         best = _select_best_candidate(
             response,
             source=source,
-            template=template_rgb,
-            alpha=alpha_values,
+            template=decoded.rgb,
+            alpha=decoded.alpha,
             threshold=threshold,
         )
         if best is None:
@@ -159,7 +245,7 @@ class OpenCvTemplateMatcher:
         match_x, match_y, confidence = best
         reference_x = region.x + match_x
         reference_y = region.y + match_y
-        if prepared.reference_size is None:
+        if frame.original_size == frame.reference_size:
             bounds = Bounds(
                 x=reference_x,
                 y=reference_y,
@@ -172,10 +258,24 @@ class OpenCvTemplateMatcher:
                 y=reference_y,
                 width=template_width,
                 height=template_height,
-                original_size=prepared.original_size,
-                reference_size=prepared.reference_size,
+                original_size=frame.original_size,
+                reference_size=frame.reference_size,
             )
         return TemplateMatch(bounds=bounds, confidence=confidence)
+
+    def _coerce_frame(
+        self,
+        image: Image.Image | PreparedFrame,
+        *,
+        reference_size: tuple[int, int] | None,
+    ) -> PreparedFrame | None:
+        if isinstance(image, PreparedFrame):
+            if reference_size is not None:
+                validated_reference_size = _validate_reference_size(reference_size)
+                if validated_reference_size != image.reference_size:
+                    raise ValueError("reference_size cannot change an already prepared frame")
+            return image
+        return self.prepare_frame(image, reference_size=reference_size)
 
 
 def _validate_threshold(threshold: float) -> None:
@@ -193,7 +293,7 @@ def _validate_image(image: Image.Image) -> None:
         raise ValueError("image must have positive width and height")
     try:
         image.load()
-    except Exception as exc:  # Pillow uses several exception types for closed/bad images.
+    except Exception as exc:
         raise ValueError("image could not be loaded as a valid PIL image") from exc
 
 
@@ -233,17 +333,27 @@ def _validate_search_region(
         search_region.x + search_region.width > width
         or search_region.y + search_region.height > height
     ):
-        raise ValueError(
-            f"search_region must fit within the {width}x{height} matching image"
-        )
+        raise ValueError(f"search_region must fit within the {width}x{height} matching image")
     return search_region
 
 
-def _load_template(path: Path) -> tuple[Image.Image, Image.Image]:
+def _validate_template_path(path: Path) -> Path:
     if not isinstance(path, Path):
         raise TypeError("template_path must be a pathlib.Path")
+    return path.resolve()
+
+
+def _stat_template(path: Path) -> os.stat_result:
+    try:
+        stat = path.stat()
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(f"template image does not exist: {path}") from exc
     if not path.is_file():
         raise FileNotFoundError(f"template image does not exist: {path}")
+    return stat
+
+
+def _decode_template(path: Path) -> _DecodedTemplate:
     try:
         with Image.open(path) as opened:
             template = opened.convert("RGBA")
@@ -252,10 +362,11 @@ def _load_template(path: Path) -> tuple[Image.Image, Image.Image]:
 
     if template.width <= 0 or template.height <= 0:
         raise ValueError(f"template image must have positive dimensions: {path}")
-    alpha = template.getchannel("A")
-    if not np.any(np.asarray(alpha, dtype=np.uint8)):
+    rgba = np.array(template, dtype=np.uint8, copy=True, order="C")
+    alpha = rgba[..., 3]
+    if not np.any(alpha):
         raise ValueError("template image must contain at least one non-transparent pixel")
-    return template, alpha
+    return _DecodedTemplate(rgb=rgba[..., :3], alpha=alpha)
 
 
 def _aspect_ratio_error(
@@ -272,52 +383,29 @@ def _aspect_ratio_error(
 def _correlation_response(
     source: np.ndarray,
     template: np.ndarray,
-    mask: np.ndarray | None,
+    alpha: np.ndarray,
 ) -> np.ndarray:
     template_values = template.astype(np.float32)
-    if mask is None:
+    if np.all(alpha == 255):
         template_variance = float(np.max(np.var(template_values, axis=(0, 1))))
         if template_variance <= 1e-6:
-            result = cv2.matchTemplate(
-                source,
-                template,
-                cv2.TM_SQDIFF_NORMED,
-            )
+            result = cv2.matchTemplate(source, template, cv2.TM_SQDIFF_NORMED)
             return np.clip(1.0 - result, 0.0, 1.0)
-        result = cv2.matchTemplate(
-            source,
-            template,
-            cv2.TM_CCOEFF_NORMED,
-        )
+        result = cv2.matchTemplate(source, template, cv2.TM_CCOEFF_NORMED)
         return np.clip(np.nan_to_num(result, nan=-1.0), 0.0, 1.0)
 
-    if float(np.sum(mask)) <= 0.0:
+    if float(np.sum(alpha)) <= 0.0:
         raise ValueError("template mask must contain at least one visible pixel")
-    weights = mask[..., None] / 255.0
-    template_means = np.sum(template_values * weights, axis=(0, 1)) / np.sum(weights, axis=(0, 1))
-    template_variance = float(
-        np.sum(
-            (template_values - template_means) ** 2 * weights
-        )
+    weights = alpha[..., None] / 255.0
+    template_means = np.sum(template_values * weights, axis=(0, 1)) / np.sum(
+        weights, axis=(0, 1)
     )
+    template_variance = float(np.sum((template_values - template_means) ** 2 * weights))
     if template_variance <= 1e-6:
-        result = cv2.matchTemplate(
-            source,
-            template,
-            cv2.TM_SQDIFF_NORMED,
-            mask=mask,
-        )
+        result = cv2.matchTemplate(source, template, cv2.TM_SQDIFF_NORMED, mask=alpha)
         return np.clip(1.0 - result, 0.0, 1.0)
 
-    # OpenCV's masked normalized cross-correlation is the supported masked
-    # operation. The absolute-color guard below supplies the stricter color
-    # requirement and prevents brightness-only anchors from passing.
-    result = cv2.matchTemplate(
-        source,
-        template,
-        cv2.TM_CCORR_NORMED,
-        mask=mask,
-    )
+    result = cv2.matchTemplate(source, template, cv2.TM_CCORR_NORMED, mask=alpha)
     return np.clip(np.nan_to_num(result, nan=-1.0), 0.0, 1.0)
 
 

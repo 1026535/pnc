@@ -24,6 +24,7 @@ from pnc_automation.app.pnc.domain.observation import (
     SpatialViewport,
     SpatialViewportAddressingKind,
 )
+from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict, ScreenDecision, ScreenEvidence
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
@@ -66,13 +67,14 @@ from pnc_automation.app.pnc.navigation.world_map_survey_recorder import WorldMap
 from pnc_automation.app.pnc.navigation.world_map_sweep import WorldMapSweepPolicy
 from pnc_automation.app.pnc.persistence.world_map_survey_debug_store import WorldMapSurveyDebugStore
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
-from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
+from pnc_automation.app.pnc.vision.selectors import DetectionKind, SelectorRegistry, build_default_selector_registry
 from pnc_automation.app.runtime.observation_artifacts import ObservationArtifactKind, observation_artifact_selection
 from pnc_automation.core.errors import SelectorResolutionError
 from tests.test_support import (
     FakeObservationService,
     FakeSession,
     build_logger,
+    make_captured_frame,
     make_observation,
     make_visible,
     make_spatial_object,
@@ -563,7 +565,7 @@ class WorldMapSearchTests(unittest.TestCase):
 
         self.assertEqual(len(actions), 1)
         self.assertEqual(actions[0].timing_profile, ActionTimingProfile.WORLD_MAP_MOVEMENT)
-        self.assertEqual(actions[0].follow_up_request, ObservationRequest.world_map_movement_follow_up())
+        self.assertEqual(actions[0].follow_up_request, ObservationRequest.world_map_movement_proof_follow_up())
 
     def test_coordinate_mover_records_json_ready_step_traces_in_runtime_state(self) -> None:
         """Persists direct-movement timing and coordinate details in shared runtime state for live comparison tools."""
@@ -602,7 +604,7 @@ class WorldMapSearchTests(unittest.TestCase):
         self.assertLessEqual(trace["action_follow_up_observe_elapsed_ms"], trace["action_elapsed_ms"])
         self.assertEqual(trace["action_follow_up_observation_count"], 1)
         self.assertGreaterEqual(trace["prove_elapsed_ms"], 0.0)
-        self.assertEqual(observer.requests, [ObservationRequest.world_map_movement_follow_up()])
+        self.assertEqual(observer.requests, [ObservationRequest.world_map_movement_proof_follow_up()])
 
     def test_move_to_checkpoint_uses_movement_proof_scope_on_final_landing(self) -> None:
         """Keeps the mover on the narrow P1 proof contract instead of hiding rich checkpoint analysis inside movement."""
@@ -2006,12 +2008,14 @@ class WorldMapSearchTests(unittest.TestCase):
                     return replace(capture.observation)
             raise AssertionError("P2 received a screenshot that P1 did not capture.")
 
+        test_registry = _world_map_test_registry()
         service = WorldMapSearchService(
             screen_flows=flows,
             observation_service=observer,
             action_executor=ObservedActionExecutor(
-                selector_registry=build_default_selector_registry(),
+                selector_registry=test_registry,
                 action_executor=ActionExecutor(
+                    selector_registry=test_registry,
                     session=session,
                     stable_click_delay_ms=0,
                     post_action_observe_delay_ms=0,
@@ -2464,12 +2468,14 @@ class WorldMapSearchTests(unittest.TestCase):
                     return replace(capture.observation)
             raise AssertionError("P2 received a screenshot that P1 did not capture.")
 
+        test_registry = _world_map_test_registry()
         service = WorldMapSearchService(
             screen_flows=self.flows,
             observation_service=observer,
             action_executor=ObservedActionExecutor(
-                selector_registry=build_default_selector_registry(),
+                selector_registry=test_registry,
                 action_executor=ActionExecutor(
+                    selector_registry=test_registry,
                     session=session,
                     stable_click_delay_ms=0,
                     post_action_observe_delay_ms=0,
@@ -2485,6 +2491,21 @@ class WorldMapSearchTests(unittest.TestCase):
             viewport_analyzer=WorldMapViewportAnalyzer(observation_builder=build_p2_observation),
         )
         return service, observer, session
+
+
+def _world_map_test_registry() -> SelectorRegistry:
+    """Provide an explicit synthetic strategy for the reviewed overview fixture's Expand control."""
+
+    canonical = build_default_selector_registry()
+    expand = replace(
+        canonical.require(UiElementId.PNC_WORLD_EXPAND_BUTTON),
+        detection_kind=DetectionKind.GUARDED_GEOMETRY,
+        notes=("Synthetic unit-test strategy; production catalog remains fail-closed.",),
+    )
+    return SelectorRegistry(
+        selectors=tuple(expand if selector.id == expand.id else selector for selector in canonical.all()),
+        surfaces=canonical.all_surfaces(),
+    )
 
 
 class _CountingScreenFlowPlanner(ScreenFlowPlanner):
@@ -2762,9 +2783,15 @@ def _make_world_map_overview_observation(
             action_point=marker_point,
         )
     return Observation(
-        screen_type=ScreenType.PNC_WORLD_MAP_OVERVIEW,
+        decision=ScreenDecision(
+            base_screen=ScreenType.PNC_WORLD_MAP_OVERVIEW,
+            effective_screen=ScreenType.PNC_WORLD_MAP_OVERVIEW,
+            guard=GuardVerdict.CLEAR,
+            evidence=(ScreenEvidence(ScreenType.PNC_WORLD_MAP_OVERVIEW, "test"),),
+        ),
         visible_elements=visible_elements,
         image_size=(200, 200),
+        frame_ref=make_captured_frame(b"overview").frame_ref,
     )
 
 

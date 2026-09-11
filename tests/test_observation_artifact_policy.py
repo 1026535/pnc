@@ -27,8 +27,9 @@ from pnc_automation.app.runtime.observation_mode import ObservationMode
 from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.core.infra.capture.screenshot_service import ScreenshotService
 from pnc_automation.core.infra.storage.artifact_store import ArtifactStore
+from pnc_automation.core.vision.ocr.ocr_service import ObservationOcrContext, UnavailableOcrService
 from pnc_automation.app.pnc.domain.observation import SpatialObjectKind, SpatialSurfaceType
-from tests.test_support import FakeObservationService, make_observation, make_spatial_object, make_spatial_surface
+from tests.test_support import FakeObservationService, make_captured_frame, make_observation, make_spatial_object, make_spatial_surface
 
 
 class ObservationArtifactSelectionTests(unittest.TestCase):
@@ -318,10 +319,24 @@ class _ArtifactAwareObservationBuilder:
 
     observations: list
 
-    def build(self, screenshot: object, *, request: ObservationRequest | None = None) -> object:
+    def create_ocr_context(self, screenshot: object) -> ObservationOcrContext:
+        return ObservationOcrContext(
+            screenshot.image,
+            UnavailableOcrService(),
+            screenshot.frame_ref,
+            "test",
+        )
+
+    def build(
+        self,
+        screenshot: object,
+        *,
+        request: ObservationRequest | None = None,
+        ocr_context: ObservationOcrContext | None = None,
+    ) -> object:
         """Returns the next queued observation while preserving the current screenshot provenance."""
 
-        del request
+        del request, ocr_context
         if not self.observations:
             raise AssertionError("No observation queued for ObservationService.")
         observation = self.observations.pop(0)
@@ -335,15 +350,15 @@ class _ArtifactAwareObservationBuilder:
 class _FakeScreenshotSession:
     """Returns one deterministic in-memory PNG payload for screenshot capture tests."""
 
-    def capture_screenshot_bytes(self) -> bytes:
-        """Returns a simple valid PNG payload."""
+    def capture_screenshot_frame(self):
+        """Returns a simple valid PNG payload with explicit provenance."""
 
         image = Image.new("RGB", (40, 40), (15, 28, 68))
         from io import BytesIO
 
         buffer = BytesIO()
         image.save(buffer, format="PNG")
-        return buffer.getvalue()
+        return make_captured_frame(buffer.getvalue())
 
 
 def _make_recorder(

@@ -98,7 +98,14 @@ class ScreenFlowPlanner:
                     observe_after=True,
                 )
             ]
-        return [KeyEventAction(key_code="KEYCODE_BACK", reason=reason, observe_after=True)]
+        return [
+            WaitAction(
+                milliseconds=250,
+                reason=f"{reason}_passive_settle",
+                observe_after=True,
+                follow_up_request=ObservationRequest.full_runtime_default(),
+            )
+        ]
 
     def ensure_android_home(self, observation: Observation) -> list[ActionRequest]:
         """Plans a transition to Android home when needed."""

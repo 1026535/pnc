@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import unittest
 from collections.abc import Sequence
+from dataclasses import replace
 from pathlib import Path
 
 from pnc_automation.app.automation.engine.action_executor import ActionExecutor
@@ -28,6 +29,8 @@ from pnc_automation.app.pnc.domain.action_requests import (
 from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId, build_home_city_object_metadata
 from pnc_automation.app.pnc.domain.chat import ChatChannel
 from pnc_automation.app.pnc.domain.observation import (
+    DetectedListEntry,
+    RowRecognitionStatus,
     ListEntryKind,
     Observation,
     SpatialObjectKind,
@@ -35,6 +38,7 @@ from pnc_automation.app.pnc.domain.observation import (
     SpatialSurfaceType,
     VisibleElementSourceKind,
 )
+from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict, ScreenDecision, ScreenEvidence
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
@@ -49,6 +53,7 @@ from pnc_automation.app.pnc.vision.selectors import (
     SelectorStatus,
     build_default_selector_registry,
 )
+from pnc_automation.core.vision.image.models import Bounds
 from tests.test_support import (
     FakeObservationService,
     FakeSession,
@@ -97,7 +102,7 @@ class AutomationFrameworkTests(unittest.TestCase):
                 SelectorDefinition(
                     id=selector_id,
                     screens=(source_screen,),
-                    detection_kind=DetectionKind.PLANNED,
+                    detection_kind=DetectionKind.SEMANTIC,
                     status=SelectorStatus.CLICK_MAPPED,
                     interaction_kind=interaction_kind,
                     click=ClickDefinition(),
@@ -665,7 +670,7 @@ class AutomationFrameworkTests(unittest.TestCase):
 
         self.assertEqual(result.steps[0].status.value, "success")
         self.assertEqual(fake_session.launches, 1)
-        self.assertEqual(fake_session.key_events, ["KEYCODE_BACK", "KEYCODE_BACK", "KEYCODE_BACK"])
+        self.assertEqual(fake_session.key_events, [])
 
     def test_action_executor_retries_unknown_narrow_follow_up_with_full_runtime_observation(self) -> None:
         """Promotes transient unknown results from narrow follow-ups to one broad runtime observation before returning."""
@@ -677,6 +682,7 @@ class AutomationFrameworkTests(unittest.TestCase):
             ]
         )
         executor = ActionExecutor(
+            selector_registry=build_default_selector_registry(),
             session=FakeSession(),
             stable_click_delay_ms=0,
             post_action_observe_delay_ms=0,
@@ -721,6 +727,7 @@ class AutomationFrameworkTests(unittest.TestCase):
             ]
         )
         executor = ActionExecutor(
+            selector_registry=build_default_selector_registry(),
             session=FakeSession(),
             stable_click_delay_ms=0,
             post_action_observe_delay_ms=0,
@@ -758,15 +765,7 @@ class AutomationFrameworkTests(unittest.TestCase):
 
         fake_session = FakeSession()
         fake_observer = FakeObservationService(observations=[make_observation(ScreenType.PNC_WORLD_MAP)])
-        executor = ActionExecutor(
-            session=fake_session,
-            stable_click_delay_ms=0,
-            post_action_observe_delay_ms=0,
-            chat_stable_click_delay_ms=0,
-            chat_post_action_observe_delay_ms=0,
-            logger=build_logger(),
-            sleep=lambda _: None,
-        )
+        executor = _make_observed_action_executor(fake_session)
         resource_node = make_spatial_object(
             SpatialObjectKind.RESOURCE_NODE,
             name_text="Food Farm",
@@ -806,6 +805,7 @@ class AutomationFrameworkTests(unittest.TestCase):
         fake_session = FakeSession()
         fake_observer = FakeObservationService(observations=[make_observation(ScreenType.PNC_GATHER_NODE)])
         executor = ActionExecutor(
+            selector_registry=build_default_selector_registry(),
             session=fake_session,
             stable_click_delay_ms=0,
             post_action_observe_delay_ms=0,
@@ -815,27 +815,28 @@ class AutomationFrameworkTests(unittest.TestCase):
             sleep=lambda _: None,
         )
 
-        result = executor.execute_actions(
-            (
-                TapAction(
-                    selector_id=UiElementId.PNC_GATHER_BUTTON,
-                    reason="open_gather_march",
-                    observe_after=True,
-                    follow_up_request=ObservationRequest.march_confirm_follow_up(),
+        with self.assertRaises(SelectorResolutionError):
+            executor.execute_actions(
+                (
+                    TapAction(
+                        selector_id=UiElementId.PNC_GATHER_BUTTON,
+                        reason="open_gather_march",
+                        observe_after=True,
+                        follow_up_request=ObservationRequest.march_confirm_follow_up(),
+                    ),
+                    TapAction(selector_id=UiElementId.PNC_MARCH_CONFIRM_BUTTON, reason="confirm_gather_march"),
                 ),
-                TapAction(selector_id=UiElementId.PNC_MARCH_CONFIRM_BUTTON, reason="confirm_gather_march"),
-            ),
-            make_observation(ScreenType.PNC_GATHER_NODE, visible_ids=(UiElementId.PNC_GATHER_BUTTON,)),
-            observe=fake_observer.observe,
-        )
+                make_observation(ScreenType.PNC_GATHER_NODE, visible_ids=(UiElementId.PNC_GATHER_BUTTON,)),
+                observe=fake_observer.observe,
+            )
 
-        self.assertEqual(result.screen_type, ScreenType.PNC_GATHER_NODE)
-        self.assertEqual(fake_session.taps, [(5, 5)])
+        self.assertEqual(fake_session.taps, [])
 
     def test_tap_actions_prefer_visible_element_action_points(self) -> None:
         """Uses selector-specific action points when OCR-derived bounds are not the real touch target."""
 
         executor = ActionExecutor(
+            selector_registry=build_default_selector_registry(),
             session=FakeSession(),
             stable_click_delay_ms=0,
             post_action_observe_delay_ms=0,
@@ -844,18 +845,30 @@ class AutomationFrameworkTests(unittest.TestCase):
             logger=build_logger(),
             sleep=lambda _: None,
         )
+        observation = make_observation(ScreenType.PNC_HOME_CITY)
         observation = Observation(
-            screen_type=ScreenType.PNC_HOME_CITY,
+            decision=ScreenDecision(
+                base_screen=ScreenType.PNC_HOME_CITY,
+                effective_screen=ScreenType.PNC_HOME_CITY,
+                guard=GuardVerdict.CLEAR,
+                evidence=(ScreenEvidence(ScreenType.PNC_HOME_CITY, "test"),),
+            ),
             visible_elements={
-                UiElementId.PNC_BOTTOM_NAV_BAG: make_visible(
-                    UiElementId.PNC_BOTTOM_NAV_BAG,
-                    x=440,
-                    y=1560,
-                    width=54,
-                    height=33,
-                    action_point=(482, 1529),
+                UiElementId.PNC_BOTTOM_NAV_BAG: replace(
+                    make_visible(
+                        UiElementId.PNC_BOTTOM_NAV_BAG,
+                        x=440,
+                        y=1560,
+                        width=54,
+                        height=33,
+                        action_point=(482, 1529),
+                    ),
+                    frame_ref=observation.frame_ref,
+                    source_screen=observation.screen_type,
+                    source_layout_id=observation.decision.layout_id,
                 )
             },
+            frame_ref=observation.frame_ref,
         )
 
         executor.execute_action(
@@ -869,6 +882,7 @@ class AutomationFrameworkTests(unittest.TestCase):
         """Resolves castle-row taps through the shared OCR-tolerant castle-name matcher."""
 
         executor = ActionExecutor(
+            selector_registry=build_default_selector_registry(),
             session=FakeSession(),
             stable_click_delay_ms=0,
             post_action_observe_delay_ms=0,
@@ -902,10 +916,130 @@ class AutomationFrameworkTests(unittest.TestCase):
 
         self.assertEqual(executor.session.taps, [(240, 872)])
 
+    def test_protected_rows_require_complete_action_geometry_and_explicit_point(self) -> None:
+        """Daily and Resource rows cannot fall back to card centers or incomplete geometry."""
+
+        executor = ActionExecutor(
+            selector_registry=build_default_selector_registry(),
+            session=FakeSession(),
+            stable_click_delay_ms=0,
+            post_action_observe_delay_ms=0,
+            chat_stable_click_delay_ms=0,
+            chat_post_action_observe_delay_ms=0,
+            logger=build_logger(),
+            sleep=lambda _: None,
+        )
+        complete = _protected_observation(ListEntryKind.RESOURCE_ITEM)
+        executor.execute_action(
+            TapListEntryAction(
+                entry_kind=ListEntryKind.RESOURCE_ITEM,
+                metadata_key="item_id",
+                metadata_value="gold:50:normal",
+                use_action_point=True,
+            ),
+            complete,
+        )
+        self.assertEqual([(50, 50)], executor.session.taps)
+
+        for row in (
+            _protected_observation(ListEntryKind.RESOURCE_ITEM, row_status=RowRecognitionStatus.CLIPPED),
+            _protected_observation(ListEntryKind.RESOURCE_ITEM, row_status=RowRecognitionStatus.NO_ACTION),
+            _protected_observation(ListEntryKind.RESOURCE_INVENTORY_EXCLUSION),
+            _protected_observation(ListEntryKind.RESOURCE_INVENTORY_UNRESOLVED),
+        ):
+            with self.subTest(status=row.list_entries[0].row_status):
+                with self.assertRaises(SelectorResolutionError):
+                    executor.execute_action(
+                        TapListEntryAction(
+                            entry_kind=row.list_entries[0].kind,
+                            metadata_key="item_id",
+                            metadata_value="gold:50:normal",
+                            use_action_point=True,
+                        ),
+                        row,
+                    )
+        with self.assertRaises(SelectorResolutionError):
+            executor.execute_action(
+                TapListEntryAction(
+                    entry_kind=ListEntryKind.RESOURCE_ITEM,
+                    metadata_key="item_id",
+                    metadata_value="gold:50:normal",
+                    use_action_point=False,
+                ),
+                complete,
+            )
+        self.assertEqual([(50, 50)], executor.session.taps)
+
+
+    def test_protected_rows_reject_stale_provenance_and_cross_row_ambiguity(self) -> None:
+        """Fresh row identity and frame provenance prevent a tap from crossing rows or captures."""
+
+        executor = ActionExecutor(
+            selector_registry=build_default_selector_registry(),
+            session=FakeSession(),
+            stable_click_delay_ms=0,
+            post_action_observe_delay_ms=0,
+            chat_stable_click_delay_ms=0,
+            chat_post_action_observe_delay_ms=0,
+            logger=build_logger(),
+            sleep=lambda _: None,
+        )
+        first = _protected_observation(ListEntryKind.DAILY_QUEST, item_id="quest-a")
+        duplicate = _protected_observation(ListEntryKind.DAILY_QUEST, item_id="quest-a")
+        duplicate = Observation(
+            decision=first.decision,
+            visible_elements=first.visible_elements,
+            list_entries=(first.list_entries[0], duplicate.list_entries[0]),
+            image_size=first.image_size,
+            frame_ref=first.frame_ref,
+        )
+        with self.assertRaises(SelectorResolutionError):
+            executor.execute_action(
+                TapListEntryAction(
+                    entry_kind=ListEntryKind.DAILY_QUEST,
+                    metadata_key="item_id",
+                    metadata_value="quest-a",
+                    use_action_point=True,
+                ),
+                duplicate,
+            )
+        stale_entry = first.list_entries[0].__class__(
+            kind=first.list_entries[0].kind,
+            bounds=first.list_entries[0].bounds,
+            title_text=first.list_entries[0].title_text,
+            action_point=first.list_entries[0].action_point,
+            action_bounds=first.list_entries[0].action_bounds,
+            row_status=first.list_entries[0].row_status,
+            metadata=first.list_entries[0].metadata,
+            frame_ref=None,
+            source_screen=first.screen_type,
+            source_layout_id=first.decision.layout_id,
+        )
+        stale = Observation(
+            decision=first.decision,
+            visible_elements=first.visible_elements,
+            list_entries=(stale_entry,),
+            image_size=first.image_size,
+            frame_ref=first.frame_ref,
+        )
+        with self.assertRaises(SelectorResolutionError):
+            executor.execute_action(
+                TapListEntryAction(
+                    entry_kind=ListEntryKind.DAILY_QUEST,
+                    metadata_key="item_id",
+                    metadata_value="quest-a",
+                    use_action_point=True,
+                ),
+                stale,
+            )
+        self.assertEqual([], executor.session.taps)
+
+
     def test_tap_spatial_object_actions_use_current_viewport_action_points(self) -> None:
         """Uses the live spatial-object action point from the current viewport instead of any fixed building coordinate."""
 
         executor = ActionExecutor(
+            selector_registry=build_default_selector_registry(),
             session=FakeSession(),
             stable_click_delay_ms=0,
             post_action_observe_delay_ms=0,
@@ -948,6 +1082,7 @@ class AutomationFrameworkTests(unittest.TestCase):
         """Uses the concrete target point captured during planning instead of re-resolving duplicate semantic matches."""
 
         executor = ActionExecutor(
+            selector_registry=build_default_selector_registry(),
             session=FakeSession(),
             stable_click_delay_ms=0,
             post_action_observe_delay_ms=0,
@@ -1065,6 +1200,7 @@ class AutomationFrameworkTests(unittest.TestCase):
         """Focuses selector-backed text entry through the canonical action point instead of the bounds center."""
 
         executor = ActionExecutor(
+            selector_registry=build_default_selector_registry(),
             session=FakeSession(),
             stable_click_delay_ms=0,
             post_action_observe_delay_ms=0,
@@ -1079,21 +1215,27 @@ class AutomationFrameworkTests(unittest.TestCase):
             chat_draft_empty=True,
         )
         observation = Observation(
-            screen_type=observation.screen_type,
+            decision=observation.decision,
             visible_elements={
-                UiElementId.PNC_CHAT_INPUT_FIELD: make_visible(
-                    UiElementId.PNC_CHAT_INPUT_FIELD,
-                    x=20,
-                    y=40,
-                    width=90,
-                    height=22,
-                    action_point=(81, 55),
+                UiElementId.PNC_CHAT_INPUT_FIELD: replace(
+                    make_visible(
+                        UiElementId.PNC_CHAT_INPUT_FIELD,
+                        x=20,
+                        y=40,
+                        width=90,
+                        height=22,
+                        action_point=(81, 55),
+                    ),
+                    frame_ref=observation.frame_ref,
+                    source_screen=observation.screen_type,
+                    source_layout_id=observation.decision.layout_id,
                 )
             },
             image_size=observation.image_size,
             active_chat_channel=observation.active_chat_channel,
             chat_draft_empty=observation.chat_draft_empty,
             chat_draft_text=observation.chat_draft_text,
+            frame_ref=observation.frame_ref,
         )
 
         executor.execute_action(
@@ -1135,6 +1277,7 @@ class AutomationFrameworkTests(unittest.TestCase):
         """Avoids redundant chat-tab taps when the current observation already proves the active channel."""
 
         executor = ActionExecutor(
+            selector_registry=build_default_selector_registry(),
             session=FakeSession(),
             stable_click_delay_ms=0,
             post_action_observe_delay_ms=0,
@@ -1161,6 +1304,7 @@ class AutomationFrameworkTests(unittest.TestCase):
 
         fake_observer = FakeObservationService(observations=[])
         executor = ActionExecutor(
+            selector_registry=build_default_selector_registry(),
             session=FakeSession(),
             stable_click_delay_ms=0,
             post_action_observe_delay_ms=0,
@@ -1210,6 +1354,7 @@ class AutomationFrameworkTests(unittest.TestCase):
             ]
         )
         executor = ActionExecutor(
+            selector_registry=build_default_selector_registry(),
             session=fake_session,
             stable_click_delay_ms=0,
             post_action_observe_delay_ms=0,
@@ -1260,6 +1405,7 @@ class AutomationFrameworkTests(unittest.TestCase):
         fake_session = FakeSession()
         fake_observer = FakeObservationService(observations=[make_observation(ScreenType.PNC_LOADING)])
         executor = ActionExecutor(
+            selector_registry=build_default_selector_registry(),
             session=fake_session,
             stable_click_delay_ms=0,
             post_action_observe_delay_ms=0,
@@ -1308,15 +1454,7 @@ class AutomationFrameworkTests(unittest.TestCase):
         """Refreshes chat state after a tab change and only types on the next chat-ready increment."""
 
         fake_session = FakeSession()
-        executor = ActionExecutor(
-            session=fake_session,
-            stable_click_delay_ms=0,
-            post_action_observe_delay_ms=0,
-            chat_stable_click_delay_ms=0,
-            chat_post_action_observe_delay_ms=0,
-            logger=build_logger(),
-            sleep=lambda _: None,
-        )
+        executor = _make_observed_action_executor(fake_session)
         first_observer = FakeObservationService(
             observations=[
                 make_observation(
@@ -1378,23 +1516,37 @@ class AutomationFrameworkTests(unittest.TestCase):
                     ),
                     active_chat_channel=ChatChannel.ALLIANCE,
                     chat_draft_empty=True,
-                )
+                ),
+                make_observation(
+                    ScreenType.PNC_CHAT,
+                    visible_ids=(
+                        UiElementId.PNC_CHAT_TAB_KINGDOM,
+                        UiElementId.PNC_CHAT_TAB_ALLIANCE,
+                        UiElementId.PNC_CHAT_INPUT_FIELD,
+                        UiElementId.PNC_CHAT_SEND_BUTTON,
+                    ),
+                    active_chat_channel=ChatChannel.ALLIANCE,
+                    chat_draft_empty=True,
+                ),
             ]
         )
         second_actions = ScreenFlowPlanner().send_chat_message(
-            first_result,
+            first_result.observation,
             message="hello",
             channel=ChatChannel.ALLIANCE,
         )
 
         executor.execute_actions(
             second_actions,
-            first_result,
+            first_result.observation,
             observe=second_observer.observe,
         )
 
         self.assertEqual(first_observer.requests, [ObservationRequest.source_screen_retry(ScreenType.PNC_CHAT)])
-        self.assertEqual(second_observer.requests, [ObservationRequest.chat_send_follow_up()])
+        self.assertEqual(
+            second_observer.requests,
+            [ObservationRequest.full_runtime_default(), ObservationRequest.chat_send_follow_up()],
+        )
         self.assertEqual(fake_session.key_events[0], "KEYCODE_MOVE_END")
         self.assertEqual(fake_session.key_events.count("KEYCODE_DEL"), 28)
         self.assertEqual(fake_session.texts, ["hello"])
@@ -1403,6 +1555,7 @@ class AutomationFrameworkTests(unittest.TestCase):
         """Uses the shared clear-and-replace policy instead of appending onto a stale chat draft."""
 
         executor = ActionExecutor(
+            selector_registry=build_default_selector_registry(),
             session=FakeSession(),
             stable_click_delay_ms=0,
             post_action_observe_delay_ms=0,
@@ -2254,9 +2407,22 @@ def _make_observed_action_executor(
 ) -> ObservedActionExecutor:
     """Builds the shared observed-action executor used by runner and executor tests."""
 
+    canonical_registry = build_default_selector_registry()
+    if registry is None:
+        resolved_registry = canonical_registry
+    else:
+        custom_ids = {selector.id for selector in registry.all()}
+        resolved_registry = SelectorRegistry(
+            selectors=(
+                *registry.all(),
+                *(selector for selector in canonical_registry.all() if selector.id not in custom_ids),
+            ),
+            surfaces=registry.all_surfaces(),
+        )
     return ObservedActionExecutor(
-        selector_registry=build_default_selector_registry() if registry is None else registry,
+        selector_registry=resolved_registry,
         action_executor=ActionExecutor(
+            selector_registry=resolved_registry,
             session=session,
             stable_click_delay_ms=0,
             post_action_observe_delay_ms=0,
@@ -2271,6 +2437,27 @@ def _make_observed_action_executor(
     )
 
 
+def _protected_observation(
+    kind: ListEntryKind,
+    *,
+    row_status: RowRecognitionStatus = RowRecognitionStatus.COMPLETE,
+    item_id: str = "gold:50:normal",
+) -> Observation:
+    """Build one protected row with independently bounded single-action geometry."""
+
+    screen = ScreenType.PNC_QUEST_DAILY if kind == ListEntryKind.DAILY_QUEST else ScreenType.PNC_BAG
+    entry = DetectedListEntry(
+        kind=kind,
+        bounds=Bounds(40, 40, 20, 20),
+        title_text="Protected row",
+        action_point=(50, 50) if row_status == RowRecognitionStatus.COMPLETE else None,
+        action_bounds=Bounds(44, 44, 12, 12) if row_status == RowRecognitionStatus.COMPLETE else None,
+        row_status=row_status,
+        metadata={"item_id": item_id},
+    )
+    return make_observation(screen, list_entries=(entry,))
+
+
+
 if __name__ == "__main__":
     unittest.main()
-

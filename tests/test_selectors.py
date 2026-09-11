@@ -19,7 +19,11 @@ from pnc_automation.app.pnc.vision.selector_catalog import (
     SelectorCatalogSurfaceViewport,
 )
 from pnc_automation.app.pnc.vision.selector_interaction_kind import SelectorInteractionKind
-from pnc_automation.app.pnc.vision.selectors import DetectionKind, build_default_selector_registry, default_selector_template_root
+from pnc_automation.app.pnc.vision.selectors import (
+    DetectionKind,
+    build_default_selector_registry,
+)
+from pnc_automation.app.pnc.vision.selector_catalog import default_selector_asset_root
 
 
 class SelectorRegistryTests(unittest.TestCase):
@@ -105,7 +109,7 @@ class SelectorRegistryTests(unittest.TestCase):
         self.assertEqual(world_surface.viewport.coordinate_selector, UiElementId.PNC_WORLD_COORDINATE_BAR)
         self.assertIn(SpatialObjectKind.RESOURCE_NODE, world_surface.object_kinds)
         self.assertEqual(registry.require(UiElementId.PNC_WORLD_COORDINATE_BAR).detection_kind, DetectionKind.OCR_REGION)
-        self.assertEqual(registry.require(UiElementId.PNC_WORLD_HOME_NAV).detection_kind, DetectionKind.OCR_REGION)
+        self.assertEqual(registry.require(UiElementId.PNC_WORLD_HOME_NAV).detection_kind, DetectionKind.SEMANTIC)
         home_surface = registry.require_surface(SpatialSurfaceType.HOME_CITY_SURFACE)
         self.assertEqual(home_surface.screen, ScreenType.PNC_HOME_CITY)
         self.assertEqual(home_surface.viewport.addressing_kind, SpatialViewportAddressingKind.CAMERA_RELATIVE)
@@ -172,12 +176,12 @@ class SelectorRegistryTests(unittest.TestCase):
         self.assertAlmostEqual(intro_confirm.relative_bounds.action_x_ratio, 0.5)
         self.assertAlmostEqual(intro_confirm.relative_bounds.action_y_ratio, 0.667)
 
-    def test_default_selector_template_root_stays_package_root_relative(self) -> None:
-        """Keeps the default selector template root anchored at the package root after package moves."""
+    def test_default_selector_asset_root_stays_package_data_relative(self) -> None:
+        """Keeps packaged selector assets anchored at the canonical vision data root."""
 
         self.assertEqual(
-            default_selector_template_root(),
-            Path(__file__).resolve().parents[1] / "pnc_automation" / "templates" / "pnc",
+            default_selector_asset_root(),
+            Path(__file__).resolve().parents[1] / "pnc_automation" / "app" / "pnc" / "vision" / "data",
         )
 
     def test_selector_catalog_rejects_navigation_without_reviewed_destination(self) -> None:
@@ -190,8 +194,9 @@ class SelectorRegistryTests(unittest.TestCase):
                         id="PNC_BOTTOM_NAV_HOME",
                         screens=("PNC_HOME_CITY",),
                         status="click_mapped",
-                        detection_kind="template",
+                        detection_kind="semantic",
                         interaction_kind="navigation",
+                        materialize_relative_bounds=False,
                     ),
                 )
             )
@@ -206,8 +211,9 @@ class SelectorRegistryTests(unittest.TestCase):
                         id="PNC_VIP_HEADER",
                         screens=("PNC_VIP",),
                         status="screenshot_seeded",
-                        detection_kind="planned",
+                        detection_kind="semantic",
                         interaction_kind="label",
+                        materialize_relative_bounds=False,
                         click=SelectorCatalogClickDefinition(
                             anchor="center",
                             outcomes=(
@@ -234,8 +240,9 @@ class SelectorRegistryTests(unittest.TestCase):
                     id="PNC_BOTTOM_NAV_BAG",
                     screens=("PNC_HOME_CITY",),
                     status="click_mapped",
-                    detection_kind="template",
+                    detection_kind="semantic",
                     interaction_kind="navigation",
+                    materialize_relative_bounds=False,
                     click=SelectorCatalogClickDefinition(
                         anchor="center",
                         outcomes=(
@@ -265,8 +272,9 @@ class SelectorRegistryTests(unittest.TestCase):
                         id="PNC_BOTTOM_NAV_BAG",
                         screens=("PNC_HOME_CITY",),
                         status="click_mapped",
-                        detection_kind="template",
+                        detection_kind="semantic",
                         interaction_kind="navigation",
+                        materialize_relative_bounds=False,
                         click=SelectorCatalogClickDefinition(
                             anchor="center",
                             outcomes=(
@@ -300,7 +308,7 @@ class SelectorRegistryTests(unittest.TestCase):
             )
 
             with self.assertRaises(SelectorResolutionError):
-                build_default_selector_registry(catalog_path=catalog_path, template_root=Path(temp_directory))
+                build_default_selector_registry(catalog_path=catalog_path, asset_root=Path(temp_directory))
 
     def test_build_default_selector_registry_rejects_legacy_ocr_region_schema(self) -> None:
         """Fails fast when catalog content still uses the obsolete absolute OCR rectangle field."""
@@ -323,7 +331,7 @@ class SelectorRegistryTests(unittest.TestCase):
             )
 
             with self.assertRaises(SelectorResolutionError):
-                build_default_selector_registry(catalog_path=catalog_path, template_root=Path(temp_directory))
+                build_default_selector_registry(catalog_path=catalog_path, asset_root=Path(temp_directory))
 
     def test_selector_catalog_rejects_surface_viewport_selectors_missing_from_catalog(self) -> None:
         """Fails fast when one spatial surface references overlay selectors missing from the same catalog."""
@@ -335,7 +343,8 @@ class SelectorRegistryTests(unittest.TestCase):
                         id="PNC_WORLD_COORDINATE_BAR",
                         screens=("PNC_WORLD_MAP",),
                         status="screenshot_seeded",
-                        detection_kind="planned",
+                        detection_kind="semantic",
+                        materialize_relative_bounds=False,
                     ),
                 ),
                 surfaces=(

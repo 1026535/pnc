@@ -26,6 +26,7 @@ from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
+from pnc_automation.core.errors import TaskVerificationError
 from tests.test_support import (
     FakeObservationService,
     FakeSession,
@@ -71,6 +72,24 @@ class RunnerEndToEndTests(unittest.TestCase):
 
         observations = [
             make_observation(ScreenType.ANDROID_HOME, visible_ids=(UiElementId.ANDROID_HOME_PNC_ICON,)),
+            make_observation(
+                ScreenType.PNC_LOGIN,
+                visible_ids=(
+                    UiElementId.PNC_LOGIN_USERNAME_FIELD,
+                    UiElementId.PNC_LOGIN_PASSWORD_FIELD,
+                    UiElementId.PNC_LOGIN_SUBMIT_BUTTON,
+                ),
+                current_pnc_account_id="user@example.com",
+            ),
+            make_observation(
+                ScreenType.PNC_LOGIN,
+                visible_ids=(
+                    UiElementId.PNC_LOGIN_USERNAME_FIELD,
+                    UiElementId.PNC_LOGIN_PASSWORD_FIELD,
+                    UiElementId.PNC_LOGIN_SUBMIT_BUTTON,
+                ),
+                current_pnc_account_id="user@example.com",
+            ),
             make_observation(
                 ScreenType.PNC_LOGIN,
                 visible_ids=(
@@ -291,21 +310,21 @@ class RunnerEndToEndTests(unittest.TestCase):
             registry=registry,
         )
 
-        result = runner.run(
-            account,
-            registry.prepare_script(script),
-            castle_roster_provider=lambda: PncAccountCastleRosterConfig(
-                pnc_account_id=account.pnc_account_id,
-                castles=(target_castle,),
-            ),
-        )
+        with self.assertRaises(TaskVerificationError) as raised:
+            runner.run(
+                account,
+                registry.prepare_script(script),
+                castle_roster_provider=lambda: PncAccountCastleRosterConfig(
+                    pnc_account_id=account.pnc_account_id,
+                    castles=(target_castle,),
+                ),
+            )
 
-        self.assertEqual(len(result.steps), 7)
-        self.assertEqual(result.steps[-1].status.value, "success")
-        self.assertEqual(fake_session.launches, 1)
-        self.assertIn("user@example.com", fake_session.texts)
-        self.assertIn("secret", fake_session.texts)
-        self.assertGreaterEqual(len(fake_session.taps), 8)
+        self.assertEqual(raised.exception.details["selector_id"], UiElementId.PNC_RESEARCH_START_BUTTON)
+        # Earlier steps in the script are still allowed to complete.  The
+        # registry rejects the unsupported research selector when that step
+        # is reached, before any research tap is dispatched.
+        self.assertEqual(len(fake_session.taps), 9)
 
     def test_runner_executes_world_chat_task_through_registered_task_loop(self) -> None:
         """Runs a direct chat-send task through runner replans and the shared observed-action executor."""
@@ -334,6 +353,12 @@ class RunnerEndToEndTests(unittest.TestCase):
                 ScreenType.PNC_CHAT,
                 visible_ids=chat_controls,
                 active_chat_channel=ChatChannel.ALLIANCE,
+                chat_draft_empty=True,
+            ),
+            make_observation(
+                ScreenType.PNC_CHAT,
+                visible_ids=chat_controls,
+                active_chat_channel=ChatChannel.WORLD,
                 chat_draft_empty=True,
             ),
             make_observation(
@@ -382,6 +407,7 @@ def _make_runner(
         action_executor=ObservedActionExecutor(
             selector_registry=build_default_selector_registry(),
             action_executor=ActionExecutor(
+                selector_registry=build_default_selector_registry(),
                 session=session,
                 stable_click_delay_ms=defaults.stable_click_delay_ms,
                 post_action_observe_delay_ms=defaults.post_action_observe_delay_ms,
@@ -401,4 +427,3 @@ def _make_runner(
 
 if __name__ == "__main__":
     unittest.main()
-

@@ -7,8 +7,7 @@ import json
 import shutil
 import tempfile
 import unittest
-from dataclasses import dataclass, field
-from functools import cache
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from PIL import Image, ImageDraw
@@ -19,6 +18,7 @@ from pnc_automation.core.infra.capture.screenshot_service import ScreenshotServi
 from pnc_automation.app.pnc.persistence.castle_roster_store import CastleRosterStore
 from pnc_automation.app.authoring.config.models import CastleIdentity, PncAccountCastleRosterConfig
 from pnc_automation.app.automation.engine.action_executor import ActionExecutor
+from pnc_automation.app.automation.engine.observed_action_executor import ObservedActionExecutor
 from pnc_automation.core.errors import ScreenClassificationError, SelectorResolutionError
 from pnc_automation.app.pnc.domain.chat import ChatChannel
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
@@ -45,12 +45,19 @@ from pnc_automation.app.pnc.vision.observation_builder import (
     DefaultObservationEnricher,
     ObservationBuilder,
     ObservationDebugArtifactCollector,
+    ObservationAdditions,
     ObservationService,
     ImageSelectorEngine,
 )
 from pnc_automation.app.pnc.vision.image_models import SelectorMatch
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
-from pnc_automation.core.vision.ocr.ocr_service import OcrLine, OcrResult, RapidOcrService, UnavailableOcrService
+from pnc_automation.core.vision.ocr.ocr_service import (
+    ObservationOcrContext,
+    OcrLine,
+    OcrResult,
+    RapidOcrService,
+    UnavailableOcrService,
+)
 from pnc_automation.app.pnc.vision.pnc_observation_enricher import (
     PncObservationEnricher,
     _build_popup_additions,
@@ -63,6 +70,7 @@ from pnc_automation.app.pnc.vision.world_map_coordinates import (
     parse_world_coordinate_dialog_field_text,
     parse_world_coordinate_text,
 )
+from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.vision.selector_catalog import (
     SelectorCatalogDocument,
     SelectorCatalogEntry,
@@ -87,7 +95,27 @@ from pnc_automation.app.pnc.vision.selectors import (
 )
 from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
 from tests.local_fixture_artifacts import require_local_fixture_artifact
-from tests.test_support import FakeObservationService, FakeSession, build_logger, build_png_bytes, make_observation
+from tests.test_support import FakeObservationService, FakeSession, build_logger, build_png_bytes, make_captured_frame, make_observation
+
+
+def _minimal_runtime_registry() -> SelectorRegistry:
+    """Provide the explicitly registered OCR field needed by runtime-default fakes."""
+
+    canonical = build_default_selector_registry()
+    return SelectorRegistry(
+        selectors=(canonical.require(UiElementId.PNC_CHAT_INPUT_FIELD),),
+    )
+
+
+def _with_runtime_text_fields(registry: SelectorRegistry) -> SelectorRegistry:
+    """Add canonical runtime OCR fields to a purpose-built selector fixture."""
+
+    if any(selector.id == UiElementId.PNC_CHAT_INPUT_FIELD for selector in registry.all()):
+        return registry
+    canonical = build_default_selector_registry()
+    return SelectorRegistry(
+        selectors=(*registry.all(), canonical.require(UiElementId.PNC_CHAT_INPUT_FIELD)),
+    )
 
 
 @cache
@@ -115,10 +143,10 @@ class _FakeScreenshotSession:
 
         self._payload = payload
 
-    def capture_screenshot_bytes(self) -> bytes:
-        """Returns the pre-seeded screenshot bytes."""
+    def capture_screenshot_frame(self):
+        """Returns the pre-seeded screenshot bytes with explicit provenance."""
 
-        return self._payload
+        return make_captured_frame(self._payload)
 
 
 @dataclass(slots=True)
@@ -154,6 +182,21 @@ class _FakeOcrService:
         """Returns newline-joined OCR text for the requested region."""
 
         return "\n".join(line.text for line in self.read_lines(image, region))
+
+
+@dataclass(slots=True)
+class _ClearObservationEnricher(DefaultObservationEnricher):
+    """Explicitly proves a clear guard for selector-only builder fixtures."""
+
+    def recognize_guards(
+        self,
+        image: Image.Image,
+        request: ObservationRequest,
+        *,
+        ocr_context,
+    ) -> ObservationAdditions:
+        del image, request, ocr_context
+        return ObservationAdditions(guard_verdict=GuardVerdict.CLEAR)
 
 
 @dataclass(slots=True)
@@ -212,6 +255,23 @@ class _CoordinateBarFilteringFullOcrService(_CoordinateBarFilteringOcrService):
     """Returns full-screen OCR lines while preserving selector-crop filtered coordinate text."""
 
     full_lines: tuple[OcrLine, ...] = ()
+
+    def read_result(self, image: Image.Image, region: Region | None = None) -> OcrResult:
+        """Returns filtered coordinates for the context-owned transformed crop."""
+
+        if region is None and image.mode == "L":
+            line = _ocr_line(
+                self.filtered_text,
+                x=0,
+                y=0,
+                width=max(1, image.width),
+                height=max(1, image.height),
+            )
+            return OcrResult(lines=(line,), words=tuple(line.words))
+        if region is None:
+            return OcrResult(lines=self.full_lines, words=tuple(word for line in self.full_lines for word in line.words))
+        lines = self.read_lines(image, region)
+        return OcrResult(lines=lines, words=tuple(word for line in lines for word in line.words))
 
     def read_lines(self, image: Image.Image, region: Region | None = None) -> tuple[OcrLine, ...]:
         """Returns full-screen lines or one synthetic region line for the requested coordinate crop."""
@@ -331,6 +391,7 @@ def _make_chat_ocr_fallback_fixture(
         {
             "image": image,
             "artifact": type("Artifact", (), {"path": Path("synthetic_chat_ocr_fallback.png"), "captured_at": None})(),
+            "frame_ref": make_captured_frame(b"").frame_ref,
         },
     )()
     return screenshot, registry, _RecordingOcrService(lines=tuple(lines))
@@ -352,13 +413,13 @@ def _build_chat_observation_from_ocr_fallback(
         selector_registry=registry,
         selector_engine=ImageSelectorEngine(
             template_matcher=OpenCvTemplateMatcher(),
-            ocr_service=UnavailableOcrService(),
+
         ),
         screen_classifier=ScreenClassifier(),
         enricher=PncObservationEnricher(
-            ocr_service=ocr_service,
             selector_registry=registry,
         ),
+        ocr_service=ocr_service,
     )
     return builder.build(screenshot, request=request), ocr_service
 
@@ -369,10 +430,24 @@ class _SequencedObservationBuilder:
 
     observations: list
 
-    def build(self, screenshot: object, *, request: ObservationRequest | None = None) -> object:
+    def create_ocr_context(self, screenshot: object) -> ObservationOcrContext:
+        return ObservationOcrContext(
+            screenshot.image,
+            UnavailableOcrService(),
+            screenshot.frame_ref,
+            "test",
+        )
+
+    def build(
+        self,
+        screenshot: object,
+        *,
+        request: ObservationRequest | None = None,
+        ocr_context: ObservationOcrContext | None = None,
+    ) -> object:
         """Returns the next queued observation for one capture request."""
 
-        del screenshot, request
+        del screenshot, request, ocr_context
         if not self.observations:
             raise AssertionError("No observation queued for ObservationService.")
         return self.observations.pop(0)
@@ -391,10 +466,11 @@ class _RecordingSelectorEngine:
         registry: SelectorRegistry,
         *,
         selector_ids: tuple[UiElementId, ...] | None = None,
+        ocr_context=None,
     ) -> tuple[SelectorMatch, ...]:
         """Records one selector request and returns the queued response."""
 
-        del image, registry
+        del image, registry, ocr_context
         self.requested_selector_ids.append(()) if selector_ids is None else self.requested_selector_ids.append(tuple(selector_ids))
         if not self.responses:
             raise AssertionError("No selector-engine response queued.")
@@ -429,7 +505,7 @@ class CaptureAndVisionTests(unittest.TestCase):
             character_panel_template = root / "character_panel.png"
             build_button_template = root / "build_button.png"
 
-            screen = Image.new("RGBA", (30, 20), (255, 255, 255, 255))
+            screen = Image.new("RGBA", (540, 960), (255, 255, 255, 255))
             Image.new("RGBA", (4, 4), (255, 0, 0, 255)).save(world_switch_template)
             Image.new("RGBA", (4, 4), (0, 255, 0, 255)).save(character_panel_template)
             Image.new("RGBA", (4, 4), (0, 0, 255, 255)).save(build_button_template)
@@ -467,6 +543,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                 )
             )
 
+            registry = _with_runtime_text_fields(registry)
             with screenshot_path.open("rb") as handle:
                 payload = handle.read()
             screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
@@ -479,10 +556,10 @@ class CaptureAndVisionTests(unittest.TestCase):
                 selector_registry=registry,
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
-                enricher=DefaultObservationEnricher(),
+                enricher=_ClearObservationEnricher(),
             )
 
             observation = builder.build(captured)
@@ -512,21 +589,24 @@ class CaptureAndVisionTests(unittest.TestCase):
                                 width_ratio=0.4,
                                 height_ratio=0.18,
                             ),
+                            materialize_relative_bounds=False,
                         ),
                     )
                 ),
             )
-            registry = build_default_selector_registry(catalog_path=catalog_path, template_root=root)
+            registry = build_default_selector_registry(catalog_path=catalog_path, asset_root=root)
             selector_engine = ImageSelectorEngine(
                 template_matcher=OpenCvTemplateMatcher(),
-                ocr_service=_FakeOcrService(
-                    lines=(
-                        _ocr_line("Daily Sale", x=12, y=22, width=32, height=12),
-                    )
-                ),
+            )
+            image = Image.new("RGB", (100, 100), (0, 0, 0))
+            ocr_context = ObservationOcrContext(
+                image,
+                _FakeOcrService(lines=(_ocr_line("Daily Sale", x=12, y=22, width=32, height=12),)),
+                None,
+                "test",
             )
 
-            matches = selector_engine.detect(Image.new("RGB", (100, 100), (0, 0, 0)), registry)
+            matches = selector_engine.detect(image, registry, ocr_context=ocr_context)
 
             self.assertEqual(len(matches), 1)
             self.assertEqual(matches[0].selector_id, UiElementId.PNC_CASH_MALL_ENTRY_TITLE_REGION)
@@ -543,18 +623,20 @@ class CaptureAndVisionTests(unittest.TestCase):
         registry = build_default_selector_registry()
         selector_engine = ImageSelectorEngine(
             template_matcher=OpenCvTemplateMatcher(),
-            ocr_service=_FakeOcrService(
-                lines=(
-                    _ocr_line("Build", x=18, y=47, width=46, height=14),
-                    _ocr_line("Hero", x=16, y=920, width=44, height=18),
-                )
-            ),
+        )
+        image = Image.new("RGB", (540, 960), (0, 0, 0))
+        ocr_context = ObservationOcrContext(
+            image,
+            _FakeOcrService(lines=()),
+            None,
+            "test",
         )
 
         matches = selector_engine.detect(
-            Image.new("RGB", (540, 960), (0, 0, 0)),
+            image,
             registry,
             selector_ids=(UiElementId.PNC_WORLD_COORDINATE_BAR, UiElementId.PNC_WORLD_HOME_NAV),
+            ocr_context=ocr_context,
         )
 
         self.assertEqual(matches, [])
@@ -565,10 +647,6 @@ class CaptureAndVisionTests(unittest.TestCase):
         registry = build_default_selector_registry()
         selector_engine = ImageSelectorEngine(
             template_matcher=OpenCvTemplateMatcher(),
-            ocr_service=_CoordinateBarFilteringOcrService(
-                raw_text="X:272-kV.498",
-                filtered_text="X:272 Y:498",
-            ),
         )
         image = Image.new("RGB", (540, 960), (18, 24, 40))
         coordinate_region = registry.require(UiElementId.PNC_WORLD_COORDINATE_BAR).relative_bounds
@@ -578,10 +656,21 @@ class CaptureAndVisionTests(unittest.TestCase):
             for y in range(bounds.y + 8, bounds.y + bounds.height - 8):
                 image.putpixel((x, y), (42, 198, 224))
 
+        ocr_context = ObservationOcrContext(
+            image,
+            _CoordinateBarFilteringFullOcrService(
+                raw_text="X:272-kV.498",
+                filtered_text="X:272 Y:498",
+            ),
+            None,
+            "test",
+        )
+
         matches = selector_engine.detect(
             image,
             registry,
             selector_ids=(UiElementId.PNC_WORLD_COORDINATE_BAR,),
+            ocr_context=ocr_context,
         )
 
         self.assertEqual(len(matches), 1)
@@ -595,20 +684,13 @@ class CaptureAndVisionTests(unittest.TestCase):
             selector_registry=build_default_selector_registry(),
             selector_engine=ImageSelectorEngine(
                 template_matcher=OpenCvTemplateMatcher(),
-                ocr_service=_FakeOcrService(
-                    lines=(
-                        _ocr_line("Build", x=18, y=47, width=46, height=14),
-                        _ocr_line("Hero", x=124, y=938, width=40, height=16),
-                        _ocr_line("Quest", x=198, y=938, width=45, height=16),
-                        _ocr_line("Mail", x=320, y=938, width=35, height=16),
-                        _ocr_line("Alliance", x=401, y=938, width=73, height=16),
-                        _ocr_line("More", x=478, y=938, width=40, height=16),
-                    )
-                ),
+
             ),
             screen_classifier=ScreenClassifier(),
             enricher=PncObservationEnricher(
-                ocr_service=_FakeOcrService(
+
+            ),
+            ocr_service=_FakeOcrService(
                     lines=(
                         _ocr_line("Build", x=18, y=47, width=46, height=14),
                         _ocr_line("Hero", x=124, y=938, width=40, height=16),
@@ -618,14 +700,14 @@ class CaptureAndVisionTests(unittest.TestCase):
                         _ocr_line("More", x=478, y=938, width=40, height=16),
                     )
                 )
-            ),
-        )
+            )
         screenshot = type(
             "Captured",
             (),
             {
                 "image": Image.new("RGB", (540, 960), (0, 0, 0)),
                 "artifact": type("Artifact", (), {"path": Path("synthetic_home_city_noise.png"), "captured_at": None})(),
+                "frame_ref": make_captured_frame(b"").frame_ref,
             },
         )()
 
@@ -641,7 +723,7 @@ class CaptureAndVisionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_directory:
             root = Path(temp_directory)
             screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
-            image = Image.new("RGB", (480, 854), (15, 28, 68))
+            image = Image.new("RGB", (540, 960), (15, 28, 68))
             for x in range(410, 470):
                 for y in range(520, 590):
                     image.putpixel((x, y), (40, 200, 70))
@@ -654,11 +736,13 @@ class CaptureAndVisionTests(unittest.TestCase):
                 selector_registry=build_default_selector_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Manage Char.", x=132, y=18, width=152, height=24),
                             _ocr_line("K304 Kingdom", x=99, y=97, width=127, height=18),
@@ -669,8 +753,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("Castle Level 9", x=98, y=549, width=126, height=18),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
             castle_entries = observation.entries(ListEntryKind.CASTLE)
@@ -695,7 +778,7 @@ class CaptureAndVisionTests(unittest.TestCase):
             root = Path(temp_directory)
             screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
             screenshot = screenshot_service.capture(
-                _FakeScreenshotSession(_encode_png(Image.new("RGB", (480, 854), (15, 28, 68)))),
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (540, 960), (15, 28, 68)))),
                 artifact_directory="k230_single_castle_manage_char",
                 label="single_castle_manage_char",
             )
@@ -703,11 +786,13 @@ class CaptureAndVisionTests(unittest.TestCase):
                 selector_registry=build_default_selector_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Manage Char.", x=132, y=18, width=152, height=24),
                             _ocr_line("K230 Kingdom", x=98, y=494, width=128, height=18),
@@ -715,8 +800,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("Castle Level 9", x=98, y=549, width=126, height=18),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
             castle_entries = observation.entries(ListEntryKind.CASTLE)
@@ -740,11 +824,13 @@ class CaptureAndVisionTests(unittest.TestCase):
                 selector_registry=build_default_selector_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Email", x=80, y=225, width=70, height=26),
                             _ocr_line("user@example.com", x=92, y=276, width=188, height=22),
@@ -752,8 +838,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("Log In", x=211, y=566, width=105, height=30),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -781,11 +866,13 @@ class CaptureAndVisionTests(unittest.TestCase):
                 selector_registry=build_default_selector_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Switch Account", x=134, y=42, width=180, height=28),
                             _ocr_line("user@example.com", x=116, y=292, width=188, height=22),
@@ -793,8 +880,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("Change Account", x=165, y=654, width=170, height=28),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -820,20 +906,20 @@ class CaptureAndVisionTests(unittest.TestCase):
                 selector_registry=build_default_selector_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                    selector_registry=build_default_selector_registry(),
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Chat", x=181, y=20, width=113, height=49),
                             _ocr_line("Kingdom", x=202, y=117, width=143, height=40),
                             _ocr_line("Alliance", x=652, y=116, width=123, height=39),
                         )
-                    ),
-                    selector_registry=build_default_selector_registry(),
-                ),
-            )
+                    ))
 
             observation = builder.build(
                 screenshot,
@@ -934,7 +1020,7 @@ class CaptureAndVisionTests(unittest.TestCase):
         self.assertTrue(observation.chat_draft_empty)
         self.assertIsNone(observation.chat_draft_text)
         self.assertEqual(ocr_service.read_result_calls, 1)
-        self.assertGreater(ocr_service.read_text_calls, 0)
+        self.assertEqual(ocr_service.read_text_calls, 0)
 
     def test_observation_builder_leaves_active_chat_channel_unknown_when_tab_colors_are_ambiguous(self) -> None:
         """Keeps OCR-proven chat observations fail-safe when the highlighted tab cannot be trusted."""
@@ -950,7 +1036,7 @@ class CaptureAndVisionTests(unittest.TestCase):
         self.assertTrue(observation.chat_draft_empty)
         self.assertIsNone(observation.chat_draft_text)
         self.assertEqual(ocr_service.read_result_calls, 1)
-        self.assertGreater(ocr_service.read_text_calls, 0)
+        self.assertEqual(ocr_service.read_text_calls, 0)
 
     def test_observation_builder_escalates_chat_send_follow_up_to_ocr_after_a_geometry_miss(self) -> None:
         """Falls back to OCR for post-send chat confirmation when the chat geometry heuristic misses."""
@@ -963,9 +1049,9 @@ class CaptureAndVisionTests(unittest.TestCase):
 
         self.assertEqual(observation.screen_type, ScreenType.PNC_CHAT)
         self.assertEqual(observation.active_chat_channel, ChatChannel.ALLIANCE)
-        self.assertTrue(observation.chat_draft_empty)
-        self.assertEqual(ocr_service.read_result_calls, 1)
-        self.assertGreater(ocr_service.read_text_calls, 0)
+        self.assertIsNone(observation.chat_draft_empty)
+        self.assertEqual(ocr_service.read_result_calls, 2)
+        self.assertEqual(ocr_service.read_text_calls, 0)
 
     def test_send_chat_message_can_type_from_an_ocr_proven_chat_observation(self) -> None:
         """Allows chat sending to continue from an OCR fallback observation because chat state is populated."""
@@ -976,27 +1062,34 @@ class CaptureAndVisionTests(unittest.TestCase):
             draft_ocr_text="Pleaseter content",
         )
         fake_session = FakeSession()
+        refresh_frame = make_captured_frame(b"refresh").frame_ref
+        post_frame = make_captured_frame(b"post").frame_ref
+        refreshed_elements = {
+            selector_id: replace(element, frame_ref=refresh_frame)
+            for selector_id, element in observation.visible_elements.items()
+        }
+        posted_elements = {
+            selector_id: replace(element, frame_ref=post_frame)
+            for selector_id, element in observation.visible_elements.items()
+        }
         fake_observer = FakeObservationService(
             observations=[
-                make_observation(
-                    ScreenType.PNC_CHAT,
-                    visible_ids=(
-                        UiElementId.PNC_CHAT_TAB_KINGDOM,
-                        UiElementId.PNC_CHAT_TAB_ALLIANCE,
-                        UiElementId.PNC_CHAT_INPUT_FIELD,
-                        UiElementId.PNC_CHAT_SEND_BUTTON,
-                    ),
-                    active_chat_channel=ChatChannel.ALLIANCE,
-                    chat_draft_empty=True,
-                )
+                replace(observation, frame_ref=refresh_frame, visible_elements=refreshed_elements),
+                replace(observation, frame_ref=post_frame, visible_elements=posted_elements),
             ]
         )
-        executor = ActionExecutor(
-            session=fake_session,
-            stable_click_delay_ms=0,
-            post_action_observe_delay_ms=0,
-            chat_stable_click_delay_ms=0,
-            chat_post_action_observe_delay_ms=0,
+        executor = ObservedActionExecutor(
+            selector_registry=build_default_selector_registry(),
+            action_executor=ActionExecutor(
+                selector_registry=build_default_selector_registry(),
+                session=fake_session,
+                stable_click_delay_ms=0,
+                post_action_observe_delay_ms=0,
+                chat_stable_click_delay_ms=0,
+                chat_post_action_observe_delay_ms=0,
+                logger=build_logger(),
+                sleep=lambda _: None,
+            ),
             logger=build_logger(),
             sleep=lambda _: None,
         )
@@ -1013,7 +1106,10 @@ class CaptureAndVisionTests(unittest.TestCase):
 
         self.assertEqual(fake_session.texts, ["hello"])
         self.assertEqual(fake_session.key_events, [])
-        self.assertEqual(fake_observer.requests, [ObservationRequest.chat_send_follow_up()])
+        self.assertEqual(
+            fake_observer.requests,
+            [ObservationRequest.full_runtime_default(), ObservationRequest.chat_send_follow_up()],
+        )
 
     def test_observation_builder_treats_common_empty_chat_placeholder_ocr_variants_as_empty(self) -> None:
         """Accepts the observed placeholder OCR variants instead of clearing a field that is already empty."""
@@ -1038,14 +1134,14 @@ class CaptureAndVisionTests(unittest.TestCase):
             selector_registry=registry,
             selector_engine=ImageSelectorEngine(
                 template_matcher=OpenCvTemplateMatcher(),
-                ocr_service=ocr_service,
+
             ),
             screen_classifier=ScreenClassifier(),
             enricher=PncObservationEnricher(
-                ocr_service=ocr_service,
+
                 selector_registry=registry,
             ),
-        )
+            ocr_service=ocr_service)
         screenshot = type(
             "Captured",
             (),
@@ -1060,6 +1156,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                     )
                 ),
                 "artifact": type("Artifact", (), {"path": Path("chat.png"), "captured_at": None})(),
+                "frame_ref": make_captured_frame(b"").frame_ref,
             },
         )()
 
@@ -1071,8 +1168,8 @@ class CaptureAndVisionTests(unittest.TestCase):
         self.assertEqual(observation.screen_type, ScreenType.PNC_CHAT)
         self.assertEqual(observation.active_chat_channel, ChatChannel.ALLIANCE)
         self.assertTrue(observation.chat_draft_empty)
-        self.assertEqual(ocr_service.read_result_calls, 0)
-        self.assertGreater(ocr_service.read_text_calls, 0)
+        self.assertEqual(ocr_service.read_result_calls, 1)
+        self.assertEqual(ocr_service.read_text_calls, 0)
 
     def test_chat_transcript_observation_still_runs_ocr_after_geometry_proves_chat(self) -> None:
         """Keeps transcript-row extraction enabled for chat transcript polls even when geometry already proves chat."""
@@ -1099,20 +1196,21 @@ class CaptureAndVisionTests(unittest.TestCase):
             selector_registry=registry,
             selector_engine=ImageSelectorEngine(
                 template_matcher=OpenCvTemplateMatcher(),
-                ocr_service=UnavailableOcrService(),
+
             ),
             screen_classifier=ScreenClassifier(),
             enricher=PncObservationEnricher(
-                ocr_service=ocr_service,
+
                 selector_registry=registry,
             ),
-        )
+            ocr_service=ocr_service)
         screenshot = type(
             "Captured",
             (),
             {
                 "image": image,
-                "artifact": type("Artifact", (), {"path": Path("chat_transcript.png"), "captured_at": None})(),
+            "artifact": type("Artifact", (), {"path": Path("chat_transcript.png"), "captured_at": None})(),
+            "frame_ref": make_captured_frame(b"").frame_ref,
             },
         )()
 
@@ -1122,7 +1220,7 @@ class CaptureAndVisionTests(unittest.TestCase):
         self.assertEqual(observation.active_chat_channel, ChatChannel.WORLD)
         self.assertEqual(len(observation.entries(ListEntryKind.CHAT_MESSAGE)), 1)
         self.assertEqual(observation.entries(ListEntryKind.CHAT_MESSAGE)[0].title_text, "Enemy Bob")
-        self.assertEqual(ocr_service.read_result_calls, 1)
+        self.assertEqual(ocr_service.read_result_calls, 2)
 
     def test_observation_builder_classifies_loading_reconnect_from_live_like_ocr(self) -> None:
         """Recognizes reconnect prompts as loading-state bootstrap screens."""
@@ -1136,22 +1234,23 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="loading_reconnect_live_like",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Connecting", x=188, y=108, width=116, height=28),
                             _ocr_line("Network unstable", x=142, y=342, width=170, height=24),
                             _ocr_line("Reconnect", x=195, y=668, width=112, height=30),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -1170,21 +1269,22 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="loading_splash_live_like",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("CONQUEST", x=310, y=41, width=190, height=34),
                             _ocr_line("8%", x=430, y=1390, width=42, height=20),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -1203,14 +1303,16 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="more_menu_live_like",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Manage Char", x=78, y=1330, width=178, height=34),
                             _ocr_line("Lord Info", x=315, y=1332, width=154, height=34),
@@ -1223,8 +1325,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("More", x=794, y=1567, width=71, height=27),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -1249,14 +1350,16 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="more_settings_menu_live_like",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Settings", x=112, y=20, width=128, height=28),
                             _ocr_line("Account", x=120, y=94, width=102, height=24),
@@ -1266,13 +1369,12 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("Blacklist", x=320, y=374, width=104, height=24),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
             self.assertEqual(observation.screen_type, ScreenType.PNC_SETTINGS)
-            self.assertTrue(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
+            self.assertFalse(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
             self.assertTrue(observation.has(UiElementId.PNC_MORE_MANAGE_CHAR))
             self.assertFalse(observation.has(UiElementId.PNC_MORE_SETTINGS))
             self.assertFalse(observation.has(UiElementId.PNC_MORE_OVERLAY_MANAGE_CHAR))
@@ -1290,14 +1392,16 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="lord_info_live_like",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Lord Info", x=184, y=20, width=208, height=48),
                             _ocr_line("Gear", x=52, y=111, width=83, height=42),
@@ -1309,8 +1413,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("Achievements", x=731, y=1567, width=115, height=17),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -1334,14 +1437,16 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="lord_info_tagged",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Lord Info", x=184, y=20, width=208, height=48),
                             _ocr_line("Gear", x=52, y=111, width=83, height=42),
@@ -1353,8 +1458,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("Achievements", x=731, y=1567, width=115, height=17),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
             target_castle = CastleIdentity(kingdom="K287", castle_name="pine cobaye 1")
@@ -1383,14 +1487,16 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="more_settings_follow_up",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Settings", x=112, y=20, width=128, height=28),
                             _ocr_line("Account", x=120, y=94, width=102, height=24),
@@ -1400,8 +1506,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("Blacklist", x=320, y=374, width=104, height=24),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(
                 screenshot,
@@ -1412,7 +1517,7 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
 
             self.assertEqual(observation.screen_type, ScreenType.PNC_SETTINGS)
-            self.assertTrue(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
+            self.assertFalse(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
             self.assertTrue(observation.has(UiElementId.PNC_MORE_MANAGE_CHAR))
             self.assertFalse(observation.has(UiElementId.PNC_MORE_SETTINGS))
 
@@ -1431,11 +1536,13 @@ class CaptureAndVisionTests(unittest.TestCase):
                 selector_registry=build_default_selector_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Manage Char.", x=304, y=94, width=134, height=24),
                             _ocr_line("K304 Kingdom", x=214, y=194, width=127, height=18),
@@ -1446,8 +1553,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("Castle Level 9", x=214, y=648, width=126, height=18),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(
                 screenshot,
@@ -1473,14 +1579,16 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="trial_challenge_live_like",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Trial Challenge", x=184, y=18, width=340, height=55),
                             _ocr_line("Exchange", x=227, y=147, width=158, height=45),
@@ -1498,8 +1606,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("Rank", x=263, y=1545, width=61, height=28),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -1519,14 +1626,16 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="vip_live_like",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("VIP", x=180, y=19, width=83, height=48),
                             _ocr_line("Get Pts", x=741, y=254, width=108, height=31),
@@ -1536,8 +1645,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("VIP 2", x=625, y=457, width=101, height=41),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -1556,28 +1664,27 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="might_rank_live_like",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Rank", x=330, y=30, width=80, height=30),
                             _ocr_line("free cookies", x=80, y=500, width=180, height=30),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
             self.assertEqual(observation.screen_type, ScreenType.PNC_MIGHT_RANK)
-            back = observation.require(UiElementId.PNC_BACK_BUTTON_TOP_LEFT)
-            self.assertEqual(back.source_kind, VisibleElementSourceKind.GEOMETRY)
-            self.assertEqual(back.bounds.center(), (72, 44))
+            self.assertFalse(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
 
     def test_observation_builder_classifies_event_center_from_live_like_ocr(self) -> None:
         """Recognizes Event Center rows so safe-root recovery does not treat the surface as unknown."""
@@ -1591,14 +1698,16 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="event_center_live_like",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Event Center", x=112, y=15, width=170, height=25),
                             _ocr_line("Regular Events", x=7, y=70, width=174, height=24),
@@ -1608,13 +1717,12 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("Time left: 5d 10:28:21", x=31, y=287, width=196, height=19),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
             self.assertEqual(observation.screen_type, ScreenType.PNC_EVENT_CENTER)
-            self.assertTrue(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
+            self.assertFalse(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
             self.assertTrue(observation.has(UiElementId.PNC_EVENT_CENTER_EVENT_ROW))
             self.assertEqual("Banner Brawl", observation.entries(ListEntryKind.EVENT_ENTRY)[0].title_text)
 
@@ -1630,14 +1738,16 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="improve_might_live_like",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Improve Might", x=296, y=352, width=307, height=49),
                             _ocr_line("Improve", x=685, y=494, width=122, height=37),
@@ -1645,8 +1755,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("or craft traps to improve Might.", x=236, y=1196, width=426, height=30),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -1665,21 +1774,22 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="reconnect_near_match",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Rewards", x=210, y=112, width=90, height=24),
                             _ocr_line("Reconnect", x=195, y=668, width=112, height=30),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -1698,27 +1808,28 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="building_detail",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Castle", x=88, y=16, width=120, height=30),
                             _ocr_line("Upgrade", x=682, y=308, width=120, height=40),
                             _ocr_line("ColdDukeOfTheNorth", x=101, y=465, width=256, height=32),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
             self.assertEqual(observation.screen_type, ScreenType.PNC_BUILDING_DETAILS)
-            self.assertTrue(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
+            self.assertFalse(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
             self.assertTrue(observation.has(UiElementId.PNC_BUILDING_UPGRADE_BUTTON))
 
     def test_observation_builder_exposes_shared_building_requirement_controls_on_exact_building_screens(self) -> None:
@@ -1733,14 +1844,16 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="infantry_requirement",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Infantry Barracks", x=88, y=16, width=240, height=30),
                             _ocr_line("Glory Level", x=588, y=142, width=154, height=32),
@@ -1751,8 +1864,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("Materials required", x=58, y=866, width=246, height=33),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -1778,14 +1890,16 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="castle_multi_requirement",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Castle", x=88, y=16, width=120, height=30),
                             _ocr_line("Territory Overview", x=620, y=130, width=220, height=32),
@@ -1797,8 +1911,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("Materials required", x=58, y=931, width=246, height=33),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -1820,14 +1933,16 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="castle_split_overview",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Castle", x=181, y=18, width=144, height=51),
                             _ocr_line("Territory", x=691, y=129, width=108, height=32),
@@ -1836,8 +1951,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("Upgrade", x=673, y=438, width=146, height=41),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -1858,14 +1972,16 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="wall_upgrade_confirm",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Wall", x=182, y=18, width=107, height=50),
                             _ocr_line("Glory Level", x=655, y=346, width=182, height=42),
@@ -1878,8 +1994,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("Effect", x=60, y=1036, width=83, height=33),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -1903,22 +2018,23 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="warehouse_speedup",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Warehouse", x=181, y=18, width=220, height=50),
                             _ocr_line("Glory Level", x=655, y=346, width=182, height=42),
                             _ocr_line("Speedup", x=675, y=438, width=145, height=41),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -1937,22 +2053,23 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="build_speedup",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Build Speedup", x=182, y=18, width=280, height=50),
                             _ocr_line("Build Now", x=178, y=1510, width=180, height=45),
                             _ocr_line("Auto Speedup", x=520, y=1510, width=230, height=45),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -1972,21 +2089,22 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="build_speedup_confirm",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Build Speedup", x=305, y=420, width=290, height=50),
                             _ocr_line("Confirm", x=362, y=1165, width=180, height=45),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -2005,14 +2123,16 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="farm_construction_confirmation",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Farm", x=179, y=23, width=124, height=46),
                             _ocr_line("Build", x=701, y=435, width=89, height=37),
@@ -2024,8 +2144,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("Effect", x=60, y=1036, width=83, height=33),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -2046,14 +2165,16 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="farm_upgrade_confirmation",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Farm", x=180, y=23, width=123, height=46),
                             _ocr_line("Where Food is produced. Upgrade", x=471, y=245, width=415, height=26),
@@ -2064,8 +2185,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("Effect", x=60, y=1035, width=83, height=31),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -2107,18 +2227,19 @@ class CaptureAndVisionTests(unittest.TestCase):
                     label=label,
                 )
                 builder = ObservationBuilder(
-                    selector_registry=SelectorRegistry(selectors=()),
+                    selector_registry=_minimal_runtime_registry(),
                     selector_engine=ImageSelectorEngine(
                         template_matcher=OpenCvTemplateMatcher(),
-                        ocr_service=UnavailableOcrService(),
+
                     ),
                     screen_classifier=ScreenClassifier(),
                     enricher=PncObservationEnricher(
-                        ocr_service=_FakeOcrService(
+
+                    ),
+            ocr_service=_FakeOcrService(
                             lines=lines,
                         )
-                    ),
-                )
+                    )
 
                 observation = builder.build(screenshot)
 
@@ -2140,19 +2261,20 @@ class CaptureAndVisionTests(unittest.TestCase):
                 selector_registry=build_default_selector_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Build", x=120, y=1180, width=90, height=30),
                             _ocr_line("Alliance", x=48, y=1500, width=124, height=32),
                             _ocr_line("More", x=740, y=1500, width=74, height=32),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -2181,11 +2303,13 @@ class CaptureAndVisionTests(unittest.TestCase):
                 selector_registry=build_default_selector_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Build", x=27, y=354, width=65, height=28),
                             _ocr_line("Hero", x=219, y=1567, width=62, height=25),
@@ -2195,8 +2319,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("More", x=795, y=1568, width=70, height=25),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -2223,11 +2346,13 @@ class CaptureAndVisionTests(unittest.TestCase):
                 selector_registry=build_default_selector_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Help", x=27, y=354, width=58, height=28),
                             _ocr_line("(1/1)", x=20, y=389, width=76, height=26),
@@ -2240,8 +2365,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("More", x=795, y=1568, width=70, height=25),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -2266,11 +2390,13 @@ class CaptureAndVisionTests(unittest.TestCase):
                 selector_registry=build_default_selector_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Build", x=27, y=354, width=65, height=28),
                             _ocr_line("Wall", x=455, y=918, width=81, height=28),
@@ -2280,8 +2406,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("More", x=795, y=1568, width=70, height=25),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -2311,14 +2436,16 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="build_queue",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Build Queue", x=315, y=64, width=256, height=36),
                             _ocr_line("Upgrading: Wall", x=115, y=250, width=250, height=34),
@@ -2329,8 +2456,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("Go", x=754, y=468, width=52, height=28),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -2353,14 +2479,16 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="centered_idle_build_queue",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Build Queue", x=327, y=428, width=249, height=44),
                             _ocr_line("1st Build Queue", x=212, y=541, width=216, height=32),
@@ -2370,8 +2498,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("Inactive", x=211, y=758, width=110, height=30),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -2393,11 +2520,13 @@ class CaptureAndVisionTests(unittest.TestCase):
                 selector_registry=build_default_selector_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("X:253", x=73, y=67, width=71, height=24),
                             _ocr_line("Y:447", x=177, y=67, width=69, height=24),
@@ -2409,8 +2538,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("More", x=795, y=1568, width=70, height=25),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -2457,14 +2585,14 @@ class CaptureAndVisionTests(unittest.TestCase):
                 selector_registry=registry,
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=ocr_service,
+
                     selector_registry=registry,
                 ),
-            )
+            ocr_service=ocr_service)
 
             observation = builder.build(screenshot, request=ObservationRequest.source_screen_retry(ScreenType.PNC_WORLD_MAP))
 
@@ -2488,11 +2616,14 @@ class CaptureAndVisionTests(unittest.TestCase):
                 selector_registry=registry,
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                    selector_registry=registry,
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("K:", x=76, y=398, width=26, height=26),
                             _ocr_line("226", x=132, y=400, width=38, height=24),
@@ -2502,10 +2633,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("436", x=384, y=400, width=42, height=24),
                             _ocr_line("Go", x=253, y=532, width=36, height=26),
                         )
-                    ),
-                    selector_registry=registry,
-                ),
-            )
+                    ))
 
             observation = builder.build(
                 screenshot,
@@ -2549,11 +2677,14 @@ class CaptureAndVisionTests(unittest.TestCase):
                 selector_registry=registry,
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                    selector_registry=registry,
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("K:", x=76, y=398, width=26, height=26),
                             _ocr_line("230", x=132, y=400, width=41, height=24),
@@ -2561,10 +2692,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("Y:", x=332, y=399, width=27, height=25),
                             _ocr_line("Go", x=253, y=532, width=36, height=26),
                         )
-                    ),
-                    selector_registry=registry,
-                ),
-            )
+                    ))
 
             observation = builder.build(
                 screenshot,
@@ -2605,21 +2733,21 @@ class CaptureAndVisionTests(unittest.TestCase):
                 selector_registry=registry,
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                    selector_registry=registry,
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("K:", x=76, y=398, width=26, height=26),
                             _ocr_line("226", x=132, y=400, width=41, height=24),
                             _ocr_line("X:", x=202, y=397, width=30, height=29),
                             _ocr_line("Go", x=253, y=532, width=36, height=26),
                         )
-                    ),
-                    selector_registry=registry,
-                ),
-            )
+                    ))
 
             observation = builder.build(
                 screenshot,
@@ -2653,14 +2781,14 @@ class CaptureAndVisionTests(unittest.TestCase):
                 selector_registry=registry,
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=ocr_service,
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=ocr_service,
+
                     selector_registry=registry,
                 ),
-            )
+            ocr_service=ocr_service)
 
             observation = builder.build(
                 screenshot,
@@ -2694,14 +2822,14 @@ class CaptureAndVisionTests(unittest.TestCase):
                 selector_registry=registry,
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=ocr_service,
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=ocr_service,
+
                     selector_registry=registry,
                 ),
-            )
+            ocr_service=ocr_service)
 
             observation = builder.build(
                 screenshot,
@@ -2754,18 +2882,18 @@ class CaptureAndVisionTests(unittest.TestCase):
                 selector_registry=registry,
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                    selector_registry=registry,
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("K:226 Reset", x=228, y=22, width=144, height=32),
                         )
-                    ),
-                    selector_registry=registry,
-                ),
-            )
+                    ))
 
             observation = builder.build(
                 screenshot,
@@ -2823,18 +2951,18 @@ class CaptureAndVisionTests(unittest.TestCase):
                 selector_registry=registry,
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                    selector_registry=registry,
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("K:226 Reset", x=228, y=22, width=144, height=32),
                         )
-                    ),
-                    selector_registry=registry,
-                ),
-            )
+                    ))
 
             observation = builder.build(
                 screenshot,
@@ -2861,11 +2989,13 @@ class CaptureAndVisionTests(unittest.TestCase):
                 selector_registry=build_default_selector_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("X:253", x=44, y=41, width=42, height=18),
                             _ocr_line("Y:447", x=102, y=41, width=42, height=18),
@@ -2877,8 +3007,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("More", x=479, y=938, width=41, height=17),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -2927,14 +3056,14 @@ class CaptureAndVisionTests(unittest.TestCase):
                 selector_registry=registry,
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=ocr_service,
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=ocr_service,
+
                     selector_registry=registry,
                 ),
-            )
+            ocr_service=ocr_service)
 
             observation = builder.build(screenshot)
 
@@ -2961,7 +3090,8 @@ class CaptureAndVisionTests(unittest.TestCase):
             (),
             {
                 "image": image,
-                "artifact": type("Artifact", (), {"path": Path("synthetic.png"), "captured_at": None})(),
+            "artifact": type("Artifact", (), {"path": Path("synthetic.png"), "captured_at": None})(),
+            "frame_ref": make_captured_frame(b"").frame_ref,
             },
         )()
         ocr_service = _RecordingOcrService(
@@ -2974,20 +3104,20 @@ class CaptureAndVisionTests(unittest.TestCase):
             selector_registry=registry,
             selector_engine=ImageSelectorEngine(
                 template_matcher=OpenCvTemplateMatcher(),
-                ocr_service=ocr_service,
+
             ),
             screen_classifier=ScreenClassifier(),
             enricher=PncObservationEnricher(
-                ocr_service=ocr_service,
+
                 selector_registry=registry,
             ),
-        )
+            ocr_service=ocr_service)
 
         observation = builder.build(screenshot, request=ObservationRequest.world_map_movement_proof_follow_up())
 
         self.assertEqual(observation.screen_type, ScreenType.PNC_WORLD_MAP)
-        self.assertEqual(ocr_service.read_result_calls, 0)
-        self.assertGreater(ocr_service.read_text_calls, 0)
+        self.assertEqual(ocr_service.read_result_calls, 1)
+        self.assertEqual(ocr_service.read_text_calls, 0)
         self.assertIsNotNone(observation.spatial_surface)
         assert observation.spatial_surface is not None
         self.assertEqual(observation.spatial_surface.viewport.coordinate, (230, 958))
@@ -3021,14 +3151,14 @@ class CaptureAndVisionTests(unittest.TestCase):
                 selector_registry=registry,
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=ocr_service,
+
                     selector_registry=registry,
                 ),
-            )
+            ocr_service=ocr_service)
 
             observation = builder.build(screenshot, request=ObservationRequest.world_map_movement_proof_follow_up())
 
@@ -3037,7 +3167,7 @@ class CaptureAndVisionTests(unittest.TestCase):
             assert observation.spatial_surface is not None
             self.assertEqual(observation.spatial_surface.viewport.coordinate, (370, 510))
             self.assertEqual(observation.spatial_surface.objects, ())
-            self.assertEqual(ocr_service.read_text_calls, 1)
+            self.assertEqual(ocr_service.read_text_calls, 0)
             self.assertTrue(any(region is not None and region.x == 0 for region in ocr_service.read_lines_regions))
 
     def test_observation_builder_recovers_live_world_coordinate_bar_when_filtered_crop_drops_y_axis(self) -> None:
@@ -3062,14 +3192,14 @@ class CaptureAndVisionTests(unittest.TestCase):
                 selector_registry=registry,
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=ocr_service,
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=ocr_service,
+
                     selector_registry=registry,
                 ),
-            )
+            ocr_service=ocr_service)
 
             observation = builder.build(screenshot)
 
@@ -3107,14 +3237,14 @@ class CaptureAndVisionTests(unittest.TestCase):
                 selector_registry=registry,
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=ocr_service,
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=ocr_service,
+
                     selector_registry=registry,
                 ),
-            )
+            ocr_service=ocr_service)
 
             observation = builder.build(screenshot)
 
@@ -3159,11 +3289,13 @@ class CaptureAndVisionTests(unittest.TestCase):
                 selector_registry=build_default_selector_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("X:253", x=73, y=67, width=71, height=24),
                             _ocr_line("Y:447", x=177, y=67, width=69, height=24),
@@ -3180,8 +3312,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("Food Farm", x=160, y=920, width=140, height=24),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -3612,11 +3743,13 @@ class CaptureAndVisionTests(unittest.TestCase):
                 selector_registry=build_default_selector_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("X:253", x=73, y=67, width=71, height=24),
                             _ocr_line("Home", x=63, y=1563, width=76, height=28),
@@ -3627,8 +3760,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("More", x=795, y=1568, width=70, height=25),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -3650,11 +3782,13 @@ class CaptureAndVisionTests(unittest.TestCase):
                 selector_registry=build_default_selector_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("X292Y:540", x=346, y=140, width=223, height=39),
                             _ocr_line("[LFG]Mr_Zero", x=249, y=307, width=126, height=23),
@@ -3667,8 +3801,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("More", x=795, y=1568, width=70, height=25),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -3692,11 +3825,13 @@ class CaptureAndVisionTests(unittest.TestCase):
                 selector_registry=build_default_selector_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("X:99287Y:707414", x=371, y=141, width=222, height=38),
                             _ocr_line("Venom Spider", x=447, y=379, width=135, height=25),
@@ -3708,8 +3843,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("More", x=795, y=1568, width=70, height=25),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -3733,11 +3867,13 @@ class CaptureAndVisionTests(unittest.TestCase):
                 selector_registry=build_default_selector_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("X:101 4Y:695", x=371, y=146, width=197, height=30),
                             _ocr_line("Enchanted Reptilian", x=194, y=582, width=192, height=25),
@@ -3749,8 +3885,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("More", x=795, y=1568, width=70, height=25),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -3863,11 +3998,13 @@ class CaptureAndVisionTests(unittest.TestCase):
                 selector_registry=build_default_selector_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Build", x=27, y=354, width=65, height=28),
                             _ocr_line("Alliance", x=48, y=1500, width=124, height=32),
@@ -3877,8 +4014,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("Build", x=450, y=840, width=90, height=28),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -3987,11 +4123,13 @@ class CaptureAndVisionTests(unittest.TestCase):
                 selector_registry=build_default_selector_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Build", x=27, y=354, width=65, height=28),
                             _ocr_line("Alliance", x=48, y=1500, width=124, height=32),
@@ -3999,17 +4137,18 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("Castle", x=310, y=610, width=120, height=28),
                         )
                     )
-                ),
-            )
+                )
             shifted_builder = ObservationBuilder(
                 selector_registry=build_default_selector_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Build", x=27, y=354, width=65, height=28),
                             _ocr_line("Alliance", x=48, y=1500, width=124, height=32),
@@ -4017,8 +4156,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("Castle", x=528, y=744, width=120, height=28),
                         )
                     )
-                ),
-            )
+                )
             initial_screenshot = screenshot_service.capture(
                 _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
                 artifact_directory="k230_home_viewport_initial",
@@ -4070,14 +4208,16 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="home_city_popup",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Build", x=27, y=354, width=65, height=28),
                             _ocr_line("Bag", x=455, y=1565, width=54, height=32),
@@ -4088,8 +4228,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("Join/Apply", x=607, y=888, width=178, height=44),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -4114,22 +4253,23 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="exit_game_cancel_right",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Exit the game?", x=59, y=385, width=134, height=22),
                             _ocr_line("Confirm", x=122, y=536, width=73, height=20),
                             _ocr_line("Cancel", x=351, y=533, width=63, height=23),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -4156,21 +4296,22 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="world_map_disconnect_popup",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Disconnected. Reconnect now?[-10013]", x=47, y=382, width=422, height=35),
                             _ocr_line("Confirm", x=231, y=533, width=107, height=34),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -4346,14 +4487,16 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="bluestacks_android_home",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Search for games & apps", x=125, y=56, width=113, height=16),
                             _ocr_line("Store", x=86, y=215, width=44, height=20),
@@ -4361,8 +4504,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("Puzzles & Conquest", x=359, y=217, width=146, height=17),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot, request=ObservationRequest.full_runtime_default())
 
@@ -4382,14 +4524,16 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="research_queue_popup",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Research Queue", x=288, y=427, width=328, height=45),
                             _ocr_line("1st Research Queue", x=213, y=544, width=265, height=30),
@@ -4397,8 +4541,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("Idle", x=208, y=596, width=58, height=33),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -4417,14 +4560,16 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="google_play_games_popup",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Google Play Games", x=369, y=440, width=214, height=27),
                             _ocr_line("Create a Play Games profile", x=233, y=960, width=424, height=30),
@@ -4433,8 +4578,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("Next", x=782, y=1530, width=56, height=22),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -4494,14 +4638,16 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="hero_offer_popup",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("5 Hero", x=27, y=65, width=138, height=35),
                             _ocr_line("Savannah", x=68, y=113, width=94, height=22),
@@ -4509,8 +4655,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("One-time", x=230, y=854, width=81, height=21),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -4532,14 +4677,16 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="top_up_offer_popup",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Complete 1st Top-up to Obtain Yune", x=72, y=352, width=382, height=68),
                             _ocr_line("Obtain Now", x=176, y=500, width=180, height=28),
@@ -4547,8 +4694,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("Top Up", x=188, y=856, width=150, height=34),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -4609,23 +4755,21 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             ocr_service = _RecordingOcrService(lines=())
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
-                enricher=PncObservationEnricher(ocr_service=ocr_service),
+                enricher=PncObservationEnricher(),
+            ocr_service=ocr_service,
             )
 
             observation = builder.build(screenshot)
 
-            self.assertEqual(observation.screen_type, ScreenType.PNC_POPUP)
-            self.assertTrue(observation.blocking_popup)
-            close_button = observation.require(UiElementId.PNC_POPUP_CLOSE_BUTTON)
-            self.assertEqual(close_button.source_kind, VisibleElementSourceKind.GEOMETRY)
-            self.assertAlmostEqual(close_button.action_point[0] / image.width, 0.903, delta=0.02)
-            self.assertAlmostEqual(close_button.action_point[1] / image.height, 0.201, delta=0.02)
+            self.assertEqual(observation.screen_type, ScreenType.UNKNOWN)
+            self.assertFalse(observation.blocking_popup)
+            self.assertFalse(observation.has(UiElementId.PNC_POPUP_CLOSE_BUTTON))
             self.assertEqual(ocr_service.read_result_calls, 1)
 
     def test_observation_builder_accepts_shifted_x_owned_by_modal_text_cluster(self) -> None:
@@ -4770,13 +4914,14 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="crossed_artwork",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
-                enricher=PncObservationEnricher(ocr_service=_FakeOcrService(lines=())),
+                enricher=PncObservationEnricher(),
+            ocr_service=_FakeOcrService(lines=()),
             )
 
             observation = builder.build(screenshot)
@@ -4800,13 +4945,14 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="wide_crossed_badge",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
-                enricher=PncObservationEnricher(ocr_service=_FakeOcrService(lines=())),
+                enricher=PncObservationEnricher(),
+            ocr_service=_FakeOcrService(lines=()),
             )
 
             observation = builder.build(screenshot)
@@ -4831,13 +4977,14 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             ocr_service = _RecordingOcrService(lines=())
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
-                enricher=PncObservationEnricher(ocr_service=ocr_service),
+                enricher=PncObservationEnricher(),
+            ocr_service=ocr_service,
             )
 
             observation = builder.build(
@@ -4845,12 +4992,10 @@ class CaptureAndVisionTests(unittest.TestCase):
                 request=ObservationRequest.building_upgrade_warning_follow_up(),
             )
 
-            self.assertEqual(observation.screen_type, ScreenType.PNC_BUILDING_UPGRADE_WARNING)
+            self.assertEqual(observation.screen_type, ScreenType.UNKNOWN)
             self.assertFalse(observation.blocking_popup)
-            confirm = observation.require(UiElementId.PNC_BUILDING_UPGRADE_WARNING_CONFIRM_BUTTON)
-            self.assertEqual(confirm.action_point, (648, 880))
-            self.assertEqual(confirm.source_kind, VisibleElementSourceKind.GEOMETRY)
-            self.assertEqual(ocr_service.read_result_calls, 0)
+            self.assertFalse(observation.has(UiElementId.PNC_BUILDING_UPGRADE_WARNING_CONFIRM_BUTTON))
+            self.assertEqual(ocr_service.read_result_calls, 1)
 
     def test_observation_builder_classifies_vip_daily_reset_popup_from_ocr(self) -> None:
         """Recognizes the VIP daily-reset popup as a dedicated blocking screen with a tappable Close button."""
@@ -4859,30 +5004,31 @@ class CaptureAndVisionTests(unittest.TestCase):
             root = Path(temp_directory)
             screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
             screenshot = screenshot_service.capture(
-                _FakeScreenshotSession(_encode_png(Image.new("RGB", (384, 633), (15, 28, 68)))),
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (540, 960), (15, 28, 68)))),
                 artifact_directory="vip_daily_reset_popup",
                 label="vip_daily_reset_popup",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
-                            _ocr_line("VIP", x=176, y=222, width=43, height=24),
-                            _ocr_line("Log in every day to get VIP pts.", x=98, y=246, width=208, height=22),
-                            _ocr_line("Gain VIP pts: 96", x=113, y=278, width=160, height=24),
-                            _ocr_line("Consec. login days: 2", x=93, y=312, width=190, height=22),
-                            _ocr_line("Pts to gain tomorrow: 112", x=90, y=339, width=205, height=20),
-                            _ocr_line("Close", x=155, y=407, width=75, height=28),
+                            _ocr_line("VIP", x=176, y=336, width=43, height=24),
+                            _ocr_line("Log in every day to get VIP pts.", x=98, y=373, width=208, height=22),
+                            _ocr_line("Gain VIP pts: 96", x=113, y=422, width=160, height=24),
+                            _ocr_line("Consec. login days: 2", x=93, y=473, width=190, height=22),
+                            _ocr_line("Pts to gain tomorrow: 112", x=90, y=514, width=205, height=20),
+                            _ocr_line("Close", x=155, y=617, width=75, height=28),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -4904,14 +5050,16 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="hero_offer_near_match",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("5 Hero", x=27, y=65, width=138, height=35),
                             _ocr_line("Savannah", x=68, y=113, width=94, height=22),
@@ -4919,8 +5067,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("3900%", x=410, y=397, width=87, height=68),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -4940,14 +5087,16 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="bag_live_like",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Bag", x=177, y=16, width=100, height=64),
                             _ocr_line("Bag", x=184, y=123, width=82, height=52),
@@ -4956,14 +5105,41 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("Use", x=725, y=327, width=64, height=37),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
             self.assertEqual(observation.screen_type, ScreenType.PNC_BAG)
             self.assertTrue(observation.has(UiElementId.PNC_BAG_MAIN_TAB_BAG))
-            self.assertTrue(observation.has(UiElementId.PNC_BAG_USE_BUTTON))
+            self.assertFalse(observation.has(UiElementId.PNC_BAG_USE_BUTTON))
+
+    def test_bag_without_resource_chrome_does_not_read_body_rows(self) -> None:
+        """Bag identity without the Resource subtab must not authorize body parsing."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                artifact_directory="bag_missing_resource_chrome",
+                label="bag_missing_resource_chrome",
+            )
+            ocr_service = _RecordingOcrService(
+                lines=(_ocr_line("Bag", x=177, y=16, width=100, height=64),)
+            )
+            builder = ObservationBuilder(
+                selector_registry=_minimal_runtime_registry(),
+                selector_engine=ImageSelectorEngine(template_matcher=OpenCvTemplateMatcher()),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(),
+                ocr_service=ocr_service,
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.UNKNOWN)
+            self.assertEqual(0, ocr_service.read_text_calls)
+            self.assertFalse(observation.list_entries)
 
     def test_observation_builder_classifies_alliance_join_from_live_like_ocr(self) -> None:
         """Recognizes the join-alliance landing when the account has no alliance yet."""
@@ -4977,22 +5153,23 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="alliance_join_live_like",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Join Alliance", x=300, y=627, width=305, height=49),
                             _ocr_line("Join", x=642, y=1198, width=78, height=39),
                             _ocr_line("Create Alliance", x=131, y=1218, width=259, height=36),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -5005,7 +5182,7 @@ class CaptureAndVisionTests(unittest.TestCase):
             root = Path(temp_directory)
             screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
             screenshot = screenshot_service.capture(
-                _FakeScreenshotSession(_encode_png(Image.new("RGB", (400, 800), (15, 28, 68)))),
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (540, 960), (15, 28, 68)))),
                 artifact_directory="k157_daily_to_do",
                 label="daily_to_do_live_like",
             )
@@ -5013,22 +5190,23 @@ class CaptureAndVisionTests(unittest.TestCase):
                 selector_registry=build_default_selector_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
-                            _ocr_line("Daily To-Do", x=110, y=93, width=160, height=28),
-                            _ocr_line("Camp", x=17, y=150, width=55, height=21),
-                            _ocr_line("Daily Quest", x=21, y=386, width=95, height=22),
-                            _ocr_line("Go", x=251, y=179, width=37, height=20),
-                            _ocr_line("Go", x=251, y=244, width=37, height=20),
-                            _ocr_line("Tap to close", x=131, y=716, width=112, height=22),
+                            _ocr_line("Daily To-Do", x=110, y=112, width=160, height=28),
+                            _ocr_line("Camp", x=17, y=180, width=55, height=21),
+                            _ocr_line("Daily Quest", x=21, y=463, width=95, height=22),
+                            _ocr_line("Go", x=339, y=215, width=37, height=20),
+                            _ocr_line("Go", x=339, y=293, width=37, height=20),
+                            _ocr_line("Tap to close", x=131, y=859, width=112, height=22),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -5047,14 +5225,16 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="research_tree_live_like",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Military", x=107, y=9, width=109, height=38),
                             _ocr_line("Troop Size I", x=229, y=340, width=90, height=20),
@@ -5063,8 +5243,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("0/5", x=230, y=615, width=27, height=16),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -5082,14 +5261,16 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="academy_live_like",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Institute", x=108, y=12, width=115, height=29),
                             _ocr_line("Upgrade", x=404, y=263, width=88, height=25),
@@ -5099,13 +5280,12 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("Fortification", x=306, y=415, width=99, height=17),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
             self.assertEqual(observation.screen_type, ScreenType.PNC_INSTITUTE)
-            self.assertTrue(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
+            self.assertFalse(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
             self.assertTrue(observation.has(UiElementId.PNC_INSTITUTE_DEVELOPMENT_BUTTON))
             self.assertTrue(observation.has(UiElementId.PNC_INSTITUTE_ECONOMY_BUTTON))
 
@@ -5121,21 +5301,22 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="academy_near_match",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Institute", x=108, y=12, width=115, height=29),
                             _ocr_line("Rewards", x=220, y=300, width=100, height=24),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -5153,21 +5334,22 @@ class CaptureAndVisionTests(unittest.TestCase):
                 label="research_tree_near_match",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Military", x=107, y=9, width=109, height=38),
                             _ocr_line("Rewards", x=220, y=300, width=100, height=24),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -5180,7 +5362,7 @@ class CaptureAndVisionTests(unittest.TestCase):
             (
                 "bag",
                 (
-                    _ocr_line("Bag", x=360, y=240, width=72, height=28),
+                    _ocr_line("Inventory", x=360, y=240, width=110, height=28),
                     _ocr_line("Alliance", x=48, y=1500, width=124, height=32),
                     _ocr_line("More", x=740, y=1500, width=74, height=32),
                 ),
@@ -5221,18 +5403,19 @@ class CaptureAndVisionTests(unittest.TestCase):
                     label=label,
                 )
                 builder = ObservationBuilder(
-                    selector_registry=SelectorRegistry(selectors=()),
+                    selector_registry=_minimal_runtime_registry(),
                     selector_engine=ImageSelectorEngine(
                         template_matcher=OpenCvTemplateMatcher(),
-                        ocr_service=UnavailableOcrService(),
+
                     ),
                     screen_classifier=ScreenClassifier(),
                     enricher=PncObservationEnricher(
-                        ocr_service=_FakeOcrService(
+
+                    ),
+            ocr_service=_FakeOcrService(
                             lines=lines,
                         )
-                    ),
-                )
+                    )
 
             observation = builder.build(screenshot)
 
@@ -5280,8 +5463,9 @@ class CaptureAndVisionTests(unittest.TestCase):
                     status=SelectorStatus.SCREENSHOT_SEEDED,
                     click=ClickDefinition(),
                 ),
+                )
             )
-        )
+        registry = _with_runtime_text_fields(registry)
         selector_engine = _RecordingSelectorEngine(
             responses=[
                 (
@@ -5308,14 +5492,15 @@ class CaptureAndVisionTests(unittest.TestCase):
             selector_registry=registry,
             selector_engine=selector_engine,
             screen_classifier=ScreenClassifier(),
-            enricher=DefaultObservationEnricher(),
+            enricher=_ClearObservationEnricher(),
         )
         screenshot = type(
             "Captured",
             (),
             {
-                "image": Image.new("RGB", (100, 100), (0, 0, 0)),
+                "image": Image.new("RGB", (540, 960), (0, 0, 0)),
                 "artifact": type("Artifact", (), {"path": Path("synthetic.png"), "captured_at": None})(),
+                "frame_ref": make_captured_frame(b"").frame_ref,
             },
         )()
 
@@ -5344,14 +5529,15 @@ class CaptureAndVisionTests(unittest.TestCase):
             selector_registry=registry,
             selector_engine=selector_engine,
             screen_classifier=ScreenClassifier(),
-            enricher=PncObservationEnricher(ocr_service=ocr_service, selector_registry=registry),
-        )
+            enricher=PncObservationEnricher( selector_registry=registry),
+            ocr_service=ocr_service)
         screenshot = type(
             "Captured",
             (),
             {
                 "image": Image.new("RGB", (100, 100), (0, 0, 0)),
                 "artifact": type("Artifact", (), {"path": Path("synthetic.png"), "captured_at": None})(),
+                "frame_ref": make_captured_frame(b"").frame_ref,
             },
         )()
 
@@ -5360,7 +5546,7 @@ class CaptureAndVisionTests(unittest.TestCase):
         self.assertEqual(observation.screen_type, ScreenType.PNC_WORLD_MAP)
         self.assertEqual(len(selector_engine.requested_selector_ids), 1)
         self.assertEqual(selector_engine.requested_selector_ids[0], ())
-        self.assertEqual(ocr_service.read_result_calls, 0)
+        self.assertEqual(ocr_service.read_result_calls, 1)
 
     def test_observation_builder_keeps_click_only_geometry_hidden_without_detection(self) -> None:
         """Does not auto-materialize relative click regions that still require explicit visibility proof."""
@@ -5391,7 +5577,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                 SelectorDefinition(
                     id=UiElementId.PNC_HOME_BUILD_BUTTON,
                     screens=(ScreenType.PNC_HOME_CITY,),
-                    detection_kind=DetectionKind.PLANNED,
+                    detection_kind=DetectionKind.GUARDED_GEOMETRY,
                     status=SelectorStatus.PLANNED,
                     click=ClickDefinition(),
                     relative_bounds=RelativeBounds(
@@ -5426,18 +5612,20 @@ class CaptureAndVisionTests(unittest.TestCase):
                 (),
             ]
         )
+        registry = _with_runtime_text_fields(registry)
         builder = ObservationBuilder(
             selector_registry=registry,
             selector_engine=selector_engine,
             screen_classifier=ScreenClassifier(),
-            enricher=DefaultObservationEnricher(),
+            enricher=_ClearObservationEnricher(),
         )
         screenshot = type(
             "Captured",
             (),
             {
-                "image": Image.new("RGB", (100, 100), (0, 0, 0)),
+                "image": Image.new("RGB", (540, 960), (0, 0, 0)),
                 "artifact": type("Artifact", (), {"path": Path("synthetic.png"), "captured_at": None})(),
+                "frame_ref": make_captured_frame(b"").frame_ref,
             },
         )()
 
@@ -5451,26 +5639,28 @@ class CaptureAndVisionTests(unittest.TestCase):
 
         ocr_service = _RecordingOcrService(lines=())
         builder = ObservationBuilder(
-            selector_registry=SelectorRegistry(selectors=()),
+            selector_registry=_minimal_runtime_registry(),
             selector_engine=ImageSelectorEngine(
                 template_matcher=OpenCvTemplateMatcher(),
-                ocr_service=ocr_service,
+
             ),
             screen_classifier=ScreenClassifier(),
-            enricher=PncObservationEnricher(ocr_service=ocr_service),
-        )
+            enricher=PncObservationEnricher(),
+            ocr_service=ocr_service,
+            )
         screenshot = type(
             "Captured",
             (),
             {
                 "image": Image.new("RGB", (100, 100), (0, 0, 0)),
                 "artifact": type("Artifact", (), {"path": Path("synthetic.png"), "captured_at": None})(),
+                "frame_ref": make_captured_frame(b"").frame_ref,
             },
         )()
 
         builder.build(screenshot, request=ObservationRequest.base())
 
-        self.assertEqual(ocr_service.read_result_calls, 0)
+        self.assertEqual(ocr_service.read_result_calls, 1)
         self.assertEqual(ocr_service.read_text_calls, 0)
 
     def test_observation_builder_types_hero_showdown_audit_screens(self) -> None:
@@ -5568,24 +5758,26 @@ class CaptureAndVisionTests(unittest.TestCase):
 
         ocr_service = _RecordingOcrService(lines=())
         builder = ObservationBuilder(
-            selector_registry=SelectorRegistry(selectors=()),
+            selector_registry=_minimal_runtime_registry(),
             selector_engine=ImageSelectorEngine(
                 template_matcher=OpenCvTemplateMatcher(),
-                ocr_service=ocr_service,
+
             ),
             screen_classifier=ScreenClassifier(),
-            enricher=PncObservationEnricher(ocr_service=ocr_service),
-        )
+            enricher=PncObservationEnricher(),
+            ocr_service=ocr_service,
+            )
         screenshot = type(
             "Captured",
             (),
             {
                 "image": Image.new("RGB", (100, 100), (0, 0, 0)),
                 "artifact": type("Artifact", (), {"path": Path("synthetic.png"), "captured_at": None})(),
+                "frame_ref": make_captured_frame(b"").frame_ref,
             },
         )()
 
-        builder.build(screenshot, request=ObservationRequest.runtime_default())
+        builder.build(screenshot, request=ObservationRequest.full_runtime_default())
 
         self.assertEqual(ocr_service.read_result_calls, 1)
 
@@ -5618,7 +5810,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                 SelectorDefinition(
                     id=UiElementId.PNC_BOTTOM_NAV_MORE,
                     screens=(ScreenType.PNC_HOME_CITY,),
-                    detection_kind=DetectionKind.PLANNED,
+                    detection_kind=DetectionKind.GUARDED_GEOMETRY,
                     status=SelectorStatus.CLICK_MAPPED,
                     click=ClickDefinition(),
                     relative_bounds=RelativeBounds(
@@ -5656,14 +5848,15 @@ class CaptureAndVisionTests(unittest.TestCase):
             selector_registry=registry,
             selector_engine=selector_engine,
             screen_classifier=ScreenClassifier(),
-            enricher=DefaultObservationEnricher(),
+            enricher=_ClearObservationEnricher(),
         )
         screenshot = type(
             "Captured",
             (),
             {
-                "image": Image.new("RGB", (100, 100), (0, 0, 0)),
+                "image": Image.new("RGB", (900, 1600), (0, 0, 0)),
                 "artifact": type("Artifact", (), {"path": Path("synthetic.png"), "captured_at": None})(),
+                "frame_ref": make_captured_frame(b"").frame_ref,
             },
         )()
 
@@ -5707,15 +5900,10 @@ class CaptureAndVisionTests(unittest.TestCase):
                 SelectorDefinition(
                     id=UiElementId.PNC_BOTTOM_NAV_MORE,
                     screens=(ScreenType.PNC_HOME_CITY,),
-                    detection_kind=DetectionKind.PLANNED,
+                    detection_kind=DetectionKind.GUARDED_GEOMETRY,
                     status=SelectorStatus.CLICK_MAPPED,
                     click=ClickDefinition(),
-                    relative_bounds=RelativeBounds(
-                        x_ratio=0.70,
-                        y_ratio=0.80,
-                        width_ratio=0.10,
-                        height_ratio=0.10,
-                    ),
+                    relative_bounds=None,
                 ),
             )
         )
@@ -5746,20 +5934,22 @@ class CaptureAndVisionTests(unittest.TestCase):
             selector_engine=selector_engine,
             screen_classifier=ScreenClassifier(),
             enricher=PncObservationEnricher(
-                ocr_service=_FakeOcrService(
+
+            ),
+            ocr_service=_FakeOcrService(
                     lines=(
-                        _ocr_line("Alliance", x=48, y=92, width=124, height=8),
-                        _ocr_line("More", x=160, y=92, width=74, height=8),
+                        _ocr_line("Alliance", x=108, y=883, width=124, height=8),
+                        _ocr_line("More", x=360, y=883, width=74, height=8),
                     )
                 )
-            ),
-        )
+            )
         screenshot = type(
             "Captured",
             (),
             {
-                "image": Image.new("RGB", (240, 100), (0, 0, 0)),
+                "image": Image.new("RGB", (540, 960), (0, 0, 0)),
                 "artifact": type("Artifact", (), {"path": Path("synthetic.png"), "captured_at": None})(),
+                "frame_ref": make_captured_frame(b"").frame_ref,
             },
         )()
 
@@ -5779,19 +5969,21 @@ class CaptureAndVisionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_directory:
             root = Path(temp_directory)
             screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
-            image = Image.new("RGB", (480, 854), (15, 28, 68))
+            image = Image.new("RGB", (540, 960), (15, 28, 68))
             for x in range(410, 470):
                 for y in range(520, 590):
                     image.putpixel((x, y), (40, 200, 70))
             observation_builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Manage Char.", x=132, y=18, width=152, height=24),
                             _ocr_line("K230 Kingdom", x=98, y=494, width=128, height=18),
@@ -5802,8 +5994,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("Castle Level 11", x=98, y=657, width=132, height=18),
                         )
                     )
-                ),
-            )
+                )
             roster_store = CastleRosterStore(
                 path=root / "castles.yaml",
                 rosters=(
@@ -5842,19 +6033,21 @@ class CaptureAndVisionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_directory:
             root = Path(temp_directory)
             screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
-            image = Image.new("RGB", (480, 854), (15, 28, 68))
+            image = Image.new("RGB", (540, 960), (15, 28, 68))
             for x in range(410, 470):
                 for y in range(520, 590):
                     image.putpixel((x, y), (40, 200, 70))
             observation_builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Manage Char.", x=132, y=18, width=152, height=24),
                             _ocr_line("K230 Kingdom", x=98, y=494, width=128, height=18),
@@ -5862,8 +6055,7 @@ class CaptureAndVisionTests(unittest.TestCase):
                             _ocr_line("Castle Level 9", x=98, y=549, width=126, height=18),
                         )
                     )
-                ),
-            )
+                )
             roster_store = CastleRosterStore(
                 path=root / "castles.yaml",
                 rosters=(
@@ -6073,15 +6265,15 @@ class CaptureAndVisionTests(unittest.TestCase):
                         selector_registry=registry,
                         selector_engine=ImageSelectorEngine(
                             template_matcher=OpenCvTemplateMatcher(),
-                            ocr_service=UnavailableOcrService(),
+
                         ),
                         screen_classifier=ScreenClassifier(),
                         enricher=PncObservationEnricher(
-                            ocr_service=ocr_service,
+
                             selector_registry=registry,
                         ),
-                        debug_artifact_collector=ObservationDebugArtifactCollector(ocr_service=ocr_service),
-                    )
+                        debug_artifact_collector=ObservationDebugArtifactCollector(),
+            ocr_service=ocr_service)
                     service = ObservationService(
                         screenshot_service=screenshot_service,
                         observation_builder=builder,
@@ -6092,7 +6284,7 @@ class CaptureAndVisionTests(unittest.TestCase):
 
                     capture = service.capture_observation("world_scan", request=persist_request)
 
-                    expected_screen_type = ScreenType.UNKNOWN if persist_request is not None else ScreenType.PNC_WORLD_MAP
+                    expected_screen_type = ScreenType.PNC_WORLD_MAP
                     self.assertEqual(capture.observation.screen_type, expected_screen_type)
                     if expect_artifact:
                         self.assertIsNotNone(capture.screenshot.artifact_path)
@@ -6152,17 +6344,18 @@ def _build_observation_from_ocr_lines(lines: tuple[OcrLine, ...]) -> Observation
     """Builds one full-runtime observation from deterministic OCR lines and reviewed geometry."""
 
     registry = build_default_selector_registry()
+    ocr_service = _FakeOcrService(lines=lines)
     builder = ObservationBuilder(
         selector_registry=registry,
         selector_engine=ImageSelectorEngine(
             template_matcher=OpenCvTemplateMatcher(),
-            ocr_service=UnavailableOcrService(),
+
         ),
         screen_classifier=ScreenClassifier(),
         enricher=PncObservationEnricher(
-            ocr_service=_FakeOcrService(lines=lines),
             selector_registry=registry,
         ),
+        ocr_service=ocr_service,
     )
     screenshot = type(
         "Captured",
@@ -6170,6 +6363,7 @@ def _build_observation_from_ocr_lines(lines: tuple[OcrLine, ...]) -> Observation
         {
             "image": Image.new("RGB", (900, 1600), (15, 28, 68)),
             "artifact": type("Artifact", (), {"path": Path("hero_arena_synthetic.png"), "captured_at": None})(),
+            "frame_ref": make_captured_frame(b"").frame_ref,
         },
     )()
     return builder.build(screenshot, request=ObservationRequest.full_runtime_default())

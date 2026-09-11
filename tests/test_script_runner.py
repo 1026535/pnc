@@ -22,6 +22,7 @@ from pnc_automation.app.authoring.config.models import (
     RuntimeConfig,
 )
 from pnc_automation.core.infra.capture.screenshot_service import ScreenshotService
+from pnc_automation.core.vision.ocr.ocr_service import ObservationOcrContext, UnavailableOcrService
 from pnc_automation.core.infra.emulator.bluestacks_instance import BlueStacksInstance
 from pnc_automation.core.infra.storage.artifact_store import ArtifactStore
 from pnc_automation.bluestacks_management.instance_lease import InstanceLeaseRegistry
@@ -609,10 +610,16 @@ class ScriptRunnerTests(unittest.TestCase):
 class _WorldMapObservationBuilder:
     """Builds one deterministic world-map observation while preserving screenshot provenance."""
 
-    def build(self, screenshot: object, *, request: ObservationRequest | None = None) -> object:
+    def build(
+        self,
+        screenshot: object,
+        *,
+        request: ObservationRequest | None = None,
+        ocr_context: ObservationOcrContext | None = None,
+    ) -> object:
         """Returns a typed world-map observation with the current screenshot path and capture time."""
 
-        del request
+        del request, ocr_context
         return replace(
             make_observation(
                 ScreenType.PNC_WORLD_MAP,
@@ -634,6 +641,16 @@ class _WorldMapObservationBuilder:
             ),
             artifact_path=screenshot.artifact_path,
             captured_at=screenshot.captured_at,
+        )
+
+    def create_ocr_context(self, screenshot: object) -> ObservationOcrContext:
+        """Binds the canonical per-capture context required by ObservationService."""
+
+        return ObservationOcrContext(
+            image=screenshot.image,
+            backend=UnavailableOcrService(),
+            frame_ref=screenshot.frame_ref,
+            backend_revision="test-world-map-builder",
         )
 
 

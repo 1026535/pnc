@@ -11,11 +11,18 @@ from typing import Any
 
 from pnc_automation.app.authoring.config.models import CastleIdentity, PncAccountCastleRosterConfig
 from pnc_automation.core.errors import SelectorResolutionError
+from pnc_automation.core.infra.emulator.provenance import FrameRef
 from pnc_automation.app.pnc.domain.chat import ChatChannel
 from pnc_automation.app.pnc.domain.mail import MailboxType
 from pnc_automation.app.pnc.domain.popup import PopupOverlayObservation
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
+from pnc_automation.app.pnc.domain.screen_decision import (
+    BLOCKING_SCREEN_TYPES,
+    GuardVerdict,
+    ScreenDecision,
+    ScreenEvidence,
+)
 from pnc_automation.core.vision.image.models import Bounds
 from pnc_automation.core.text.normalization import normalize_ocr_text
 
@@ -38,7 +45,10 @@ class VisibleElement:
     source_kind: VisibleElementSourceKind = VisibleElementSourceKind.TEMPLATE
     extracted_text: str | None = None
     action_point: tuple[int, int] | None = None
-
+    identity_evidence: bool = True
+    frame_ref: FrameRef | None = None
+    source_screen: ScreenType | None = None
+    source_layout_id: str | None = None
 
 class ListEntryKind(StrEnum):
     """Typed list-based collections observed on dynamic screens."""
@@ -59,6 +69,18 @@ class ListEntryKind(StrEnum):
     DAILY_QUEST = "daily_quest"
     RESOURCE_ITEM = "resource_item"
     RESOURCE_INVENTORY_EXCLUSION = "resource_inventory_exclusion"
+    RESOURCE_INVENTORY_UNRESOLVED = "resource_inventory_unresolved"
+
+
+class RowRecognitionStatus(StrEnum):
+    """Describes whether a dynamic row is safe to consume as an actionable target."""
+
+    NOT_EVALUATED = "not_evaluated"
+    COMPLETE = "complete"
+    CLIPPED = "clipped"
+    UNREADABLE = "unreadable"
+    AMBIGUOUS = "ambiguous"
+    NO_ACTION = "no_action"
 
 
 class CurrentCastleEvidenceKind(StrEnum):
@@ -119,6 +141,23 @@ class DetectedListEntry:
     selected: bool = False
     action_point: tuple[int, int] | None = None
     metadata: Mapping[str, Any] = field(default_factory=dict)
+    row_status: RowRecognitionStatus = RowRecognitionStatus.NOT_EVALUATED
+    action_bounds: Bounds | None = None
+    frame_ref: FrameRef | None = None
+    source_screen: ScreenType | None = None
+    source_layout_id: str | None = None
+
+    def __post_init__(self) -> None:
+        """Require independently bounded action geometry for complete actionable rows."""
+
+        if self.row_status != RowRecognitionStatus.COMPLETE:
+            return
+        if self.action_point is None or self.action_bounds is None:
+            raise ValueError("Complete rows require an action point and action bounds.")
+        if not self.bounds.contains_bounds(self.action_bounds):
+            raise ValueError("Complete row action bounds must remain inside the row bounds.")
+        if not self.action_bounds.contains_point(self.action_point):
+            raise ValueError("Complete row action point must lie inside its action bounds.")
 
     def require_metadata(self, key: str) -> Any:
         """Returns a required metadata field or fails fast."""
@@ -403,7 +442,7 @@ class SpatialSurfaceObservation:
 class Observation:
     """Authoritative interpreted state for one screenshot."""
 
-    screen_type: ScreenType
+    decision: ScreenDecision
     visible_elements: Mapping[UiElementId, VisibleElement]
     list_entries: tuple[DetectedListEntry, ...] = ()
     spatial_surface: SpatialSurfaceObservation | None = None
@@ -411,7 +450,6 @@ class Observation:
     image_size: tuple[int, int] | None = None
     frame_fingerprint: str | None = None
     captured_at: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
-    blocking_popup: bool = False
     popup_overlay: PopupOverlayObservation | None = None
     current_castle: CastleIdentity | None = None
     current_castle_evidence: CurrentCastleEvidenceKind | None = None
@@ -426,6 +464,19 @@ class Observation:
     text_field_states: Mapping[UiElementId, ObservedTextFieldState] = field(default_factory=dict)
     chat_draft_empty: bool | None = None
     chat_draft_text: str | None = None
+    frame_ref: FrameRef | None = None
+
+    @property
+    def screen_type(self) -> ScreenType:
+        """Returns the effective screen owned by the immutable decision."""
+
+        return self.decision.effective_screen
+
+    @property
+    def blocking_popup(self) -> bool:
+        """Returns the derived global guard state for this observation."""
+
+        return self.decision.guard == GuardVerdict.BLOCKED or self.screen_type in BLOCKING_SCREEN_TYPES
 
     @property
     def current_castle_name(self) -> str | None:
