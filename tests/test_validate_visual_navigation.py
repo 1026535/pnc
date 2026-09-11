@@ -2,6 +2,7 @@
 
 import unittest
 import json
+from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
@@ -15,10 +16,12 @@ from pnc_automation.app.pnc.domain.action_requests import (
 )
 from pnc_automation.app.authoring.config.models import CastleIdentity
 from pnc_automation.app.pnc.domain.observation import (
+    Bounds,
     CurrentCastleEvidenceKind,
     ListEntryKind,
     SpatialSurfaceType,
 )
+from pnc_automation.app.pnc.domain.mail import MailboxType
 from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict, ScreenDecision, ScreenEvidence
 from pnc_automation.app.automation.engine.read_only_policy import ReadOnlyProbePolicy
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
@@ -378,6 +381,37 @@ class VisualNavigationSafetyTests(unittest.TestCase):
         self.assertNotIn(UiElementId.PNC_MAIL_THREAD_ROW, ALLOWED_TAPS)
         self.assertNotIn(UiElementId.PNC_MAIL_THREAD_DELETE_BUTTON, ALLOWED_TAPS)
         self.assertNotIn(UiElementId.PNC_MORE_VIP, ALLOWED_TAPS)
+        self.assertIn(UiElementId.PNC_MAIL_COMPOSE_BUTTON, ALLOWED_TAPS)
+        self.assertIn(UiElementId.PNC_MAIL_COMPOSE_CLOSE_BUTTON, ALLOWED_TAPS)
+        self.assertIn(UiElementId.PNC_WORLD_EXPAND_BUTTON, ALLOWED_TAPS)
+        self.assertIn(UiElementId.PNC_WORLD_OVERVIEW_CLOSE_BUTTON, ALLOWED_TAPS)
+        self.assertNotIn(UiElementId.PNC_MAIL_COMPOSE_SEND_BUTTON, ALLOWED_TAPS)
+        self.assertNotIn(UiElementId.PNC_WORLD_OVERVIEW_RECENTER_REGION, ALLOWED_TAPS)
+        self.assertNotIn(UiElementId.PNC_WORLD_OVERVIEW_WORLD_ICON, ALLOWED_TAPS)
+
+    def test_new_routes_declare_fixed_budgets_and_source_guards(self) -> None:
+        self.assertEqual(8, ROUTE_DECLARATIONS[ProbeRoute.NAVIGATION].max_input_attempts)
+        self.assertEqual(12, ROUTE_DECLARATIONS[ProbeRoute.MAIL_COMPOSE].max_input_attempts)
+        self.assertEqual(10, ROUTE_DECLARATIONS[ProbeRoute.WORLD_OVERVIEW].max_input_attempts)
+        policy = ReadOnlyProbePolicy(
+            enabled=True,
+            allowed_selectors=ALLOWED_TAPS,
+            allowed_selector_screens=PROBE_SELECTOR_SCREENS,
+            allowed_back_screens=PROBE_BACK_SCREENS,
+        )
+        policy.validate(
+            TapAction(selector_id=UiElementId.PNC_MAIL_COMPOSE_BUTTON),
+            make_observation(ScreenType.PNC_MAILBOX_LIST),
+        )
+        policy.validate(
+            TapAction(selector_id=UiElementId.PNC_WORLD_EXPAND_BUTTON),
+            make_observation(ScreenType.PNC_WORLD_MAP),
+        )
+        with self.assertRaises(SelectorResolutionError):
+            policy.validate(
+                TapAction(selector_id=UiElementId.PNC_MAIL_COMPOSE_BUTTON),
+                make_observation(ScreenType.PNC_HOME_CITY),
+            )
 
     def test_alliance_join_is_safe_to_unwind_but_not_to_enter_or_join(self) -> None:
         policy = ReadOnlyProbePolicy(
@@ -589,8 +623,72 @@ class VisualNavigationSafetyTests(unittest.TestCase):
         self.assertEqual("clear", payload["coordinates"]["p2"]["guard"])
         self.assertFalse(payload["coordinates"]["p2"]["coordinate_only"])
 
+    def test_fake_mail_compose_route_uses_typed_compose_and_close_then_returns_home(self) -> None:
+        payload, runtime = _run_fake_probe(ProbeRoute.MAIL_COMPOSE, return_runtime=True)
 
-def _run_fake_probe(route: ProbeRoute) -> dict[str, object]:
+        self.assertEqual("PNC_MAILBOX_LIST", payload["mail_compose"]["source_screen"])
+        self.assertEqual("PNC_MAIL_COMPOSE_POPUP", payload["mail_compose"]["destination_screen"])
+        self.assertEqual("PNC_HOME_CITY", payload["mail_compose"]["return_screen"])
+        self.assertEqual(12, payload["input_budget"]["max_attempts"])
+        self.assertEqual(12, runtime.action_executor.action_executor.configured_max_attempts)
+        self.assertEqual(
+            [
+                UiElementId.PNC_BOTTOM_NAV_MORE,
+                UiElementId.PNC_BOTTOM_NAV_MAIL,
+                UiElementId.PNC_MAIL_ROW_PLAYER_MAIL,
+                UiElementId.PNC_MAIL_COMPOSE_BUTTON,
+                UiElementId.PNC_MAIL_COMPOSE_CLOSE_BUTTON,
+            ],
+            [action.selector_id for action in runtime.action_executor.actions if isinstance(action, TapAction)],
+        )
+        self.assertFalse(any(isinstance(action, InputTextAction) for action in runtime.action_executor.actions))
+        self.assertNotIn(
+            UiElementId.PNC_MAIL_COMPOSE_SEND_BUTTON,
+            [action.selector_id for action in runtime.action_executor.actions if isinstance(action, TapAction)],
+        )
+
+    def test_fake_world_overview_route_parses_context_closes_in_place_and_returns_home(self) -> None:
+        payload, runtime = _run_fake_probe(ProbeRoute.WORLD_OVERVIEW, return_runtime=True)
+
+        overview = payload["world_overview"]
+        self.assertEqual("PNC_WORLD_MAP", overview["source_screen"])
+        self.assertEqual("PNC_WORLD_MAP_OVERVIEW", overview["destination_screen"])
+        self.assertEqual([0, 0], overview["source_coordinate"])
+        self.assertEqual(overview["source_coordinate"], overview["overview_coordinate"])
+        self.assertEqual(overview["source_coordinate"], overview["closed_coordinate"])
+        self.assertEqual("PNC_HOME_CITY", payload["final"]["screen"])
+        self.assertEqual(10, payload["input_budget"]["max_attempts"])
+        self.assertEqual(10, runtime.action_executor.action_executor.configured_max_attempts)
+        selectors = [
+            action.selector_id for action in runtime.action_executor.actions if isinstance(action, TapAction)
+        ]
+        self.assertIn(UiElementId.PNC_WORLD_EXPAND_BUTTON, selectors)
+        self.assertIn(UiElementId.PNC_WORLD_OVERVIEW_CLOSE_BUTTON, selectors)
+        self.assertNotIn(UiElementId.PNC_WORLD_OVERVIEW_RECENTER_REGION, ALLOWED_TAPS)
+
+    def test_empty_player_mailbox_is_typed_applicability_skip_and_unwinds_home(self) -> None:
+        payload, runtime = _run_fake_probe(
+            ProbeRoute.MAIL_COMPOSE,
+            mailbox_empty=True,
+            return_runtime=True,
+        )
+
+        self.assertEqual("applicability_skip", payload["status"])
+        self.assertEqual("observed_empty_player_mailbox", payload["applicability"]["predicate"])
+        self.assertIsNone(payload["mail_compose"]["destination_screen"])
+        self.assertEqual("PNC_HOME_CITY", payload["final"]["screen"])
+        self.assertNotIn(
+            UiElementId.PNC_MAIL_COMPOSE_BUTTON,
+            [action.selector_id for action in runtime.action_executor.actions if isinstance(action, TapAction)],
+        )
+
+
+def _run_fake_probe(
+    route: ProbeRoute,
+    *,
+    mailbox_empty: bool = False,
+    return_runtime: bool = False,
+) -> dict[str, object] | tuple[dict[str, object], "_FakeRuntime"]:
     """Run one route against a typed fake runtime without creating a live session."""
 
     castle = CastleIdentity(kingdom="K287", castle_name="pine cobaye 1")
@@ -615,6 +713,35 @@ def _run_fake_probe(route: ProbeRoute) -> dict[str, object]:
     observations = [make_observation(ScreenType.PNC_HOME_CITY), manage, weak_home]
     if route == ProbeRoute.FIELDS:
         observations.extend((make_observation(ScreenType.PNC_LORD_INFO), weak_home))
+    elif route == ProbeRoute.MAIL_COMPOSE:
+        observations.extend(
+            (
+                make_observation(ScreenType.PNC_MAIL_HUB),
+                make_observation(
+                    ScreenType.PNC_MAILBOX_LIST,
+                    mailbox_type=MailboxType.PLAYER,
+                    mailbox_empty=mailbox_empty,
+                ),
+                *(() if mailbox_empty else (
+                    make_observation(ScreenType.PNC_MAIL_COMPOSE_POPUP),
+                    make_observation(
+                        ScreenType.PNC_MAILBOX_LIST,
+                        mailbox_type=MailboxType.PLAYER,
+                        mailbox_empty=False,
+                    ),
+                )),
+                weak_home,
+            )
+        )
+    elif route == ProbeRoute.WORLD_OVERVIEW:
+        observations.extend(
+            (
+                _fake_world_observation(coordinate_only=False, guard=GuardVerdict.CLEAR, x=0, y=0),
+                _fake_world_overview_observation(),
+                _fake_world_observation(coordinate_only=False, guard=GuardVerdict.CLEAR, x=0, y=0),
+                weak_home,
+            )
+        )
     else:
         p1 = _fake_world_observation(coordinate_only=True, guard=GuardVerdict.CLEAR)
         p2 = _fake_world_observation(coordinate_only=False, guard=GuardVerdict.CLEAR)
@@ -628,10 +755,17 @@ def _run_fake_probe(route: ProbeRoute) -> dict[str, object]:
     )
     with TemporaryDirectory() as directory, patch("tools.validate_visual_navigation.build_application_runner", return_value=app):
         summary_path = run_probe(Path("config.yaml"), "testing", Path(directory), route=route)
-        return json.loads(summary_path.read_text(encoding="utf-8"))
+        payload = json.loads(summary_path.read_text(encoding="utf-8"))
+        return (payload, runtime) if return_runtime else payload
 
 
-def _fake_world_observation(*, coordinate_only: bool, guard: GuardVerdict):
+def _fake_world_observation(
+    *,
+    coordinate_only: bool,
+    guard: GuardVerdict,
+    x: int = 123,
+    y: int = 456,
+):
     """Build a deterministic World Map P1 or P2 observation at one coordinate."""
 
     decision = ScreenDecision(
@@ -644,8 +778,31 @@ def _fake_world_observation(*, coordinate_only: bool, guard: GuardVerdict):
     return make_observation(
         ScreenType.PNC_WORLD_MAP,
         decision=decision,
-        spatial_surface=make_spatial_surface(SpatialSurfaceType.WORLD_MAP, x=123, y=456),
+        spatial_surface=make_spatial_surface(SpatialSurfaceType.WORLD_MAP, x=x, y=y),
     )
+
+
+def _fake_world_overview_observation():
+    """Build a marker-at-origin overview proof that projects back to world (0, 0)."""
+
+    observation = make_observation(
+        ScreenType.PNC_WORLD_MAP_OVERVIEW,
+        visible_ids=(
+            UiElementId.PNC_WORLD_OVERVIEW_MAP_REGION,
+            UiElementId.PNC_WORLD_OVERVIEW_VIEWPORT_MARKER,
+            UiElementId.PNC_WORLD_OVERVIEW_CLOSE_BUTTON,
+        ),
+    )
+    observation.visible_elements[UiElementId.PNC_WORLD_OVERVIEW_MAP_REGION] = replace(
+        observation.visible_elements[UiElementId.PNC_WORLD_OVERVIEW_MAP_REGION],
+        bounds=Bounds(x=0, y=0, width=200, height=200),
+    )
+    observation.visible_elements[UiElementId.PNC_WORLD_OVERVIEW_VIEWPORT_MARKER] = replace(
+        observation.visible_elements[UiElementId.PNC_WORLD_OVERVIEW_VIEWPORT_MARKER],
+        bounds=Bounds(x=0, y=0, width=10, height=10),
+        action_point=(0, 0),
+    )
+    return observation
 
 
 class _FakeRuntime:
@@ -717,10 +874,16 @@ class _FakeObservedExecutor:
     """Executes one fake action by consuming exactly one post-action observation."""
 
     def __init__(self) -> None:
+        self.actions = []
         self.action_executor = SimpleNamespace(
             input_attempts=0,
-            configure_input_attempt_budget=lambda max_attempts, duration_seconds: None,
+            configured_max_attempts=None,
+            configure_input_attempt_budget=self._configure_input_attempt_budget,
         )
+
+    def _configure_input_attempt_budget(self, max_attempts, duration_seconds) -> None:
+        del duration_seconds
+        self.action_executor.configured_max_attempts = max_attempts
 
     def configure_read_only_probe_mode(self, **kwargs) -> None:
         del kwargs
@@ -729,6 +892,7 @@ class _FakeObservedExecutor:
         del current
         self.action_executor.input_attempts += len(actions)
         action = actions[0]
+        self.actions.append(action)
         return SimpleNamespace(observation=observe("fake_post_action", action.follow_up_request))
 
 
@@ -751,6 +915,25 @@ class _FakeFlowPlanner:
     def ensure_world_map_ready(self, observation):
         if observation.screen_type == ScreenType.PNC_HOME_CITY:
             return [TapAction(selector_id=UiElementId.PNC_HOME_WORLD_SWITCH, reason="fake_world")]
+        return []
+
+    def open_mail_hub(self, observation):
+        if observation.screen_type == ScreenType.PNC_HOME_CITY:
+            return [TapAction(selector_id=UiElementId.PNC_BOTTOM_NAV_MAIL, reason="fake_mail_hub")]
+        return []
+
+    def open_mail_compose(self, observation, params):
+        del params
+        if observation.screen_type == ScreenType.PNC_MAILBOX_LIST:
+            return [TapAction(selector_id=UiElementId.PNC_MAIL_COMPOSE_BUTTON, reason="fake_mail_compose")]
+        return []
+
+    def open_mailbox(self, observation, mailbox):
+        del mailbox
+        if observation.screen_type == ScreenType.PNC_HOME_CITY:
+            return [TapAction(selector_id=UiElementId.PNC_BOTTOM_NAV_MAIL, reason="fake_mail_hub")]
+        if observation.screen_type == ScreenType.PNC_MAIL_HUB:
+            return [TapAction(selector_id=UiElementId.PNC_MAIL_ROW_PLAYER_MAIL, reason="fake_player_mailbox")]
         return []
 
     def open_lord_info(self, observation):

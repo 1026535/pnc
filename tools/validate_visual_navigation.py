@@ -23,6 +23,7 @@ ensure_repo_root_on_path()
 
 from pnc_automation.app import build_application_runner
 from pnc_automation.app.pnc.domain.action_requests import ActionRequest, KeyEventAction, TapAction, WaitAction
+from pnc_automation.app.pnc.domain.mail import MailRecipientKind, MailboxType, SendMailParams
 from pnc_automation.app.pnc.domain.observation import (
     CurrentCastleEvidenceKind,
     DetectedListEntry,
@@ -34,6 +35,7 @@ from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
+from pnc_automation.app.pnc.navigation.world_map_search import WorldMapOverviewNavigator
 from pnc_automation.app.pnc.vision.navigation_selector_validator import (
     NavigationSelectorValidator,
     write_navigation_selector_validation_report,
@@ -67,6 +69,8 @@ class ProbeRoute(StrEnum):
     VIP = "vip"
     CHAT = "chat"
     MAIL_HUB = "mail_hub"
+    MAIL_COMPOSE = "mail_compose"
+    WORLD_OVERVIEW = "world_overview"
     ALLIANCE = "alliance"
     GIFT_CENTER = "gift_center"
     NAVIGATION_SELECTORS = "navigation_selectors"
@@ -81,6 +85,7 @@ class ProbeRouteDeclaration:
     destination_screens: frozenset[ScreenType]
     entry_selectors: frozenset[UiElementId]
     read_only: bool = True
+    max_input_attempts: int = MAX_INPUT_ATTEMPTS
 
 
 ROUTE_DECLARATIONS: Mapping[ProbeRoute, ProbeRouteDeclaration] = {
@@ -144,6 +149,23 @@ ROUTE_DECLARATIONS: Mapping[ProbeRoute, ProbeRouteDeclaration] = {
         destination_screens=frozenset({ScreenType.PNC_MAIL_HUB}),
         entry_selectors=frozenset({UiElementId.PNC_BOTTOM_NAV_MAIL}),
     ),
+    ProbeRoute.MAIL_COMPOSE: ProbeRouteDeclaration(
+        route=ProbeRoute.MAIL_COMPOSE,
+        entry_screens=frozenset({
+            ScreenType.PNC_HOME_CITY,
+            ScreenType.PNC_MAILBOX_LIST,
+        }),
+        destination_screens=frozenset({ScreenType.PNC_MAIL_COMPOSE_POPUP}),
+        entry_selectors=frozenset({UiElementId.PNC_BOTTOM_NAV_MAIL, UiElementId.PNC_MAIL_COMPOSE_BUTTON}),
+        max_input_attempts=12,
+    ),
+    ProbeRoute.WORLD_OVERVIEW: ProbeRouteDeclaration(
+        route=ProbeRoute.WORLD_OVERVIEW,
+        entry_screens=frozenset({ScreenType.PNC_HOME_CITY, ScreenType.PNC_WORLD_MAP}),
+        destination_screens=frozenset({ScreenType.PNC_WORLD_MAP_OVERVIEW}),
+        entry_selectors=frozenset({UiElementId.PNC_HOME_WORLD_SWITCH, UiElementId.PNC_WORLD_EXPAND_BUTTON}),
+        max_input_attempts=10,
+    ),
     ProbeRoute.ALLIANCE: ProbeRouteDeclaration(
         route=ProbeRoute.ALLIANCE,
         entry_screens=frozenset({ScreenType.PNC_HOME_CITY}),
@@ -175,6 +197,7 @@ PROBE_SELECTOR_SCREENS = (
                 ScreenType.PNC_VIP,
                 ScreenType.PNC_CHAT,
                 ScreenType.PNC_MAIL_HUB,
+                ScreenType.PNC_MAILBOX_LIST,
                 ScreenType.PNC_ALLIANCE_HOME,
                 ScreenType.PNC_ALLIANCE_JOIN,
                 ScreenType.PNC_GIFT_CENTER,
@@ -187,10 +210,15 @@ PROBE_SELECTOR_SCREENS = (
     (UiElementId.PNC_BOTTOM_NAV_QUEST, frozenset({ScreenType.PNC_HOME_CITY})),
     (UiElementId.PNC_BOTTOM_NAV_BAG, frozenset({ScreenType.PNC_HOME_CITY})),
     (UiElementId.PNC_BOTTOM_NAV_MAIL, frozenset({ScreenType.PNC_HOME_CITY})),
+    (UiElementId.PNC_MAIL_ROW_PLAYER_MAIL, frozenset({ScreenType.PNC_MAIL_HUB})),
+    (UiElementId.PNC_MAIL_COMPOSE_BUTTON, frozenset({ScreenType.PNC_MAILBOX_LIST})),
+    (UiElementId.PNC_MAIL_COMPOSE_CLOSE_BUTTON, frozenset({ScreenType.PNC_MAIL_COMPOSE_POPUP})),
     (UiElementId.PNC_BOTTOM_NAV_ALLIANCE, frozenset({ScreenType.PNC_HOME_CITY})),
     (UiElementId.PNC_QUEST_TAB_MAIN, frozenset({ScreenType.PNC_QUEST_MAIN, ScreenType.PNC_QUEST_DAILY})),
     (UiElementId.PNC_QUEST_TAB_DAILY, frozenset({ScreenType.PNC_QUEST_MAIN, ScreenType.PNC_QUEST_DAILY})),
     (UiElementId.PNC_HOME_WORLD_SWITCH, frozenset({ScreenType.PNC_HOME_CITY})),
+    (UiElementId.PNC_WORLD_EXPAND_BUTTON, frozenset({ScreenType.PNC_WORLD_MAP})),
+    (UiElementId.PNC_WORLD_OVERVIEW_CLOSE_BUTTON, frozenset({ScreenType.PNC_WORLD_MAP_OVERVIEW})),
     (UiElementId.PNC_WORLD_HOME_NAV, frozenset({ScreenType.PNC_WORLD_MAP})),
     (UiElementId.PNC_HOME_LORD_INFO_SHORTCUT, frozenset({ScreenType.PNC_HOME_CITY})),
     (UiElementId.PNC_HOME_VIP_SHORTCUT, frozenset({ScreenType.PNC_HOME_CITY})),
@@ -209,6 +237,7 @@ PROBE_BACK_SCREENS = frozenset(
         ScreenType.PNC_VIP,
         ScreenType.PNC_CHAT,
         ScreenType.PNC_MAIL_HUB,
+        ScreenType.PNC_MAILBOX_LIST,
         ScreenType.PNC_ALLIANCE_HOME,
         ScreenType.PNC_ALLIANCE_JOIN,
         ScreenType.PNC_GIFT_CENTER,
@@ -549,7 +578,7 @@ def run_probe(
         },
         "status": "running",
         "trace": str(trace),
-        "input_budget": {"max_attempts": MAX_INPUT_ATTEMPTS, "max_seconds": MAX_PROBE_SECONDS},
+        "input_budget": {"max_attempts": declaration.max_input_attempts, "max_seconds": MAX_PROBE_SECONDS},
     }
     if navigation_source_screen is not None:
         summary["navigation_source_screen"] = navigation_source_screen.name
@@ -609,7 +638,10 @@ def run_probe(
         }
         if not foreground_after:
             raise RuntimeError("Read-only visual navigation could not verify the app foreground before input.")
-        executor.action_executor.configure_input_attempt_budget(MAX_INPUT_ATTEMPTS, duration_seconds=MAX_PROBE_SECONDS)
+        executor.action_executor.configure_input_attempt_budget(
+            declaration.max_input_attempts,
+            duration_seconds=MAX_PROBE_SECONDS,
+        )
 
         def capture_observation(label: str, request: ObservationRequest | None = None):
             """Capture through the same time checked, run-prefixed path used by route steps."""
@@ -656,7 +688,10 @@ def run_probe(
             """Validate one bounded action, record intent, and retain executor evidence."""
 
             nonlocal current, action_count
-            if action_count >= MAX_INPUT_ATTEMPTS or input_attempts() >= MAX_INPUT_ATTEMPTS:
+            if (
+                action_count >= declaration.max_input_attempts
+                or input_attempts() >= declaration.max_input_attempts
+            ):
                 raise RuntimeError("Read-only visual navigation exhausted its input-attempt budget.")
             require_time_budget()
             if current.screen_type == ScreenType.UNKNOWN or current.decision.coordinate_only:
@@ -832,6 +867,97 @@ def run_probe(
                 "coordinate": coordinate,
             }
             current = p2
+            reach(ScreenType.PNC_HOME_CITY, runtime.flow_planner.ensure_home_city)
+        elif selected_route == ProbeRoute.MAIL_COMPOSE:
+            mail_params = SendMailParams(
+                recipient_kind=MailRecipientKind.PLAYER,
+                player_name="read_only_probe_placeholder",
+                profile_route=None,
+                subject="unused_read_only_probe_subject",
+                body="unused_read_only_probe_body",
+            )
+            reach(
+                ScreenType.PNC_MAILBOX_LIST,
+                lambda observation: runtime.flow_planner.open_mailbox(observation, MailboxType.PLAYER),
+            )
+            mail_source = current.screen_type
+            if current.mailbox_type != MailboxType.PLAYER:
+                raise RuntimeError("Mail-compose route did not produce the typed PLAYER mailbox.")
+            if current.mailbox_empty is True:
+                route_status = "applicability_skip"
+                summary["applicability"] = {
+                    "predicate": "observed_empty_player_mailbox",
+                    "screen": current.screen_type.name,
+                }
+                summary["mail_compose"] = {
+                    "source_screen": mail_source.name,
+                    "destination_screen": None,
+                    "reason": "player_mailbox_empty",
+                }
+            else:
+                compose_actions = runtime.flow_planner.open_mail_compose(current, mail_params)
+                if len(compose_actions) != 1:
+                    raise RuntimeError("Mail-compose route requires one canonical compose-entry action.")
+                step(compose_actions[0])
+                if current.screen_type != ScreenType.PNC_MAIL_COMPOSE_POPUP:
+                    raise RuntimeError("Mail-compose route did not produce the typed compose popup.")
+                summary["mail_compose"] = {
+                    "source_screen": mail_source.name,
+                    "destination_screen": current.screen_type.name,
+                    "entry_selector": (
+                        compose_actions[0].selector_id.value
+                        if isinstance(compose_actions[0], TapAction)
+                        else None
+                    ),
+                    "close_selector": UiElementId.PNC_MAIL_COMPOSE_CLOSE_BUTTON.value,
+                }
+                close_actions = (TapAction(
+                    selector_id=UiElementId.PNC_MAIL_COMPOSE_CLOSE_BUTTON,
+                    observe_after=True,
+                    reason="close_mail_compose_read_only_probe",
+                    follow_up_request=ObservationRequest.mail_navigation_follow_up(
+                        ScreenType.PNC_MAILBOX_LIST,
+                        ScreenType.PNC_MAIL_HUB,
+                    ),
+                ),)
+                step(close_actions[0])
+                if current.screen_type not in {ScreenType.PNC_MAIL_HUB, ScreenType.PNC_MAILBOX_LIST}:
+                    raise RuntimeError("Mail-compose close did not return to a typed mail navigation screen.")
+            reach(ScreenType.PNC_HOME_CITY, runtime.flow_planner.ensure_home_city)
+            summary["mail_compose"]["return_screen"] = current.screen_type.name
+        elif selected_route == ProbeRoute.WORLD_OVERVIEW:
+            reach(ScreenType.PNC_WORLD_MAP, runtime.flow_planner.ensure_world_map_ready)
+            source_coordinate = _coordinate_proof(current, phase="world-overview source")
+            overview_navigator = WorldMapOverviewNavigator()
+            open_actions = overview_navigator.plan_open(current)
+            if len(open_actions) != 1:
+                raise RuntimeError("World-overview route requires one canonical overview-entry action.")
+            step(open_actions[0])
+            if current.screen_type != ScreenType.PNC_WORLD_MAP_OVERVIEW:
+                raise RuntimeError("World-overview route did not produce the typed overview screen.")
+            overview_context = overview_navigator.parse_context(current)
+            if overview_context.current_viewport_coordinate != source_coordinate:
+                raise RuntimeError(
+                    "World-overview context changed the world coordinate during the read-only proof."
+                )
+            close_actions = overview_navigator.plan_close_in_place(current)
+            if len(close_actions) != 1:
+                raise RuntimeError("World-overview route requires one canonical in-place close action.")
+            step(close_actions[0])
+            closed_coordinate = _coordinate_proof(current, phase="world-overview close")
+            if current.screen_type != ScreenType.PNC_WORLD_MAP or closed_coordinate != source_coordinate:
+                raise RuntimeError("World-overview close did not preserve the source world coordinate.")
+            summary["world_overview"] = {
+                "source_screen": ScreenType.PNC_WORLD_MAP.name,
+                "destination_screen": ScreenType.PNC_WORLD_MAP_OVERVIEW.name,
+                "source_coordinate": source_coordinate,
+                "overview_coordinate": overview_context.current_viewport_coordinate,
+                "closed_coordinate": closed_coordinate,
+                "map_bounds": asdict(overview_context.map_bounds),
+                "map_region_bounds": asdict(overview_context.map_region_bounds),
+                "open_selector": open_actions[0].selector_id.value,
+                "close_selector": close_actions[0].selector_id.value,
+            }
             reach(ScreenType.PNC_HOME_CITY, runtime.flow_planner.ensure_home_city)
         elif selected_route in {ProbeRoute.LORD_INFO, ProbeRoute.VIP, ProbeRoute.CHAT, ProbeRoute.MAIL_HUB, ProbeRoute.GIFT_CENTER}:
             step(_route_entry_action(selected_route, current, runtime))
