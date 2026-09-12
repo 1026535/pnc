@@ -250,3 +250,51 @@ a change remains in the implemented boundaries. The explicit F implementation
 gaps, limited independent profile coverage, and live Quest label abstention above
 prevent claiming the whole plan or all game workflows complete. No broad rollout,
 crop-only guard replacement, account switch or mutation result is approved here.
+
+## 2026-09-12 continuation after rebase
+
+This section supersedes the historical "Final review disposition" for the current dirty feature worktree. The feature remains based on `02f07ac`; the source-control baseline and two newer remote test-organization commits are recorded in the updated plan. No main-worktree edits, commit or push were performed by this continuation. Pre-existing untracked review/build artifacts and the `send_mail_task.py` worktree status were preserved.
+
+### Implemented integration
+
+- Replacement `NavigationPerception` obtains the canonical capture OCR context factory through `core_runtime.py`. It no longer silently skips guards because the enricher lacks its own backend, nor creates a second unbound content context. Guards/content reuse native screenshot pixels and real capture identity.
+- Shared `observation_provenance.py` owns control/row publication and rejects foreign frame/screen/layout proof. Missing provenance is retained as missing, so dispatch cannot treat a synthetic fixture identity as real capture proof.
+- The canonical classifier now handles navigation layouts, viewport rejection, loading, conflicting foreground guards and explicit background evidence. Update-over-coordinate-dialog regression retains the background identity without treating both dialogs as competing foreground guards.
+- Exact modal and loading recognition uses one shared implementation across the two guard entry points. A measured popup is no longer suppressed merely because Home anchors survive. Generic close search distinguishes the outer close band from shifted controls belonging to separately established modals; owned dismiss regions are removed before selecting another close candidate.
+- Strict screen/decision consistency and requested OCR-selector registration are restored. Rebase-only duplicated recovery declarations, error-policy substitution and default registry injection were removed. Offline fixtures now supply explicit contracts. The shadow-detector test file changed only to migrate shared Observation fixtures; no YOLO production behavior was added.
+
+### Validation of this working-tree state
+
+All paths below are relative to `C:/Users/lebel/pnc/artifacts/worktrees/non-yolo` unless the full path is shown.
+
+| Command/check | Result |
+|---|---|
+| `py -m unittest tests.test_capture_and_vision tests.test_yolo_shadow tests.test_ocr_region_plan tests.test_observation_artifact_policy` (worker targeted modules) | Passed: 184 tests across the modules; 3 fixture skips |
+| `py -m unittest tests.test_navigation_core tests.test_core_runtime tests.test_screen_decision_contract tests.test_frame_provenance tests.test_ocr_service tests.test_flows_and_tasks` | Passed: 284 tests before the final additional-close regression |
+| `py -m unittest tests.test_navigation_core tests.test_core_runtime tests.test_capture_and_vision` | Passed: 203 tests; 3 fixture skips, including final close-exclusion behavior |
+| `py -m unittest discover -s tests` | Passed: **1,392 tests, 22 skips**, after the review corrections. Log: `artifacts/non_yolo_recognition/resume_20260912/full_unittest_review_fixed.log`. The final click-point containment refinement additionally passed the 62 targeted tests below |
+| `py tools/benchmark_screen_recognition.py --coverage-audit --root C:/Users/lebel/pnc/artifacts/worktrees/non-yolo --output artifacts/non_yolo_recognition/resume_20260912/coverage_audit.json` | Passed; 329 selectors, 273 enabled, 56 unsupported, 59 orphan IDs, zero missing required assets |
+| Refreshed audit consistency checks | Passed; `artifacts/non_yolo_recognition/resume_20260912/report_validation.json` |
+| `py -m unittest tests.test_navigation_core tests.test_core_runtime tests.test_screen_decision_contract` | Passed: 62 tests including empty popup profile, displaced same-ID control, supplied classifier and final click-point containment |
+| `git diff --check` | Passed |
+| `py artifacts/non_yolo_recognition/resume_20260912/run_core_probe.py` | Failed before navigation: configured testing instance connected, PNC not foregrounded, canonical launcher raised `GameLaunchError`; `core_summary.json` |
+| Follow-up canonical runtime diagnostic through `py -` | Blocked by Android readiness `DeviceConnectionError`, before capture; `launch_diagnostic.json` |
+| `py tools/validate_navigation_selectors.py` | Initial invocation rejected missing `--account` and `--selector`; this tool is now a live canary CLI. Fully specified rerun below remains blocked by the confirmed readiness failure |
+| Current installed-wheel, warm latency, per-target and mutation promotion | Not rerun/promoted; old evidence remains explicitly historical and mutation execution is outside this authorization |
+
+Initial navigation tests exposed the update-over-coordinate-dialog foreground/background bug and were rerun after the fix. One targeted invocation used nonexistent `tests.test_screen_decision`; corrected to `tests.test_screen_decision_contract`. These invocation failures are not counted as successful validation. The first full run passed 1,389 tests; subsequent full runs passed 1,390 and 1,392 as the additional-close and review regressions were added. The final containment refinement was checked by the affected 62-test suite while the last full run was in progress. Expected offline CLI negative-test messages in the full log do not represent host restarts: the full suite remained offline, with opt-in live modules skipped.
+
+### Live blocker and exact next commands
+
+Target was the configured `testing` instance with required `SMOKE_TEST` role and its currently active castle. Both attempts used canonical runtime leases and configured ADB resolution. Startup origin is unknown. No navigation tap, resource mutation, message, or castle switch occurred. Active castle verification, Bag content, final Home and live timing remain unverified because the launch/readiness failures happened first.
+
+After the configured instance is responsive, rerun the bounded core proof (eight attempted inputs, ten minutes, three observations per settle) and the selector canary:
+
+```powershell
+py artifacts/non_yolo_recognition/resume_20260912/run_core_probe.py
+py tools/validate_navigation_selectors.py --config C:/Users/lebel/pnc/config/accounts.yaml --account testing --selector PNC_BOTTOM_NAV_BAG --source-screen PNC_HOME_CITY --output-dir artifacts/non_yolo_recognition/resume_20260912/selector_live
+```
+
+Then repeat the relevant Quest/field/coordinate evidence before extending F. The refreshed `f_disposition_matrix.md` still records 90 families, seven reviewed region plans, and 83 guarded full-frame fallbacks. Research/Gathering/Campaign producer evidence, independent corpus labels, per-target qualification and mutation-backed postconditions remain incomplete. A visual-only generic close with measured surface support retains its pre-existing navigation recovery policy; the general builder still treats that evidence as unresolved. This continuation shares exact modal detection and conservative decision/provenance contracts, but does not promote a uniform visual-only policy or claim the complete vision plan is finished.
+
+Final bounded review found and resolved two further integration issues: same-screen visual popup profiles no longer drop interruption-owned controls, and runtime composition injects the existing classifier instead of constructing a separate one. Template refinement is limited to foreground-guard-owned selectors whose proposed click point falls inside the measured guard bounds; an underlying same-ID control cannot redirect dismissal. Regression tests cover both issues. The live readiness blocker remains unchanged.

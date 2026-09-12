@@ -43,7 +43,7 @@ from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
-from pnc_automation.app.pnc.vision.selectors import SelectorRegistry, build_default_selector_registry
+from pnc_automation.app.pnc.vision.selectors import SelectorRegistry
 
 
 @dataclass(slots=True)
@@ -56,7 +56,7 @@ class ActionExecutor:
     chat_stable_click_delay_ms: int
     chat_post_action_observe_delay_ms: int
     logger: logging.LoggerAdapter
-    selector_registry: SelectorRegistry = field(default_factory=build_default_selector_registry)
+    selector_registry: SelectorRegistry
     world_map_movement_stable_click_delay_ms: int = 300
     world_map_movement_post_action_observe_delay_ms: int = 800
     sleep: Callable[[float], None] = time.sleep

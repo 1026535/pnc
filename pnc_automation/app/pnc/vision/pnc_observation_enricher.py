@@ -1807,55 +1807,42 @@ class PncObservationEnricher:
             self.ocr_service = self.selector_registry  # type: ignore[assignment]
             self.selector_registry = None
 
-    def detect_interruption(self, image: Image.Image, *, owned_dismiss_bounds: tuple[Bounds, ...] = ()) -> ObservationAdditions:
-        """Run the global guard through a compatibility OCR context.
+    def detect_interruption(
+        self, image: Image.Image, *, ocr_context: ObservationOcrContext,
+        owned_dismiss_bounds: tuple[Bounds, ...] = (),
+    ) -> ObservationAdditions:
+        """Measure navigation interruptions using the capture's shared OCR context."""
 
-        The replacement navigation perception API predates the frame-scoped
-        ``ObservationOcrContext`` interface. Keeping this adapter on the
-        canonical enricher lets deterministic callers exercise the same guard
-        rules without constructing a full observation builder.
-        """
-
-        if self.ocr_service is None:
-            return ObservationAdditions()
-        result = self.ocr_service.read_result(image)
+        result = ocr_context.read_result(
+            image, purpose=OcrReadPurpose.GUARD,
+            detail="navigation_guard;fallback=mandatory_global_guard",
+        )
         lines = tuple(sorted(result.lines, key=lambda line: (line.bounds.y, line.bounds.x)))
         anchors = self.text_anchor_detector.detect(result)
+        modal_guard = self._recognize_modal_guards(image=image, lines=lines, ocr_context=ocr_context)
+        if modal_guard is not None:
+            return modal_guard
         popup = _build_popup_additions(image=image, lines=lines, anchors=anchors)
         if popup is not None:
-            return popup
-        visual = _build_visual_popup_close_additions(image=image)
-        if visual is not None:
-            close = visual.visible_elements[UiElementId.PNC_POPUP_CLOSE_BUTTON].bounds
-            center = close.center()
-            owned = any(
-                bounds.x <= center[0] <= bounds.x + bounds.width
-                and bounds.y <= center[1] <= bounds.y + bounds.height
-                and bounds.width >= close.width * 0.8
-                and bounds.height >= close.height * 0.8
-                for bounds in owned_dismiss_bounds
+            return replace(
+                popup,
+                guard_verdict=(GuardVerdict.UNRESOLVED if any(
+                    evidence.reason.startswith("weak_") for evidence in popup.screen_evidence
+                ) else GuardVerdict.BLOCKED),
             )
-            if not owned:
-                return visual
-        loading = _build_loading_additions(image=image, lines=lines)
-        return loading if loading is not None else ObservationAdditions()
-
-    def recognize_guards(
-        self,
-        image: Image.Image,
-        request: ObservationRequest,
-        *,
-        ocr_context: ObservationOcrContext,
-    ) -> ObservationAdditions:
-        """Runs independent global guard recognizers before semantic enrichment."""
-
-        ocr_result = ocr_context.read_result(
-            image,
-            purpose=OcrReadPurpose.GUARD,
-            detail="global_guard;fallback=mandatory_global_guard",
+        visual = _build_visual_popup_close_additions(
+            image=image, excluded_bounds=owned_dismiss_bounds,
         )
-        lines = tuple(sorted(ocr_result.lines, key=lambda line: (line.bounds.y, line.bounds.x)))
-        anchors = self.text_anchor_detector.detect(ocr_result)
+        if visual is not None:
+            return replace(visual, guard_verdict=GuardVerdict.BLOCKED)
+        return ObservationAdditions(guard_verdict=GuardVerdict.CLEAR)
+
+    def _recognize_modal_guards(
+        self, *, image: Image.Image, lines: tuple[OcrLine, ...],
+        ocr_context: ObservationOcrContext,
+    ) -> ObservationAdditions | None:
+        """Resolve exact modal/loading evidence once for both perception paths."""
+
         strong: list[ObservationAdditions] = []
         warning = _build_exact_building_upgrade_warning_additions(image=image, lines=lines)
         if warning is not None:
@@ -1938,6 +1925,27 @@ class PncObservationEnricher:
             )
         if weak_modal is not None:
             return replace(weak_modal, guard_verdict=GuardVerdict.UNRESOLVED)
+        return None
+
+    def recognize_guards(
+        self,
+        image: Image.Image,
+        request: ObservationRequest,
+        *,
+        ocr_context: ObservationOcrContext,
+    ) -> ObservationAdditions:
+        """Runs independent global guard recognizers before semantic enrichment."""
+
+        ocr_result = ocr_context.read_result(
+            image,
+            purpose=OcrReadPurpose.GUARD,
+            detail="global_guard;fallback=mandatory_global_guard",
+        )
+        lines = tuple(sorted(ocr_result.lines, key=lambda line: (line.bounds.y, line.bounds.x)))
+        anchors = self.text_anchor_detector.detect(ocr_result)
+        modal_guard = self._recognize_modal_guards(image=image, lines=lines, ocr_context=ocr_context)
+        if modal_guard is not None:
+            return modal_guard
         popup = _build_popup_additions(image=image, lines=lines, anchors=anchors)
         if popup is not None:
             weak_popup = any(
@@ -1955,7 +1963,7 @@ class PncObservationEnricher:
         )
         visual_popup = _build_visual_popup_close_additions(
             image=image,
-            excluded_bounds=overview_close_bounds,
+            excluded_bounds=() if overview_close_bounds is None else (overview_close_bounds,),
         )
         if visual_popup is not None:
             if lines:
@@ -1972,7 +1980,7 @@ class PncObservationEnricher:
             overview_close_bounds is not None
             and _find_visual_popup_close_bounds(
                 image=image,
-                excluded_bounds=overview_close_bounds,
+                excluded_bounds=() if overview_close_bounds is None else (overview_close_bounds,),
             )
             is not None
         ):
@@ -5133,7 +5141,7 @@ def _build_update_required_popup_additions(
 def _build_visual_popup_close_additions(
     *,
     image: Image.Image,
-    excluded_bounds: Bounds | None = None,
+    excluded_bounds: tuple[Bounds, ...] = (),
 ) -> ObservationAdditions | None:
     """Returns a generic popup close selector when upper-right image geometry contains a bright X."""
 
@@ -5250,106 +5258,6 @@ def _world_map_overview_chrome_proven(*, image: Image.Image, lines: tuple[OcrLin
     )
 
 
-def _find_visual_popup_close_bounds(
-    *,
-    image: Image.Image,
-    excluded_bounds: Bounds | None = None,
-) -> Bounds | None:
-    """Finds a square two-diagonal bright component in the normalized popup-close search area."""
-
-    rgb_image = image.convert("RGB")
-    search_left = int(image.width * 0.72)
-    search_right = int(image.width * 0.99)
-    search_top = int(image.height * 0.02)
-    search_bottom = int(image.height * 0.40)
-    bright_pixels = {
-        (x, y)
-        for y in range(search_top, search_bottom)
-        for x in range(search_left, search_right)
-        if _is_bright_popup_close_pixel(rgb_image.getpixel((x, y)))
-    }
-    candidates: list[Bounds] = []
-    neighbor_offsets = tuple(
-        (x_offset, y_offset)
-        for y_offset in (-1, 0, 1)
-        for x_offset in (-1, 0, 1)
-        if x_offset != 0 or y_offset != 0
-    )
-    while bright_pixels:
-        seed = bright_pixels.pop()
-        pending = [seed]
-        component = [seed]
-        while pending:
-            x, y = pending.pop()
-            for x_offset, y_offset in neighbor_offsets:
-                neighbor = (x + x_offset, y + y_offset)
-                if neighbor not in bright_pixels:
-                    continue
-                bright_pixels.remove(neighbor)
-                pending.append(neighbor)
-                component.append(neighbor)
-        bounds = _visual_close_component_bounds(image=image, component=component)
-        if bounds is not None:
-            if excluded_bounds is not None and excluded_bounds.contains_bounds(bounds):
-                continue
-            candidates.append(bounds)
-    if not candidates:
-        return None
-    return max(candidates, key=lambda bounds: bounds.center()[0])
-
-
-def _is_bright_popup_close_pixel(pixel: tuple[int, int, int]) -> bool:
-    """Accepts the white or gold luminous pixels used by P&C popup close glyphs."""
-
-    red, green, blue = pixel
-    return min(pixel) >= 200 or (
-        red >= 190
-        and green >= 160
-        and blue >= 55
-        and red + green + blue >= 480
-    )
-
-
-def _visual_close_component_bounds(
-    *,
-    image: Image.Image,
-    component: list[tuple[int, int]],
-) -> Bounds | None:
-    """Returns bounds only when one bright component has a conservative X-shaped profile."""
-
-    if len(component) < 20:
-        return None
-    x_values = tuple(point[0] for point in component)
-    y_values = tuple(point[1] for point in component)
-    left = min(x_values)
-    top = min(y_values)
-    width = max(x_values) - left + 1
-    height = max(y_values) - top + 1
-    center_x = left + (width / 2)
-    if center_x < image.width * 0.86:
-        return None
-    if not int(image.width * 0.02) <= width <= int(image.width * 0.10):
-        return None
-    if not int(image.height * 0.01) <= height <= int(image.height * 0.07):
-        return None
-    if not 0.80 <= width / height <= 1.25:
-        return None
-
-    diagonal_tolerance = 0.18
-    descending_diagonal = sum(
-        abs(((x - left) / max(1, width - 1)) - ((y - top) / max(1, height - 1))) <= diagonal_tolerance
-        for x, y in component
-    ) / len(component)
-    ascending_diagonal = sum(
-        abs(((x - left) / max(1, width - 1)) + ((y - top) / max(1, height - 1)) - 1)
-        <= diagonal_tolerance
-        for x, y in component
-    ) / len(component)
-    if descending_diagonal < 0.42 or ascending_diagonal < 0.42:
-        return None
-    return Bounds(x=left, y=top, width=width, height=height)
-
-
 def _has_visual_popup_surface(*, image: Image.Image, close_bounds: Bounds) -> bool:
     """Requires dimmed or panel-backed surface support below the generic close X."""
 
@@ -5457,7 +5365,7 @@ def _find_visual_popup_close_bounds(
     *,
     image: Image.Image,
     modal_bounds: Bounds | None = None,
-    excluded_bounds: Bounds | None = None,
+    excluded_bounds: tuple[Bounds, ...] = (),
 ) -> Bounds | None:
     """Find a bright X relative to a previously established modal boundary."""
 
@@ -5505,7 +5413,11 @@ def _find_visual_popup_close_bounds(
         bounds = _visual_close_component_bounds(image=image, component=component)
         if bounds is None:
             continue
-        if excluded_bounds is not None and excluded_bounds.contains_bounds(bounds):
+        if modal_bounds is None and bounds.center()[0] < image.width * 0.86:
+            # The generic search owns only the outer close band. Shifted
+            # controls require an independently established modal boundary.
+            continue
+        if any(excluded.contains_bounds(bounds) for excluded in excluded_bounds):
             continue
         if modal_bounds is not None and not _is_modal_close_candidate(
             bounds=bounds,

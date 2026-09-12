@@ -488,6 +488,25 @@ class _RecordingSelectorEngine:
 class CaptureAndVisionTests(unittest.TestCase):
     """Validates screenshot persistence and synthetic vision classification."""
 
+    def test_observation_builder_rejects_missing_requested_ocr_selector(self) -> None:
+        """Does not silently drop a requested OCR field from a reduced registry."""
+
+        builder = ObservationBuilder(
+            selector_registry=SelectorRegistry(selectors=()),
+            selector_engine=ImageSelectorEngine(
+                template_matcher=OpenCvTemplateMatcher(),
+            ),
+            screen_classifier=ScreenClassifier(),
+            enricher=PncObservationEnricher(),
+        )
+
+        with self.assertRaisesRegex(ValueError, "PNC_CHAT_INPUT_FIELD.*not registered"):
+            builder.compile_ocr_region_plans(
+                resolved_screen=ScreenType.PNC_CHAT,
+                request=ObservationRequest.chat_transcript_observation(),
+                image_size=(540, 960),
+            )
+
     def test_screenshot_service_persists_valid_png(self) -> None:
         """Captures a screenshot, validates it, and writes it to disk."""
 
@@ -4891,7 +4910,7 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             ocr_service = _RecordingOcrService(lines=())
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
@@ -5062,7 +5081,10 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
         )
 
-        additions = enricher.detect_interruption(image)
+        additions = enricher.detect_interruption(
+            image,
+            ocr_context=ObservationOcrContext(image, enricher.ocr_service, None, "test"),
+        )
 
         self.assertIn(UiElementId.PNC_UPDATE_CONFIRM_BUTTON, additions.visible_elements)
         self.assertNotIn(UiElementId.PNC_POPUP_CLOSE_BUTTON, additions.visible_elements)

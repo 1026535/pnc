@@ -116,14 +116,6 @@ class _InterruptionRecoveryResult:
 
 
 @dataclass(frozen=True, slots=True)
-class _InterruptionRecoveryResult:
-    """Carries one recovered observation and whether an exact update was involved."""
-
-    observation: Observation | None
-    update_recovered: bool = False
-
-
-@dataclass(frozen=True, slots=True)
 class _ObservedNavigationTap:
     """Carries the shared metadata required for one fallback-eligible navigation tap."""
 

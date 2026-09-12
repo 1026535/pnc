@@ -563,6 +563,7 @@ class ScreenClassifier:
         guard: GuardVerdict = GuardVerdict.NOT_EVALUATED,
         coordinate_only: bool = False,
         viewport_reviewed: bool | None = None,
+        background_evidence: Sequence[ScreenEvidence] = (),
     ) -> ScreenDecision:
         """Resolves all independent evidence into one conservative decision."""
 
@@ -584,7 +585,12 @@ class ScreenClassifier:
             if screen_type in BLOCKING_SCREEN_TYPES | {ScreenType.PNC_LOADING}
         }
         blocker_screen_types.update(selector_blocker_types)
-        base_evidence = tuple(item for item in evidence if item.screen_type not in blocker_screen_types)
+        # Independently observed background anchors may survive a foreground
+        # interruption (including a dialog over another dialog). They inform
+        # base identity, never compete as foreground guard evidence.
+        base_evidence = tuple(background_evidence) + tuple(
+            item for item in evidence if item.screen_type not in blocker_screen_types
+        )
         base_evidence_screen_types = {item.screen_type for item in base_evidence}
         base_selector_matches = tuple(
             screen_type for screen_type in selector_matches if screen_type not in blocker_screen_types
@@ -655,7 +661,7 @@ class ScreenClassifier:
             effective_screen=effective_screen,
             layout_id=_resolved_layout_id(effective_evidence),
             guard=final_guard,
-            evidence=tuple(evidence),
+            evidence=tuple(background_evidence) + tuple(evidence),
             coordinate_only=coordinate_only,
         )
 
