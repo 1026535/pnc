@@ -33,9 +33,9 @@ BLOCKING_SCREEN_TYPES = frozenset(
         ScreenType.PNC_POPUP,
         ScreenType.PNC_VIP_DAILY_RESET,
         ScreenType.PNC_BUILDING_UPGRADE_WARNING,
+        ScreenType.PNC_WORLD_COORDINATE_DIALOG,
         ScreenType.PNC_BUILD_SPEEDUP_CONFIRM,
         ScreenType.PNC_MAIL_COMPOSE_POPUP,
-        ScreenType.PNC_WORLD_COORDINATE_DIALOG,
         ScreenType.PNC_CHAT_PLAYER_ACTION_POPUP,
         ScreenType.PNC_ALLIANCE_MEMBER_MANAGE_POPUP,
     }

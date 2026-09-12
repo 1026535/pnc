@@ -13,7 +13,18 @@ from uuid import uuid4
 
 from pnc_automation.core.infra.adb.client import AdbClient
 from pnc_automation.core.infra.emulator.bluestacks_instance import BlueStacksInstance
-from pnc_automation.core.errors import DeviceConnectionError, FrameProvenanceError, GameLaunchError, ScreenshotCaptureError
+from pnc_automation.bluestacks_management.instance_lease import (
+    PROCESS_INSTANCE_LEASES,
+    InstanceLeaseRegistry,
+    ProcessInstanceLease,
+)
+from pnc_automation.core.config.host import BlueStacksCapabilities
+from pnc_automation.core.errors import (
+    DeviceConnectionError,
+    FrameProvenanceError,
+    GameLaunchError,
+    ScreenshotCaptureError,
+)
 from pnc_automation.core.infra.emulator.provenance import CapturedFrame, FrameRef
 
 
@@ -38,7 +49,18 @@ class BlueStacksSession:
     sleep: Callable[[float], None] = time.sleep
     connect_attempts: int = 30
     connect_retry_delay_seconds: float = 2.0
+    lease_registry: InstanceLeaseRegistry = field(
+        default_factory=lambda: PROCESS_INSTANCE_LEASES,
+        repr=False,
+    )
+    capabilities: BlueStacksCapabilities = field(
+        default_factory=BlueStacksCapabilities.unrestricted,
+        repr=False,
+    )
+    instance_lease: ProcessInstanceLease | None = field(default=None, repr=False)
     provenance_max_age_seconds: float = 30.0
+    _instance_lease: ProcessInstanceLease | None = field(default=None, init=False, repr=False)
+    _closed: bool = field(default=False, init=False, repr=False)
     _session_id: str = field(default_factory=lambda: uuid4().hex, init=False, repr=False)
     _session_epoch: int = field(default=0, init=False, repr=False)
     _capture_sequence: int = field(default=0, init=False, repr=False)
@@ -50,19 +72,26 @@ class BlueStacksSession:
     def connect(self) -> None:
         """Connects to the configured ADB endpoint and validates device readiness."""
 
-        attempts = max(1, self.connect_attempts)
-        last_connect_result = None
-        last_state_result = None
-        for attempt_index in range(attempts):
-            last_connect_result = self.adb_client.connect(self.instance.device_id)
-            if last_connect_result.succeeded:
-                last_state_result = self.adb_client.get_state(self.instance.device_id)
-                if last_state_result.succeeded and last_state_result.stdout_text.strip() == "device":
-                    self._start_session_epoch()
-                    return
-            if attempt_index < attempts - 1 and self.connect_retry_delay_seconds > 0:
-                self.sleep(self.connect_retry_delay_seconds)
-        if last_connect_result is not None and not last_connect_result.succeeded:
+        self._ensure_lease()
+        try:
+            attempts = max(1, self.connect_attempts)
+            last_connect_result = None
+            last_state_result = None
+            for attempt_index in range(attempts):
+                last_connect_result = self.adb_client.connect(self.instance.device_id)
+                if last_connect_result.succeeded:
+                    last_state_result = self.adb_client.get_state(self.instance.device_id)
+                    if last_state_result.succeeded and last_state_result.stdout_text.strip() == "device":
+                        self._start_session_epoch()
+                        return
+                if attempt_index < attempts - 1 and self.connect_retry_delay_seconds > 0:
+                    self.sleep(self.connect_retry_delay_seconds)
+            if last_connect_result is not None and not last_connect_result.succeeded:
+                raise DeviceConnectionError(
+                    f"Failed to connect to device '{self.instance.device_id}'.",
+                    device_id=self.instance.device_id,
+                    stderr=last_connect_result.stderr_text,
+                )
             raise DeviceConnectionError(
                 f"Device '{self.instance.device_id}' is not ready.",
                 device_id=self.instance.device_id,
@@ -263,6 +292,7 @@ class BlueStacksSession:
         whose pixels may describe a different UI state to authorize an action.
         """
 
+        self._ensure_lease()
         with self._provenance_lock:
             input_sequence = self._input_sequence
             session_epoch = self._session_epoch
@@ -370,19 +400,6 @@ class BlueStacksSession:
             self._latest_frame = None
             self._consumed_frame = None
 
-
-def _frame_identity(frame_ref: FrameRef) -> tuple[str, int, int, int]:
-    """Returns the stable identity used for one-frame replay protection."""
-
-    return (
-        frame_ref.session_id,
-        frame_ref.session_epoch,
-        frame_ref.capture_sequence,
-        frame_ref.input_sequence,
-    )
-
-
-
     def close(self) -> None:
         """Releases the session's operation reference and prevents lease retention in long-lived workers."""
 
@@ -434,6 +451,17 @@ def _frame_identity(frame_ref: FrameRef) -> tuple[str, int, int, int]:
             raise PermissionError(
                 f"BlueStacks account for '{self.instance.display_name}' is read-only and cannot send input."
             )
+
+
+def _frame_identity(frame_ref: FrameRef) -> tuple[str, int, int, int]:
+    """Returns the stable identity used for one-frame replay protection."""
+
+    return (
+        frame_ref.session_id,
+        frame_ref.session_epoch,
+        frame_ref.capture_sequence,
+        frame_ref.input_sequence,
+    )
 
 
 def _encode_adb_text(text: str) -> str:

@@ -12,6 +12,7 @@ from PIL import Image
 from pnc_automation.app.automation.engine.navigation_core import NavigationCore, NavigationPolicy, reviewed_navigation_edges
 from pnc_automation.app.pnc.domain.observation import Bounds, Observation, VisibleElement, VisibleElementSourceKind
 from pnc_automation.app.pnc.domain.popup import decide_popup_recovery
+from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict, ScreenDecision
 from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
@@ -45,7 +46,11 @@ class Guard:
 
 def observation(screen, *, geometry=False, blocked=False):
     return Observation(
-        screen_type=screen, blocking_popup=blocked,
+        decision=ScreenDecision(
+            base_screen=screen,
+            effective_screen=screen,
+            guard=GuardVerdict.BLOCKED if blocked else GuardVerdict.CLEAR,
+        ),
         visible_elements={UiElementId.PNC_HOME_WORLD_SWITCH: VisibleElement(
             UiElementId.PNC_HOME_WORLD_SWITCH, Bounds(10, 20, 30, 40), 0.99,
             source_kind=VisibleElementSourceKind.GEOMETRY if geometry else VisibleElementSourceKind.TEMPLATE,
@@ -77,7 +82,10 @@ class NavigationCoreTests(unittest.TestCase):
                 ScreenType.PNC_MORE_MENU: UiElementId.PNC_MORE_SETTINGS,
             }
             selector = selectors.get(screen)
-            return Observation(screen_type=screen, visible_elements={} if selector is None else {
+            result = observation(screen)
+            if selector is None:
+                return replace(result, visible_elements={})
+            return replace(result, visible_elements={
                 selector: VisibleElement(selector, Bounds(10, 20, 30, 40), 1.0, source_kind=VisibleElementSourceKind.TEMPLATE),
             })
 
@@ -93,7 +101,7 @@ class NavigationCoreTests(unittest.TestCase):
 
     def test_settings_back_accepts_world_but_rejects_unobserved_parent(self):
         selector = UiElementId.PNC_BACK_BUTTON_TOP_LEFT
-        before = Observation(screen_type=ScreenType.PNC_SETTINGS, visible_elements={
+        before = replace(observation(ScreenType.PNC_SETTINGS), visible_elements={
             selector: VisibleElement(selector, Bounds(10, 20, 30, 40), 1.0, source_kind=VisibleElementSourceKind.TEMPLATE),
         })
         for destination in (ScreenType.PNC_WORLD_MAP, ScreenType.PNC_BAG):

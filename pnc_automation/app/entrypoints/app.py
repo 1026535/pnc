@@ -38,6 +38,7 @@ from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservatio
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
 from pnc_automation.app.pnc.vision.selectors import SelectorRegistry, build_default_selector_registry
 from pnc_automation.app.pnc.vision.visual_screen_recognizer import load_visual_screen_recognizer
+from pnc_automation.bluestacks_management.instance_lease import InstanceLeaseBundle
 from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
 
 

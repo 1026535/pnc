@@ -438,7 +438,7 @@ class SpatialSurfaceObservation:
         )
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, init=False)
 class Observation:
     """Authoritative interpreted state for one screenshot."""
 
@@ -467,6 +467,84 @@ class Observation:
     chat_draft_text: str | None = None
     frame_ref: FrameRef | None = None
 
+    def __init__(
+        self,
+        decision: ScreenDecision | None = None,
+        visible_elements: Mapping[UiElementId, VisibleElement] | None = None,
+        list_entries: tuple[DetectedListEntry, ...] = (),
+        spatial_surface: SpatialSurfaceObservation | None = None,
+        artifact_path: Path | None = None,
+        image_size: tuple[int, int] | None = None,
+        frame_fingerprint: str | None = None,
+        captured_at: datetime | None = None,
+        current_castle: CastleIdentity | None = None,
+        current_castle_evidence: CurrentCastleEvidenceKind | None = None,
+        current_pnc_account_id: str | None = None,
+        verified_pnc_account_id: str | None = None,
+        castle_roster_snapshot: PncAccountCastleRosterConfig | None = None,
+        available_march_slots: int | None = None,
+        active_chat_channel: ChatChannel | None = None,
+        profile_player_name: str | None = None,
+        mailbox_type: MailboxType | None = None,
+        mailbox_empty: bool | None = None,
+        empty_mailboxes: frozenset[MailboxType] = frozenset(),
+        text_field_states: Mapping[UiElementId, ObservedTextFieldState] | None = None,
+        chat_draft_empty: bool | None = None,
+        chat_draft_text: str | None = None,
+        frame_ref: FrameRef | None = None,
+        *,
+        screen_type: ScreenType | None = None,
+        blocking_popup: bool | None = None,
+    ) -> None:
+        """Build an observation while accepting the pre-decision fixture API."""
+
+        if decision is None:
+            if screen_type is None:
+                raise TypeError("Observation requires decision or legacy screen_type.")
+            decision = ScreenDecision(
+                base_screen=screen_type,
+                effective_screen=screen_type,
+                guard=GuardVerdict.BLOCKED if blocking_popup else GuardVerdict.CLEAR,
+            )
+        elif screen_type is not None and screen_type != decision.effective_screen:
+            raise ValueError("Legacy screen_type contradicts the supplied screen decision.")
+        if blocking_popup and decision.guard != GuardVerdict.BLOCKED:
+            decision = ScreenDecision(
+                base_screen=decision.base_screen,
+                effective_screen=decision.effective_screen,
+                layout_id=decision.layout_id,
+                guard=GuardVerdict.BLOCKED,
+                evidence=decision.evidence,
+                coordinate_only=decision.coordinate_only,
+            )
+        values = {
+            "decision": decision,
+            "visible_elements": {} if visible_elements is None else visible_elements,
+            "list_entries": list_entries,
+            "spatial_surface": spatial_surface,
+            "artifact_path": artifact_path,
+            "image_size": image_size,
+            "frame_fingerprint": frame_fingerprint,
+            "captured_at": captured_at or datetime.now(tz=UTC),
+            "current_castle": current_castle,
+            "current_castle_evidence": current_castle_evidence,
+            "current_pnc_account_id": current_pnc_account_id,
+            "verified_pnc_account_id": verified_pnc_account_id,
+            "castle_roster_snapshot": castle_roster_snapshot,
+            "available_march_slots": available_march_slots,
+            "active_chat_channel": active_chat_channel,
+            "profile_player_name": profile_player_name,
+            "mailbox_type": mailbox_type,
+            "mailbox_empty": mailbox_empty,
+            "empty_mailboxes": empty_mailboxes,
+            "text_field_states": {} if text_field_states is None else text_field_states,
+            "chat_draft_empty": chat_draft_empty,
+            "chat_draft_text": chat_draft_text,
+            "frame_ref": frame_ref,
+        }
+        for field_name, value in values.items():
+            object.__setattr__(self, field_name, value)
+
     @property
     def screen_type(self) -> ScreenType:
         """Returns the effective screen owned by the immutable decision."""
@@ -483,6 +561,7 @@ class Observation:
 
         return (
             self.screen_type != ScreenType.PNC_LOADING
+            and self.screen_type != ScreenType.PNC_WORLD_COORDINATE_DIALOG
             and (self.decision.guard == GuardVerdict.BLOCKED or self.screen_type in BLOCKING_SCREEN_TYPES)
         )
 

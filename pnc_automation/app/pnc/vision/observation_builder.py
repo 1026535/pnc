@@ -246,6 +246,9 @@ class ImageSelectorEngine:
     """Detects selectors using template matching and optional OCR."""
 
     template_matcher: OpenCvTemplateMatcher
+    # Kept as a compatibility injection point for older fixture builders; OCR
+    # ownership remains with ObservationBuilder's frame-scoped context.
+    ocr_service: OcrService | None = None
 
     def detect(
         self,
@@ -351,6 +354,8 @@ class ObservationBuilder:
         """Create the single OCR context owned by one captured screenshot."""
 
         backend = self.ocr_service
+        if backend is None:
+            backend = getattr(self.enricher, "ocr_service", None)
         if backend is None:
             backend = UnavailableOcrService()
         return ObservationOcrContext(

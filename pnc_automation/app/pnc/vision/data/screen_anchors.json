@@ -42,7 +42,22 @@
         "build": null,
         "locale": null,
         "qualification": "guarded_reference_only"
-      }
+      },
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/core_institute_pnc_back_button_top_left.png",
+            "search_region": [
+              22,
+              8,
+              58,
+              38
+            ],
+            "threshold": 0.93
+          }
+        }
+      ]
     },
     {
       "id": "event_center",
@@ -120,7 +135,35 @@
         "build": null,
         "locale": null,
         "qualification": "guarded_reference_only"
-      }
+      },
+      "controls": [
+        {
+          "selector": "PNC_QUEST_TAB_MAIN",
+          "anchor": {
+            "image": "screen_anchors/core_quest_daily_pnc_quest_tab_main.png",
+            "search_region": [
+              34,
+              72,
+              116,
+              27
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/core_quest_daily_pnc_back_button_top_left.png",
+            "search_region": [
+              22,
+              8,
+              58,
+              38
+            ],
+            "threshold": 0.93
+          }
+        }
+      ]
     },
     {
       "id": "quest_main",
@@ -159,7 +202,35 @@
         "build": null,
         "locale": null,
         "qualification": "guarded_reference_only"
-      }
+      },
+      "controls": [
+        {
+          "selector": "PNC_QUEST_TAB_DAILY",
+          "anchor": {
+            "image": "screen_anchors/core_quest_main_pnc_quest_tab_daily.png",
+            "search_region": [
+              212,
+              72,
+              114,
+              27
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/core_quest_main_pnc_back_button_top_left.png",
+            "search_region": [
+              22,
+              8,
+              58,
+              38
+            ],
+            "threshold": 0.93
+          }
+        }
+      ]
     },
     {
       "id": "bag",
@@ -198,7 +269,22 @@
         "build": null,
         "locale": null,
         "qualification": "guarded_reference_only"
-      }
+      },
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/core_bag_pnc_back_button_top_left.png",
+            "search_region": [
+              22,
+              8,
+              58,
+              38
+            ],
+            "threshold": 0.93
+          }
+        }
+      ]
     },
     {
       "id": "settings",
@@ -237,7 +323,74 @@
         "build": null,
         "locale": null,
         "qualification": "guarded_reference_only"
-      }
+      },
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/core_settings_pnc_back_button_top_left.png",
+            "search_region": [
+              22,
+              8,
+              58,
+              38
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_MORE_MANAGE_CHAR",
+          "anchor": {
+            "image": "screen_anchors/game_first_pnc_more_manage_char.png",
+            "search_region": [
+              371,
+              90,
+              127,
+              28
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_SETTINGS_RANK",
+          "anchor": {
+            "image": "screen_anchors/game_first_pnc_settings_rank.png",
+            "search_region": [
+              371,
+              170,
+              57,
+              28
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_SETTINGS_PREFERENCES",
+          "anchor": {
+            "image": "screen_anchors/game_first_pnc_settings_preferences.png",
+            "search_region": [
+              107,
+              250,
+              80,
+              28
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_SETTINGS_NOTIFICATIONS",
+          "anchor": {
+            "image": "screen_anchors/game_first_pnc_settings_notifications.png",
+            "search_region": [
+              370,
+              331,
+              128,
+              28
+            ],
+            "threshold": 0.93
+          }
+        }
+      ]
     },
     {
       "id": "more_overlay",
@@ -276,7 +429,39 @@
         "build": null,
         "locale": null,
         "qualification": "guarded_reference_only"
-      }
+      },
+      "controls": [
+        {
+          "selector": "PNC_MORE_SETTINGS",
+          "anchor": {
+            "image": "screen_anchors/core_more_overlay_pnc_more_settings.png",
+            "search_region": [
+              460,
+              855,
+              69,
+              32
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_MORE_RANK",
+          "anchor": {
+            "image": "screen_anchors/game_first_pnc_more_rank.png",
+            "search_region": [
+              395,
+              828,
+              40,
+              35
+            ],
+            "threshold": 0.93
+          }
+        }
+      ],
+      "occludes": [
+        "PNC_HOME_CITY",
+        "PNC_WORLD_MAP"
+      ]
     },
     {
       "id": "manage_char",
@@ -315,7 +500,22 @@
         "build": null,
         "locale": null,
         "qualification": "guarded_reference_only"
-      }
+      },
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/game_first_back.png",
+            "search_region": [
+              23,
+              9,
+              56,
+              36
+            ],
+            "threshold": 0.93
+          }
+        }
+      ]
     },
     {
       "id": "alliance_invitation",
@@ -393,7 +593,22 @@
         "build": null,
         "locale": null,
         "qualification": "guarded_reference_only"
-      }
+      },
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/core_institute_pnc_back_button_top_left.png",
+            "search_region": [
+              22,
+              8,
+              58,
+              38
+            ],
+            "threshold": 0.93
+          }
+        }
+      ]
     },
     {
       "id": "goddess_statue",
@@ -432,7 +647,22 @@
         "build": null,
         "locale": null,
         "qualification": "guarded_reference_only"
-      }
+      },
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/core_institute_pnc_back_button_top_left.png",
+            "search_region": [
+              22,
+              8,
+              58,
+              38
+            ],
+            "threshold": 0.93
+          }
+        }
+      ]
     },
     {
       "id": "warehouse",
@@ -468,6 +698,704 @@
       "review": {
         "reference_manifest": "tests/data/screen_recognition/manifest.json",
         "description": "Reviewed PNC_WAREHOUSE identity anchor group from the frozen reference fixture.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/core_institute_pnc_back_button_top_left.png",
+            "search_region": [
+              22,
+              8,
+              58,
+              38
+            ],
+            "threshold": 0.93
+          }
+        }
+      ]
+    },
+    {
+      "id": "home_city",
+      "screen": "PNC_HOME_CITY",
+      "anchors": [
+        {
+          "image": "screen_anchors/core_home_city_identity_0.png",
+          "search_region": [
+            12,
+            929,
+            65,
+            28
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/core_home_city_identity_1.png",
+          "search_region": [
+            12,
+            210,
+            45,
+            22
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_HOME_WORLD_SWITCH",
+          "anchor": {
+            "image": "screen_anchors/core_home_city_pnc_home_world_switch.png",
+            "search_region": [
+              12,
+              929,
+              65,
+              28
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_BOTTOM_NAV_QUEST",
+          "anchor": {
+            "image": "screen_anchors/core_home_city_pnc_bottom_nav_quest.png",
+            "search_region": [
+              201,
+              902,
+              36,
+              37
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_BOTTOM_NAV_BAG",
+          "anchor": {
+            "image": "screen_anchors/core_home_city_pnc_bottom_nav_bag.png",
+            "search_region": [
+              273,
+              901,
+              34,
+              37
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_BOTTOM_NAV_MORE",
+          "anchor": {
+            "image": "screen_anchors/core_home_city_pnc_bottom_nav_more.png",
+            "search_region": [
+              487,
+              902,
+              31,
+              36
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_HOME_RESEARCH_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/core_home_city_pnc_home_research_button.png",
+            "search_region": [
+              4,
+              277,
+              64,
+              19
+            ],
+            "threshold": 0.93
+          }
+        }
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/home_city_core.png",
+        "decoded_sha256": "c5d14dc40865df81c7ee617ef6281c56b1a0a5d6feb6daa12e1d0b8cb6a71438",
+        "capture_group": "rebased-origin-main/screen_recognition"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Rebased reviewed PNC_HOME_CITY identity and control anchors from origin/main.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      }
+    },
+    {
+      "id": "world_map",
+      "screen": "PNC_WORLD_MAP",
+      "anchors": [
+        {
+          "image": "screen_anchors/core_world_map_identity_0.png",
+          "search_region": [
+            20,
+            928,
+            63,
+            29
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/core_world_map_identity_1.png",
+          "search_region": [
+            8,
+            798,
+            40,
+            37
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_WORLD_HOME_NAV",
+          "anchor": {
+            "image": "screen_anchors/core_world_map_pnc_world_home_nav.png",
+            "search_region": [
+              20,
+              928,
+              63,
+              29
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_WORLD_COORDINATE_BAR",
+          "anchor": {
+            "image": "screen_anchors/core_world_map_pnc_world_coordinate_bar.png",
+            "search_region": [
+              185,
+              81,
+              34,
+              32
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_WORLD_EXPAND_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/core_world_map_overview_entry.png",
+            "search_region": [
+              14,
+              669,
+              44,
+              44
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_WORLD_HUD_TOGGLE",
+          "anchor": {
+            "image": "screen_anchors/core_world_map_hud_toggle.png",
+            "search_region": [
+              8,
+              798,
+              40,
+              38
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_BOTTOM_NAV_MORE",
+          "anchor": {
+            "image": "screen_anchors/game_first_pnc_bottom_nav_more.png",
+            "search_region": [
+              487,
+              902,
+              32,
+              36
+            ],
+            "threshold": 0.93
+          }
+        }
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/world_map_core.png",
+        "decoded_sha256": "60cf6fae1568c3951186c4885939959e3a3b0966aa6768f5e674f93baa663afb",
+        "capture_group": "rebased-origin-main/screen_recognition"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Rebased reviewed PNC_WORLD_MAP identity and control anchors from origin/main.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      }
+    },
+    {
+      "id": "coordinate_dialog",
+      "screen": "PNC_WORLD_COORDINATE_DIALOG",
+      "anchors": [
+        {
+          "image": "screen_anchors/core_coordinate_dialog_identity_0.png",
+          "search_region": [
+            71,
+            394,
+            35,
+            34
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/core_coordinate_dialog_identity_1.png",
+          "search_region": [
+            199,
+            394,
+            32,
+            34
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/core_coordinate_dialog_identity_2.png",
+          "search_region": [
+            467,
+            307,
+            43,
+            44
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_WORLD_COORDINATE_DIALOG_CLOSE_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/core_coordinate_dialog_pnc_world_coordinate_dialog_close_button.png",
+            "search_region": [
+              467,
+              307,
+              43,
+              44
+            ],
+            "threshold": 0.93
+          },
+          "dismisses_surface": true
+        }
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/coordinate_dialog_core.png",
+        "decoded_sha256": "c389e165cc5e3e60e02ced947d3ceb77bf59fa7811c3235ecbd12f2ac5ebbac5",
+        "capture_group": "rebased-origin-main/screen_recognition"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Rebased reviewed PNC_WORLD_COORDINATE_DIALOG identity and control anchors from origin/main.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      }
+    },
+    {
+      "id": "world_overview",
+      "screen": "PNC_WORLD_MAP_OVERVIEW",
+      "anchors": [
+        {
+          "image": "screen_anchors/core_world_overview_identity_0.png",
+          "search_region": [
+            238,
+            793,
+            114,
+            27
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/core_world_overview_identity_1.png",
+          "search_region": [
+            238,
+            831,
+            66,
+            28
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_WORLD_OVERVIEW_CLOSE_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/core_world_overview_pnc_world_overview_close_button.png",
+            "search_region": [
+              477,
+              14,
+              50,
+              48
+            ],
+            "threshold": 0.93
+          },
+          "dismisses_surface": true
+        },
+        {
+          "selector": "PNC_WORLD_OVERVIEW_WORLD_ICON",
+          "anchor": {
+            "image": "screen_anchors/game_first_pnc_world_overview_world_icon.png",
+            "search_region": [
+              30,
+              884,
+              47,
+              47
+            ],
+            "threshold": 0.93
+          }
+        }
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/world_overview_core.png",
+        "decoded_sha256": "7d8ba05e945cf2e0361e3d86b2a8e48bbe18fd25840de54550f472d4deaef1bf",
+        "capture_group": "rebased-origin-main/screen_recognition"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Rebased reviewed PNC_WORLD_MAP_OVERVIEW identity and control anchors from origin/main.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      }
+    },
+    {
+      "id": "world_expanded",
+      "screen": "PNC_WORLD_MAP_EXPANDED",
+      "anchors": [
+        {
+          "image": "screen_anchors/core_world_expanded_hud_toggle.png",
+          "search_region": [
+            8,
+            864,
+            40,
+            39
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/core_world_expanded_overview_entry.png",
+          "search_region": [
+            13,
+            730,
+            46,
+            45
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_WORLD_HUD_TOGGLE",
+          "anchor": {
+            "image": "screen_anchors/core_world_expanded_hud_toggle.png",
+            "search_region": [
+              8,
+              864,
+              40,
+              39
+            ],
+            "threshold": 0.93
+          }
+        }
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/world_expanded_core.png",
+        "decoded_sha256": "59420307fee2ae190a758adb3507f22ba0087802182f549cfc25e5ba01501036",
+        "capture_group": "rebased-origin-main/screen_recognition"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Rebased reviewed PNC_WORLD_MAP_EXPANDED identity and control anchors from origin/main.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      }
+    },
+    {
+      "id": "research_queue",
+      "screen": "PNC_RESEARCH_QUEUE",
+      "anchors": [
+        {
+          "image": "screen_anchors/core_research_queue_header.png",
+          "search_region": [
+            167,
+            253,
+            210,
+            33
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/core_research_queue_row.png",
+          "search_region": [
+            124,
+            321,
+            182,
+            27
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_RESEARCH_QUEUE_GO",
+          "anchor": {
+            "image": "screen_anchors/core_research_queue_go.png",
+            "search_region": [
+              413,
+              340,
+              45,
+              28
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_RESEARCH_QUEUE_CLOSE",
+          "dismisses_surface": true,
+          "anchor": {
+            "image": "screen_anchors/core_research_queue_close.png",
+            "search_region": [
+              468,
+              250,
+              40,
+              38
+            ],
+            "threshold": 0.93
+          }
+        }
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/research_queue_core.png",
+        "decoded_sha256": "51e2e0c3a0cc327694825f84a53fa4b9a1e1706c12f0d443698878965d0ba528",
+        "capture_group": "rebased-origin-main/screen_recognition"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Rebased reviewed PNC_RESEARCH_QUEUE identity and control anchors from origin/main.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      }
+    },
+    {
+      "id": "settings_preferences",
+      "screen": "PNC_SETTINGS_PREFERENCES",
+      "anchors": [
+        {
+          "image": "screen_anchors/game_first_settings_preferences_0.png",
+          "search_region": [
+            105,
+            5,
+            127,
+            39
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/game_first_settings_preferences_1.png",
+          "search_region": [
+            195,
+            69,
+            150,
+            28
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/game_first_back.png",
+            "search_region": [
+              23,
+              9,
+              56,
+              36
+            ],
+            "threshold": 0.93
+          }
+        }
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/game_first_navigation/settings_preferences_after.png",
+        "decoded_sha256": "7c3b0f1d5e1bb50371dc02ec1b366a4ae9e5bee7cb3b9911218ea5b476da0619",
+        "capture_group": "rebased-origin-main/game_first_navigation"
+      },
+      "review": {
+        "reference_manifest": "tests/data/game_first_navigation/provenance.json",
+        "description": "Rebased reviewed PNC_SETTINGS_PREFERENCES identity and control anchors from origin/main.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      }
+    },
+    {
+      "id": "notifications",
+      "screen": "PNC_NOTIFICATIONS",
+      "anchors": [
+        {
+          "image": "screen_anchors/game_first_notifications_0.png",
+          "search_region": [
+            105,
+            5,
+            190,
+            39
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/game_first_notifications_1.png",
+          "search_region": [
+            193,
+            468,
+            157,
+            29
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/game_first_back.png",
+            "search_region": [
+              23,
+              9,
+              56,
+              36
+            ],
+            "threshold": 0.93
+          }
+        }
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/game_first_navigation/settings_notifications_after.png",
+        "decoded_sha256": "dc6549a5fd639fd6e7c83e9eea8c44a7fba4942a550a29e80bf89430fab315a2",
+        "capture_group": "rebased-origin-main/game_first_navigation"
+      },
+      "review": {
+        "reference_manifest": "tests/data/game_first_navigation/provenance.json",
+        "description": "Rebased reviewed PNC_NOTIFICATIONS identity and control anchors from origin/main.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      }
+    },
+    {
+      "id": "rank_hub",
+      "screen": "PNC_RANK_HUB",
+      "anchors": [
+        {
+          "image": "screen_anchors/game_first_rank_hub_0.png",
+          "search_region": [
+            105,
+            5,
+            82,
+            39
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/game_first_rank_hub_1.png",
+          "search_region": [
+            178,
+            64,
+            186,
+            29
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/game_first_back.png",
+            "search_region": [
+              23,
+              9,
+              56,
+              36
+            ],
+            "threshold": 0.93
+          }
+        }
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/game_first_navigation/settings_rank_after.png",
+        "decoded_sha256": "eb61684b34650a6382e2c598368858f5dfe5fd9401fdc696412663d1782103df",
+        "capture_group": "rebased-origin-main/game_first_navigation"
+      },
+      "review": {
+        "reference_manifest": "tests/data/game_first_navigation/provenance.json",
+        "description": "Rebased reviewed PNC_RANK_HUB identity and control anchors from origin/main.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      }
+    },
+    {
+      "id": "kingdom_list",
+      "screen": "PNC_WORLD_KINGDOM_LIST",
+      "anchors": [
+        {
+          "image": "screen_anchors/game_first_kingdom_list_0.png",
+          "search_region": [
+            105,
+            5,
+            193,
+            39
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/game_first_kingdom_list_1.png",
+          "search_region": [
+            15,
+            95,
+            305,
+            24
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/game_first_back.png",
+            "search_region": [
+              23,
+              9,
+              56,
+              36
+            ],
+            "threshold": 0.93
+          }
+        }
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/game_first_navigation/kingdoms_settled_before.png",
+        "decoded_sha256": "4cc71bd8ca598031557904393138dc0ac4c5dab268f6fc35477a8e5170c16639",
+        "capture_group": "rebased-origin-main/game_first_navigation"
+      },
+      "review": {
+        "reference_manifest": "tests/data/game_first_navigation/provenance.json",
+        "description": "Rebased reviewed PNC_WORLD_KINGDOM_LIST identity and control anchors from origin/main.",
         "build": null,
         "locale": null,
         "qualification": "guarded_reference_only"

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 from pathlib import Path
 import shutil
@@ -30,21 +31,32 @@ class VisualScreenMetadataTests(unittest.TestCase):
             for sample in manifest["samples"]
             if sample["split"] == "reference"
         }
-        self.assertEqual(12, len(catalog["profiles"]))
+        self.assertEqual(22, len(catalog["profiles"]))
         for profile in catalog["profiles"]:
             with self.subTest(profile=profile["id"]):
                 source = profile["source"]
-                sample = references[source["fixture"]]
-                self.assertEqual(sample["sha256"], source["decoded_sha256"])
-                self.assertEqual(sample["group"], source["capture_group"])
-                self.assertEqual("tests/data/screen_recognition/manifest.json", profile["review"]["reference_manifest"])
+                if source["fixture"] in references:
+                    sample = references[source["fixture"]]
+                    self.assertEqual(sample["sha256"], source["decoded_sha256"])
+                    self.assertEqual(sample["group"], source["capture_group"])
+                    self.assertEqual("tests/data/screen_recognition/manifest.json", profile["review"]["reference_manifest"])
+                elif profile["review"]["reference_manifest"] == "tests/data/screen_recognition/manifest.json":
+                    fixture = Path(__file__).parents[1] / source["fixture"]
+                    self.assertTrue(fixture.is_file())
+                    self.assertEqual(hashlib.sha256(fixture.read_bytes()).hexdigest(), source["decoded_sha256"])
+                    self.assertEqual("tests/data/screen_recognition/manifest.json", profile["review"]["reference_manifest"])
+                else:
+                    fixture = Path(__file__).parents[1] / source["fixture"]
+                    self.assertTrue(fixture.is_file())
+                    self.assertEqual(hashlib.sha256(fixture.read_bytes()).hexdigest(), source["decoded_sha256"])
+                    self.assertEqual("tests/data/game_first_navigation/provenance.json", profile["review"]["reference_manifest"])
                 self.assertEqual("guarded_reference_only", profile["review"]["qualification"])
                 self.assertIsNone(profile["review"]["build"])
                 self.assertIsNone(profile["review"]["locale"])
                 self.assertEqual(1, profile["revision"])
 
         recognizer = load_visual_screen_recognizer()
-        self.assertEqual(12, len(recognizer.profiles))
+        self.assertEqual(22, len(recognizer.profiles))
         self.assertTrue(all(profile.review.qualification == "guarded_reference_only" for profile in recognizer.profiles))
 
         class _MatchAll:
@@ -57,7 +69,7 @@ class VisualScreenMetadataTests(unittest.TestCase):
                 return object()
 
         recognition = load_visual_screen_recognizer(matcher=_MatchAll()).recognize(Image.new("RGB", (540, 960)))
-        self.assertEqual(12, len(recognition.evidence))
+        self.assertEqual(20, len(recognition.evidence))
         self.assertTrue(all(item.layout_revision == 1 for item in recognition.evidence))
 
     def test_malformed_provenance_is_rejected_eagerly(self) -> None:

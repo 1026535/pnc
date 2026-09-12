@@ -1778,6 +1778,49 @@ class PncObservationEnricher:
 
     selector_registry: SelectorRegistry | None = None
     text_anchor_detector: TextAnchorDetector = field(default_factory=TextAnchorDetector)
+    # Backwards-compatible fixture injection; production builders pass the
+    # frame-scoped OCR context directly.
+    ocr_service: OcrService | None = None
+
+    def __post_init__(self) -> None:
+        """Accept the historical positional OCR fixture used by offline callers."""
+
+        if self.ocr_service is None and self.selector_registry is not None and hasattr(self.selector_registry, "read_result"):
+            self.ocr_service = self.selector_registry  # type: ignore[assignment]
+            self.selector_registry = None
+
+    def detect_interruption(self, image: Image.Image, *, owned_dismiss_bounds: tuple[Bounds, ...] = ()) -> ObservationAdditions:
+        """Run the global guard through a compatibility OCR context.
+
+        The replacement navigation perception API predates the frame-scoped
+        ``ObservationOcrContext`` interface. Keeping this adapter on the
+        canonical enricher lets deterministic callers exercise the same guard
+        rules without constructing a full observation builder.
+        """
+
+        if self.ocr_service is None:
+            return ObservationAdditions()
+        result = self.ocr_service.read_result(image)
+        lines = tuple(sorted(result.lines, key=lambda line: (line.bounds.y, line.bounds.x)))
+        anchors = self.text_anchor_detector.detect(result)
+        popup = _build_popup_additions(image=image, lines=lines, anchors=anchors)
+        if popup is not None:
+            return popup
+        visual = _build_visual_popup_close_additions(image=image)
+        if visual is not None:
+            close = visual.visible_elements[UiElementId.PNC_POPUP_CLOSE_BUTTON].bounds
+            center = close.center()
+            owned = any(
+                bounds.x <= center[0] <= bounds.x + bounds.width
+                and bounds.y <= center[1] <= bounds.y + bounds.height
+                and bounds.width >= close.width * 0.8
+                and bounds.height >= close.height * 0.8
+                for bounds in owned_dismiss_bounds
+            )
+            if not owned:
+                return visual
+        loading = _build_loading_additions(image=image, lines=lines)
+        return loading if loading is not None else ObservationAdditions()
 
     def recognize_guards(
         self,

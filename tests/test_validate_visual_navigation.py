@@ -148,7 +148,7 @@ class VisualNavigationSafetyTests(unittest.TestCase):
     def test_navigation_selector_cli_runs_each_declared_source_independently(self) -> None:
         with TemporaryDirectory() as directory:
             summaries = []
-            for index in range(2):
+            for index in range(3):
                 path = Path(directory) / f"summary-{index}.json"
                 path.write_text(json.dumps({"status": "passed", "navigation_report": "report.yaml"}), encoding="utf-8")
                 summaries.append(path)
@@ -164,9 +164,9 @@ class VisualNavigationSafetyTests(unittest.TestCase):
                 side_effect=summaries,
             ) as run_probe:
                 self.assertEqual(0, validate_navigation_selectors.main())
-            self.assertEqual(2, run_probe.call_count)
+            self.assertEqual(3, run_probe.call_count)
             self.assertEqual(
-                [ScreenType.PNC_HOME_CITY, ScreenType.PNC_MORE_MENU],
+                [ScreenType.PNC_HOME_CITY, ScreenType.PNC_WORLD_MAP, ScreenType.PNC_MORE_MENU],
                 [call.kwargs["navigation_source_screen"] for call in run_probe.call_args_list],
             )
             self.assertTrue(all(
