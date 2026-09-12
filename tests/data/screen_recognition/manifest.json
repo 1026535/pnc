@@ -429,6 +429,36 @@
       "expected_visual_screens": [
         "PNC_CASTLE"
       ]
+    },
+    {
+      "image": "campaign_map.png",
+      "screen": "PNC_CAMPAIGN_MAP",
+      "split": "reference",
+      "group": "2026-09-12/serious_stuff/campaign_navigation",
+      "sha256": "05f3d0ff1fba60751a71e366a89946f8750e38fd48eabb6ce377548a74bf3059",
+      "expected_visual_screens": [
+        "PNC_CAMPAIGN_MAP"
+      ]
+    },
+    {
+      "image": "campaign_chapter_10.png",
+      "screen": "PNC_CAMPAIGN_CHAPTER",
+      "split": "reference",
+      "group": "2026-09-12/serious_stuff/campaign_navigation",
+      "sha256": "b45dc5a7d432665647fe2f5c7541124db8ff09ac31fc3c21df25e63c53c93678",
+      "expected_visual_screens": [
+        "PNC_CAMPAIGN_CHAPTER"
+      ]
+    },
+    {
+      "image": "campaign_stage_10_3.png",
+      "screen": "PNC_CAMPAIGN_STAGE",
+      "split": "reference",
+      "group": "2026-09-12/serious_stuff/campaign_navigation",
+      "sha256": "efab0c7ecb4c30187e057235bfe9efdfb831fc212aa61bc42548791177628157",
+      "expected_visual_screens": [
+        "PNC_CAMPAIGN_STAGE"
+      ]
     }
   ]
 }
