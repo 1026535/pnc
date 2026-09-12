@@ -7,11 +7,12 @@ from enum import StrEnum
 from typing import Generic, Literal, Protocol, TypeVar
 
 from pnc_automation.app.automation.engine.core_runtime import CoreRuntime
-from pnc_automation.app.automation.engine.core_daily_mutation import CoreDailyClaimBoundary
+from pnc_automation.app.automation.engine.core_daily_mutation import CoreMutationBoundary
 from pnc_automation.app.pnc.domain.daily_maintenance import (
     DailyQuestId, DailyQuestRow, DailyTaskCheckpoint, DailyTargetOutcome,
 )
 from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
+from pnc_automation.app.pnc.domain.policy_models import ResearchCategory
 from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.domain.chat import ChatChannel
@@ -89,7 +90,7 @@ class CoreWorkflowResult(Generic[T]):
 class WorkflowContext:
     """Exposes only reviewed navigation and fresh, expected-screen content capture."""
 
-    __slots__ = ("_runtime", "_last_navigation_count", "_last_observation", "_effect", "_daily_claims")
+    __slots__ = ("_runtime", "_last_navigation_count", "_last_observation", "_effect", "_mutation_boundary", "_research_node")
 
     def __init__(
         self,
@@ -97,7 +98,7 @@ class WorkflowContext:
         *,
         last_observation: Observation,
         effect: WorkflowEffect = WorkflowEffect.READ_ONLY,
-        daily_claims: CoreDailyClaimBoundary | None = None,
+        mutation_boundary: CoreMutationBoundary | None = None,
     ) -> None:
         """Starts a context after the runner has confirmed the workflow entry screen."""
 
@@ -107,16 +108,53 @@ class WorkflowContext:
         self._last_navigation_count = runtime.observation_count
         self._last_observation = last_observation
         self._effect = effect
-        self._daily_claims = daily_claims
+        self._mutation_boundary = mutation_boundary
+        self._research_node: str | None = None
+
+    def open_research_node(self, title: str, category: ResearchCategory) -> Observation:
+        """Reacquire one exact supported node before proving its idle detail."""
+
+        self._research_node = None
+        try:
+            observation = self._runtime.navigation.open_research_node(
+                title, category, observe_content=self._observe_research_content,
+            )
+            self._research_node = title
+            return observation
+        finally:
+            self._sync_from_runtime()
+
+    def start_research(self, checkpoint: DailyTaskCheckpoint) -> tuple[DailyTaskCheckpoint, DailyTargetOutcome]:
+        """Use the canonical one-research boundary only after this context selected its node."""
+
+        if (
+            self._effect != WorkflowEffect.RESOURCE_CHANGING
+            or self._mutation_boundary is None or self._research_node is None
+        ):
+            raise PermissionError("Research requires exact authority and a freshly selected node.")
+        title = self._research_node
+        self._research_node = None
+        try:
+            return self._mutation_boundary.start_research(
+                runtime=self._runtime, observe=self._observe_research_content,
+                node_title=title, checkpoint=checkpoint,
+            )
+        finally:
+            self._sync_from_runtime()
+
+    def _observe_research_content(self, label: str) -> Observation:
+        """Keep research captures fresh; operation owners evaluate their published facts."""
+
+        return self._observe_operation_content(label, operation="Research")
 
     def claim_daily_reward(
         self, row: DailyQuestRow, checkpoint: DailyTaskCheckpoint,
     ) -> tuple[DailyTaskCheckpoint, DailyTargetOutcome]:
         """Claim one exact row through the authorized canonical journal boundary."""
 
-        if self._effect != WorkflowEffect.RESOURCE_CHANGING or self._daily_claims is None:
+        if self._effect != WorkflowEffect.RESOURCE_CHANGING or self._mutation_boundary is None:
             raise PermissionError("Daily claims require an authorized resource-changing workflow.")
-        return self._daily_claims.claim(
+        return self._mutation_boundary.claim(
             runtime=self._runtime, observe=self._observe_daily_claim,
             row=row, checkpoint=checkpoint,
         )
@@ -149,6 +187,7 @@ class WorkflowContext:
 
         if not isinstance(target, ScreenType) or target == ScreenType.UNKNOWN:
             raise ValueError("Workflow navigation requires a known screen target.")
+        self._research_node = None
         observation = self._runtime.navigation.navigate(target)
         self._last_navigation_count = self._runtime.observation_count
         self._last_observation = observation
@@ -179,6 +218,7 @@ class WorkflowContext:
 
         if not isinstance(target, HomeCityObjectId):
             raise ValueError("Building navigation requires a known HomeCityObjectId target.")
+        self._research_node = None
         observation = self._runtime.navigation.open_building(
             target,
             observe_content=lambda label: self._runtime.observe(label, include_content=True),
@@ -344,7 +384,7 @@ class CoreWorkflowRunner(Generic[T]):
     """Owns entry, execution, and exit without replaying failed or ambiguous actions."""
 
     runtime: CoreRuntime
-    daily_claims: CoreDailyClaimBoundary | None = None
+    mutation_boundary: CoreMutationBoundary | None = None
 
     def run(self, workflow: CoreWorkflow[T]) -> CoreWorkflowResult[T]:
         """Run a bounded workflow, requiring exact authority for supported mutations."""
@@ -354,7 +394,7 @@ class CoreWorkflowRunner(Generic[T]):
             raise TypeError("Core workflows must expose a validated WorkflowSpec.")
         mutating = spec.effect == WorkflowEffect.RESOURCE_CHANGING
         if mutating and (
-            self.daily_claims is None or spec.mutation_capability != DailyQuestId.CLAIM_COMPLETED
+            self.mutation_boundary is None or spec.mutation_capability != self.mutation_boundary.policy.quest_id
         ):
             self.runtime.record(
                 {
@@ -367,15 +407,15 @@ class CoreWorkflowRunner(Generic[T]):
                 "The resource-changing workflow has no supported exact mutation boundary."
             )
         if mutating:
-            self.daily_claims.authorize()
+            self.mutation_boundary.authorize()
         self.runtime.record({"event": "workflow_started", "workflow": spec.name, "effect": spec.effect.value})
         try:
             if mutating:
-                self.daily_claims.verify_active_castle(self.runtime)
+                self.mutation_boundary.verify_active_castle(self.runtime)
             entry = self.runtime.navigation.navigate(spec.entry_screen)
             context = WorkflowContext(
                 self.runtime, last_observation=entry, effect=spec.effect,
-                daily_claims=self.daily_claims if mutating else None,
+                mutation_boundary=self.mutation_boundary if mutating else None,
             )
             value = workflow.execute(context)
             exit_observation = self.runtime.navigation.navigate(spec.exit_screen)

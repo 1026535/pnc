@@ -12,7 +12,7 @@ from pnc_automation.app.automation.daily_maintenance.application_service import 
 from pnc_automation.app.automation.daily_maintenance.authorization import DailyMutationAuthorizer
 from pnc_automation.app.automation.daily_maintenance.coordinator import daily_viewport_from_observation
 from pnc_automation.app.automation.daily_maintenance.connected_runner import ConnectedClaimOnlyCastleRunner
-from pnc_automation.app.automation.engine.core_daily_mutation import CoreDailyClaimBoundary
+from pnc_automation.app.automation.engine.core_daily_mutation import CoreMutationBoundary
 from pnc_automation.app.automation.engine.core_workflow import CoreWorkflowRunner, WorkflowContext, WorkflowEffect, WorkflowSpec
 from pnc_automation.app.automation.engine.navigation_core import NavigationCore, NavigationPolicy
 from pnc_automation.app.pnc.domain.action_requests import SwipeAction
@@ -101,7 +101,7 @@ class CoreDailyMutationTests(unittest.TestCase):
         self.store = DailyRunJournalStore(Path(temporary.name))
         self.castle = CastleIdentity("K1", "Castle", 20)
         self.checkpoint = DailyTaskCheckpoint("2026-09-12", "reset", "account", self.castle)
-        self.scope = CoreDailyClaimBoundary(
+        self.scope = CoreMutationBoundary(
             target=DailyMaintenanceTargetConfig("account", "castle", self.castle, (), max_claims=1),
             boundary=DailyRunBoundary(date(2026, 9, 12), "reset"),
             authorizer=DailyMutationAuthorizer((MutationAcknowledgement(

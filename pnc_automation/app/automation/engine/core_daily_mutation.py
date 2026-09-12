@@ -1,4 +1,4 @@
-"""Bind the existing Daily claim authority and journal to the core lifecycle."""
+"""Bind the existing mutation authority and journal to supported core operations."""
 
 from __future__ import annotations
 
@@ -7,14 +7,34 @@ from dataclasses import dataclass
 
 from pnc_automation.app.automation.daily_maintenance.application_service import DailyRunBoundary
 from pnc_automation.app.automation.daily_maintenance.authorization import DailyMutationAuthorizer
-from pnc_automation.app.automation.daily_maintenance.claim_executor import JournaledDailyClaimExecutor
-from pnc_automation.app.automation.daily_maintenance.mutation_dispatcher import JournaledMutationDispatcher
-from pnc_automation.app.automation.engine.core_runtime import CoreRuntime
-from pnc_automation.app.authoring.config.daily_maintenance import DailyMaintenanceTargetConfig
-from pnc_automation.app.pnc.domain.daily_maintenance import (
-    DailyQuestRow, DailyTargetOutcome, DailyTaskCheckpoint, MutationIntentState,
+from pnc_automation.app.automation.daily_maintenance.claim_executor import (
+    JournaledDailyClaimExecutor,
 )
-from pnc_automation.app.pnc.domain.observation import Observation
+from pnc_automation.app.automation.daily_maintenance.mutation_dispatcher import (
+    JournaledMutationDispatcher,
+    MutationOperation,
+    MutationReconciliation,
+)
+from pnc_automation.app.automation.engine.core_runtime import CoreRuntime
+from pnc_automation.app.automation.engine.task import TaskId
+from pnc_automation.app.automation.tasks.research_task import _is_active_research_detail
+from pnc_automation.app.authoring.config.daily_maintenance import (
+    DailyCapabilityPolicy,
+    DailyMaintenanceTargetConfig,
+)
+from pnc_automation.app.pnc.domain.action_requests import TapAction
+from pnc_automation.app.pnc.domain.daily_maintenance import (
+    DailyQuestId,
+    DailyQuestRow,
+    DailyTargetOutcome,
+    DailyTargetOutcomeStatus,
+    DailyTaskCheckpoint,
+    MutationIntentState,
+)
+from pnc_automation.app.pnc.domain.observation import Observation, VisibleElementSourceKind
+from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
+from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.persistence.daily_run_journal_store import DailyRunJournalStore
 
 
@@ -31,32 +51,53 @@ class _ClaimObservationSession:
 
 
 @dataclass(frozen=True, slots=True)
-class CoreDailyClaimBoundary:
-    """An exact claim-only scope; it grants no generic tap or capability execution."""
+class CoreMutationBoundary:
+    """Bind supported typed operations to the existing exact authority and journal."""
 
     target: DailyMaintenanceTargetConfig
     boundary: DailyRunBoundary
     authorizer: DailyMutationAuthorizer
     journal_store: DailyRunJournalStore
 
+    @property
+    def policy(self) -> DailyCapabilityPolicy:
+        """Return the one supported capability, rejecting all unimplemented effects."""
+
+        if not self.target.capabilities:
+            return DailyCapabilityPolicy(
+                DailyQuestId.CLAIM_COMPLETED,
+                TaskId.DAILY_MAINTENANCE,
+                self.target.max_claims,
+            )
+        if len(self.target.capabilities) == 1:
+            policy = self.target.capabilities[0]
+            if (
+                policy.quest_id == DailyQuestId.UPGRADE_RESEARCH
+                and policy.task_id == TaskId.RESEARCH
+                and policy.max_mutations == 1
+                and policy.max_diamond_spend == 0
+            ):
+                return policy
+        raise PermissionError("The core mutation scope has no supported exact capability policy.")
+
     def authorize(self) -> None:
         """Reject unsupported capabilities and missing authority before device access."""
 
-        if self.target.capabilities:
-            raise PermissionError("The core Daily claim boundary cannot execute action capabilities.")
-        self.authorizer.require_claims(
+        self.authorizer.require(
             account_id=self.target.account_id,
             castle_ref=self.target.castle_ref,
             maintenance_date=self.boundary.maintenance_date,
-            max_claims=self.target.max_claims,
+            policy=self.policy,
         )
 
     def verify_active_castle(self, runtime: CoreRuntime) -> None:
-        """Require the canonical nonselecting preflight before opening the claim flow."""
+        """Require the canonical nonselecting preflight before executing a mutation."""
 
         self.authorize()
         if runtime.preflight_active_castle_identity() != self.target.castle:
-            raise PermissionError("The active castle does not match the authorized Daily target.")
+            raise PermissionError(
+                "The active castle does not match the authorized mutation target."
+            )
 
     def claim(
         self,
@@ -69,24 +110,9 @@ class CoreDailyClaimBoundary:
         """Use the existing executor once, preserving durable budget and ambiguity."""
 
         self.authorize()
-        if (
-            checkpoint.account_id != self.target.account_id
-            or checkpoint.castle != self.target.castle
-            or checkpoint.game_reset_id != self.boundary.game_reset_id
-            or checkpoint.maintenance_date != self.boundary.maintenance_date.isoformat()
-        ):
-            raise PermissionError("Daily claim checkpoint does not match its authorized boundary.")
-        persisted = self.journal_store.load(
-            game_reset_id=checkpoint.game_reset_id,
-            account_id=checkpoint.account_id,
-            castle=checkpoint.castle,
-        )
-        if persisted is not None and persisted != checkpoint:
-            raise RuntimeError("Daily claim checkpoint is stale relative to the durable journal.")
-        if persisted is None and checkpoint.mutation_intents:
-            raise RuntimeError("Daily claim history is missing from the durable journal.")
-        if any(intent.state != MutationIntentState.COMMITTED for intent in checkpoint.mutation_intents):
-            raise RuntimeError("An unresolved mutation must be reconciled before another claim.")
+        if self.policy.quest_id != DailyQuestId.CLAIM_COMPLETED:
+            raise PermissionError("This scope does not authorize Daily claims.")
+        self._require_checkpoint(checkpoint)
         executor = runtime.runtime.require_observed_action_executor(
             "Core Daily claims require the canonical observed action executor."
         )
@@ -96,3 +122,124 @@ class CoreDailyClaimBoundary:
             dispatcher=JournaledMutationDispatcher(self.journal_store),
             maximum_claims=self.target.max_claims,
         ).claim(row=row, checkpoint=checkpoint)
+
+    def _require_checkpoint(self, checkpoint: DailyTaskCheckpoint) -> None:
+        """Do not replace durable receipts with stale or cross-target caller state."""
+
+        if (
+            checkpoint.account_id != self.target.account_id
+            or checkpoint.castle != self.target.castle
+            or checkpoint.game_reset_id != self.boundary.game_reset_id
+            or checkpoint.maintenance_date != self.boundary.maintenance_date.isoformat()
+        ):
+            raise PermissionError("Mutation checkpoint does not match its authorized boundary.")
+        persisted = self.journal_store.load(
+            game_reset_id=checkpoint.game_reset_id,
+            account_id=checkpoint.account_id,
+            castle=checkpoint.castle,
+        )
+        if persisted is not None and persisted != checkpoint:
+            raise RuntimeError("Mutation checkpoint is stale relative to the durable journal.")
+        if persisted is None and checkpoint.mutation_intents:
+            raise RuntimeError("Mutation history is missing from the durable journal.")
+        if any(
+            intent.state != MutationIntentState.COMMITTED
+            for intent in checkpoint.mutation_intents
+        ):
+            raise RuntimeError("An unresolved mutation must be reconciled before another claim.")
+
+    def start_research(
+        self,
+        *,
+        runtime: CoreRuntime,
+        observe: Callable[[str], Observation],
+        node_title: str,
+        checkpoint: DailyTaskCheckpoint,
+    ) -> tuple[DailyTaskCheckpoint, DailyTargetOutcome]:
+        """Start one normal research item; uncertain dispatch is never replayed."""
+
+        self.authorize()
+        if self.policy.quest_id != DailyQuestId.UPGRADE_RESEARCH:
+            raise PermissionError("This scope does not authorize Research.")
+        self._require_checkpoint(checkpoint)
+        if any(
+            intent.quest_id == DailyQuestId.UPGRADE_RESEARCH
+            for intent in checkpoint.mutation_intents
+        ):
+            raise PermissionError("The one-research mutation budget has been consumed.")
+        source = observe("research_start_source")
+        control = source.visible_elements.get(UiElementId.PNC_RESEARCH_START_BUTTON)
+        if (
+            source.screen_type != ScreenType.PNC_RESEARCH_TREE
+            or source.blocking_popup
+            or source.decision.guard != GuardVerdict.CLEAR
+            or not any(
+                evidence.screen_type == ScreenType.PNC_RESEARCH_TREE
+                and evidence.reason == "visual_anchor:research_tree_node_detail"
+                for evidence in source.decision.evidence
+            )
+            or control is None
+            or control.source_kind != VisibleElementSourceKind.TEMPLATE
+            or _is_active_research_detail(source)
+        ):
+            raise RuntimeError("Research requires a fresh, guarded normal Start control.")
+        executor = runtime.runtime.require_observed_action_executor(
+            "Core Research requires the canonical observed action executor."
+        )
+
+        def dispatch() -> None:
+            executed = executor.execute_action(
+                TapAction(
+                    selector_id=UiElementId.PNC_RESEARCH_START_BUTTON,
+                    reason="start_research",
+                ),
+                source,
+            )
+            if not executed:
+                raise RuntimeError("Research Start was not executed; its journal prevents replay.")
+
+        def reconcile() -> MutationReconciliation:
+            after = runtime.navigation.confirm_content_after_action(
+                source,
+                frozenset({ScreenType.PNC_RESEARCH_TREE}),
+                "research_started",
+                observe,
+                completion_predicate=lambda frame: (
+                    _is_active_research_detail(frame)
+                    and not frame.has(UiElementId.PNC_RESEARCH_START_BUTTON)
+                ),
+            )
+            return MutationReconciliation(
+                postcondition_proven=True,
+                original_precondition_proven=False,
+                artifact_paths=(
+                    () if after.artifact_path is None else (str(after.artifact_path),)
+                ),
+            )
+
+        result = JournaledMutationDispatcher(self.journal_store).execute(
+            checkpoint=checkpoint,
+            operation=MutationOperation(
+                operation_id="research-001",
+                quest_id=DailyQuestId.UPGRADE_RESEARCH,
+                expected_precondition=f"Selected research {node_title} has a normal Start control",
+                expected_postcondition="Guarded active research detail with no Start control",
+                metadata={"node_title": node_title},
+            ),
+            dispatch=dispatch,
+            reconcile=reconcile,
+        )
+        return result.checkpoint, DailyTargetOutcome(
+            quest_id=DailyQuestId.UPGRADE_RESEARCH,
+            status=(
+                DailyTargetOutcomeStatus.SUCCESS
+                if result.committed
+                else DailyTargetOutcomeStatus.PENDING_CLARIFICATION
+            ),
+            message=(
+                "Research start observed."
+                if result.committed
+                else "Research outcome is unproved; no replay."
+            ),
+            artifact_paths=result.artifact_paths,
+        )

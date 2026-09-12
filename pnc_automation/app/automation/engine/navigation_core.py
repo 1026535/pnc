@@ -31,10 +31,13 @@ from pnc_automation.app.pnc.domain.observation import (
     Observation,
     SpatialSurfaceType,
     VisibleElementSourceKind,
+    RowRecognitionStatus,
     castle_entry_matches,
     castle_entry_identity_matches,
 )
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
+from pnc_automation.app.pnc.domain.policy_models import ResearchCategory
+from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.domain.chat import (
     ChatChannel,
     chat_channel_selector_id,
@@ -455,6 +458,48 @@ class NavigationCore:
             observe_content,
         )
 
+    def open_research_node(
+        self, title: str, category: ResearchCategory, *,
+        observe_content: Callable[[str], Observation],
+    ) -> Observation:
+        """Select one fresh Development node and prove its normal detail control."""
+
+        if category != ResearchCategory.DEVELOPMENT or not isinstance(title, str) or not title.strip():
+            raise ValueError("Research selection requires one named Development node.")
+        self._sequence += 1
+        label = f"core_{self._sequence}_research_node"
+        source = observe_content(f"{label}_source")
+        if (
+            source.screen_type != ScreenType.PNC_RESEARCH_TREE or source.blocking_popup
+            or source.decision.guard != GuardVerdict.CLEAR
+            or not any(evidence.reason == "visual_anchor:research_tree_development" for evidence in source.decision.evidence)
+        ):
+            raise RuntimeError("Research node selection requires the proved Development grid.")
+        matches = tuple(
+            entry for entry in source.entries(ListEntryKind.RESEARCH)
+            if entry.title_text == title and entry.metadata.get("category") == category.value
+        )
+        if (
+            len(matches) != 1 or matches[0].row_status != RowRecognitionStatus.COMPLETE
+            or matches[0].action_point is None or matches[0].action_bounds is None
+            or not matches[0].action_bounds.contains_point(matches[0].action_point)
+            or not matches[0].bounds.contains_bounds(matches[0].action_bounds)
+        ):
+            raise RuntimeError("Research node is missing, changed or ambiguous; no tap sent.")
+        return self._execute_content_and_confirm(
+            TapListEntryAction(
+                entry_kind=ListEntryKind.RESEARCH, title_text=title,
+                metadata_key="category", metadata_value=category.value,
+                use_action_point=True, reason="open_research_candidate",
+            ),
+            source, frozenset({ScreenType.PNC_RESEARCH_TREE}), label, observe_content,
+            completion_predicate=lambda frame: (
+                frame.decision.guard == GuardVerdict.CLEAR
+                and any(evidence.reason == "visual_anchor:research_tree_node_detail" for evidence in frame.decision.evidence)
+                and _template_control(frame, UiElementId.PNC_RESEARCH_START_BUTTON)
+            ),
+        )
+
     def scroll_daily_quest(
         self, *, adjusted: bool, observe_content: Callable[[str], Observation],
     ) -> Observation:
@@ -658,6 +703,18 @@ class NavigationCore:
         """Execute one bounded content action without replaying a failed gesture."""
         if not self.actuator.execute_action(action, before):
             raise RuntimeError("Navigation actuator did not execute the content action.")
+        return self.confirm_content_after_action(
+            before, destinations, label, observe_content,
+            completion_predicate=completion_predicate,
+        )
+
+    def confirm_content_after_action(
+        self, before: Observation, destinations: frozenset[ScreenType], label: str,
+        observe_content: Callable[[str], Observation], *,
+        completion_predicate: Callable[[Observation], bool] | None = None,
+    ) -> Observation:
+        """Passively confirm one already dispatched action without issuing another."""
+
         started = self.clock()
         stable = 0
         previous = ScreenType.UNKNOWN

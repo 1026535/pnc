@@ -10,7 +10,7 @@ from pnc_automation.app.automation.daily_maintenance.application_service import 
 )
 from pnc_automation.app.automation.daily_maintenance.authorization import DailyMutationAuthorizer
 from pnc_automation.app.automation.daily_maintenance.core_daily_maintenance import CoreDailyMaintenanceWorkflow
-from pnc_automation.app.automation.engine.core_daily_mutation import CoreDailyClaimBoundary
+from pnc_automation.app.automation.engine.core_daily_mutation import CoreMutationBoundary
 from pnc_automation.app.automation.engine.core_runtime import CoreRuntime, build_core_runtime
 from pnc_automation.app.automation.engine.core_workflow import CoreWorkflowRunner
 from pnc_automation.app.authoring.config.daily_maintenance import DailyMaintenanceTargetConfig
@@ -109,7 +109,7 @@ class ConnectedClaimOnlyCastleRunner:
             )
         result = CoreWorkflowRunner(
             core,
-            daily_claims=CoreDailyClaimBoundary(
+            mutation_boundary=CoreMutationBoundary(
                 target=target, boundary=boundary, authorizer=self.authorizer,
                 journal_store=journal_store,
             ),
