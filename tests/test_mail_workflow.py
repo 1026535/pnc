@@ -1468,6 +1468,84 @@ class MailWorkflowTests(unittest.TestCase):
         self.assertEqual(chat_entries[0].metadata["chat_entry_kind"], ChatEntryKind.PLAYER.value)
         self.assertEqual(chat_entries[0].metadata["message_text"], "Hello there")
 
+    def test_observation_builder_accepts_two_bracket_prefix_sender_with_multiline_message(self) -> None:
+        """Accepts the live sender shape while keeping an unattached interior message fail-closed."""
+
+        observation = _build_observation(
+            request=ObservationRequest.chat_transcript_observation(),
+            lines=(
+                _ocr_line("Chat", x=250, y=40, width=120, height=24),
+                _ocr_line("Kingdom", x=180, y=96, width=120, height=24),
+                _ocr_line("Alliance", x=520, y=96, width=120, height=24),
+                _ocr_line("[Cursed] [PAC] Publius A. Hadrianus", x=120, y=260, width=260, height=24),
+                _ocr_line("I'm very impressed.", x=160, y=292, width=220, height=24),
+                _ocr_line("That's quite a wonderfull talent", x=160, y=316, width=300, height=24),
+                _ocr_line("just some floating message text", x=200, y=500, width=300, height=24),
+            ),
+        )
+
+        chat_entries = observation.entries(ListEntryKind.CHAT_MESSAGE)
+
+        self.assertEqual(len(chat_entries), 2)
+        self.assertEqual(chat_entries[0].metadata["chat_entry_kind"], ChatEntryKind.PLAYER.value)
+        self.assertEqual(chat_entries[0].title_text, "[Cursed] [PAC] Publius A. Hadrianus")
+        self.assertEqual(chat_entries[0].metadata["message_text"], "I'm very impressed. That's quite a wonderfull talent")
+        self.assertEqual(chat_entries[1].metadata["chat_entry_kind"], ChatEntryKind.UNSUPPORTED.value)
+        self.assertEqual(chat_entries[1].metadata["unsupported_reason"], "message_only")
+
+    def test_observation_builder_normalizes_live_september_12_kingdom_chat_transcript(self) -> None:
+        """Normalizes the saved portrait transcript into three Publius rows, two replies, and one announcement."""
+
+        image = Image.open(
+            require_local_fixture_artifact(
+                "kingdom_chat_september_12_transcript",
+                default_repo_relative_path=(
+                    "../../../2026-09-12/serious_stuff/"
+                    "20260912T044124Z_chat_route_v3_transcript.png"
+                ),
+            )
+        )
+        observation = _build_observation(
+            request=ObservationRequest.chat_transcript_observation(),
+            image=image,
+            image_size=image.size,
+            lines=(
+                _ocr_line("Chat", x=108, y=11, width=69, height=31),
+                _ocr_line("Kingdom", x=63, y=69, width=87, height=25),
+                _ocr_line("Alliance", x=218, y=69, width=76, height=23),
+                _ocr_line("[Cursed] [PAC] Publius A. Hadrianus", x=108, y=130, width=265, height=19),
+                _ocr_line("I'm very impressed.That's quite a wonderfull talent", x=111, y=164, width=374, height=17),
+                _ocr_line("youhavehere.", x=111, y=187, width=125, height=17),
+                _ocr_line("[Cursed] [PAC] Publius A. Hadrianus", x=108, y=252, width=265, height=17),
+                _ocr_line("I've a list of guys to send you... if you would tame", x=109, y=282, width=366, height=21),
+                _ocr_line("them likethat, I would payforthis!", x=110, y=306, width=258, height=17),
+                _ocr_line("[Cursed] [PAC] Publius A. Hadrianus", x=107, y=370, width=266, height=19),
+                _ocr_line("2026-09-1120:24", x=195, y=468, width=151, height=17),
+                _ocr_line("just sleepy", x=105, y=517, width=82, height=22),
+                _ocr_line("Oh?", x=110, y=552, width=34, height=19),
+                _ocr_line("just sleepy", x=105, y=624, width=81, height=19),
+                _ocr_line("giveme the list I'll think about it", x=111, y=663, width=235, height=19),
+                _ocr_line("2026-09-1122:18", x=195, y=723, width=151, height=17),
+                _ocr_line("SystemMessage", x=103, y=775, width=123, height=17),
+                _ocr_line("Congrats!..()obtained[Relic Coinx60]", x=112, y=808, width=351, height=17),
+                _ocr_line("in", x=460, y=810, width=23, height=13),
+                _ocr_line("WondrousRoulette!(JoinNow)", x=112, y=830, width=225, height=17),
+            ),
+        )
+
+        chat_entries = observation.entries(ListEntryKind.CHAT_MESSAGE)
+
+        self.assertEqual(len(chat_entries), 6)
+        self.assertEqual(
+            [entry.metadata["chat_entry_kind"] for entry in chat_entries],
+            [ChatEntryKind.PLAYER.value] * 5 + [ChatEntryKind.ANNOUNCEMENT.value],
+        )
+        self.assertEqual([entry.title_text for entry in chat_entries[:3]], ["[Cursed] [PAC] Publius A. Hadrianus"] * 3)
+        self.assertEqual(chat_entries[0].metadata["message_text"], "I'm very impressed.That's quite a wonderfull talent youhavehere.")
+        self.assertEqual(chat_entries[1].metadata["message_text"], "I've a list of guys to send you... if you would tame them likethat, I would payforthis!")
+        self.assertEqual(chat_entries[2].metadata["message_text"], "[sticker]")
+        self.assertEqual(len(visible_unsupported_chat_entries(chat_entries)), 0)
+
     def test_observation_builder_marks_announcement_rows_without_promoting_them_to_player_chat(self) -> None:
         """Keeps announcement rows visible for diagnostics while excluding them from player-chat projections."""
 
