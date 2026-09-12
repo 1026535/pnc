@@ -13,10 +13,12 @@ from pnc_automation.app.automation.collect_kingdom_chat import (
     CollectKingdomChatWorkflow,
 )
 from pnc_automation.app.automation.collect_mail import CollectMailResult, CollectMailWorkflow
+from pnc_automation.app.automation.open_building import OpenBuildingResult, OpenBuildingWorkflow
 from pnc_automation.app.automation.refresh_castle_roster import (
     RefreshCastleRosterResult,
     RefreshCastleRosterWorkflow,
 )
+from pnc_automation.app.automation.engine.task import TaskId
 from pnc_automation.app.automation.engine.core_runtime import CoreRuntime
 from pnc_automation.app.automation.engine.core_workflow import (
     CoreWorkflowResult,
@@ -26,6 +28,7 @@ from pnc_automation.app.automation.engine.core_workflow import (
 from pnc_automation.app.authoring.config.models import AccountConfig, LiveAutomationRole
 from pnc_automation.app.authoring.scripts.models import PreparedScriptStep
 from pnc_automation.app.pnc.domain.mail import CollectMailParams
+from pnc_automation.app.pnc.domain.policy_models import OpenBuildingPolicy
 from pnc_automation.app.pnc.domain.observation import (
     CurrentCastleEvidenceKind,
     CurrentCastleMatchStatus,
@@ -34,7 +37,6 @@ from pnc_automation.app.pnc.domain.observation import (
 from pnc_automation.app.pnc.persistence.chat_archive_store import ChatArchiveStore
 from pnc_automation.app.pnc.persistence.castle_roster_store import CastleRosterStore
 from pnc_automation.app.pnc.persistence.mail_archive_store import MailArchiveStore
-from pnc_automation.app.automation.engine.task import TaskId
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 
 
@@ -64,7 +66,13 @@ class CoreScriptDispatcher:
         self,
         *,
         step: PreparedScriptStep,
-    ) -> CoreWorkflowResult[GameReadyResult | CollectKingdomChatResult | CollectMailResult | RefreshCastleRosterResult]:
+    ) -> CoreWorkflowResult[
+        GameReadyResult
+        | CollectKingdomChatResult
+        | CollectMailResult
+        | OpenBuildingResult
+        | RefreshCastleRosterResult
+    ]:
         """Runs one supported typed step without closing the shared connected runtime."""
 
         self._validate_step(step)
@@ -104,6 +112,8 @@ class CoreScriptDispatcher:
                 active_castle=active_castle,
                 roster_store=cast(CastleRosterStore, self.castle_roster_store),
             )
+        elif step.task == TaskId.OPEN_BUILDING:
+            workflow = OpenBuildingWorkflow(policy=cast(OpenBuildingPolicy, step.parsed_params))
         else:
             raise RuntimeError(f"No typed core dispatcher is registered for task '{step.task}'.")
         runner = self._workflow_runner
@@ -203,6 +213,7 @@ def validate_core_script_step(
     if step.task not in {
         TaskId.COLLECT_KINGDOM_CHAT,
         TaskId.COLLECT_MAIL,
+        TaskId.OPEN_BUILDING,
         TaskId.REFRESH_CASTLE_ROSTER,
     }:
         raise RuntimeError(f"No typed core dispatcher is registered for task '{step.task}'.")
@@ -221,6 +232,11 @@ def validate_core_script_step(
             raise RuntimeError(
                 "Collect Mail typed dispatch requires a configured MailArchiveStore before navigation."
             )
+        return
+    if step.task == TaskId.OPEN_BUILDING:
+        if not isinstance(step.parsed_params, OpenBuildingPolicy):
+            raise RuntimeError("Typed Open Building dispatch requires parsed OpenBuildingPolicy.")
+        OpenBuildingWorkflow(policy=step.parsed_params)
         return
     if step.parsed_params is not None:
         raise RuntimeError("Typed castle-roster refresh dispatch requires parameterless parsed parameters.")

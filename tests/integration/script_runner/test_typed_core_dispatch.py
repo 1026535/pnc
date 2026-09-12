@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import UTC, datetime
 import json
 from pathlib import Path
@@ -19,6 +19,7 @@ from pnc_automation.app.automation.collect_mail import (
     CollectMailResult,
     CollectMailWorkflow,
 )
+from pnc_automation.app.automation.open_building import OpenBuildingResult, OpenBuildingWorkflow
 from pnc_automation.app.automation.refresh_castle_roster import (
     RefreshCastleRosterResult,
     RefreshCastleRosterWorkflow,
@@ -48,6 +49,7 @@ from pnc_automation.app.authoring.scripts.models import (
 from pnc_automation.app.authoring.scripts.registry import TaskRegistry
 from pnc_automation.app.entrypoints.task_registry import build_default_task_registry
 from pnc_automation.app.entrypoints.cli import _serialize_run_result
+from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.domain.observation import Observation
 from pnc_automation.app.pnc.domain.mail import (
@@ -56,10 +58,12 @@ from pnc_automation.app.pnc.domain.mail import (
     MailboxAvailability,
     MailboxType,
 )
+from pnc_automation.app.pnc.domain.policy_models import OpenBuildingPolicy
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.persistence.chat_archive_store import ChatArchiveStore
 from pnc_automation.app.pnc.persistence.castle_roster_store import CastleRosterStore
 from pnc_automation.app.pnc.persistence.mail_archive_store import MailArchiveStore
+from pnc_automation.core.errors import ScriptValidationError
 from pnc_automation.core.infra.emulator.bluestacks_instance import BlueStacksInstance
 from pnc_automation.core.infra.emulator.session import BlueStacksSessionCleanupPolicy
 
@@ -105,6 +109,72 @@ class TypedCoreDispatchTests(unittest.TestCase):
                 }
             ),
         )
+
+    def test_default_registry_uses_typed_open_building_definition(self) -> None:
+        """Registers authored open-building with the canonical policy parser and optional target."""
+
+        definition = build_default_task_registry().require(TaskId.OPEN_BUILDING)
+
+        self.assertIsInstance(definition, CoreWorkflowTaskDefinition)
+        self.assertEqual(definition.castle_target_policy, CastleTargetPolicy.OPTIONAL)
+        self.assertEqual(
+            OpenBuildingPolicy(building=HomeCityObjectId.CASTLE),
+            definition.parse_params({"building": HomeCityObjectId.CASTLE.value}),
+        )
+        with self.assertRaises(AttributeError):
+            definition.id = TaskId.COLLECT_MAIL  # type: ignore[misc]
+
+    def test_script_runner_rejects_unmodeled_open_building_before_connection(self) -> None:
+        """Rejects a legacy-only generic building endpoint during typed pre-connect validation."""
+
+        script_runner = _minimal_script_runner(archive_store=None)
+        with patch.object(ScriptRunner, "_build_runner") as build_runner:
+            with self.assertRaisesRegex(ScriptValidationError, "no modeled primary screen"):
+                script_runner._run_script_for_account(
+                    account=_account(),
+                    script=_run_open_building_script(building=HomeCityObjectId.BANK.value),
+                )
+
+        build_runner.assert_not_called()
+
+    def test_dispatcher_rejects_malformed_open_building_policy_before_connection(self) -> None:
+        """Rejects an unparsed authored policy without constructing the connected runtime."""
+
+        for malformed_params in (None, {"building": HomeCityObjectId.CASTLE.value}):
+            with self.subTest(malformed_params=malformed_params):
+                runtime_factory = Mock()
+                dispatcher = CoreScriptDispatcher(
+                    account=_account(),
+                    chat_archive_store=None,
+                    core_runtime_factory=runtime_factory,
+                )
+
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "Typed Open Building dispatch requires parsed OpenBuildingPolicy",
+                ):
+                    dispatcher.execute(
+                        step=replace(
+                            _prepared_open_building_step(),
+                            parsed_params=malformed_params,
+                        )
+                    )
+
+                runtime_factory.assert_not_called()
+
+    def test_script_runner_validates_open_building_without_archive_dependencies(self) -> None:
+        """Accepts a supported typed open-building step without mail, Chat, or roster storage."""
+
+        script_runner = _minimal_script_runner(
+            archive_store=None,
+            mail_archive_store=None,
+            castle_roster_store=None,
+        )
+        prepared = script_runner.task_registry.prepare_script(
+            _run_open_building_script(building=HomeCityObjectId.CASTLE.value)
+        ).steps
+
+        script_runner._validate_core_script_dependencies(prepared)
 
     def test_default_registry_uses_immutable_parameterless_roster_definition(self) -> None:
         """Registers roster refresh as an untargeted typed core step."""
@@ -665,6 +735,103 @@ class TypedCoreDispatchTests(unittest.TestCase):
         runtime_factory.assert_called_once_with()
         core_runtime.close.assert_not_called()
 
+    def test_dispatcher_open_building_uses_typed_workflow_without_stores(self) -> None:
+        """Builds the canonical open-building workflow after exact active-castle preflight."""
+
+        active = CastleIdentity("K1", "Castle", 12)
+        core_runtime = Mock()
+        core_runtime.preflight_active_castle_identity.return_value = active
+        typed_result = CoreWorkflowResult(
+            workflow_name="open_building",
+            succeeded=True,
+            value=OpenBuildingResult(
+                building=HomeCityObjectId.CASTLE,
+                screen_type=ScreenType.PNC_CASTLE,
+                captured_at=datetime(2026, 9, 12, tzinfo=UTC),
+            ),
+            exit_screen=ScreenType.PNC_CASTLE,
+            trace_path="trace.jsonl",
+        )
+        workflow_runner = Mock()
+        workflow_runner.run.return_value = typed_result
+        runtime_factory = Mock(return_value=core_runtime)
+        runner_factory = Mock(return_value=workflow_runner)
+        dispatcher = CoreScriptDispatcher(
+            account=_account(),
+            chat_archive_store=None,
+            mail_archive_store=None,
+            castle_roster_store=None,
+            core_runtime_factory=runtime_factory,
+        )
+
+        with patch(
+            "pnc_automation.app.automation.engine.core_script_dispatcher.CoreWorkflowRunner",
+            runner_factory,
+        ):
+            result = dispatcher.execute(step=_prepared_open_building_step())
+
+        self.assertIs(typed_result, result)
+        workflow = workflow_runner.run.call_args.args[0]
+        self.assertIsInstance(workflow, OpenBuildingWorkflow)
+        self.assertEqual(OpenBuildingPolicy(HomeCityObjectId.CASTLE), workflow.policy)
+        core_runtime.preflight_active_castle_identity.assert_called_once_with()
+        runtime_factory.assert_called_once_with()
+        core_runtime.close.assert_not_called()
+
+    def test_dispatcher_open_building_rejects_requested_castle_mismatch(self) -> None:
+        """Rejects a typed open-building step when exact preflight identity differs from its target."""
+
+        active = CastleIdentity("K1", "Active", 12)
+        requested = CastleIdentity("K2", "Requested", 12)
+        core_runtime = Mock()
+        core_runtime.preflight_active_castle_identity.return_value = active
+        runtime_factory = Mock(return_value=core_runtime)
+        runner_factory = Mock()
+        dispatcher = CoreScriptDispatcher(
+            account=_account(),
+            chat_archive_store=None,
+            core_runtime_factory=runtime_factory,
+        )
+
+        with patch(
+            "pnc_automation.app.automation.engine.core_script_dispatcher.CoreWorkflowRunner",
+            runner_factory,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "requested castle target"):
+                dispatcher.execute(step=_prepared_open_building_step(castle=requested))
+
+        core_runtime.preflight_active_castle_identity.assert_called_once_with()
+        runner_factory.assert_not_called()
+        core_runtime.close.assert_not_called()
+
+    def test_dispatcher_open_building_preserves_core_route_guard_without_legacy_fallback(self) -> None:
+        """Propagates a mapped endpoint's missing reviewed route without replaying through legacy dispatch."""
+
+        core_runtime = Mock()
+        core_runtime.preflight_active_castle_identity.return_value = CastleIdentity("K1", "Active", 12)
+        core_runtime.trace_path = Path("trace.jsonl")
+        core_runtime.navigation.navigate.return_value = Observation(
+            screen_type=ScreenType.PNC_HOME_CITY,
+            visible_elements={},
+            captured_at=datetime(2026, 9, 12, tzinfo=UTC),
+        )
+        core_runtime.navigation.open_building.side_effect = RuntimeError("no reviewed navigation route")
+        dispatcher = CoreScriptDispatcher(
+            account=_account(),
+            chat_archive_store=None,
+            core_runtime_factory=Mock(return_value=core_runtime),
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "no reviewed navigation route"):
+            dispatcher.execute(
+                step=_prepared_open_building_step(
+                    policy=OpenBuildingPolicy(HomeCityObjectId.SANCTUM),
+                )
+            )
+
+        core_runtime.navigation.open_building.assert_called_once()
+        core_runtime.close.assert_not_called()
+
     def test_dispatcher_collect_mail_requires_active_castle_before_workflow(self) -> None:
         """Fails before workflow construction when typed mail cannot prove active identity."""
 
@@ -1052,6 +1219,21 @@ def _prepared_mail_step(
     )
 
 
+def _prepared_open_building_step(
+    *,
+    castle: CastleIdentity | None = None,
+    policy: OpenBuildingPolicy | None = None,
+) -> PreparedScriptStep:
+    """Builds one already-prepared typed open-building step."""
+
+    return PreparedScriptStep(
+        script_step=ScriptStep(task=TaskId.OPEN_BUILDING, castle=castle),
+        parsed_params=OpenBuildingPolicy(HomeCityObjectId.CASTLE) if policy is None else policy,
+        castle_target_policy=CastleTargetPolicy.OPTIONAL,
+        resolved_castle=castle,
+    )
+
+
 def _workflow_result() -> CoreWorkflowResult[object]:
     """Builds a minimal successful typed result for runner routing tests."""
 
@@ -1119,6 +1301,16 @@ def _run_mail_script() -> RunScript:
         name="mail",
         path=Path("mail.yaml"),
         steps=(ScriptStep(task=TaskId.COLLECT_MAIL, params={"mailboxes": ["player"]}),),
+    )
+
+
+def _run_open_building_script(*, building: str) -> RunScript:
+    """Builds one authored open-building script for pre-connect validation tests."""
+
+    return RunScript(
+        name="open_building",
+        path=Path("open_building.yaml"),
+        steps=(ScriptStep(task=TaskId.OPEN_BUILDING, params={"building": building}),),
     )
 
 

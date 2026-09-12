@@ -319,6 +319,48 @@ class BlueStacksInstanceResolverTests(unittest.TestCase):
             self.assertEqual(instance.device_id, "127.0.0.1:5555")
             self.assertEqual(launcher.launched_instance_keys, ["Rvc64"])
 
+    def test_resolve_rejects_display_name_remapped_during_launch(self) -> None:
+        """Does not redirect account work to a different instance after startup."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            config_path = _write_bluestacks_config(
+                Path(temp_directory),
+                """
+                bst.instance.Nougat32.display_name="testing"
+                bst.instance.Nougat32.status.adb_port="5555"
+                bst.instance.Rvc64.display_name="other"
+                bst.instance.Rvc64.status.adb_port="5566"
+                """,
+            )
+            launcher = _UpdatingConfigInstanceLauncher(
+                config_path=config_path,
+                updated_content="""
+                bst.instance.Nougat32.display_name="other"
+                bst.instance.Nougat32.status.adb_port="5555"
+                bst.instance.Rvc64.display_name="testing"
+                bst.instance.Rvc64.status.adb_port="5566"
+                """,
+            )
+            resolver = BlueStacksInstanceResolver(
+                config_path=config_path,
+                running_instance_source=_SequencedRunningInstanceSource(
+                    snapshots=(
+                        (_make_running_instance(instance_key="Rvc64", process_id=102),),
+                        (
+                            _make_running_instance(instance_key="Nougat32"),
+                            _make_running_instance(instance_key="Rvc64", process_id=102),
+                        ),
+                    ),
+                ),
+                instance_launcher=launcher,
+                launch_poll_interval_seconds=0,
+            )
+
+            with self.assertRaisesRegex(ConfigurationError, "instance identity changed during startup"):
+                resolver.resolve(_make_instance_config(display_name="testing"))
+
+            self.assertEqual(launcher.launched_instance_keys, ["Nougat32"])
+
     def test_resolve_rejects_matching_display_name_when_launch_does_not_start_instance(self) -> None:
         """Fails fast when BlueStacks launch returns but process metadata never exposes the target."""
 

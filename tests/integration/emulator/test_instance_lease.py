@@ -2,23 +2,47 @@
 
 from __future__ import annotations
 
-import tempfile
 import json
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import unittest
 from pathlib import Path
+from typing import BinaryIO
+from unittest.mock import patch
 
-from pnc_automation.core.errors import InstanceBusyError
+from pnc_automation.bluestacks_management import instance_lease
 from pnc_automation.bluestacks_management.instance_lease import InstanceLeaseRegistry
+from pnc_automation.core.errors import InstanceBusyError
 
 from tests.support.paths import REPOSITORY_ROOT
 
 
 class InstanceLeaseRegistryTests(unittest.TestCase):
     """Validates fail-fast native locking and process-local re-entrancy."""
+
+    def test_wait_parameters_reject_nonfinite_values_before_acquisition(self) -> None:
+        """Prevents NaN and infinity from turning contention into an unbounded wait."""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            for invalid in (float("nan"), float("inf"), float("-inf"), True):
+                with self.subTest(parameter="timeout", value=invalid):
+                    registry = InstanceLeaseRegistry(root=root)
+                    try:
+                        with self.assertRaises(ValueError):
+                            registry.acquire(display_name="testing", timeout_seconds=invalid)
+                    finally:
+                        registry.release_all()
+                with self.subTest(parameter="poll_interval", value=invalid):
+                    registry = InstanceLeaseRegistry(root=root, poll_interval_seconds=invalid)
+                    try:
+                        with self.assertRaises(ValueError):
+                            registry.acquire(display_name="testing")
+                    finally:
+                        registry.release_all()
 
     def test_same_registry_ref_counts_one_process_lease(self) -> None:
         """Allows nested runtime objects to release independently without dropping ownership early."""
@@ -172,6 +196,118 @@ class InstanceLeaseRegistryTests(unittest.TestCase):
                 observer.release_all()
                 competitor.release_all()
                 owner.release_all()
+
+    def test_failed_bundle_rolls_back_after_unexpected_acquisition_error(self) -> None:
+        """Releases earlier native locks when a later lock file cannot be opened."""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            registry = InstanceLeaseRegistry(root=root, wait_timeout_seconds=0)
+            acquired: list[instance_lease._NativeInstanceLease] = []
+            acquire_once = InstanceLeaseRegistry._acquire_once
+
+            def fail_second(
+                owner: InstanceLeaseRegistry, *, lease_key: str, display_name: str
+            ) -> instance_lease._NativeInstanceLease:
+                if display_name == "z_unavailable":
+                    raise PermissionError("lock directory became unavailable")
+                lease = acquire_once(owner, lease_key=lease_key, display_name=display_name)
+                acquired.append(lease)
+                return lease
+
+            try:
+                with patch.object(InstanceLeaseRegistry, "_acquire_once", fail_second):
+                    with self.assertRaises(PermissionError):
+                        registry.acquire_many(("a_available", "z_unavailable"))
+                self.assertTrue(acquired[0].handle.closed)
+                with InstanceLeaseRegistry(root=root, wait_timeout_seconds=0).acquire_bundle(("a_available",)):
+                    pass
+            finally:
+                registry.release_all()
+                for lease in acquired:
+                    if not lease.handle.closed:
+                        lease.release()
+
+    def test_bundle_failure_preserves_acquisition_and_rollback_errors(self) -> None:
+        """Surfaces both the original acquisition failure and failed rollback."""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            registry = InstanceLeaseRegistry(root=root, wait_timeout_seconds=0)
+            acquired: list[instance_lease._NativeInstanceLease] = []
+            acquire_once = InstanceLeaseRegistry._acquire_once
+            release_native = instance_lease._NativeInstanceLease.release
+
+            def fail_second(
+                owner: InstanceLeaseRegistry, *, lease_key: str, display_name: str
+            ) -> instance_lease._NativeInstanceLease:
+                if display_name == "z_unavailable":
+                    raise PermissionError("lock directory became unavailable")
+                lease = acquire_once(owner, lease_key=lease_key, display_name=display_name)
+                acquired.append(lease)
+                return lease
+
+            try:
+                with (
+                    patch.object(InstanceLeaseRegistry, "_acquire_once", fail_second),
+                    patch.object(
+                        instance_lease._NativeInstanceLease,
+                        "release",
+                        side_effect=OSError("rollback failed"),
+                    ),
+                ):
+                    with self.assertRaises(BaseExceptionGroup) as raised:
+                        registry.acquire_many(("a_available", "z_unavailable"))
+                self.assertIsInstance(raised.exception.exceptions[0], PermissionError)
+                self.assertIsInstance(raised.exception.exceptions[1], OSError)
+            finally:
+                registry.release_all()
+                for lease in acquired:
+                    if not lease.handle.closed:
+                        release_native(lease)
+
+    def test_owner_write_failure_closes_the_acquired_native_handle(self) -> None:
+        """Does not strand a new lock when persisting owner diagnostics fails."""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            registry = InstanceLeaseRegistry(root=root, wait_timeout_seconds=0)
+            opened: list[BinaryIO] = []
+
+            def fail_write(handle: BinaryIO, *, display_name: str) -> None:
+                opened.append(handle)
+                raise OSError("owner diagnostics could not be flushed")
+
+            try:
+                with patch.object(instance_lease, "_write_owner", fail_write):
+                    with self.assertRaises(OSError):
+                        registry.acquire(display_name="testing")
+                self.assertTrue(opened[0].closed)
+                with InstanceLeaseRegistry(root=root, wait_timeout_seconds=0).acquire_bundle(("testing",)):
+                    pass
+            finally:
+                registry.release_all()
+                for handle in opened:
+                    handle.close()
+
+    def test_unlock_failure_still_closes_the_native_handle(self) -> None:
+        """Releases OS ownership even when explicit byte-range unlock fails."""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            registry = InstanceLeaseRegistry(root=root, wait_timeout_seconds=0)
+            lease = registry.acquire(display_name="testing")
+            native = registry._leases["testing"]
+            try:
+                with patch.object(instance_lease, "_unlock_file", side_effect=OSError("unlock failed")):
+                    with self.assertRaises(OSError):
+                        lease.release()
+                self.assertTrue(native.handle.closed)
+                with InstanceLeaseRegistry(root=root, wait_timeout_seconds=0).acquire_bundle(("testing",)):
+                    pass
+            finally:
+                native.handle.close()
+                registry.release_all()
 
     def test_released_instance_can_be_acquired_again(self) -> None:
         """Relies on native lock release rather than stale metadata after a process exits."""
