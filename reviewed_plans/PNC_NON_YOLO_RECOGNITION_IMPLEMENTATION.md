@@ -251,7 +251,17 @@ gaps, limited independent profile coverage, and live Quest label abstention abov
 prevent claiming the whole plan or all game workflows complete. No broad rollout,
 crop-only guard replacement, account switch or mutation result is approved here.
 
-## 2026-09-12 merge recovery checkpoint
+## 2026-09-12 integration outcome
+
+The combined feature preserves published history through `5c4ce6b` and mainline through `c7dfdd5`. Local merge commits are `e6df3bb` and `8697789`; the latter retains quiescent BlueStacks cleanup and the `.local-data` defaults. All conflict files were resolved. The split-test migration carried 175 feature test definitions into canonical owners, removed seven obsolete monoliths, and relocated 11 new feature tests. Mainline's eight shutdown tests were also moved into the portable inventory and passed.
+
+The fresh coverage audit passes on the actual tracked catalog and manifest: 329 selectors, 273 enabled, 56 unsupported, 59 orphan IDs; 90 families include seven reviewed region plans and 83 guarded full-frame fallbacks. All 35 manifest hashes and 29 profile-source hashes match the canonical dimension-prefixed decoded-RGB contract. The catalog now declares layout identity independently of appearance identity, preserving Home recognition when multiple compatible variants match.
+
+Packaging: the exact Python 3.13 wheel command could not load `setuptools.build_meta`; no dependencies were installed. A bundled build runtime produced the wheel without downloads, and isolated loading under Python 3.13 with the source worktree excluded succeeded. The wheel includes catalog v3, 29 profiles, 95 declared anchor images, 329 selectors, and the required Gift Center template. Wheel build/load evidence is under `artifacts/non_yolo_recognition/integration_20260912/`.
+
+Targeted validation passed: 16 visual/catalog-layout tests, two Home/loading navigation regressions, 62 emulator/provenance/probe-lifecycle tests, and 41 tests fixing the last migrated fixture imports/paths. The current live gate remains blocked before capture, as detailed below. Remaining Research/Gathering/Campaign recognition and broad promotion are incomplete; the latest user request is to push this integration and review the published changes before further feature work.
+
+### Historical recovery checkpoint
 
 This checkpoint supersedes the source-control status in the historical continuation below. The corrected feature was committed and published as `5c4ce6b2c0b9ded17ddc7ddf8622bd6663b42e50`. Integration is underway in `artifacts/worktrees/non-yolo-integration-current` on temporary branch `codex/non-yolo-integration-current`, merging that published feature with mainline `68e7349`. The original feature worktree and its unrelated scratch files are preserved. Newly observed mainline commits `76c486f` and `0a12e8c` remain to integrate before landing.
 
