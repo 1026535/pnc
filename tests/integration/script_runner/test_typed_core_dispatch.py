@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -11,6 +11,11 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
+from pnc_automation.app.automation.engine.navigation_core import (
+    NavigationCore,
+    NavigationPolicy,
+    reviewed_navigation_edges,
+)
 from pnc_automation.app.automation.engine.core_runtime import build_core_runtime
 from pnc_automation.app.automation.engine.core_script_dispatcher import CoreScriptDispatcher, GameReadyResult
 from pnc_automation.app.automation.engine.core_workflow import CoreWorkflowResult
@@ -30,6 +35,7 @@ from pnc_automation.app.automation.engine.runner import (
     CoreStepRunResult,
     RunResult,
 )
+from pnc_automation.app.pnc.domain.action_requests import InputTextAction, TapAction
 from pnc_automation.app.automation.engine.script_runner import ScriptRunner
 from pnc_automation.app.automation.engine.task import (
     BaseAutomationTask,
@@ -53,7 +59,7 @@ from pnc_automation.app.entrypoints.cli import _serialize_run_result
 from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.domain.chat import ChatChannel, ChatMessageTaskParams
-from pnc_automation.app.pnc.domain.observation import Observation
+from pnc_automation.app.pnc.domain.observation import DetectedListEntry, ListEntryKind, Observation
 from pnc_automation.app.pnc.domain.mail import (
     CollectMailParams,
     MailArchiveMode,
@@ -62,6 +68,7 @@ from pnc_automation.app.pnc.domain.mail import (
 )
 from pnc_automation.app.pnc.domain.policy_models import OpenBuildingPolicy
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.persistence.chat_archive_store import ChatArchiveStore
 from pnc_automation.app.pnc.persistence.castle_roster_store import CastleRosterStore
 from pnc_automation.app.pnc.persistence.mail_archive_store import MailArchiveStore
@@ -70,6 +77,7 @@ from pnc_automation.core.infra.emulator.bluestacks_instance import BlueStacksIns
 from pnc_automation.core.infra.emulator.session import BlueStacksSessionCleanupPolicy
 
 from tests.support.core.logging import build_logger
+from tests.support.pnc.observations import make_entry, make_observation
 
 
 class TypedCoreDispatchTests(unittest.TestCase):
@@ -189,6 +197,59 @@ class TypedCoreDispatchTests(unittest.TestCase):
         self.assertIs(active, workflow.active_castle)
         runtime_factory.assert_called_once_with()
         core_runtime.preflight_active_castle_identity.assert_called_once_with()
+
+    def test_authored_alliance_chat_send_reaches_home_after_whitespace_receipt(self) -> None:
+        """Runs one authored Alliance send through real receipt completion and Home exit."""
+
+        message = "test from bot"
+        castle = CastleIdentity("K1", "free cookies")
+        runtime = _FakeChatCoreRuntime(_alliance_send_frames(message), active_castle=castle)
+        dispatcher = CoreScriptDispatcher(
+            account=_account(),
+            chat_archive_store=None,
+            core_runtime_factory=lambda: runtime,
+        )
+        runner = _make_runner(observation_service=Mock(), core_step_executor=dispatcher)
+        script = build_default_task_registry().prepare_script(
+            RunScript(
+                name="alliance_chat",
+                path=Path("alliance_chat.yaml"),
+                steps=(
+                    ScriptStep(
+                        task=TaskId.SEND_ALLIANCE_CHAT_MESSAGE,
+                        params={"message": message},
+                    ),
+                ),
+            )
+        )
+
+        result = runner.run(_account(), script)
+
+        step_result = result.steps[0]
+        self.assertIsInstance(step_result, CoreStepRunResult)
+        self.assertEqual(TaskStatus.SUCCESS, step_result.status)
+        self.assertEqual(TaskId.SEND_ALLIANCE_CHAT_MESSAGE, step_result.task_id)
+        self.assertTrue(step_result.workflow_result.succeeded)
+        self.assertEqual("send_alliance_chat", step_result.workflow_result.workflow_name)
+        self.assertEqual(ScreenType.PNC_HOME_CITY, step_result.workflow_result.exit_screen)
+        self.assertEqual(ChatChannel.ALLIANCE, step_result.workflow_result.value.channel)
+        self.assertEqual(message, step_result.workflow_result.value.message)
+        self.assertEqual(1, step_result.workflow_result.value.receipt_count)
+        self.assertTrue(step_result.workflow_result.value.sent_proof)
+        self.assertEqual(ScreenType.PNC_HOME_CITY, runtime.last_observation.screen_type)
+        self.assertEqual(16, runtime.observation_count)
+
+        submitted = [
+            action
+            for action in runtime.actuator.actions
+            if isinstance(action, TapAction)
+            and action.selector_id == UiElementId.PNC_CHAT_FOCUSED_SEND_BUTTON
+        ]
+        typed = [action for action in runtime.actuator.actions if isinstance(action, InputTextAction)]
+        self.assertEqual(1, len(submitted))
+        self.assertEqual(1, len(typed))
+        self.assertEqual(message, typed[0].text)
+        self.assertFalse(typed[0].replace_existing)
 
     def test_default_registry_uses_canonical_mail_parser(self) -> None:
         """Registers authored mail as an optional typed step with the shared domain parser."""
@@ -1467,6 +1528,154 @@ def _workflow_result() -> CoreWorkflowResult[object]:
         value="value",
         exit_screen=ScreenType.PNC_HOME_CITY,
         trace_path="trace.jsonl",
+    )
+
+
+class _RecordingActuator:
+    """Records real NavigationCore actions while accepting each deterministic fixture action."""
+
+    def __init__(self) -> None:
+        self.actions: list[object] = []
+
+    def execute_action(self, action: object, _observation: Observation) -> bool:
+        """Accept one observed action and keep it available for assertions."""
+
+        self.actions.append(action)
+        return True
+
+
+class _FakeChatCoreRuntime:
+    """Provides the narrow CoreRuntime surface needed by authored chat dispatch."""
+
+    def __init__(self, observations: tuple[Observation, ...], *, active_castle: CastleIdentity) -> None:
+        self._observations = iter(observations)
+        self._observation_count = 0
+        self._last_observation: Observation | None = None
+        self.active_castle = active_castle
+        self.trace_path = Path("trace.jsonl")
+        self.actuator = _RecordingActuator()
+        self.records: list[dict[str, object]] = []
+        self.navigation = NavigationCore(
+            self.actuator,
+            self.observe,
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4, poll_seconds=0, stable_observations=2),
+            sleep=lambda _seconds: None,
+            record=self.record,
+        )
+
+    @property
+    def observation_count(self) -> int:
+        """Returns the number of fixture frames consumed by the core."""
+
+        return self._observation_count
+
+    @property
+    def last_observation(self) -> Observation | None:
+        """Returns the latest fixture frame consumed by the core."""
+
+        return self._last_observation
+
+    def observe(self, label: str, *, include_content: bool = False) -> Observation:
+        """Consumes one fresh deterministic frame and records its label."""
+
+        del include_content
+        try:
+            observation = next(self._observations)
+        except StopIteration as error:
+            raise AssertionError(f"Unexpected fixture capture for '{label}'.") from error
+        self._observation_count += 1
+        self._last_observation = observation
+        return observation
+
+    def record(self, entry: dict[str, object]) -> None:
+        """Keeps navigation trace metadata available for focused assertions."""
+
+        self.records.append(entry)
+
+    def preflight_active_castle_identity(self) -> CastleIdentity:
+        """Returns the exact active identity that the typed dispatcher would preflight."""
+
+        return self.active_castle
+
+
+def _alliance_send_frames(message: str) -> tuple[Observation, ...]:
+    """Builds Home, Chat, receipt, and Home frames for one authored send."""
+
+    start = datetime(2026, 9, 12, 19, 0, tzinfo=UTC)
+    receipt = make_entry(
+        ListEntryKind.CHAT_MESSAGE,
+        title="[NAX] freecookies",
+        metadata={
+            "chat_entry_kind": "player",
+            "message_text": "testfrom bot",
+            "visible_order": 0,
+        },
+    )
+    home = (UiElementId.PNC_CHAT_SHORTCUT,)
+    back = (UiElementId.PNC_BACK_BUTTON_TOP_LEFT,)
+    input_field = (UiElementId.PNC_CHAT_INPUT_FIELD, *back)
+    focused_empty = (
+        UiElementId.PNC_CHAT_FOCUSED_EMPTY_INPUT,
+        UiElementId.PNC_CHAT_FOCUSED_SEND_BUTTON,
+        *back,
+    )
+    focused_send = (UiElementId.PNC_CHAT_FOCUSED_SEND_BUTTON, *back)
+    frames = (
+        (ScreenType.PNC_HOME_CITY, home, None, None, None, ()),
+        (ScreenType.PNC_HOME_CITY, home, None, None, None, ()),
+        (ScreenType.PNC_HOME_CITY, home, None, None, None, ()),
+        (ScreenType.PNC_CHAT, back, ChatChannel.ALLIANCE, True, None, ()),
+        (ScreenType.PNC_CHAT, back, ChatChannel.ALLIANCE, True, None, ()),
+        (ScreenType.PNC_CHAT, input_field, ChatChannel.ALLIANCE, True, None, ()),
+        (ScreenType.PNC_CHAT, focused_empty, ChatChannel.ALLIANCE, True, None, ()),
+        (ScreenType.PNC_CHAT, focused_empty, ChatChannel.ALLIANCE, True, None, ()),
+        (ScreenType.PNC_CHAT, focused_send, ChatChannel.ALLIANCE, False, message, ()),
+        (ScreenType.PNC_CHAT, focused_send, ChatChannel.ALLIANCE, False, message, ()),
+        (ScreenType.PNC_CHAT, focused_empty, ChatChannel.ALLIANCE, True, None, (receipt,)),
+        (ScreenType.PNC_CHAT, focused_empty, ChatChannel.ALLIANCE, True, None, (receipt,)),
+        (ScreenType.PNC_CHAT, back, ChatChannel.ALLIANCE, True, None, ()),
+        (ScreenType.PNC_CHAT, back, ChatChannel.ALLIANCE, True, None, ()),
+        (ScreenType.PNC_HOME_CITY, home, None, None, None, ()),
+        (ScreenType.PNC_HOME_CITY, home, None, None, None, ()),
+    )
+    return tuple(
+        _alliance_send_frame(
+            start + timedelta(seconds=index),
+            screen=screen,
+            visible_ids=visible_ids,
+            channel=channel,
+            draft_empty=draft_empty,
+            draft_text=draft_text,
+            entries=entries,
+        )
+        for index, (screen, visible_ids, channel, draft_empty, draft_text, entries) in enumerate(frames)
+    )
+
+
+def _alliance_send_frame(
+    captured_at: datetime,
+    *,
+    screen: ScreenType,
+    visible_ids: tuple[UiElementId, ...],
+    channel: ChatChannel | None,
+    draft_empty: bool | None,
+    draft_text: str | None,
+    entries: tuple[DetectedListEntry, ...],
+) -> Observation:
+    """Builds one typed frame with template-backed controls and chat content."""
+
+    return replace(
+        make_observation(
+            screen,
+            visible_ids=visible_ids,
+            active_chat_channel=channel,
+            chat_draft_empty=draft_empty,
+            chat_draft_text=draft_text,
+            list_entries=entries,
+            artifact_path=Path("alliance-chat.png"),
+        ),
+        captured_at=captured_at,
     )
 
 
