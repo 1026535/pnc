@@ -89,7 +89,10 @@ class SendMailTask(BaseAutomationTask):
         direct_player_compose_block = _verify_direct_player_compose_entry(context, before=before, after=after)
         if direct_player_compose_block is not None:
             return direct_player_compose_block
-        if after.blocking_popup or after.screen_type == ScreenType.PNC_POPUP:
+        if (
+            (after.blocking_popup or after.screen_type == ScreenType.PNC_POPUP)
+            and after.screen_type != ScreenType.PNC_MAIL_COMPOSE_POPUP
+        ):
             return TaskResult.replan("Mail workflow reached a blocking popup and needs centralized recovery.")
         if after.screen_type in {ScreenType.PNC_LOADING, ScreenType.UNKNOWN}:
             return TaskResult.replan("Mail workflow is still settling after the previous increment.")

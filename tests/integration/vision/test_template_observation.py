@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from tests.support.pnc.capture_vision.clear_observation_enricher import _ClearObservationEnricher
+from tests.support.pnc.capture_vision.with_runtime_text_fields import _with_runtime_text_fields
+
 import tempfile
 import unittest
 from pathlib import Path
@@ -44,7 +47,7 @@ class TemplateObservationTests(unittest.TestCase):
             character_panel_template = root / "character_panel.png"
             build_button_template = root / "build_button.png"
 
-            screen = Image.new("RGBA", (30, 20), (255, 255, 255, 255))
+            screen = Image.new("RGBA", (540, 960), (255, 255, 255, 255))
             Image.new("RGBA", (4, 4), (255, 0, 0, 255)).save(world_switch_template)
             Image.new("RGBA", (4, 4), (0, 255, 0, 255)).save(character_panel_template)
             Image.new("RGBA", (4, 4), (0, 0, 255, 255)).save(build_button_template)
@@ -82,6 +85,7 @@ class TemplateObservationTests(unittest.TestCase):
                 )
             )
 
+            registry = _with_runtime_text_fields(registry)
             with screenshot_path.open("rb") as handle:
                 payload = handle.read()
             screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
@@ -94,10 +98,10 @@ class TemplateObservationTests(unittest.TestCase):
                 selector_registry=registry,
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
-                enricher=DefaultObservationEnricher(),
+                enricher=_ClearObservationEnricher(),
             )
 
             observation = builder.build(captured)

@@ -5,7 +5,13 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from pnc_automation.app.pnc.domain.observation import VisibleElement
+from pnc_automation.app.pnc.domain.observation import VisibleElement, VisibleElementSourceKind
+from pnc_automation.app.pnc.domain.screen_decision import (
+    BLOCKING_SCREEN_TYPES,
+    GuardVerdict,
+    ScreenDecision,
+    ScreenEvidence,
+)
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 
@@ -17,14 +23,6 @@ class ClassificationRule:
     screen_type: ScreenType
     required_all: frozenset[UiElementId]
     required_any: frozenset[UiElementId] = frozenset()
-
-
-@dataclass(frozen=True, slots=True)
-class ScreenEvidence:
-    """Represents one strong parser conclusion about the current screen."""
-
-    screen_type: ScreenType
-    reason: str
 
 
 class ScreenClassifier:
@@ -168,7 +166,6 @@ class ScreenClassifier:
                 required_all=frozenset(
                     {
                         UiElementId.PNC_BAG_MAIN_TAB_BAG,
-                        UiElementId.PNC_BAG_USE_BUTTON,
                     }
                 ),
             ),
@@ -312,10 +309,6 @@ class ScreenClassifier:
             ClassificationRule(
                 screen_type=ScreenType.PNC_SACRED_TREE_BLESSING_RECORD,
                 required_all=frozenset({UiElementId.PNC_SACRED_TREE_BLESSING_RECORD_HEADER}),
-            ),
-            ClassificationRule(
-                screen_type=ScreenType.PNC_OTHER_LORD_SACRED_TREE,
-                required_all=frozenset({UiElementId.PNC_OTHER_LORD_SACRED_TREE_OWNER_NAME_LABEL}),
             ),
             ClassificationRule(
                 screen_type=ScreenType.PNC_RARE_EARTH_FIELD,
@@ -558,36 +551,133 @@ class ScreenClassifier:
         visible_elements: dict[UiElementId, VisibleElement],
         evidence: Sequence[ScreenEvidence] = (),
     ) -> ScreenType:
-        """Returns the first matching screen classification or UNKNOWN."""
+        """Returns the effective screen from the immutable decision."""
 
-        selector_ids = frozenset(visible_elements.keys())
+        return self.decide(visible_elements, evidence=evidence).effective_screen
+
+    def decide(
+        self,
+        visible_elements: dict[UiElementId, VisibleElement],
+        evidence: Sequence[ScreenEvidence] = (),
+        *,
+        guard: GuardVerdict = GuardVerdict.NOT_EVALUATED,
+        coordinate_only: bool = False,
+        viewport_reviewed: bool | None = None,
+        background_evidence: Sequence[ScreenEvidence] = (),
+    ) -> ScreenDecision:
+        """Resolves all independent evidence into one conservative decision."""
+
+        selector_ids = frozenset(
+            selector_id
+            for selector_id, element in visible_elements.items()
+            if element.source_kind != VisibleElementSourceKind.GEOMETRY and element.identity_evidence
+        )
         evidence_screen_types = {item.screen_type for item in evidence}
-        selector_match = self._classify_from_selectors(selector_ids)
-        if selector_match is not None:
-            if evidence_screen_types and not _evidence_supports_selector_match(
+        selector_matches = self._classify_from_selectors(selector_ids)
+        selector_blocker_types = {
+            screen_type
+            for screen_type in selector_matches
+            if screen_type in BLOCKING_SCREEN_TYPES | {ScreenType.PNC_LOADING}
+        }
+        blocker_screen_types = {
+            screen_type
+            for screen_type in evidence_screen_types
+            if screen_type in BLOCKING_SCREEN_TYPES | {ScreenType.PNC_LOADING}
+        }
+        blocker_screen_types.update(selector_blocker_types)
+        # Independently observed background anchors may survive a foreground
+        # interruption (including a dialog over another dialog). They inform
+        # base identity, never compete as foreground guard evidence.
+        base_evidence = tuple(background_evidence) + tuple(
+            item for item in evidence if item.screen_type not in blocker_screen_types
+        )
+        base_evidence_screen_types = {item.screen_type for item in base_evidence}
+        base_selector_matches = tuple(
+            screen_type for screen_type in selector_matches if screen_type not in blocker_screen_types
+        )
+        collapsed_evidence = _collapse_evidence(base_evidence)
+        selector_match = _collapse_screen_types(base_selector_matches)
+        layout_ids_by_family: dict[frozenset[ScreenType], set[str]] = {}
+        for item in base_evidence:
+            if item.layout_id is None:
+                continue
+            layout_ids_by_family.setdefault(_screen_type_family(item.screen_type), set()).add(item.layout_id)
+        base_layout_conflict = any(len(layout_ids) > 1 for layout_ids in layout_ids_by_family.values())
+        blocker_layout_ids_by_family: dict[frozenset[ScreenType], set[str]] = {}
+        for item in evidence:
+            if item.screen_type not in blocker_screen_types or item.layout_id is None:
+                continue
+            blocker_layout_ids_by_family.setdefault(_screen_type_family(item.screen_type), set()).add(item.layout_id)
+        blocker_layout_conflict = any(len(layout_ids) > 1 for layout_ids in blocker_layout_ids_by_family.values())
+        if base_layout_conflict:
+            base_screen = ScreenType.UNKNOWN
+        elif base_selector_matches and selector_match is None:
+            base_screen = ScreenType.UNKNOWN
+        elif selector_match is not None:
+            base_screen = selector_match
+            if base_evidence and not _evidence_supports_selector_match(
                 selector_match=selector_match,
-                evidence_screen_types=evidence_screen_types,
+                evidence_screen_types=base_evidence_screen_types,
             ):
-                return ScreenType.UNKNOWN
-            return selector_match
-        collapsed_evidence = _collapse_evidence_screen_types(evidence_screen_types)
-        if collapsed_evidence is not None:
-            return collapsed_evidence
-        return ScreenType.UNKNOWN
+                base_screen = ScreenType.UNKNOWN
+        elif base_evidence and collapsed_evidence is None:
+            base_screen = ScreenType.UNKNOWN
+        elif collapsed_evidence is not None:
+            base_screen = collapsed_evidence
+        else:
+            base_screen = ScreenType.UNKNOWN
+        effective_screen = base_screen
+        final_guard = guard
+        if guard == GuardVerdict.UNRESOLVED:
+            effective_screen = ScreenType.UNKNOWN
+            final_guard = GuardVerdict.UNRESOLVED
+        elif base_layout_conflict or blocker_layout_conflict:
+            effective_screen = ScreenType.UNKNOWN
+            final_guard = GuardVerdict.UNRESOLVED
+        elif len(blocker_screen_types) > 1:
+            effective_screen = ScreenType.UNKNOWN
+            final_guard = GuardVerdict.UNRESOLVED
+        elif blocker_screen_types:
+            effective_screen = next(iter(blocker_screen_types))
+            if guard in {GuardVerdict.CLEAR, GuardVerdict.BLOCKED}:
+                final_guard = GuardVerdict.BLOCKED
+            else:
+                final_guard = GuardVerdict.NOT_EVALUATED
+        elif guard == GuardVerdict.BLOCKED and base_screen == ScreenType.UNKNOWN:
+            effective_screen = ScreenType.UNKNOWN
+            final_guard = GuardVerdict.UNRESOLVED
+        elif guard == GuardVerdict.BLOCKED:
+            effective_screen = ScreenType.UNKNOWN
+            final_guard = GuardVerdict.UNRESOLVED
+        if viewport_reviewed is False and not coordinate_only:
+            effective_screen = ScreenType.UNKNOWN
+            final_guard = GuardVerdict.UNRESOLVED
+        effective_family = _screen_type_family(effective_screen)
+        effective_evidence = tuple(
+            item for item in evidence if _screen_type_family(item.screen_type) == effective_family
+        )
+        return ScreenDecision(
+            base_screen=base_screen,
+            effective_screen=effective_screen,
+            layout_id=_resolved_layout_id(effective_evidence),
+            guard=final_guard,
+            evidence=tuple(background_evidence) + tuple(evidence),
+            coordinate_only=coordinate_only,
+        )
 
-    def _classify_from_selectors(self, selector_ids: frozenset[UiElementId]) -> ScreenType | None:
-        """Returns the first screen implied purely by selector anchors."""
+    def _classify_from_selectors(self, selector_ids: frozenset[UiElementId]) -> tuple[ScreenType, ...]:
+        """Returns every screen implied purely by non-geometry selector anchors."""
 
+        matches: list[ScreenType] = []
         if UiElementId.PNC_POPUP_CLOSE_BUTTON in selector_ids:
-            return ScreenType.PNC_POPUP
-
+            matches.append(ScreenType.PNC_POPUP)
         for rule in self._rules:
             if not rule.required_all.issubset(selector_ids):
                 continue
             if rule.required_any and rule.required_any.isdisjoint(selector_ids):
                 continue
-            return rule.screen_type
-        return None
+            matches.append(rule.screen_type)
+        return tuple(matches)
 
 
 _COMPATIBLE_SCREEN_TYPE_FAMILIES = (
@@ -603,10 +693,12 @@ def _evidence_supports_selector_match(
 ) -> bool:
     """Returns whether parser evidence agrees with one selector-owned exact screen family."""
 
-    if selector_match in evidence_screen_types:
-        return True
     selector_family = _screen_type_family(selector_match)
-    return any(_screen_type_family(evidence_screen_type) == selector_family for evidence_screen_type in evidence_screen_types)
+    return all(
+        evidence_screen_type == selector_match
+        or _screen_type_family(evidence_screen_type) == selector_family
+        for evidence_screen_type in evidence_screen_types
+    )
 
 
 def _collapse_evidence_screen_types(evidence_screen_types: set[ScreenType]) -> ScreenType | None:
@@ -625,6 +717,26 @@ def _collapse_evidence_screen_types(evidence_screen_types: set[ScreenType]) -> S
         }:
             return candidate
     return next(iter(sorted(evidence_screen_types, key=lambda item: item.value)))
+
+
+def _collapse_evidence(evidence: Sequence[ScreenEvidence]) -> ScreenType | None:
+    """Collapses evidence while rejecting incompatible screen and layout conclusions."""
+
+    evidence_screen_types = {item.screen_type for item in evidence}
+    return _collapse_evidence_screen_types(evidence_screen_types)
+
+
+def _collapse_screen_types(screen_types: Sequence[ScreenType]) -> ScreenType | None:
+    """Collapses selector matches using the same compatible root-family rule."""
+
+    return _collapse_evidence_screen_types(set(screen_types))
+
+
+def _resolved_layout_id(evidence: Sequence[ScreenEvidence]) -> str | None:
+    """Returns one layout identity only when all supplied identities agree."""
+
+    layout_ids = {item.layout_id for item in evidence if item.layout_id is not None}
+    return next(iter(layout_ids)) if len(layout_ids) == 1 else None
 
 
 def _screen_type_family(screen_type: ScreenType) -> frozenset[ScreenType]:

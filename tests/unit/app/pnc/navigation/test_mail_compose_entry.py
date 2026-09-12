@@ -48,7 +48,7 @@ class MailComposeEntryTests(MailWorkflowFixtures, unittest.TestCase):
         self.assertEqual(actions[0].follow_up_request, ObservationRequest.mail_compose_follow_up())
 
     def test_open_mail_compose_from_player_mailbox_only_taps_compose(self) -> None:
-        """Uses one compose-opening increment from the player mailbox so the compose popup is observed before target entry."""
+        """Uses the reviewed Player mailbox compose control before target entry."""
 
         params = SendMailParams(
             recipient_kind=MailRecipientKind.PLAYER,

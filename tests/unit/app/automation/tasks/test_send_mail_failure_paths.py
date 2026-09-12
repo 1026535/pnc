@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict, ScreenDecision, ScreenEvidence
+
 import unittest
 
 from pnc_automation.app.automation.engine.task import TaskId
@@ -187,7 +189,12 @@ class SendMailFailurePathsTests(MailWorkflowFixtures, unittest.TestCase):
             task_id=TaskId.SEND_MAIL,
         )
         after = Observation(
-            screen_type=ScreenType.UNKNOWN,
+            decision=ScreenDecision(
+                base_screen=ScreenType.UNKNOWN,
+                effective_screen=ScreenType.UNKNOWN,
+                guard=GuardVerdict.UNRESOLVED,
+                evidence=(ScreenEvidence(ScreenType.UNKNOWN, "test"),),
+            ),
             visible_elements={
                 UiElementId.PNC_STATUS_BANNER: VisibleElement(
                     selector_id=UiElementId.PNC_STATUS_BANNER,

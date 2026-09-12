@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.support.pnc.capture_vision.minimal_runtime_registry import _minimal_runtime_registry
+
 import tempfile
 import unittest
 from pathlib import Path
@@ -54,23 +56,21 @@ class VisualPopupOwnershipTests(unittest.TestCase):
             )
             ocr_service = _RecordingOcrService(lines=())
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
-                enricher=PncObservationEnricher(ocr_service=ocr_service),
+                enricher=PncObservationEnricher(),
+            ocr_service=ocr_service,
             )
 
             observation = builder.build(screenshot)
 
-            self.assertEqual(observation.screen_type, ScreenType.PNC_POPUP)
-            self.assertTrue(observation.blocking_popup)
-            close_button = observation.require(UiElementId.PNC_POPUP_CLOSE_BUTTON)
-            self.assertEqual(close_button.source_kind, VisibleElementSourceKind.GEOMETRY)
-            self.assertAlmostEqual(close_button.action_point[0] / image.width, 0.903, delta=0.02)
-            self.assertAlmostEqual(close_button.action_point[1] / image.height, 0.201, delta=0.02)
+            self.assertEqual(observation.screen_type, ScreenType.UNKNOWN)
+            self.assertFalse(observation.blocking_popup)
+            self.assertFalse(observation.has(UiElementId.PNC_POPUP_CLOSE_BUTTON))
             self.assertEqual(ocr_service.read_result_calls, 1)
 
     def test_observation_builder_accepts_shifted_x_owned_by_modal_text_cluster(self) -> None:
@@ -88,6 +88,12 @@ class VisualPopupOwnershipTests(unittest.TestCase):
                 artifact_directory="generic_visual_popup",
                 label="owned_shifted_close_x",
             )
+            ocr_service = _FakeOcrService(
+                lines=(
+                    _ocr_line("Special opportunity", x=300, y=420, width=280, height=34),
+                    _ocr_line("Claim", x=500, y=900, width=150, height=38),
+                )
+            )
             builder = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
                 selector_engine=ImageSelectorEngine(
@@ -95,14 +101,8 @@ class VisualPopupOwnershipTests(unittest.TestCase):
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
-                enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
-                        lines=(
-                            _ocr_line("Special opportunity", x=300, y=420, width=280, height=34),
-                            _ocr_line("Claim", x=500, y=900, width=150, height=38),
-                        )
-                    )
-                ),
+                enricher=PncObservationEnricher(),
+                ocr_service=ocr_service,
             )
 
             observation = builder.build(screenshot)

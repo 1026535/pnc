@@ -2,21 +2,29 @@
 
 from pnc_automation.core.vision.ocr.ocr_lines import merge_ocr_lines
 from pnc_automation.core.vision.ocr.ocr_service import (
-    CachedOcrService,
+    OcrContextMetrics,
     OcrLine,
+    OcrReadDiagnostic,
+    OcrReadPurpose,
+    OcrReadStatus,
     OcrResult,
     OcrService,
     OcrWord,
+    ObservationOcrContext,
     RapidOcrService,
     UnavailableOcrService,
 )
 
 __all__ = [
-    "CachedOcrService",
+    "OcrContextMetrics",
     "OcrLine",
+    "OcrReadDiagnostic",
+    "OcrReadPurpose",
+    "OcrReadStatus",
     "OcrResult",
     "OcrService",
     "OcrWord",
+    "ObservationOcrContext",
     "RapidOcrService",
     "UnavailableOcrService",
     "merge_ocr_lines",

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
+
 import unittest
 
 from pnc_automation.app.automation.engine.action_executor import ActionExecutor
@@ -24,6 +26,7 @@ class SwipeInputTests(MailWorkflowFixtures, unittest.TestCase):
         """Resolves selector-independent swipe geometry from explicit normalized start/end ratios when provided."""
 
         executor = ActionExecutor(
+            selector_registry=build_default_selector_registry(),
             session=FakeSession(),
             stable_click_delay_ms=0,
             post_action_observe_delay_ms=0,
@@ -51,6 +54,7 @@ class SwipeInputTests(MailWorkflowFixtures, unittest.TestCase):
         """Forwards the requested swipe input source so profile-level gesture calibration survives execution."""
 
         executor = ActionExecutor(
+            selector_registry=build_default_selector_registry(),
             session=FakeSession(),
             stable_click_delay_ms=0,
             post_action_observe_delay_ms=0,
@@ -79,6 +83,7 @@ class SwipeInputTests(MailWorkflowFixtures, unittest.TestCase):
         """Forwards the requested drag primitive so callers can opt into motion-event gestures."""
 
         executor = ActionExecutor(
+            selector_registry=build_default_selector_registry(),
             session=FakeSession(),
             stable_click_delay_ms=0,
             post_action_observe_delay_ms=0,

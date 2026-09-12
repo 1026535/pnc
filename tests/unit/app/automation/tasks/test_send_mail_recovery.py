@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pnc_automation.app.pnc.domain.action_requests import WaitAction
+
 import unittest
 
 from pnc_automation.app.automation.engine.task import TaskId
@@ -100,6 +102,6 @@ class SendMailRecoveryTests(MailWorkflowFixtures, unittest.TestCase):
         actions = task.plan(context, make_observation(ScreenType.UNKNOWN))
 
         self.assertEqual(len(actions), 1)
-        self.assertIsInstance(actions[0], KeyEventAction)
-        self.assertEqual(actions[0].key_code, "KEYCODE_BACK")
-        self.assertEqual(actions[0].reason, "recover_unknown_mail_screen")
+        self.assertIsInstance(actions[0], WaitAction)
+        self.assertEqual(actions[0].milliseconds, 250)
+        self.assertEqual(actions[0].reason, "recover_unknown_mail_screen_passive_settle")

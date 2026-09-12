@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from pnc_automation.app.automation.engine.observed_action_executor import ObservedActionExecutor
+from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
+from tests.support.pnc.capture_vision.fake_screenshot_session import make_captured_frame
+from dataclasses import replace
+
 import unittest
 
 from pnc_automation.app.automation.engine.action_executor import ActionExecutor
@@ -32,27 +37,34 @@ class ChatObservationActionsTests(unittest.TestCase):
             draft_ocr_text="Pleaseter content",
         )
         fake_session = FakeSession()
+        refresh_frame = make_captured_frame(b"refresh").frame_ref
+        post_frame = make_captured_frame(b"post").frame_ref
+        refreshed_elements = {
+            selector_id: replace(element, frame_ref=refresh_frame)
+            for selector_id, element in observation.visible_elements.items()
+        }
+        posted_elements = {
+            selector_id: replace(element, frame_ref=post_frame)
+            for selector_id, element in observation.visible_elements.items()
+        }
         fake_observer = FakeObservationService(
             observations=[
-                make_observation(
-                    ScreenType.PNC_CHAT,
-                    visible_ids=(
-                        UiElementId.PNC_CHAT_TAB_KINGDOM,
-                        UiElementId.PNC_CHAT_TAB_ALLIANCE,
-                        UiElementId.PNC_CHAT_INPUT_FIELD,
-                        UiElementId.PNC_CHAT_SEND_BUTTON,
-                    ),
-                    active_chat_channel=ChatChannel.ALLIANCE,
-                    chat_draft_empty=True,
-                )
+                replace(observation, frame_ref=refresh_frame, visible_elements=refreshed_elements),
+                replace(observation, frame_ref=post_frame, visible_elements=posted_elements),
             ]
         )
-        executor = ActionExecutor(
-            session=fake_session,
-            stable_click_delay_ms=0,
-            post_action_observe_delay_ms=0,
-            chat_stable_click_delay_ms=0,
-            chat_post_action_observe_delay_ms=0,
+        executor = ObservedActionExecutor(
+            selector_registry=build_default_selector_registry(),
+            action_executor=ActionExecutor(
+                selector_registry=build_default_selector_registry(),
+                session=fake_session,
+                stable_click_delay_ms=0,
+                post_action_observe_delay_ms=0,
+                chat_stable_click_delay_ms=0,
+                chat_post_action_observe_delay_ms=0,
+                logger=build_logger(),
+                sleep=lambda _: None,
+            ),
             logger=build_logger(),
             sleep=lambda _: None,
         )
@@ -69,4 +81,7 @@ class ChatObservationActionsTests(unittest.TestCase):
 
         self.assertEqual(fake_session.texts, ["hello"])
         self.assertEqual(fake_session.key_events, [])
-        self.assertEqual(fake_observer.requests, [ObservationRequest.chat_send_follow_up()])
+        self.assertEqual(
+            fake_observer.requests,
+            [ObservationRequest.full_runtime_default(), ObservationRequest.chat_send_follow_up()],
+        )

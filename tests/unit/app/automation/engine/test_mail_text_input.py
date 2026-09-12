@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
+
 import unittest
 
 from pnc_automation.app.automation.engine.action_executor import ActionExecutor
@@ -22,6 +24,7 @@ class MailTextInputTests(MailWorkflowFixtures, unittest.TestCase):
         """Uses the generic observed text-field state to replace mail subject content in place."""
 
         executor = ActionExecutor(
+            selector_registry=build_default_selector_registry(),
             session=FakeSession(),
             stable_click_delay_ms=0,
             post_action_observe_delay_ms=0,
@@ -59,6 +62,7 @@ class MailTextInputTests(MailWorkflowFixtures, unittest.TestCase):
         """Uses the shared multiline policy for the compose body instead of rejecting newlines outright."""
 
         executor = ActionExecutor(
+            selector_registry=build_default_selector_registry(),
             session=FakeSession(),
             stable_click_delay_ms=0,
             post_action_observe_delay_ms=0,

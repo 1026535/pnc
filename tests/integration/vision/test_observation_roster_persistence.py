@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.support.pnc.capture_vision.minimal_runtime_registry import _minimal_runtime_registry
+
 import tempfile
 import unittest
 from pathlib import Path
@@ -38,19 +40,21 @@ class ObservationRosterPersistenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_directory:
             root = Path(temp_directory)
             screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
-            image = Image.new("RGB", (480, 854), (15, 28, 68))
+            image = Image.new("RGB", (540, 960), (15, 28, 68))
             for x in range(410, 470):
                 for y in range(520, 590):
                     image.putpixel((x, y), (40, 200, 70))
             observation_builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Manage Char.", x=132, y=18, width=152, height=24),
                             _ocr_line("K230 Kingdom", x=98, y=494, width=128, height=18),
@@ -61,8 +65,7 @@ class ObservationRosterPersistenceTests(unittest.TestCase):
                             _ocr_line("Castle Level 11", x=98, y=657, width=132, height=18),
                         )
                     )
-                ),
-            )
+                )
             roster_store = CastleRosterStore(
                 path=root / "castles.yaml",
                 rosters=(
@@ -101,19 +104,21 @@ class ObservationRosterPersistenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_directory:
             root = Path(temp_directory)
             screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
-            image = Image.new("RGB", (480, 854), (15, 28, 68))
+            image = Image.new("RGB", (540, 960), (15, 28, 68))
             for x in range(410, 470):
                 for y in range(520, 590):
                     image.putpixel((x, y), (40, 200, 70))
             observation_builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Manage Char.", x=132, y=18, width=152, height=24),
                             _ocr_line("K230 Kingdom", x=98, y=494, width=128, height=18),
@@ -121,8 +126,7 @@ class ObservationRosterPersistenceTests(unittest.TestCase):
                             _ocr_line("Castle Level 9", x=98, y=549, width=126, height=18),
                         )
                     )
-                ),
-            )
+                )
             roster_store = CastleRosterStore(
                 path=root / "castles.yaml",
                 rosters=(

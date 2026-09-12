@@ -77,6 +77,7 @@ class RunnerCastleTargetingTests(RuntimeCastleTargetingFixtures, unittest.TestCa
             action_executor=ObservedActionExecutor(
                 selector_registry=build_default_selector_registry(),
                 action_executor=ActionExecutor(
+                    selector_registry=build_default_selector_registry(),
                     session=fake_session,
                     stable_click_delay_ms=0,
                     post_action_observe_delay_ms=0,
@@ -124,6 +125,7 @@ class RunnerCastleTargetingTests(RuntimeCastleTargetingFixtures, unittest.TestCa
             action_executor=ObservedActionExecutor(
                 selector_registry=build_default_selector_registry(),
                 action_executor=ActionExecutor(
+                    selector_registry=build_default_selector_registry(),
                     session=FakeSession(),
                     stable_click_delay_ms=0,
                     post_action_observe_delay_ms=0,

@@ -19,23 +19,25 @@ from pnc_automation.app.pnc.vision.selectors import build_default_selector_regis
 from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
 
 from tests.support.pnc.capture_vision.fake_ocr_service import _FakeOcrService
+from tests.support.pnc.capture_vision.fake_screenshot_session import make_captured_frame
 
 
 def _build_observation_from_ocr_lines(lines: tuple[OcrLine, ...]) -> Observation:
     """Builds one full-runtime observation from deterministic OCR lines and reviewed geometry."""
 
     registry = build_default_selector_registry()
+    ocr_service = _FakeOcrService(lines=lines)
     builder = ObservationBuilder(
         selector_registry=registry,
         selector_engine=ImageSelectorEngine(
             template_matcher=OpenCvTemplateMatcher(),
-            ocr_service=UnavailableOcrService(),
+
         ),
         screen_classifier=ScreenClassifier(),
         enricher=PncObservationEnricher(
-            ocr_service=_FakeOcrService(lines=lines),
             selector_registry=registry,
         ),
+        ocr_service=ocr_service,
     )
     screenshot = type(
         "Captured",
@@ -43,6 +45,7 @@ def _build_observation_from_ocr_lines(lines: tuple[OcrLine, ...]) -> Observation
         {
             "image": Image.new("RGB", (900, 1600), (15, 28, 68)),
             "artifact": type("Artifact", (), {"path": Path("hero_arena_synthetic.png"), "captured_at": None})(),
+            "frame_ref": make_captured_frame(b"").frame_ref,
         },
     )()
     return builder.build(screenshot, request=ObservationRequest.full_runtime_default())

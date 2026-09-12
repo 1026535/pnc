@@ -16,8 +16,8 @@ from tests.support.automation.task_context.flow_and_task_fixtures import FlowAnd
 class EnsureGameRunningTests(FlowAndTaskFixtures, unittest.TestCase):
     """Proves ensure game running."""
 
-    def test_recover_unknown_game_screen_uses_back_without_relaunching(self) -> None:
-        """Uses one in-game back increment for unknown endpoint states instead of restarting the app."""
+    def test_recover_unknown_game_screen_uses_passive_settle_without_relaunching(self) -> None:
+        """Settles an unknown endpoint passively instead of dispatching unproved Back."""
 
         actions = self.flows.recover_unknown_game_screen(
             make_observation(ScreenType.UNKNOWN),
@@ -25,9 +25,8 @@ class EnsureGameRunningTests(FlowAndTaskFixtures, unittest.TestCase):
         )
 
         self.assertEqual(len(actions), 1)
-        self.assertIsInstance(actions[0], KeyEventAction)
-        self.assertEqual(actions[0].key_code, "KEYCODE_BACK")
-        self.assertEqual(actions[0].reason, "recover_unknown_endpoint")
+        self.assertIsInstance(actions[0], WaitAction)
+        self.assertEqual(actions[0].reason, "recover_unknown_endpoint_passive_settle")
 
     def test_ensure_game_running_waits_on_unknown_once_launch_is_in_progress(self) -> None:
         """Keeps waiting on the launch splash instead of bouncing back through Android home."""
@@ -44,7 +43,7 @@ class EnsureGameRunningTests(FlowAndTaskFixtures, unittest.TestCase):
         self.assertEqual(actions[0].reason, "wait_for_pnc_launch")
 
     def test_ensure_game_running_recovers_unknown_in_game_state_before_any_relaunch(self) -> None:
-        """Uses one bounded in-game recovery increment before the bootstrap task is allowed to relaunch anything."""
+        """Uses one passive observation before the bootstrap task is allowed to relaunch anything."""
 
         task = EnsureGameRunningTask()
         context = self._make_context(params=None)
@@ -52,9 +51,8 @@ class EnsureGameRunningTests(FlowAndTaskFixtures, unittest.TestCase):
         actions = task.plan(context, make_observation(ScreenType.UNKNOWN))
 
         self.assertEqual(len(actions), 1)
-        self.assertIsInstance(actions[0], KeyEventAction)
-        self.assertEqual(actions[0].key_code, "KEYCODE_BACK")
-        self.assertEqual(actions[0].reason, "recover_unknown_before_foreground")
+        self.assertIsInstance(actions[0], WaitAction)
+        self.assertEqual(actions[0].reason, "recover_unknown_before_foreground_passive_settle")
 
     def test_ensure_game_running_replans_when_launch_lands_on_unknown_splash(self) -> None:
         """Treats an unknown post-launch splash as in-progress foregrounding instead of immediate failure."""

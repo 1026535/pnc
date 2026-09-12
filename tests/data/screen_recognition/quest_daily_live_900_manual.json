@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "image": "quest_daily_live_900.png",
+  "screen": "PNC_QUEST_DAILY",
+  "state": "clear",
+  "group": "testing/live_B/20260911T003749Z_82f9b93d",
+  "source_artifact": "C:/Users/lebel/pnc/artifacts/2026-09-11/testing/20260911T003915Z_visual_20260911T003749Z_82f9b93d_8_post_action_1.png",
+  "reviewed_at": "2026-09-11T00:39:15Z",
+  "dimensions": [900, 1600],
+  "rows": [
+    {"title": "Upgrade building 1x", "progress": [0, 1], "state": "go", "card": [18, 622, 860, 164], "Go": [647, 663, 217, 73]},
+    {"title": "Challenge 3x in Hero Arena", "progress": [0, 3], "state": "go", "card": [18, 813, 860, 164], "Go": [647, 854, 217, 73]},
+    {"title": "Upgrade tech 1x", "progress": [0, 1], "state": "go", "card": [18, 1004, 860, 164], "Go": [647, 1045, 217, 73]},
+    {"title": "Train Infantry x250", "progress": [0, 250], "state": "go", "card": [18, 1195, 860, 164], "Go": [647, 1236, 217, 73]},
+    {"title": "Train Cavalry x250", "progress": [0, 250], "state": "go", "card": [18, 1386, 860, 164], "Go": [647, 1428, 217, 73]}
+  ],
+  "partial_next_row": [0, 1576, 900, 24]
+}

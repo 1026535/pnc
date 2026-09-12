@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from pathlib import PurePosixPath, PureWindowsPath
 from typing import Any, Callable
 
 import yaml
+from PIL import Image, UnidentifiedImageError
 
 from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.app.pnc.vision.selector_interaction_kind import SelectorInteractionKind
@@ -26,7 +29,16 @@ _CATALOG_HEADER_LINES = (
     "# - `label`: non-interactive screen evidence; it must not declare click metadata",
     "# `surfaces` extend the same canonical file with scrollable-scene definitions used for world-map",
     "# and home-city spatial parsing; fixed overlay UI remains in `selectors`.",
+    "# `template_asset` is required for enabled `detection_kind: template` selectors:",
+    "# - `path` is explicit and package-relative to the canonical packaged `vision/data` asset root",
+    "# - `reference_size` is the image size used to normalize template matching coordinates",
+    "# - `search_region` is an optional absolute ROI in that reference coordinate space",
+    "# - `mask: embedded_alpha` uses transparency embedded in the PNG; external masks are unsupported",
+    "# - `threshold` is the reviewed matcher threshold",
 )
+
+_SUPPORTED_DETECTION_KINDS = frozenset({"template", "guarded_geometry", "ocr_region", "semantic", "unsupported"})
+_EMBEDDED_ALPHA_MASK = "embedded_alpha"
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,6 +132,82 @@ class SelectorCatalogRelativeBounds:
 
 
 @dataclass(frozen=True, slots=True)
+class SelectorCatalogTemplateSearchRegion:
+    """Stores an optional matcher ROI in the template's reference coordinate space."""
+
+    x: int
+    y: int
+    width: int
+    height: int
+
+    def __post_init__(self) -> None:
+        """Rejects malformed absolute image-space ROI values."""
+
+        if any(isinstance(value, bool) or not isinstance(value, int) for value in (self.x, self.y, self.width, self.height)):
+            raise SelectorResolutionError("Template search_region coordinates must be integers.")
+        if self.x < 0 or self.y < 0 or self.width <= 0 or self.height <= 0:
+            raise SelectorResolutionError("Template search_region must have non-negative origin and positive dimensions.")
+
+    def to_document(self) -> dict[str, int]:
+        """Returns the YAML-ready representation of this matcher ROI."""
+
+        return {"x": self.x, "y": self.y, "width": self.width, "height": self.height}
+
+
+@dataclass(frozen=True, slots=True)
+class SelectorCatalogTemplateAsset:
+    """Describes one packaged template and its normalized matcher metadata."""
+
+    path: str
+    reference_size: tuple[int, int]
+    threshold: float
+    mask: str = _EMBEDDED_ALPHA_MASK
+    search_region: SelectorCatalogTemplateSearchRegion | None = None
+
+    def __post_init__(self) -> None:
+        """Rejects unsafe paths and matcher metadata before any runtime use."""
+
+        _validate_template_asset_relative_path(self.path)
+        if (
+            len(self.reference_size) != 2
+            or any(isinstance(value, bool) or not isinstance(value, int) for value in self.reference_size)
+            or any(value <= 0 for value in self.reference_size)
+        ):
+            raise SelectorResolutionError("Template reference_size must contain two positive integers.", path=self.path)
+        if isinstance(self.threshold, bool) or not isinstance(self.threshold, int | float) or not math.isfinite(float(self.threshold)):
+            raise SelectorResolutionError("Template threshold must be a finite number in (0, 1].", path=self.path)
+        if not 0 < float(self.threshold) <= 1:
+            raise SelectorResolutionError("Template threshold must be in (0, 1].", path=self.path, threshold=self.threshold)
+        if self.mask != _EMBEDDED_ALPHA_MASK:
+            raise SelectorResolutionError(
+                "Template mask must be 'embedded_alpha'; external mask paths are unsupported.",
+                path=self.path,
+                mask=self.mask,
+            )
+        if self.search_region is not None:
+            reference_width, reference_height = self.reference_size
+            if self.search_region.x + self.search_region.width > reference_width or self.search_region.y + self.search_region.height > reference_height:
+                raise SelectorResolutionError(
+                    "Template search_region must fit inside reference_size.",
+                    path=self.path,
+                    reference_size=self.reference_size,
+                )
+
+    def to_document(self) -> dict[str, object]:
+        """Returns the YAML-ready representation of this packaged template."""
+
+        document: dict[str, object] = {
+            "path": self.path,
+            "reference_size": list(self.reference_size),
+            "threshold": self.threshold,
+            "mask": self.mask,
+        }
+        if self.search_region is not None:
+            document["search_region"] = self.search_region.to_document()
+        return document
+
+
+@dataclass(frozen=True, slots=True)
 class SelectorCatalogEntry:
     """Represents one raw selector entry as stored in the static catalog document."""
 
@@ -130,6 +218,7 @@ class SelectorCatalogEntry:
     interaction_kind: str | None = None
     click: SelectorCatalogClickDefinition | None = None
     relative_bounds: SelectorCatalogRelativeBounds | None = None
+    template_asset: SelectorCatalogTemplateAsset | None = None
     materialize_relative_bounds: bool = True
     notes: tuple[str, ...] = ()
 
@@ -148,6 +237,8 @@ class SelectorCatalogEntry:
             document["click"] = self.click.to_document()
         if self.relative_bounds is not None:
             document["relative_bounds"] = self.relative_bounds.to_document()
+        if self.template_asset is not None:
+            document["template_asset"] = self.template_asset.to_document()
         if not self.materialize_relative_bounds:
             document["materialize_relative_bounds"] = False
         if self.notes:
@@ -265,6 +356,7 @@ class SelectorCatalogDocument:
 
     selectors: tuple[SelectorCatalogEntry, ...]
     surfaces: tuple[SelectorCatalogSurfaceEntry, ...] = ()
+    asset_root: Path | None = field(default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         """Ensures the static catalog remains canonical and unambiguous."""
@@ -307,17 +399,37 @@ def default_selector_catalog_path() -> Path:
     return Path(__file__).resolve().parent / "data" / "selector_registry.yaml"
 
 
-def load_selector_catalog_document(path: Path | None = None) -> SelectorCatalogDocument:
-    """Loads the static selector catalog document from disk."""
+def default_selector_asset_root() -> Path:
+    """Returns the packaged vision/data directory that owns selector assets."""
+
+    return Path(__file__).resolve().parent / "data"
+
+
+def load_selector_catalog_document(
+    path: Path | None = None,
+    *,
+    asset_root: Path | None = None,
+    validate_assets: bool = True,
+) -> SelectorCatalogDocument:
+    """Loads the static selector catalog document from disk.
+
+    Asset validation may be disabled only by offline inventory callers that need
+    to report missing packaged paths instead of failing before the report is built.
+    """
 
     catalog_path = path or default_selector_catalog_path()
+    resolved_asset_root = (asset_root or default_selector_asset_root()).resolve()
     with catalog_path.open("r", encoding="utf-8") as handle:
         loaded = yaml.safe_load(handle)
     document = require_selector_schema_mapping(loaded, context="selector catalog root", document_label="selector catalog")
-    return SelectorCatalogDocument(
+    catalog = SelectorCatalogDocument(
         selectors=tuple(_load_selector_entries(document.get("selectors"))),
         surfaces=tuple(_load_surface_entries(document.get("surfaces", ()))),
+        asset_root=resolved_asset_root,
     )
+    if validate_assets:
+        validate_selector_catalog_assets(catalog, asset_root=resolved_asset_root)
+    return catalog
 
 
 def write_selector_catalog_document(path: Path, document: SelectorCatalogDocument) -> None:
@@ -382,6 +494,12 @@ def _load_selector_entries(value: object) -> tuple[SelectorCatalogEntry, ...]:
             document_label="selector catalog",
             selector_label="selector",
         )
+        template_asset = load_selector_schema_template_asset(
+            mapping.get("template_asset"),
+            selector_id=selector_id,
+            document_label="selector catalog",
+            selector_label="selector",
+        )
         materialize_relative_bounds = (
             require_selector_schema_bool(
                 mapping.get("materialize_relative_bounds"),
@@ -389,7 +507,7 @@ def _load_selector_entries(value: object) -> tuple[SelectorCatalogEntry, ...]:
                 document_label="selector catalog",
             )
             if "materialize_relative_bounds" in mapping
-            else True
+            else detection_kind == "guarded_geometry"
         )
         notes = tuple(
             load_selector_schema_string_sequence(
@@ -407,6 +525,7 @@ def _load_selector_entries(value: object) -> tuple[SelectorCatalogEntry, ...]:
                 interaction_kind=interaction_kind,
                 click=click,
                 relative_bounds=relative_bounds,
+                template_asset=template_asset,
                 materialize_relative_bounds=materialize_relative_bounds,
                 notes=notes,
             )
@@ -507,14 +626,44 @@ def validate_selector_catalog_interactions(document: SelectorCatalogDocument) ->
     """Rejects selector interaction metadata that contradicts the declared click contract."""
 
     for selector in document.selectors:
-        if selector.relative_bounds is None and not selector.materialize_relative_bounds:
+        if selector.detection_kind not in _SUPPORTED_DETECTION_KINDS:
+            raise SelectorResolutionError(
+                "Selector detection_kind must use a supported strategy.",
+                selector_id=selector.id,
+                detection_kind=selector.detection_kind,
+            )
+        if selector.detection_kind == "template":
+            if selector.template_asset is None:
+                raise SelectorResolutionError(
+                    "Every template selector must declare template_asset metadata; use unsupported for unimplemented controls.",
+                    selector_id=selector.id,
+                    status=selector.status,
+                )
+        elif selector.template_asset is not None:
+            raise SelectorResolutionError(
+                "Only template selectors may declare template_asset metadata.",
+                selector_id=selector.id,
+                detection_kind=selector.detection_kind,
+            )
+        if selector.detection_kind == "unsupported" and not selector.notes:
+            raise SelectorResolutionError(
+                "Unsupported selectors must include a notes entry explaining the missing strategy.",
+                selector_id=selector.id,
+            )
+        if selector.materialize_relative_bounds and selector.relative_bounds is None:
             raise SelectorResolutionError(
                 "Selector materialize_relative_bounds requires relative_bounds.",
                 selector_id=selector.id,
             )
-        if selector.detection_kind == "ocr_region" and selector.status != "planned" and selector.relative_bounds is None:
+        if selector.materialize_relative_bounds and selector.detection_kind != "guarded_geometry":
             raise SelectorResolutionError(
-                "Non-planned ocr_region selectors must declare normalized relative_bounds.",
+                "Only GUARDED_GEOMETRY selectors may materialize relative_bounds.",
+                selector_id=selector.id,
+                detection_kind=selector.detection_kind,
+            )
+        if selector.detection_kind in {"ocr_region", "guarded_geometry"} and selector.relative_bounds is None:
+            raise SelectorResolutionError(
+                "OCR_REGION and GUARDED_GEOMETRY selectors must declare normalized relative_bounds.",
                 selector_id=selector.id,
                 detection_kind=selector.detection_kind,
                 status=selector.status,
@@ -561,6 +710,76 @@ def validate_selector_catalog_interactions(document: SelectorCatalogDocument) ->
                 selector_id=selector.id,
                 interaction_kind=interaction_kind.value,
             )
+
+
+def validate_selector_catalog_assets(document: SelectorCatalogDocument, *, asset_root: Path) -> None:
+    """Eagerly validates every declared packaged template and its decoded image content."""
+
+    root = asset_root.resolve()
+    for selector in document.selectors:
+        asset = selector.template_asset
+        if asset is None:
+            continue
+        asset_path = (root / Path(asset.path)).resolve()
+        try:
+            asset_path.relative_to(root)
+        except ValueError as error:
+            raise SelectorResolutionError(
+                "Template asset path must remain below the selector catalog asset directory.",
+                selector_id=selector.id,
+                path=asset.path,
+            ) from error
+        if not asset_path.is_file():
+            raise SelectorResolutionError(
+                "Template asset path does not resolve to a packaged file.",
+                selector_id=selector.id,
+                path=asset.path,
+                resolved_path=str(asset_path),
+            )
+        try:
+            with Image.open(asset_path) as image:
+                image.load()
+                width, height = image.size
+                if width <= 0 or height <= 0:
+                    raise SelectorResolutionError(
+                        "Template asset must decode to positive dimensions.",
+                        selector_id=selector.id,
+                        path=asset.path,
+                    )
+                reference_width, reference_height = asset.reference_size
+                if width > reference_width or height > reference_height:
+                    raise SelectorResolutionError(
+                        "Template asset dimensions must fit inside reference_size.",
+                        selector_id=selector.id,
+                        path=asset.path,
+                        asset_size=(width, height),
+                        reference_size=asset.reference_size,
+                    )
+                if asset.search_region is not None and (
+                    width > asset.search_region.width or height > asset.search_region.height
+                ):
+                    raise SelectorResolutionError(
+                        "Template asset dimensions must fit inside search_region.",
+                        selector_id=selector.id,
+                        path=asset.path,
+                        asset_size=(width, height),
+                        search_region=asset.search_region.to_document(),
+                    )
+                alpha = image.convert("RGBA").getchannel("A")
+                if alpha.getextrema()[1] == 0:
+                    raise SelectorResolutionError(
+                        "Template asset alpha channel is fully transparent.",
+                        selector_id=selector.id,
+                        path=asset.path,
+                    )
+        except SelectorResolutionError:
+            raise
+        except (OSError, UnidentifiedImageError) as error:
+            raise SelectorResolutionError(
+                "Template asset could not be decoded as an image.",
+                selector_id=selector.id,
+                path=asset.path,
+            ) from error
 
 
 def load_selector_schema_click_definition(
@@ -738,6 +957,115 @@ def load_selector_schema_relative_bounds(
     )
 
 
+def load_selector_schema_template_asset(
+    value: object,
+    *,
+    selector_id: str,
+    document_label: str,
+    selector_label: str,
+) -> SelectorCatalogTemplateAsset | None:
+    """Loads explicit packaged-template metadata from one catalog selector."""
+
+    if value is None:
+        return None
+    mapping = require_selector_schema_mapping(
+        value,
+        context=f"{selector_label} '{selector_id}' template_asset",
+        document_label=document_label,
+    )
+    if "mask_path" in mapping:
+        raise SelectorResolutionError(
+            "Template assets use embedded alpha masks; external mask_path metadata is unsupported.",
+            selector_id=selector_id,
+        )
+    path = require_selector_schema_string(
+        mapping.get("path"),
+        context=f"{selector_label} '{selector_id}' template_asset path",
+        document_label=document_label,
+    )
+    reference_values = require_selector_schema_sequence(
+        mapping.get("reference_size"),
+        context=f"{selector_label} '{selector_id}' template_asset reference_size",
+        document_label=document_label,
+    )
+    if len(reference_values) != 2:
+        raise SelectorResolutionError(
+            "Template reference_size must contain exactly two dimensions.",
+            selector_id=selector_id,
+        )
+    reference_size = tuple(
+        _require_schema_integer(
+            item,
+            context=f"{selector_label} '{selector_id}' template_asset reference_size",
+            document_label=document_label,
+        )
+        for item in reference_values
+    )
+    search_region = load_selector_schema_template_search_region(
+        mapping.get("search_region"),
+        selector_id=selector_id,
+        document_label=document_label,
+        selector_label=selector_label,
+    )
+    mask = require_selector_schema_string(
+        mapping.get("mask"),
+        context=f"{selector_label} '{selector_id}' template_asset mask",
+        document_label=document_label,
+    )
+    threshold = require_selector_schema_number(
+        mapping.get("threshold"),
+        context=f"{selector_label} '{selector_id}' template_asset threshold",
+        document_label=document_label,
+    )
+    return SelectorCatalogTemplateAsset(
+        path=path,
+        reference_size=reference_size,
+        search_region=search_region,
+        mask=mask,
+        threshold=threshold,
+    )
+
+
+def load_selector_schema_template_search_region(
+    value: object,
+    *,
+    selector_id: str,
+    document_label: str,
+    selector_label: str,
+) -> SelectorCatalogTemplateSearchRegion | None:
+    """Loads an optional absolute ROI in reference image coordinates."""
+
+    if value is None:
+        return None
+    mapping = require_selector_schema_mapping(
+        value,
+        context=f"{selector_label} '{selector_id}' template_asset search_region",
+        document_label=document_label,
+    )
+    return SelectorCatalogTemplateSearchRegion(
+        x=_require_schema_integer(
+            mapping.get("x"),
+            context=f"{selector_label} '{selector_id}' template_asset search_region x",
+            document_label=document_label,
+        ),
+        y=_require_schema_integer(
+            mapping.get("y"),
+            context=f"{selector_label} '{selector_id}' template_asset search_region y",
+            document_label=document_label,
+        ),
+        width=_require_schema_integer(
+            mapping.get("width"),
+            context=f"{selector_label} '{selector_id}' template_asset search_region width",
+            document_label=document_label,
+        ),
+        height=_require_schema_integer(
+            mapping.get("height"),
+            context=f"{selector_label} '{selector_id}' template_asset search_region height",
+            document_label=document_label,
+        ),
+    )
+
+
 def load_selector_schema_surface_viewport(
     value: object,
     *,
@@ -880,6 +1208,27 @@ def require_selector_schema_number(value: object, *, context: str, document_labe
     if isinstance(value, bool) or not isinstance(value, int | float):
         raise SelectorResolutionError(f"Expected a number in the {document_label}.", context=context)
     return float(value)
+
+
+def _require_schema_integer(value: object, *, context: str, document_label: str) -> int:
+    """Returns one YAML integer without accepting booleans or fractional values."""
+
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise SelectorResolutionError(f"Expected an integer in the {document_label}.", context=context)
+    return value
+
+
+def _validate_template_asset_relative_path(path: str) -> None:
+    """Rejects absolute, empty, and traversal paths before filesystem resolution."""
+
+    if not isinstance(path, str) or path == "":
+        raise SelectorResolutionError("Template asset path must be a non-empty relative path.", path=path)
+    posix_path = PurePosixPath(path.replace("\\", "/"))
+    windows_path = PureWindowsPath(path)
+    if posix_path.is_absolute() or windows_path.is_absolute() or windows_path.drive:
+        raise SelectorResolutionError("Template asset path must be relative to the vision/data package directory.", path=path)
+    if ".." in posix_path.parts or not posix_path.parts:
+        raise SelectorResolutionError("Template asset path must not traverse its package directory.", path=path)
 
 
 def _require_ratio(value: float, *, field_name: str, inclusive_zero: bool) -> None:

@@ -1,115 +1,32 @@
-"""Live validator for reviewed navigation selectors in the canonical selector registry."""
+"""Run one bounded, read-only canary per explicitly requested navigation selector."""
 
 from __future__ import annotations
 
 import argparse
-from datetime import UTC, datetime
+import json
 from pathlib import Path
 
-from _script_bootstrap import ensure_repo_root_on_path
+try:
+    from _script_bootstrap import ensure_repo_root_on_path
+except ModuleNotFoundError:
+    from tools._script_bootstrap import ensure_repo_root_on_path
 
 root = ensure_repo_root_on_path()
 
-from pnc_automation.app import build_application_runner
-from pnc_automation.app.authoring.config.models import LiveAutomationRole
-from pnc_automation.app.automation.engine.script_runner import ConnectedAccountRuntime, ScriptRunner
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
-from pnc_automation.app.pnc.vision.navigation_selector_validator import (
-    NavigationSelectorValidator,
-    write_navigation_selector_validation_report,
-)
+from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.vision.selector_catalog import default_selector_catalog_path
+from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
 from pnc_automation.core.errors import SelectorResolutionError
-from pnc_automation.core.infra.storage.path_segments import sanitize_artifact_segment
-
-
-def main() -> int:
-    """Parses arguments, runs the live validator, and writes a YAML report."""
-
-    parser = argparse.ArgumentParser(description="Validate reviewed navigation selectors against a live session.")
-    parser.add_argument("--config", default=str(root / "config" / "accounts.yaml"), help="Path to the runtime config file.")
-    parser.add_argument(
-        "--catalog",
-        default=str(default_selector_catalog_path()),
-        help="Path to the selector catalog used by the runtime.",
-    )
-    parser.add_argument("--account", required=True, help="Configured account id to validate.")
-    parser.add_argument(
-        "--selector",
-        action="append",
-        default=[],
-        help="UiElementId name or value to validate. May be provided multiple times. Defaults to all navigation selectors.",
-    )
-    parser.add_argument(
-        "--output-dir",
-        default=str(root / "navigation_selector_validation_output"),
-        help="Directory where the YAML validation report should be written.",
-    )
-    parser.add_argument("--verbose", action="store_true", help="Enable verbose structured logging.")
-    arguments = parser.parse_args()
-
-    application = build_application_runner(
-        Path(arguments.config),
-        verbose=arguments.verbose,
-        catalog_path=Path(arguments.catalog),
-    )
-    script_runner = application.script_runner
-    account = script_runner.config.require_account(arguments.account)
-    account.require_live_role(LiveAutomationRole.LIVE_TESTING)
-    with application.reserve_accounts((account.id,)):
-        runtime = script_runner.build_connected_runtime(
-            account=account,
-            required_role=LiveAutomationRole.LIVE_TESTING,
-        )
-        try:
-            validator = _build_navigation_selector_validator(script_runner=script_runner, runtime=runtime)
-            report = validator.validate(
-                selector_ids=None
-                if not arguments.selector
-                else tuple(_require_ui_element_id(item) for item in arguments.selector)
-            )
-        finally:
-            runtime.close()
-    report_path = _build_output_path(
-        base_directory=Path(arguments.output_dir),
-        account_id=arguments.account,
-    )
-    write_navigation_selector_validation_report(report_path, report)
-
-    print(f"report={report_path}")
-    print(f"passed={report.passed_count}")
-    print(f"failed={report.failed_count}")
-    print(f"skipped={report.skipped_count}")
-    for result in report.results:
-        if result.status.value == "passed":
-            continue
-        print(
-            f"{result.status.value}:{result.selector_id.value}:{result.source_screen.name}:{result.reason}",
-        )
-    return 0 if report.failed_count == 0 else 1
-
-
-def _build_navigation_selector_validator(
-    *,
-    script_runner: ScriptRunner,
-    runtime: ConnectedAccountRuntime,
-) -> NavigationSelectorValidator:
-    """Builds the live validator from the canonical connected runtime graph."""
-
-    action_executor = runtime.require_observed_action_executor(
-        "Navigation-selector validation requires a connected observed-action executor."
-    )
-    return NavigationSelectorValidator(
-        selector_registry=script_runner.observation_builder.selector_registry,
-        observation_service=runtime.observation_service,
-        action_executor=action_executor,
-        screen_flows=runtime.flow_planner,
-        logger=script_runner.logger,
-    )
+from tools.validate_visual_navigation import (
+    ProbeRoute,
+    run_probe,
+    validate_navigation_selector_ids,
+)
 
 
 def _require_ui_element_id(raw_value: str) -> UiElementId:
-    """Parses one requested selector identifier from either its enum member name or value."""
+    """Parse one requested selector identifier before creating any runtime."""
 
     if raw_value in UiElementId.__members__:
         return UiElementId[raw_value]
@@ -122,13 +39,84 @@ def _require_ui_element_id(raw_value: str) -> UiElementId:
         ) from error
 
 
-def _build_output_path(*, base_directory: Path, account_id: str) -> Path:
-    """Returns the timestamped validation-report path for one live run."""
+def _require_screen_type(raw_value: str) -> ScreenType:
+    """Parse one reviewed source screen before creating any runtime."""
 
-    timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
-    base_directory.mkdir(parents=True, exist_ok=True)
-    filename = f"{timestamp}_{sanitize_artifact_segment(account_id)}_navigation_validation.yaml"
-    return base_directory / filename
+    if raw_value in ScreenType.__members__:
+        return ScreenType[raw_value]
+    try:
+        return ScreenType(raw_value)
+    except ValueError as error:
+        raise ValueError(f"Unknown reviewed source screen '{raw_value}'.") from error
+
+
+def main() -> int:
+    """Validate each explicit selector through the shared bounded visual preflight."""
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--config", default=str(root / "config" / "accounts.yaml"))
+    parser.add_argument("--catalog", default=str(default_selector_catalog_path()))
+    parser.add_argument("--account", required=True)
+    parser.add_argument(
+        "--selector",
+        action="append",
+        required=True,
+        help="UiElementId name or value; each selector gets an independent canary run.",
+    )
+    parser.add_argument(
+        "--source-screen",
+        action="append",
+        help="Reviewed source ScreenType name or value; omit to run every declared source independently.",
+    )
+    parser.add_argument("--output-dir", default=str(root / "artifacts" / "screen_recognition" / "navigation"))
+    arguments = parser.parse_args()
+
+    catalog_path = Path(arguments.catalog)
+    selector_ids = validate_navigation_selector_ids(
+        tuple(_require_ui_element_id(item) for item in arguments.selector),
+        catalog_path=catalog_path,
+    )
+    registry = build_default_selector_registry(catalog_path=catalog_path)
+    requested_sources = (
+        tuple(_require_screen_type(item) for item in arguments.source_screen)
+        if arguments.source_screen
+        else None
+    )
+    cases: list[tuple[UiElementId, ScreenType]] = []
+    for selector_id in selector_ids:
+        declared_sources = registry.require(selector_id).screens
+        sources = declared_sources if requested_sources is None else requested_sources
+        for source_screen in sources:
+            if source_screen not in declared_sources:
+                raise ValueError(
+                    f"Selector '{selector_id.value}' is not reviewed from source screen "
+                    f"'{source_screen.name}'."
+                )
+            cases.append((selector_id, source_screen))
+    statuses: list[bool] = []
+    for selector_id, source_screen in cases:
+        try:
+            summary_path = run_probe(
+                Path(arguments.config),
+                arguments.account,
+                Path(arguments.output_dir),
+                route=ProbeRoute.NAVIGATION_SELECTORS,
+                navigation_selectors=(selector_id,),
+                navigation_source_screen=source_screen,
+                catalog_path=catalog_path,
+            )
+        except Exception as error:
+            print(f"failed:{selector_id.value}:{type(error).__name__}:{error}")
+            return 1
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        passed = summary.get("status") == "passed"
+        statuses.append(passed)
+        print(
+            f"{'passed' if passed else 'failed'}:{selector_id.value}:"
+            f"source={source_screen.name}:"
+            f"summary={summary_path}:report={summary.get('navigation_report')}"
+        )
+    return 0 if all(statuses) else 1
 
 
 if __name__ == "__main__":

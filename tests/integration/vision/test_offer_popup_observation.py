@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.support.pnc.capture_vision.minimal_runtime_registry import _minimal_runtime_registry
+
 import tempfile
 import unittest
 from pathlib import Path
@@ -44,14 +46,16 @@ class OfferPopupObservationTests(unittest.TestCase):
                 label="hero_offer_popup",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("5 Hero", x=27, y=65, width=138, height=35),
                             _ocr_line("Savannah", x=68, y=113, width=94, height=22),
@@ -59,8 +63,7 @@ class OfferPopupObservationTests(unittest.TestCase):
                             _ocr_line("One-time", x=230, y=854, width=81, height=21),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -82,14 +85,16 @@ class OfferPopupObservationTests(unittest.TestCase):
                 label="top_up_offer_popup",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Complete 1st Top-up to Obtain Yune", x=72, y=352, width=382, height=68),
                             _ocr_line("Obtain Now", x=176, y=500, width=180, height=28),
@@ -97,8 +102,7 @@ class OfferPopupObservationTests(unittest.TestCase):
                             _ocr_line("Top Up", x=188, y=856, width=150, height=34),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -125,13 +129,14 @@ class OfferPopupObservationTests(unittest.TestCase):
             )
             ocr_service = _RecordingOcrService(lines=())
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
-                enricher=PncObservationEnricher(ocr_service=ocr_service),
+                enricher=PncObservationEnricher(),
+                ocr_service=ocr_service,
             )
 
             observation = builder.build(screenshot)

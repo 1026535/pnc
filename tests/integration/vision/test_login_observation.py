@@ -46,11 +46,13 @@ class LoginObservationTests(unittest.TestCase):
                 selector_registry=build_default_selector_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Email", x=80, y=225, width=70, height=26),
                             _ocr_line("user@example.com", x=92, y=276, width=188, height=22),
@@ -58,8 +60,7 @@ class LoginObservationTests(unittest.TestCase):
                             _ocr_line("Log In", x=211, y=566, width=105, height=30),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -87,11 +88,13 @@ class LoginObservationTests(unittest.TestCase):
                 selector_registry=build_default_selector_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Switch Account", x=134, y=42, width=180, height=28),
                             _ocr_line("user@example.com", x=116, y=292, width=188, height=22),
@@ -99,8 +102,7 @@ class LoginObservationTests(unittest.TestCase):
                             _ocr_line("Change Account", x=165, y=654, width=170, height=28),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 

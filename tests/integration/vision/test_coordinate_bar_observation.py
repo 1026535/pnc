@@ -50,11 +50,13 @@ class CoordinateBarObservationTests(unittest.TestCase):
                 selector_registry=build_default_selector_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("X:253", x=44, y=41, width=42, height=18),
                             _ocr_line("Y:447", x=102, y=41, width=42, height=18),
@@ -66,8 +68,7 @@ class CoordinateBarObservationTests(unittest.TestCase):
                             _ocr_line("More", x=479, y=938, width=41, height=17),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -116,14 +117,14 @@ class CoordinateBarObservationTests(unittest.TestCase):
                 selector_registry=registry,
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=ocr_service,
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=ocr_service,
+
                     selector_registry=registry,
                 ),
-            )
+            ocr_service=ocr_service)
 
             observation = builder.build(screenshot)
 

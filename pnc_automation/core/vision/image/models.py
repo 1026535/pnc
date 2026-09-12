@@ -14,6 +14,23 @@ class Bounds:
     width: int
     height: int
 
+    def contains_bounds(self, candidate: Bounds) -> bool:
+        """Return whether a positive rectangle is wholly inside this rectangle."""
+
+        return (
+            self.width > 0 and self.height > 0
+            and candidate.width > 0 and candidate.height > 0
+            and self.x <= candidate.x and self.y <= candidate.y
+            and candidate.x + candidate.width <= self.x + self.width
+            and candidate.y + candidate.height <= self.y + self.height
+        )
+
+    def contains_point(self, point: tuple[int, int]) -> bool:
+        """Return whether a pixel lies inside this half-open rectangle."""
+
+        x, y = point
+        return self.x <= x < self.x + self.width and self.y <= y < self.y + self.height
+
     def center(self) -> tuple[int, int]:
         """Returns the bounds midpoint in image coordinates."""
 

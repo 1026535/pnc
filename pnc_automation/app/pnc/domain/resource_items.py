@@ -3,9 +3,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 
 
 _RESOURCE_ORDER = ("food", "wood", "iron", "gold")
+
+
+class ResourceInventoryStatus(StrEnum):
+    """Describes whether the full visual inventory scan is safe to select from."""
+
+    COMPLETE = "complete"
+    UNKNOWN = "unknown"
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,11 +52,23 @@ class ResourceInventory:
     items: tuple[ResourceItem, ...]
     exhausted: bool
     artifact_paths: tuple[str, ...]
+    status: ResourceInventoryStatus = ResourceInventoryStatus.COMPLETE
+    unresolved_reasons: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        """Keep unknown scans explicit instead of silently treating them as empty."""
+
+        if self.status == ResourceInventoryStatus.UNKNOWN and not self.unresolved_reasons:
+            raise ValueError("Unknown resource inventory scans require at least one unresolved reason.")
+        if self.status == ResourceInventoryStatus.COMPLETE and self.unresolved_reasons:
+            raise ValueError("Complete resource inventory scans cannot carry unresolved reasons.")
 
 
 def smallest_resource_item(inventory: ResourceInventory) -> ResourceItem | None:
     """Chooses the global smallest owned pack, with Food/Wood/Iron/Gold ties."""
 
+    if inventory.status != ResourceInventoryStatus.COMPLETE:
+        raise ValueError("Resource inventory status is unknown; no item may be selected.")
     if not inventory.exhausted or not inventory.artifact_paths:
         raise ValueError("Resource selection requires an evidenced full inventory scan.")
     identities = [item.identity for item in inventory.items]
