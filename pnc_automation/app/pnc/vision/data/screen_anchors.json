@@ -684,7 +684,7 @@
         },
         {
           "image": "screen_anchors/home_chat_shortcut_alliance.png",
-          "search_region": [0, 780, 100, 110],
+          "search_region": [0, 840, 55, 55],
           "threshold": 0.93
         }
       ],
@@ -693,7 +693,7 @@
           "selector": "PNC_CHAT_SHORTCUT",
           "anchor": {
             "image": "screen_anchors/home_chat_shortcut_alliance.png",
-            "search_region": [0, 780, 100, 110],
+            "search_region": [0, 840, 55, 55],
             "threshold": 0.93
           }
         }
@@ -715,7 +715,7 @@
         },
         {
           "image": "screen_anchors/home_chat_shortcut_kingdom.png",
-          "search_region": [0, 780, 100, 110],
+          "search_region": [0, 840, 55, 55],
           "threshold": 0.93
         }
       ],
@@ -724,7 +724,7 @@
           "selector": "PNC_CHAT_SHORTCUT",
           "anchor": {
             "image": "screen_anchors/home_chat_shortcut_kingdom.png",
-            "search_region": [0, 780, 100, 110],
+            "search_region": [0, 840, 55, 55],
             "threshold": 0.93
           }
         }

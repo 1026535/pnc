@@ -717,16 +717,16 @@
     "source": "artifacts/2026-09-12/serious_stuff/20260912T043707Z_chat_route_home_source.png",
     "source_sha256": "758f63603ae5844ef836b9092efdf37ca4d05725eb99cc016c38b6da1d233dbb",
     "reference_size": [540, 960],
-    "crop": [5, 805, 63, 875],
-    "notes": "Measured Home chat shortcut with the blue Alliance channel icon variant."
+    "crop": [4, 849, 49, 889],
+    "notes": "Measured Home chat shortcut actual blue Alliance channel icon; crop excludes the quest-tracking arrow and message text."
   },
   {
     "asset": "screen_anchors/home_chat_shortcut_kingdom.png",
     "source": "artifacts/2026-09-12/serious_stuff/20260912T044131Z_chat_route_v3_return_post_action_1.png",
     "source_sha256": "4aa27520aba3eb9f33209bcd07b06b178961a3678c59818be0e8a28be2254768",
     "reference_size": [540, 960],
-    "crop": [5, 805, 63, 875],
-    "notes": "Measured Home chat shortcut with the brown Kingdom channel icon variant."
+    "crop": [4, 849, 49, 889],
+    "notes": "Measured Home chat shortcut actual brown Kingdom channel icon; crop excludes the quest-tracking arrow and message text."
   },
   {
     "asset": "screen_anchors/chat_identity_header.png",

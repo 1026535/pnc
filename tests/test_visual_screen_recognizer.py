@@ -135,6 +135,17 @@ class VisualScreenRecognizerTests(unittest.TestCase):
         """Keeps Home identity anchors required while recognizing both measured shortcut icons."""
 
         recognizer = load_visual_screen_recognizer()
+        shortcut_definition = build_default_selector_registry().require(UiElementId.PNC_CHAT_SHORTCUT)
+        self.assertIsNotNone(shortcut_definition.relative_bounds)
+        shortcut_geometry = shortcut_definition.relative_bounds.materialize(
+            selector_id=UiElementId.PNC_CHAT_SHORTCUT,
+            image_size=(540, 960),
+        )
+        self.assertEqual(shortcut_geometry.bounds, Bounds(4, 849, 45, 40))
+        self.assertEqual(shortcut_geometry.action_point, (26, 869))
+        self.assertTrue(4 <= shortcut_geometry.action_point[0] <= 49)
+        self.assertTrue(849 <= shortcut_geometry.action_point[1] <= 889)
+        self.assertGreater(shortcut_geometry.action_point[1], 840)
         for name, profile_id in (
             ("chat_home_alliance.png", "home_city_chat_alliance"),
             ("chat_home_kingdom.png", "home_city_chat_kingdom"),
@@ -147,7 +158,27 @@ class VisualScreenRecognizerTests(unittest.TestCase):
                     item for item in result.controls if item.selector_id == UiElementId.PNC_CHAT_SHORTCUT
                 )
                 self.assertEqual(shortcut.source_kind.name, "TEMPLATE")
-                self.assertEqual(shortcut.bounds, Bounds(5, 805, 58, 70))
+                self.assertEqual(shortcut.bounds, Bounds(4, 849, 45, 40))
+                center_x, center_y = shortcut.bounds.center()
+                self.assertTrue(4 <= center_x <= 49)
+                self.assertTrue(849 <= center_y <= 889)
+                self.assertNotEqual(center_y, 840)
+                scaled = recognizer.recognize(_capture(name).image.resize((900, 1600)))
+                scaled_shortcut = next(
+                    item for item in scaled.controls if item.selector_id == UiElementId.PNC_CHAT_SHORTCUT
+                )
+                scaled_center_x, scaled_center_y = scaled_shortcut.bounds.center()
+                self.assertTrue(round(4 * 900 / 540) <= scaled_center_x <= round(49 * 900 / 540))
+                self.assertTrue(round(849 * 1600 / 960) <= scaled_center_y <= round(889 * 1600 / 960))
+                self.assertNotEqual(scaled_center_y, round(840 * 1600 / 960))
+                scaled_geometry = shortcut_definition.relative_bounds.materialize(
+                    selector_id=UiElementId.PNC_CHAT_SHORTCUT,
+                    image_size=(900, 1600),
+                )
+                scaled_action_x, scaled_action_y = scaled_geometry.action_point
+                self.assertTrue(round(4 * 900 / 540) <= scaled_action_x <= round(49 * 900 / 540))
+                self.assertTrue(round(849 * 1600 / 960) <= scaled_action_y <= round(889 * 1600 / 960))
+                self.assertNotEqual(scaled_action_y, round(840 * 1600 / 960))
 
     def test_collect_mail_list_and_thread_profiles_are_mutually_exclusive(self) -> None:
         """Requires footer-versus-detail chrome to keep the dynamic mail screens distinct."""
