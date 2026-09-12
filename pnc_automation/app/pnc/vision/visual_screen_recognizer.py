@@ -70,16 +70,18 @@ class VisualScreenRecognizer:
 
     def recognize(self, image: Image.Image) -> VisualRecognition:
         """Return all matching profiles; the canonical classifier resolves evidence."""
+        prepared = self.matcher.prepare_image(image, reference_size=self.reference_size)
+        if prepared is None:
+            return VisualRecognition()
         matching = tuple(
             profile
             for profile in self.profiles
             if all(
-                self.matcher.find_best_match(
-                    image,
+                self.matcher.find_best_match_prepared(
+                    prepared,
                     anchor.path,
                     threshold=anchor.threshold,
                     search_region=anchor.search_region,
-                    reference_size=self.reference_size,
                 ) is not None
                 for anchor in profile.anchors
             )
@@ -93,10 +95,9 @@ class VisualScreenRecognizer:
         if len({profile.screen_type for profile in matching}) == 1:
             for profile in matching:
                 for control in profile.controls:
-                    match = self.matcher.find_best_match(
-                        image, control.anchor.path, threshold=control.anchor.threshold,
+                    match = self.matcher.find_best_match_prepared(
+                        prepared, control.anchor.path, threshold=control.anchor.threshold,
                         search_region=control.anchor.search_region,
-                        reference_size=self.reference_size,
                     )
                     if match is not None:
                         controls[control.selector_id] = VisibleElement(

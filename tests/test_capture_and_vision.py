@@ -8,6 +8,7 @@ import shutil
 import tempfile
 import unittest
 from dataclasses import dataclass, field
+from functools import cache
 from pathlib import Path
 
 from PIL import Image, ImageDraw
@@ -83,6 +84,23 @@ from pnc_automation.app.pnc.vision.selectors import (
 from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
 from tests.local_fixture_artifacts import require_local_fixture_artifact
 from tests.test_support import FakeObservationService, FakeSession, build_logger, build_png_bytes, make_observation
+
+
+@cache
+def _shared_rapid_ocr_service() -> RapidOcrService:
+    """Returns one stateless RapidOCR engine shared by image-backed tests."""
+
+    return RapidOcrService()
+
+
+def _require_rapid_ocr_service(test_case: unittest.TestCase) -> RapidOcrService:
+    """Returns shared RapidOCR support or skips when the optional backend is unavailable."""
+
+    try:
+        return _shared_rapid_ocr_service()
+    except ScreenClassificationError as error:
+        test_case.skipTest(str(error))
+        raise AssertionError("skipTest must stop the current test") from error
 
 
 class _FakeScreenshotSession:
@@ -2563,10 +2581,7 @@ class CaptureAndVisionTests(unittest.TestCase):
             "world_coordinate_dialog_zero_fields_live_20260613",
             default_repo_relative_path="tests/data/world_map/world_coordinate_dialog_zero_fields_live_20260613.png",
         )
-        try:
-            ocr_service = RapidOcrService()
-        except ScreenClassificationError as error:
-            self.skipTest(str(error))
+        ocr_service = _require_rapid_ocr_service(self)
         with tempfile.TemporaryDirectory() as temp_directory:
             root = Path(temp_directory)
             screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
@@ -2607,10 +2622,7 @@ class CaptureAndVisionTests(unittest.TestCase):
             "world_coordinate_dialog_missing_y_label_live_20260614",
             default_repo_relative_path="tests/data/world_map/world_coordinate_dialog_missing_y_label_live_20260614.png",
         )
-        try:
-            ocr_service = RapidOcrService()
-        except ScreenClassificationError as error:
-            self.skipTest(str(error))
+        ocr_service = _require_rapid_ocr_service(self)
         with tempfile.TemporaryDirectory() as temp_directory:
             root = Path(temp_directory)
             screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
@@ -2978,10 +2990,7 @@ class CaptureAndVisionTests(unittest.TestCase):
             "world_coordinate_bar_live_edge_failure_20260606",
             default_repo_relative_path="tests/data/world_map/world_coordinate_bar_live_edge_failure_20260606.png",
         )
-        try:
-            ocr_service = RapidOcrService()
-        except ScreenClassificationError as error:
-            self.skipTest(str(error))
+        ocr_service = _require_rapid_ocr_service(self)
         with tempfile.TemporaryDirectory() as temp_directory:
             root = Path(temp_directory)
             screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
@@ -3026,10 +3035,7 @@ class CaptureAndVisionTests(unittest.TestCase):
             "world_coordinate_bar_live_y_truncation_20260607",
             default_repo_relative_path="tests/data/world_map/world_coordinate_bar_live_y_truncation_20260607.png",
         )
-        try:
-            ocr_service = RapidOcrService()
-        except ScreenClassificationError as error:
-            self.skipTest(str(error))
+        ocr_service = _require_rapid_ocr_service(self)
         with tempfile.TemporaryDirectory() as temp_directory:
             root = Path(temp_directory)
             screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))

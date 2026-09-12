@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
+from functools import cache
 from pathlib import Path
 
 from pnc_automation.core.errors import SelectorResolutionError
@@ -17,7 +18,10 @@ from pnc_automation.app.pnc.domain.observation import (
 )
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
-from pnc_automation.app.pnc.vision.selector_catalog import load_selector_catalog_document
+from pnc_automation.app.pnc.vision.selector_catalog import (
+    SelectorCatalogDocument,
+    load_selector_catalog_document,
+)
 from pnc_automation.app.pnc.vision.selector_interaction_kind import SelectorInteractionKind
 
 
@@ -254,11 +258,35 @@ def build_default_selector_registry(
 ) -> SelectorRegistry:
     """Builds the static selector registry described by the implementation plan."""
 
+    if template_root is None and catalog_path is None:
+        return _build_packaged_selector_registry()
     root = template_root or default_selector_template_root()
     catalog = load_selector_catalog_document(catalog_path)
+    return _build_selector_registry(root=root, catalog=catalog)
+
+
+@cache
+def _build_packaged_selector_registry() -> SelectorRegistry:
+    """Builds the immutable packaged registry once per process."""
+
+    return _build_selector_registry(
+        root=default_selector_template_root(),
+        catalog=load_selector_catalog_document(None),
+    )
+
+
+def _build_selector_registry(*, root: Path, catalog: SelectorCatalogDocument) -> SelectorRegistry:
+    """Builds one registry from validated catalog data and its template root."""
+
     return SelectorRegistry(
-        selectors=tuple(_create_selector_from_catalog_entry(selector=selector, root=root) for selector in catalog.selectors),
-        surfaces=tuple(_create_surface_from_catalog_entry(surface=surface) for surface in catalog.surfaces),
+        selectors=tuple(
+            _create_selector_from_catalog_entry(selector=selector, root=root)
+            for selector in catalog.selectors
+        ),
+        surfaces=tuple(
+            _create_surface_from_catalog_entry(surface=surface)
+            for surface in catalog.surfaces
+        ),
     )
 
 
