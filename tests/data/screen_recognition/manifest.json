@@ -205,6 +205,36 @@
       ]
     },
     {
+      "image": "research_node_detail.png",
+      "screen": "PNC_RESEARCH_TREE",
+      "split": "reference",
+      "group": "2026-09-12/testing",
+      "sha256": "b3ac3a01f7d61286cefe067e0f2e02857d5766f5491b90cbb7abf324144df0db",
+      "expected_visual_screens": [
+        "PNC_RESEARCH_TREE"
+      ]
+    },
+    {
+      "image": "research_node_detail_active.png",
+      "screen": "PNC_RESEARCH_TREE",
+      "split": "reference",
+      "group": "2026-09-12/testing",
+      "sha256": "d528d880814f582794683b3a9a9e6633d2ac646ef6df131b13b94a80b5b21698",
+      "expected_visual_screens": [
+        "PNC_RESEARCH_TREE"
+      ]
+    },
+    {
+      "image": "research_node_detail_active_reloaded.png",
+      "screen": "PNC_RESEARCH_TREE",
+      "split": "reference",
+      "group": "2026-09-12/testing",
+      "sha256": "4a64edfe921dcfa3b9966e41b700acfc4e7619eb8529f070649bdae80d1d2aee",
+      "expected_visual_screens": [
+        "PNC_RESEARCH_TREE"
+      ]
+    },
+    {
       "image": "goddess_statue_audit.png",
       "screen": "PNC_GODDESS_STATUE",
       "split": "reference",

@@ -5,6 +5,41 @@ Current landed baseline: `2bb3c9074d99a532018e071ed121d12e6d75cd8f` on `origin/m
 Status: implemented recognition foundation validated; remaining F integrations
 and broader promotion remain blocked as itemized below. No blanket rollout approval.
 
+## Paused checkpoint: Development research action and reconciliation (2026-09-12)
+
+The current continuation closes the bounded Development Research action gap on the
+configured `testing` target. The canonical OCR row producer identifies complete
+Development nodes and derives each action point from the measured node icon rather
+than its label. A reviewed detail profile exposes only the blue normal Research
+button; the adjacent gold Research Now option is excluded. A separate active-detail
+profile uses stable Speedup-button chrome while excluding the changing progress fill
+and timer, and exposes no Speedup or cancel action.
+
+Root first observed that a label-center tap produced no transition, then required
+icon-derived action geometry. The corrected node action opened Construction I
+(2/5). The normal Research action was dispatched once through the observed executor
+with an exact budget of 16,400 food, 7,010 wood, and zero premium currency. The
+postcondition showed both exact resource deltas, a running timer, and no Start
+control. `ResearchTask.verify` now requires clear
+`visual_anchor:research_tree_node_detail_active` evidence; an ordinary tree or
+unrecognized same-screen frame cannot confirm the mutation.
+
+Live source and postcondition evidence:
+
+- Detail before dispatch: `artifacts/2026-09-12/testing/20260912T192049Z_core_20260912T183757Z_5d65bcbf_0046_research_node_detail.png`.
+- Immediate active detail: `artifacts/2026-09-12/testing/20260912T201102Z_core_20260912T183757Z_5d65bcbf_0051_research_start_postcondition.png`.
+- Elapsed-time regression source: `artifacts/2026-09-12/testing/20260912T202536Z_core_20260912T183757Z_5d65bcbf_0052_research_detail_reloaded.png`.
+- Final active-detail proof: `artifacts/2026-09-12/testing/20260912T204123Z_core_20260912T183757Z_5d65bcbf_0056_research_detail_reloaded.png`.
+- Final Home: `artifacts/2026-09-12/testing/20260912T204305Z_core_20260912T183757Z_5d65bcbf_0066_core_route_source.png`.
+
+The active-detail profile matched both active frames despite the elapsed timer. A
+single reviewed Android Back closed that proved detail, and canonical navigation
+returned to clear Home. The continuous reservation completed with 15 input attempts
+and 66 observations; the pre-existing instance was preserved and the lease released.
+The focused root suite passed 60 tests. Gathering/March, Campaign, broader category
+coverage, member-only applicability, and target/build/locale promotion remain open.
+Implementation is paused at this durable checkpoint at the user's request.
+
 The isolated worktree preserves the relevant recognition/journal baseline recorded in
 `artifacts/non_yolo_recognition/isolated_baseline.json`. The original checkout is
 reserved for the user's other task. No configuration changes, castle switches,
