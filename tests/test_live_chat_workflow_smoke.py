@@ -1,19 +1,25 @@
-"""Opt-in live smoke tests for the reusable chat workflow."""
+"""Opt-in live smoke coverage for one explicitly authorized typed chat send."""
 
 from __future__ import annotations
 
 import os
-import time
-import unittest
-from dataclasses import dataclass
 from pathlib import Path
+import unittest
+from unittest.mock import patch
 
 from pnc_automation.app import build_application_runner
+from pnc_automation.app.automation.engine.core_runtime import build_core_runtime
+from pnc_automation.app.automation.engine.core_workflow import CoreWorkflowResult, CoreWorkflowRunner
+from pnc_automation.app.automation.send_chat import SendChatResult, SendChatWorkflow
 from pnc_automation.app.authoring.config.models import LiveAutomationRole
-from pnc_automation.app.pnc.domain.chat import ChatChannel
-from pnc_automation.app.pnc.domain.observation import Observation
+from pnc_automation.app.pnc.domain.chat import (
+    ChatChannel,
+    ChatMessageTaskParams,
+    parse_chat_message_params,
+)
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
-from tests.live_smoke_support import build_live_runtime
+from pnc_automation.core.errors import ScriptValidationError
+from tests.live_smoke_support import live_session_cleanup_policy_from_environment
 
 
 def _live_chat_smoke_enabled() -> bool:
@@ -22,131 +28,128 @@ def _live_chat_smoke_enabled() -> bool:
     return os.getenv("PNC_RUN_LIVE_CHAT_SMOKE") == "1"
 
 
-@dataclass(frozen=True, slots=True)
-class _LiveChatSendResult:
-    """Captures the outcome and timing of one live reusable chat send."""
+def _require_environment(name: str) -> str:
+    """Returns one explicit non-empty live-smoke setting."""
 
-    channel: ChatChannel
-    before: Observation
-    after: Observation
-    duration_seconds: float
+    value = os.getenv(name)
+    if value is None or value.strip() == "":
+        raise ValueError(f"Typed chat smoke requires explicit {name}.")
+    return value
 
 
-@unittest.skipUnless(_live_chat_smoke_enabled(), "Set PNC_RUN_LIVE_CHAT_SMOKE=1 to run live chat smoke tests.")
+def _live_chat_inputs_from_environment() -> tuple[ChatChannel, ChatMessageTaskParams]:
+    """Parses the one channel and message that the caller explicitly supplied."""
+
+    channel_value = _require_environment("PNC_LIVE_CHAT_CHANNEL").strip().casefold()
+    try:
+        channel = ChatChannel(channel_value)
+    except ValueError as error:
+        raise ValueError("PNC_LIVE_CHAT_CHANNEL must be 'world' or 'alliance'.") from error
+    params = parse_chat_message_params(
+        {"message": _require_environment("PNC_LIVE_CHAT_MESSAGE")},
+        task_label="live_chat_smoke",
+    )
+    return channel, params
+
+
+class LiveChatSmokeConfigurationTests(unittest.TestCase):
+    """Validates smoke payloads before application or connection construction."""
+
+    @patch.dict(os.environ, {}, clear=True)
+    def test_channel_and_message_are_required(self) -> None:
+        """Missing channel fails before the live application can be built."""
+
+        with self.assertRaisesRegex(ValueError, "PNC_LIVE_CHAT_CHANNEL"):
+            _live_chat_inputs_from_environment()
+
+    @patch.dict(os.environ, {"PNC_LIVE_CHAT_CHANNEL": "world"}, clear=True)
+    def test_message_is_required(self) -> None:
+        """Missing message fails before the live application can be built."""
+
+        with self.assertRaisesRegex(ValueError, "PNC_LIVE_CHAT_MESSAGE"):
+            _live_chat_inputs_from_environment()
+
+    @patch.dict(
+        os.environ,
+        {"PNC_LIVE_CHAT_CHANNEL": "guild", "PNC_LIVE_CHAT_MESSAGE": "hello"},
+        clear=True,
+    )
+    def test_channel_must_be_supported(self) -> None:
+        """The smoke accepts only the two typed, reviewed chat channels."""
+
+        with self.assertRaisesRegex(ValueError, "world.*alliance"):
+            _live_chat_inputs_from_environment()
+
+    @patch.dict(
+        os.environ,
+        {"PNC_LIVE_CHAT_CHANNEL": "world", "PNC_LIVE_CHAT_MESSAGE": "hello\r\nagain"},
+        clear=True,
+    )
+    def test_message_parser_rejects_multiline_payload(self) -> None:
+        """The shared parser rejects multiline input before any connection."""
+
+        with self.assertRaises(ScriptValidationError):
+            _live_chat_inputs_from_environment()
+
+
+@unittest.skipUnless(
+    _live_chat_smoke_enabled(),
+    "Set PNC_RUN_LIVE_CHAT_SMOKE=1 to run the typed live chat smoke.",
+)
 class LiveChatWorkflowSmokeTests(unittest.TestCase):
-    """Validates the reusable chat workflow against a configured live BlueStacks session."""
+    """Runs one explicit typed send and proves its receipt and Home exit."""
 
     @classmethod
     def setUpClass(cls) -> None:
-        """Builds the live runtime and executes one send for each supported chat channel."""
+        """Builds one reserved typed runtime and executes exactly one requested send."""
 
+        # Resolve the payload before building the application or acquiring a lease.
+        cls.channel, cls.params = _live_chat_inputs_from_environment()
         cls.config_path = Path(os.getenv("PNC_LIVE_CHAT_CONFIG", "config/accounts.yaml"))
         cls.account_id = os.getenv("PNC_LIVE_CHAT_ACCOUNT", "testing")
-        cls.baseline_seconds = float(os.getenv("PNC_LIVE_CHAT_BASELINE_SECONDS", "10.5"))
         cls.application = build_application_runner(cls.config_path)
         cls.script_runner = cls.application.script_runner
         cls.account = cls.script_runner.config.require_account(cls.account_id)
         cls.account.require_live_role(LiveAutomationRole.SMOKE_TEST)
-        cls.lease_bundle = cls.script_runner.reserve_accounts((cls.account_id,))
+        cls.lease_bundle = cls.application.reserve_accounts((cls.account_id,))
         cls.addClassCleanup(cls.lease_bundle.close)
-        runtime = build_live_runtime(
-            config_account=cls.account,
-            script_runner=cls.script_runner,
+        core_runtime = build_core_runtime(
+            cls.script_runner,
+            cls.account,
+            cls.account.artifact_directory_name,
+            required_role=LiveAutomationRole.SMOKE_TEST,
+            session_cleanup_policy=live_session_cleanup_policy_from_environment(),
         )
-        cls.runtime = runtime
-        cls.addClassCleanup(cls.runtime.close)
-        cls.session = runtime.session
-        cls.observation_service = runtime.observation_service
-        cls.flows = runtime.flow_planner
-        cls.action_executor = runtime.require_observed_action_executor(
-            "Live chat smoke requires a connected observed-action executor."
+        cls.core_runtime = core_runtime
+        cls.addClassCleanup(core_runtime.close)
+
+        # This bounded roster proof reads the exact active identity and never selects a castle.
+        cls.active_castle = core_runtime.preflight_active_castle_identity()
+        cls.workflow = SendChatWorkflow(
+            params=cls.params,
+            active_castle=cls.active_castle,
+            channel=cls.channel,
         )
-        cls.alliance_result = cls._run_live_send(ChatChannel.ALLIANCE)
-        cls.world_result = cls._run_live_send(ChatChannel.WORLD)
+        cls.result = CoreWorkflowRunner[SendChatResult](core_runtime).run(cls.workflow)
 
-    @classmethod
-    def tearDownClass(cls) -> None:
-        """Releases the shared connected runtime after the smoke suite."""
+    def test_one_typed_send_has_a_visible_receipt_and_returns_home(self) -> None:
+        """Requires positive typed receipt metadata followed by the reviewed Home exit."""
 
-        runtime = getattr(cls, "runtime", None)
-        if runtime is not None:
-            runtime.close()
-
-    @classmethod
-    def _run_live_send(cls, channel: ChatChannel) -> _LiveChatSendResult:
-        """Recovers to home city, executes incremental chat-send planning, and returns the final observation and timing."""
-
-        before = cls._ensure_home_city(label_prefix=f"live_chat_{channel.value}_prepare")
-        message = f"chat smoke {channel.value} {int(time.time())}"
-        start = time.perf_counter()
-        observation = before
-        send_confirmed = False
-        for step_index in range(8):
-            actions = cls.flows.send_chat_message(observation, message=message, channel=channel)
-            execution = cls.action_executor.execute_actions(
-                actions,
-                observation,
-                observe=lambda label, request=None: cls.observation_service.observe(
-                    f"live_chat_{channel.value}_{step_index + 1}_{label}",
-                    request=request,
-                ),
-            )
-            observation = execution.observation
-            send_confirmed = any(getattr(action, "reason", "") == "send_chat_message" for action in actions)
-            if (
-                send_confirmed
-                and observation.screen_type == ScreenType.PNC_CHAT
-                and observation.active_chat_channel == channel
-                and observation.chat_draft_empty
-            ):
-                break
-        else:
-            raise AssertionError(f"Could not complete the incremental live chat send for '{channel.value}'.")
-        duration_seconds = time.perf_counter() - start
-        return _LiveChatSendResult(
-            channel=channel,
-            before=before,
-            after=observation,
-            duration_seconds=duration_seconds,
+        self.assertIsInstance(self.result, CoreWorkflowResult)
+        self.assertTrue(self.result.succeeded)
+        self.assertIsInstance(self.result.value, SendChatResult)
+        expected_name = (
+            "send_alliance_chat"
+            if self.channel == ChatChannel.ALLIANCE
+            else "send_kingdom_chat"
         )
+        self.assertEqual(self.workflow.spec.name, expected_name)
+        self.assertEqual(self.result.value.channel, self.channel)
+        self.assertEqual(self.result.value.message, self.params.message)
+        self.assertGreater(self.result.value.receipt_count, 0)
+        self.assertTrue(self.result.value.sent_proof)
+        self.assertEqual(self.result.exit_screen, ScreenType.PNC_HOME_CITY)
 
-    @classmethod
-    def _ensure_home_city(cls, *, label_prefix: str) -> Observation:
-        """Returns the live session to home city before one reusable chat send."""
 
-        observation = cls.observation_service.observe(f"{label_prefix}_before")
-        for step_index in range(10):
-            if observation.screen_type == ScreenType.PNC_HOME_CITY and not observation.blocking_popup:
-                return observation
-            execution = cls.action_executor.execute_actions(
-                cls.flows.ensure_home_city(observation),
-                observation,
-                observe=lambda label, request=None: cls.observation_service.observe(
-                    f"{label_prefix}_{step_index + 1}_{label}",
-                    request=request,
-                ),
-            )
-            observation = execution.observation
-        raise AssertionError(f"Could not recover the live session to home city before '{label_prefix}'.")
-
-    def test_live_alliance_send_stays_in_chat_and_clears_the_draft(self) -> None:
-        """Verifies the live alliance send finishes on chat with the alliance tab active and an empty draft."""
-
-        self.assertEqual(self.alliance_result.before.screen_type, ScreenType.PNC_HOME_CITY)
-        self.assertEqual(self.alliance_result.after.screen_type, ScreenType.PNC_CHAT)
-        self.assertEqual(self.alliance_result.after.active_chat_channel, ChatChannel.ALLIANCE)
-        self.assertTrue(self.alliance_result.after.chat_draft_empty)
-
-    def test_live_world_send_stays_in_chat_and_clears_the_draft(self) -> None:
-        """Verifies the live world send finishes on chat with the kingdom tab active and an empty draft."""
-
-        self.assertEqual(self.world_result.before.screen_type, ScreenType.PNC_HOME_CITY)
-        self.assertEqual(self.world_result.after.screen_type, ScreenType.PNC_CHAT)
-        self.assertEqual(self.world_result.after.active_chat_channel, ChatChannel.WORLD)
-        self.assertTrue(self.world_result.after.chat_draft_empty)
-
-    def test_live_chat_sends_beat_the_previous_home_city_baseline(self) -> None:
-        """Checks that the optimized home-city chat sends stay below the configured live baseline."""
-
-        self.assertLess(self.alliance_result.duration_seconds, self.baseline_seconds)
-        self.assertLess(self.world_result.duration_seconds, self.baseline_seconds)
+if __name__ == "__main__":
+    unittest.main()

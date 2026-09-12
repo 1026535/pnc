@@ -14,10 +14,9 @@ from pnc_automation.app.automation.engine.task_executor import TaskExecutor
 from pnc_automation.app.automation.tasks.campaign_task import CampaignTask
 from pnc_automation.app.automation.tasks.gathering_task import GatheringTask
 from pnc_automation.app.automation.tasks.research_task import ResearchTask
-from pnc_automation.app.automation.tasks.send_chat_message_task import SendAllianceChatMessageTask
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
-from pnc_automation.core.errors import SelectorResolutionError, TaskVerificationError
+from pnc_automation.core.errors import TaskVerificationError
 from tests.support.core.logging import build_logger
 from tests.support.pnc.observations import make_observation
 
@@ -37,10 +36,6 @@ class TaskRecognitionRequirementTests(unittest.TestCase):
         self.assertEqual(
             ("PNC_CAMPAIGN_BATTLE_BUTTON",),
             tuple(selector.value for selector in CampaignTask.required_recognition_selectors),
-        )
-        self.assertEqual(
-            ("PNC_CHAT_SEND_BUTTON",),
-            tuple(selector.value for selector in SendAllianceChatMessageTask.required_recognition_selectors),
         )
 
     def test_unsupported_requirement_fails_before_recovery_or_plan(self) -> None:
@@ -75,37 +70,6 @@ class TaskRecognitionRequirementTests(unittest.TestCase):
         from pnc_automation.app.automation.engine.task import BaseAutomationTask
 
         self.assertEqual((), BaseAutomationTask.required_recognition_selectors)
-
-    def test_legacy_alliance_send_requires_unmodeled_blue_send_before_actions(self) -> None:
-        """Keeps the legacy Alliance path fail-closed while its blue control is unmodeled."""
-
-        task = SendAllianceChatMessageTask()
-        action_executor = Mock()
-        selector_registry = Mock()
-        selector_registry.require_supported.side_effect = SelectorResolutionError(
-            "blue Send is not modeled",
-            reason="blue Send is not modeled",
-        )
-        action_executor.action_executor.selector_registry = selector_registry
-        observation_service = Mock()
-        task_executor = TaskExecutor(
-            observation_service=observation_service,
-            action_executor=action_executor,
-            logger=Mock(spec=logging.LoggerAdapter),
-            max_replans_per_step=2,
-            max_retries_per_step=1,
-        )
-
-        with self.assertRaises(TaskVerificationError) as raised:
-            task_executor.execute(task=task, context=Mock(), before=Mock())
-
-        error = raised.exception
-        self.assertEqual(task.id, error.details["task_id"])
-        self.assertEqual(task.required_recognition_selectors[0], error.details["selector_id"])
-        self.assertIn("blue Send", error.details["catalog_reason"])
-        action_executor.recover_interruption_if_required.assert_not_called()
-        action_executor.execute_actions.assert_not_called()
-        observation_service.observe.assert_not_called()
 
     def test_runner_rejects_unsupported_tasks_before_non_home_preflight(self) -> None:
         """Unsupported primary tasks must not recover, navigate, capture, or input first."""

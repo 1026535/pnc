@@ -20,7 +20,7 @@ from pnc_automation.app.automation.collect_mail import (
     CollectMailWorkflow,
 )
 from pnc_automation.app.automation.open_building import OpenBuildingResult, OpenBuildingWorkflow
-from pnc_automation.app.automation.send_kingdom_chat import SendKingdomChatWorkflow
+from pnc_automation.app.automation.send_chat import SendChatWorkflow
 from pnc_automation.app.automation.refresh_castle_roster import (
     RefreshCastleRosterResult,
     RefreshCastleRosterWorkflow,
@@ -52,7 +52,7 @@ from pnc_automation.app.entrypoints.task_registry import build_default_task_regi
 from pnc_automation.app.entrypoints.cli import _serialize_run_result
 from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
-from pnc_automation.app.pnc.domain.chat import ChatMessageTaskParams
+from pnc_automation.app.pnc.domain.chat import ChatChannel, ChatMessageTaskParams
 from pnc_automation.app.pnc.domain.observation import Observation
 from pnc_automation.app.pnc.domain.mail import (
     CollectMailParams,
@@ -100,27 +100,31 @@ class TypedCoreDispatchTests(unittest.TestCase):
             definition.parse_params({"message": "hello"}),
         )
 
-    def test_dispatcher_rejects_malformed_world_chat_params_before_runtime(self) -> None:
-        """Rejects an unparsed typed World Chat payload without composing the runtime."""
+    def test_dispatcher_rejects_malformed_chat_params_before_runtime(self) -> None:
+        """Rejects unparsed typed World and Alliance payloads without composing the runtime."""
 
-        for malformed_params in (None, {"message": "hello"}):
-            with self.subTest(malformed_params=malformed_params):
-                runtime_factory = Mock()
-                dispatcher = CoreScriptDispatcher(
-                    account=_account(),
-                    chat_archive_store=None,
-                    core_runtime_factory=runtime_factory,
-                )
-
-                with self.assertRaisesRegex(RuntimeError, "ChatMessageTaskParams"):
-                    dispatcher.execute(
-                        step=replace(
-                            _prepared_world_chat_step(),
-                            parsed_params=malformed_params,
-                        )
+        for task_id, prepared_step in (
+            (TaskId.SEND_WORLD_CHAT_MESSAGE, _prepared_world_chat_step()),
+            (TaskId.SEND_ALLIANCE_CHAT_MESSAGE, _prepared_alliance_chat_step()),
+        ):
+            for malformed_params in (None, {"message": "hello"}):
+                with self.subTest(task_id=task_id, malformed_params=malformed_params):
+                    runtime_factory = Mock()
+                    dispatcher = CoreScriptDispatcher(
+                        account=_account(),
+                        chat_archive_store=None,
+                        core_runtime_factory=runtime_factory,
                     )
 
-                runtime_factory.assert_not_called()
+                    with self.assertRaisesRegex(RuntimeError, "ChatMessageTaskParams"):
+                        dispatcher.execute(
+                            step=replace(
+                                prepared_step,
+                                parsed_params=malformed_params,
+                            )
+                        )
+
+                    runtime_factory.assert_not_called()
 
     def test_dispatcher_builds_world_chat_workflow_without_archive_store(self) -> None:
         """Builds the fixed World Chat workflow from typed params without Chat storage."""
@@ -147,8 +151,41 @@ class TypedCoreDispatchTests(unittest.TestCase):
 
         self.assertIs(typed_result, result)
         workflow = workflow_runner.run.call_args.args[0]
-        self.assertIsInstance(workflow, SendKingdomChatWorkflow)
+        self.assertIsInstance(workflow, SendChatWorkflow)
         self.assertEqual(ChatMessageTaskParams(message="hello"), workflow.params)
+        self.assertEqual(ChatChannel.WORLD, workflow.channel)
+        self.assertIs(active, workflow.active_castle)
+        runtime_factory.assert_called_once_with()
+        core_runtime.preflight_active_castle_identity.assert_called_once_with()
+
+    def test_dispatcher_builds_alliance_chat_workflow_without_archive_store(self) -> None:
+        """Builds Alliance Chat through the same typed dispatcher without storage dependencies."""
+
+        active = CastleIdentity("K1", "free cookies", 12)
+        core_runtime = Mock()
+        core_runtime.preflight_active_castle_identity.return_value = active
+        typed_result = _workflow_result()
+        workflow_runner = Mock()
+        workflow_runner.run.return_value = typed_result
+        runtime_factory = Mock(return_value=core_runtime)
+        runner_factory = Mock(return_value=workflow_runner)
+        dispatcher = CoreScriptDispatcher(
+            account=_account(),
+            chat_archive_store=None,
+            core_runtime_factory=runtime_factory,
+        )
+
+        with patch(
+            "pnc_automation.app.automation.engine.core_script_dispatcher.CoreWorkflowRunner",
+            runner_factory,
+        ):
+            result = dispatcher.execute(step=_prepared_alliance_chat_step())
+
+        self.assertIs(typed_result, result)
+        workflow = workflow_runner.run.call_args.args[0]
+        self.assertIsInstance(workflow, SendChatWorkflow)
+        self.assertEqual(ChatMessageTaskParams(message="hello"), workflow.params)
+        self.assertEqual(ChatChannel.ALLIANCE, workflow.channel)
         self.assertIs(active, workflow.active_castle)
         runtime_factory.assert_called_once_with()
         core_runtime.preflight_active_castle_identity.assert_called_once_with()
@@ -987,6 +1024,31 @@ class TypedCoreDispatchTests(unittest.TestCase):
         runner_factory.assert_not_called()
         core_runtime.close.assert_not_called()
 
+    def test_alliance_dispatcher_rejects_requested_castle_mismatch(self) -> None:
+        """Applies the same exact active-castle guard to the typed Alliance send."""
+
+        active = CastleIdentity("K1", "Active", 12)
+        requested = CastleIdentity("K1", "Requested", 12)
+        core_runtime = Mock()
+        core_runtime.preflight_active_castle_identity.return_value = active
+        runner_factory = Mock()
+        dispatcher = CoreScriptDispatcher(
+            account=_account(),
+            chat_archive_store=None,
+            core_runtime_factory=Mock(return_value=core_runtime),
+        )
+
+        with patch(
+            "pnc_automation.app.automation.engine.core_script_dispatcher.CoreWorkflowRunner",
+            runner_factory,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "requested castle target"):
+                dispatcher.execute(step=_prepared_alliance_chat_step(castle=requested))
+
+        core_runtime.preflight_active_castle_identity.assert_called_once_with()
+        runner_factory.assert_not_called()
+        core_runtime.close.assert_not_called()
+
     def test_dispatcher_accepts_valid_exact_castle_match(self) -> None:
         """Executes a targeted typed step only after exact active-castle confirmation."""
 
@@ -1220,6 +1282,18 @@ def _prepared_world_chat_step(*, castle: CastleIdentity | None = None) -> Prepar
     """Builds one already-prepared typed World Chat send step."""
 
     script_step = ScriptStep(task=TaskId.SEND_WORLD_CHAT_MESSAGE, castle=castle)
+    return PreparedScriptStep(
+        script_step=script_step,
+        parsed_params=ChatMessageTaskParams(message="hello"),
+        castle_target_policy=CastleTargetPolicy.OPTIONAL,
+        resolved_castle=castle,
+    )
+
+
+def _prepared_alliance_chat_step(*, castle: CastleIdentity | None = None) -> PreparedScriptStep:
+    """Builds one already-prepared typed Alliance Chat send step."""
+
+    script_step = ScriptStep(task=TaskId.SEND_ALLIANCE_CHAT_MESSAGE, castle=castle)
     return PreparedScriptStep(
         script_step=script_step,
         parsed_params=ChatMessageTaskParams(message="hello"),

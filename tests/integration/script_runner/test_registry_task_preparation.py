@@ -56,12 +56,16 @@ class RegistryTaskPreparationTests(AutomationFrameworkFixtures, unittest.TestCas
             TaskRegistry(tasks=(definition, definition))
 
     def test_default_task_registry_includes_chat_tasks(self) -> None:
-        """Exposes both chat send tasks and the Kingdom Chat monitor through the standard registry."""
+        """Exposes both typed chat sends and the Kingdom Chat monitor through the standard registry."""
 
         registry = build_default_task_registry()
 
-        self.assertEqual(registry.require(TaskId.SEND_ALLIANCE_CHAT_MESSAGE).id, TaskId.SEND_ALLIANCE_CHAT_MESSAGE)
-        self.assertEqual(registry.require(TaskId.SEND_WORLD_CHAT_MESSAGE).id, TaskId.SEND_WORLD_CHAT_MESSAGE)
+        for task_id in (TaskId.SEND_ALLIANCE_CHAT_MESSAGE, TaskId.SEND_WORLD_CHAT_MESSAGE):
+            with self.subTest(task_id=task_id):
+                definition = registry.require(task_id)
+                self.assertIsInstance(definition, CoreWorkflowTaskDefinition)
+                self.assertEqual(definition.id, task_id)
+                self.assertEqual(definition.castle_target_policy, CastleTargetPolicy.OPTIONAL)
         self.assertEqual(registry.require(TaskId.COLLECT_KINGDOM_CHAT).id, TaskId.COLLECT_KINGDOM_CHAT)
 
     def test_world_chat_task_uses_the_typed_single_line_message_parser(self) -> None:
@@ -77,3 +81,23 @@ class RegistryTaskPreparationTests(AutomationFrameworkFixtures, unittest.TestCas
         )
         with self.assertRaisesRegex(ScriptValidationError, "single-line"):
             definition.parse_params({"message": "hello\nworld"})
+
+    def test_alliance_chat_task_uses_the_typed_single_line_message_parser(self) -> None:
+        """Prepares Alliance Chat through the same canonical parser without storage dependencies."""
+
+        definition = build_default_task_registry().require(TaskId.SEND_ALLIANCE_CHAT_MESSAGE)
+
+        self.assertIsInstance(definition, CoreWorkflowTaskDefinition)
+        self.assertEqual(definition.castle_target_policy, CastleTargetPolicy.OPTIONAL)
+        self.assertEqual(
+            ChatMessageTaskParams(message="hello"),
+            definition.parse_params({"message": "hello"}),
+        )
+        with self.assertRaises(ScriptValidationError):
+            definition.parse_params({})
+        with self.assertRaises(ScriptValidationError):
+            definition.parse_params({"message": " ", "channel": "alliance"})
+        with self.assertRaisesRegex(ScriptValidationError, "only the 'message' parameter"):
+            definition.parse_params({"message": "hello", "channel": "alliance"})
+        with self.assertRaisesRegex(ScriptValidationError, "single-line"):
+            definition.parse_params({"message": "hello\rworld"})

@@ -14,7 +14,7 @@ from pnc_automation.app.automation.collect_kingdom_chat import (
 )
 from pnc_automation.app.automation.collect_mail import CollectMailResult, CollectMailWorkflow
 from pnc_automation.app.automation.open_building import OpenBuildingResult, OpenBuildingWorkflow
-from pnc_automation.app.automation.send_kingdom_chat import SendKingdomChatResult, SendKingdomChatWorkflow
+from pnc_automation.app.automation.send_chat import SendChatResult, SendChatWorkflow
 from pnc_automation.app.automation.refresh_castle_roster import (
     RefreshCastleRosterResult,
     RefreshCastleRosterWorkflow,
@@ -28,7 +28,7 @@ from pnc_automation.app.automation.engine.core_workflow import (
 )
 from pnc_automation.app.authoring.config.models import AccountConfig, LiveAutomationRole
 from pnc_automation.app.authoring.scripts.models import PreparedScriptStep
-from pnc_automation.app.pnc.domain.chat import ChatMessageTaskParams
+from pnc_automation.app.pnc.domain.chat import ChatChannel, ChatMessageTaskParams
 from pnc_automation.app.pnc.domain.mail import CollectMailParams
 from pnc_automation.app.pnc.domain.policy_models import OpenBuildingPolicy
 from pnc_automation.app.pnc.domain.observation import (
@@ -74,7 +74,7 @@ class CoreScriptDispatcher:
         | CollectMailResult
         | OpenBuildingResult
         | RefreshCastleRosterResult
-        | SendKingdomChatResult
+        | SendChatResult
     ]:
         """Runs one supported typed step without closing the shared connected runtime."""
 
@@ -100,10 +100,16 @@ class CoreScriptDispatcher:
                 active_castle=active_castle,
                 archive_store=cast(ChatArchiveStore, self.chat_archive_store),
             )
-        elif step.task == TaskId.SEND_WORLD_CHAT_MESSAGE:
-            workflow = SendKingdomChatWorkflow(
+        elif step.task in {TaskId.SEND_WORLD_CHAT_MESSAGE, TaskId.SEND_ALLIANCE_CHAT_MESSAGE}:
+            channel = (
+                ChatChannel.WORLD
+                if step.task == TaskId.SEND_WORLD_CHAT_MESSAGE
+                else ChatChannel.ALLIANCE
+            )
+            workflow = SendChatWorkflow(
                 params=cast(ChatMessageTaskParams, step.parsed_params),
                 active_castle=active_castle,
+                channel=channel,
             )
         elif step.task == TaskId.COLLECT_MAIL:
             workflow = CollectMailWorkflow(
@@ -220,15 +226,16 @@ def validate_core_script_step(
         return
     if step.task not in {
         TaskId.SEND_WORLD_CHAT_MESSAGE,
+        TaskId.SEND_ALLIANCE_CHAT_MESSAGE,
         TaskId.COLLECT_KINGDOM_CHAT,
         TaskId.COLLECT_MAIL,
         TaskId.OPEN_BUILDING,
         TaskId.REFRESH_CASTLE_ROSTER,
     }:
         raise RuntimeError(f"No typed core dispatcher is registered for task '{step.task}'.")
-    if step.task == TaskId.SEND_WORLD_CHAT_MESSAGE:
+    if step.task in {TaskId.SEND_WORLD_CHAT_MESSAGE, TaskId.SEND_ALLIANCE_CHAT_MESSAGE}:
         if not isinstance(step.parsed_params, ChatMessageTaskParams):
-            raise RuntimeError("Typed Kingdom Chat send dispatch requires parsed ChatMessageTaskParams.")
+            raise RuntimeError("Typed Chat send dispatch requires parsed ChatMessageTaskParams.")
         return
     if step.task == TaskId.COLLECT_KINGDOM_CHAT:
         if step.parsed_params is not None:
