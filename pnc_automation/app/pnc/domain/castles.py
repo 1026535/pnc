@@ -4,6 +4,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+import re
+
+from pnc_automation.core.text.normalization import normalize_ocr_text
+
+
+def normalize_castle_display_name(name_text: str) -> str:
+    """Remove one leading alliance tag from a displayed castle name."""
+
+    stripped = name_text.strip()
+    normalized = re.sub(r"^\[[^\]]+\]\s*", "", stripped, count=1).strip()
+    return stripped if normalized == "" else normalized
 
 
 @dataclass(frozen=True, slots=True)
@@ -13,6 +24,14 @@ class CastleIdentity:
     kingdom: str
     castle_name: str
     castle_level: int | None = None
+
+
+def castle_names_match(left: str, right: str) -> bool:
+    """Match displayed castle names through stable OCR whitespace normalization."""
+
+    if left == right:
+        return True
+    return normalize_ocr_text(left) == normalize_ocr_text(right)
 
 
 def castle_identity_key(castle: CastleIdentity) -> tuple[str, str]:

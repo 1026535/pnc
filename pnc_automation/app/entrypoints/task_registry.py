@@ -13,7 +13,6 @@ from pnc_automation.app.automation.tasks.research_task import ResearchTask
 from pnc_automation.app.automation.tasks.select_castle_task import SelectCastleTask
 from pnc_automation.app.automation.tasks.send_chat_message_task import (
     SendAllianceChatMessageTask,
-    SendWorldChatMessageTask,
 )
 from pnc_automation.app.automation.tasks.send_mail_task import SendMailTask
 from pnc_automation.app.authoring.scripts.registry import TaskRegistry
@@ -24,6 +23,7 @@ from pnc_automation.app.automation.engine.task import (
     require_no_params,
 )
 from pnc_automation.app.pnc.domain.mail import parse_collect_mail_params
+from pnc_automation.app.pnc.domain.chat import parse_chat_message_params
 from pnc_automation.app.pnc.domain.policy_models import OpenBuildingPolicy
 
 
@@ -50,7 +50,11 @@ def build_default_task_registry() -> TaskRegistry:
                 parameter_parser=partial(require_no_params, TaskId.REFRESH_CASTLE_ROSTER),
             ),
             SendAllianceChatMessageTask(),
-            SendWorldChatMessageTask(),
+            CoreWorkflowTaskDefinition(
+                id=TaskId.SEND_WORLD_CHAT_MESSAGE,
+                castle_target_policy=CastleTargetPolicy.OPTIONAL,
+                parameter_parser=partial(parse_chat_message_params, task_label=TaskId.SEND_WORLD_CHAT_MESSAGE),
+            ),
             SendMailTask(),
             CoreWorkflowTaskDefinition(
                 id=TaskId.COLLECT_MAIL,

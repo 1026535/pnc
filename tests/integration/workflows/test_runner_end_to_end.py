@@ -341,8 +341,8 @@ class RunnerEndToEndTests(unittest.TestCase):
         self.assertIn("secret", fake_session.texts)
         self.assertEqual(len(fake_session.taps), 9)
 
-    def test_runner_executes_world_chat_task_through_registered_task_loop(self) -> None:
-        """Runs a direct chat-send task through runner replans and the shared observed-action executor."""
+    def test_runner_dispatches_world_chat_task_to_typed_core_executor(self) -> None:
+        """Routes the registered World Chat task without entering the legacy action loop."""
 
         message = "runner parity chat"
         defaults = DefaultsConfig(stable_click_delay_ms=0, post_action_observe_delay_ms=0)
@@ -356,55 +356,37 @@ class RunnerEndToEndTests(unittest.TestCase):
             path=Path("chat.yaml"),
             steps=(ScriptStep(task=TaskId.SEND_WORLD_CHAT_MESSAGE, params={"message": message}),),
         )
-        chat_controls = (
-            UiElementId.PNC_CHAT_TAB_KINGDOM,
-            UiElementId.PNC_CHAT_TAB_ALLIANCE,
-            UiElementId.PNC_CHAT_INPUT_FIELD,
-            UiElementId.PNC_CHAT_SEND_BUTTON,
-        )
-        observations = [
-            make_observation(ScreenType.PNC_HOME_CITY, visible_ids=(UiElementId.PNC_CHAT_SHORTCUT,)),
-            make_observation(
-                ScreenType.PNC_CHAT,
-                visible_ids=chat_controls,
-                active_chat_channel=ChatChannel.ALLIANCE,
-                chat_draft_empty=True,
-            ),
-            make_observation(
-                ScreenType.PNC_CHAT,
-                visible_ids=chat_controls,
-                active_chat_channel=ChatChannel.WORLD,
-                chat_draft_empty=True,
-            ),
-            make_observation(
-                ScreenType.PNC_CHAT,
-                visible_ids=chat_controls,
-                active_chat_channel=ChatChannel.WORLD,
-                chat_draft_empty=True,
-            ),
-            make_observation(
-                ScreenType.PNC_CHAT,
-                visible_ids=chat_controls,
-                active_chat_channel=ChatChannel.WORLD,
-                chat_draft_empty=True,
-            ),
-        ]
-        fake_observer = FakeObservationService(observations=observations)
+        fake_observer = FakeObservationService(observations=[])
         fake_session = FakeSession()
         registry = build_default_task_registry()
+        core_step_executor = Mock()
+        core_step_executor.execute.return_value = CoreWorkflowResult(
+            workflow_name="send_kingdom_chat",
+            succeeded=True,
+            value={"message": message},
+            exit_screen=ScreenType.PNC_HOME_CITY,
+            trace_path="chat-trace.jsonl",
+        )
         runner = _make_runner(
             defaults=defaults,
             observation_service=fake_observer,
             session=fake_session,
             registry=registry,
+            core_step_executor=core_step_executor,
         )
 
         result = runner.run(account, registry.prepare_script(script))
 
         self.assertEqual(len(result.steps), 1)
         self.assertEqual(result.steps[0].status.value, "success")
-        self.assertEqual(result.steps[0].attempts, 3)
-        self.assertIn(message, fake_session.texts)
+        self.assertEqual(result.steps[0].attempts, 1)
+        core_step_executor.execute.assert_called_once()
+        prepared_step = core_step_executor.execute.call_args.kwargs["step"]
+        self.assertEqual(TaskId.SEND_WORLD_CHAT_MESSAGE, prepared_step.task)
+        self.assertEqual({"message": message}, {"message": prepared_step.parsed_params.message})
+        self.assertEqual([], fake_observer.labels)
+        self.assertEqual([], fake_session.texts)
+        self.assertEqual([], fake_session.taps)
 
 
 def _make_runner(

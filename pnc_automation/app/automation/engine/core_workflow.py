@@ -8,6 +8,7 @@ from typing import Generic, Literal, Protocol, TypeVar
 
 from pnc_automation.app.automation.engine.core_runtime import CoreRuntime
 from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
+from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.domain.chat import ChatChannel
 from pnc_automation.app.pnc.domain.observation import Observation
 from pnc_automation.app.pnc.domain.mail import MailboxAvailability, MailboxType
@@ -72,14 +73,23 @@ class CoreWorkflowResult(Generic[T]):
 class WorkflowContext:
     """Exposes only reviewed navigation and fresh, expected-screen content capture."""
 
-    __slots__ = ("_runtime", "_last_navigation_count", "_last_observation")
+    __slots__ = ("_runtime", "_last_navigation_count", "_last_observation", "_effect")
 
-    def __init__(self, runtime: CoreRuntime, *, last_observation: Observation) -> None:
+    def __init__(
+        self,
+        runtime: CoreRuntime,
+        *,
+        last_observation: Observation,
+        effect: WorkflowEffect = WorkflowEffect.READ_ONLY,
+    ) -> None:
         """Starts a context after the runner has confirmed the workflow entry screen."""
 
+        if not isinstance(effect, WorkflowEffect):
+            raise TypeError("WorkflowContext.effect must be a WorkflowEffect.")
         self._runtime = runtime
         self._last_navigation_count = runtime.observation_count
         self._last_observation = last_observation
+        self._effect = effect
 
     def navigate(self, target: ScreenType) -> Observation:
         """Navigates through the reviewed graph and records the fresh completion observation."""
@@ -182,6 +192,26 @@ class WorkflowContext:
         finally:
             self._sync_from_runtime()
 
+    def send_chat_message(
+        self,
+        channel: ChatChannel,
+        message: str,
+        active_castle: CastleIdentity,
+    ) -> Observation:
+        """Send one chat message only for the reviewed non-spending effect."""
+
+        if self._effect != WorkflowEffect.NONSPENDING_STATE_CHANGE:
+            raise PermissionError("Sending chat requires the NONSPENDING_STATE_CHANGE workflow effect.")
+        try:
+            return self._runtime.navigation.send_chat_message(
+                channel,
+                message,
+                active_castle,
+                observe_content=self._observe_chat_content,
+            )
+        finally:
+            self._sync_from_runtime()
+
     def _observe_mail_content(self, label: str) -> Observation:
         """Capture fresh mail content for one constrained operation."""
 
@@ -245,7 +275,7 @@ class CoreWorkflowRunner(Generic[T]):
         self.runtime.record({"event": "workflow_started", "workflow": spec.name, "effect": spec.effect.value})
         try:
             entry = self.runtime.navigation.navigate(spec.entry_screen)
-            context = WorkflowContext(self.runtime, last_observation=entry)
+            context = WorkflowContext(self.runtime, last_observation=entry, effect=spec.effect)
             value = workflow.execute(context)
             exit_observation = self.runtime.navigation.navigate(spec.exit_screen)
             result = CoreWorkflowResult(

@@ -11,7 +11,7 @@ from enum import StrEnum
 import numpy as np
 from PIL import Image
 
-from pnc_automation.app.pnc.domain.castles import CastleIdentity
+from pnc_automation.app.pnc.domain.castles import CastleIdentity, normalize_castle_display_name
 from pnc_automation.core.errors import ScreenClassificationError, SelectorResolutionError
 from pnc_automation.app.pnc.domain.chat import ChatChannel, ChatEntryKind
 from pnc_automation.app.pnc.domain.building_catalog import (
@@ -7388,23 +7388,8 @@ def _lord_info_name_to_current_castle(name_text: str) -> CastleIdentity:
 
     return CastleIdentity(
         kingdom="",
-        castle_name=_normalize_lord_info_current_castle_name(name_text),
+        castle_name=normalize_castle_display_name(name_text),
     )
-
-
-def _normalize_lord_info_current_castle_name(name_text: str) -> str:
-    """Returns the canonical castle name from the Lord Info display label.
-
-    The live Lord Info header can prepend the alliance tag, for example
-    ``[AAS] pine cobaye 1``, even though the configured castle identity and the
-    Manage Char roster use the bare castle name. Current-castle matching should
-    therefore strip one leading bracketed alliance tag while preserving the
-    exact visible spelling of the castle name itself.
-    """
-
-    stripped = name_text.strip()
-    normalized = re.sub(r"^\[[^\]]+\]\s*", "", stripped, count=1).strip()
-    return stripped if normalized == "" else normalized
 
 
 def _is_research_tree_support_line(line: OcrLine) -> bool:
