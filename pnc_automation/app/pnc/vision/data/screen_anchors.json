@@ -1365,6 +1365,61 @@
       "layout_id": "research_queue"
     },
     {
+      "id": "research_tree_development",
+      "screen": "PNC_RESEARCH_TREE",
+      "anchors": [
+        {
+          "image": "screen_anchors/research_tree_development_0.png",
+          "search_region": [
+            108,
+            10,
+            195,
+            33
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/research_tree_development_1.png",
+          "search_region": [
+            463,
+            80,
+            67,
+            40
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/core_institute_pnc_back_button_top_left.png",
+            "search_region": [
+              22,
+              8,
+              58,
+              38
+            ],
+            "threshold": 0.93
+          }
+        }
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "research_tree_development.png",
+        "decoded_sha256": "c0ed2d5f824812ff0ea4582bb12d407bbced432c2dead11cf35a2b76ce7c4ccb",
+        "capture_group": "2026-09-12/testing"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Reviewed Development Research Tree identity and measured Back control from the frozen live reference fixture.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "layout_id": "research_tree_development"
+    },
+    {
       "id": "settings_preferences",
       "screen": "PNC_SETTINGS_PREFERENCES",
       "anchors": [

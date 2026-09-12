@@ -642,6 +642,8 @@ def reviewed_navigation_edges() -> tuple[NavigationEdge, ...]:
         NavigationEdge(screen.PNC_HOME_CITY, selector.PNC_HOME_RESEARCH_BUTTON, frozenset({screen.PNC_RESEARCH_QUEUE})),
         NavigationEdge(screen.PNC_RESEARCH_QUEUE, selector.PNC_RESEARCH_QUEUE_CLOSE, frozenset({screen.PNC_HOME_CITY})),
         NavigationEdge(screen.PNC_RESEARCH_QUEUE, selector.PNC_RESEARCH_QUEUE_GO, frozenset({screen.PNC_HOME_CITY})),
+        NavigationEdge(screen.PNC_INSTITUTE, selector.PNC_INSTITUTE_DEVELOPMENT_BUTTON, frozenset({screen.PNC_RESEARCH_TREE})),
+        NavigationEdge(screen.PNC_RESEARCH_TREE, selector.PNC_BACK_BUTTON_TOP_LEFT, frozenset({screen.PNC_INSTITUTE})),
         NavigationEdge(screen.PNC_WORLD_MAP, selector.PNC_WORLD_COORDINATE_BAR, frozenset({screen.PNC_WORLD_COORDINATE_DIALOG})),
         NavigationEdge(screen.PNC_WORLD_COORDINATE_DIALOG, selector.PNC_WORLD_COORDINATE_DIALOG_CLOSE_BUTTON, frozenset({screen.PNC_WORLD_MAP})),
         NavigationEdge(screen.PNC_WORLD_MAP, selector.PNC_WORLD_EXPAND_BUTTON, frozenset({screen.PNC_WORLD_MAP_OVERVIEW})),

@@ -265,6 +265,52 @@ class NavigationCoreTests(unittest.TestCase):
             {(edge.source, edge.selector, edge.destinations) for edge in edges},
         )
 
+    def test_development_research_tree_edges_are_limited_to_observed_route(self):
+        """Keeps only the measured Development entry and ResearchTree Back return edges."""
+
+        edges = {
+            (edge.source, edge.selector, edge.destinations)
+            for edge in reviewed_navigation_edges()
+        }
+
+        self.assertIn(
+            (
+                ScreenType.PNC_INSTITUTE,
+                UiElementId.PNC_INSTITUTE_DEVELOPMENT_BUTTON,
+                frozenset({ScreenType.PNC_RESEARCH_TREE}),
+            ),
+            edges,
+        )
+        self.assertIn(
+            (
+                ScreenType.PNC_RESEARCH_TREE,
+                UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+                frozenset({ScreenType.PNC_INSTITUTE}),
+            ),
+            edges,
+        )
+        self.assertEqual(
+            {
+                item
+                for item in edges
+                if (
+                    item[0] == ScreenType.PNC_RESEARCH_TREE
+                    or item[1] == UiElementId.PNC_INSTITUTE_DEVELOPMENT_BUTTON
+                )
+            },
+            {
+                (
+                    ScreenType.PNC_INSTITUTE,
+                    UiElementId.PNC_INSTITUTE_DEVELOPMENT_BUTTON,
+                    frozenset({ScreenType.PNC_RESEARCH_TREE}),
+                ),
+                (
+                    ScreenType.PNC_RESEARCH_TREE,
+                    UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+                    frozenset({ScreenType.PNC_INSTITUTE}),
+                ),
+            },
+        )
     def test_chat_back_replans_from_world_parent_and_returns_home_once(self):
         now = datetime(2026, 9, 12, tzinfo=UTC)
 
