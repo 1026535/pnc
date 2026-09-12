@@ -3,21 +3,31 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from datetime import UTC, datetime
+import json
 from pathlib import Path
 from types import SimpleNamespace
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
+from pnc_automation.app.automation.engine.core_runtime import build_core_runtime
 from pnc_automation.app.automation.engine.core_script_dispatcher import CoreScriptDispatcher
 from pnc_automation.app.automation.engine.core_workflow import CoreWorkflowResult
-from pnc_automation.app.automation.engine.runner import AutomationRunner, CoreStepRunResult
+from pnc_automation.app.automation.engine.runner import (
+    AutomationRunner,
+    CoreStepRunResult,
+    RunResult,
+)
 from pnc_automation.app.automation.engine.script_runner import ScriptRunner
 from pnc_automation.app.automation.engine.task import (
+    BaseAutomationTask,
     CastleTargetPolicy,
     CoreWorkflowTaskDefinition,
+    TaskResult,
     TaskId,
     TaskStatus,
+    require_no_params,
 )
 from pnc_automation.app.authoring.config.models import AccountConfig, DefaultsConfig, LiveAutomationRole
 from pnc_automation.app.authoring.scripts.models import (
@@ -26,10 +36,14 @@ from pnc_automation.app.authoring.scripts.models import (
     RunScript,
     ScriptStep,
 )
+from pnc_automation.app.authoring.scripts.registry import TaskRegistry
 from pnc_automation.app.entrypoints.task_registry import build_default_task_registry
+from pnc_automation.app.entrypoints.cli import _serialize_run_result
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.persistence.chat_archive_store import ChatArchiveStore
+from pnc_automation.core.infra.emulator.bluestacks_instance import BlueStacksInstance
+from pnc_automation.core.infra.emulator.session import BlueStacksSessionCleanupPolicy
 
 from tests.support.core.logging import build_logger
 
@@ -125,6 +139,79 @@ class TypedCoreDispatchTests(unittest.TestCase):
 
         executor.execute.assert_called_once()
 
+    def test_script_runner_builds_mixed_steps_over_one_connected_graph(self) -> None:
+        """Wires both dispatch paths to one connected service graph and one owner close."""
+
+        events: list[str] = []
+        observation_service = Mock()
+        observation_service.observe.side_effect = lambda label, **_kwargs: (
+            events.append(f"observe:{label}") or Mock()
+        )
+        observed_action_executor = Mock()
+        observed_action_executor.recover_interruption_if_required.return_value = None
+        core_executor = Mock()
+        core_executor.execute.side_effect = lambda **_kwargs: (
+            events.append("core") or _workflow_result()
+        )
+        connected_runtime = SimpleNamespace(
+            session=SimpleNamespace(
+                instance=BlueStacksInstance(
+                    id="instance",
+                    display_name="display",
+                    device_id="device",
+                    app_package="package",
+                )
+            ),
+            observation_service=observation_service,
+            flow_planner=Mock(),
+            world_map_survey_recorder=None,
+            world_map_search_service=None,
+            close=Mock(side_effect=lambda: events.append("close")),
+            require_observed_action_executor=Mock(return_value=observed_action_executor),
+        )
+        script_runner = _minimal_script_runner(archive_store=Mock(spec=ChatArchiveStore))
+        script_runner.config.defaults = DefaultsConfig()
+        script_runner.logger = build_logger()
+        registry = TaskRegistry(
+            tasks=(
+                _LegacyNoOpTask(events),
+                CoreWorkflowTaskDefinition(
+                    id=TaskId.COLLECT_KINGDOM_CHAT,
+                    castle_target_policy=CastleTargetPolicy.OPTIONAL,
+                    parameter_parser=lambda params: require_no_params(TaskId.COLLECT_KINGDOM_CHAT, params),
+                ),
+            )
+        )
+        script_runner.task_registry = registry
+        script = registry.prepare_script(
+            RunScript(
+                name="mixed",
+                path=Path("mixed.yaml"),
+                steps=(
+                    ScriptStep(task=TaskId.ENSURE_GAME_RUNNING),
+                    ScriptStep(task=TaskId.COLLECT_KINGDOM_CHAT),
+                ),
+            )
+        )
+
+        with patch.object(ScriptRunner, "_build_core_step_executor", return_value=core_executor) as build_core:
+            runner = script_runner._build_automation_runner_from_services(
+                account=_account(),
+                connected_runtime=connected_runtime,
+            )
+        runner.run(_account(), script)
+        runner.close()
+
+        build_core.assert_called_once_with(
+            account=_account(),
+            connected_runtime=connected_runtime,
+            required_role=LiveAutomationRole.LIVE_TESTING,
+        )
+        self.assertEqual(["observe:ensure_game_running_before", "legacy", "core", "close"], events)
+        connected_runtime.require_observed_action_executor.assert_called_once()
+        connected_runtime.close.assert_called_once_with()
+        self.assertEqual(1, observation_service.observe.call_count)
+
     def test_explicit_castle_uses_existing_alignment_once_before_core_dispatch(self) -> None:
         """Runs the established synthetic castle alignment once, then delegates the typed step."""
 
@@ -155,6 +242,27 @@ class TypedCoreDispatchTests(unittest.TestCase):
 
         dispatcher.core_runtime_factory.assert_not_called()  # type: ignore[attr-defined]
 
+    def test_dispatcher_rejects_unsupported_task_before_composition(self) -> None:
+        """Fails closed for a task without a typed dispatcher before assembling core services."""
+
+        runtime_factory = Mock()
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            dispatcher = CoreScriptDispatcher(
+                account=_account(),
+                chat_archive_store=ChatArchiveStore(Path(temporary_directory) / "chat"),
+                core_runtime_factory=runtime_factory,
+            )
+            unsupported = PreparedScriptStep(
+                script_step=ScriptStep(task=TaskId.COLLECT_MAIL),
+                parsed_params=None,
+                castle_target_policy=CastleTargetPolicy.OPTIONAL,
+            )
+
+            with self.assertRaisesRegex(RuntimeError, "No typed core dispatcher"):
+                dispatcher.execute(step=unsupported)
+
+        runtime_factory.assert_not_called()
+
     def test_dispatcher_validates_exact_castle_after_core_preflight(self) -> None:
         """Uses the canonical exact identity matcher and leaves the shared runtime open per step."""
 
@@ -179,6 +287,34 @@ class TypedCoreDispatchTests(unittest.TestCase):
 
         core_runtime.preflight_active_castle_identity.assert_called_once_with()
         runner_factory.assert_not_called()
+        core_runtime.close.assert_not_called()
+
+    def test_dispatcher_accepts_valid_exact_castle_match(self) -> None:
+        """Executes a targeted typed step only after exact active-castle confirmation."""
+
+        active = CastleIdentity("K1", "Requested", 12)
+        core_runtime = Mock()
+        core_runtime.preflight_active_castle_identity.return_value = active
+        workflow_result = _workflow_result()
+        workflow_runner = Mock()
+        workflow_runner.run.return_value = workflow_result
+        runtime_factory = Mock(return_value=core_runtime)
+        runner_factory = Mock(return_value=workflow_runner)
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            dispatcher = CoreScriptDispatcher(
+                account=_account(),
+                chat_archive_store=ChatArchiveStore(Path(temporary_directory) / "chat"),
+                core_runtime_factory=runtime_factory,
+            )
+            with patch(
+                "pnc_automation.app.automation.engine.core_script_dispatcher.CoreWorkflowRunner",
+                runner_factory,
+            ):
+                result = dispatcher.execute(step=_prepared_chat_step(castle=active))
+
+        self.assertIs(workflow_result, result)
+        core_runtime.preflight_active_castle_identity.assert_called_once_with()
+        workflow_runner.run.assert_called_once()
         core_runtime.close.assert_not_called()
 
     def test_dispatcher_lazily_composes_once_and_returns_typed_result(self) -> None:
@@ -219,26 +355,101 @@ class TypedCoreDispatchTests(unittest.TestCase):
                 script_runner._run_script_for_account(account=account, script=_run_script(params={}))
         build_runner.assert_not_called()
 
-        script_runner = _minimal_script_runner(
-            archive_store=ChatArchiveStore(Path(tempfile.mkdtemp()) / "chat"),
-        )
-        fake_runner = Mock()
-        fake_runner.run.return_value = Mock()
-        with patch.object(ScriptRunner, "_build_runner", return_value=(fake_runner, lambda: None)) as build_runner:
-            script_runner._run_script_for_account(
-                account=account,
-                script=_run_script(params={}),
-                required_role=LiveAutomationRole.SMOKE_TEST,
+        policy = BlueStacksSessionCleanupPolicy.close_at_phase_end(shutdown_grace_seconds=0)
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            script_runner = _minimal_script_runner(
+                archive_store=ChatArchiveStore(Path(temporary_directory) / "chat"),
             )
-        build_runner.assert_called_once_with(account, required_role=LiveAutomationRole.SMOKE_TEST)
+            fake_runner = Mock()
+            fake_runner.run.return_value = Mock()
+            with patch.object(ScriptRunner, "_build_runner", return_value=(fake_runner, lambda: None)) as build_runner:
+                script_runner._run_script_for_account(
+                    account=account,
+                    script=_run_script(params={}),
+                    required_role=LiveAutomationRole.SMOKE_TEST,
+                    session_cleanup_policy=policy,
+                )
+            build_runner.assert_called_once_with(
+                account,
+                required_role=LiveAutomationRole.SMOKE_TEST,
+                session_cleanup_policy=policy,
+            )
 
-        invalid = _minimal_script_runner(
-            archive_store=ChatArchiveStore(Path(tempfile.mkdtemp()) / "chat"),
+            invalid = _minimal_script_runner(
+                archive_store=ChatArchiveStore(Path(temporary_directory) / "invalid-chat"),
+            )
+            with patch.object(ScriptRunner, "_build_runner") as build_runner:
+                with self.assertRaisesRegex(Exception, "does not accept"):
+                    invalid._run_script_for_account(account=account, script=_run_script(params={"unexpected": True}))
+            build_runner.assert_not_called()
+
+    def test_script_runner_closes_runner_when_core_execution_fails(self) -> None:
+        """Closes the connected owner after a typed script fails during execution."""
+
+        account = _account()
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            script_runner = _minimal_script_runner(
+                archive_store=ChatArchiveStore(Path(temporary_directory) / "chat"),
+            )
+            fake_runner = Mock()
+            fake_runner.run.side_effect = RuntimeError("core execution failed")
+            with patch.object(
+                ScriptRunner,
+                "_build_runner",
+                return_value=(fake_runner, lambda: None),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "core execution failed"):
+                    script_runner._run_script_for_account(account=account, script=_run_script(params={}))
+
+        fake_runner.close.assert_called_once_with()
+
+    def test_core_runtime_construction_failure_closes_connected_owner(self) -> None:
+        """Closes the connected graph when core assembly fails after session construction."""
+
+        connected_runtime = Mock()
+        script_runner = Mock()
+        account = _account()
+        script_runner.build_connected_runtime.return_value = connected_runtime
+        with patch(
+            "pnc_automation.app.automation.engine.core_runtime.assemble_core_runtime",
+            side_effect=RuntimeError("core assembly failed"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "core assembly failed"):
+                build_core_runtime(script_runner, account, "account")
+
+        connected_runtime.close.assert_called_once_with()
+        script_runner.build_connected_runtime.assert_called_once_with(
+            account=account,
+            required_role=None,
+            session_cleanup_policy=None,
         )
-        with patch.object(ScriptRunner, "_build_runner") as build_runner:
-            with self.assertRaisesRegex(Exception, "does not accept"):
-                invalid._run_script_for_account(account=account, script=_run_script(params={"unexpected": True}))
-        build_runner.assert_not_called()
+
+    def test_cli_run_serializer_emits_typed_core_result_contract(self) -> None:
+        """Serializes the retained typed workflow result through the actual CLI JSON path."""
+
+        now = datetime.now(tz=UTC)
+        result = RunResult(
+            account_id="account",
+            script_name="chat",
+            steps=(
+                CoreStepRunResult(
+                    task_id=TaskId.COLLECT_KINGDOM_CHAT,
+                    status=TaskStatus.SUCCESS,
+                    attempts=1,
+                    message="completed",
+                    workflow_result=_workflow_result(),
+                ),
+            ),
+            started_at=now,
+            finished_at=now,
+        )
+
+        payload = json.loads(_serialize_run_result(result))
+
+        self.assertEqual("account", payload["account_id"])
+        self.assertEqual("collect_kingdom_chat", payload["steps"][0]["task_id"])
+        self.assertEqual("collect_kingdom_chat", payload["steps"][0]["workflow_result"]["workflow_name"])
+        self.assertTrue(payload["steps"][0]["workflow_result"]["succeeded"])
 
 
 def _account(*, roles: frozenset[LiveAutomationRole] | None = None) -> AccountConfig:
@@ -250,6 +461,32 @@ def _account(*, roles: frozenset[LiveAutomationRole] | None = None) -> AccountCo
         pnc_account_id="pnc-account",
         live_roles=frozenset({LiveAutomationRole.LIVE_TESTING}) if roles is None else roles,
     )
+
+
+class _LegacyNoOpTask(BaseAutomationTask):
+    """Small legacy task used to prove mixed dispatch ordering."""
+
+    id = TaskId.ENSURE_GAME_RUNNING
+
+    def __init__(self, events: list[str]) -> None:
+        self._events = events
+
+    def parse_params(self, params):
+        require_no_params(self.id, params)
+        return None
+
+    def is_applicable(self, context, observation) -> bool:
+        del context, observation
+        self._events.append("legacy")
+        return True
+
+    def plan(self, context, observation):
+        del context, observation
+        return []
+
+    def verify(self, context, before, after):
+        del context, before, after
+        return TaskResult.success("legacy complete")
 
 
 def _prepared_chat_step(*, castle: CastleIdentity | None = None) -> PreparedScriptStep:
