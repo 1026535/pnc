@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 from numbers import Real
 from pathlib import Path
 
@@ -16,6 +17,21 @@ from pnc_automation.core.vision.image.models import Bounds, TemplateMatch
 _MAX_ASPECT_RATIO_ERROR = 0.01
 _MAX_COLOR_DELTA = 255.0
 _MAX_CANDIDATES_TO_CHECK = 256
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedTemplateImage:
+    """Stores one normalized screenshot for a batch of template matches."""
+
+    source: np.ndarray
+    original_size: tuple[int, int]
+    reference_size: tuple[int, int] | None
+
+    @property
+    def working_size(self) -> tuple[int, int]:
+        """Returns the pixel dimensions used for matching and search regions."""
+
+        return self.reference_size or self.original_size
 
 
 class OpenCvTemplateMatcher:
@@ -51,9 +67,27 @@ class OpenCvTemplateMatcher:
         """
 
         _validate_threshold(threshold)
+        prepared = self.prepare_image(image, reference_size=reference_size)
+        if prepared is None:
+            return None
+
+        return self.find_best_match_prepared(
+            prepared,
+            template_path,
+            threshold=threshold,
+            search_region=search_region,
+        )
+
+    def prepare_image(
+        self,
+        image: Image.Image,
+        *,
+        reference_size: tuple[int, int] | None = None,
+    ) -> PreparedTemplateImage | None:
+        """Normalizes one screenshot once for a sequence of template matches."""
+
         _validate_image(image)
         normalized_reference_size = _validate_reference_size(reference_size)
-
         original_width, original_height = image.size
         if normalized_reference_size is not None and _aspect_ratio_error(
             original_width,
@@ -62,18 +96,34 @@ class OpenCvTemplateMatcher:
         ) > _MAX_ASPECT_RATIO_ERROR:
             return None
 
-        template, alpha = _load_template(template_path)
-
         working_image = image.convert("RGB")
         if normalized_reference_size is not None:
-            reference_width, reference_height = normalized_reference_size
             if working_image.size != normalized_reference_size:
                 working_image = working_image.resize(
                     normalized_reference_size,
                     Image.Resampling.LANCZOS,
                 )
-        else:
-            reference_width, reference_height = working_image.size
+        return PreparedTemplateImage(
+            source=np.asarray(working_image, dtype=np.uint8),
+            original_size=image.size,
+            reference_size=normalized_reference_size,
+        )
+
+    def find_best_match_prepared(
+        self,
+        prepared: PreparedTemplateImage,
+        template_path: Path,
+        *,
+        threshold: float,
+        search_region: Bounds | None = None,
+    ) -> TemplateMatch | None:
+        """Matches a template against a screenshot normalized by :meth:`prepare_image`."""
+
+        if not isinstance(prepared, PreparedTemplateImage):
+            raise TypeError("prepared must be a PreparedTemplateImage instance")
+        _validate_threshold(threshold)
+        template, alpha = _load_template(template_path)
+        reference_width, reference_height = prepared.working_size
 
         region = _validate_search_region(
             search_region,
@@ -87,8 +137,10 @@ class OpenCvTemplateMatcher:
         if template_width > region.width or template_height > region.height:
             return None
 
-        source = np.asarray(working_image, dtype=np.uint8)
-        source = source[region.y : region.y + region.height, region.x : region.x + region.width]
+        source = prepared.source[
+            region.y : region.y + region.height,
+            region.x : region.x + region.width,
+        ]
         template_rgb = np.asarray(template, dtype=np.uint8)[..., :3]
         alpha_values = np.asarray(alpha, dtype=np.uint8)
         template_mask = alpha_values if not np.all(alpha_values == 255) else None
@@ -107,7 +159,7 @@ class OpenCvTemplateMatcher:
         match_x, match_y, confidence = best
         reference_x = region.x + match_x
         reference_y = region.y + match_y
-        if normalized_reference_size is None:
+        if prepared.reference_size is None:
             bounds = Bounds(
                 x=reference_x,
                 y=reference_y,
@@ -120,8 +172,8 @@ class OpenCvTemplateMatcher:
                 y=reference_y,
                 width=template_width,
                 height=template_height,
-                original_size=(original_width, original_height),
-                reference_size=normalized_reference_size,
+                original_size=prepared.original_size,
+                reference_size=prepared.reference_size,
             )
         return TemplateMatch(bounds=bounds, confidence=confidence)
 

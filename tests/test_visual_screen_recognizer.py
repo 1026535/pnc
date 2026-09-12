@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from PIL import Image, ImageEnhance
 
@@ -51,6 +52,20 @@ def _builder(ocr: _RecordingOcrService) -> ObservationBuilder:
 
 class VisualScreenRecognizerTests(unittest.TestCase):
     """Require distinct tabs, conservative matches, and intact global guard ordering."""
+
+    def test_recognition_prepares_each_frame_once_for_all_anchor_checks(self) -> None:
+        """Keeps normalization work scoped to one pass instead of one resize per anchor."""
+
+        recognizer = load_visual_screen_recognizer()
+        image = Image.new("RGB", (900, 1600))
+        with patch.object(
+            recognizer.matcher,
+            "prepare_image",
+            wraps=recognizer.matcher.prepare_image,
+        ) as prepare_image:
+            recognizer.recognize(image)
+
+        prepare_image.assert_called_once_with(image, reference_size=(540, 960))
 
     def test_reviewed_reference_profiles_and_separate_day_positives(self) -> None:
         recognizer = load_visual_screen_recognizer()

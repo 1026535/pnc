@@ -86,6 +86,34 @@ class OpenCvTemplateMatcherTests(unittest.TestCase):
         assert result is not None
         self.assertEqual(result.bounds, Bounds(x=42, y=22, width=20, height=16))
 
+    def test_prepared_image_reuses_normalized_pixels_and_projects_matches(self) -> None:
+        """Supports multiple matches against one normalized screenshot without repeated resizing."""
+
+        reference = _textured_image((80, 40))
+        first_template = reference.crop((8, 6, 18, 14))
+        second_template = reference.crop((51, 21, 63, 31))
+        image = reference.resize((160, 80), Image.Resampling.NEAREST)
+        prepared = self.matcher.prepare_image(image, reference_size=(80, 40))
+
+        self.assertIsNotNone(prepared)
+        assert prepared is not None
+        first = self.matcher.find_best_match_prepared(
+            prepared,
+            self._save(first_template),
+            threshold=0.85,
+        )
+        second = self.matcher.find_best_match_prepared(
+            prepared,
+            self._save(second_template),
+            threshold=0.85,
+        )
+
+        self.assertIsNotNone(first)
+        self.assertIsNotNone(second)
+        assert first is not None and second is not None
+        self.assertEqual(first.bounds, Bounds(x=16, y=12, width=20, height=16))
+        self.assertEqual(second.bounds, Bounds(x=102, y=42, width=24, height=20))
+
     def test_rejects_reference_with_different_aspect_ratio(self) -> None:
         image = Image.new("RGB", (100, 100), (10, 20, 30))
         template = Image.new("RGB", (10, 10), (10, 20, 30))
