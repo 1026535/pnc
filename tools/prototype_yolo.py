@@ -66,7 +66,7 @@ def main() -> int:
     parser.add_argument("--config", type=Path, default=Path("config/accounts.yaml"))
     parser.add_argument("--class-map", type=Path)
     parser.add_argument("--confidence", type=float, default=0.35)
-    parser.add_argument("--output-dir", type=Path, default=Path("artifacts/yolo_prototype/runs"))
+    parser.add_argument("--output-dir", type=Path, default=Path(".local-data/artifacts/yolo_prototype/runs"))
     args = parser.parse_args()
     detector = YoloOnnxDetector(args.model, confidence_threshold=args.confidence)
     shadow = YoloShadowObserver(detector, load_class_map(args.class_map))

@@ -47,6 +47,26 @@ Treat a clean Git operation as insufficient proof. Review the full feature diff 
 
 Immediately before landing, fetch the target again. If its remote tip moved, repeat divergence analysis, synchronization, review, and affected validation against the new tip.
 
+## Generated Local Data
+
+Keep generated run products out of Git and separate from authored repository data:
+
+- Use the repository-root `.local-data/` directory, created on demand and
+  ignored by Git, for local runtime artifacts, chat/mail archives, reports,
+  timing CSVs, selector discovery/validation output, screenshots, logs, state,
+  coverage, and similar generated data.
+- Keep `.test-impact/` for test-selection scratch and CI evidence. It is also
+  ignored and must not be staged.
+- Treat `tests/data/`, package `**/data/` directories, example configuration,
+  selector catalogs, and reviewed plans as authored inputs unless the task
+  explicitly changes them. Do not solve output pollution with a global
+  `*.csv` or `*.json` ignore rule.
+- Before staging, inspect `git status --short --ignored` and verify unexpected
+  output with `git check-ignore -v <path>`. If a generated file is already
+  tracked, preserve it by moving it into the matching `.local-data/` location,
+  stage the old path's removal, and update the producing command's default.
+  Never delete a generated result just to clean the worktree.
+
 ## Land And Publish
 
 Follow repository protections and the user's requested delivery path:

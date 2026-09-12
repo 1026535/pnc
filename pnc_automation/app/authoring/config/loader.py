@@ -153,7 +153,7 @@ def _load_artifact_root(raw_artifacts: Any, workspace_root: Path) -> Path:
     """Loads and resolves the artifact root relative to the workspace root."""
 
     raw = require_mapping(raw_artifacts or {}, context="artifacts")
-    artifact_root = require_string(raw.get("root", "artifacts"), context="artifacts.root")
+    artifact_root = require_string(raw.get("root", ".local-data/artifacts"), context="artifacts.root")
     return (workspace_root / artifact_root).resolve()
 
 
@@ -161,7 +161,7 @@ def _load_archive_root(raw_archives: Any, workspace_root: Path) -> Path:
     """Loads and resolves the durable archive root relative to the workspace root."""
 
     raw = require_mapping(raw_archives or {}, context="archives")
-    archive_root = require_string(raw.get("root", "archives"), context="archives.root")
+    archive_root = require_string(raw.get("root", ".local-data/archives"), context="archives.root")
     return (workspace_root / archive_root).resolve()
 
 

@@ -68,7 +68,7 @@ class ConfigLoaderTests(unittest.TestCase):
             self.assertTrue(config.artifact_root.is_dir())
             self.assertTrue(config.archive_root.is_dir())
             self.assertEqual(config.artifact_root, (root / "artifacts").resolve())
-            self.assertEqual(config.archive_root, (root / "archives").resolve())
+            self.assertEqual(config.archive_root, (root / ".local-data" / "archives").resolve())
             self.assertEqual(config.runtime.observation_mode, ObservationMode.DEBUG)
             self.assertFalse(config.runtime.bluestacks_memory.enabled)
             self.assertEqual(
@@ -86,6 +86,35 @@ class ConfigLoaderTests(unittest.TestCase):
             )
             self.assertEqual(config.require_instance("bs-main").display_name, "serious_stuff")
             self.assertEqual(config.defaults.bluestacks_config_path, (root / "fixtures" / "bluestacks.conf").resolve())
+
+    def test_load_app_config_defaults_generated_roots_under_local_data(self) -> None:
+        """Keeps generated runtime data under the ignored local-data root by default."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            config_path = root / "accounts.yaml"
+            config_path.write_text(
+                textwrap.dedent(
+                    """
+                    instances:
+                      - id: bs-main
+                        display_name: serious_stuff
+                        app_package: com.global.tmslg
+                    accounts:
+                      - id: account_a
+                        instance_id: bs-main
+                        pnc_account_id: inline_user
+                        username: inline_user
+                        password: inline_pass
+                    """
+                ).strip(),
+                encoding="utf-8",
+            )
+
+            config = load_app_config(config_path)
+
+        self.assertEqual(config.artifact_root, (root / ".local-data" / "artifacts").resolve())
+        self.assertEqual(config.archive_root, (root / ".local-data" / "archives").resolve())
 
     def test_load_app_config_rejects_unknown_live_role(self) -> None:
         """Fails closed instead of silently enabling a misspelled live workflow role."""
@@ -235,7 +264,7 @@ class ConfigLoaderTests(unittest.TestCase):
 
             self.assertEqual(config.artifact_root, (root / "artifacts").resolve())
             self.assertNotEqual(config.artifact_root, (config_dir / "artifacts").resolve())
-            self.assertEqual(config.archive_root, (root / "archives").resolve())
+            self.assertEqual(config.archive_root, (root / ".local-data" / "archives").resolve())
             self.assertNotEqual(config.archive_root, (config_dir / "archives").resolve())
             self.assertEqual(config.defaults.bluestacks_config_path, (root / "fixtures" / "bluestacks.conf").resolve())
             self.assertNotEqual(
