@@ -91,6 +91,21 @@ This guide describes the bounded path for moving one workflow onto the reviewed 
 
 Active-castle preflight recognizes the selected row through exact Manage Characters evidence. It searches a long roster with bounded swipes in both directions and stops on repeated viewport signatures without tapping a castle row.
 
+## Migration status
+
+The full workflow migration is incomplete. A direct API port does not migrate an authored YAML task with the same name. The feature branches listed below are separate deliverables; this table does not imply that they have been merged into `main`.
+
+| Workflow or boundary | Current status |
+| --- | --- |
+| Daily Quest status | Implemented as the reference typed workflow; this reads status, not Daily maintenance execution. |
+| Open-building | Direct CLI/Python port on `codex/open-building-core-port`. |
+| Collect-mail | Direct Python port on `codex/collect-mail-core-port`. |
+| Kingdom Chat collection | Direct Python port on `codex/collect-kingdom-chat-core-port`, stacked on the collect-mail branch. |
+| Authored scripts | The corresponding registered `TaskId`/YAML steps still use legacy dispatch. Typed script dispatch remains missing. |
+| Bootstrap and roster workflows | Login, castle selection, and roster refresh remain unported. Core preflight reuses foreground/bootstrap behavior; safe popup recovery belongs to the canonical runtime. Neither is an empty workflow to recreate. |
+| Chat and mail sending | Need typed input/send operations and explicit authorization for the actual message and destination before live sending. |
+| Resource-changing workflows | Construction, upgrade, research, gathering, campaign actions, and Daily maintenance execution still need reviewed typed operations and the existing authorizer/executor/journal bridge. Live spending needs an exact action, target, and budget. |
+
 ## Typed Kingdom Chat port
 
 `CollectKingdomChatWorkflow` is the typed direct Python port for one Kingdom Chat heartbeat. Its `WorkflowSpec` uses `PNC_HOME_CITY` for both entry and exit and `WorkflowEffect.NONSPENDING_STATE_CHANGE`: opening the chat may update in-game read state, while the canonical `ChatArchiveStore` writes the local archive. The workflow enters Chat through the reviewed Home shortcut, captures content with the Chat transcript observation scope, and leaves final Home confirmation to `CoreWorkflowRunner`.
@@ -99,9 +114,27 @@ Active-castle preflight recognizes the selected row through exact Manage Charact
 
 `ApplicationRunner.run_collect_kingdom_chat` performs archive availability and exact active-castle preflight before constructing the workflow, then closes its one connected runtime on every outcome. The direct `AutomationApi.collect_kingdom_chat` and module helper hold or reuse the canonical scoped account reservation for the complete call and return the typed core result. Authored `TaskId.COLLECT_KINGDOM_CHAT` YAML steps remain on the legacy `ScriptRunner` dispatch boundary until typed script dispatch is implemented; no adapter routes those steps through `CoreWorkflowRunner`.
 
+The September 12 live proof on `serious_stuff` archived five visible player messages and confirmed final Home. Its trace is `artifacts/2026-09-12/serious_stuff/20260912T054101Z_9deb03aa_core_trace.jsonl`; final Home is `20260912T054325Z_core_20260912T054101Z_9deb03aa_0039_core_10_after_1.png` in the same directory. The canonical process-scoped instance lease remained held across implementation and dependent probes. No message was sent and no castle was selected.
+
+The first attempt exposed an oversized Home shortcut template: its center at y=840 hit the quest tracker. The corrected crop isolates the Chat icon and centers at (26,869) on the 540×960 fixture. Preserve the original failed trace `20260912T053222Z_124b53df_core_trace.jsonl`; it explains the regression fixture and does not prove a legacy registry misclick.
+
+The shared Chat selector passed from both Home and World Map in `artifacts/replacement_core/kingdom_chat_selectors/20260912T054642Z_serious_stuff_navigation_validation.yaml`. A subsequent core Back action proved the conditional return: World-origin Chat returns to World Map, while Home-origin Chat returns Home. The source and destination are `20260912T054655Z_core_20260912T054650Z_e37b4dc7_0002_core_1_source.png` and `20260912T054700Z_core_20260912T054650Z_e37b4dc7_0003_core_1_after_0.png`. The reviewed Back edge now accepts either observed parent and replans toward the requested destination. This does not add a World-to-Chat core entry edge; that still needs current-frame core control evidence.
+
+The corrected live rerun confirmed Chat → World Map → Home, then Home → Chat, Alliance selection, Kingdom selection, and final Home. Its trace is `artifacts/2026-09-12/serious_stuff/20260912T055048Z_341e9d87_core_trace.jsonl`; final Home is `20260912T055210Z_core_20260912T055048Z_341e9d87_0023_core_6_after_1.png` in the same directory. The compact outcome is `artifacts/replacement_core/kingdom_chat_tabs_result.json`. Both selector cases passed again in `kingdom_chat_selectors/20260912T055035Z_serious_stuff_navigation_validation.yaml` while preparing that conditional-return proof.
+
+The live helpers ran inside one Python process holding the canonical outer lease, through `AutomationApi.collect_kingdom_chat`, `tools/validate_navigation_selectors.py:main` with `--account serious_stuff --selector PNC_CHAT_SHORTCUT`, and the typed `WorkflowContext` channel operations. Reloading the corrected navigation module preserved the original lease-manager instance and reservation; no competing process acquired the emulator between probes. The game was already running and remained open at Home.
+
+Validation for this Chat branch:
+
+- `py -m unittest tests.test_navigation_core tests.test_core_runtime`: passed, 59 tests after the conditional-return correction.
+- `py -m unittest tests.test_visual_screen_recognizer`: passed, 15 tests after the shortcut correction.
+- `py -m unittest discover -s tests`: passed, 1,270 tests with 22 configured/opt-in skips. Final output: `artifacts/replacement_core/kingdom_chat_final_tests.log`.
+- `git diff --check`: passed.
+- Direct API, shared selector, and typed channel live proofs on `serious_stuff`: passed as recorded above. The two earlier failures were reproducible navigation defects, corrected with offline regressions and live reruns.
+
 ## Historical issues resolved
 
-Earlier Daily validation recorded a visible cavalry Go control that OCR classified as `unknown_action` and a City HUD sparkle that was mistaken for a popup close control. The canonical parser and popup ownership fixes now have deterministic regressions and final role-selected validation. The original evidence and limits remain in the [replacement-core validation ledger](../reviewed_plans/PNC_CORE_PORTING_VALIDATION.md); those historical observations do not describe the current Daily result. The new Kingdom Chat port still requires its own bounded live proof.
+Earlier Daily validation recorded a visible cavalry Go control that OCR classified as `unknown_action` and a City HUD sparkle that was mistaken for a popup close control. The canonical parser and popup ownership fixes now have deterministic regressions and final role-selected validation. The original evidence and limits remain in the [replacement-core validation ledger](../reviewed_plans/PNC_CORE_PORTING_VALIDATION.md); those historical observations do not describe the current Daily result.
 
 The replacement runner supports `WorkflowEffect.READ_ONLY` and `WorkflowEffect.NONSPENDING_STATE_CHANGE`. Collect-mail uses the latter because opening unread mail may update read state and archive persistence writes local files, while it spends no in-game resources. Resource-changing work remains behind the existing Daily authorizer, executor, and journal contracts. Adding a boolean acknowledgement, direct executor access, or a second journal would bypass the intended boundary and is not a valid port.
 
