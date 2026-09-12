@@ -484,6 +484,67 @@ class RuntimeCastleTargetingTests(unittest.TestCase):
             application.probe_after_scope()
             self.assertTrue(application.competitor_acquired_after_scope)
 
+    def test_python_use_account_holds_real_lease_between_dependent_actions(self) -> None:
+        """Prevents another process-shaped registry from entering between two dependent actions."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            application = _RealLeaseApplicationRunner(Path(temp_directory))
+            api = AutomationApi(application=application)
+
+            with api.use_account("account_a") as session:
+                session.research(priority=["economy"])
+                session.building_construct(building="farm")
+
+            application.probe_after_scope()
+            self.assertTrue(application.competitor_acquired_after_scope)
+
+    def test_python_reserve_accounts_holds_scope_for_multi_step_workflow(self) -> None:
+        """Provides an explicit reservation for dependent calls without account preparation helpers."""
+
+        fake_runner = _FakeApplicationRunner()
+        api = AutomationApi(application=fake_runner)
+
+        with api.reserve_accounts(("account_a",)):
+            api.research(priority=["economy"])
+            api.building_construct(building="farm")
+
+        self.assertEqual(len(fake_runner.reservations), 1)
+        self.assertTrue(fake_runner.reservations[0].closed)
+        self.assertEqual(
+            fake_runner.task_calls,
+            [
+                (TaskId.RESEARCH, "account_a", {"priority": ["economy"]}),
+                (TaskId.BUILDING_CONSTRUCT, "account_a", {"building": "farm"}),
+            ],
+        )
+
+    def test_python_reservation_rejects_account_outside_declared_bundle(self) -> None:
+        """Fails before execution when a workflow tries to escape its declared account bundle."""
+
+        fake_runner = _FakeApplicationRunner()
+        api = AutomationApi(application=fake_runner)
+
+        with api.reserve_accounts(("account_a",)):
+            with self.assertRaisesRegex(RuntimeError, "outside the active workflow reservation"):
+                api.research(account_id="account_b")
+
+        self.assertTrue(fake_runner.reservations[0].closed)
+        self.assertEqual(fake_runner.task_calls, [])
+
+    def test_python_reservation_rejects_incremental_bundle_expansion(self) -> None:
+        """Requires all accounts to be declared before a workflow acquires its first instance."""
+
+        fake_runner = _FakeApplicationRunner()
+        api = AutomationApi(application=fake_runner)
+
+        with api.reserve_accounts(("account_a",)):
+            with self.assertRaisesRegex(RuntimeError, "Cannot expand an active workflow reservation"):
+                with api.reserve_accounts(("account_a", "account_b")):
+                    pass
+
+        self.assertEqual(len(fake_runner.reservations), 1)
+        self.assertTrue(fake_runner.reservations[0].closed)
+
     def test_python_use_account_failed_preparation_releases_real_lease(self) -> None:
         """Allows a competitor to acquire immediately after a failed public API preparation."""
 
