@@ -4858,19 +4858,25 @@ def _build_visual_popup_close_additions(*, image: Image.Image) -> ObservationAdd
     close_bounds = _find_visual_popup_close_bounds(image=image)
     if close_bounds is None or not _has_visual_popup_surface(image=image, close_bounds=close_bounds):
         return None
+    close_element = _make_visible(
+        selector_id=UiElementId.PNC_POPUP_CLOSE_BUTTON,
+        x=close_bounds.x,
+        y=close_bounds.y,
+        width=close_bounds.width,
+        height=close_bounds.height,
+        action_point=close_bounds.center(),
+        source_kind=VisibleElementSourceKind.GEOMETRY,
+    )
     return ObservationAdditions(
-        visible_elements={
-            UiElementId.PNC_POPUP_CLOSE_BUTTON: _make_visible(
-                selector_id=UiElementId.PNC_POPUP_CLOSE_BUTTON,
-                x=close_bounds.x,
-                y=close_bounds.y,
-                width=close_bounds.width,
-                height=close_bounds.height,
-                action_point=close_bounds.center(),
-                source_kind=VisibleElementSourceKind.GEOMETRY,
-            )
-        },
+        visible_elements={UiElementId.PNC_POPUP_CLOSE_BUTTON: close_element},
         screen_evidence=(ScreenEvidence(ScreenType.PNC_POPUP, "visual_upper_right_close_x"),),
+        popup_overlay=_popup_overlay_from_elements(
+            image=image,
+            elements=((PopupControlKind.CLOSE_X, close_element),),
+            layout_id="visual_modal_close_x",
+            evidence_kind=PopupEvidenceKind.GEOMETRY,
+            reason="visual_upper_right_close_x",
+        ),
     )
 
 

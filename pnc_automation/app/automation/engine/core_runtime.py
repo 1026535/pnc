@@ -35,6 +35,7 @@ class CoreRuntime:
     _observed_action_executor: ObservedActionExecutor | None = None
     _capture_count: int = 0
     _last_observation: Observation | None = None
+    _last_observe_recovered: bool = False
 
     def close(self) -> None:
         """Releases the connected runtime owned by this replacement-core operation."""
@@ -66,6 +67,7 @@ class CoreRuntime:
     def observe(self, label: str, *, include_content: bool = False) -> Observation:
         """Captures one frame, then delegates safe interruption recovery to the connected executor."""
 
+        self._last_observe_recovered = False
         observation = self._observe_once(label, include_content=include_content)
         if self._observed_action_executor is None:
             return observation
@@ -77,7 +79,10 @@ class CoreRuntime:
                 include_content=include_content,
             ),
         )
-        return recovered if recovered is not None else observation
+        if recovered is None:
+            return observation
+        self._last_observe_recovered = True
+        return recovered
 
     def _observe_once(self, label: str, *, include_content: bool) -> Observation:
         """Captures and perceives one frame without recursively entering popup recovery."""
@@ -152,6 +157,13 @@ class CoreRuntime:
             if self.navigation.clock() - started >= policy.max_seconds:
                 break
             observation = self.observe(f"preflight_settle_{index}")
+            if self._last_observe_recovered:
+                # Popup recovery owns an independent bounded episode. Restart
+                # only this passive settle clock and stability state before
+                # counting its fresh known result.
+                started = self.navigation.clock()
+                previous_screen = ScreenType.UNKNOWN
+                stable = 0
             elapsed = self.navigation.clock() - started
             if previous_captured_at is not None and observation.captured_at <= previous_captured_at:
                 raise RuntimeError("Preflight received a stale capture while settling the initial screen.")
