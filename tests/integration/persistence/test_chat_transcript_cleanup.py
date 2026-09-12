@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import unittest
+import tempfile
+from pathlib import Path
 
 from pnc_automation.app.pnc.persistence.chat_transcript_cleanup import (
     build_chat_transcript_cleanup_patterns,
     clean_chat_transcript_text,
+    persist_cleaned_chat_transcript,
 )
+from pnc_automation.app.pnc.persistence.archive_ownership import chat_scope_from_transcript_path
 
 
 class ChatTranscriptCleanupTests(unittest.TestCase):
@@ -60,6 +64,30 @@ class ChatTranscriptCleanupTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "Malformed transcript line"):
             clean_chat_transcript_text("Enemy Bob says hello\n")
+
+    def test_persisted_cleanup_uses_canonical_lock_and_atomic_publication(self) -> None:
+        """Managed cleanup edits are serialized and replace the transcript through a sibling temp file."""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            transcript = Path(temporary_directory) / "2026-03-24" / "account" / "k1_castle" / "kingdom" / "transcript.log"
+            transcript.parent.mkdir(parents=True)
+            transcript.write_text("[2026-03-24T10:00:00Z] Enemy Bob: Hello\n", encoding="utf-8")
+            persist_cleaned_chat_transcript(transcript, "[2026-03-24T10:00:00Z] Enemy Bob: Changed\n")
+            self.assertEqual("[2026-03-24T10:00:00Z] Enemy Bob: Changed\n", transcript.read_text(encoding="utf-8"))
+
+    def test_persisted_cleanup_refuses_pending_recovery(self) -> None:
+        """Manual edits cannot destroy evidence owned by a pending chat transaction."""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            transcript = Path(temporary_directory) / "2026-03-24" / "account" / "k1_castle" / "kingdom" / "transcript.log"
+            transcript.parent.mkdir(parents=True)
+            original = "[2026-03-24T10:00:00Z] Enemy Bob: Hello\n"
+            transcript.write_text(original, encoding="utf-8")
+            scope = chat_scope_from_transcript_path(transcript)
+            scope.pending_path.write_text("{}", encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "pending archive recovery"):
+                persist_cleaned_chat_transcript(transcript, "")
+            self.assertEqual(original, transcript.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

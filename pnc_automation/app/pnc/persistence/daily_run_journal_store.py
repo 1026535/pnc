@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import tempfile
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from threading import Lock
@@ -20,6 +19,7 @@ from pnc_automation.app.pnc.domain.daily_maintenance import (
 )
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.core.errors import ConfigurationError
+from pnc_automation.core.infra.storage.atomic_file import atomic_write_bytes, replace_flushed_file
 from pnc_automation.core.infra.storage.path_segments import sanitize_artifact_segment
 
 
@@ -39,17 +39,7 @@ def _replace_checkpoint_file(source: Path, destination: Path) -> None:
     Keep the old journal intact and retry only the same flushed temporary file;
     persistent denials and other I/O errors must still stop mutation dispatch.
     """
-    for attempt in range(len(_WINDOWS_REPLACE_RETRY_DELAYS) + 1):
-        try:
-            os.replace(source, destination)
-            return
-        except OSError as error:
-            if (
-                getattr(error, "winerror", None) not in {5, 32, 33}
-                or attempt == len(_WINDOWS_REPLACE_RETRY_DELAYS)
-            ):
-                raise
-            sleep(_WINDOWS_REPLACE_RETRY_DELAYS[attempt])
+    replace_flushed_file(source, destination, replace=os.replace, sleep_function=sleep)
 
 
 @dataclass(slots=True)
@@ -122,26 +112,16 @@ class DailyRunJournalStore:
             castle=checkpoint.castle,
         )
         path.parent.mkdir(parents=True, exist_ok=True)
-        payload = json.dumps(_serialize_checkpoint(checkpoint), indent=2, sort_keys=True) + "\n"
+        payload = (json.dumps(_serialize_checkpoint(checkpoint), indent=2, sort_keys=True) + "\n").encode("utf-8")
         with self._lock:
-            temporary_path: Path | None = None
-            try:
-                with tempfile.NamedTemporaryFile(
-                    mode="w",
-                    encoding="utf-8",
-                    dir=path.parent,
-                    prefix="journal-",
-                    suffix=".tmp",
-                    delete=False,
-                ) as handle:
-                    temporary_path = Path(handle.name)
-                    handle.write(payload)
-                    handle.flush()
-                    os.fsync(handle.fileno())
-                _replace_checkpoint_file(temporary_path, path)
-            finally:
-                if temporary_path is not None and temporary_path.exists():
-                    temporary_path.unlink()
+            atomic_write_bytes(
+                path,
+                payload,
+                prefix="journal-",
+                suffix=".tmp",
+                replace=os.replace,
+                sleep_function=sleep,
+            )
         return path
 
     def prepare_intent(self, checkpoint: DailyTaskCheckpoint, intent: MutationIntent) -> DailyTaskCheckpoint:

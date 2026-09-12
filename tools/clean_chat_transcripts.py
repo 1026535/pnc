@@ -12,6 +12,7 @@ root = ensure_repo_root_on_path()
 from pnc_automation.app.pnc.persistence.chat_transcript_cleanup import (
     build_chat_transcript_cleanup_patterns,
     clean_chat_transcript_text,
+    persist_cleaned_chat_transcript,
 )
 
 
@@ -53,8 +54,7 @@ def main() -> int:
             changed_files += 1
             removed_lines += len(result.removed_lines)
             if arguments.write:
-                with transcript_path.open("w", encoding="utf-8", newline="\n") as handle:
-                    handle.write(result.cleaned_text)
+                persist_cleaned_chat_transcript(transcript_path, result.cleaned_text)
         print(f"{transcript_path} removed={len(result.removed_lines)} mode={'write' if arguments.write else 'dry-run'}")
         if not arguments.show_removed:
             continue
