@@ -2283,6 +2283,22 @@ selectors:
   status: planned
   detection_kind: semantic
   materialize_relative_bounds: false
+- id: PNC_RESEARCH_QUEUE_GO
+  screens:
+  - PNC_RESEARCH_QUEUE
+  status: planned
+  detection_kind: semantic
+  materialize_relative_bounds: false
+  notes:
+  - Produced by the reviewed Research Queue visual profile; focuses Institute without starting research.
+- id: PNC_RESEARCH_QUEUE_CLOSE
+  screens:
+  - PNC_RESEARCH_QUEUE
+  status: planned
+  detection_kind: semantic
+  materialize_relative_bounds: false
+  notes:
+  - Produced by the reviewed Research Queue visual profile; closes the queue overlay.
 - id: PNC_RESEARCH_START_BUTTON
   screens:
   - PNC_RESEARCH_TREE

@@ -88,8 +88,10 @@ class CoreRuntimeTests(unittest.TestCase):
 
         class _Guard:
             ocr_service = Mock(spec=OcrService)
-            def detect_interruption(self, image, *, ocr_context, owned_dismiss_bounds=()):
-                del image, owned_dismiss_bounds
+            def detect_interruption(
+                self, image, *, ocr_context, owned_dismiss_bounds=(), owned_navigation_screen=None,
+            ):
+                del image, ocr_context, owned_dismiss_bounds, owned_navigation_screen
                 return ObservationAdditions(guard_verdict=GuardVerdict.CLEAR)
 
         black_capture = CapturedScreenshot(
@@ -557,8 +559,10 @@ class CoreRuntimeTests(unittest.TestCase):
 
         class _Guard:
             ocr_service = Mock(spec=OcrService)
-            def detect_interruption(self, image, *, ocr_context, owned_dismiss_bounds=()):
-                del image, owned_dismiss_bounds
+            def detect_interruption(
+                self, image, *, ocr_context, owned_dismiss_bounds=(), owned_navigation_screen=None,
+            ):
+                del image, ocr_context, owned_dismiss_bounds, owned_navigation_screen
                 return ObservationAdditions(guard_verdict=GuardVerdict.CLEAR)
 
             def enrich(self, image, screen_type, visible_elements, request, *, ocr_context, ocr_regions):
