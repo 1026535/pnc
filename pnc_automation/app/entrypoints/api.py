@@ -13,6 +13,7 @@ from pnc_automation.core.vision.observation_policy import ObservationMode
 from pnc_automation.app import ApplicationRunner, build_application_runner
 from pnc_automation.app.automation.collect_mail import CollectMailResult
 from pnc_automation.app.automation.collect_kingdom_chat import CollectKingdomChatResult
+from pnc_automation.app.automation.refresh_castle_roster import RefreshCastleRosterResult
 from pnc_automation.app.automation.engine.core_workflow import CoreWorkflowResult
 from pnc_automation.app.automation.engine.runner import RunResult, StepRunResult
 from pnc_automation.app.automation.engine.script_runner import require_successful_preparation
@@ -313,6 +314,11 @@ class AutomationSession:
 
         return self.api.collect_kingdom_chat(account_id=self.account_id)
 
+    def refresh_castle_roster(self) -> CoreWorkflowResult[RefreshCastleRosterResult]:
+        """Runs one typed replacement-core full castle-roster scan for the prepared session."""
+
+        return self.api.refresh_castle_roster(account_id=self.account_id)
+
     def run_mail_schedules(
         self,
         *,
@@ -458,6 +464,7 @@ class AutomationApi:
             lambda: self.application.run_open_building(
                 account_id=resolved_account_id,
                 building=building,
+                session_cleanup_policy=self._cleanup_policy_for(resolved_account_id),
             ),
         )
 
@@ -618,6 +625,7 @@ class AutomationApi:
                     "limit_per_mailbox": limit_per_mailbox,
                     "only_new": only_new,
                 },
+                session_cleanup_policy=self._cleanup_policy_for(resolved_account_id),
             ),
         )
 
@@ -631,7 +639,26 @@ class AutomationApi:
         resolved_account_id = self._resolve_account_id(account_id)
         return self._run_with_account_reservation(
             resolved_account_id,
-            lambda: self.application.run_collect_kingdom_chat(account_id=resolved_account_id),
+            lambda: self.application.run_collect_kingdom_chat(
+                account_id=resolved_account_id,
+                session_cleanup_policy=self._cleanup_policy_for(resolved_account_id),
+            ),
+        )
+
+    def refresh_castle_roster(
+        self,
+        *,
+        account_id: str | None = None,
+    ) -> CoreWorkflowResult[RefreshCastleRosterResult]:
+        """Runs one typed replacement-core full roster scan using current-castle semantics."""
+
+        resolved_account_id = self._resolve_account_id(account_id)
+        return self._run_with_account_reservation(
+            resolved_account_id,
+            lambda: self.application.run_refresh_castle_roster(
+                account_id=resolved_account_id,
+                session_cleanup_policy=self._cleanup_policy_for(resolved_account_id),
+            ),
         )
 
     def run_mail_schedules(
@@ -923,6 +950,15 @@ def collect_kingdom_chat(
     """Runs one typed replacement-core Kingdom Chat poll through the default facade."""
 
     return _default_api().collect_kingdom_chat(account_id=account_id)
+
+
+def refresh_castle_roster(
+    *,
+    account_id: str | None = None,
+) -> CoreWorkflowResult[RefreshCastleRosterResult]:
+    """Runs one typed replacement-core full roster scan through the default facade."""
+
+    return _default_api().refresh_castle_roster(account_id=account_id)
 
 
 def run_mail_schedules(

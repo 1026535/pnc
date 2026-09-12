@@ -8,9 +8,6 @@ import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from pnc_automation.app.automation.engine.task import TaskId, TaskStatus
-from pnc_automation.app.automation.engine.task_context import TaskContext
-from pnc_automation.app.automation.tasks.collect_kingdom_chat_task import CollectKingdomChatTask
 from pnc_automation.app.pnc.persistence.chat_archive_store import ChatArchiveStore
 from pnc_automation.app.authoring.config.models import (
     AccountConfig,
@@ -20,14 +17,8 @@ from pnc_automation.app.authoring.config.models import (
 )
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.domain.chat import ChatChannel, ChatEntryKind, ObservedChatEntry
-from pnc_automation.app.pnc.domain.observation import ListEntryKind
-from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
-from pnc_automation.app.pnc.enums.screen_type import ScreenType
-from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 
 from tests.support.core.logging import build_logger
-from tests.support.pnc.observations import make_entry, make_observation
-from tests.support.runtime.observation_service import FakeObservationService
 
 
 class ChatMonitorTests(unittest.TestCase):
@@ -47,7 +38,6 @@ class ChatMonitorTests(unittest.TestCase):
             ),
         )
         self.defaults = DefaultsConfig(stable_click_delay_ms=0, post_action_observe_delay_ms=0)
-        self.flows = ScreenFlowPlanner()
         self.logger = build_logger()
         self.target_castle = CastleIdentity(kingdom="K304", castle_name="K304554ca2797", castle_level=12)
 
@@ -273,193 +263,6 @@ class ChatMonitorTests(unittest.TestCase):
             self.assertTrue(update.changed)
             self.assertTrue(update.gap_detected)
             self.assertEqual([entry.sender_name for entry in update.appended_entries], ["Enemy Alice"])
-
-    def test_collect_kingdom_chat_task_uses_the_shared_chat_channel_flow(self) -> None:
-        """Delegates chat acquisition to the shared channel-alignment flow instead of reimplementing navigation."""
-
-        task = CollectKingdomChatTask()
-        observation = make_observation(
-            ScreenType.PNC_HOME_CITY,
-            visible_ids=(UiElementId.PNC_CHAT_SHORTCUT,),
-        )
-        context = self._make_context(params=None, target_castle=self.target_castle)
-
-        actions = task.plan(context, observation)
-
-        self.assertEqual(actions, self.flows.ensure_chat_channel(observation, ChatChannel.WORLD))
-
-    def test_collect_kingdom_chat_task_archives_only_player_rows(self) -> None:
-        """Archives player chat, ignores announcements, and reports a successful heartbeat append."""
-
-        task = CollectKingdomChatTask()
-        with tempfile.TemporaryDirectory() as temp_directory:
-            store = ChatArchiveStore(root=Path(temp_directory) / "chat")
-            fake_observer = FakeObservationService(
-                observations=[
-                    make_observation(
-                        ScreenType.PNC_CHAT,
-                        active_chat_channel=ChatChannel.WORLD,
-                        list_entries=(
-                            make_entry(
-                                ListEntryKind.CHAT_MESSAGE,
-                                title="Enemy Bob",
-                                subtitle="Hello there",
-                                metadata={
-                                    "chat_entry_kind": ChatEntryKind.PLAYER.value,
-                                    "message_text": "Hello there",
-                                    "visible_order": 0,
-                                },
-                            ),
-                            make_entry(
-                                ListEntryKind.CHAT_MESSAGE,
-                                title="System notice",
-                                metadata={
-                                    "chat_entry_kind": ChatEntryKind.ANNOUNCEMENT.value,
-                                    "message_text": "Castle battle begins soon",
-                                    "visible_order": 1,
-                                },
-                                action_point=(0, 0),
-                            ),
-                        ),
-                    ),
-                ]
-            )
-            context = self._make_context(
-                params=None,
-                task_id=TaskId.COLLECT_KINGDOM_CHAT,
-                target_castle=self.target_castle,
-                chat_archive_store=store,
-                observation_service=fake_observer,
-            )
-
-            result = task.verify(
-                context,
-                make_observation(ScreenType.PNC_CHAT, active_chat_channel=ChatChannel.WORLD),
-                make_observation(ScreenType.PNC_CHAT, active_chat_channel=ChatChannel.WORLD),
-            )
-
-            transcript_path = next((Path(temp_directory) / "chat").rglob("transcript.log"))
-            transcript = transcript_path.read_text(encoding="utf-8")
-            self.assertEqual(result.status, TaskStatus.SUCCESS)
-            self.assertIn("Archived 1 new Kingdom chat player message", result.message)
-            self.assertIn("Enemy Bob: Hello there", transcript)
-            self.assertNotIn("Castle battle begins soon", transcript)
-
-    def test_collect_kingdom_chat_task_fails_on_unsupported_rows(self) -> None:
-        """Fails safely instead of archiving transcript content when OCR marked visible rows as unsupported."""
-
-        task = CollectKingdomChatTask()
-        with tempfile.TemporaryDirectory() as temp_directory:
-            store = ChatArchiveStore(root=Path(temp_directory) / "chat")
-            fake_observer = FakeObservationService(
-                observations=[
-                    make_observation(
-                        ScreenType.PNC_CHAT,
-                        active_chat_channel=ChatChannel.WORLD,
-                        list_entries=(
-                            make_entry(
-                                ListEntryKind.CHAT_MESSAGE,
-                                title="???",
-                                metadata={
-                                    "chat_entry_kind": ChatEntryKind.UNSUPPORTED.value,
-                                    "message_text": "???",
-                                    "visible_order": 0,
-                                },
-                                action_point=(0, 0),
-                            ),
-                        ),
-                    ),
-                ]
-            )
-            context = self._make_context(
-                params=None,
-                task_id=TaskId.COLLECT_KINGDOM_CHAT,
-                target_castle=self.target_castle,
-                chat_archive_store=store,
-                observation_service=fake_observer,
-            )
-
-            result = task.verify(
-                context,
-                make_observation(ScreenType.PNC_CHAT, active_chat_channel=ChatChannel.WORLD),
-                make_observation(ScreenType.PNC_CHAT, active_chat_channel=ChatChannel.WORLD),
-            )
-
-            self.assertEqual(result.status, TaskStatus.FAILED)
-            self.assertIn("unsupported rows", result.message)
-            self.assertFalse(any((Path(temp_directory) / "chat").rglob("transcript.log")))
-
-    def test_collect_kingdom_chat_task_reports_unsupported_row_shape_in_failure_diagnostics(self) -> None:
-        """Includes row-shape detail in the failure result so unsupported OCR is easier to debug live."""
-
-        task = CollectKingdomChatTask()
-        with tempfile.TemporaryDirectory() as temp_directory:
-            store = ChatArchiveStore(root=Path(temp_directory) / "chat")
-            fake_observer = FakeObservationService(
-                observations=[
-                    make_observation(
-                        ScreenType.PNC_CHAT,
-                        active_chat_channel=ChatChannel.WORLD,
-                        list_entries=(
-                            make_entry(
-                                ListEntryKind.CHAT_MESSAGE,
-                                title="[DMG]p2o2i2u2ueu3u47484",
-                                metadata={
-                                    "chat_entry_kind": ChatEntryKind.UNSUPPORTED.value,
-                                    "message_text": "[DMG]p2o2i2u2ueu3u47484",
-                                    "message_preview": "[DMG]p2o2i2u2ueu3u47484",
-                                    "visible_order": 0,
-                                    "unsupported_reason": "sender_only",
-                                    "sender_evidence": "[DMG]p2o2i2u2ueu3u47484",
-                                },
-                                action_point=(0, 0),
-                            ),
-                        ),
-                    ),
-                ]
-            )
-            context = self._make_context(
-                params=None,
-                task_id=TaskId.COLLECT_KINGDOM_CHAT,
-                target_castle=self.target_castle,
-                chat_archive_store=store,
-                observation_service=fake_observer,
-            )
-
-            result = task.verify(
-                context,
-                make_observation(ScreenType.PNC_CHAT, active_chat_channel=ChatChannel.WORLD),
-                make_observation(ScreenType.PNC_CHAT, active_chat_channel=ChatChannel.WORLD),
-            )
-
-            self.assertEqual(result.status, TaskStatus.FAILED)
-            self.assertIn("sender_only", result.message)
-            self.assertIn("[DMG]p2o2i2u2ueu3u47484", result.message)
-
-    def _make_context(
-        self,
-        *,
-        params: object,
-        task_id: TaskId = TaskId.COLLECT_KINGDOM_CHAT,
-        target_castle: CastleIdentity | None = None,
-        chat_archive_store: ChatArchiveStore | None = None,
-        observation_service: FakeObservationService | None = None,
-    ) -> TaskContext:
-        """Builds one task context with the shared chat monitor test dependencies."""
-
-        return TaskContext(
-            account=self.account,
-            castle_roster_provider=lambda: None,
-            defaults=self.defaults,
-            step=type("Step", (), {"task": task_id})(),
-            params=params,
-            flows=self.flows,
-            logger=self.logger,
-            target_castle=target_castle,
-            chat_archive_store=chat_archive_store,
-            observation_service=observation_service,
-        )
-
 
 if __name__ == "__main__":
     unittest.main()

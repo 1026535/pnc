@@ -83,6 +83,57 @@ class TaskStatus(StrEnum):
     REPLAN = "replan"
 
 
+def require_no_params(task_id: TaskId, params: Mapping[str, Any]) -> None:
+    """Validates the canonical parameterless task contract for script definitions."""
+
+    if not isinstance(params, Mapping):
+        raise ScriptValidationError(
+            f"Task '{task_id}' parameters must be a mapping.",
+            task_id=task_id,
+        )
+    if params:
+        raise ScriptValidationError(
+            f"Task '{task_id}' does not accept script parameters.",
+            task_id=task_id,
+        )
+
+
+class TaskDefinition(Protocol):
+    """Common metadata contract shared by legacy and typed task definitions."""
+
+    id: TaskId
+    castle_target_policy: CastleTargetPolicy
+
+    def parse_params(self, params: Mapping[str, Any]) -> Any:
+        """Validates and converts raw script parameters."""
+
+
+@dataclass(frozen=True, slots=True)
+class CoreWorkflowTaskDefinition:
+    """Immutable metadata for a task dispatched through the replacement core."""
+
+    id: TaskId
+    castle_target_policy: CastleTargetPolicy
+    parameter_parser: Callable[[Mapping[str, Any]], Any]
+
+    def __post_init__(self) -> None:
+        """Rejects malformed typed task metadata before scripts can be prepared."""
+
+        if not isinstance(self.id, TaskId):
+            raise TypeError("CoreWorkflowTaskDefinition.id must be a TaskId.")
+        if not isinstance(self.castle_target_policy, CastleTargetPolicy):
+            raise TypeError(
+                "CoreWorkflowTaskDefinition.castle_target_policy must be a CastleTargetPolicy."
+            )
+        if not callable(self.parameter_parser):
+            raise TypeError("CoreWorkflowTaskDefinition.parameter_parser must be callable.")
+
+    def parse_params(self, params: Mapping[str, Any]) -> Any:
+        """Parses one typed definition through its canonical parameter parser."""
+
+        return self.parameter_parser(params)
+
+
 @dataclass(frozen=True, slots=True)
 class TaskResult:
     """Represents the result of one task verification pass."""
@@ -179,11 +230,7 @@ class BaseAutomationTask(ABC):
     def _require_no_params(self, params: Mapping[str, Any]) -> None:
         """Fails fast when a parameterless task receives script parameters."""
 
-        if params:
-            raise ScriptValidationError(
-                f"Task '{self.id}' does not accept script parameters.",
-                task_id=self.id,
-            )
+        require_no_params(self.id, params)
 
 
 def choose_priority_candidate(

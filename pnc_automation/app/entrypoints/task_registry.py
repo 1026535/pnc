@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+from functools import partial
+
 from pnc_automation.app.automation.tasks.building_upgrade_task import BuildingUpgradeTask
 from pnc_automation.app.automation.tasks.building_construction_task import BuildingConstructionTask
 from pnc_automation.app.automation.tasks.campaign_task import CampaignTask
-from pnc_automation.app.automation.tasks.collect_kingdom_chat_task import CollectKingdomChatTask
-from pnc_automation.app.automation.tasks.collect_mail_task import CollectMailTask
 from pnc_automation.app.automation.tasks.ensure_game_running_task import EnsureGameRunningTask
 from pnc_automation.app.automation.tasks.gathering_task import GatheringTask
 from pnc_automation.app.automation.tasks.login_task import LoginTask
@@ -21,6 +21,13 @@ from pnc_automation.app.automation.tasks.send_chat_message_task import (
 )
 from pnc_automation.app.automation.tasks.send_mail_task import SendMailTask
 from pnc_automation.app.authoring.scripts.registry import TaskRegistry
+from pnc_automation.app.automation.engine.task import (
+    CastleTargetPolicy,
+    CoreWorkflowTaskDefinition,
+    TaskId,
+    require_no_params,
+)
+from pnc_automation.app.pnc.domain.mail import parse_collect_mail_params
 
 
 def build_default_task_registry() -> TaskRegistry:
@@ -36,8 +43,16 @@ def build_default_task_registry() -> TaskRegistry:
             SendAllianceChatMessageTask(),
             SendWorldChatMessageTask(),
             SendMailTask(),
-            CollectMailTask(),
-            CollectKingdomChatTask(),
+            CoreWorkflowTaskDefinition(
+                id=TaskId.COLLECT_MAIL,
+                castle_target_policy=CastleTargetPolicy.OPTIONAL,
+                parameter_parser=partial(parse_collect_mail_params, task_label=TaskId.COLLECT_MAIL),
+            ),
+            CoreWorkflowTaskDefinition(
+                id=TaskId.COLLECT_KINGDOM_CHAT,
+                castle_target_policy=CastleTargetPolicy.OPTIONAL,
+                parameter_parser=partial(require_no_params, TaskId.COLLECT_KINGDOM_CHAT),
+            ),
             OpenBuildingTask(),
             BuildingConstructionTask(),
             BuildingUpgradeTask(),

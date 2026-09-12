@@ -68,6 +68,7 @@ class OpenBuildingApplicationTests(unittest.TestCase):
             account,
             "account",
             required_role=LiveAutomationRole.LIVE_TESTING,
+            session_cleanup_policy=None,
         )
         runtime.close.assert_called_once_with()
 
@@ -110,6 +111,7 @@ class OpenBuildingApplicationTests(unittest.TestCase):
             account,
             "account",
             required_role=required_role,
+            session_cleanup_policy=None,
         )
         runtime.close.assert_called_once_with()
 
@@ -134,6 +136,7 @@ class OpenBuildingApplicationTests(unittest.TestCase):
             account,
             "account",
             required_role=LiveAutomationRole.LIVE_TESTING,
+            session_cleanup_policy=None,
         )
         runtime.close.assert_called_once_with()
 
@@ -223,6 +226,7 @@ class OpenBuildingApplicationTests(unittest.TestCase):
         application.run_open_building.assert_called_once_with(
             account_id="account",
             building=HomeCityObjectId.INSTITUTE.value,
+            session_cleanup_policy=None,
         )
         application.reserve_accounts.assert_called_once_with(("account",))
         application.reserve_accounts.return_value.close.assert_called_once_with()
@@ -255,6 +259,7 @@ class OpenBuildingApplicationTests(unittest.TestCase):
         application.run_open_building.assert_called_once_with(
             account_id="account",
             building=HomeCityObjectId.INSTITUTE.value,
+            session_cleanup_policy=None,
         )
 
     def test_python_api_rejects_account_outside_active_reservation(self) -> None:

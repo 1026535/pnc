@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import unittest
 
-from pnc_automation.app.automation.tasks.collect_mail_task import CollectMailTask
 from pnc_automation.app.automation.tasks.send_mail_task import SendMailTask
 from pnc_automation.core.errors import ScriptValidationError
 from pnc_automation.app.pnc.domain.mail import (
@@ -13,6 +12,7 @@ from pnc_automation.app.pnc.domain.mail import (
     MailboxType,
     MailRecipientKind,
     SendMailParams,
+    parse_collect_mail_params,
 )
 
 from tests.support.pnc.mail.mail_workflow_fixtures import MailWorkflowFixtures
@@ -93,18 +93,17 @@ class MailParametersTests(MailWorkflowFixtures, unittest.TestCase):
                 }
             )
 
-    def test_collect_mail_task_parses_deduplicated_mailboxes(self) -> None:
+    def test_collect_mail_parser_parses_deduplicated_mailboxes(self) -> None:
         """Collapses duplicate mailbox names while preserving canonical ordering."""
 
-        task = CollectMailTask()
-
-        params = task.parse_params(
-            {
+        params = parse_collect_mail_params(
+            task_label="collect_mail",
+            params={
                 "mailboxes": ["player", "alliance", "player"],
                 "archive_mode": "both",
                 "limit_per_mailbox": 7,
                 "only_new": True,
-            }
+            },
         )
 
         self.assertEqual(
