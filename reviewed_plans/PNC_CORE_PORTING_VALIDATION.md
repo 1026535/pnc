@@ -1,5 +1,36 @@
 # Replacement core porting validation ledger
 
+## Alliance Chat sending — September 12, 2026
+
+`codex/send-alliance-chat-core-port` starts at main `91793c880cc4893d196859e56ba9fbacaf9a44e5`. Both authored chat sends now use `SendChatWorkflow`, the existing typed parser, and the same guarded core composer sequence. The obsolete legacy chat task and duplicate send flow were removed. Mail sending remains unported. Luna implemented and self-reviewed the changes; root reviewed the consolidated result, owned every live operation, and found no remaining actionable code findings after the corrections below.
+
+The first authored live attempt exposed a legacy castle-alignment call before typed dispatch. It failed in Manage Characters before any typing or submission. Commit `39cf53518fccbd603468769e5f2ebbec0ff8a74d` removes that duplicate owner: an explicit typed `castle_ref` is checked by the core dispatcher's exact current-castle preflight and cannot implicitly switch castles. Scripts requiring a switch must request `SELECT_CASTLE` explicitly. Legacy steps retain their existing alignment behavior. The original failure is preserved in `.local-data/artifacts/replacement_core/alliance_before_dispatch_failure.json`; explicit recovery confirmed Home at `20260912T191907Z_core_20260912T191851Z_d16ce42c_0007_core_2_after_1.png`.
+
+The corrected authored workflow submitted exactly one authorized `test from bot` to Alliance Chat on `serious_stuff`, castle `free cookies`, already in `[NAX]`. No alliance join or castle switch was needed. Its gold return control posted the message, but receipt confirmation timed out because OCR read `testfrom bot`. The original workflow remains recorded as failed; it was not replayed. Trace: `20260912T192153Z_05d897fb_core_trace.jsonl`. Before-send Alliance frame: `20260912T192345Z_core_20260912T192153Z_05d897fb_0035_core_10_chat_channel_after_1.png`. Posted receipt: `20260912T192424Z_core_20260912T192153Z_05d897fb_0044_core_9_chat_send_submit_after_4.png`.
+
+Commit `dea0f7f1ec2f1953ab55efbf3c667da57a620826` corrects the canonical receipt matcher to remove whitespace only. Sender, punctuation, case, empty-composer, and strictly increased own-message count requirements remain intact. The same matcher evaluates the baseline, so an unchanged pre-existing whitespace variant cannot prove another send. Archive normalization and exact typed-draft checks are unchanged.
+
+Root then ran `reconcile_alliance_receipt()` from `.local-data/artifacts/replacement_core/reconcile_alliance_receipt.py` inside the original reserved Python process. It parsed the saved pre-send frame through current perception, captured two fresh live receipts, and evaluated the production completion predicate. The baseline count was zero and both fresh counts were one. A guard prohibited typing and either Send control throughout reconciliation. Exact active-castle preflight and final Home both passed. Root inspected the posted receipt and Home images. This is a corrected read-only reconciliation of the original send, not a second send or a fresh end-to-end successful authored run.
+
+Reconciliation evidence:
+
+- Result: `.local-data/artifacts/replacement_core/alliance_receipt_reconciliation_result.json`.
+- Trace: `20260912T193256Z_6adb20a4_core_trace.jsonl`.
+- Fresh receipt: `20260912T193312Z_core_20260912T193256Z_6adb20a4_0002_alliance_receipt_reconciliation_1.png`.
+- Final Home: `20260912T193444Z_core_20260912T193256Z_6adb20a4_0032_core_route_source.png`.
+
+All named traces and screenshots above are under `artifacts/2026-09-12/serious_stuff/`. The instance was already running. The canonical outer lease stayed held across preparation, dependent probes, corrections, and recovery; workers remained offline. The instance remains warm at Home for remaining migration work. No additional Kingdom message was sent.
+
+Validation used Python 3.13.5 at `C:/Users/lebel/AppData/Local/Programs/Python/Python313/python.exe`:
+
+- Target-dispatch regression subset: 56 tests passed.
+- Receipt domain/navigation subset: 18 tests passed. Shared workflow, typed dispatch, chat monitor, and archive cleanup subset: 66 tests passed.
+- `tools/run_tests.py full --results .test-impact/alliance-receipt-final-results.json`: passed on `dea0f7f`, 1,775 total, 1,770 passed and five optional fixture skips; 115.954 seconds, 117.722 including selection/reporting. Source fingerprint: `919985a98cc2d8ce1144e3db860180eb7dffe62bd9fc2dfaf370fd3f14f1a49f`.
+- The opt-out chat smoke module passed its four configuration tests and skipped its one live test. The smoke contract now requires an explicit channel/message and one class-scoped reservation; no default messages or send replay remain. The actual live proof used `LIVE_TESTING` on the user-selected instance, not a substituted smoke-role account.
+- `git diff --check`: passed. Subsequent changes are this validation record and the receipt-matching explanation in the porting guide.
+
+Earlier full runs passed before live findings: 1,771 total at the first Alliance checkpoint and 1,773 after the target fix, each with five skips. The final run above supersedes them. No selector assets changed in this port; the separate smoke-role selector-validator limitation recorded for Kingdom still applies. It was not bypassed.
+
 ## Kingdom Chat sending — September 12, 2026
 
 `codex/send-kingdom-chat-core-port` ports authored `SEND_WORLD_CHAT_MESSAGE` to `SendKingdomChatWorkflow`. The shared typed `NavigationCore.send_chat_message` owns positive empty-composer evidence, guarded channel selection, one focus/type/submit sequence, and a fresh visible receipt. It rejects channel drift, unknown/loading screens, popups, stale captures, exact draft mismatches, and ambiguous receipts without replay. The context requires `NONSPENDING_STATE_CHANGE`; active-castle preflight remains exact and never selects a castle. Alliance and mail bindings remain unported at this checkpoint. Legacy Alliance is rejected before task preflight or input because its blue Send control is unsupported.
