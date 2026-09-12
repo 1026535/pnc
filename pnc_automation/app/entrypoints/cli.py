@@ -20,9 +20,10 @@ from pnc_automation.app.automation.daily_maintenance.authorization import DailyM
 from pnc_automation.app.entrypoints.daily_maintenance import (
     ConnectedClaimOnlyRunnerFactory,
 )
-from pnc_automation.app.automation.engine.task import TaskId
 from pnc_automation.app.automation.engine.script_runner import require_successful_preparation
 from pnc_automation.core.vision.observation_policy import ObservationMode
+from pnc_automation.app.automation.engine.task import TaskId
+from pnc_automation.app.automation.open_building import build_open_building_workflow
 from pnc_automation.app import ApplicationRunner, build_application_runner
 from pnc_automation.app.authoring.config.models import LiveAutomationRole
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
@@ -157,6 +158,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(_serialize_run_result(result))
         return 0
     if parsed.command == "open-building":
+        # Validate before optional castle preparation can connect to the configured runtime.
+        build_open_building_workflow({"building": parsed.building})
         castle = _parse_optional_castle(parser, parsed)
         with application.reserve_accounts((parsed.account,)):
             if castle is not None:
@@ -167,13 +170,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                         required_role=required_role,
                     )
                 )
-            step_result = application.run_task(
+            result = application.run_open_building(
                 account_id=parsed.account,
-                task_id=TaskId.OPEN_BUILDING,
-                params={"building": parsed.building},
+                building=parsed.building,
                 required_role=required_role,
             )
-        print(_serialize_step_result(account_id=parsed.account, step_result=step_result))
+        print(json.dumps(asdict(result), indent=2, default=str))
         return 0
     if parsed.command == "construct":
         castle = _parse_optional_castle(parser, parsed)
