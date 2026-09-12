@@ -30,10 +30,19 @@ unexpected tail, rolls state backward, or treats a short fingerprint as message
 equality. An unresolved or malformed record is preserved and reported as a
 blocked consistency error.
 
-Existing `state.json` files remain readable. They are validated more strictly on
-load, but are not bulk-migrated. An old transcript is preserved byte-for-byte;
-an incomplete or malformed boundary requires operator review rather than guessed
-repair. State is a visible overlap window, not a message database.
+New `state.json` files use schema version 2 and include `transcript_evidence`:
+either `null` (the visible overlap may be inherited from the prior day, but this
+day has no committed transcript yet) or `{exists, length, sha256}` for the
+complete target-day transcript bytes. Before both an append and a no-delta state
+advance, the store verifies the target transcript's regular-file status, complete
+line boundaries, exact length, and full digest. A later row after midnight
+therefore starts a new transcript at byte offset zero.
+
+Legacy states without this field remain readable conservatively. A non-empty
+legacy state is usable only after its same-day transcript exists and validates;
+the store calculates evidence while lazily upgrading the state. Missing,
+truncated, malformed, or ambiguous legacy data fails closed rather than becoming
+an empty baseline. State is a visible overlap window, not a message database.
 
 ## Mail completion
 
@@ -54,9 +63,23 @@ markers. A later mode-aware upgrade is intentionally outside this protocol.
 
 Archive locks use stable files and native `msvcrt` or `fcntl` primitives with a
 finite acquisition budget. Lock-file existence is not ownership evidence, and
-stale locks are never deleted by age or PID heuristics. The transcript cleanup
-tool's `--write` path uses the same stream lock, refuses pending recovery, and
-publishes its replacement atomically. Dry-run parsing does not mutate archives.
+stale locks are never deleted by age or PID heuristics. Every existing managed
+path component is checked before mutation: symlinks, Windows junctions/reparse
+points, root escapes, non-regular targets, and unexpected layouts are rejected.
+The transcript cleanup tool's `--write` path holds the same stream lock across
+read, parse, replacement, and state-evidence update; it refuses pending recovery.
+Dry-run parsing does not mutate archives.
+
+Recovery returns the original pending capture timestamp to the store. A current
+observation older than recovered work, including work in a skipped or future
+day, is rejected before current-call result counts or screenshot flags are
+computed. Recovered rows are never reported as rows appended by that call.
+
+The tested codec limits are 16 MiB for a pending JSON record and 12 MiB for its
+decoded append payload. Pending reads are bounded to one byte beyond the record
+limit before JSON decoding. Atomic replacement uses seven total attempts with
+the existing six bounded Windows sharing-denial delays; errors after a replacement
+are classified from the resulting bytes on retry.
 
 Stop old archive-writing processes before enabling this writer. Before a
 downgrade, stop writers and resolve or inspect every pending record; do not delete

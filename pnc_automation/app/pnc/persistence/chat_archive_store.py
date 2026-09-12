@@ -5,23 +5,39 @@ from __future__ import annotations
 import hashlib
 import os
 import uuid
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable
 
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.domain.chat import ChatChannel, ObservedChatEntry, chat_channel_archive_directory, normalize_chat_text
-from pnc_automation.app.pnc.persistence.archive_ownership import ArchiveOwnershipScope, chat_archive_scope
+from pnc_automation.app.pnc.persistence.archive_ownership import (
+    ArchiveOwnershipError,
+    ArchiveOwnershipScope,
+    chat_archive_scope,
+    validate_chat_archive_directory,
+    validate_chat_archive_file,
+    validate_managed_path,
+)
 from pnc_automation.app.pnc.persistence.artifact_naming import format_castle_artifact_directory
+from pnc_automation.app.pnc.persistence.chat_archive_state import (
+    ChatArchiveSchemaError,
+    ChatArchiveState,
+    ChatTranscriptEvidence,
+    NormalizedPlayerChatEntry,
+    VisibleChatSnapshot,
+    canonical_json_bytes,
+    decode_json_object,
+    decode_state_document,
+    state_document,
+    state_bytes,
+)
 from pnc_automation.app.pnc.persistence.chat_archive_transaction import (
     ChatArchiveConsistencyError,
     ChatArchivePublicationError,
-    ChatArchiveSchemaError,
     ChatStreamIdentity,
     PendingChatTransaction,
-    canonical_json_bytes,
-    decode_json_object,
     load_pending,
     resolve_root_relative,
     write_pending,
@@ -29,37 +45,6 @@ from pnc_automation.app.pnc.persistence.chat_archive_transaction import (
 from pnc_automation.core.infra.storage.atomic_file import atomic_write_bytes
 from pnc_automation.core.infra.storage.artifact_naming import format_account_artifact_directory
 from pnc_automation.core.infra.storage.file_lock import NativePathLockManager
-
-
-@dataclass(frozen=True, slots=True)
-class NormalizedPlayerChatEntry:
-    """Represents one normalized visible player-chat row used for overlap and transcript writes."""
-
-    sender_name: str
-    message_text: str
-    visible_order: int
-
-    def content_key(self) -> tuple[str, str]:
-        """Returns the normalized sender/message identity used for overlap comparisons."""
-
-        return (normalize_chat_text(self.sender_name), normalize_chat_text(self.message_text))
-
-
-@dataclass(frozen=True, slots=True)
-class VisibleChatSnapshot:
-    """Captures one canonical normalized visible-window snapshot for overlap detection."""
-
-    entries: tuple[NormalizedPlayerChatEntry, ...]
-    fingerprint: str
-
-
-@dataclass(frozen=True, slots=True)
-class ChatArchiveState:
-    """Carries the persisted prior visible window used for one channel/day overlap decision."""
-
-    snapshot: VisibleChatSnapshot
-    last_captured_at: datetime | None = None
-    gap_detected: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,6 +64,17 @@ class StoredChatArchiveUpdate:
         """Returns whether the heartbeat appended player transcript content."""
 
         return bool(self.appended_entries)
+
+
+@dataclass(frozen=True, slots=True)
+class ChatRecoveryResult:
+    """Reports a completed recovery without mixing its rows into the current call."""
+
+    archive_day: str
+    captured_at: datetime
+    snapshot: VisibleChatSnapshot
+    transcript_path: Path
+    state_path: Path
 
 
 @dataclass(slots=True)
@@ -138,15 +134,34 @@ class ChatArchiveStore:
             lock_manager=self.lock_manager,
         )
         with scope.lock():
-            self._recover_pending(scope=scope, account_id=account_id, castle=castle, channel=channel)
+            recovered = self._recover_pending(scope=scope, account_id=account_id, castle=castle, channel=channel)
+            if recovered is not None:
+                self._reject_stale_observation(
+                    ChatArchiveState(snapshot=recovered.snapshot, last_captured_at=recovered.captured_at),
+                    captured_at,
+                    snapshot,
+                )
+            self._validate_chat_directory(directory)
             directory.mkdir(parents=True, exist_ok=True)
-            previous_state = self._load_overlap_baseline_state(
-                state_path=state_path,
-                account_id=account_id,
-                castle=castle,
-                channel=channel,
-                captured_at=captured_at,
+            current_state = self._load_state(
+                state_path,
+                transcript_path=transcript_path,
+                archive_day=captured_at.astimezone().strftime("%Y-%m-%d"),
             )
+            previous_state = current_state
+            if previous_state is None:
+                previous_day = (captured_at.astimezone() - timedelta(days=1)).strftime("%Y-%m-%d")
+                previous_directory = self._build_directory_for_local_day(
+                    account_id=account_id,
+                    castle=castle,
+                    channel=channel,
+                    local_day=previous_day,
+                )
+                previous_state = self._load_state(
+                    previous_directory / "state.json",
+                    transcript_path=previous_directory / "transcript.log",
+                    archive_day=previous_day,
+                )
             self._reject_stale_observation(previous_state, captured_at, snapshot)
             persisted_snapshot = previous_state.snapshot if previous_state is not None and not snapshot.entries else snapshot
             appended_entries, gap_detected = _compute_snapshot_delta(
@@ -175,9 +190,15 @@ class ChatArchiveStore:
                     screenshot_path=screenshot_path,
                 )
             else:
+                retained_evidence = None if current_state is None else current_state.transcript_evidence
                 self._write_state(
                     state_path,
-                    ChatArchiveState(snapshot=persisted_snapshot, last_captured_at=captured_at, gap_detected=gap_detected),
+                    ChatArchiveState(
+                        snapshot=persisted_snapshot,
+                        last_captured_at=captured_at,
+                        gap_detected=gap_detected,
+                        transcript_evidence=retained_evidence,
+                    ),
                 )
         return StoredChatArchiveUpdate(
             directory=directory,
@@ -204,20 +225,30 @@ class ChatArchiveStore:
     ) -> None:
         """Prepares, appends, publishes state, and retires one chat transaction."""
 
+        self._validate_chat_file(transcript_path, allowed_names={"transcript.log"}, allow_missing=True)
+        self._validate_chat_file(state_path, allowed_names={"state.json"}, allow_missing=True)
+        self._validate_managed_file(screenshot_path, allow_missing=False)
         existing_transcript = transcript_path.read_bytes() if transcript_path.exists() else b""
         if transcript_path.exists():
             _validate_transcript_bytes(existing_transcript)
         prior_state_bytes = state_path.read_bytes() if state_path.is_file() else None
-        prior_state: ChatArchiveState | None = None
         if prior_state_bytes is not None:
-            prior_state = _state_from_document(decode_json_object(prior_state_bytes, field_name="state"))
-            if prior_state.snapshot.entries and not transcript_path.exists():
-                raise ChatArchiveConsistencyError("Chat archive state has visible rows but its transcript is missing.")
-        next_state = ChatArchiveState(snapshot=snapshot, last_captured_at=captured_at, gap_detected=gap_detected)
-        next_state_document = _state_document(next_state)
-        next_state_bytes = canonical_json_bytes(next_state_document)
+            decode_state_document(decode_json_object(prior_state_bytes, field_name="state"), allow_legacy=True)
+        next_transcript_length = len(existing_transcript)
         append_bytes = _format_append_bytes(captured_at=captured_at, entries=appended_entries)
-        relative_screenshot = screenshot_path.resolve().relative_to(self.root).as_posix()
+        next_state = ChatArchiveState(
+            snapshot=snapshot,
+            last_captured_at=captured_at,
+            gap_detected=gap_detected,
+            transcript_evidence=ChatTranscriptEvidence(
+                exists=True,
+                length=next_transcript_length + len(append_bytes),
+                sha256=hashlib.sha256(existing_transcript + append_bytes).hexdigest(),
+            ),
+        )
+        next_state_document = state_document(next_state)
+        next_state_bytes = state_bytes(next_state)
+        relative_screenshot = screenshot_path.absolute().relative_to(self.root).as_posix()
         transaction = PendingChatTransaction(
             operation_id=uuid.uuid4().hex,
             stream_identity=ChatStreamIdentity(
@@ -245,11 +276,19 @@ class ChatArchiveStore:
         self._fault("after_state_publish")
         self._retire_pending(scope.pending_path)
 
-    def _recover_pending(self, *, scope: ArchiveOwnershipScope, account_id: str, castle: CastleIdentity, channel: ChatChannel) -> None:
+    def _recover_pending(
+        self,
+        *,
+        scope: ArchiveOwnershipScope,
+        account_id: str,
+        castle: CastleIdentity,
+        channel: ChatChannel,
+    ) -> ChatRecoveryResult | None:
         """Finishes one published pending record exactly once or fails closed."""
 
+        self._validate_control_file(scope.pending_path, allow_missing=True)
         if not scope.pending_path.exists():
-            return
+            return None
         transaction = load_pending(scope.pending_path)
         _validate_state_bytes(canonical_json_bytes(transaction.next_state))
         expected_identity = ChatStreamIdentity(
@@ -268,8 +307,15 @@ class ChatArchiveStore:
         transcript_path = directory / "transcript.log"
         state_path = directory / "state.json"
         screenshot_path = resolve_root_relative(self.root, transaction.screenshot_relative_path)
-        if screenshot_path.parent != (directory / "screenshots").resolve():
+        self._validate_chat_directory(directory)
+        self._validate_chat_file(transcript_path, allowed_names={"transcript.log"}, allow_missing=True)
+        self._validate_chat_file(state_path, allowed_names={"state.json"}, allow_missing=True)
+        if screenshot_path.parent != (directory / "screenshots").absolute():
             raise ChatArchiveConsistencyError("Chat pending screenshot path does not match its recorded stream and day.")
+        try:
+            self._validate_managed_file(screenshot_path, allow_missing=False)
+        except ArchiveOwnershipError as error:
+            raise ChatArchiveConsistencyError("Chat pending screenshot path is not a safe managed file.") from error
         if not screenshot_path.is_file() or screenshot_path.stat().st_size != transaction.screenshot_length:
             raise ChatArchiveConsistencyError("Chat pending screenshot is missing or incomplete.")
         if _sha256_file(screenshot_path) != transaction.screenshot_sha256:
@@ -284,16 +330,34 @@ class ChatArchiveStore:
         if not old_state and not next_state:
             raise ChatArchiveConsistencyError("Chat pending recovery found an unrelated or corrupt target state.")
         status = _classify_transcript(transcript_path, transaction)
+        if status == "complete":
+            _validate_state_transcript_evidence(transaction.next_state, transcript_path)
         if next_state:
             if status != "complete":
                 raise ChatArchiveConsistencyError("Chat target state is published before its complete transcript append.")
+            self._flush_validated_transcript(transcript_path)
             self._retire_pending(scope.pending_path)
-            return
+            return ChatRecoveryResult(
+                archive_day=transaction.archive_day,
+                captured_at=transaction.captured_at,
+                snapshot=_state_from_document(transaction.next_state).snapshot,
+                transcript_path=transcript_path,
+                state_path=state_path,
+            )
         if status != "complete":
             self._append_pending_bytes(transcript_path, transaction)
+        else:
+            self._flush_validated_transcript(transcript_path)
         atomic_write_bytes(state_path, canonical_json_bytes(transaction.next_state), prefix="state-", suffix=".tmp")
         self._fault("after_state_publish")
         self._retire_pending(scope.pending_path)
+        return ChatRecoveryResult(
+            archive_day=transaction.archive_day,
+            captured_at=transaction.captured_at,
+            snapshot=_state_from_document(transaction.next_state).snapshot,
+            transcript_path=transcript_path,
+            state_path=state_path,
+        )
 
     def _append_pending_bytes(self, transcript_path: Path, transaction: PendingChatTransaction) -> None:
         """Appends only the still-missing tail of an exact pending byte payload."""
@@ -313,6 +377,7 @@ class ChatArchiveStore:
         remaining = transaction.append_bytes[suffix_length:]
         if remaining:
             transcript_path.parent.mkdir(parents=True, exist_ok=True)
+            self._validate_chat_file(transcript_path, allowed_names={"transcript.log"}, allow_missing=True)
             with transcript_path.open("r+b" if transcript_path.exists() else "w+b", buffering=0) as handle:
                 handle.seek(0, os.SEEK_END)
                 if handle.tell() != len(current):
@@ -328,6 +393,14 @@ class ChatArchiveStore:
         _validate_transcript_bytes(final_bytes)
         if len(final_bytes) != transaction.previous_offset + transaction.append_length:
             raise ChatArchiveConsistencyError("Chat transcript append did not reach its recorded byte length.")
+        self._fault("after_transcript_flush")
+
+    def _flush_validated_transcript(self, transcript_path: Path) -> None:
+        """Re-flushes complete bytes before state publication or journal retirement."""
+
+        with transcript_path.open("r+b", buffering=0) as handle:
+            handle.flush()
+            os.fsync(handle.fileno())
         self._fault("after_transcript_flush")
 
     def _retire_pending(self, pending_path: Path) -> None:
@@ -359,42 +432,43 @@ class ChatArchiveStore:
             castle_name=castle.castle_name,
         ) / chat_channel_archive_directory(channel)
 
-    def _load_overlap_baseline_state(
-        self,
-        *,
-        state_path: Path,
-        account_id: str,
-        castle: CastleIdentity,
-        channel: ChatChannel,
-        captured_at: datetime,
-    ) -> ChatArchiveState | None:
-        """Loads current-day state or the immediate prior-day overlap baseline."""
-
-        current_state = self._load_state(state_path)
-        if current_state is not None:
-            return current_state
-        previous_day = (captured_at.astimezone() - timedelta(days=1)).strftime("%Y-%m-%d")
-        return self._load_state(
-            self._build_directory_for_local_day(
-                account_id=account_id,
-                castle=castle,
-                channel=channel,
-                local_day=previous_day,
-            ) / "state.json"
-        )
-
-    def _load_state(self, state_path: Path) -> ChatArchiveState | None:
+    def _load_state(self, state_path: Path, *, transcript_path: Path, archive_day: str) -> ChatArchiveState | None:
         """Loads and strictly validates one complete persisted state document."""
 
-        if not state_path.is_file():
+        try:
+            self._validate_chat_file(state_path, allowed_names={"state.json"}, allow_missing=True)
+            self._validate_chat_file(transcript_path, allowed_names={"transcript.log"}, allow_missing=True)
+        except ArchiveOwnershipError as error:
+            raise ChatArchiveConsistencyError("Chat archive state or transcript path is not a safe managed path.") from error
+        if not state_path.exists():
+            if transcript_path.exists():
+                raise ChatArchiveConsistencyError("Chat archive transcript exists without a validating state document.")
             return None
         try:
-            return _state_from_document(decode_json_object(state_path.read_bytes(), field_name="state"))
+            decoded = decode_state_document(decode_json_object(state_path.read_bytes(), field_name="state"), allow_legacy=True)
+            state = decoded.state
+            if state.last_captured_at is not None and state.last_captured_at.astimezone().strftime("%Y-%m-%d") != archive_day:
+                raise ChatArchiveSchemaError("Chat archive state timestamp does not match its local-day directory.")
+            if decoded.legacy:
+                if state.snapshot.entries:
+                    evidence = _read_complete_transcript_evidence(transcript_path)
+                    state = ChatArchiveState(
+                        snapshot=state.snapshot,
+                        last_captured_at=state.last_captured_at,
+                        gap_detected=state.gap_detected,
+                        transcript_evidence=evidence,
+                    )
+                elif transcript_path.exists():
+                    raise ChatArchiveConsistencyError("Legacy empty chat state has an unexpected target-day transcript.")
+            else:
+                _validate_state_transcript_evidence(state, transcript_path)
+            return state
         except (OSError, ChatArchiveSchemaError, ValueError, TypeError) as error:
             raise ChatArchiveConsistencyError("Chat archive state is malformed.") from error
 
     def _write_state(self, state_path: Path, state: ChatArchiveState) -> None:
-        atomic_write_bytes(state_path, canonical_json_bytes(_state_document(state)), prefix="state-", suffix=".tmp")
+        self._validate_chat_file(state_path, allowed_names={"state.json"}, allow_missing=True)
+        atomic_write_bytes(state_path, state_bytes(state), prefix="state-", suffix=".tmp")
 
     def _persist_screenshot(
         self,
@@ -418,12 +492,16 @@ class ChatArchiveStore:
         if not screenshot_payload:
             raise ValueError("ChatArchiveStore requires a non-empty screenshot payload for a change.")
         screenshots_directory = directory / "screenshots"
+        self._validate_chat_directory(directory)
+        validate_managed_path(self.root, screenshots_directory, allow_missing_leaf=True)
         screenshots_directory.mkdir(parents=True, exist_ok=True)
+        validate_managed_path(self.root, screenshots_directory, require_directory=True)
         extension = screenshot_extension.lstrip(".") or "png"
         candidate = screenshots_directory / f"{captured_at.astimezone(UTC).strftime('%Y%m%dT%H%M%SZ')}_{snapshot.fingerprint}.{extension}"
         digest = hashlib.sha256(screenshot_payload).hexdigest()
         for suffix in range(10000):
             selected = candidate if suffix == 0 else screenshots_directory / f"{candidate.stem}-{suffix}{candidate.suffix}"
+            self._validate_managed_file(selected, allow_missing=True)
             if selected.exists():
                 if selected.is_file() and selected.stat().st_size == len(screenshot_payload) and _sha256_file(selected) == digest:
                     return selected
@@ -437,56 +515,70 @@ class ChatArchiveStore:
             return
         if captured_at < previous_state.last_captured_at:
             raise ChatArchiveConsistencyError("Chat observation is older than the recovered archive baseline.")
-        if captured_at == previous_state.last_captured_at and snapshot.entries != previous_state.snapshot.entries:
+        if (
+            captured_at == previous_state.last_captured_at
+            and not _equal_timestamp_observation_is_allowed(previous_state.snapshot, snapshot)
+        ):
             raise ChatArchiveConsistencyError("Chat observation timestamp is reused with different content.")
 
+    def _validate_chat_directory(self, directory: Path) -> None:
+        try:
+            validate_chat_archive_directory(self.root, directory, allow_missing=True)
+        except ArchiveOwnershipError as error:
+            raise ChatArchiveConsistencyError("Chat archive directory is not a safe canonical path.") from error
 
-def _state_document(state: ChatArchiveState) -> dict[str, Any]:
-    return {
-        "last_captured_at": None if state.last_captured_at is None else state.last_captured_at.isoformat(),
-        "gap_detected": state.gap_detected,
-        "snapshot": {"fingerprint": state.snapshot.fingerprint, "entries": [asdict(entry) for entry in state.snapshot.entries]},
-    }
+    def _validate_chat_file(self, path: Path, *, allowed_names: set[str], allow_missing: bool) -> None:
+        try:
+            validate_chat_archive_file(self.root, path, allowed_names=allowed_names, allow_missing=allow_missing)
+        except ArchiveOwnershipError as error:
+            raise ChatArchiveConsistencyError("Chat archive file is not a safe canonical path.") from error
+
+    def _validate_control_file(self, path: Path, *, allow_missing: bool) -> None:
+        try:
+            validate_managed_path(self.root, path, allow_missing_leaf=allow_missing, require_file=not allow_missing)
+        except ArchiveOwnershipError as error:
+            raise ChatArchiveConsistencyError("Chat archive control path is not safe.") from error
+
+    def _validate_managed_file(self, path: Path, *, allow_missing: bool) -> None:
+        try:
+            validate_managed_path(self.root, path, allow_missing_leaf=allow_missing, require_file=not allow_missing)
+        except ArchiveOwnershipError as error:
+            raise ChatArchiveConsistencyError("Chat archive managed path is not safe.") from error
 
 
 def _state_from_document(document: dict[str, Any]) -> ChatArchiveState:
-    if set(document) - {"last_captured_at", "gap_detected", "snapshot"} or "snapshot" not in document:
-        raise ChatArchiveSchemaError("Chat archive state has an unsupported or missing field.")
-    snapshot_document = _require_mapping(document["snapshot"], field_name="snapshot")
-    if set(snapshot_document) != {"fingerprint", "entries"} or not isinstance(snapshot_document["entries"], list):
-        raise ChatArchiveSchemaError("Chat archive state snapshot has an invalid schema.")
-    entries: list[NormalizedPlayerChatEntry] = []
-    for index, item in enumerate(snapshot_document["entries"]):
-        if not isinstance(item, dict):
-            raise ChatArchiveSchemaError(f"Chat archive state snapshot entry {index} must be a mapping.")
-        entries.append(
-            NormalizedPlayerChatEntry(
-                sender_name=_require_non_empty_chat_value(item.get("sender_name"), field_name="sender_name"),
-                message_text=_require_non_empty_chat_value(item.get("message_text"), field_name="message_text"),
-                visible_order=_require_non_negative_int(item.get("visible_order"), field_name="visible_order"),
-            )
-        )
-    captured = document.get("last_captured_at")
-    if captured is not None and not isinstance(captured, str):
-        raise ChatArchiveSchemaError("Chat archive state last_captured_at must be an ISO timestamp or null.")
-    last_captured_at = None if captured is None else datetime.fromisoformat(captured)
-    if last_captured_at is not None and (last_captured_at.tzinfo is None or last_captured_at.utcoffset() is None):
-        raise ChatArchiveSchemaError("Chat archive state last_captured_at must include a timezone.")
-    gap_detected = document.get("gap_detected", False)
-    if type(gap_detected) is not bool:
-        raise ChatArchiveSchemaError("Chat archive state gap_detected must be a boolean.")
-    return ChatArchiveState(
-        snapshot=VisibleChatSnapshot(
-            entries=tuple(entries),
-            fingerprint=_require_non_empty_chat_value(snapshot_document["fingerprint"], field_name="fingerprint"),
-        ),
-        last_captured_at=last_captured_at,
-        gap_detected=gap_detected,
-    )
+    return decode_state_document(document, allow_legacy=True).state
 
 
 def _validate_state_bytes(payload: bytes) -> None:
-    _state_from_document(decode_json_object(payload, field_name="state"))
+    decode_state_document(decode_json_object(payload, field_name="state"), allow_legacy=False)
+
+
+def _read_complete_transcript_evidence(path: Path) -> ChatTranscriptEvidence:
+    """Validates and fingerprints one legacy transcript before state upgrade."""
+
+    if not path.exists() or not path.is_file():
+        raise ChatArchiveConsistencyError("Legacy chat state claims history but its transcript is missing.")
+    data = path.read_bytes()
+    _validate_transcript_bytes(data)
+    return ChatTranscriptEvidence(exists=True, length=len(data), sha256=hashlib.sha256(data).hexdigest())
+
+
+def _validate_state_transcript_evidence(state: ChatArchiveState | dict[str, Any], transcript_path: Path) -> None:
+    """Checks target-day transcript bytes against the canonical state evidence."""
+
+    typed_state = state if isinstance(state, ChatArchiveState) else _state_from_document(state)
+    evidence = typed_state.transcript_evidence
+    if evidence is None:
+        if transcript_path.exists():
+            raise ChatArchiveConsistencyError("Chat state declares no target-day transcript, but transcript bytes exist.")
+        return
+    if not transcript_path.exists() or not transcript_path.is_file():
+        raise ChatArchiveConsistencyError("Chat state transcript evidence points to a missing transcript.")
+    data = transcript_path.read_bytes()
+    _validate_transcript_bytes(data)
+    if len(data) != evidence.length or hashlib.sha256(data).hexdigest() != evidence.sha256:
+        raise ChatArchiveConsistencyError("Chat state transcript evidence does not match the committed transcript.")
 
 
 def _compute_snapshot_delta(*, previous: VisibleChatSnapshot | None, current: VisibleChatSnapshot) -> tuple[tuple[NormalizedPlayerChatEntry, ...], bool]:
@@ -512,6 +604,14 @@ def _entries_match(previous_entries: tuple[NormalizedPlayerChatEntry, ...], curr
     if len(previous_entries) != len(current_entries):
         return False
     return all(previous.content_key() == current.content_key() for previous, current in zip(previous_entries, current_entries, strict=True))
+
+
+def _equal_timestamp_observation_is_allowed(previous: VisibleChatSnapshot, current: VisibleChatSnapshot) -> bool:
+    """Allows only normalized repeats and empty observations retaining history."""
+
+    if _entries_match(previous.entries, current.entries):
+        return True
+    return bool(previous.entries) and not current.entries
 
 
 def _format_append_bytes(*, captured_at: datetime, entries: tuple[NormalizedPlayerChatEntry, ...]) -> bytes:
@@ -581,12 +681,6 @@ def _sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
-
-
-def _require_mapping(value: object, *, field_name: str) -> dict[str, Any]:
-    if isinstance(value, dict):
-        return value
-    raise ChatArchiveSchemaError(f"Chat archive state field '{field_name}' must be a mapping.")
 
 
 def _require_non_empty_chat_value(value: object, *, field_name: str) -> str:

@@ -4,14 +4,20 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 from dataclasses import dataclass, field
-from datetime import UTC
+from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
 from pnc_automation.app.pnc.domain.mail import MailArchiveMode, MailArchiveRecord, thread_partner_directory_name
-from pnc_automation.app.pnc.persistence.archive_ownership import mail_archive_scope
+from pnc_automation.app.pnc.persistence.archive_ownership import (
+    ArchiveOwnershipError,
+    mail_archive_scope,
+    validate_managed_path,
+)
 from pnc_automation.core.infra.storage.atomic_file import atomic_write_bytes
 from pnc_automation.core.infra.storage.file_lock import NativePathLockManager
 from pnc_automation.core.infra.storage.path_segments import sanitize_artifact_segment
@@ -19,6 +25,23 @@ from pnc_automation.core.infra.storage.path_segments import sanitize_artifact_se
 
 class MailArchiveStorageError(RuntimeError):
     """Raised when a mail archive cannot prove a complete matching record."""
+
+
+class MailArchiveCandidateStatus(StrEnum):
+    """Content-free classification used while inspecting mail candidates."""
+
+    COMPLETE = "complete"
+    INCOMPLETE = "incomplete"
+    CORRUPT = "corrupt"
+    CONTRADICTORY = "contradictory"
+
+
+@dataclass(frozen=True, slots=True)
+class MailArchiveCandidateDiagnostic:
+    """Identifies one candidate disposition without exposing metadata or payload content."""
+
+    candidate_name: str
+    status: MailArchiveCandidateStatus
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,12 +62,19 @@ class MailArchiveStore:
 
     root: Path
     lock_manager: NativePathLockManager = field(default_factory=NativePathLockManager, repr=False)
+    _last_candidate_diagnostics: tuple[MailArchiveCandidateDiagnostic, ...] = field(default=(), init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Resolves and creates the durable mail archive root."""
 
         self.root = self.root.expanduser().resolve()
         self.root.mkdir(parents=True, exist_ok=True)
+
+    @property
+    def last_candidate_diagnostics(self) -> tuple[MailArchiveCandidateDiagnostic, ...]:
+        """Returns content-free dispositions from the most recent fingerprint inspection."""
+
+        return self._last_candidate_diagnostics
 
     def has_fingerprint(self, *, active_castle: str, mailbox_type: str, fingerprint: str) -> bool:
         """Returns whether one fully validated legacy or versioned capture exists."""
@@ -76,12 +106,6 @@ class MailArchiveStore:
         if not isinstance(archive_mode, MailArchiveMode):
             raise TypeError("MailArchiveStore.archive_mode must be a MailArchiveMode.")
         requires_screenshot = archive_mode in {MailArchiveMode.SCREENSHOT, MailArchiveMode.BOTH}
-        screenshot_bytes: bytes | None = None
-        if requires_screenshot:
-            if screenshot_source_path is None or not screenshot_source_path.is_file():
-                raise MailArchiveStorageError("Mail screenshot archive mode requires an existing source payload.")
-            screenshot_bytes = screenshot_source_path.read_bytes()
-        text_bytes = record.normalized_thread_text.encode("utf-8") if archive_mode in {MailArchiveMode.TEXT, MailArchiveMode.BOTH} else None
         scope = mail_archive_scope(
             self.root,
             active_castle=record.active_castle,
@@ -97,15 +121,33 @@ class MailArchiveStore:
             )
             if existing_directory is not None and skip_existing:
                 return self._stored_record(record, existing_directory, created=False)
+            screenshot_bytes: bytes | None = None
+            if requires_screenshot:
+                if screenshot_source_path is None or not screenshot_source_path.is_file():
+                    raise MailArchiveStorageError("Mail screenshot archive mode requires an existing source payload.")
+                screenshot_bytes = screenshot_source_path.read_bytes()
+                if not screenshot_bytes:
+                    raise MailArchiveStorageError("Mail screenshot archive mode requires a non-empty source payload.")
+            text_bytes = (
+                record.normalized_thread_text.encode("utf-8")
+                if archive_mode in {MailArchiveMode.TEXT, MailArchiveMode.BOTH}
+                else None
+            )
             directory = self._allocate_directory(record)
             directory.mkdir(parents=True, exist_ok=False)
+            try:
+                validate_managed_path(self.root, directory, require_directory=True)
+            except ArchiveOwnershipError as error:
+                raise MailArchiveStorageError("Mail archive destination became an unsafe managed path.") from error
             thread_text_path: Path | None = None
             screenshot_path: Path | None = None
             if text_bytes is not None:
                 thread_text_path = directory / "thread.txt"
+                validate_managed_path(self.root, thread_text_path, allow_missing_leaf=True)
                 atomic_write_bytes(thread_text_path, text_bytes, prefix="thread-", suffix=".tmp")
             if screenshot_bytes is not None:
                 screenshot_path = directory / "thread.png"
+                validate_managed_path(self.root, screenshot_path, allow_missing_leaf=True)
                 atomic_write_bytes(screenshot_path, screenshot_bytes, prefix="screenshot-", suffix=".tmp")
             metadata = self._metadata_document(
                 record=record,
@@ -113,8 +155,10 @@ class MailArchiveStore:
                 thread_text_path=thread_text_path,
                 screenshot_path=screenshot_path,
             )
+            metadata_path = directory / "metadata.json"
+            validate_managed_path(self.root, metadata_path, allow_missing_leaf=True)
             atomic_write_bytes(
-                directory / "metadata.json",
+                metadata_path,
                 (json.dumps(metadata, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8"),
                 prefix="metadata-",
                 suffix=".tmp",
@@ -175,9 +219,23 @@ class MailArchiveStore:
 
     def _allocate_directory(self, record: MailArchiveRecord) -> Path:
         base = self._build_directory(record)
+        try:
+            validate_managed_path(self.root, base.parent, allow_missing_leaf=True)
+        except ArchiveOwnershipError as error:
+            raise MailArchiveStorageError("Mail archive destination has an unsafe managed path.") from error
         for suffix in range(10000):
             candidate = base if suffix == 0 else base.with_name(f"{base.name}-{suffix}")
-            if not candidate.exists():
+            if os.path.lexists(candidate):
+                try:
+                    validate_managed_path(self.root, candidate, require_directory=True)
+                except ArchiveOwnershipError as error:
+                    raise MailArchiveStorageError("Mail archive destination has an unsafe managed path.") from error
+                continue
+            try:
+                validate_managed_path(self.root, candidate, allow_missing_leaf=True)
+            except ArchiveOwnershipError as error:
+                raise MailArchiveStorageError("Mail archive destination has an unsafe managed path.") from error
+            if not os.path.lexists(candidate):
                 return candidate
         raise MailArchiveStorageError("Unable to allocate a collision-safe mail archive directory.")
 
@@ -201,99 +259,191 @@ class MailArchiveStore:
 
         castle_segment = sanitize_artifact_segment(active_castle)
         if not self.root.exists():
+            self._last_candidate_diagnostics = ()
             return None
         candidates = []
+        diagnostics: list[MailArchiveCandidateDiagnostic] = []
         pattern = re.compile(rf"^\d{{8}}T\d{{6}}Z_{re.escape(fingerprint)}(?:-\d+)?$")
         for metadata_path in self.root.rglob("metadata.json"):
             directory = metadata_path.parent
             if directory.name == ".archive-control" or not pattern.fullmatch(directory.name):
                 continue
             relative = directory.relative_to(self.root).parts
-            if len(relative) != 5 or relative[1] != castle_segment or relative[2] != mailbox_type:
+            if (
+                len(relative) != 5
+                or os.path.normcase(relative[1]) != os.path.normcase(castle_segment)
+                or os.path.normcase(relative[2]) != os.path.normcase(mailbox_type)
+            ):
                 continue
-            status = _classify_candidate(
-                directory,
-                active_castle=active_castle,
-                mailbox_type=mailbox_type,
-                fingerprint=fingerprint,
-            )
-            if status == "complete":
+            try:
+                validate_managed_path(self.root, directory, require_directory=True)
+                status = _classify_candidate(
+                    directory,
+                    active_castle=active_castle,
+                    mailbox_type=mailbox_type,
+                    fingerprint=fingerprint,
+                    root=self.root,
+                )
+            except ArchiveOwnershipError:
+                status = MailArchiveCandidateStatus.CORRUPT
+            diagnostics.append(MailArchiveCandidateDiagnostic(candidate_name=directory.name, status=status))
+            if status == MailArchiveCandidateStatus.COMPLETE:
                 candidates.append(directory)
+        self._last_candidate_diagnostics = tuple(sorted(diagnostics, key=lambda item: item.candidate_name))
         return sorted(candidates)[0] if candidates else None
 
 
-def _classify_candidate(directory: Path, *, active_castle: str, mailbox_type: str, fingerprint: str) -> str:
+def _classify_candidate(
+    directory: Path,
+    *,
+    active_castle: str,
+    mailbox_type: str,
+    fingerprint: str,
+    root: Path,
+) -> MailArchiveCandidateStatus:
     metadata_path = directory / "metadata.json"
     try:
+        validate_managed_path(root, metadata_path, require_file=True)
         metadata = _read_json_object(metadata_path.read_bytes())
-    except (OSError, ValueError, TypeError, json.JSONDecodeError):
-        return "invalid"
-    if any(metadata.get(field) != expected for field, expected in {
-        "active_castle": active_castle,
-        "mailbox_type": mailbox_type,
-        "fingerprint": fingerprint,
-    }.items()):
-        return "contradictory"
-    if metadata.get("schema_version") == 2:
-        return _classify_versioned_candidate(directory, metadata)
-    if "schema_version" in metadata:
-        return "invalid"
-    return _classify_legacy_candidate(directory, metadata)
+    except (ArchiveOwnershipError, OSError, ValueError, TypeError, UnicodeError, json.JSONDecodeError):
+        return MailArchiveCandidateStatus.CORRUPT
+    try:
+        if not (
+            isinstance(metadata.get("active_castle"), str)
+            and os.path.normcase(metadata["active_castle"]) == os.path.normcase(active_castle)
+            and isinstance(metadata.get("mailbox_type"), str)
+            and os.path.normcase(metadata["mailbox_type"]) == os.path.normcase(mailbox_type)
+            and metadata.get("fingerprint") == fingerprint
+        ):
+            return MailArchiveCandidateStatus.CONTRADICTORY
+        if metadata.get("schema_version") == 2:
+            return _classify_versioned_candidate(directory, metadata, root=root)
+        if "schema_version" in metadata:
+            return MailArchiveCandidateStatus.CORRUPT
+        return _classify_legacy_candidate(directory, metadata, root=root)
+    except (OSError, UnicodeError, ValueError, TypeError):
+        return MailArchiveCandidateStatus.CORRUPT
 
 
-def _classify_versioned_candidate(directory: Path, metadata: dict[str, Any]) -> str:
-    if type(metadata.get("schema_version")) is not int or metadata["schema_version"] != 2:
-        return "invalid"
+def _classify_versioned_candidate(
+    directory: Path,
+    metadata: dict[str, Any],
+    *,
+    root: Path,
+) -> MailArchiveCandidateStatus:
+    expected_keys = {
+        "schema_version",
+        "archive_mode",
+        "account_id",
+        "pnc_account_id",
+        "active_castle",
+        "mailbox_type",
+        "sender_name",
+        "thread_timestamp_text",
+        "fingerprint",
+        "captured_at",
+        "normalized_thread_text",
+        "source_artifact_paths",
+        "manifest",
+    }
+    if set(metadata) != expected_keys or type(metadata.get("schema_version")) is not int or metadata["schema_version"] != 2:
+        return MailArchiveCandidateStatus.CORRUPT
     try:
         mode = MailArchiveMode(metadata["archive_mode"])
     except (KeyError, ValueError, TypeError):
-        return "invalid"
+        return MailArchiveCandidateStatus.CORRUPT
+    if not all(
+        isinstance(metadata.get(field), str) and bool(metadata[field].strip())
+        for field in ("account_id", "pnc_account_id", "active_castle", "mailbox_type", "sender_name", "fingerprint", "captured_at", "normalized_thread_text")
+    ):
+        return MailArchiveCandidateStatus.CORRUPT
+    if not _valid_fingerprint(metadata["fingerprint"]):
+        return MailArchiveCandidateStatus.CORRUPT
+    try:
+        captured_at = datetime.fromisoformat(metadata["captured_at"])
+    except ValueError:
+        return MailArchiveCandidateStatus.CORRUPT
+    if captured_at.tzinfo is None or captured_at.utcoffset() is None:
+        return MailArchiveCandidateStatus.CORRUPT
+    if metadata.get("thread_timestamp_text") is not None and not isinstance(metadata["thread_timestamp_text"], str):
+        return MailArchiveCandidateStatus.CORRUPT
+    if not isinstance(metadata.get("source_artifact_paths"), list) or not all(isinstance(item, str) for item in metadata["source_artifact_paths"]):
+        return MailArchiveCandidateStatus.CORRUPT
     manifest = metadata.get("manifest")
     if not isinstance(manifest, list):
-        return "invalid"
+        return MailArchiveCandidateStatus.CORRUPT
     required = {"thread.txt"} if mode == MailArchiveMode.TEXT else {"thread.png"} if mode == MailArchiveMode.SCREENSHOT else {"thread.txt", "thread.png"}
     entries: dict[str, dict[str, Any]] = {}
     for item in manifest:
         if not isinstance(item, dict) or set(item) != {"path", "length", "sha256"}:
-            return "invalid"
+            return MailArchiveCandidateStatus.CORRUPT
         path = item.get("path")
         if not isinstance(path, str) or path not in {"thread.txt", "thread.png"}:
-            return "invalid"
+            return MailArchiveCandidateStatus.CORRUPT
         if path in entries or type(item.get("length")) is not int or item["length"] < 0 or not _valid_sha(item.get("sha256")):
-            return "invalid"
+            return MailArchiveCandidateStatus.CORRUPT
         entries[path] = item
     if set(entries) != required:
-        return "incomplete"
+        return MailArchiveCandidateStatus.INCOMPLETE
     for name, item in entries.items():
         path = directory / name
+        try:
+            validate_managed_path(root, path, require_file=True)
+        except ArchiveOwnershipError:
+            return MailArchiveCandidateStatus.INCOMPLETE
         if not path.is_file() or path.stat().st_size != item["length"] or _sha256_file(path) != item["sha256"]:
-            return "incomplete"
+            return MailArchiveCandidateStatus.INCOMPLETE
+        if name == "thread.png" and item["length"] == 0:
+            return MailArchiveCandidateStatus.INCOMPLETE
     text_path = directory / "thread.txt"
     if text_path.is_file():
         try:
             if text_path.read_text(encoding="utf-8") != metadata.get("normalized_thread_text"):
-                return "invalid"
+                return MailArchiveCandidateStatus.CORRUPT
         except (OSError, UnicodeDecodeError):
-            return "incomplete"
-    return "complete"
+            return MailArchiveCandidateStatus.INCOMPLETE
+    return MailArchiveCandidateStatus.COMPLETE
 
 
-def _classify_legacy_candidate(directory: Path, metadata: dict[str, Any]) -> str:
+def _classify_legacy_candidate(
+    directory: Path,
+    metadata: dict[str, Any],
+    *,
+    root: Path,
+) -> MailArchiveCandidateStatus:
     text_path = directory / "thread.txt"
     screenshot_path = directory / "thread.png"
+    try:
+        text_exists = os.path.lexists(text_path)
+        screenshot_exists = os.path.lexists(screenshot_path)
+        if text_exists:
+            validate_managed_path(root, text_path, require_file=True)
+        if screenshot_exists:
+            validate_managed_path(root, screenshot_path, require_file=True)
+    except ArchiveOwnershipError:
+        return MailArchiveCandidateStatus.CORRUPT
     if not text_path.is_file() and not screenshot_path.is_file():
-        return "incomplete"
+        return MailArchiveCandidateStatus.INCOMPLETE
     if text_path.is_file():
         try:
-            if text_path.read_text(encoding="utf-8") != metadata.get("normalized_thread_text"):
-                return "invalid"
+            if text_path.stat().st_size == 0 or not isinstance(metadata.get("normalized_thread_text"), str):
+                return MailArchiveCandidateStatus.INCOMPLETE
+            if text_path.read_text(encoding="utf-8") != metadata["normalized_thread_text"]:
+                return MailArchiveCandidateStatus.CORRUPT
         except (OSError, UnicodeDecodeError):
-            return "incomplete"
-    return "complete"
+            return MailArchiveCandidateStatus.INCOMPLETE
+    if screenshot_path.is_file() and screenshot_path.stat().st_size == 0:
+        return MailArchiveCandidateStatus.INCOMPLETE
+    return MailArchiveCandidateStatus.COMPLETE
 
 
 def _read_json_object(payload: bytes) -> dict[str, Any]:
-    return json.loads(payload.decode("utf-8"), object_pairs_hook=_reject_duplicate_keys, parse_constant=_reject_constant)
+    """Decodes metadata and rejects non-object top-level JSON values."""
+
+    document = json.loads(payload.decode("utf-8"), object_pairs_hook=_reject_duplicate_keys, parse_constant=_reject_constant)
+    if not isinstance(document, dict):
+        raise ValueError("Mail metadata must be a JSON object.")
+    return document
 
 
 def _reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
@@ -311,6 +461,10 @@ def _reject_constant(value: str) -> object:
 
 def _valid_sha(value: object) -> bool:
     return isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value) is not None
+
+
+def _valid_fingerprint(value: object) -> bool:
+    return isinstance(value, str) and re.fullmatch(r"[0-9a-f]{8}", value) is not None
 
 
 def _sha256_file(path: Path) -> str:

@@ -29,9 +29,6 @@ _ALLOWED_TRANSITIONS = {
     MutationIntentState.RECONCILED: MutationIntentState.COMMITTED,
 }
 
-_WINDOWS_REPLACE_RETRY_DELAYS = (0.01, 0.02, 0.04, 0.08, 0.16, 0.32)
-
-
 def _replace_checkpoint_file(source: Path, destination: Path) -> None:
     """Retry transient Windows denial of replacement without rewriting the payload.
 

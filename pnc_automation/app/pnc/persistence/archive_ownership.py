@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import re
+import stat
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -22,6 +23,95 @@ from pnc_automation.core.infra.storage.artifact_naming import format_account_art
 
 class ArchiveOwnershipError(RuntimeError):
     """Raised when an archive scope cannot be mapped to one canonical stream."""
+
+
+def validate_managed_path(
+    root: Path,
+    path: Path,
+    *,
+    allow_missing_leaf: bool = False,
+    require_file: bool = False,
+    require_directory: bool = False,
+) -> Path:
+    """Validates an archive path without following aliases or reparse points."""
+
+    root_path = Path(os.path.abspath(os.fspath(root.expanduser())))
+    candidate = Path(os.path.abspath(os.fspath(path.expanduser())))
+    if not root_path.exists() or not root_path.is_dir() or _is_alias(root_path):
+        raise ArchiveOwnershipError("Configured archive root must be an existing regular directory.")
+    try:
+        relative_parts = candidate.relative_to(root_path).parts
+    except ValueError as error:
+        raise ArchiveOwnershipError("Managed archive path escapes the configured archive root.") from error
+    current = root_path
+    for index, part in enumerate(relative_parts):
+        current /= part
+        if not os.path.lexists(current):
+            if not allow_missing_leaf:
+                raise ArchiveOwnershipError(f"Managed archive path component is missing: {current.name}")
+            break
+        if _is_alias(current):
+            raise ArchiveOwnershipError(f"Managed archive path cannot use a symlink or reparse point: {current.name}")
+        if index != len(relative_parts) - 1 and not current.is_dir():
+            raise ArchiveOwnershipError(f"Managed archive path component is not a directory: {current.name}")
+    if os.path.lexists(candidate):
+        if require_file and not candidate.is_file():
+            raise ArchiveOwnershipError(f"Managed archive target is not a regular file: {candidate.name}")
+        if require_directory and not candidate.is_dir():
+            raise ArchiveOwnershipError(f"Managed archive target is not a directory: {candidate.name}")
+    resolved_root = Path(os.path.realpath(root_path))
+    resolved_candidate = Path(os.path.realpath(candidate))
+    try:
+        resolved_candidate.relative_to(resolved_root)
+    except ValueError as error:
+        raise ArchiveOwnershipError("Managed archive path resolves outside the configured archive root.") from error
+    return candidate
+
+
+def validate_chat_archive_directory(root: Path, directory: Path, *, allow_missing: bool = True) -> Path:
+    """Validates the canonical day/account/castle/channel chat directory."""
+
+    root_path = Path(os.path.abspath(os.fspath(root.expanduser())))
+    candidate = Path(os.path.abspath(os.fspath(directory.expanduser())))
+    try:
+        relative = candidate.relative_to(root_path).parts
+    except ValueError as error:
+        raise ArchiveOwnershipError("Chat archive directory escapes its configured root.") from error
+    if len(relative) != 4 or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", relative[0]):
+        raise ArchiveOwnershipError("Chat archive directory does not match the canonical day/account/castle/channel layout.")
+    if relative[3] not in {"kingdom", "alliance"} or any(not item for item in relative[1:]):
+        raise ArchiveOwnershipError("Chat archive directory contains an invalid canonical path segment.")
+    return validate_managed_path(
+        root_path,
+        candidate,
+        allow_missing_leaf=allow_missing,
+        require_directory=not (allow_missing and not os.path.lexists(candidate)),
+    )
+
+
+def validate_chat_archive_file(root: Path, path: Path, *, allowed_names: set[str], allow_missing: bool = False) -> Path:
+    """Validates one managed chat file and its canonical parent directory."""
+
+    candidate = Path(os.path.abspath(os.fspath(path.expanduser())))
+    if candidate.name not in allowed_names:
+        raise ArchiveOwnershipError("Managed chat file has an unexpected name.")
+    validate_chat_archive_directory(root, candidate.parent, allow_missing=allow_missing)
+    return validate_managed_path(
+        root,
+        candidate,
+        allow_missing_leaf=allow_missing,
+        require_file=not (allow_missing and not os.path.lexists(candidate)),
+    )
+
+
+def _is_alias(path: Path) -> bool:
+    if path.is_symlink():
+        return True
+    try:
+        attributes = os.lstat(path).st_file_attributes
+    except (AttributeError, OSError):
+        return False
+    return bool(attributes & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x0400))
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,8 +148,17 @@ class ArchiveOwnershipScope:
     _active_lock: NativePathLock | None = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
-        self.root = self.root.expanduser().resolve()
+        self.root = Path(os.path.abspath(os.fspath(self.root.expanduser())))
+        validate_managed_path(self.root, self.root, require_directory=True)
+        validate_managed_path(self.root, self.control_root, allow_missing_leaf=True)
         self.control_directory.mkdir(parents=True, exist_ok=True)
+        validate_managed_path(self.root, self.control_directory, require_directory=True)
+        validate_managed_path(
+            self.root,
+            self.pending_path,
+            allow_missing_leaf=True,
+            require_file=os.path.lexists(self.pending_path),
+        )
 
     @property
     def key(self) -> str:
@@ -89,6 +188,22 @@ class ArchiveOwnershipScope:
 
         if self._active_lock is not None:
             raise ArchiveOwnershipError("Archive stream ownership cannot be re-entered by one store transaction.")
+        validate_managed_path(self.root, self.control_root, allow_missing_leaf=True)
+        validate_managed_path(self.root, self.control_directory, allow_missing_leaf=True)
+        self.control_directory.mkdir(parents=True, exist_ok=True)
+        validate_managed_path(self.root, self.control_directory, require_directory=True)
+        validate_managed_path(
+            self.root,
+            self.lock_path,
+            allow_missing_leaf=True,
+            require_file=os.path.lexists(self.lock_path),
+        )
+        validate_managed_path(
+            self.root,
+            self.pending_path,
+            allow_missing_leaf=True,
+            require_file=os.path.lexists(self.pending_path),
+        )
         acquired = self.lock_manager.acquire(self.lock_path)
         self._active_lock = acquired
         try:
@@ -153,7 +268,7 @@ def mail_archive_scope(
 def chat_scope_from_transcript_path(path: Path) -> ArchiveOwnershipScope:
     """Maps the canonical five-level chat layout to its day-independent scope."""
 
-    resolved = path.expanduser().resolve()
+    resolved = Path(os.path.abspath(os.fspath(path.expanduser())))
     if resolved.name != "transcript.log" or len(resolved.parents) < 5:
         raise ArchiveOwnershipError(
             "Managed chat cleanup requires a canonical transcript.log path beneath day/account/castle/channel directories."
@@ -163,6 +278,7 @@ def chat_scope_from_transcript_path(path: Path) -> ArchiveOwnershipScope:
         raise ArchiveOwnershipError("Managed chat cleanup could not determine a canonical archive root from the transcript path.")
     if castle_segment.name == "" or account_segment.name == "":
         raise ArchiveOwnershipError("Managed chat cleanup requires non-empty account and castle path segments.")
+    validate_chat_archive_file(root, resolved, allowed_names={"transcript.log"}, allow_missing=False)
     return ArchiveOwnershipScope(
         root=root,
         identity=ArchiveStreamIdentity(

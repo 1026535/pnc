@@ -4,10 +4,20 @@ from __future__ import annotations
 
 import unittest
 import tempfile
+import subprocess
+import sys
+import threading
+import time
+from datetime import UTC, datetime
 from pathlib import Path
+from unittest.mock import patch
 
+from pnc_automation.app.pnc.domain.castles import CastleIdentity
+from pnc_automation.app.pnc.domain.chat import ChatChannel, ChatEntryKind, ObservedChatEntry
+from pnc_automation.app.pnc.persistence.chat_archive_store import ChatArchiveStore
 from pnc_automation.app.pnc.persistence.chat_transcript_cleanup import (
     build_chat_transcript_cleanup_patterns,
+    clean_and_persist_chat_transcript,
     clean_chat_transcript_text,
     persist_cleaned_chat_transcript,
 )
@@ -88,6 +98,97 @@ class ChatTranscriptCleanupTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "pending archive recovery"):
                 persist_cleaned_chat_transcript(transcript, "")
             self.assertEqual(original, transcript.read_text(encoding="utf-8"))
+
+    def test_cleanup_read_modify_write_is_serialized_with_concurrent_store_writer(self) -> None:
+        """A writer that arrives during cleanup cannot be erased by a stale pre-lock read."""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            store = ChatArchiveStore(root / "chat")
+            castle = CastleIdentity("K1", "Castle", 22)
+            first_snapshot = store.build_snapshot((ObservedChatEntry(
+                ChatEntryKind.PLAYER, "Alice", "I crafted a blade! (Tap to View)", 0,
+            ),))
+            first = store.persist_heartbeat(
+                account_id="account", castle=castle, channel=ChatChannel.WORLD,
+                captured_at=datetime(2026, 3, 24, 10, tzinfo=UTC),
+                snapshot=first_snapshot, screenshot_payload=b"first",
+            )
+            entered = threading.Event()
+            continue_cleanup = threading.Event()
+            writer_done = threading.Event()
+            writer_errors: list[BaseException] = []
+            real_clean = __import__(
+                "pnc_automation.app.pnc.persistence.chat_transcript_cleanup",
+                fromlist=["clean_chat_transcript_text"],
+            ).clean_chat_transcript_text
+
+            def delayed_clean(*args: object, **kwargs: object):
+                entered.set()
+                self.assertTrue(continue_cleanup.wait(timeout=5))
+                return real_clean(*args, **kwargs)
+
+            def writer() -> None:
+                try:
+                    store.persist_heartbeat(
+                        account_id="account", castle=castle, channel=ChatChannel.WORLD,
+                        captured_at=datetime(2026, 3, 24, 10, 1, tzinfo=UTC),
+                        snapshot=store.build_snapshot((
+                            ObservedChatEntry(ChatEntryKind.PLAYER, "Alice", "I crafted a blade! (Tap to View)", 0),
+                            ObservedChatEntry(ChatEntryKind.PLAYER, "Bob", "kept row", 1),
+                        )),
+                        screenshot_payload=b"second",
+                    )
+                except BaseException as error:
+                    writer_errors.append(error)
+                finally:
+                    writer_done.set()
+
+            with patch(
+                "pnc_automation.app.pnc.persistence.chat_transcript_cleanup.clean_chat_transcript_text",
+                side_effect=delayed_clean,
+            ):
+                cleanup_thread = threading.Thread(
+                    target=lambda: clean_and_persist_chat_transcript(
+                        first.transcript_path,
+                        patterns=build_chat_transcript_cleanup_patterns(),
+                    )
+                )
+                cleanup_thread.start()
+                self.assertTrue(entered.wait(timeout=5))
+                writer_thread = threading.Thread(target=writer)
+                writer_thread.start()
+                time.sleep(0.1)
+                self.assertFalse(writer_done.is_set())
+                continue_cleanup.set()
+                cleanup_thread.join(timeout=5)
+                writer_thread.join(timeout=5)
+            self.assertFalse(writer_errors, writer_errors)
+            self.assertIn("kept row", first.transcript_path.read_text(encoding="utf-8"))
+
+    def test_cli_write_uses_locked_production_cleanup_path(self) -> None:
+        """The command-line write mode exercises the same synthetic managed archive path."""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            transcript = root / "2026-03-24" / "account" / "k1_castle" / "kingdom" / "transcript.log"
+            transcript.parent.mkdir(parents=True)
+            transcript.write_text(
+                "[2026-03-24T10:00:00Z] Alice: I crafted a blade! (Tap to View)\n"
+                "[2026-03-24T10:01:00Z] Bob: kept row\n",
+                encoding="utf-8",
+            )
+            tool = Path(__file__).resolve().parents[3] / "tools" / "clean_chat_transcripts.py"
+            result = subprocess.run(
+                [sys.executable, str(tool), "--write", str(transcript)],
+                cwd=Path(__file__).resolve().parents[3],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertIn("mode=write", result.stdout)
+            self.assertEqual("[2026-03-24T10:01:00Z] Bob: kept row\n", transcript.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

@@ -5,24 +5,25 @@ from __future__ import annotations
 import base64
 import binascii
 import hashlib
-import json
+import os
 import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from pnc_automation.app.pnc.persistence.chat_archive_state import (
+    ChatArchiveSchemaError,
+    canonical_json_bytes,
+    decode_json_object,
+    validate_state_document,
+)
 from pnc_automation.core.infra.storage.atomic_file import atomic_write_bytes
 
 
 MAX_PENDING_BYTES = 16 * 1024 * 1024
 MAX_APPEND_BYTES = 12 * 1024 * 1024
-_SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 _DAY_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-
-
-class ChatArchiveSchemaError(ValueError):
-    """Raised when a persisted chat state or pending record is malformed."""
 
 
 class ChatArchiveConsistencyError(RuntimeError):
@@ -40,6 +41,20 @@ class ChatStreamIdentity:
     account_segment: str
     castle_segment: str
     channel: str
+
+    def __post_init__(self) -> None:
+        """Normalizes physical path segments so case aliases share one identity."""
+
+        for name, value in (
+            ("account_segment", self.account_segment),
+            ("castle_segment", self.castle_segment),
+            ("channel", self.channel),
+        ):
+            if not isinstance(value, str) or not value or value in {".", ".."} or any(separator in value for separator in ("/", "\\")):
+                raise ChatArchiveSchemaError(f"Chat stream identity field '{name}' is unsafe.")
+        object.__setattr__(self, "account_segment", os.path.normcase(self.account_segment))
+        object.__setattr__(self, "castle_segment", os.path.normcase(self.castle_segment))
+        object.__setattr__(self, "channel", os.path.normcase(self.channel))
 
     def as_document(self) -> dict[str, str]:
         """Returns the strict JSON identity document."""
@@ -124,7 +139,7 @@ def decode_pending_bytes(payload: bytes) -> PendingChatTransaction:
 
     if len(payload) > MAX_PENDING_BYTES:
         raise ChatArchiveSchemaError("Chat pending record exceeds the maximum supported size.")
-    document = _decode_json_object(payload, field_name="pending")
+    document = decode_json_object(payload, field_name="pending")
     expected_keys = {
         "schema_version",
         "operation_id",
@@ -160,8 +175,12 @@ def decode_pending_bytes(payload: bytes) -> PendingChatTransaction:
     if _DAY_PATTERN.fullmatch(archive_day) is None:
         raise ChatArchiveSchemaError("Chat pending archive_day must be YYYY-MM-DD.")
     captured_at = _aware_datetime(document["captured_at"], "captured_at")
+    if captured_at.astimezone().strftime("%Y-%m-%d") != archive_day:
+        raise ChatArchiveSchemaError("Chat pending archive_day does not match captured_at in the local timezone.")
     transcript_existed = _exact_bool(document["transcript_existed"], "transcript_existed")
     previous_offset = _non_negative_int(document["previous_offset"], "previous_offset")
+    if not transcript_existed and previous_offset != 0:
+        raise ChatArchiveSchemaError("Chat pending absent transcripts must start at byte offset zero.")
     prefix_sha256 = _sha256(document["prefix_sha256"], "prefix_sha256")
     append_encoded = _non_empty_string(document["append_bytes_base64"], "append_bytes_base64")
     try:
@@ -186,6 +205,11 @@ def decode_pending_bytes(payload: bytes) -> PendingChatTransaction:
             raise ChatArchiveSchemaError("Chat pending prior_target_state has an invalid schema.")
         prior_state_sha256 = _sha256(prior_mapping["sha256"], "prior_target_state.sha256")
     next_state = _mapping(document["next_state"], "next_state")
+    decoded_next_state = validate_state_document(next_state, allow_legacy=False)
+    if decoded_next_state.transcript_evidence is None:
+        raise ChatArchiveSchemaError("Chat pending next_state must identify committed transcript evidence.")
+    if decoded_next_state.last_captured_at != captured_at:
+        raise ChatArchiveSchemaError("Chat pending next_state timestamp does not match captured_at.")
     next_state_sha256 = _sha256(document["next_state_sha256"], "next_state_sha256")
     if next_state_sha256 != hashlib.sha256(canonical_json_bytes(next_state)).hexdigest():
         raise ChatArchiveSchemaError("Chat pending next_state_sha256 does not match next_state.")
@@ -226,12 +250,15 @@ def load_pending(path: Path) -> PendingChatTransaction:
     """Loads and strictly validates one pending record."""
 
     try:
-        payload = path.read_bytes()
+        with path.open("rb") as handle:
+            payload = handle.read(MAX_PENDING_BYTES + 1)
     except OSError as error:
         raise ChatArchiveConsistencyError("Unable to read the chat pending record.") from error
+    if len(payload) > MAX_PENDING_BYTES:
+        raise ChatArchiveConsistencyError("Chat pending record exceeds the maximum supported size.")
     try:
         return decode_pending_bytes(payload)
-    except (ChatArchiveSchemaError, UnicodeError, json.JSONDecodeError) as error:
+    except (ChatArchiveSchemaError, UnicodeError) as error:
         raise ChatArchiveConsistencyError("Chat pending record is malformed.") from error
 
 
@@ -243,63 +270,17 @@ def write_pending(path: Path, transaction: PendingChatTransaction) -> None:
     atomic_write_bytes(path, payload, prefix="pending-", suffix=".tmp")
 
 
-def canonical_json_bytes(document: object) -> bytes:
-    """Returns the single canonical JSON byte encoding used for state and journals."""
-
-    try:
-        return json.dumps(
-            document,
-            ensure_ascii=False,
-            separators=(",", ":"),
-            sort_keys=True,
-            allow_nan=False,
-        ).encode("utf-8")
-    except (TypeError, ValueError, UnicodeEncodeError) as error:
-        raise ChatArchiveSchemaError("Chat archive document cannot be canonically encoded.") from error
-
-
-def decode_json_object(payload: bytes, *, field_name: str) -> dict[str, Any]:
-    """Decodes one duplicate-key-free JSON object for shared state validation."""
-
-    return _decode_json_object(payload, field_name=field_name)
-
-
 def resolve_root_relative(root: Path, relative_path: str) -> Path:
     """Resolves a stored archive path and rejects traversal or absolute aliases."""
 
     relative = _relative_path(relative_path, "relative_path")
-    root_resolved = root.expanduser().resolve()
-    candidate = (root_resolved / relative).resolve(strict=False)
+    root_resolved = root.expanduser().absolute()
+    candidate = root_resolved / relative
     try:
         candidate.relative_to(root_resolved)
     except ValueError as error:
         raise ChatArchiveConsistencyError("Stored chat path escapes the configured archive root.") from error
     return candidate
-
-
-def _decode_json_object(payload: bytes, *, field_name: str) -> dict[str, Any]:
-    try:
-        document = json.loads(
-            payload.decode("utf-8"),
-            object_pairs_hook=_reject_duplicate_keys,
-            parse_constant=_reject_json_constant,
-        )
-    except (UnicodeDecodeError, json.JSONDecodeError, ChatArchiveSchemaError) as error:
-        raise ChatArchiveSchemaError(f"Chat {field_name} is not valid JSON.") from error
-    return _mapping(document, field_name)
-
-
-def _reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
-    result: dict[str, object] = {}
-    for key, value in pairs:
-        if key in result:
-            raise ChatArchiveSchemaError("Duplicate JSON keys are not supported in chat archive data.")
-        result[key] = value
-    return result
-
-
-def _reject_json_constant(value: str) -> object:
-    raise ChatArchiveSchemaError(f"JSON constant '{value}' is not supported in chat archive data.")
 
 
 def _mapping(value: object, field_name: str) -> dict[str, Any]:
@@ -327,7 +308,7 @@ def _non_negative_int(value: object, field_name: str) -> int:
 
 
 def _sha256(value: object, field_name: str) -> str:
-    if not isinstance(value, str) or _SHA256_PATTERN.fullmatch(value) is None:
+    if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{64}", value) is None:
         raise ChatArchiveSchemaError(f"Chat archive field '{field_name}' must be a lowercase SHA-256 digest.")
     return value
 
@@ -345,7 +326,7 @@ def _aware_datetime(value: object, field_name: str) -> datetime:
 
 
 def _relative_path(value: object, field_name: str) -> str:
-    if not isinstance(value, str) or not value or Path(value).is_absolute():
+    if not isinstance(value, str) or not value or Path(value).is_absolute() or ":" in value or "\x00" in value:
         raise ChatArchiveSchemaError(f"Chat archive field '{field_name}' must be a relative path.")
     normalized = Path(value)
     if any(part in {"", ".", ".."} for part in normalized.parts) or "\\" in value:

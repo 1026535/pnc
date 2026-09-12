@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
+import os
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -122,3 +125,167 @@ class MailArchiveStoreTests(MailWorkflowFixtures, unittest.TestCase):
                 (first.directory / "thread.txt").read_bytes(),
                 (second.directory / "thread.txt").read_bytes(),
             )
+
+    def test_existing_complete_record_is_reused_before_requiring_new_screenshot(self) -> None:
+        """Deduplication does not fail merely because a retry lacks its source screenshot."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory) / "mail"
+            store = MailArchiveStore(root=root)
+            source = Path(temp_directory) / "source.png"
+            source.write_bytes(build_png_bytes())
+            record = _mail_archive_record()
+            first = store.persist(record=record, archive_mode=MailArchiveMode.BOTH, screenshot_source_path=source)
+            source.unlink()
+            reused = store.persist(record=record, archive_mode=MailArchiveMode.BOTH, screenshot_source_path=source)
+            self.assertFalse(reused.created)
+            self.assertEqual(first.directory, reused.directory)
+
+    def test_empty_screenshot_is_rejected_for_screenshot_and_both_modes(self) -> None:
+        """Zero-byte screenshot files cannot become usable completion evidence."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory) / "mail"
+            source = Path(temp_directory) / "empty.png"
+            source.write_bytes(b"")
+            record = _mail_archive_record()
+            for mode in (MailArchiveMode.SCREENSHOT, MailArchiveMode.BOTH):
+                with self.subTest(mode=mode):
+                    with self.assertRaisesRegex(Exception, "non-empty"):
+                        MailArchiveStore(root=root).persist(
+                            record=record, archive_mode=mode, screenshot_source_path=source,
+                        )
+            self.assertEqual((), tuple(root.rglob("metadata.json")))
+
+    def test_text_screenshot_and_both_modes_publish_their_required_payloads(self) -> None:
+        """Each archive mode publishes exactly the payloads its completion metadata requires."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory) / "mail"
+            source = Path(temp_directory) / "source.png"
+            source.write_bytes(build_png_bytes())
+            for mode in (MailArchiveMode.TEXT, MailArchiveMode.SCREENSHOT, MailArchiveMode.BOTH):
+                with self.subTest(mode=mode):
+                    record = _mail_archive_record()
+                    stored = MailArchiveStore(root=root).persist(
+                        record=record,
+                        archive_mode=mode,
+                        screenshot_source_path=source if mode != MailArchiveMode.TEXT else None,
+                        skip_existing=False,
+                    )
+                    self.assertTrue(stored.created)
+                    self.assertEqual(mode != MailArchiveMode.SCREENSHOT, stored.thread_text_path is not None)
+                    self.assertEqual(mode != MailArchiveMode.TEXT, stored.screenshot_path is not None)
+                    self.assertEqual(1, len(tuple(stored.directory.glob("metadata.json"))))
+
+    def test_metadata_replace_effect_then_error_is_reused_on_retry(self) -> None:
+        """A marker replacement that took effect remains a valid completion on retry."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory) / "mail"
+            source = Path(temp_directory) / "source.png"
+            source.write_bytes(build_png_bytes())
+            record = _mail_archive_record()
+            store = MailArchiveStore(root=root)
+            real_atomic_write = __import__(
+                "pnc_automation.app.pnc.persistence.mail_archive_store",
+                fromlist=["atomic_write_bytes"],
+            ).atomic_write_bytes
+
+            def fail_after_metadata_replace(source_path: str | os.PathLike[str], target_path: str | os.PathLike[str]) -> None:
+                os.replace(source_path, target_path)
+                if Path(target_path).name == "metadata.json":
+                    raise OSError("injected post-replace error")
+
+            def patched_atomic(destination: Path, payload: bytes, **kwargs: object) -> None:
+                if destination.name == "metadata.json":
+                    kwargs["replace"] = fail_after_metadata_replace
+                real_atomic_write(destination, payload, **kwargs)
+
+            with patch("pnc_automation.app.pnc.persistence.mail_archive_store.atomic_write_bytes", side_effect=patched_atomic):
+                with self.assertRaisesRegex(OSError, "post-replace"):
+                    store.persist(record=record, archive_mode=MailArchiveMode.BOTH, screenshot_source_path=source)
+            reused = store.persist(record=record, archive_mode=MailArchiveMode.BOTH, screenshot_source_path=None)
+            self.assertFalse(reused.created)
+
+    def test_corrupt_top_level_metadata_does_not_hide_valid_candidate(self) -> None:
+        """A list or malformed candidate is ignored without masking a valid sibling."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory) / "mail"
+            store = MailArchiveStore(root=root)
+            record = _mail_archive_record()
+            valid = store.persist(record=record, archive_mode=MailArchiveMode.TEXT)
+            corrupt = valid.directory.with_name(valid.directory.name + "-1")
+            corrupt.mkdir()
+            (corrupt / "metadata.json").write_text("[]", encoding="utf-8")
+            self.assertTrue(store.has_fingerprint(
+                active_castle=record.active_castle,
+                mailbox_type=record.mailbox_type.value,
+                fingerprint=record.fingerprint.value,
+            ))
+            self.assertEqual(
+                ("complete", "corrupt"),
+                tuple(diagnostic.status.value for diagnostic in store.last_candidate_diagnostics),
+            )
+            self.assertTrue(store.last_candidate_diagnostics[1].candidate_name.endswith("-1"))
+            reused = store.persist(record=record, archive_mode=MailArchiveMode.TEXT)
+            self.assertFalse(reused.created)
+            self.assertEqual(valid.directory, reused.directory)
+
+    def test_legacy_empty_screenshot_is_not_usable_evidence(self) -> None:
+        """Legacy metadata remains conservative when its only screenshot is empty."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory) / "mail"
+            store = MailArchiveStore(root=root)
+            record = _mail_archive_record()
+            directory = store._build_directory(record)
+            directory.mkdir(parents=True)
+            (directory / "metadata.json").write_text(
+                json.dumps({
+                    "active_castle": record.active_castle,
+                    "mailbox_type": record.mailbox_type.value,
+                    "fingerprint": record.fingerprint.value,
+                    "normalized_thread_text": record.normalized_thread_text,
+                }),
+                encoding="utf-8",
+            )
+            (directory / "thread.png").write_bytes(b"")
+            self.assertFalse(store.has_fingerprint(
+                active_castle=record.active_castle,
+                mailbox_type=record.mailbox_type.value,
+                fingerprint=record.fingerprint.value,
+            ))
+
+    def test_same_fingerprint_lookup_and_create_are_serialized(self) -> None:
+        """Concurrent stores produce one complete record and one deduplicated result."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory) / "mail"
+            source = Path(temp_directory) / "source.png"
+            source.write_bytes(build_png_bytes())
+            record = _mail_archive_record()
+            barrier = threading.Barrier(2)
+            results: list[object] = []
+
+            def persist() -> None:
+                try:
+                    barrier.wait(timeout=5)
+                    results.append(MailArchiveStore(root=root).persist(
+                        record=record,
+                        archive_mode=MailArchiveMode.BOTH,
+                        screenshot_source_path=source,
+                    ))
+                except BaseException as error:
+                    results.append(error)
+
+            threads = [threading.Thread(target=persist) for _ in range(2)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(timeout=5)
+            self.assertEqual(2, len(results))
+            self.assertTrue(all(not isinstance(result, BaseException) for result in results), results)
+            self.assertEqual(1, sum(result.created for result in results if not isinstance(result, BaseException)))
+            self.assertEqual(1, len(tuple(root.rglob("metadata.json"))))
