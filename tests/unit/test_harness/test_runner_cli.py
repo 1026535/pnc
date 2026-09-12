@@ -11,7 +11,7 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from types import ModuleType
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 from tools import run_tests
 
@@ -43,7 +43,9 @@ class RunnerCliTests(unittest.TestCase):
             path.write_text(contents, encoding="utf-8")
         self.enterContext(patch.object(run_tests, "resolve", return_value="a" * 40))
         self.enterContext(patch.object(run_tests, "working_paths", return_value=list(self.files)))
-        self.enterContext(patch.object(run_tests, "python_snapshot", return_value=self.sources))
+        self.python_snapshot = self.enterContext(
+            patch.object(run_tests, "python_snapshot", return_value=self.sources)
+        )
         self.base = self.enterContext(patch.object(run_tests, "base_revision", return_value="b" * 40))
         self.enterContext(patch.object(run_tests, "changed_paths", return_value=["README.md"]))
         self.enterContext(patch.object(
@@ -134,19 +136,55 @@ class RunnerCliTests(unittest.TestCase):
         self.assertEqual(self.flag_snapshots, [([], "portable")])
 
     def test_measure_defaults_timing_csv_under_local_data(self) -> None:
-        """Keeps the default measurement report out of the repository root."""
+        """Keeps ordinary measurement free of context state and context switching."""
 
+        seed = self.root / ".test-impact/contexts.json"
+        seed.parent.mkdir()
+        seed.write_text('{"previous": "seed"}', encoding="utf-8")
         coverage_module = ModuleType("coverage")
         coverage_factory = Mock()
         coverage_module.Coverage = coverage_factory
         with (
             patch.dict(sys.modules, {"coverage": coverage_module}),
-            patch.object(run_tests, "seed_contexts"),
+            patch.object(run_tests, "seed_contexts") as publish_seed,
         ):
             self.assertEqual(self.invoke("measure"), 0)
 
         self.assertTrue((self.root / ".local-data" / "reports" / "test_timings.csv").is_file())
         self.assertFalse((self.root / "test_timings.csv").exists())
+        self.assertEqual(seed.read_text(encoding="utf-8"), '{"previous": "seed"}')
+        publish_seed.assert_not_called()
+        coverage_factory.return_value.switch_context.assert_not_called()
+        self.python_snapshot.assert_not_called()
+
+    def test_measure_with_contexts_switches_contexts_and_publishes_seed(self) -> None:
+        """Enables per-test contexts and publishes only after a complete measurement."""
+
+        seed = self.root / ".test-impact/contexts.json"
+        seed.parent.mkdir()
+        seed.write_text('{"previous": "seed"}', encoding="utf-8")
+        coverage_module = ModuleType("coverage")
+        coverage_factory = Mock()
+        coverage_module.Coverage = coverage_factory
+        with (
+            patch.dict(sys.modules, {"coverage": coverage_module}),
+            patch.object(run_tests, "seed_contexts") as publish_seed,
+        ):
+            self.assertEqual(self.invoke("measure", "--contexts"), 0)
+
+        self.assertFalse(seed.exists())
+        publish_seed.assert_called_once()
+        self.assertEqual(publish_seed.call_args.args[:4], (
+            seed,
+            coverage_factory.return_value,
+            self.root,
+            self.sources,
+        ))
+        self.assertEqual(
+            coverage_factory.return_value.switch_context.call_args_list,
+            [call("tests.unit.sample.test_available.AvailableCase.test_available"), call("")],
+        )
+        self.python_snapshot.assert_called_once_with(self.root, None)
 
     def test_candidate_fingerprint_changes_for_non_python_resource_edit(self) -> None:
         self.assertEqual(self.invoke("full", "--dry-run"), 0)
@@ -159,7 +197,7 @@ class RunnerCliTests(unittest.TestCase):
         self.assertEqual(before["inventory_modules"], after["inventory_modules"])
         self.loader_factory.assert_not_called()
 
-    def test_interrupted_measure_removes_previous_context_seed(self) -> None:
+    def test_interrupted_context_measure_removes_previous_context_seed(self) -> None:
         seed = self.root / ".test-impact/contexts.json"
         seed.parent.mkdir()
         seed.write_text('{"previous": "seed"}', encoding="utf-8")
@@ -172,7 +210,7 @@ class RunnerCliTests(unittest.TestCase):
             patch.object(run_tests, "seed_contexts") as publish_seed,
         ):
             with self.assertRaises(KeyboardInterrupt):
-                self.invoke("measure")
+                self.invoke("measure", "--contexts")
         coverage_factory.return_value.start.assert_called_once_with()
         self.assertFalse(seed.exists())
         publish_seed.assert_not_called()

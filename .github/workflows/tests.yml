@@ -65,7 +65,7 @@ jobs:
           if ($env:TEST_EVENT -eq 'pull_request') {
             python tools/run_tests.py affected --base "$env:TEST_BASE_SHA" --explain --json .test-impact/selection.json --results .test-impact/results.json --csv .test-impact/timings.csv
           } elseif ($env:TEST_EVENT -eq 'schedule') {
-            python tools/run_tests.py measure --explain --json .test-impact/selection.json --results .test-impact/results.json --csv .test-impact/timings.csv
+            python tools/run_tests.py measure --contexts --explain --json .test-impact/selection.json --results .test-impact/results.json --csv .test-impact/timings.csv
           } else {
             python tools/run_tests.py full --explain --json .test-impact/selection.json --results .test-impact/results.json --csv .test-impact/timings.csv
           }
@@ -93,5 +93,6 @@ jobs:
             .test-impact/results.json
             .test-impact/timings.csv
             .test-impact/coverage.json
+            .test-impact/contexts.json
             .test-impact/audit-selection.json
             .test-impact/audit-result.json

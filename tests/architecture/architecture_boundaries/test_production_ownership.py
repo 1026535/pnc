@@ -4,8 +4,13 @@ from __future__ import annotations
 
 import ast
 import unittest
-from importlib.util import resolve_name
 from pathlib import Path
+
+from tests.support.python_sources import (
+    iter_import_targets,
+    repository_python_sources,
+    repository_python_sources_under,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -17,24 +22,13 @@ class ProductionOwnershipTests(unittest.TestCase):
 
     def assert_no_imports(self, root: Path, forbidden: tuple[str, ...]) -> None:
         offenders: list[str] = []
-        paths = (root,) if root.is_file() else sorted(root.rglob("*.py"))
-        self.assertTrue(paths, f"No sources found under {root}")
-        for path in paths:
-            relative = path.relative_to(REPO_ROOT).with_suffix("")
-            package = ".".join(relative.parts[:-1])
-            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-            for node in ast.walk(tree):
-                targets: list[str] = []
-                if isinstance(node, ast.Import):
-                    targets = [alias.name for alias in node.names]
-                elif isinstance(node, ast.ImportFrom):
-                    base = node.module or ""
-                    if node.level:
-                        base = resolve_name("." * node.level + base, package)
-                    targets = [base, *(f"{base}.{alias.name}" for alias in node.names)]
-                for target in targets:
-                    if any(target == prefix or target.startswith(prefix + ".") for prefix in forbidden):
-                        offenders.append(f"{relative}:{node.lineno}:{target}")
+        sources = repository_python_sources_under(root)
+        self.assertTrue(sources, f"No sources found under {root}")
+        for source in sources:
+            relative = source.relative_path.with_suffix("")
+            for line_number, target in iter_import_targets(source):
+                if any(target == prefix or target.startswith(prefix + ".") for prefix in forbidden):
+                    offenders.append(f"{relative}:{line_number}:{target}")
         self.assertEqual(offenders, [])
 
     def test_core_has_no_application_imports(self) -> None:
@@ -77,11 +71,10 @@ class ProductionOwnershipTests(unittest.TestCase):
             "TaskRegistry": "app/authoring/scripts/registry.py",
         }
         found: dict[str, list[str]] = {name: [] for name in owners}
-        for path in PACKAGE_ROOT.rglob("*.py"):
-            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-            for node in ast.walk(tree):
+        for source in repository_python_sources():
+            for node in ast.walk(source.tree):
                 if isinstance(node, (ast.ClassDef, ast.FunctionDef)) and node.name in found:
-                    found[node.name].append(path.relative_to(PACKAGE_ROOT).as_posix())
+                    found[node.name].append(source.path.relative_to(PACKAGE_ROOT).as_posix())
         self.assertEqual(found, {name: [owner] for name, owner in owners.items()})
 
     def test_production_does_not_use_legacy_observation_imports(self) -> None:
