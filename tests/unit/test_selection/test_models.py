@@ -10,6 +10,28 @@ from tools.test_selection.models import SelectionPlan, inventory, module_name
 
 
 class InventoryTests(unittest.TestCase):
+    def test_repository_offline_tests_belong_to_portable_inventory(self) -> None:
+        """Prevents misplaced offline tests from silently escaping CI."""
+
+        root = Path(__file__).resolve().parents[3]
+        paths = [
+            path.relative_to(root).as_posix()
+            for path in (root / "tests").rglob("test_*.py")
+        ]
+        selected = {test.path for test in inventory(paths)}
+        missing = [
+            path
+            for path in paths
+            if path not in selected
+            and not path.startswith(("tests/support/", "tests/data/", "tests/live/"))
+            and not (
+                Path(path).parent.as_posix() == "tests"
+                and Path(path).name.startswith("test_live_")
+            )
+        ]
+
+        self.assertEqual(sorted(missing), [], "Move offline tests into a portable tier.")
+
     def test_suite_discovery_never_imports_application_or_changes_environment(self) -> None:
         source = textwrap.dedent("""
             import importlib.abc
