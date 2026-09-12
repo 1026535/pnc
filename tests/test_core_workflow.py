@@ -90,6 +90,19 @@ class CoreWorkflowTests(unittest.TestCase):
         self.assertEqual([], runtime.navigation.targets)
         self.assertEqual(0, runtime.observation_count)
 
+    def test_nonspending_state_change_workflow_is_allowed(self) -> None:
+        """Allows local archive/read-state workflows while retaining the resource-changing gate."""
+
+        runtime = _FakeRuntime(_daily_observation(_entry("hero_arena")))
+
+        result = CoreWorkflowRunner(runtime).run(_NonspendingWorkflow())
+
+        self.assertTrue(result.succeeded)
+        self.assertEqual(
+            [ScreenType.PNC_HOME_CITY, ScreenType.PNC_QUEST_DAILY, ScreenType.PNC_HOME_CITY],
+            runtime.navigation.targets,
+        )
+
     def test_content_capture_rejects_stale_and_blocking_frames(self) -> None:
         """Requires a fresh non-blocking typed Daily frame after navigation."""
 
@@ -193,6 +206,21 @@ class _ResourceChangingWorkflow:
     def execute(self, context: WorkflowContext) -> None:
         del context
         raise AssertionError("The mutation body must never execute.")
+
+
+class _NonspendingWorkflow:
+    """Represents a bounded state-change workflow permitted by the core runner."""
+
+    spec = WorkflowSpec(
+        name="nonspending",
+        entry_screen=ScreenType.PNC_HOME_CITY,
+        exit_screen=ScreenType.PNC_HOME_CITY,
+        effect=WorkflowEffect.NONSPENDING_STATE_CHANGE,
+    )
+
+    def execute(self, context: WorkflowContext) -> Observation:
+        context.navigate(ScreenType.PNC_QUEST_DAILY)
+        return context.observe_content(expected_screen=ScreenType.PNC_QUEST_DAILY)
 
 
 @dataclass(slots=True)

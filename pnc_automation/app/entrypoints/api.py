@@ -10,6 +10,8 @@ from typing import Any
 
 from pnc_automation.app.runtime.observation_mode import ObservationMode
 from pnc_automation.app import ApplicationRunner, build_application_runner
+from pnc_automation.app.automation.collect_mail import CollectMailResult
+from pnc_automation.app.automation.engine.core_workflow import CoreWorkflowResult
 from pnc_automation.app.automation.engine.runner import RunResult, StepRunResult
 from pnc_automation.app.automation.engine.script_runner import require_successful_preparation
 from pnc_automation.app.automation.engine.task import TaskId
@@ -254,8 +256,8 @@ class AutomationSession:
         archive_mode: str = "both",
         limit_per_mailbox: int = 25,
         only_new: bool = True,
-    ) -> StepRunResult:
-        """Runs one direct mail-collection step against the prepared session."""
+    ) -> CoreWorkflowResult[CollectMailResult]:
+        """Runs one typed replacement-core mail collection against the prepared session."""
 
         return self.api.collect_mail(
             account_id=self.account_id,
@@ -527,12 +529,11 @@ class AutomationApi:
         archive_mode: str = "both",
         limit_per_mailbox: int = 25,
         only_new: bool = True,
-    ) -> StepRunResult:
-        """Runs one direct collect_mail task using current-castle semantics."""
+    ) -> CoreWorkflowResult[CollectMailResult]:
+        """Runs one typed replacement-core collect_mail workflow using current-castle semantics."""
 
-        return self.run_task(
+        return self.application.run_collect_mail(
             account_id=self._resolve_account_id(account_id),
-            task_id=TaskId.COLLECT_MAIL,
             params={
                 "mailboxes": list(mailboxes),
                 "archive_mode": archive_mode,
@@ -761,8 +762,8 @@ def collect_mail(
     archive_mode: str = "both",
     limit_per_mailbox: int = 25,
     only_new: bool = True,
-) -> StepRunResult:
-    """Runs one direct collect_mail step through the default application facade."""
+) -> CoreWorkflowResult[CollectMailResult]:
+    """Runs one typed replacement-core collect_mail workflow through the default facade."""
 
     return _default_api().collect_mail(
         account_id=account_id,
