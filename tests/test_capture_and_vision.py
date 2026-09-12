@@ -850,11 +850,19 @@ class CaptureAndVisionTests(unittest.TestCase):
             )
             self.assertEqual(
                 observation.require(UiElementId.PNC_CHAT_TAB_KINGDOM).source_kind,
-                VisibleElementSourceKind.GEOMETRY,
+                VisibleElementSourceKind.OCR,
             )
             self.assertEqual(
                 observation.require(UiElementId.PNC_CHAT_TAB_ALLIANCE).source_kind,
-                VisibleElementSourceKind.GEOMETRY,
+                VisibleElementSourceKind.OCR,
+            )
+            self.assertEqual(
+                observation.require(UiElementId.PNC_CHAT_TAB_KINGDOM).bounds,
+                Bounds(x=202, y=117, width=143, height=40),
+            )
+            self.assertEqual(
+                observation.require(UiElementId.PNC_CHAT_TAB_ALLIANCE).bounds,
+                Bounds(x=652, y=116, width=123, height=39),
             )
             self.assertEqual(
                 observation.require(UiElementId.PNC_CHAT_SEND_BUTTON).source_kind,
@@ -864,6 +872,51 @@ class CaptureAndVisionTests(unittest.TestCase):
                 observation.require(UiElementId.PNC_CHAT_INPUT_FIELD).source_kind,
                 VisibleElementSourceKind.GEOMETRY,
             )
+
+    def test_observation_builder_classifies_compact_chat_and_uses_ocr_tab_bounds(self) -> None:
+        """Recognizes the current compact chat layout and avoids stale tab geometry."""
+
+        image_size = (540, 960)
+        screenshot = type(
+            "Captured",
+            (),
+            {
+                "image": Image.new("RGB", image_size, (15, 28, 68)),
+                "artifact": type("Artifact", (), {"path": Path("synthetic_compact_chat.png"), "captured_at": None})(),
+            },
+        )()
+        registry = build_default_selector_registry()
+        builder = ObservationBuilder(
+            selector_registry=registry,
+            selector_engine=ImageSelectorEngine(
+                template_matcher=OpenCvTemplateMatcher(),
+                ocr_service=UnavailableOcrService(),
+            ),
+            screen_classifier=ScreenClassifier(),
+            enricher=PncObservationEnricher(
+                ocr_service=_FakeOcrService(
+                    lines=(
+                        _ocr_line("Chat", x=111, y=16, width=75, height=28),
+                        _ocr_line("Kingdom", x=64, y=64, width=82, height=26),
+                        _ocr_line("Alliance", x=219, y=64, width=91, height=27),
+                    )
+                ),
+                selector_registry=registry,
+            ),
+        )
+
+        observation = builder.build(
+            screenshot,
+            request=ObservationRequest.source_screen_retry(ScreenType.PNC_CHAT),
+        )
+
+        self.assertEqual(observation.screen_type, ScreenType.PNC_CHAT)
+        kingdom = observation.require(UiElementId.PNC_CHAT_TAB_KINGDOM)
+        alliance = observation.require(UiElementId.PNC_CHAT_TAB_ALLIANCE)
+        self.assertEqual(kingdom.source_kind, VisibleElementSourceKind.OCR)
+        self.assertEqual(alliance.source_kind, VisibleElementSourceKind.OCR)
+        self.assertEqual(kingdom.bounds, Bounds(x=64, y=64, width=82, height=26))
+        self.assertEqual(alliance.bounds, Bounds(x=219, y=64, width=91, height=27))
 
     def test_observation_builder_extracts_chat_state_after_ocr_chat_fallback(self) -> None:
         """Carries active-channel and draft state through the OCR fallback path once chat is proven."""

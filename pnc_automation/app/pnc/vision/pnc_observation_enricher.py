@@ -6235,10 +6235,14 @@ def _build_chat_overlay_additions(
         min_y=int(image.height * 0.05),
         max_y=int(image.height * 0.14),
     )
+    # The current 540 px capture uses a compact tab layout. Keep the wider
+    # legacy threshold for 900 px captures while accepting the measured
+    # current Alliance tab around x=219.
+    alliance_min_x = int(image.width * (0.35 if image.width <= 600 else 0.55))
     alliance = _find_line_with_normalized_text(
         lines=lines,
         normalized_text=_CHAT_ALLIANCE_TEXT,
-        min_x=int(image.width * 0.55),
+        min_x=alliance_min_x,
         min_y=int(image.height * 0.05),
         max_y=int(image.height * 0.14),
     )
@@ -6249,6 +6253,14 @@ def _build_chat_overlay_additions(
             UiElementId.PNC_CHAT_HEADER: _make_visible_from_line(
                 selector_id=UiElementId.PNC_CHAT_HEADER,
                 line=header,
+            ),
+            UiElementId.PNC_CHAT_TAB_KINGDOM: _make_visible_from_line(
+                selector_id=UiElementId.PNC_CHAT_TAB_KINGDOM,
+                line=kingdom,
+            ),
+            UiElementId.PNC_CHAT_TAB_ALLIANCE: _make_visible_from_line(
+                selector_id=UiElementId.PNC_CHAT_TAB_ALLIANCE,
+                line=alliance,
             ),
         },
         screen_evidence=(ScreenEvidence(ScreenType.PNC_CHAT, "ocr_chat_overlay"),),
