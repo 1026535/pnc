@@ -8,8 +8,12 @@ from pathlib import Path
 from pnc_automation.app.authoring.scripts.models import RunScript, ScriptStep
 from pnc_automation.app.authoring.scripts.registry import TaskRegistry
 from pnc_automation.app.entrypoints.task_registry import build_default_task_registry
-from pnc_automation.app.automation.engine.task import TaskId
-from pnc_automation.app.automation.tasks.ensure_game_running_task import EnsureGameRunningTask
+from pnc_automation.app.automation.engine.task import (
+    CastleTargetPolicy,
+    CoreWorkflowTaskDefinition,
+    TaskId,
+    require_no_params,
+)
 from pnc_automation.core.errors import ScriptValidationError
 
 from tests.support.automation.engine.automation_framework_fixtures import (
@@ -43,7 +47,12 @@ class RegistryTaskPreparationTests(AutomationFrameworkFixtures, unittest.TestCas
         """Rejects duplicate task ids instead of silently shadowing one task."""
 
         with self.assertRaises(ValueError):
-            TaskRegistry(tasks=(EnsureGameRunningTask(), EnsureGameRunningTask()))
+            definition = CoreWorkflowTaskDefinition(
+                id=TaskId.ENSURE_GAME_RUNNING,
+                castle_target_policy=CastleTargetPolicy.DISALLOWED,
+                parameter_parser=lambda params: require_no_params(TaskId.ENSURE_GAME_RUNNING, params),
+            )
+            TaskRegistry(tasks=(definition, definition))
 
     def test_default_task_registry_includes_chat_tasks(self) -> None:
         """Exposes both chat send tasks and the Kingdom Chat monitor through the standard registry."""

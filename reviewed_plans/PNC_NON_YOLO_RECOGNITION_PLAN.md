@@ -1,10 +1,10 @@
 # Integrate visual recognition, guarded controls, and targeted OCR
 
-Status (2026-09-12): implementation resumed. Published merge `5261b1d` integrates mainline `15845b8`. The next implemented slice adds four measured Institute category controls at profile revision 2. Remaining F family evidence and live promotion gates are incomplete. This document does not authorize game mutations.
+Status (2026-09-12): implementation resumed. Published Institute increment `0cd24ad` builds on merge `5261b1d`; the final synchronization integrates mainline `328e000` (typed readiness, roster/canary identity, and focused-window detection). The next implemented slice adds four measured Institute category controls at profile revision 2. Remaining F family evidence and live promotion gates are incomplete. This document does not authorize game mutations.
 
 ## Current follow-through
 
-Complete the Institute proof with the two queue controls registered in the canonical selector registry. The live guard repair is limited to unique visual Queue identity plus its measured Close; maintain regression coverage for missing proof and a second blocking popup. Before broader navigation rollout, resolve and validate the outstanding graph registrations for More Rank, Settings Rank, Settings Preferences, Settings Notifications and World HUD Toggle. Research Tree, resource-changing actions, new destinations and broad locale/build promotion remain separate evidence gates.
+The Institute proof passed on testing with the two queue controls registered in the canonical selector registry; 10 navigation inputs verified the active castle, reached Institute, recognized all four categories, and returned Home. The live guard repair is limited to unique visual Queue identity plus its measured Close; maintain regression coverage for missing proof and a second blocking popup. Before broader navigation rollout, resolve and validate the outstanding graph registrations for More Rank, Settings Rank, Settings Preferences, Settings Notifications and World HUD Toggle. Research Tree, resource-changing actions, new destinations and broad locale/build promotion remain separate evidence gates.
 
 ## Context and objective
 
