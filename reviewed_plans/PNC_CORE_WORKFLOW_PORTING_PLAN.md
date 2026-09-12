@@ -1,0 +1,83 @@
+# Core workflow porting: A's continuation plan
+
+## Scope and source of truth
+
+The original request was to port remaining existing workflows to the new core, using
+workflow-named feature branches and Luna for concrete implementation. Its execution
+record lived in [the porting guide](../instructions/CORE_WORKFLOW_PORTING.md),
+[validation ledger](PNC_CORE_PORTING_VALIDATION.md) and the local September 12 pause
+checkpoint. This document consolidates its remaining execution plan without replacing
+the canonical guide or discarding historical evidence.
+
+Use [the coordinated backlog](PNC_AB_COORDINATED_CONTINUATION.md) as the sole shared
+ownership/dependency table. Its authority and exclusions supersede prior narrow
+publication-only milestones. This is implementation through completion of A's original
+remaining scope, not another integration-only stop.
+
+## Retain and retire
+
+Retain completed A01/A02/A04/A05/A06/A07/A09/A10/A11 implementations and tests.
+Do not rebuild readiness, popup recovery, active-castle scanning, shared Chat sending,
+archives, direct/authored collection, modeled building focus, castle selection or
+Campaign navigation assets. Castle alternate-target and automated Campaign navigation
+proof remain explicitly pending; code landing alone does not satisfy them.
+
+Retire from A's plan any independent OCR/row parser, shared predicate/catalog/guard
+implementation or observation-publication workaround: these belong to B. Resource
+workflows must not add a second mutation boundary. Do not create empty ports for catalog
+TaskIds without an existing implementation. Broader Daily new-capability work is D01,
+while migration of existing Daily execution remains A17.
+
+## Implementation sequence
+
+1. Establish a clean workflow-named branch from the coordinated base, preserving other
+   worktrees. Verify current direct/authored bindings against the seven remaining legacy
+   tasks: Login, SendMail, BuildingConstruction, BuildingUpgrade, Research, Gathering and
+   Campaign. Use that narrow caller check to catch new completed work, not a broad audit.
+2. Supervisor: define X01's smallest concrete typed operation/authority/journal contract
+   and tests, reusing existing exact target/budget semantics. Send B the actual observation
+   requirements for Research/Gathering and any missing login/mail facts. Meanwhile one
+   Luna xhigh worker can implement the independently evidence-supported Login migration.
+3. Implement X01 offline and prove rejection before dispatch, current-frame guards,
+   journal continuity, exception/cleanup ownership and ambiguous-result no replay. Do not
+   simply enable the resource-changing enum. Resolve concrete authority-model gaps before
+   dependent implementations, and retain denial for unsupported actions.
+4. Port A08/A12/A13/A14/A15/A16 in coherent workflow slices as B's producers and X01 permit.
+   Preserve canonical parameters, meaningful completion, supported direct/authored
+   behavior and migration of obsolete callers. Remove obsolete legacy paths only after
+   replacement consumers/tests exist. Campaign's existing endpoint is battle preparation;
+   do not silently promise a full battle loop or Daily farm policy.
+5. Port A17's existing Daily coordinator and session/adapters through the same boundary.
+   Preserve full-sweep semantics, recognized/unknown outcomes, exact claims, resource-item
+   selection, Hero Hall durable singles/cooldowns and journals. Keep automatic execution
+   disabled and leave new features, release configuration and scheduling to D01.
+6. Integrate B/A slices into the single candidate at useful dependency boundaries. Reuse
+   valid component evidence, validate changed production combinations, and publish exact
+   reviewed commits. Do not repeat completed component merges. Main landing authority
+   follows the shared plan's explicit rule; lack of it does not stop independent coding.
+7. Close the porting ledger with each row's code, bindings, tests, integration commit and
+   remaining live limits. Prepare exact live-proof requests for blocked rows, without
+   treating an unanswered request as approval or blocking unrelated offline work.
+
+## Validation and stop conditions
+
+Use the repository runner, focused/affected tests per slice, and the required combined
+portable full gate. Preserve B's real-builder Research regression and actual active-detail
+postcondition, A's real-context castle mismatch/no-replay regression, Campaign return-chain
+tests, mainline Chat contracts and atomic journal/locking tests. Test consumer behavior
+through the real builder when it depends on B's publication, not only synthetic controls.
+
+Supervisor A reviews Luna's exact diff and handles uncertain architecture. One Luna worker
+at a time; no live actions by the worker. A can fix routine issues and continue without
+another permission request. Stop the affected row for an unresolved behavior/authority
+decision, missing producer/evidence or failing checks with no diagnosed fix; record the
+symbol/fixture needed and continue unblocked rows. No worktree cleanup or new task creation.
+
+## Working status
+
+- Start: shared plan baseline; prior A/B component work integrated and offline validated.
+- Next: X01 contract plus A03 independent migration; B04 producer request.
+- Interface agreements: append only concrete agreed symbol/fixture contracts here and
+  reference them from B's plan; do not duplicate the shared ownership table.
+- Live: alternate-castle switch, Campaign automated route and remaining mutating/sending
+  workflows need separate exact authorization and evidence.

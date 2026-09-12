@@ -1,5 +1,11 @@
 # Porting a workflow to the replacement core
 
+Current execution plan: [A's coordinated continuation](../reviewed_plans/PNC_CORE_WORKFLOW_PORTING_PLAN.md)
+and [shared A/B ownership and backlog](../reviewed_plans/PNC_AB_COORDINATED_CONTINUATION.md).
+These supersede historical pause/publication-only status, while this guide remains the
+canonical porting contract. Resource-changing execution remains rejected until A's
+reviewed canonical mutation bridge is implemented; the plan is not a bypass.
+
 This guide describes the bounded path for moving one workflow onto the reviewed navigation core. It applies to the shared runtime in `pnc_automation/app/automation/engine/`, the typed PNC observations, and the application and CLI entrypoints. The core permits read-only and non-spending state-change workflows; resource-changing workflows are rejected before they observe the device.
 
 ## Canonical owners
