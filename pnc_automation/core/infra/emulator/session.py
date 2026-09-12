@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import re
 import time
 from collections.abc import Callable
 from contextlib import contextmanager
@@ -221,15 +222,20 @@ class BlueStacksSession:
                 device_id=self.instance.device_id,
                 stderr=result.stderr_text,
             )
-        return self.instance.app_package in result.stdout_text
+        current_focus_package = _parse_current_focus_package(
+            result.stdout_text,
+            device_id=self.instance.device_id,
+        )
+        return current_focus_package == self.instance.app_package
 
-    def ensure_app_foregrounded(self) -> None:
-        """Launches the game when it is not already foregrounded."""
+    def ensure_app_foregrounded(self) -> bool:
+        """Launches the game when needed and reports whether a launch was started."""
 
         if self.is_app_foregrounded():
-            return
+            return False
         self._require_app_launch()
         self.launch_app()
+        return True
 
     @_input_dispatch
     def launch_app(self) -> None:
@@ -615,6 +621,59 @@ def _frame_identity(frame_ref: FrameRef) -> tuple[str, int, int, int]:
         frame_ref.capture_sequence,
         frame_ref.input_sequence,
     )
+
+
+_CURRENT_FOCUS_FIELD = re.compile(r"^[ \t]*mCurrentFocus[ \t]*=[ \t]*(?P<value>[^\r\n]*)[ \t]*\r?$", re.MULTILINE)
+_WINDOW_FOCUS_VALUE = re.compile(
+    r"^Window\{(?P<token>[0-9A-Fa-f]+)[ \t]+(?P<user>u[0-9]+)[ \t]+(?P<title>[^{}\r\n]+)\}$"
+)
+
+
+def _parse_current_focus_package(window_dump: str, *, device_id: str) -> str | None:
+    """Extracts the package from exactly one WMS mCurrentFocus field."""
+
+    matches = tuple(_CURRENT_FOCUS_FIELD.finditer(window_dump))
+    if len(matches) != 1:
+        raise GameLaunchError(
+            "Android window output must contain exactly one mCurrentFocus field.",
+            device_id=device_id,
+            field="mCurrentFocus",
+            field_count=len(matches),
+        )
+    value = matches[0].group("value").strip()
+    if value == "null":
+        return None
+    match = _WINDOW_FOCUS_VALUE.fullmatch(value)
+    if match is None:
+        raise GameLaunchError(
+            "Android mCurrentFocus field is malformed; expected a Window value or null.",
+            device_id=device_id,
+            field="mCurrentFocus",
+        )
+    title = match.group("title").strip()
+    if not title:
+        raise GameLaunchError(
+            "Android mCurrentFocus Window title is empty.",
+            device_id=device_id,
+            field="mCurrentFocus",
+        )
+    component = title.split(maxsplit=1)[0]
+    if "/" not in component:
+        return None
+    if component.count("/") != 1:
+        raise GameLaunchError(
+            "Android mCurrentFocus Window component is malformed.",
+            device_id=device_id,
+            field="mCurrentFocus",
+        )
+    package, _, activity = component.partition("/")
+    if not package or not activity:
+        raise GameLaunchError(
+            "Android mCurrentFocus Window component is malformed.",
+            device_id=device_id,
+            field="mCurrentFocus",
+        )
+    return package
 
 
 def _encode_adb_text(text: str) -> str:

@@ -103,10 +103,15 @@ The full workflow migration is incomplete. A direct API port does not migrate an
 | Open-building | Integrated direct CLI/Python port; authored task dispatch remains legacy. |
 | Collect-mail | Direct Python port and typed authored `TaskId.COLLECT_MAIL` dispatch share `CollectMailWorkflow`. |
 | Kingdom Chat collection | Integrated direct Python port and typed authored `TaskId.COLLECT_KINGDOM_CHAT` dispatch. |
-| Authored scripts | `TaskId.COLLECT_KINGDOM_CHAT` and `TaskId.COLLECT_MAIL` use the typed core dispatcher; other registered `TaskId`/YAML steps remain on legacy dispatch. |
-| Bootstrap and roster workflows | Roster refresh has a typed direct Python API; its authored task remains legacy. Login and castle selection remain unported. Core preflight reuses foreground/bootstrap behavior; safe popup recovery belongs to the canonical runtime. Neither is an empty workflow to recreate. |
+| Session readiness | `TaskId.ENSURE_GAME_RUNNING` is a typed lifecycle step backed by `CoreRuntime.ensure_game_ready`; it proves a stable known P&C screen and does not prove login or account identity. |
+| Authored scripts | `TaskId.ENSURE_GAME_RUNNING`, `TaskId.COLLECT_KINGDOM_CHAT`, `TaskId.COLLECT_MAIL`, and `TaskId.REFRESH_CASTLE_ROSTER` use the typed core dispatcher; other registered `TaskId`/YAML steps remain on legacy dispatch. |
+| Bootstrap and roster workflows | Roster refresh has typed direct Python and authored dispatch. Login and castle selection remain unported. Core preflight reuses foreground/bootstrap behavior; safe popup recovery belongs to the canonical runtime. Neither is an empty workflow to recreate. |
 | Chat and mail sending | Need typed input/send operations and explicit authorization for the actual message and destination before live sending. |
 | Resource-changing workflows | Construction, upgrade, research, gathering, campaign actions, and Daily maintenance execution still need reviewed typed operations and the existing authorizer/executor/journal bridge. Live spending needs an exact action, target, and budget. |
+
+Generated session preparation runs the typed readiness step before the existing legacy Login step. Readiness foregrounds the configured app, passively waits through bounded loading, and returns only a stable known P&C screen; Android Home, unknown screens, stale captures, unresolved blocking popups, and exhausted time budgets fail closed. When this call actually launches the app, transient UNKNOWN or Android Home frames are tolerated within the existing settle budget; an already-foreground app still fails immediately on UNKNOWN. The canonical runtime observation boundary may dismiss an explicitly safe popup during this check. Unknown frames do not use the legacy Back or relaunch fallback, and a known login screen is only a game-ready endpoint, not account or login verification.
+
+`BlueStacksSession.ensure_app_foregrounded` reports whether it launched the app. Foreground detection reads the exact component package in one Android `mCurrentFocus` field, ignoring background windows. Missing, ambiguous, or malformed focus evidence raises `GameLaunchError`; it does not guess from another window field. Live readiness passed both from an already-running Home screen and from the launcher with the game backgrounded. These proofs do not establish cold-start or credential-entry coverage; see the validation ledger for evidence and limits.
 
 ## Typed Kingdom Chat port
 
@@ -173,6 +178,12 @@ The authored Chat proof used one current-castle YAML step through `ApplicationRu
 One current-castle `collect_mail` YAML step passed on `serious_stuff` with player mailbox, limit one, `archive_mode: both`, and `only_new: false`. It returned `CoreStepRunResult`, success, and final Home. The mailbox was explicitly unavailable, so zero threads were processed or archived. This is an unavailable-mailbox proof, not a fresh thread-read claim. Offline workflow coverage checks empty mailboxes, deduplication, exact active-castle preflight, and persisted text and screenshot bytes.
 
 The helper is `.local-data/artifacts/replacement_core/authored_mail_port_live.py`; its compact result is `authored_mail_port_result.json` beside it. The configured runtime trace is `artifacts/2026-09-12/serious_stuff/20260912T072001Z_4cc53ea0_core_trace.jsonl`, with final Home frame `20260912T072322Z_core_20260912T072001Z_4cc53ea0_0039_core_11_after_1.png`. The existing outer process reservation remained held through preparation, collection, and cleanup. No castle selection, message sending, claim, or resource spending occurred.
+
+## Authored roster and canary identity
+
+Authored roster refresh rejects parameters and explicit castle targets before connecting. Its dispatcher requires only `CastleRosterStore`, borrows the script's connected runtime, and invokes the same `RefreshCastleRosterWorkflow` as the direct API. The outer script runner owns cleanup; the workflow never selects a castle.
+
+The canary identity helper also borrows the caller's connected runtime through `assemble_core_runtime`. It requires exact preflight identity matching the requested target and returns the core's final unblocked Home observation. It does not reconnect, close the caller's runtime, run legacy bootstrap, or perform a canary mutation. Unmodeled entry screens stop at the core guard; the old helper's separate Might Rank, Event Center, and Home-root routes are not retained as a fallback. Callers must start from a core-supported surface. This migration does not authorize or validate resource-changing canary execution.
 
 ## Acceptance checklist
 

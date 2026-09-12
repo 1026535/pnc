@@ -276,6 +276,7 @@ class ScriptRunner:
                 prepared_step,
                 chat_archive_store=self.chat_archive_store,
                 mail_archive_store=self.mail_archive_store,
+                castle_roster_store=self.castle_roster_store,
             )
 
     def prepare_account_session(
@@ -595,6 +596,7 @@ class ScriptRunner:
             ),
             required_role=required_role,
             mail_archive_store=self.mail_archive_store,
+            castle_roster_store=self.castle_roster_store,
         )
 
     def build_connected_session(

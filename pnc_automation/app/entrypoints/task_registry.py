@@ -7,12 +7,10 @@ from functools import partial
 from pnc_automation.app.automation.tasks.building_upgrade_task import BuildingUpgradeTask
 from pnc_automation.app.automation.tasks.building_construction_task import BuildingConstructionTask
 from pnc_automation.app.automation.tasks.campaign_task import CampaignTask
-from pnc_automation.app.automation.tasks.ensure_game_running_task import EnsureGameRunningTask
 from pnc_automation.app.automation.tasks.gathering_task import GatheringTask
 from pnc_automation.app.automation.tasks.login_task import LoginTask
 from pnc_automation.app.automation.tasks.open_building_task import OpenBuildingTask
 from pnc_automation.app.automation.tasks.popup_recovery_task import PopupRecoveryTask
-from pnc_automation.app.automation.tasks.refresh_castle_roster_task import RefreshCastleRosterTask
 from pnc_automation.app.automation.tasks.research_task import ResearchTask
 from pnc_automation.app.automation.tasks.select_castle_task import SelectCastleTask
 from pnc_automation.app.automation.tasks.send_chat_message_task import (
@@ -35,11 +33,19 @@ def build_default_task_registry() -> TaskRegistry:
 
     return TaskRegistry(
         tasks=(
-            EnsureGameRunningTask(),
+            CoreWorkflowTaskDefinition(
+                id=TaskId.ENSURE_GAME_RUNNING,
+                castle_target_policy=CastleTargetPolicy.DISALLOWED,
+                parameter_parser=partial(require_no_params, TaskId.ENSURE_GAME_RUNNING),
+            ),
             PopupRecoveryTask(),
             LoginTask(),
             SelectCastleTask(),
-            RefreshCastleRosterTask(),
+            CoreWorkflowTaskDefinition(
+                id=TaskId.REFRESH_CASTLE_ROSTER,
+                castle_target_policy=CastleTargetPolicy.DISALLOWED,
+                parameter_parser=partial(require_no_params, TaskId.REFRESH_CASTLE_ROSTER),
+            ),
             SendAllianceChatMessageTask(),
             SendWorldChatMessageTask(),
             SendMailTask(),

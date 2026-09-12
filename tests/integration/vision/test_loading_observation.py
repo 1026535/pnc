@@ -7,7 +7,6 @@ from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import Mock
 
 from PIL import Image
 
@@ -16,8 +15,6 @@ from pnc_automation.core.infra.capture.screenshot_service import ScreenshotServi
 from pnc_automation.app.automation.engine.action_executor import ActionExecutor
 from pnc_automation.app.automation.engine.observed_action_executor import ObservedActionExecutor
 from pnc_automation.app.automation.engine.runner import AutomationRunner
-from pnc_automation.app.automation.engine.task_executor import TaskExecutor
-from pnc_automation.app.automation.tasks.ensure_game_running_task import EnsureGameRunningTask
 from pnc_automation.app.authoring.config.models import DefaultsConfig
 from pnc_automation.app.authoring.scripts.registry import TaskRegistry
 from pnc_automation.app.pnc.domain.action_requests import TapPointAction, WaitAction
@@ -168,19 +165,6 @@ class LoadingObservationTests(unittest.TestCase):
                 sleep=lambda _: None,
             )
 
-            task_result = TaskExecutor(
-                observation_service=Mock(),
-                action_executor=observed_executor,
-                logger=build_logger(),
-                max_replans_per_step=1,
-                max_retries_per_step=0,
-            ).execute(
-                task=EnsureGameRunningTask(),
-                context=Mock(),
-                before=observation,
-            )
-            self.assertTrue(task_result.result.succeeded)
-            self.assertEqual([], session.taps)
             self.assertIsNone(
                 observed_executor.recover_interruption_if_required(
                     observation,

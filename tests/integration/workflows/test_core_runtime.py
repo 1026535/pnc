@@ -55,6 +55,102 @@ from tests.support.paths import TEST_DATA_ROOT
 class CoreRuntimeTests(unittest.TestCase):
     """Covers one-runtime composition and pure content identity preservation."""
 
+    def test_ensure_game_ready_foregrounds_once_and_returns_stable_known_screen(self) -> None:
+        """Uses the existing foreground boundary and passive settle without navigation."""
+
+        clock = _FakeClock()
+        navigation = _SettleNavigation(clock)
+        session = Mock()
+        runtime = _SequencedCoreRuntime(
+            navigation,
+            [
+                _frame(ScreenType.PNC_LOADING, 0),
+                _frame(ScreenType.PNC_LOGIN, 1),
+                _frame(ScreenType.PNC_LOGIN, 2),
+            ],
+        )
+        runtime.runtime.session = session
+
+        ready = runtime.ensure_game_ready()
+
+        self.assertEqual(ScreenType.PNC_LOGIN, ready.screen_type)
+        session.ensure_app_foregrounded.assert_called_once_with()
+        self.assertEqual([], navigation.navigate_calls)
+
+    def test_ensure_game_ready_rejects_stable_android_home(self) -> None:
+        """Does not treat a stable Android Home frame as a game-ready endpoint."""
+
+        clock = _FakeClock()
+        navigation = _SettleNavigation(clock)
+        runtime = _SequencedCoreRuntime(
+            navigation,
+            [_frame(ScreenType.ANDROID_HOME, 0), _frame(ScreenType.ANDROID_HOME, 1)],
+        )
+        runtime.runtime.session = Mock()
+
+        with self.assertRaisesRegex(RuntimeError, "Android Home.*not game-ready"):
+            runtime.ensure_game_ready()
+
+        runtime.runtime.session.ensure_app_foregrounded.assert_called_once_with()
+        self.assertEqual([], navigation.navigate_calls)
+
+    def test_ensure_game_ready_tolerates_transient_post_launch_unknown_and_home(self) -> None:
+        """Waits through the launch handoff without navigation until a known screen stabilizes."""
+
+        clock = _FakeClock()
+        navigation = _SettleNavigation(clock)
+        session = Mock()
+        session.ensure_app_foregrounded.return_value = True
+        runtime = _SequencedCoreRuntime(
+            navigation,
+            [
+                _frame(ScreenType.UNKNOWN, 0),
+                _frame(ScreenType.ANDROID_HOME, 1),
+                _frame(ScreenType.PNC_LOGIN, 2),
+                _frame(ScreenType.PNC_LOGIN, 3),
+            ],
+        )
+        runtime.runtime.session = session
+
+        ready = runtime.ensure_game_ready()
+
+        self.assertEqual(ScreenType.PNC_LOGIN, ready.screen_type)
+        self.assertEqual([], navigation.navigate_calls)
+        self.assertEqual(3, len(navigation.sleep_calls))
+
+    def test_ensure_game_ready_rejects_post_launch_unknown_after_existing_budget(self) -> None:
+        """Stops when a launched app never reaches a stable known screen within the existing budget."""
+
+        clock = _FakeClock()
+        navigation = _SettleNavigation(clock)
+        session = Mock()
+        session.ensure_app_foregrounded.return_value = True
+        runtime = _SequencedCoreRuntime(
+            navigation,
+            [_frame(ScreenType.UNKNOWN, 0), _frame(ScreenType.UNKNOWN, 1), _frame(ScreenType.UNKNOWN, 2), _frame(ScreenType.UNKNOWN, 3)],
+        )
+        runtime.runtime.session = session
+
+        with self.assertRaisesRegex(RuntimeError, "budget exhausted"):
+            runtime.ensure_game_ready()
+
+        self.assertEqual([], navigation.navigate_calls)
+
+    def test_ensure_game_ready_rejects_unknown_when_app_was_already_foregrounded(self) -> None:
+        """Does not apply post-launch tolerance to an already foreground app."""
+
+        clock = _FakeClock()
+        navigation = _SettleNavigation(clock)
+        session = Mock()
+        session.ensure_app_foregrounded.return_value = False
+        runtime = _SequencedCoreRuntime(navigation, [_frame(ScreenType.UNKNOWN, 0)])
+        runtime.runtime.session = session
+
+        with self.assertRaisesRegex(RuntimeError, "unknown screen"):
+            runtime.ensure_game_ready()
+
+        self.assertEqual([], navigation.navigate_calls)
+
     def test_initial_settle_passively_waits_for_loading_then_known_stable_screen(self) -> None:
         """Settling consumes loading frames and never invokes navigation actions."""
 
@@ -450,12 +546,17 @@ class CoreRuntimeTests(unittest.TestCase):
             )
 
             with (
-                patch.object(CoreRuntime, "_settle_initial_screen", return_value=_frame(ScreenType.PNC_HOME_CITY, 0)),
+                patch.object(
+                    CoreRuntime,
+                    "ensure_game_ready",
+                    return_value=_frame(ScreenType.PNC_HOME_CITY, 0),
+                ) as ensure_ready,
                 patch.object(CoreRuntime, "observe", autospec=True, return_value=identity_frame),
             ):
                 with self.assertRaisesRegex(RuntimeError, error):
                     runtime.preflight_active_castle_identity()
 
+            ensure_ready.assert_called_once_with()
             navigation.navigate.assert_called_once_with(ScreenType.PNC_CASTLE_SELECTION)
 
     def test_identity_scan_rewinds_then_finds_selected_row_without_row_tap(self) -> None:
@@ -641,7 +742,7 @@ class _SequencedCoreRuntime(CoreRuntime):
         recovered_flags: list[bool] | None = None,
     ) -> None:
         super().__init__(
-            runtime=SimpleNamespace(),
+            runtime=SimpleNamespace(session=Mock()),
             navigation=navigation,
             artifact_directory="account",
             trace_path=Path("trace.jsonl"),
