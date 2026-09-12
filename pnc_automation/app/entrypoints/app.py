@@ -18,6 +18,7 @@ from pnc_automation.core.infra.emulator.session import BlueStacksSessionCleanupP
 from pnc_automation.core.lifecycle import close_preserving_error
 from pnc_automation.app.automation.engine.task import TaskId
 from pnc_automation.app.automation.open_building import OpenBuildingResult, build_open_building_workflow
+from pnc_automation.app.automation.refresh_castle_roster import RefreshCastleRosterResult, RefreshCastleRosterWorkflow
 from pnc_automation.app.automation.daily_maintenance.daily_quest_status import (
     DailyQuestStatusResult,
     DailyQuestStatusWorkflow,
@@ -253,6 +254,38 @@ class ApplicationRunner:
         try:
             core_runtime.preflight_active_castle_identity()
             return CoreWorkflowRunner[OpenBuildingResult](core_runtime).run(workflow)
+        finally:
+            core_runtime.close()
+
+    def run_refresh_castle_roster(
+        self,
+        *,
+        account_id: str,
+        required_role: LiveAutomationRole = LiveAutomationRole.LIVE_TESTING,
+    ) -> CoreWorkflowResult[RefreshCastleRosterResult]:
+        """Runs the typed full-roster scan after validating its store before connecting."""
+
+        account = self.script_runner.config.require_account(account_id)
+        roster_store = self.script_runner.castle_roster_store
+        if roster_store is None:
+            raise RuntimeError(
+                "Refresh-castle-roster replacement workflow requires a configured CastleRosterStore before connecting."
+            )
+        core_runtime = build_core_runtime(
+            self.script_runner,
+            account,
+            account.artifact_directory_name,
+            required_role=required_role,
+        )
+        try:
+            active_castle = core_runtime.preflight_active_castle_identity()
+            workflow = RefreshCastleRosterWorkflow(
+                account_id=account.id,
+                pnc_account_id=account.pnc_account_id,
+                active_castle=active_castle,
+                roster_store=roster_store,
+            )
+            return CoreWorkflowRunner[RefreshCastleRosterResult](core_runtime).run(workflow)
         finally:
             core_runtime.close()
 
