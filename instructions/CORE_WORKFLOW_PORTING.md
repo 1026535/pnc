@@ -18,7 +18,7 @@ This guide describes the bounded path for moving one workflow onto the reviewed 
 
 ## Porting sequence
 
-1. Inventory the existing workflow’s canonical parser, typed result, screen controls, navigation edges, tests, authorizer, executor, and journal. Record whether every step is read-only, a non-spending state change, or resource-changing. Reuse the existing parser and result model where they exist.
+1. Inventory the existing workflowâ€™s canonical parser, typed result, screen controls, navigation edges, tests, authorizer, executor, and journal. Record whether every step is read-only, a non-spending state change, or resource-changing. Reuse the existing parser and result model where they exist.
 
 2. Gather game-first route evidence when a required edge is absent or its return screen is conditional. Evidence must show the visible source control, one reviewed action, fresh completion frames, and the actual return destination. Do not infer a route from a coordinate, a remembered camera position, or a legacy fallback.
 
@@ -95,14 +95,14 @@ Active-castle preflight recognizes the selected row through exact Manage Charact
 
 ## Migration status
 
-The full workflow migration is incomplete. A direct API port does not migrate an authored YAML task with the same name. The feature branches listed below are separate deliverables; this table does not imply that they have been merged into `main`.
+The full workflow migration is incomplete. A direct API port does not migrate an authored YAML task with the same name. The integrated direct ports below retain that distinction.
 
 | Workflow or boundary | Current status |
 | --- | --- |
 | Daily Quest status | Implemented as the reference typed workflow; this reads status, not Daily maintenance execution. |
-| Open-building | Direct CLI/Python port on `codex/open-building-core-port`. |
-| Collect-mail | Direct Python port on `codex/collect-mail-core-port`. |
-| Kingdom Chat collection | Direct Python port on `codex/collect-kingdom-chat-core-port`, stacked on the collect-mail branch. |
+| Open-building | Integrated direct CLI/Python port; authored task dispatch remains legacy. |
+| Collect-mail | Integrated direct Python port; authored task dispatch remains legacy. |
+| Kingdom Chat collection | Integrated direct Python port; authored task dispatch remains legacy. |
 | Authored scripts | The corresponding registered `TaskId`/YAML steps still use legacy dispatch. Typed script dispatch remains missing. |
 | Bootstrap and roster workflows | Login, castle selection, and roster refresh remain unported. Core preflight reuses foreground/bootstrap behavior; safe popup recovery belongs to the canonical runtime. Neither is an empty workflow to recreate. |
 | Chat and mail sending | Need typed input/send operations and explicit authorization for the actual message and destination before live sending. |
@@ -118,11 +118,11 @@ The full workflow migration is incomplete. A direct API port does not migrate an
 
 The September 12 live proof on `serious_stuff` archived five visible player messages and confirmed final Home. Its trace is `artifacts/2026-09-12/serious_stuff/20260912T054101Z_9deb03aa_core_trace.jsonl`; final Home is `20260912T054325Z_core_20260912T054101Z_9deb03aa_0039_core_10_after_1.png` in the same directory. The canonical process-scoped instance lease remained held across implementation and dependent probes. No message was sent and no castle was selected.
 
-The first attempt exposed an oversized Home shortcut template: its center at y=840 hit the quest tracker. The corrected crop isolates the Chat icon and centers at (26,869) on the 540×960 fixture. Preserve the original failed trace `20260912T053222Z_124b53df_core_trace.jsonl`; it explains the regression fixture and does not prove a legacy registry misclick.
+The first attempt exposed an oversized Home shortcut template: its center at y=840 hit the quest tracker. The corrected crop isolates the Chat icon and centers at (26,869) on the 540Ã—960 fixture. Preserve the original failed trace `20260912T053222Z_124b53df_core_trace.jsonl`; it explains the regression fixture and does not prove a legacy registry misclick.
 
 The shared Chat selector passed from both Home and World Map in `artifacts/replacement_core/kingdom_chat_selectors/20260912T054642Z_serious_stuff_navigation_validation.yaml`. A subsequent core Back action proved the conditional return: World-origin Chat returns to World Map, while Home-origin Chat returns Home. The source and destination are `20260912T054655Z_core_20260912T054650Z_e37b4dc7_0002_core_1_source.png` and `20260912T054700Z_core_20260912T054650Z_e37b4dc7_0003_core_1_after_0.png`. The reviewed Back edge now accepts either observed parent and replans toward the requested destination. This does not add a World-to-Chat core entry edge; that still needs current-frame core control evidence.
 
-The corrected live rerun confirmed Chat → World Map → Home, then Home → Chat, Alliance selection, Kingdom selection, and final Home. Its trace is `artifacts/2026-09-12/serious_stuff/20260912T055048Z_341e9d87_core_trace.jsonl`; final Home is `20260912T055210Z_core_20260912T055048Z_341e9d87_0023_core_6_after_1.png` in the same directory. The compact outcome is `artifacts/replacement_core/kingdom_chat_tabs_result.json`. Both selector cases passed again in `kingdom_chat_selectors/20260912T055035Z_serious_stuff_navigation_validation.yaml` while preparing that conditional-return proof.
+The corrected live rerun confirmed Chat â†’ World Map â†’ Home, then Home â†’ Chat, Alliance selection, Kingdom selection, and final Home. Its trace is `artifacts/2026-09-12/serious_stuff/20260912T055048Z_341e9d87_core_trace.jsonl`; final Home is `20260912T055210Z_core_20260912T055048Z_341e9d87_0023_core_6_after_1.png` in the same directory. The compact outcome is `artifacts/replacement_core/kingdom_chat_tabs_result.json`. Both selector cases passed again in `kingdom_chat_selectors/20260912T055035Z_serious_stuff_navigation_validation.yaml` while preparing that conditional-return proof.
 
 The live helpers ran inside one Python process holding the canonical outer lease, through `AutomationApi.collect_kingdom_chat`, `tools/validate_navigation_selectors.py:main` with `--account serious_stuff --selector PNC_CHAT_SHORTCUT`, and the typed `WorkflowContext` channel operations. Reloading the corrected navigation module preserved the original lease-manager instance and reservation; no competing process acquired the emulator between probes. The game was already running and remained open at Home.
 
@@ -133,6 +133,22 @@ Validation for this Chat branch:
 - `py -m unittest discover -s tests`: passed, 1,270 tests with 22 configured/opt-in skips. Final output: `artifacts/replacement_core/kingdom_chat_final_tests.log`.
 - `git diff --check`: passed.
 - Direct API, shared selector, and typed channel live proofs on `serious_stuff`: passed as recorded above. The two earlier failures were reproducible navigation defects, corrected with offline regressions and live reruns.
+
+## Integrated port validation — September 12
+
+The mail, Kingdom Chat, and open-building ports were combined with `origin/main` at `0542c7b`, preserving the canonical domain models, entrypoint-owned task registry, and modular test layout. Open-building now defaults to the `live_testing` role and uses the same scoped direct-API account reservation as mail and Chat. Root review found no remaining actionable integration issues.
+
+`py tools/run_tests.py full` passed: 1,438 total tests, 1,434 passed and four skipped. Focused application/workflow checks and `git diff --check HEAD` also passed. New port tests live under `tests/contract/entrypoints/` and `tests/integration/workflows/`; deleted monolithic test modules were not restored.
+
+The integrated direct APIs were then exercised sequentially on `serious_stuff` under one continuously held process lease. No castle was selected, no message was sent, and no resource was spent. Each complete sequence confirmed Home before the next sequence began:
+
+| Proof | Observed result | Evidence under `artifacts/replacement_core/` |
+| --- | --- | --- |
+| Collect-mail, player mailbox, limit one | Player mailbox explicitly unavailable; zero messages processed; Home confirmed. This confirms the unavailable-mailbox path, not a fresh thread-read proof. | `integrated_collect_mail_result.json`; trace `20260912T061614Z_f73f61b9_core_trace.jsonl` |
+| Kingdom Chat | Five visible player rows; zero duplicate archive additions; Home confirmed. | `integrated_collect_kingdom_chat_result.json`; trace `20260912T061917Z_e145fa4c_core_trace.jsonl` |
+| Open-building, Institute | Exact Institute endpoint confirmed, followed by explicit core recovery to Home while the outer reservation stayed held. | `integrated_open_building_result.json`; workflow trace `20260912T062131Z_c9b89d25_core_trace.jsonl`; recovery trace `20260912T062329Z_a26c4ea6_core_trace.jsonl` |
+
+Traces and screenshots are under `artifacts/2026-09-12/serious_stuff/`. The final handoff image is `20260912T062347Z_core_20260912T062329Z_a26c4ea6_0004_core_1_after_1.png`. The local proof helper is `artifacts/replacement_core/integrated_ports_live.py:run_integrated_port_proof`, invoked once per named workflow inside the retained lease process. The instance was already running and remains open at Home. Coding workers were offline throughout; the lease covered preparation, workflow execution, and dependent recovery.
 
 ## Historical issues resolved
 
