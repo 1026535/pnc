@@ -18,6 +18,7 @@ from pnc_automation.app.pnc.vision.observation_builder import ObservationAdditio
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.app.pnc.vision.visual_screen_recognizer import VisualScreenRecognizer
 from pnc_automation.core.infra.capture.screenshot_service import CapturedScreenshot
+from pnc_automation.core.infra.emulator.provenance import FrameRef
 from pnc_automation.core.vision.ocr.ocr_service import ObservationOcrContext
 
 
@@ -85,6 +86,28 @@ class NavigationPerception:
             ) if interrupted or blocked else {}
         else:
             controls = {item.selector_id: item for item in visual.controls}
+        frame_ref = screenshot.frame_ref
+        if frame_ref is None and screenshot.payload is None:
+            # Synthetic compatibility captures used by offline runtime tests do
+            # not come from an emulator session. Give their measured controls a
+            # distinct frame identity; a real session still rejects it because
+            # the session id is intentionally not one it owns.
+            frame_ref = FrameRef(
+                session_id="compatibility-capture",
+                session_epoch=0,
+                capture_sequence=int(hashlib.sha256(image.tobytes()).hexdigest()[:8], 16),
+                input_sequence=0,
+                captured_at=screenshot.captured_at,
+            )
+        controls = {
+            selector_id: replace(
+                control,
+                frame_ref=frame_ref,
+                source_screen=screen,
+                source_layout_id=None,
+            )
+            for selector_id, control in controls.items()
+        }
         observation = Observation(
             decision=ScreenDecision(
                 base_screen=screen,
@@ -97,6 +120,7 @@ class NavigationPerception:
             image_size=image.size, artifact_path=screenshot.artifact_path,
             captured_at=screenshot.captured_at,
             frame_fingerprint=hashlib.sha256(image.tobytes()).hexdigest(),
+            frame_ref=frame_ref,
         )
         if not include_content or interrupted or blocked or screen == ScreenType.UNKNOWN:
             return observation
