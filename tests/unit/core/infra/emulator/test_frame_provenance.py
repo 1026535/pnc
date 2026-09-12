@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import io
 import logging
+import tempfile
 import time
 import unittest
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
+from pathlib import Path
 
 from PIL import Image
 
@@ -24,6 +26,7 @@ from pnc_automation.core.infra.adb.command_result import CommandResult
 from pnc_automation.core.infra.emulator.bluestacks_instance import BlueStacksInstance
 from pnc_automation.core.infra.emulator.provenance import FrameRef
 from pnc_automation.core.infra.emulator.session import BlueStacksSession
+from pnc_automation.bluestacks_management.instance_lease import InstanceLeaseRegistry
 from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
 from tests.support.core.logging import build_logger
 from tests.support.pnc.observations import make_observation
@@ -58,9 +61,21 @@ class _CaptureAdb:
 
 
 class FrameProvenanceTests(unittest.TestCase):
+    def setUp(self) -> None:
+        """Gives each provenance test an isolated local emulator lease registry."""
+
+        self._lease_directory = tempfile.TemporaryDirectory()
+        self._lease_registry = InstanceLeaseRegistry(root=Path(self._lease_directory.name), wait_timeout_seconds=0)
+
+    def tearDown(self) -> None:
+        """Releases test-owned leases before removing the private registry."""
+
+        self._lease_registry.release_all()
+        self._lease_directory.cleanup()
+
     def test_frame_proof_is_single_use_and_input_invalidates_capture(self) -> None:
         adb = _CaptureAdb(shell_result=_result(stdout_text=""))
-        session = _make_session(adb)
+        session = _make_session(adb, lease_registry=self._lease_registry)
         frame = session.capture_screenshot_frame()
 
         with session.authorized_input(frame.frame_ref):
@@ -77,7 +92,7 @@ class FrameProvenanceTests(unittest.TestCase):
 
     def test_capture_rejects_input_started_while_screenshot_backend_is_running(self) -> None:
         adb = _CaptureAdb(shell_result=_result(stdout_text=""))
-        session = _make_session(adb)
+        session = _make_session(adb, lease_registry=self._lease_registry)
         adb.capture_callback = lambda: session.tap_point(1, 2)
 
         with self.assertRaisesRegex(ScreenshotCaptureError, "overlapped session input or epoch change"):
@@ -87,7 +102,7 @@ class FrameProvenanceTests(unittest.TestCase):
         """Prevents an out-of-order backend completion from publishing stale pixels as newest."""
 
         adb = _CaptureAdb(shell_result=_result(stdout_text=""))
-        session = _make_session(adb)
+        session = _make_session(adb, lease_registry=self._lease_registry)
         adb.capture_callback = lambda: session.capture_screenshot_frame()
 
         with self.assertRaisesRegex(ScreenshotCaptureError, "newer capture began"):
@@ -95,7 +110,7 @@ class FrameProvenanceTests(unittest.TestCase):
 
     def test_capture_rejects_session_epoch_restart_during_backend_capture(self) -> None:
         adb = _CaptureAdb(shell_result=_result(stdout_text=""))
-        session = _make_session(adb)
+        session = _make_session(adb, lease_registry=self._lease_registry)
         adb.capture_callback = session.connect
 
         with self.assertRaisesRegex(ScreenshotCaptureError, "epoch change"):
@@ -113,6 +128,7 @@ class FrameProvenanceTests(unittest.TestCase):
                 device_id="127.0.0.1:5555",
                 app_package="com.global.tmslg",
             ),
+            lease_registry=self._lease_registry,
             provenance_max_age_seconds=0.001,
         )
         frame = session.capture_screenshot_frame()
@@ -125,7 +141,7 @@ class FrameProvenanceTests(unittest.TestCase):
         """Rejects an older capture as soon as a newer capture becomes the latest frame."""
 
         adb = _CaptureAdb(shell_result=_result(stdout_text=""))
-        session = _make_session(adb)
+        session = _make_session(adb, lease_registry=self._lease_registry)
         first = session.capture_screenshot_frame()
         second = session.capture_screenshot_frame()
 
@@ -183,7 +199,7 @@ class FrameProvenanceTests(unittest.TestCase):
 
     def test_action_executor_rejects_missing_and_foreign_proofs(self) -> None:
         adb = _CaptureAdb(shell_result=_result(stdout_text=""))
-        session = _make_session(adb)
+        session = _make_session(adb, lease_registry=self._lease_registry)
         executor = _build_executor(session)
         action = TapAction(selector_id=UiElementId.PNC_HOME_BUILD_BUTTON)
 
@@ -204,7 +220,7 @@ class FrameProvenanceTests(unittest.TestCase):
 
     def test_observed_executor_refreshes_only_stale_proof_and_retries_once(self) -> None:
         adb = _CaptureAdb(shell_result=_result(stdout_text=""))
-        session = _make_session(adb)
+        session = _make_session(adb, lease_registry=self._lease_registry)
         first = session.capture_screenshot_frame()
         initial = make_observation(
             ScreenType.PNC_HOME_CITY,
@@ -321,7 +337,7 @@ class FrameProvenanceTests(unittest.TestCase):
 
     def test_observed_executor_rejects_stale_raw_coordinate_reuse(self) -> None:
         adb = _CaptureAdb(shell_result=_result(stdout_text=""))
-        session = _make_session(adb)
+        session = _make_session(adb, lease_registry=self._lease_registry)
         initial_frame = session.capture_screenshot_frame()
         initial = make_observation(ScreenType.PNC_HOME_CITY, frame_ref=initial_frame.frame_ref)
         session.tap_point(4, 5)
@@ -368,7 +384,7 @@ class _RecordingInputSession:
         self.taps += 1
 
 
-def _make_session(adb: _CaptureAdb) -> BlueStacksSession:
+def _make_session(adb: _CaptureAdb, *, lease_registry: InstanceLeaseRegistry) -> BlueStacksSession:
     return BlueStacksSession(
         adb_client=adb,
         instance=BlueStacksInstance(
@@ -379,6 +395,7 @@ def _make_session(adb: _CaptureAdb) -> BlueStacksSession:
         ),
         connect_attempts=1,
         sleep=lambda _: None,
+        lease_registry=lease_registry,
     )
 
 
