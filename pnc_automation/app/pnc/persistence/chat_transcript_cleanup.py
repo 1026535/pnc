@@ -2,13 +2,26 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
 from pnc_automation.app.pnc.domain.chat import normalize_chat_text
-from pnc_automation.app.pnc.persistence.archive_ownership import ArchiveOwnershipError, chat_scope_from_transcript_path
+from pnc_automation.app.pnc.persistence.archive_ownership import (
+    ArchiveOwnershipError,
+    chat_scope_from_transcript_path,
+    validate_chat_archive_file,
+)
+from pnc_automation.app.pnc.persistence.chat_archive_state import (
+    ChatArchiveSchemaError,
+    ChatArchiveState,
+    ChatTranscriptEvidence,
+    decode_json_object,
+    decode_state_document,
+    state_bytes,
+)
 from pnc_automation.core.infra.storage.atomic_file import atomic_write_bytes
 
 _TRANSCRIPT_LINE_PATTERN = re.compile(r"^\[(?P<timestamp>[^\]]+)\]\s+(?P<sender>.+?):\s+(?P<message>.+)$")
@@ -168,4 +181,81 @@ def persist_cleaned_chat_transcript(path: Path, cleaned_text: str) -> None:
             raise RuntimeError("Chat transcript cleanup is blocked while pending archive recovery exists.")
         if not path.is_file():
             raise ValueError(f"Chat transcript cleanup target is not a regular file: {path}")
-        atomic_write_bytes(path.resolve(), cleaned_text.encode("utf-8"), prefix="cleanup-", suffix=".tmp")
+        original_bytes = path.read_bytes()
+        _validate_state_against_transcript(scope.root, path, original_bytes)
+        atomic_write_bytes(path.absolute(), cleaned_text.encode("utf-8"), prefix="cleanup-", suffix=".tmp")
+        _update_state_transcript_evidence(scope.root, path, cleaned_text.encode("utf-8"))
+
+
+def clean_and_persist_chat_transcript(
+    path: Path,
+    *,
+    patterns: tuple[ChatTranscriptCleanupPattern, ...],
+) -> ChatTranscriptCleanupResult:
+    """Reads, cleans, and publishes one transcript while holding its stream lock."""
+
+    try:
+        scope = chat_scope_from_transcript_path(path)
+    except ArchiveOwnershipError as error:
+        raise ValueError(str(error)) from error
+    with scope.lock():
+        if scope.pending_path.exists():
+            raise RuntimeError("Chat transcript cleanup is blocked while pending archive recovery exists.")
+        try:
+            original_text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as error:
+            raise ValueError(f"Unable to read chat transcript for cleanup: {path}") from error
+        result = clean_chat_transcript_text(original_text, patterns=patterns)
+        if result.changed:
+            cleaned_bytes = result.cleaned_text.encode("utf-8")
+            _validate_state_against_transcript(scope.root, path, original_text.encode("utf-8"))
+            atomic_write_bytes(path.absolute(), cleaned_bytes, prefix="cleanup-", suffix=".tmp")
+            _update_state_transcript_evidence(scope.root, path, cleaned_bytes)
+        return result
+
+
+def _validate_state_against_transcript(root: Path, transcript_path: Path, transcript_bytes: bytes) -> None:
+    """Rejects cleanup when the state evidence no longer matches the bytes being edited."""
+
+    state_path = transcript_path.parent / "state.json"
+    try:
+        validate_chat_archive_file(root, state_path, allowed_names={"state.json"}, allow_missing=True)
+    except ArchiveOwnershipError as error:
+        raise ValueError("Chat cleanup state path is not safe.") from error
+    if not state_path.exists():
+        return
+    try:
+        decoded = decode_state_document(decode_json_object(state_path.read_bytes(), field_name="state"), allow_legacy=True)
+    except (OSError, ChatArchiveSchemaError) as error:
+        raise RuntimeError("Chat cleanup is blocked by malformed archive state.") from error
+    evidence = decoded.state.transcript_evidence
+    if not decoded.legacy and evidence is None:
+        raise RuntimeError("Chat cleanup is blocked because state declares no target-day transcript.")
+    if evidence is not None and (
+        evidence.length != len(transcript_bytes) or evidence.sha256 != hashlib.sha256(transcript_bytes).hexdigest()
+    ):
+        raise RuntimeError("Chat cleanup is blocked because transcript bytes do not match state evidence.")
+
+
+def _update_state_transcript_evidence(root: Path, transcript_path: Path, transcript_bytes: bytes) -> None:
+    """Updates the same-day state evidence after an intentional transcript edit."""
+
+    state_path = transcript_path.parent / "state.json"
+    if not state_path.exists():
+        return
+    try:
+        decoded = decode_state_document(decode_json_object(state_path.read_bytes(), field_name="state"), allow_legacy=True)
+        updated = ChatArchiveState(
+            snapshot=decoded.state.snapshot,
+            last_captured_at=decoded.state.last_captured_at,
+            gap_detected=decoded.state.gap_detected,
+            transcript_evidence=ChatTranscriptEvidence(
+                exists=True,
+                length=len(transcript_bytes),
+                sha256=hashlib.sha256(transcript_bytes).hexdigest(),
+            ),
+        )
+        validate_chat_archive_file(root, state_path, allowed_names={"state.json"}, allow_missing=False)
+        atomic_write_bytes(state_path.absolute(), state_bytes(updated), prefix="cleanup-state-", suffix=".tmp")
+    except (OSError, ChatArchiveSchemaError, ArchiveOwnershipError) as error:
+        raise RuntimeError("Chat cleanup transcript was published but its state evidence could not be updated.") from error

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+import math
 import sys
 import tempfile
 import time
@@ -65,6 +66,18 @@ class NativePathLockTests(unittest.TestCase):
                     process.kill()
                     process.wait(timeout=5)
                     process.communicate(timeout=5)
+
+    def test_lock_timeout_and_poll_inputs_are_strictly_bounded(self) -> None:
+        with self.assertRaises(ValueError):
+            NativePathLockManager(timeout_seconds=True)
+        with self.assertRaises(ValueError):
+            NativePathLockManager(timeout_seconds=-1)
+        with self.assertRaises(ValueError):
+            NativePathLockManager(timeout_seconds=math.inf)
+        with self.assertRaises(ValueError):
+            NativePathLockManager(poll_interval_seconds=True)
+        with self.assertRaises(ValueError):
+            NativePathLockManager(poll_interval_seconds=0)
 
 
 if __name__ == "__main__":

@@ -11,8 +11,8 @@ root = ensure_repo_root_on_path()
 
 from pnc_automation.app.pnc.persistence.chat_transcript_cleanup import (
     build_chat_transcript_cleanup_patterns,
+    clean_and_persist_chat_transcript,
     clean_chat_transcript_text,
-    persist_cleaned_chat_transcript,
 )
 
 
@@ -48,13 +48,14 @@ def main() -> int:
     changed_files = 0
     removed_lines = 0
     for transcript_path in transcript_paths:
-        original_text = transcript_path.read_text(encoding="utf-8")
-        result = clean_chat_transcript_text(original_text, patterns=patterns)
+        if arguments.write:
+            result = clean_and_persist_chat_transcript(transcript_path, patterns=patterns)
+        else:
+            original_text = transcript_path.read_text(encoding="utf-8")
+            result = clean_chat_transcript_text(original_text, patterns=patterns)
         if result.changed:
             changed_files += 1
             removed_lines += len(result.removed_lines)
-            if arguments.write:
-                persist_cleaned_chat_transcript(transcript_path, result.cleaned_text)
         print(f"{transcript_path} removed={len(result.removed_lines)} mode={'write' if arguments.write else 'dry-run'}")
         if not arguments.show_removed:
             continue
@@ -74,12 +75,12 @@ def _discover_transcript_paths(raw_paths: list[str]) -> tuple[Path, ...]:
 
     transcript_paths: list[Path] = []
     for raw_path in raw_paths:
-        path = Path(raw_path).resolve()
+        path = Path(raw_path).absolute()
         if path.is_file():
             transcript_paths.append(path)
             continue
         if path.is_dir():
-            transcript_paths.extend(sorted(item.resolve() for item in path.rglob("transcript.log")))
+            transcript_paths.extend(sorted(item.absolute() for item in path.rglob("transcript.log")))
             continue
         raise ValueError(f"Transcript cleanup target does not exist: {path}")
     unique_paths = tuple(dict.fromkeys(transcript_paths))

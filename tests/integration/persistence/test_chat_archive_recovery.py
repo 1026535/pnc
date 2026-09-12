@@ -12,16 +12,20 @@ import time
 import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.domain.chat import ChatChannel, ChatEntryKind, ObservedChatEntry
 from pnc_automation.app.pnc.persistence.chat_archive_store import (
     ChatArchiveStore,
     ChatArchiveState,
+    NormalizedPlayerChatEntry,
     VisibleChatSnapshot,
 )
 from pnc_automation.app.pnc.persistence.chat_archive_transaction import (
     ChatArchiveConsistencyError,
+    canonical_json_bytes,
     decode_pending_bytes,
 )
 
@@ -234,6 +238,32 @@ class ChatArchiveRecoveryTests(unittest.TestCase):
             self.assertFalse(update.changed)
             self.assertEqual(1, update.transcript_path.read_text(encoding="utf-8").count("\n"))
 
+    def test_actual_child_process_exit_after_flush_and_state_is_recoverable(self) -> None:
+        """True child exits cover the later append and state publication boundaries too."""
+
+        worker = Path(__file__).parents[2] / "support" / "pnc" / "persistence" / "chat_archive_crash_worker.py"
+        for boundary in ("after_transcript_flush", "after_state_publish"):
+            with self.subTest(boundary=boundary), tempfile.TemporaryDirectory() as temporary_directory:
+                root = Path(temporary_directory)
+                completed = subprocess.run(
+                    [sys.executable, str(worker), str(root), boundary],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                    cwd=Path(__file__).resolve().parents[3],
+                )
+                self.assertEqual(23, completed.returncode, completed.stderr)
+                snapshot = ChatArchiveStore(root).build_snapshot(
+                    (ObservedChatEntry(ChatEntryKind.PLAYER, "Child", "child process", 0),)
+                )
+                update = ChatArchiveStore(root).persist_heartbeat(
+                    account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                    captured_at=self.captured_at, snapshot=snapshot,
+                )
+                self.assertFalse(update.changed)
+                self.assertEqual(1, update.transcript_path.read_text(encoding="utf-8").count("\n"))
+
     def test_distinct_store_objects_serialize_one_stream_transaction(self) -> None:
         """A second object waits for the first object's native stream lock."""
 
@@ -291,6 +321,551 @@ class ChatArchiveRecoveryTests(unittest.TestCase):
             self.assertTrue(all(not isinstance(outcome, BaseException) for outcome in outcomes))
             transcript = next(root.rglob("transcript.log"))
             self.assertEqual(1, transcript.read_text(encoding="utf-8").count("serialized"))
+
+    def test_same_stream_ordered_overlap_snapshot_replays_after_recovery(self) -> None:
+        """A later ordered-overlap snapshot sees recovered state and appends only its new row."""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            first_snapshot = self._snapshot("A")
+            second_snapshot = self._snapshot("A", "B")
+            first_ready = threading.Event()
+            release_first = threading.Event()
+            outcomes: list[object] = []
+
+            def pause_first(stage: str) -> None:
+                if stage == "after_pending_publish":
+                    first_ready.set()
+                    self.assertTrue(release_first.wait(timeout=5))
+
+            def run_first() -> None:
+                try:
+                    outcomes.append(ChatArchiveStore(root, fault_injector=pause_first).persist_heartbeat(
+                        account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                        captured_at=self.captured_at, snapshot=first_snapshot, screenshot_payload=b"one",
+                    ))
+                except BaseException as error:
+                    outcomes.append(error)
+
+            first_thread = threading.Thread(target=run_first)
+            first_thread.start()
+            self.assertTrue(first_ready.wait(timeout=5))
+            second_result: list[object] = []
+            second_done = threading.Event()
+
+            def run_second() -> None:
+                try:
+                    second_result.append(ChatArchiveStore(root).persist_heartbeat(
+                        account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                        captured_at=self.captured_at + timedelta(seconds=1),
+                        snapshot=second_snapshot, screenshot_payload=b"two",
+                    ))
+                except BaseException as error:
+                    second_result.append(error)
+                finally:
+                    second_done.set()
+
+            second_thread = threading.Thread(target=run_second)
+            second_thread.start()
+            self.assertFalse(second_done.wait(timeout=0.1))
+            release_first.set()
+            first_thread.join(timeout=5)
+            second_thread.join(timeout=5)
+            self.assertFalse(first_thread.is_alive())
+            self.assertFalse(second_thread.is_alive())
+            self.assertTrue(all(not isinstance(outcome, BaseException) for outcome in outcomes))
+            self.assertEqual(1, len(second_result))
+            self.assertFalse(isinstance(second_result[0], BaseException))
+            update = second_result[0]
+            self.assertEqual(("B",), tuple(entry.message_text for entry in update.appended_entries))
+            self.assertEqual(1, update.transcript_path.read_text(encoding="utf-8").count(": A\n"))
+            self.assertEqual(1, update.transcript_path.read_text(encoding="utf-8").count(": B\n"))
+
+    def test_separate_streams_do_not_share_a_writer_lock(self) -> None:
+        """An unrelated chat channel can publish while another stream is paused."""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            first_ready = threading.Event()
+            release_first = threading.Event()
+            second_done = threading.Event()
+            outcomes: list[object] = []
+
+            def pause_first(stage: str) -> None:
+                if stage == "after_pending_publish":
+                    first_ready.set()
+                    self.assertTrue(release_first.wait(timeout=5))
+
+            def run_first() -> None:
+                try:
+                    outcomes.append(ChatArchiveStore(root, fault_injector=pause_first).persist_heartbeat(
+                        account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                        captured_at=self.captured_at, snapshot=self._snapshot("world"), screenshot_payload=b"world",
+                    ))
+                except BaseException as error:
+                    outcomes.append(error)
+
+            def run_second() -> None:
+                try:
+                    outcomes.append(ChatArchiveStore(root).persist_heartbeat(
+                        account_id="account", castle=self.castle, channel=ChatChannel.ALLIANCE,
+                        captured_at=self.captured_at, snapshot=self._snapshot("alliance"), screenshot_payload=b"alliance",
+                    ))
+                except BaseException as error:
+                    outcomes.append(error)
+                finally:
+                    second_done.set()
+
+            first_thread = threading.Thread(target=run_first)
+            first_thread.start()
+            self.assertTrue(first_ready.wait(timeout=5))
+            second_thread = threading.Thread(target=run_second)
+            second_thread.start()
+            self.assertTrue(second_done.wait(timeout=5))
+            release_first.set()
+            first_thread.join(timeout=5)
+            second_thread.join(timeout=5)
+            self.assertFalse(first_thread.is_alive())
+            self.assertFalse(second_thread.is_alive())
+            self.assertEqual(2, len(outcomes))
+            self.assertTrue(all(not isinstance(outcome, BaseException) for outcome in outcomes))
+            self.assertEqual(2, len(tuple(root.rglob("transcript.log"))))
+
+    def test_current_state_evidence_rejects_missing_transcript_before_no_delta(self) -> None:
+        """A nonempty state cannot advance while its target-day transcript is missing."""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            store = ChatArchiveStore(root)
+            snapshot = self._snapshot("same")
+            first = store.persist_heartbeat(
+                account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                captured_at=self.captured_at, snapshot=snapshot, screenshot_payload=b"first",
+            )
+            state_before = first.state_path.read_bytes()
+            first.transcript_path.unlink()
+            with self.assertRaises(ChatArchiveConsistencyError):
+                store.persist_heartbeat(
+                    account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                    captured_at=self.captured_at + timedelta(seconds=1), snapshot=snapshot,
+                )
+            self.assertEqual(state_before, first.state_path.read_bytes())
+            self.assertFalse(first.transcript_path.exists())
+
+    def test_midnight_overlap_state_starts_new_transcript_at_zero(self) -> None:
+        """Inherited overlap with no rows creates explicit no-transcript state for the new day."""
+
+        zone = ZoneInfo("America/Toronto")
+        before_midnight = datetime(2026, 1, 1, 23, 59, tzinfo=zone)
+        after_midnight = before_midnight + timedelta(minutes=2)
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            store = ChatArchiveStore(root)
+            first_snapshot = self._snapshot("A")
+            second_snapshot = self._snapshot("A", "B")
+            store.persist_heartbeat(
+                account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                captured_at=before_midnight, snapshot=first_snapshot, screenshot_payload=b"first",
+            )
+            unchanged = store.persist_heartbeat(
+                account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                captured_at=after_midnight, snapshot=first_snapshot,
+            )
+            self.assertFalse(unchanged.transcript_path.exists())
+            self.assertIsNone(json.loads(unchanged.state_path.read_text(encoding="utf-8"))["transcript_evidence"])
+            appended = store.persist_heartbeat(
+                account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                captured_at=after_midnight + timedelta(minutes=1), snapshot=second_snapshot, screenshot_payload=b"second",
+            )
+            self.assertEqual(("B",), tuple(entry.message_text for entry in appended.appended_entries))
+            self.assertEqual("B", appended.transcript_path.read_text(encoding="utf-8").split(": ", 1)[1].splitlines()[0])
+
+    def test_dst_local_day_overlap_keeps_target_day_transcript_boundary(self) -> None:
+        """Spring-forward local dates retain the prior-day overlap without borrowing its bytes."""
+
+        zone = ZoneInfo("America/Toronto")
+        before_dst_day = datetime(2026, 3, 7, 23, 59, tzinfo=zone)
+        on_dst_day = datetime(2026, 3, 8, 3, 1, tzinfo=zone)
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            store = ChatArchiveStore(root)
+            first_snapshot = self._snapshot("A")
+            second_snapshot = self._snapshot("A", "B")
+            store.persist_heartbeat(
+                account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                captured_at=before_dst_day, snapshot=first_snapshot, screenshot_payload=b"first",
+            )
+            inherited = store.persist_heartbeat(
+                account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                captured_at=on_dst_day, snapshot=first_snapshot,
+            )
+            self.assertFalse(inherited.transcript_path.exists())
+            appended = store.persist_heartbeat(
+                account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                captured_at=on_dst_day + timedelta(minutes=1), snapshot=second_snapshot, screenshot_payload=b"second",
+            )
+            self.assertEqual(("B",), tuple(entry.message_text for entry in appended.appended_entries))
+            self.assertEqual(1, appended.transcript_path.read_text(encoding="utf-8").count(": B\n"))
+
+    def test_equal_timestamp_uses_normalized_content_and_retains_empty_baseline(self) -> None:
+        """Whitespace/order-only changes and repeated empty observations remain idempotent."""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            store = ChatArchiveStore(root)
+            snapshot = self._snapshot("same")
+            reordered = VisibleChatSnapshot(
+                entries=(NormalizedPlayerChatEntry(" Bób ", " same ", 99),),
+                fingerprint=snapshot.fingerprint,
+            )
+            different = self._snapshot("different")
+            store.persist_heartbeat(
+                account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                captured_at=self.captured_at, snapshot=snapshot, screenshot_payload=b"first",
+            )
+            empty = store.persist_heartbeat(
+                account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                captured_at=self.captured_at, snapshot=store.build_snapshot(()),
+            )
+            self.assertFalse(empty.changed)
+            self.assertFalse(store.persist_heartbeat(
+                account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                captured_at=self.captured_at, snapshot=reordered,
+            ).changed)
+            with self.assertRaises(ChatArchiveConsistencyError):
+                store.persist_heartbeat(
+                    account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                    captured_at=self.captured_at, snapshot=different,
+                )
+
+            empty_root = Path(temporary_directory) / "empty-first"
+            empty_first = ChatArchiveStore(empty_root)
+            empty_first.persist_heartbeat(
+                account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                captured_at=self.captured_at, snapshot=empty_first.build_snapshot(()),
+            )
+            with self.assertRaises(ChatArchiveConsistencyError):
+                empty_first.persist_heartbeat(
+                    account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                    captured_at=self.captured_at, snapshot=snapshot,
+                )
+
+    def test_recovered_rows_are_not_reported_as_current_call_rows(self) -> None:
+        """Recovery completes old work while result counts describe only the current observation."""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            first = self._snapshot("A")
+            current = self._snapshot("A", "B")
+
+            def crash(stage: str) -> None:
+                if stage == "after_pending_publish":
+                    raise SystemExit(stage)
+
+            with self.assertRaises(SystemExit):
+                ChatArchiveStore(root, fault_injector=crash).persist_heartbeat(
+                    account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                    captured_at=self.captured_at, snapshot=first, screenshot_payload=b"first",
+                )
+            update = ChatArchiveStore(root).persist_heartbeat(
+                account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                captured_at=self.captured_at + timedelta(seconds=1), snapshot=current, screenshot_payload=b"current",
+            )
+            self.assertEqual(("B",), tuple(entry.message_text for entry in update.appended_entries))
+            self.assertEqual(2, update.transcript_path.read_text(encoding="utf-8").count("\n"))
+
+    def test_recovered_future_transaction_rejects_current_stale_observation(self) -> None:
+        """A skipped-day lookup cannot hide a pending transaction captured in the future."""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            future = self.captured_at + timedelta(days=2)
+            snapshot = self._snapshot("future")
+
+            def crash(stage: str) -> None:
+                if stage == "after_pending_publish":
+                    raise SystemExit(stage)
+
+            with self.assertRaises(SystemExit):
+                ChatArchiveStore(root, fault_injector=crash).persist_heartbeat(
+                    account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                    captured_at=future, snapshot=snapshot, screenshot_payload=b"future",
+                )
+            with self.assertRaises(ChatArchiveConsistencyError):
+                ChatArchiveStore(root).persist_heartbeat(
+                    account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                    captured_at=self.captured_at, snapshot=snapshot,
+                )
+
+    def test_complete_append_flush_failure_is_reflushed_on_recovery(self) -> None:
+        """A flush failure after complete append does not permit state publication without a retry flush."""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            snapshot = self._snapshot("flush")
+
+            def fail_flush(stage: str) -> None:
+                if stage == "after_transcript_flush":
+                    raise OSError("injected flush failure")
+
+            with self.assertRaisesRegex(OSError, "flush failure"):
+                ChatArchiveStore(root, fault_injector=fail_flush).persist_heartbeat(
+                    account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                    captured_at=self.captured_at, snapshot=snapshot, screenshot_payload=b"flush",
+                )
+            update = ChatArchiveStore(root).persist_heartbeat(
+                account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                captured_at=self.captured_at, snapshot=snapshot,
+            )
+            self.assertFalse(update.changed)
+            self.assertEqual(1, update.transcript_path.read_text(encoding="utf-8").count("\n"))
+
+    def test_state_publication_failure_leaves_pending_and_retry_recovers(self) -> None:
+        """A failed state publisher leaves a valid pending record for the next store."""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            snapshot = self._snapshot("state failure")
+            module = __import__(
+                "pnc_automation.app.pnc.persistence.chat_archive_store",
+                fromlist=["atomic_write_bytes"],
+            )
+            real_atomic_write = module.atomic_write_bytes
+
+            def fail_state(destination: Path, payload: bytes, **kwargs: object) -> None:
+                if destination.name == "state.json":
+                    raise OSError("injected state publication failure")
+                real_atomic_write(destination, payload, **kwargs)
+
+            with patch.object(module, "atomic_write_bytes", side_effect=fail_state):
+                with self.assertRaisesRegex(OSError, "state publication"):
+                    ChatArchiveStore(root).persist_heartbeat(
+                        account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                        captured_at=self.captured_at, snapshot=snapshot, screenshot_payload=b"state",
+                    )
+            pending = next((root / ".archive-control").rglob("pending.json"))
+            update = ChatArchiveStore(root).persist_heartbeat(
+                account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                captured_at=self.captured_at, snapshot=snapshot,
+            )
+            self.assertFalse(update.changed)
+            self.assertFalse(pending.exists())
+            self.assertEqual(1, update.transcript_path.read_text(encoding="utf-8").count("\n"))
+
+    def test_state_replace_effect_then_error_is_recovered_from_bytes(self) -> None:
+        """A state replacement that reports an error after taking effect is classified by recovery."""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            snapshot = self._snapshot("replace effect")
+            module = __import__(
+                "pnc_automation.app.pnc.persistence.chat_archive_store",
+                fromlist=["atomic_write_bytes"],
+            )
+            real_atomic_write = module.atomic_write_bytes
+
+            def replace_then_fail(source: str | os.PathLike[str], target: str | os.PathLike[str]) -> None:
+                os.replace(source, target)
+                raise OSError("injected post-replace state error")
+
+            def fail_after_state_replace(destination: Path, payload: bytes, **kwargs: object) -> None:
+                if destination.name == "state.json":
+                    kwargs["replace"] = replace_then_fail
+                real_atomic_write(destination, payload, **kwargs)
+
+            with patch.object(module, "atomic_write_bytes", side_effect=fail_after_state_replace):
+                with self.assertRaisesRegex(OSError, "post-replace state"):
+                    ChatArchiveStore(root).persist_heartbeat(
+                        account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                        captured_at=self.captured_at, snapshot=snapshot, screenshot_payload=b"replace",
+                    )
+            update = ChatArchiveStore(root).persist_heartbeat(
+                account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                captured_at=self.captured_at, snapshot=snapshot,
+            )
+            self.assertFalse(update.changed)
+            self.assertEqual(1, update.transcript_path.read_text(encoding="utf-8").count("\n"))
+
+    def test_missing_pending_screenshot_fails_closed_and_preserves_pending(self) -> None:
+        """Recovery never treats missing screenshot evidence as a completed append."""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            snapshot = self._snapshot("missing screenshot")
+
+            def crash(stage: str) -> None:
+                if stage == "after_pending_publish":
+                    raise SystemExit(stage)
+
+            with self.assertRaises(SystemExit):
+                ChatArchiveStore(root, fault_injector=crash).persist_heartbeat(
+                    account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                    captured_at=self.captured_at, snapshot=snapshot, screenshot_payload=b"missing",
+                )
+            pending = next((root / ".archive-control").rglob("pending.json"))
+            transaction = decode_pending_bytes(pending.read_bytes())
+            screenshot = root / transaction.screenshot_relative_path
+            screenshot.unlink()
+            with self.assertRaises(ChatArchiveConsistencyError):
+                ChatArchiveStore(root).persist_heartbeat(
+                    account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                    captured_at=self.captured_at, snapshot=snapshot,
+                )
+            self.assertTrue(pending.exists())
+
+    def test_recovery_interrupted_at_each_boundary_is_retryable_by_third_store(self) -> None:
+        """Each recovery write boundary remains resolvable by a fresh store."""
+
+        for boundary in ("after_transcript_flush", "after_state_publish", "before_pending_retire"):
+            with self.subTest(boundary=boundary), tempfile.TemporaryDirectory() as temporary_directory:
+                root = Path(temporary_directory)
+                snapshot = self._snapshot("retry recovery")
+
+                def crash(stage: str) -> None:
+                    if stage == "after_pending_publish":
+                        raise SystemExit(stage)
+
+                with self.assertRaises(SystemExit):
+                    ChatArchiveStore(root, fault_injector=crash).persist_heartbeat(
+                        account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                        captured_at=self.captured_at, snapshot=snapshot, screenshot_payload=b"retry",
+                    )
+
+                def interrupt_recovery(stage: str) -> None:
+                    if stage == boundary:
+                        raise SystemExit(stage)
+
+                with self.assertRaises(SystemExit):
+                    ChatArchiveStore(root, fault_injector=interrupt_recovery).persist_heartbeat(
+                        account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                        captured_at=self.captured_at, snapshot=snapshot,
+                    )
+                update = ChatArchiveStore(root).persist_heartbeat(
+                    account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                    captured_at=self.captured_at, snapshot=snapshot,
+                )
+                self.assertFalse(update.changed)
+                self.assertEqual(1, update.transcript_path.read_text(encoding="utf-8").count("\n"))
+
+    def test_pending_retirement_failure_leaves_recoverable_completion(self) -> None:
+        """A retirement error does not discard the already committed transcript and state."""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            snapshot = self._snapshot("retire")
+
+            def fail_retire(stage: str) -> None:
+                if stage == "before_pending_retire":
+                    raise OSError("injected pending retirement failure")
+
+            with self.assertRaisesRegex(OSError, "retirement failure"):
+                ChatArchiveStore(root, fault_injector=fail_retire).persist_heartbeat(
+                    account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                    captured_at=self.captured_at, snapshot=snapshot, screenshot_payload=b"retire",
+                )
+            pending = next((root / ".archive-control").rglob("pending.json"))
+            update = ChatArchiveStore(root).persist_heartbeat(
+                account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                captured_at=self.captured_at, snapshot=snapshot,
+            )
+            self.assertFalse(update.changed)
+            self.assertFalse(pending.exists())
+
+    def test_recovery_rejects_extra_tail_wrong_prefix_and_incomplete_next_state(self) -> None:
+        """Unsupported physical byte/state combinations remain untouched."""
+
+        for disposition in ("extra_tail", "wrong_prefix", "next_state_partial"):
+            with self.subTest(disposition=disposition), tempfile.TemporaryDirectory() as temporary_directory:
+                root = Path(temporary_directory)
+                snapshot = self._snapshot("unsafe")
+
+                def crash(stage: str) -> None:
+                    if stage == "after_pending_publish":
+                        raise SystemExit(stage)
+
+                with self.assertRaises(SystemExit):
+                    ChatArchiveStore(root, fault_injector=crash).persist_heartbeat(
+                        account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                        captured_at=self.captured_at, snapshot=snapshot, screenshot_payload=b"unsafe",
+                    )
+                pending_path = next((root / ".archive-control").rglob("pending.json"))
+                transaction = decode_pending_bytes(pending_path.read_bytes())
+                store = ChatArchiveStore(root)
+                directory = store._build_directory(account_id="account", castle=self.castle, channel=ChatChannel.WORLD, captured_at=self.captured_at)
+                transcript = directory / "transcript.log"
+                state = directory / "state.json"
+                if disposition == "extra_tail":
+                    transcript.write_bytes(transaction.append_bytes + b"unexpected")
+                elif disposition == "wrong_prefix":
+                    transcript.write_bytes(b"x" + transaction.append_bytes[1:])
+                else:
+                    transcript.write_bytes(transaction.append_bytes[:3])
+                    state.write_bytes(canonical_json_bytes(transaction.next_state))
+                before = (transcript.read_bytes(), state.read_bytes() if state.exists() else None, pending_path.read_bytes())
+                with self.assertRaises(ChatArchiveConsistencyError):
+                    store.persist_heartbeat(
+                        account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                        captured_at=self.captured_at, snapshot=snapshot,
+                    )
+                self.assertEqual(before, (transcript.read_bytes(), state.read_bytes() if state.exists() else None, pending_path.read_bytes()))
+
+    def test_recovery_rejects_truncated_old_transcript_without_truncating_further(self) -> None:
+        """A transaction whose recorded old prefix was truncated fails closed."""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            store = ChatArchiveStore(root)
+            first = self._snapshot("old")
+            second = self._snapshot("old", "new")
+            initial = store.persist_heartbeat(
+                account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                captured_at=self.captured_at, snapshot=first, screenshot_payload=b"old",
+            )
+
+            def crash(stage: str) -> None:
+                if stage == "after_pending_publish":
+                    raise SystemExit(stage)
+
+            with self.assertRaises(SystemExit):
+                ChatArchiveStore(root, fault_injector=crash).persist_heartbeat(
+                    account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                    captured_at=self.captured_at + timedelta(seconds=1), snapshot=second, screenshot_payload=b"new",
+                )
+            truncated = initial.transcript_path.read_bytes()[:-1]
+            initial.transcript_path.write_bytes(truncated)
+            pending = next((root / ".archive-control").rglob("pending.json"))
+            pending_before = pending.read_bytes()
+            with self.assertRaises(ChatArchiveConsistencyError):
+                ChatArchiveStore(root).persist_heartbeat(
+                    account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                    captured_at=self.captured_at + timedelta(seconds=1), snapshot=second,
+                )
+            self.assertEqual(truncated, initial.transcript_path.read_bytes())
+            self.assertEqual(pending_before, pending.read_bytes())
+
+    def test_managed_transcript_symlink_is_rejected_without_touching_target(self) -> None:
+        """A managed chat path cannot redirect archive writes outside the configured root."""
+
+        if not hasattr(os, "symlink"):
+            self.skipTest("symlink creation is unavailable")
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory) / "root"
+            outside = Path(temporary_directory) / "outside.log"
+            root.mkdir()
+            outside.write_bytes(b"outside")
+            store = ChatArchiveStore(root)
+            directory = store._build_directory(account_id="account", castle=self.castle, channel=ChatChannel.WORLD, captured_at=self.captured_at)
+            directory.mkdir(parents=True)
+            try:
+                (directory / "transcript.log").symlink_to(outside)
+            except OSError as error:
+                self.skipTest(f"symlink creation unavailable: {error}")
+            with self.assertRaises(ChatArchiveConsistencyError):
+                store.persist_heartbeat(
+                    account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                    captured_at=self.captured_at, snapshot=self._snapshot("blocked"), screenshot_payload=b"blocked",
+                )
+            self.assertEqual(b"outside", outside.read_bytes())
 
 
 if __name__ == "__main__":
