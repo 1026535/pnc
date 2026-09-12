@@ -11,7 +11,7 @@ from threading import Lock
 from time import sleep
 from typing import Any
 
-from pnc_automation.app.authoring.config.models import CastleIdentity
+from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.domain.daily_maintenance import (
     DailyQuestId,
     DailyTaskCheckpoint,

@@ -1,0 +1,97 @@
+name: Portable tests
+
+on:
+  pull_request:
+  merge_group:
+    types: [checks_requested]
+  push:
+    branches: [main]
+  schedule:
+    - cron: '23 7 * * *'
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Exact commit SHA, branch, or tag to run full tests against'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: portable-tests-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  offline:
+    name: Portable tests (${{ github.event_name == 'pull_request' && 'affected' || 'full' }})
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Check out requested candidate with selection history
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      - name: Install portable test dependencies
+        run: python -m pip install ".[test]"
+
+      - name: Record nightly selector audit
+        if: github.event_name == 'schedule'
+        continue-on-error: true
+        run: |
+          python tools/run_tests.py affected --base 'HEAD^' --dry-run --explain --json .test-impact/audit-selection.json
+          $auditExit = $LASTEXITCODE
+          if ($auditExit -ne 0) {
+            Write-Warning 'Selector audit failed; the independent full measurement will still run.'
+          }
+          exit $auditExit
+
+      - name: Run portable tests
+        env:
+          TEST_EVENT: ${{ github.event_name }}
+          TEST_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if ($env:TEST_EVENT -eq 'pull_request') {
+            python tools/run_tests.py affected --base "$env:TEST_BASE_SHA" --explain --json .test-impact/selection.json --results .test-impact/results.json --csv .test-impact/timings.csv
+          } elseif ($env:TEST_EVENT -eq 'schedule') {
+            python tools/run_tests.py measure --explain --json .test-impact/selection.json --results .test-impact/results.json --csv .test-impact/timings.csv
+          } else {
+            python tools/run_tests.py full --explain --json .test-impact/selection.json --results .test-impact/results.json --csv .test-impact/timings.csv
+          }
+          exit $LASTEXITCODE
+
+      - name: Audit nightly selection against full results
+        if: >-
+          always() && github.event_name == 'schedule' &&
+          hashFiles('.test-impact/audit-selection.json') != '' &&
+          hashFiles('.test-impact/results.json') != ''
+        run: |
+          python tools/audit_test_selection.py .test-impact/audit-selection.json .test-impact/results.json --output .test-impact/audit-result.json
+          exit $LASTEXITCODE
+
+      - name: Upload selection and result evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: portable-tests-${{ github.run_id }}-${{ github.run_attempt }}
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            .test-impact/selection.json
+            .test-impact/results.json
+            .test-impact/timings.csv
+            .test-impact/coverage.json
+            .test-impact/audit-selection.json
+            .test-impact/audit-result.json

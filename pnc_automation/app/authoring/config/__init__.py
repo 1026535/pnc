@@ -6,14 +6,16 @@ from pnc_automation.app.authoring.config.models import (
     AccountConfig,
     AppConfig,
     BlueStacksInstanceConfig,
-    CastleIdentity,
-    CastleRosterOrdering,
     CastleTargetDefinition,
     CredentialSource,
     DefaultsConfig,
-    PncAccountCastleRosterConfig,
     ResolvedCredentials,
     RuntimeConfig,
+)
+from pnc_automation.app.pnc.domain.castles import (
+    CastleIdentity,
+    CastleRosterOrdering,
+    PncAccountCastleRosterConfig,
     castle_identity_key,
 )
 

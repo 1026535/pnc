@@ -10,9 +10,8 @@ from pnc_automation.app.authoring.config.models import (
     AccountCastleTargetsConfig,
     AccountConfig,
     AppConfig,
-    PncAccountCastleRosterConfig,
-    castle_identity_key,
 )
+from pnc_automation.app.pnc.domain.castles import PncAccountCastleRosterConfig, castle_identity_key
 from pnc_automation.core.config.host import validate_live_roles
 from pnc_automation.core.errors import ConfigurationError
 

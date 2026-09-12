@@ -106,7 +106,7 @@ from pnc_automation.app.pnc.navigation.world_map_traversal import (
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.app.pnc.vision.spatial_surfaces import estimated_world_map_visible_scan_footprint_units
 from pnc_automation.app.pnc.vision.world_map_coordinates import parse_world_coordinate_dialog_field_text
-from pnc_automation.app.runtime.observation_artifacts import (
+from pnc_automation.app.pnc.domain.observation_policy import (
     ObservationArtifactRoutine,
     ObservationArtifactSelection,
     resolve_routine_artifact_selection,

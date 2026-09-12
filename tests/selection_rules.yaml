@@ -1,0 +1,38 @@
+version: 1
+full:
+  - pyproject.toml
+  - requirements*
+  - setup.*
+  - MANIFEST.in
+  - .github/*
+  - .gitignore
+  - tools/run_tests.py
+  - tools/test_selection/*
+  - tests/selection_rules.yaml
+  - tests/__init__.py
+  - tests/support/*
+  - tests/*/__init__.py
+  - tests/data/*
+  - tests/local_fixture_artifacts.py
+  - pnc_automation/*/__init__.py
+  - pnc_automation/__init__.py
+  - pnc_automation/app/pnc/domain/*
+  - pnc_automation/app/authoring/config/*
+  - pnc_automation/core/config/*
+  - pnc_automation/app/authoring/scripts/registry.py
+  - pnc_automation/app/entrypoints/app.py
+  - pnc_automation/app/entrypoints/task_registry.py
+  - pnc_automation/app/entrypoints/daily_maintenance.py
+documentation:
+  - '*.md'
+resources:
+  - pattern: pnc_automation/app/pnc/vision/data/*
+    groups: [vision, integration]
+  - pattern: pnc_automation/templates/*
+    groups: [vision, integration]
+  - pattern: scripts/*.yaml
+    groups: [integration, contract]
+  - pattern: config/*.yaml
+    groups: [integration, contract]
+  - pattern: config/*.json
+    groups: [vision, integration]

@@ -29,7 +29,7 @@ from pnc_automation.app.pnc.domain.observation import Observation
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
-from pnc_automation.app.runtime.observation_mode import ObservationMode
+from pnc_automation.core.vision.observation_policy import ObservationMode
 
 
 ALLOWED_TAPS = frozenset({

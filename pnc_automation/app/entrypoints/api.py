@@ -8,12 +8,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from pnc_automation.app.runtime.observation_mode import ObservationMode
+from pnc_automation.core.vision.observation_policy import ObservationMode
 from pnc_automation.app import ApplicationRunner, build_application_runner
 from pnc_automation.app.automation.engine.runner import RunResult, StepRunResult
 from pnc_automation.app.automation.engine.script_runner import require_successful_preparation
 from pnc_automation.app.automation.engine.task import TaskId
-from pnc_automation.app.authoring.config.models import CastleIdentity
+from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.domain.building_priority_input import resolve_building_priority_values
 from pnc_automation.bluestacks_management.instance_lease import InstanceLeaseBundle
 

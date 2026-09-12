@@ -13,7 +13,7 @@ from pnc_automation.app.pnc.domain.observation import Observation, SpatialSurfac
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.vision.observation_builder import CapturedObservation
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
-from pnc_automation.app.runtime.observation_artifacts import ObservationArtifactSelection
+from pnc_automation.app.pnc.domain.observation_policy import ObservationArtifactSelection
 from pnc_automation.core.errors import SelectorResolutionError
 
 

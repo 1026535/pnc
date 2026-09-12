@@ -11,15 +11,19 @@ from typing import Protocol
 from PIL import Image
 
 from pnc_automation.core.errors import ScreenClassificationError
-from pnc_automation.app.runtime.observation_artifacts import (
+from pnc_automation.app.pnc.domain.observation_policy import (
     ObservationArtifactKind,
     ObservationArtifactOwner,
     ObservationArtifactSelection,
     ResolvedObservationArtifactPolicy,
     resolve_observation_artifact_policy,
 )
-from pnc_automation.app.runtime.observation_mode import ObservationMode
-from pnc_automation.app.authoring.config.models import CastleIdentity, CastleRosterOrdering, PncAccountCastleRosterConfig
+from pnc_automation.core.vision.observation_policy import ObservationMode
+from pnc_automation.app.pnc.domain.castles import (
+    CastleIdentity,
+    CastleRosterOrdering,
+    PncAccountCastleRosterConfig,
+)
 from pnc_automation.core.infra.capture.screenshot_service import CapturedScreenshot, ScreenshotService
 from pnc_automation.app.pnc.persistence.castle_roster_store import CastleRosterStore
 from pnc_automation.core.infra.emulator.session import BlueStacksSession

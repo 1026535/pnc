@@ -10,7 +10,8 @@ from typing import TYPE_CHECKING, Any
 from pnc_automation.app.pnc.persistence.chat_archive_store import ChatArchiveStore
 from pnc_automation.app.pnc.persistence.mail_archive_store import MailArchiveStore
 from pnc_automation.app.pnc.persistence.castle_roster_store import CastleRosterStore
-from pnc_automation.app.authoring.config.models import AccountConfig, CastleIdentity, DefaultsConfig, PncAccountCastleRosterConfig
+from pnc_automation.app.authoring.config.models import AccountConfig, DefaultsConfig
+from pnc_automation.app.pnc.domain.castles import CastleIdentity, PncAccountCastleRosterConfig
 from pnc_automation.core.errors import TaskVerificationError
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
 

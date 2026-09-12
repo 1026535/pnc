@@ -8,7 +8,7 @@ from pnc_automation.app.authoring.scripts.models import (
     RunScript,
     ScriptStep,
 )
-from pnc_automation.app.authoring.scripts.registry import TaskRegistry, build_default_task_registry
+from pnc_automation.app.authoring.scripts.registry import TaskRegistry
 
 __all__ = [
     "CastleRefRepeatBlock",
@@ -17,6 +17,5 @@ __all__ = [
     "RunScript",
     "ScriptStep",
     "TaskRegistry",
-    "build_default_task_registry",
     "load_run_script",
 ]

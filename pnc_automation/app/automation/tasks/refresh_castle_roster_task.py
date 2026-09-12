@@ -9,7 +9,7 @@ from typing import Any
 
 from pnc_automation.app.automation.engine.task import BaseAutomationTask, CastleTargetPolicy, TaskId, TaskResult
 from pnc_automation.app.automation.engine.task_context import TaskContext
-from pnc_automation.app.authoring.config.models import CastleIdentity, castle_identity_key
+from pnc_automation.app.pnc.domain.castles import CastleIdentity, castle_identity_key
 from pnc_automation.core.errors import TaskVerificationError
 from pnc_automation.app.pnc.domain.action_requests import ActionRequest, SwipeAction, WaitAction
 from pnc_automation.app.pnc.domain.observation import ListEntryKind, Observation, castle_identity_from_entry

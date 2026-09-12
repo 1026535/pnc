@@ -62,8 +62,9 @@
 ## Offline Testing
 
 - Tests use `unittest`. On Windows, use `py` when the `python` alias is unavailable.
-- Start with the smallest relevant command, such as `py -m unittest tests.test_world_map_search` or a specific test method.
-- Run `py -m unittest discover -s tests` for cross-cutting changes, shared interfaces, config schemas, authored workflows, test infrastructure, or any change whose regression surface is broader than the targeted tests. For a genuinely isolated low-risk change, targeted validation may be sufficient; explain that choice in the final response.
+- Start with the smallest relevant portable group, such as `py tools/run_tests.py group api` or `py tools/run_tests.py group vision`. See `tests/README.md` for tier/component ownership and individual unittest commands.
+- Use `py tools/run_tests.py affected --base origin/main --explain` for development validation. It includes downstream consumers and mandatory contracts/architecture checks and falls back to full when mapping is uncertain. Do not require the full suite for every isolated development commit.
+- Run `py tools/run_tests.py full` for cross-cutting changes, shared interfaces, config schemas, authored workflows, test infrastructure, and merge-to-main validation. Nightly CI independently runs the full portable suite. Use `measure` to write per-test timing CSV and branch coverage; all these commands exclude opt-in live modules and local-only fixtures.
 - Keep ordinary tests offline and headless. They must not require BlueStacks, ADB, live game state, network access, or credentials.
 - Use saved screenshots, authored YAML, fake sessions, and explicit fixtures for deterministic integration coverage.
 - When live evidence exposes a bug, add a deterministic regression test when safe and reasonably sized. Otherwise use the local fixture mechanism based on `tests/data/local_fixture_artifacts.example.json`.

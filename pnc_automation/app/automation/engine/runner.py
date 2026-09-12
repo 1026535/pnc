@@ -19,7 +19,8 @@ from pnc_automation.app.pnc.persistence.mail_archive_store import MailArchiveSto
 from pnc_automation.app.pnc.persistence.castle_roster_store import CastleRosterStore
 from pnc_automation.app.pnc.navigation.world_map_search import WorldMapSearchService
 from pnc_automation.app.pnc.navigation.world_map_survey_recorder import WorldMapSurveyRecorder
-from pnc_automation.app.authoring.config.models import AccountConfig, CastleIdentity, DefaultsConfig, PncAccountCastleRosterConfig
+from pnc_automation.app.authoring.config.models import AccountConfig, DefaultsConfig
+from pnc_automation.app.pnc.domain.castles import CastleIdentity, PncAccountCastleRosterConfig
 from pnc_automation.core.errors import SelectorResolutionError, TaskVerificationError
 from pnc_automation.app.pnc.domain.action_requests import ActionRequest, WaitAction
 from pnc_automation.app.pnc.domain.observation import Observation
@@ -27,7 +28,7 @@ from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
 from pnc_automation.app.pnc.vision.observation_builder import ObservationService
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
-from pnc_automation.app.runtime.observation_artifacts import ObservationArtifactKind, observation_artifact_selection
+from pnc_automation.app.pnc.domain.observation_policy import ObservationArtifactKind, observation_artifact_selection
 
 
 @dataclass(frozen=True, slots=True)

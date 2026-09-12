@@ -20,7 +20,8 @@ from pnc_automation.app.automation.audits.hero_arena_audit import (
 )
 from pnc_automation.app.automation.engine.task import TaskId, TaskStatus
 from pnc_automation.app.automation.engine.script_runner import require_successful_preparation
-from pnc_automation.app.authoring.config.models import CastleIdentity, LiveAutomationRole
+from pnc_automation.app.authoring.config.models import LiveAutomationRole
+from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.core.infra.storage.artifact_store import ArtifactStore
 
 

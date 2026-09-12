@@ -24,7 +24,7 @@ from pnc_automation.app.automation.engine.task import TaskPreflight
 from pnc_automation.app.pnc.domain.observation import SpatialSurfaceType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
-from pnc_automation.app.runtime.observation_artifacts import (
+from pnc_automation.app.pnc.domain.observation_policy import (
     ObservationArtifactRoutine,
     resolve_routine_artifact_selection,
 )

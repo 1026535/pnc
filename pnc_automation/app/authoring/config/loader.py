@@ -14,17 +14,16 @@ from pnc_automation.app.authoring.config.models import (
     AccountCastleTargetsConfig,
     AppConfig,
     BlueStacksInstanceConfig,
-    CastleRosterOrdering,
     CastleTargetDefinition,
     CredentialSource,
     DEFAULT_BLUESTACKS_CONFIG_PATH,
     DefaultsConfig,
     LiveAutomationRole,
-    PncAccountCastleRosterConfig,
     ResolvedCredentials,
     RuntimeConfig,
 )
-from pnc_automation.app.runtime.observation_mode import ObservationMode
+from pnc_automation.app.pnc.domain.castles import CastleRosterOrdering, PncAccountCastleRosterConfig
+from pnc_automation.core.vision.observation_policy import ObservationMode
 from pnc_automation.core.config.host import (
     BlueStacksMemoryPolicy,
     parse_account_binding,

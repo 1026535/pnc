@@ -17,14 +17,15 @@ from pnc_automation.app.automation.daily_maintenance.application_service import 
     DailyRunBoundary,
 )
 from pnc_automation.app.automation.daily_maintenance.authorization import DailyMutationAuthorizer
-from pnc_automation.app.automation.daily_maintenance.connected_runner import (
+from pnc_automation.app.entrypoints.daily_maintenance import (
     ConnectedClaimOnlyRunnerFactory,
 )
 from pnc_automation.app.automation.engine.task import TaskId
 from pnc_automation.app.automation.engine.script_runner import require_successful_preparation
-from pnc_automation.app.runtime.observation_mode import ObservationMode
+from pnc_automation.core.vision.observation_policy import ObservationMode
 from pnc_automation.app import ApplicationRunner, build_application_runner
-from pnc_automation.app.authoring.config.models import CastleIdentity, LiveAutomationRole
+from pnc_automation.app.authoring.config.models import LiveAutomationRole
+from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.authoring.config.loader import load_app_config
 from pnc_automation.app.authoring.config.daily_maintenance import load_daily_maintenance_config
 from pnc_automation.app.authoring.config.mutation_acknowledgement import parse_mutation_acknowledgement

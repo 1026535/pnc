@@ -1,0 +1,131 @@
+"""Visual popup ownership: verifies the named internal boundary with offline fixtures."""
+
+from __future__ import annotations
+
+import tempfile
+import unittest
+from pathlib import Path
+
+from PIL import Image, ImageDraw
+
+from pnc_automation.core.infra.storage.artifact_store import ArtifactStore
+from pnc_automation.core.infra.capture.screenshot_service import ScreenshotService
+from pnc_automation.app.pnc.domain.observation import VisibleElementSourceKind
+from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
+from pnc_automation.app.pnc.vision.observation_builder import (
+    ObservationBuilder,
+    ImageSelectorEngine,
+)
+from pnc_automation.core.vision.ocr.ocr_service import UnavailableOcrService
+from pnc_automation.app.pnc.vision.pnc_observation_enricher import (
+    PncObservationEnricher,
+    _build_popup_additions,
+)
+from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
+from pnc_automation.app.pnc.vision.selectors import SelectorRegistry
+from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
+
+from tests.support.pnc.capture_vision.fake_ocr_service import _FakeOcrService
+from tests.support.pnc.capture_vision.fake_screenshot_session import _FakeScreenshotSession
+from tests.support.pnc.capture_vision.recording_ocr_service import _RecordingOcrService
+from tests.support.pnc.capture_vision.encode_png import _encode_png
+from tests.support.pnc.capture_vision.ocr_line import _ocr_line
+
+
+class VisualPopupOwnershipTests(unittest.TestCase):
+    """Proves visual popup ownership."""
+
+    def test_observation_builder_classifies_generic_upper_right_popup_x_without_popup_ocr(self) -> None:
+        """Recognizes the shared bright popup X when the one global OCR pass has no popup lines."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            image = Image.new("RGB", (900, 1600), (15, 28, 68))
+            drawing = ImageDraw.Draw(image)
+            drawing.rectangle((25, 250, 860, 1000), fill=(25, 33, 50), outline=(65, 82, 110), width=4)
+            drawing.line((794, 302, 832, 340), fill=(255, 247, 218), width=8)
+            drawing.line((832, 302, 794, 340), fill=(255, 247, 218), width=8)
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(image)),
+                artifact_directory="generic_visual_popup",
+                label="upper_right_close_x",
+            )
+            ocr_service = _RecordingOcrService(lines=())
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(ocr_service=ocr_service),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_POPUP)
+            self.assertTrue(observation.blocking_popup)
+            close_button = observation.require(UiElementId.PNC_POPUP_CLOSE_BUTTON)
+            self.assertEqual(close_button.source_kind, VisibleElementSourceKind.GEOMETRY)
+            self.assertAlmostEqual(close_button.action_point[0] / image.width, 0.903, delta=0.02)
+            self.assertAlmostEqual(close_button.action_point[1] / image.height, 0.201, delta=0.02)
+            self.assertEqual(ocr_service.read_result_calls, 1)
+
+    def test_observation_builder_accepts_shifted_x_owned_by_modal_text_cluster(self) -> None:
+        """Finds a measured X after a compact message and primary action prove modal ownership."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            image = Image.new("RGB", (900, 1600), (15, 28, 68))
+            drawing = ImageDraw.Draw(image)
+            drawing.line((700, 302, 738, 340), fill=(255, 247, 218), width=8)
+            drawing.line((738, 302, 700, 340), fill=(255, 247, 218), width=8)
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(image)),
+                artifact_directory="generic_visual_popup",
+                label="owned_shifted_close_x",
+            )
+            builder = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(
+                    ocr_service=_FakeOcrService(
+                        lines=(
+                            _ocr_line("Special opportunity", x=300, y=420, width=280, height=34),
+                            _ocr_line("Claim", x=500, y=900, width=150, height=38),
+                        )
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_POPUP)
+            self.assertTrue(observation.blocking_popup)
+            self.assertEqual(observation.popup_overlay.layout_id, "generic_modal_close_x")
+            close_button = observation.require(UiElementId.PNC_POPUP_CLOSE_BUTTON)
+            self.assertEqual(close_button.action_point, (720, 321))
+
+    def test_observation_builder_rejects_x_outside_proven_modal_edges(self) -> None:
+        """A bright cross outside the OCR-owned modal is not a dismiss control."""
+
+        image = Image.new("RGB", (900, 1600), (15, 28, 68))
+        drawing = ImageDraw.Draw(image)
+        drawing.line((54, 302, 92, 340), fill=(255, 247, 218), width=8)
+        drawing.line((92, 302, 54, 340), fill=(255, 247, 218), width=8)
+        additions = _build_popup_additions(
+            image=image,
+            lines=(
+                _ocr_line("Special opportunity", x=250, y=420, width=300, height=34),
+                _ocr_line("Claim", x=360, y=900, width=150, height=38),
+            ),
+            anchors=(),
+        )
+        self.assertIsNone(additions)

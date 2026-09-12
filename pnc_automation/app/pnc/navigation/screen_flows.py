@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from pnc_automation.app.authoring.config.models import CastleIdentity, PncAccountCastleRosterConfig
+from pnc_automation.app.pnc.domain.castles import CastleIdentity, PncAccountCastleRosterConfig
 from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.app.pnc.domain.action_requests import (
     ActionRequest,

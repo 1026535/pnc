@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 from pnc_automation.core.infra.adb.client import AdbClient
-from pnc_automation.app.runtime.observation_mode import ObservationMode
+from pnc_automation.core.vision.observation_policy import ObservationMode
 from pnc_automation.app.automation.engine.runner import RunResult, StepRunResult
 from pnc_automation.app.automation.engine.core_runtime import build_core_runtime
 from pnc_automation.app.automation.engine.core_workflow import CoreWorkflowResult, CoreWorkflowRunner
@@ -18,14 +18,15 @@ from pnc_automation.app.automation.daily_maintenance.daily_quest_status import (
     DailyQuestStatusResult,
     DailyQuestStatusWorkflow,
 )
-from pnc_automation.app.authoring.scripts.registry import build_default_task_registry
+from pnc_automation.app.entrypoints.task_registry import build_default_task_registry
 from pnc_automation.core.infra.storage.artifact_store import ArtifactStore
 from pnc_automation.app.pnc.persistence.chat_archive_store import ChatArchiveStore
 from pnc_automation.app.pnc.persistence.mail_archive_store import MailArchiveStore
 from pnc_automation.core.infra.capture.screenshot_service import ScreenshotService
 from pnc_automation.app.pnc.persistence.castle_roster_store import CastleRosterStore
 from pnc_automation.app.authoring.config.loader import load_app_config
-from pnc_automation.app.authoring.config.models import AppConfig, CastleIdentity, LiveAutomationRole
+from pnc_automation.app.authoring.config.models import AppConfig, LiveAutomationRole
+from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.core.infra.diagnostics.logging_setup import configure_logging
 from pnc_automation.core.infra.emulator.bluestacks_instance_resolver import BlueStacksInstanceResolver
 from pnc_automation.app.pnc.vision.observation_builder import (

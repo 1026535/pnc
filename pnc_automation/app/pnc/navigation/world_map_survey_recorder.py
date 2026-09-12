@@ -21,7 +21,7 @@ from pnc_automation.app.pnc.persistence.world_map_survey_debug_store import (
 )
 from pnc_automation.app.pnc.vision.observation_builder import CapturedObservation, ObservationService
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
-from pnc_automation.app.runtime.observation_artifacts import (
+from pnc_automation.app.pnc.domain.observation_policy import (
     ObservationArtifactKind,
     ObservationArtifactOwner,
     ObservationArtifactSelection,

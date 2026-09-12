@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from pnc_automation.app.authoring.config.models import CastleIdentity
+from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.core.errors import ConfigurationError
 from pnc_automation.core.config.yaml_helpers import (
     ErrorBuilder,
