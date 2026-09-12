@@ -184,8 +184,8 @@ class DailyMaintenanceCoordinator:
         reopens = 0
         deferred_quest_ids: set[DailyQuestId] = set()
         self.session.open_daily_quest()
+        viewport = self._observe_stable_viewport(label_prefix="daily_viewport_0")
         while True:
-            viewport = self._observe_stable_viewport(label_prefix=f"daily_viewport_{scanned_viewports}")
             scanned_viewports += 1
             for title in viewport.unknown_titles:
                 if title not in unknown_titles:
@@ -210,6 +210,7 @@ class DailyMaintenanceCoordinator:
                 if outcome.status == DailyTargetOutcomeStatus.PENDING_CLARIFICATION:
                     break
                 reopens = self._reopen_daily(reopens)
+                viewport = self._observe_stable_viewport(label_prefix=f"daily_viewport_{scanned_viewports}")
                 continue
 
             actionable = self._select_actionable_row(
@@ -241,6 +242,7 @@ class DailyMaintenanceCoordinator:
                     self.journal_store.save(current_checkpoint)
                     break
                 reopens = self._reopen_daily(reopens)
+                viewport = self._observe_stable_viewport(label_prefix=f"daily_viewport_{scanned_viewports}")
                 continue
 
             if viewport.bottom_marker:
@@ -253,14 +255,6 @@ class DailyMaintenanceCoordinator:
                     max_viewports=self.max_viewports,
                 )
             viewport = self._advance_viewport(previous=viewport, scanned_viewports=scanned_viewports)
-            scanned_viewports += 1
-            if viewport.bottom_marker and not self._has_pending_rows(
-                viewport,
-                target,
-                current_checkpoint,
-                deferred_quest_ids=deferred_quest_ids,
-            ):
-                break
 
         self.session.return_to_home()
         current_checkpoint = replace(current_checkpoint, current_quest_id=None, last_typed_screen=ScreenType.PNC_HOME_CITY)
@@ -328,26 +322,6 @@ class DailyMaintenanceCoordinator:
             if row.row_status == RowRecognitionStatus.COMPLETE and row.state == DailyQuestRowState.GO:
                 return row
         return None
-
-    def _has_pending_rows(
-        self,
-        viewport: DailyQuestViewport,
-        target: DailyMaintenanceTargetConfig,
-        checkpoint: DailyTaskCheckpoint,
-        deferred_quest_ids: set[DailyQuestId] | None = None,
-    ) -> bool:
-        """Returns whether the current bottom viewport still contains coordinator work."""
-
-        return any(
-            row.row_status == RowRecognitionStatus.COMPLETE
-            and row.state == DailyQuestRowState.CLAIM
-            for row in viewport.rows
-        ) or self._select_actionable_row(
-            viewport=viewport,
-            target=target,
-            checkpoint=checkpoint,
-            deferred_quest_ids=deferred_quest_ids,
-        ) is not None
 
     def _reopen_daily(self, reopens: int) -> int:
         """Reopens Daily after one mutation and enforces a non-cyclic bound."""

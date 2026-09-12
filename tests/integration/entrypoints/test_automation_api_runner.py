@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextvars import Context
 from pathlib import Path
 import tempfile
 import unittest
@@ -112,6 +113,41 @@ class AutomationApiRunnerTests(RuntimeCastleTargetingFixtures, unittest.TestCase
 
         self.assertEqual(len(fake_runner.reservations), 1)
         self.assertTrue(fake_runner.reservations[0].closed)
+
+    def test_python_reservation_rejects_implicit_account_on_another_api(self) -> None:
+        """Rejects cross-API calls before an implicit account reaches another runner."""
+
+        fake_runner = _FakeApplicationRunner()
+        api = AutomationApi(application=fake_runner)
+        other_runner = _FakeApplicationRunner()
+        other_api = AutomationApi(application=other_runner)
+
+        with api.reserve_accounts(("account_a",)):
+            with self.assertRaisesRegex(RuntimeError, "cannot switch AutomationApi"):
+                other_api.run_task(task_id=TaskId.RESEARCH)
+
+        self.assertEqual(other_runner.task_calls, [])
+
+    def test_python_use_account_rejects_reentry_without_losing_outer_reservation(self) -> None:
+        """Preserves the original lease and scope token when a session is reused recursively."""
+
+        def exercise_session() -> None:
+            fake_runner = _FakeApplicationRunner()
+            api = AutomationApi(application=fake_runner)
+            session = api.use_account("account_a")
+
+            with session:
+                with self.assertRaisesRegex(RuntimeError, "cannot be entered twice"):
+                    with session:
+                        self.fail("A live session must not be recursively entered.")
+                api.research()
+
+            self.assertEqual(len(fake_runner.reservations), 1)
+            self.assertTrue(fake_runner.reservations[0].closed)
+            with self.assertRaisesRegex(RuntimeError, "require either an explicit account_id"):
+                api.research()
+
+        Context().run(exercise_session)
 
     def test_python_use_account_failed_preparation_releases_real_lease(self) -> None:
         """Allows a competitor to acquire immediately after a failed public API preparation."""

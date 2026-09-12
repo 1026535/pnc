@@ -102,7 +102,14 @@ class JournaledDailyClaimExecutor:
             artifact_paths = () if after.artifact_path is None else (str(after.artifact_path),)
             return MutationReconciliation(
                 postcondition_proven=bool(same_quest_states)
-                and DailyQuestRowState.CLAIM.value not in same_quest_states,
+                and all(
+                    state in {
+                        DailyQuestRowState.GO.value,
+                        DailyQuestRowState.COMPLETED.value,
+                        DailyQuestRowState.REQUIREMENT.value,
+                    }
+                    for state in same_quest_states
+                ),
                 original_precondition_proven=DailyQuestRowState.CLAIM.value in same_quest_states,
                 artifact_paths=artifact_paths,
             )
