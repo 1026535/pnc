@@ -12,7 +12,7 @@ from pnc_automation.app.pnc.domain.observation import (
     SpatialViewport, SpatialViewportAddressingKind,
 )
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
-from pnc_automation.app.pnc.vision.yolo_shadow import YoloShadowObserver
+from pnc_automation.app.pnc.vision.yolo_shadow import YoloShadowObserver, evaluate_yolo_shadow
 from pnc_automation.core.infra.capture.screenshot_service import CapturedScreenshot
 from pnc_automation.core.vision.detection.yolo_onnx import YoloDetection
 from pnc_automation.core.vision.image.models import Bounds
@@ -76,6 +76,24 @@ class YoloShadowTests(unittest.TestCase):
             YoloShadowObserver(FakeDetector(), {"missing": SpatialObjectKind.MONSTER})
         with self.assertRaises(ValueError):
             YoloShadowObserver(FakeDetector(), {"monster": "monster"})
+
+    def test_evaluation_reports_generic_boxes_as_no_measured_improvement(self) -> None:
+        report = YoloShadowObserver(FakeDetector()).observe(self.capture, self.observation)
+
+        evaluation = evaluate_yolo_shadow((report, report))
+
+        self.assertEqual(evaluation.frame_count, 2)
+        self.assertEqual(evaluation.unique_frame_count, 1)
+        self.assertEqual(evaluation.frames_with_detections, 2)
+        self.assertEqual(evaluation.detection_count, 2)
+        self.assertEqual(evaluation.candidate_count, 0)
+        self.assertEqual(evaluation.detection_labels, (("monster", 2),))
+        self.assertEqual(evaluation.assessment, "no_measured_pnc_improvement")
+        self.assertFalse(evaluation.to_document()["authoritative_observation_changed"])
+
+    def test_evaluation_requires_at_least_one_report(self) -> None:
+        with self.assertRaisesRegex(ValueError, "At least one"):
+            evaluate_yolo_shadow(())
 
 
 if __name__ == "__main__":
