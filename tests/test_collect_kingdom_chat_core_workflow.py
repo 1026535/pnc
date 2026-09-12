@@ -85,6 +85,19 @@ class CollectKingdomChatCoreWorkflowTests(unittest.TestCase):
 
             self.assertFalse(any(Path(temporary_directory).rglob("state.json")))
 
+    def test_empty_transcript_fails_before_archive_write(self) -> None:
+        """A completely unparsed Chat viewport cannot create or replace an archive baseline."""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            source = Path(temporary_directory) / "chat.png"
+            source.write_bytes(b"png")
+            observation = _chat(ChatChannel.WORLD, (), source)
+
+            with self.assertRaisesRegex(TaskVerificationError, "no typed chat rows"):
+                _workflow(temporary_directory).execute(_FakeChatContext(observation, observation))
+
+            self.assertFalse(any(Path(temporary_directory).rglob("state.json")))
+
     def test_result_rejects_inconsistent_screenshot_flag(self) -> None:
         """A typed result cannot claim appended rows without a change screenshot."""
 
