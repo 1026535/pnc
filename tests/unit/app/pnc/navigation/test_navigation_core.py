@@ -86,7 +86,10 @@ class Guard:
         self.ocr_service = Mock(spec=OcrService)
         self.ocr_service.read_result.return_value = OcrResult(lines=(), words=())
 
-    def detect_interruption(self, image, *, ocr_context, owned_dismiss_bounds=()):
+    def detect_interruption(
+        self, image, *, ocr_context, owned_dismiss_bounds=(), owned_navigation_screen=None,
+    ):
+        del image, ocr_context, owned_dismiss_bounds, owned_navigation_screen
         evidence = () if self.screen is None else (ScreenEvidence(self.screen, "test_interruption"),)
         return ObservationAdditions(screen_evidence=evidence, guard_verdict=GuardVerdict.BLOCKED if evidence else GuardVerdict.CLEAR)
 
@@ -905,8 +908,10 @@ class NavigationPerceptionTests(unittest.TestCase):
         """Perception reports task-owned evidence while recovery authorization rejects it."""
 
         class _TaskOwnedGuard(Guard):
-            def detect_interruption(self, image, *, ocr_context, owned_dismiss_bounds=()):
-                del image, owned_dismiss_bounds
+            def detect_interruption(
+                self, image, *, ocr_context, owned_dismiss_bounds=(), owned_navigation_screen=None,
+            ):
+                del image, ocr_context, owned_dismiss_bounds, owned_navigation_screen
                 selector = UiElementId.PNC_BUILDING_UPGRADE_WARNING_CONFIRM_BUTTON
                 return ObservationAdditions(
                     visible_elements={selector: VisibleElement(

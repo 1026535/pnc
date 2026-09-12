@@ -590,7 +590,7 @@
           "threshold": 0.93
         }
       ],
-      "revision": 1,
+      "revision": 2,
       "source": {
         "fixture": "institute_audit.png",
         "decoded_sha256": "6e0ec65880de25d65422503a5d99184ba9aba55b22496aecb2dab60615d36b6c",
@@ -598,7 +598,7 @@
       },
       "review": {
         "reference_manifest": "tests/data/screen_recognition/manifest.json",
-        "description": "Reviewed PNC_INSTITUTE identity anchor group from the frozen reference fixture.",
+        "description": "Reviewed PNC_INSTITUTE identity and measured category controls from the frozen reference fixture.",
         "build": null,
         "locale": null,
         "qualification": "guarded_reference_only"
@@ -615,6 +615,58 @@
               38
             ],
             "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_INSTITUTE_DEVELOPMENT_BUTTON",
+          "anchor": {
+            "image": "control_anchors/institute_development.png",
+            "search_region": [
+              10,
+              310,
+              258,
+              78
+            ],
+            "threshold": 0.97
+          }
+        },
+        {
+          "selector": "PNC_INSTITUTE_ECONOMY_BUTTON",
+          "anchor": {
+            "image": "control_anchors/institute_economy.png",
+            "search_region": [
+              274,
+              310,
+              258,
+              78
+            ],
+            "threshold": 0.97
+          }
+        },
+        {
+          "selector": "PNC_INSTITUTE_MILITARY_BUTTON",
+          "anchor": {
+            "image": "control_anchors/institute_military.png",
+            "search_region": [
+              10,
+              389,
+              258,
+              79
+            ],
+            "threshold": 0.97
+          }
+        },
+        {
+          "selector": "PNC_INSTITUTE_FORTIFICATION_BUTTON",
+          "anchor": {
+            "image": "control_anchors/institute_fortification.png",
+            "search_region": [
+              274,
+              389,
+              258,
+              79
+            ],
+            "threshold": 0.97
           }
         }
       ],

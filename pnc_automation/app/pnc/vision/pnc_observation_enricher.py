@@ -1799,6 +1799,7 @@ class PncObservationEnricher:
     def detect_interruption(
         self, image: Image.Image, *, ocr_context: ObservationOcrContext,
         owned_dismiss_bounds: tuple[Bounds, ...] = (),
+        owned_navigation_screen: ScreenType | None = None,
     ) -> ObservationAdditions:
         """Measure navigation interruptions using the capture's shared OCR context."""
 
@@ -1808,7 +1809,10 @@ class PncObservationEnricher:
         )
         lines = tuple(sorted(result.lines, key=lambda line: (line.bounds.y, line.bounds.x)))
         anchors = self.text_anchor_detector.detect(result)
-        modal_guard = self._recognize_modal_guards(image=image, lines=lines, ocr_context=ocr_context)
+        modal_guard = self._recognize_modal_guards(
+            image=image, lines=lines, ocr_context=ocr_context,
+            owned_navigation_screen=owned_navigation_screen,
+        )
         if modal_guard is not None:
             return modal_guard
         popup = _build_popup_additions(image=image, lines=lines, anchors=anchors)
@@ -1829,6 +1833,7 @@ class PncObservationEnricher:
     def _recognize_modal_guards(
         self, *, image: Image.Image, lines: tuple[OcrLine, ...],
         ocr_context: ObservationOcrContext,
+        owned_navigation_screen: ScreenType | None = None,
     ) -> ObservationAdditions | None:
         """Resolve exact modal/loading evidence once for both perception paths."""
 
@@ -1860,7 +1865,10 @@ class PncObservationEnricher:
         if speedup_confirm is not None:
             strong.append(speedup_confirm)
         research_queue = _build_research_queue_popup_additions(image=image, lines=lines)
-        if research_queue is not None:
+        if research_queue is not None and owned_navigation_screen != ScreenType.PNC_RESEARCH_QUEUE:
+            # The replacement navigator can own this reviewed surface only with
+            # independent visual identity and its measured dismiss control. Other
+            # guards still run; OCR-only bootstrap keeps its blocking fallback.
             strong.append(research_queue)
         mail_compose = self._build_mail_compose_additions(
             image=image,

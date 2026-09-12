@@ -30,6 +30,7 @@ class NavigationGuard(ObservationEnricher, Protocol):
     def detect_interruption(
         self, image: Image.Image, *, ocr_context: ObservationOcrContext,
         owned_dismiss_bounds: tuple[Bounds, ...] = (),
+        owned_navigation_screen: ScreenType | None = None,
     ) -> ObservationAdditions: ...
 
 
@@ -58,6 +59,15 @@ class NavigationPerception:
         interruption = self.guard.detect_interruption(
             image, ocr_context=ocr_context,
             owned_dismiss_bounds=tuple(control.bounds for control in visual.dismiss_controls),
+            owned_navigation_screen=(
+                ScreenType.PNC_RESEARCH_QUEUE
+                if {item.screen_type for item in visual.evidence} == {ScreenType.PNC_RESEARCH_QUEUE}
+                and any(
+                    control.selector_id == UiElementId.PNC_RESEARCH_QUEUE_CLOSE
+                    for control in visual.dismiss_controls
+                )
+                else None
+            ),
         )
         evidence = tuple(visual.evidence) + tuple(interruption.screen_evidence)
         if not evidence and _is_near_black_frame(image):

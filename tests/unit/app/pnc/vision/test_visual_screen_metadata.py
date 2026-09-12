@@ -11,6 +11,7 @@ import unittest
 
 from PIL import Image
 
+from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.vision.visual_screen_recognizer import load_visual_screen_recognizer
 from tools.benchmark_screen_recognition import _decoded_image_sha256
 from tests.support.paths import REPOSITORY_ROOT, TEST_DATA_ROOT
@@ -57,7 +58,8 @@ class VisualScreenMetadataTests(unittest.TestCase):
                 self.assertEqual("guarded_reference_only", profile["review"]["qualification"])
                 self.assertIsNone(profile["review"]["build"])
                 self.assertIsNone(profile["review"]["locale"])
-                self.assertEqual(1, profile["revision"])
+                expected_revision = 2 if profile["id"] == "institute" else 1
+                self.assertEqual(expected_revision, profile["revision"])
 
         recognizer = load_visual_screen_recognizer()
         self.assertEqual(29, len(recognizer.profiles))
@@ -74,7 +76,12 @@ class VisualScreenMetadataTests(unittest.TestCase):
 
         recognition = load_visual_screen_recognizer(matcher=_MatchAll()).recognize(Image.new("RGB", (540, 960)))
         self.assertEqual(24, len({item.screen_type for item in recognition.evidence}))
-        self.assertTrue(all(item.layout_revision == 1 for item in recognition.evidence))
+        self.assertTrue(
+            all(
+                item.layout_revision == (2 if item.screen_type == ScreenType.PNC_INSTITUTE else 1)
+                for item in recognition.evidence
+            )
+        )
 
     def test_malformed_provenance_is_rejected_eagerly(self) -> None:
         original = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
