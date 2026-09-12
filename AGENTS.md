@@ -2,188 +2,104 @@
 
 ## Scope And Priorities
 
-- Limit edits to this `pnc` repository unless the user explicitly requests another location. Reading required skills and external documentation is allowed.
-- Let the user's requested outcome and explicit constraints define the task. Make reasonable assumptions for reversible, in-scope decisions; ask only when a choice would materially change behavior, the live target, resource spending, or a destructive action.
-- Explicit user instructions take precedence over skill guidelines. If a skill causes work to pause, remain unfinished, or diverge from the request, identify the exact skill instruction and explain its effect.
-- For action requests, continue through implementation and appropriate verification. Stop at a plan only when the user asks for planning or the applicable planning skill requires a reviewable plan before implementation.
-- Preserve unrelated user changes. Never expand a task merely because adjacent cleanup is possible.
+- Limit edits to this repository unless the user requests another location.
+- Let the requested outcome and explicit constraints define the task. Make reasonable assumptions for reversible decisions; ask only when a choice materially changes behavior, authorization, live targets, spending, or destructive actions.
+- Explicit user instructions take precedence over skill guidelines. If a skill blocks or redirects the work, identify the exact instruction and explain its effect.
+- Complete action requests through implementation and proportionate verification. Stop at a plan only for planning requests.
+- Preserve unrelated user changes and avoid adjacent cleanup.
+
+## Proportionality
+
+- Preserve correctness, DRY ownership, and SOLID boundaries. YAGNI limits speculative capability; it does not justify duplicated knowledge, mixed responsibilities, or brittle coupling.
+- Choose the smallest maintainable design that solves the current requirement. “Smallest” means the least machinery consistent with DRY and SOLID, not the fewest files, types, or lines. Do not add abstractions, configuration, compatibility layers, recovery systems, or extension points for hypothetical future needs.
+- Optimize for normal behavior, explicit contracts, observed failures, and likely regressions.
+- Handle a rare case in code or tests only when an explicit contract requires it, it has been observed, or credible likelihood and impact justify its implementation and maintenance cost. Mere possibility or cheapness is not enough. Otherwise note the residual risk without expanding the implementation.
+- Judge safeguards by realistic likelihood, impact, and cost. Do not add checks, retries, recovery paths, test matrices, or live runs whose expected protection is negligible; retain controls for credible high-impact or irreversible harm.
+- Run the smallest validation that can disprove the change. Once required checks pass, stop unless a failure, broad dependency, or unresolved material risk justifies more.
 
 ## Working Method
 
-1. Inspect the smallest relevant set of code, tests, configs, scripts, artifacts, and prior plans needed to understand ownership and behavior.
-2. Research current external behavior when it can affect correctness, especially OpenAI/Codex, BlueStacks, Android/ADB, library APIs, platform behavior, or security. Prefer primary or official sources and cite sources that materially shape the result.
-3. For non-trivial work, state or keep a compact plan with explicit acceptance checks. Save a plan document only when requested or required by the planning workflow.
-4. Implement in small, coherent slices. After a risky slice, run the narrowest check that can expose the likely failure before continuing.
-5. Treat validation as an engineering loop: inspect failure evidence, classify the cause, fix the implementation or fixture, and rerun the bounded proof. Stop only on a confirmed postcondition or a precise authorization, user-input, or external-state blocker.
-6. Report the outcome, changed files, validation commands and results, and any remaining risk or blocked live command.
+1. Inspect only the code, tests, configs, artifacts, and plans needed to understand the affected behavior and owner.
+2. Research current external behavior only when it can change the answer. Prefer official or primary sources and cite sources that materially shape the result.
+3. Keep plans compact and acceptance-focused. Save a plan only when requested or required by the planning workflow.
+4. Implement small, coherent changes through existing interfaces. After a risky slice, run the narrowest relevant check.
+5. Inspect actual failure evidence before changing code. Iterate while new evidence or a meaningful fix exists; stop repeated attempts that reproduce the same result without changing the diagnosis.
+6. Report the outcome, changed files, validation results, and any material remaining risk or blocker.
 
-## Architecture And Implementation
+## Architecture And Python
 
-- Keep one canonical owner for each concept. Do not duplicate predicates, parsers, formatters, selectors, workflows, or config schemas.
-- Reuse the existing application runner, script runner, observation, selector, navigation, storage, BlueStacks, ADB, and artifact abstractions.
-- Prefer typed models, dataclasses, enums, and explicit interfaces over ad hoc dictionaries or string conventions.
-- Reject invalid configuration, malformed artifacts, and unsupported content with actionable errors. For transient emulator or screen state, use bounded waits or existing recovery paths, then fail with captured evidence.
-- When requirements change, migrate callers to the canonical interface and remove obsolete paths. Keep compatibility behavior only when the task requires it, and test the compatibility contract.
-- Keep changes focused. Do not combine feature work with unrelated refactors.
-
-## Python Style
-
-- Target Python 3.13+ and follow PEP 8 with 4-space indentation and type hints.
-- Keep imports at the top, grouped as standard library, third-party, then local `pnc_automation` imports.
-- Prefer `pathlib.Path` for filesystem paths.
-- Keep functions focused and names explicit. Use comprehensions, pattern matching, decorators, or functional tools only when they improve clarity.
-- Handle `None` and error cases explicitly. Do not guess among multiple possible field, attribute, or key names; use the defined interface.
-- Add concise docstrings to public APIs and to helpers whose contract or reasoning is not obvious. Avoid docstring churn in unrelated code.
-- Add comments only for non-obvious intent, invariants, or constraints.
+- Keep one canonical owner per concept. Reuse existing runner, observation, selector, navigation, storage, emulator, ADB, and artifact abstractions.
+- Prefer typed models and explicit interfaces over ad hoc dictionaries or string conventions. Reject invalid inputs with actionable errors.
+- Use bounded recovery for expected transient emulator states. Do not build generalized recovery for unobserved states.
+- Migrate callers and remove obsolete paths when requirements change. Keep compatibility only when required.
+- Target Python 3.13+, PEP 8, type hints, grouped top-level imports, and `pathlib.Path`.
+- Keep functions focused. Add docstrings to public APIs and non-obvious helpers; add comments only for intent or invariants.
 
 ## Repository Map
 
-- Runtime package: `pnc_automation/`
-- Offline tests and fakes: `tests/`
-- Live and manual tools: `tools/`
-- Authored automation YAML: `scripts/`
-- Script authoring guide: `scripts/README.md`
-- Config templates: `config/*.example.yaml`
-- Runtime evidence: `.local-data/artifacts/` (local and ignored)
-- Reviewed plans and implementation reviews: `reviewed_plans/`
-- Local workflow skills: `.agents/skills/`
-- Shared browser/session instructions: `instructions/`
-- Legacy prompt references: `prompts/`
+- Runtime: `pnc_automation/`
+- Tests: `tests/`; testing guide: `tests/README.md`
+- Live/manual tools: `tools/`
+- Authored workflows: `scripts/`; guide: `scripts/README.md`
+- Config templates and authored config: `config/`
+- Runtime evidence and reports: `.local-data/` (ignored)
+- Test-selection evidence: `.test-impact/` (ignored)
+- Plans: `reviewed_plans/`
+- Skills: `.agents/skills/`; shared instructions: `instructions/`
 
-## Generated Local Data
+## Local Data, Config, And Secrets
 
-- Use the repository-root `.local-data/` directory for generated local data. It
-  is ignored by Git and is created on demand. Standard locations are
-  `.local-data/artifacts/` for runtime evidence, `.local-data/archives/` for
-  chat/mail archives, and `.local-data/reports/` for reports, timing CSVs,
-  selector discovery output, and similar run products.
-- `.test-impact/` remains the ignored test-selection scratch and CI evidence
-  directory. Do not commit either local-data tree.
-- Keep authored fixtures and runtime assets tracked: `tests/data/`,
-  `pnc_automation/**/data/`, example configuration, reviewed plans, and
-  selector catalogs are not generated local data.
-- Package metadata and Python requirement: `pyproject.toml`
+- Put generated screenshots, logs, archives, reports, timing data, and selector output under `.local-data/`. Keep `.test-impact/` for test-selection scratch and CI evidence.
+- Keep authored fixtures and package data tracked, including `tests/data/`, `pnc_automation/**/data/`, examples, plans, and selector catalogs.
+- Treat `config/*.example.yaml` as templates. Do not modify local `accounts.yaml`, `castles.yaml`, `daily_maintenance.yaml`, or `tests/data/local_fixture_artifacts.json` unless requested.
+- `config/castle_targets.yaml` is tracked authored config; change it only for target-catalog work and validate changed identities with existing loaders and relevant roster evidence.
+- Never expose credentials, tokens, account secrets, or sensitive config values. Redact them from captured output.
 
-## Config And Secrets
+## Offline Validation
 
-- Treat `config/*.example.yaml` as the documented templates.
-- `config/accounts.yaml`, `config/castles.yaml`, `config/daily_maintenance.yaml`, and `tests/data/local_fixture_artifacts.json` are local files. Do not modify them unless the user explicitly requests it.
-- `config/castle_targets.yaml` is tracked authored config. Change it only when the task requires target-catalog changes.
-- Never echo or paste credentials, tokens, account secrets, or sensitive local config values into prompts, patches, commands, logs, artifacts, or final responses. Redact such values if they already appear in captured output.
-- Use typed loaders and existing validation helpers. Validate `castle_targets.yaml` against `accounts.yaml`, `castles.yaml`, and relevant live BlueStacks roster evidence when target identities change.
-
-## Offline Testing
-
-- Tests use `unittest`. On Windows, use `py` when the `python` alias is unavailable.
-- Start with the smallest relevant portable group, such as `py tools/run_tests.py group api` or `py tools/run_tests.py group vision`. See `tests/README.md` for tier/component ownership and individual unittest commands.
-- For ordinary development changes, first inspect `py tools/run_tests.py affected --base origin/main --dry-run --explain`. Review the selection and fallback reasons, then execute `py tools/run_tests.py affected --base origin/main --explain`. It includes downstream consumers and mandatory contracts/architecture checks, and falls back to full when safe ownership cannot be established.
-- Use `py tools/run_tests.py full` only for cross-cutting changes, shared interfaces, config schemas, authored workflows, test infrastructure, merge-to-main validation, or an explicit full-suite request. Do not require the full suite for every isolated development commit.
-- Do not use raw `py -m unittest discover -s tests` for routine validation. It bypasses the portable inventory, ownership graph, and resource rules, and can collect opt-in live modules. Use the repository runner for portable validation.
-- `measure` and `measure --contexts` always run the complete portable inventory. Use them for timing/branch-coverage baselines and nightly context learning, not for ordinary commits. Coverage contexts are additive evidence for `affected`; they never replace static ownership rules or mandatory guards.
-- If `affected` selects the full suite, preserve the fail-closed behavior and inspect `.test-impact/selection.json` before changing rules. A missing, stale, corrupt, or incompatible context seed must not be treated as proof that tests are unrelated. All portable commands exclude opt-in live modules and local-only fixtures.
-- Keep ordinary tests offline and headless. They must not require BlueStacks, ADB, live game state, network access, or credentials.
-- Use saved screenshots, authored YAML, fake sessions, and explicit fixtures for deterministic integration coverage.
-- When live evidence exposes a bug, add a deterministic regression test when safe and reasonably sized. Otherwise use the local fixture mechanism based on `tests/data/local_fixture_artifacts.example.json`.
-- Screenshot-backed tests must skip clearly when local-only fixtures are not configured.
-- Do not add tests for documentation-only edits or reversible formatting changes that have no behavioral contract.
-
-## Validation By Change Type
-
-- Documentation or skill-only changes: run the relevant validator when one exists; otherwise run `git diff --check`.
-- Selector or navigation changes: run targeted offline tests and `py tools/validate_navigation_selectors.py`. Run registry discovery or update tools only when the task requires regenerating selector data.
-- World-map movement calibration changes: run relevant offline tests, then `py tools/run_world_map_movement_calibration.py` or the opt-in live calibration smoke when live access is available.
-- Runtime, selector, screen-classification, navigation, ADB/emulator, and authored live-workflow changes require the smallest relevant live proof when a configured BlueStacks target is available.
-- Once required checks pass, broaden or repeat them only when the change, a failure, or an unresolved risk justifies it.
+- Use the repository runner instead of raw discovery; raw `unittest discover` can bypass portable inventory and resource rules.
+- For a known isolated component, start with `py tools/run_tests.py group <name>` or the specific test documented in `tests/README.md`.
+- For ordinary source changes, run `py tools/run_tests.py affected --base origin/main --explain`. Add `--dry-run` first only when the selection or fallback needs inspection.
+- Use `py tools/run_tests.py full` only for broad or cross-cutting changes, shared contracts or schemas, test infrastructure, final integration, an explicit request, or a fail-closed `affected` fallback.
+- Use `measure` commands only for requested timing, coverage, or scheduled dependency-learning work.
+- Keep portable tests offline and headless. Add deterministic tests for changed behavior and likely regressions; do not test implementation wording, reversible formatting, or speculative low-impact edge cases.
+- Documentation or skill-only changes need the relevant validator, if any, plus `git diff --check`; they do not require unit or live tests.
 
 ## Live BlueStacks Validation
 
-Use `.agents/skills/test-bluestacks-live` for live validation. Available opt-in smoke flags are:
+Use `.agents/skills/test-bluestacks-live` when the request or changed behavior depends on ADB, emulator state, live UI timing, selectors, navigation, or a real workflow transition.
 
-- Account navigation and shared spatial surface: `PNC_RUN_LIVE_SMOKE=1`
-- Chat workflow: `PNC_RUN_LIVE_CHAT_SMOKE=1`
-- Daily-task workflow: `PNC_RUN_LIVE_DAILY_TASK_SMOKE=1`
-- Home-city atlas and building navigation: `PNC_RUN_LIVE_HOME_CITY_MAP_SMOKE=1`
-- World-map movement calibration: `PNC_RUN_LIVE_WORLD_MAP_MOVEMENT_CALIBRATION=1`
+- Prefer saved evidence and offline tests. Run one smallest relevant live smoke; do not run every flag, castle, or instance unless the contract or observed variability requires it.
+- Resolve targets from config, treat `accounts[].live_roles` as authority, and use configured ADB paths and instance resolution.
+- Acquire the canonical process-scoped lease before ADB access. Hold one scoped reservation across dependent steps; declare multi-instance bundles up front. The outer phase owns cleanup and preserves pre-existing instances by default.
+- If no castle is named, use the active castle on the configured `testing` instance. Never switch accounts or castles without explicit authorization.
+- Default to non-spending proof. Resource spending requires the exact action, target, and budget from the request or an approved plan and must use `.agents/skills/write-code-live`.
+- Inspect `.local-data/artifacts/` after a failure. Repeat a live action only after a relevant implementation or state change, and never repeat an irreversible action outside its authorized budget.
 
-Before and during a live run:
+Opt-in flags:
 
-- Confirm the account, castle target, and BlueStacks display name in `config/`. Let the canonical runtime launch the configured instance when needed and verify ADB connectivity through the resolved instance.
-- Use configured `adb_path` and `bluestacks_config_path`; never hard-code ports or device IDs.
-- If no live target is named, use the currently active castle on the configured `testing` instance. Do not select or switch castles unless the user names a castle and authorizes that navigation.
-- Preserve castle inventories for every configured account independently of live execution eligibility. `accounts[].live_roles` is the authority and assignments may be reassigned; names such as `testing`/`smoke_test`, `serious_stuff`/`live_testing`, `mega_old_acc`/`daily_canary`, and `main`/`read_only` describe the current roster examples, not immutable workflow rules. Validate the intended role before constructing a live runtime.
-- Every PNC process must acquire the canonical process-scoped lease for each BlueStacks display name before connecting through ADB. Keep the reservation across preparation, all dependent work, and cleanup. Acquisition waits are bounded. Multi-instance work must declare the complete bundle up front so the lease manager can acquire it in canonical order without hold-and-wait deadlocks.
-- Live-testing cleanup is owned by the outer task-series reservation: keep a selected instance warm for short probes and dependent substeps, then close it only when the active agent explicitly ends a longer live-testing phase. Child-session shutdown requests are deferred until the last same-process lease reference. At phase end, release the old lease, allow the configured quiescence window for newly queued work to claim and cancel or replace shutdown, then re-acquire the lease and revalidate the exact intent, instance key, and PID before stopping. Preserve pre-existing instances by default; closing one requires an explicit phase decision.
-- Multi-step live workflows must use one scoped reservation for their entire sequence: `with api.use_account(...)` for one prepared account, or `with api.reserve_accounts((...))` when several accounts/instances are involved. One-shot direct calls may use an isolated lease, but do not release and reacquire between dependent steps. The active API scope rejects calls for accounts outside its declared bundle.
-- The host-management CLI reads only host bindings, roles, metadata, and memory policy; it must remain usable without credentials or castle files. It reloads valid host authority on every monitor sample and again under lease before destructive mutation. Pending recovery intent and cooldown are durable, with at most 3 launch attempts per pass and 9 persisted attempts total; role or identity revocation blocks pending launches.
-- Run `py -m pnc_automation.bluestacks_management monitor --watch` under host supervision when automatic leak recovery is desired. It uses working set, repeated samples, durable intent, and a cooldown; it may restart only an idle instance after acquiring its canonical lease. The same loop reconciles exact-PID phase-close intent abandoned by a terminated agent, but only after obtaining the idle lease, reloading role and metadata authority, and rejecting replacement processes or read-only instances. It skips busy instances and must never auto-restart or stale-close an account carrying `read_only`. Watch mode continues monitoring peers after per-instance failures, while fatal host/configuration failures exit nonzero and are emitted through the bounded rotating state log without raw secrets.
-- Register the Windows supervisor with `tools/register_bluestacks_memory_monitor_task.ps1`. Its action must run the resolved windowless Python interpreter directly, not a PowerShell or `py` launcher wrapper: stopping a wrapper task can leave the actual monitor orphaned.
-- Run `py -m pnc_automation.bluestacks_management restart-open --require-maintenance-window --include-read-only` only for the explicit 01:55 America/Toronto open-instance maintenance boundary. The legacy Python tool paths remain compatibility shims.
-- The daily 01:55 America/Toronto maintenance boundary may restart every configured instance that is open at its initial snapshot, including an open `main`. It must acquire that complete open-instance bundle before stopping anything and must leave configured closed instances closed.
-- Default to read-only or non-spending proof. Any live validation that can spend in-game resources requires the exact action, target, and budget from the current request or a user-approved execution plan and must use `.agents/skills/write-code-live`. Do not request duplicate confirmation when those details are complete.
-- Start with the smallest smoke path that proves the risky boundary. Use observation-based waits and existing runner/navigation abstractions.
-- On failure, inspect screenshots, OCR JSON, logs, and observation artifacts under `.local-data/artifacts/` before changing code. Preserve relevant artifact paths in the final response.
+- Shared navigation/spatial: `PNC_RUN_LIVE_SMOKE=1`
+- Chat: `PNC_RUN_LIVE_CHAT_SMOKE=1`
+- Daily task: `PNC_RUN_LIVE_DAILY_TASK_SMOKE=1`
+- Home-city map: `PNC_RUN_LIVE_HOME_CITY_MAP_SMOKE=1`
+- World-map calibration: `PNC_RUN_LIVE_WORLD_MAP_MOVEMENT_CALIBRATION=1`
 
-## Local Skills
+## Skill Routing
 
-Read the applicable `SKILL.md` completely before taking the actions it governs.
+Read the applicable `SKILL.md` completely before its workflow.
 
-- `.agents/skills/create-plan`: regular repository-grounded plans and roadmaps.
-- `.agents/skills/create-plan-with-chatgpt-pro`: plans requiring a ChatGPT Pro second opinion and Codex review.
-- `.agents/skills/review-plan-live`: plan audits that require repository and bounded live evidence.
-- `.agents/skills/write-code`: production implementation, fixes, refactors, tests, and scripts.
-- `.agents/skills/review-code`: code, diff, commit, branch, or implementation reviews.
-- `.agents/skills/test-bluestacks-live`: live emulator validation and diagnosis.
-- `.agents/skills/write-code-live`: implementation with bounded in-game resource spending authorized by the current request or a user-approved execution plan.
-- `.agents/skills/control-in-app-browser`: browser automation through the selected browser surface.
-- `.agents/skills/consult-chatgpt-pro`: explicit or create-plan-with-chatgpt-pro-required, repository-grounded consultation with ChatGPT Pro.
-- `.agents/skills/implement-with-luna-global`: explicit delegation of substantial implementation to Luna workers.
-- `.agents/skills/manage-source-control`: feature branches, worktrees, rebases, merges, conflict resolution, pushes, and branch cleanup.
+- Use the plan, review, implementation, live-test, browser, and source-control skills only when their descriptions match the request.
+- `create-plan-with-chatgpt-pro` may route to `consult-chatgpt-pro`; direct Pro consultation otherwise requires an explicit request.
+- `implement-with-luna-global` is explicit-only.
+- Before porting a workflow to the replacement navigation core, read `instructions/CORE_WORKFLOW_PORTING.md`.
 
-Treat `prompts/` as legacy inspiration, not as a substitute for the applicable skill or current best practice. If a skill creates a blocker or conflicts with the requested outcome, identify the exact instruction and explain the impact instead of silently changing scope.
+## Review And Source Control
 
-## Replacement Workflow Ports
+- Reviews lead with actionable findings ordered by severity and file/line. Prioritize correctness, security, data loss, behavior, ownership, and meaningful test gaps; omit theoretical or style-only findings that would not justify a change.
+- Use `.agents/skills/manage-source-control` for branch, worktree, rebase, merge, push, or cleanup operations.
+- Inspect status before editing or staging. Do not overwrite unrelated changes or use destructive Git/filesystem commands without explicit authorization and verified targets.
+- Keep generated output out of Git. Before staging, use `git status --short --ignored` and inspect unexpected paths with `git check-ignore -v`.
 
-Before adding or migrating a workflow onto the replacement navigation core, read [`instructions/CORE_WORKFLOW_PORTING.md`](instructions/CORE_WORKFLOW_PORTING.md). It defines the canonical runtime, typed parser, effect gate, constrained context, offline checks, bounded non-spending proof, final Home evidence, and the existing authorizer/executor/journal boundary for future resource-changing work.
+## Completion
 
-## Code Review Rules
-
-- Lead with actionable findings ordered by severity, with file and line references and the cleanest fix direction.
-- Review correctness, ownership, duplication, migration completeness, test quality, security, and behavioral regressions. Omit style-only findings unless they obscure correctness or maintainability.
-- If no findings remain, say so and identify residual test gaps or assumptions.
-
-## Source Control Workflow
-
-Use `.agents/skills/manage-source-control` for new feature branches, branch synchronization, rebases, merges, cherry-picks, conflict resolution, pushes to a base branch, and branch or worktree cleanup.
-
-- Start every new endeavor from the freshly fetched remote target-branch head. When the current checkout contains unrelated changes, conflicts, or an interrupted Git operation, preserve it and create an isolated `codex/` feature worktree from that remote commit.
-- Before integrating, inspect the merge base and commits and diffs unique to both the feature and target branches. Resolve overlaps according to the intent, tests, and canonical ownership of both changesets; never select one side wholesale merely to clear conflicts.
-- Prefer rebasing a local or private feature branch onto the latest target. Do not rewrite a published or shared branch without explicit authorization; merge the target into it when shared history must be preserved.
-- Review and validate the combined result, fetch the target again immediately before landing, and repeat synchronization if it moved. Never force-push the default or a protected branch.
-
-## Generated Output During Git Work
-
-- Before staging, classify every new or changed path as authored source/config,
-  a fixture/plan, or generated local output. Generated reports, CSVs, logs,
-  screenshots, archives, state, coverage, and selector-validation products
-  belong under `.local-data/`; test-selection evidence belongs under
-  `.test-impact/`.
-- Check `git status --short --ignored` and use `git check-ignore -v <path>`
-  when output appears in the worktree. Do not use a broad `*.csv` rule because
-  an authored CSV fixture may be a real repository input.
-- If an old generated path is tracked, preserve its bytes by moving it into
-  the matching `.local-data/` subdirectory, stage the old path's removal, and
-  update the producer's default. Do not commit a generated copy or delete it
-  merely to make status clean.
-- Do not move `tests/data/`, package data, example configuration, or reviewed
-  plans into `.local-data/`; their contents are authored contracts.
-
-## Working Tree Safety
-
-- Inspect the working tree before editing. Do not revert, overwrite, or reformat unrelated user changes.
-- If existing changes overlap the task, preserve them and work with the resulting state; mention the interaction in the final response.
-- Do not use destructive Git or filesystem commands unless the user clearly requests the operation and the exact target has been verified.
-- Clean only generated evidence needed for reruns. Never remove authored config, scripts, reviewed plans, or user work as test cleanup.
-
-## Completion Criteria
-
-Before finishing, confirm that the requested behavior is implemented, the architecture has one canonical path per touched concept, obsolete paths were migrated or intentionally retained, and verification matches the actual risk. Report every validation command as passed, failed, or skipped. For required live validation that cannot run, state the exact blocker and the command that remains. Do not expose secrets in the handoff.
+Finish when the requested behavior is implemented and the smallest sufficient checks pass. Report commands as passed, failed, or skipped. For a required live check that cannot run, give the exact blocker and remaining command. Mention only material residual risks and never expose secrets.
