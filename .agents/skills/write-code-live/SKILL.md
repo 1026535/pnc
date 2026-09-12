@@ -1,43 +1,36 @@
 ---
 name: write-code-live
-description: Implement PNC code changes with bounded live validation that may spend authorized in-game resources. Use when the current request or a user-approved execution plan supplies the exact action, target, and budget; use write-code for ordinary implementation or read-only live testing.
+description: Implement PNC changes whose necessary live validation may spend in-game resources. Use only when the request or an approved plan supplies the exact action, target, and budget; use write-code for non-spending work.
 ---
 
 # Write Code Live
 
-Use [../write-code/SKILL.md](../write-code/SKILL.md) as the canonical coding workflow. Read it completely before acting and apply all of its architecture, testing, incremental implementation, and live-validation rules. This skill changes only the authorization boundary for a narrowly scoped live test: an explicitly authorized test may spend in-game resources.
+Follow [write-code](../write-code/SKILL.md). This skill adds permission handling for a necessary, bounded resource-spending proof.
 
-## Authorization Gate
+## Authorization
 
-Before any resource-spending action, record all of the following from the current request or a user-approved execution plan. When that source supplies every item, treat it as authorization and do not pause for duplicate confirmation:
+Before spending, obtain from the current request or approved plan:
 
-- the account and currently active castle; do not switch accounts or castles unless the user explicitly names and authorizes that navigation;
-- the exact live action and why the code change requires it;
-- the resource type and maximum amount, count, or number of attempts that may be spent;
-- the expected precondition, observable success signal, and post-action artifact needed to prove the result; and
-- the stop condition if the precondition, screen classification, selector, or post-action proof is missing.
+- exact account and active castle, including any authorized switching;
+- exact action and why it is needed;
+- resource type and maximum amount or attempts;
+- observable precondition and success signal; and
+- stop condition when identity, screen state, selector, or proof is uncertain.
 
-If any item is missing, stop before spending and request only the missing information. Invocation of this skill alone is not permission to choose a target, invent a budget, or spend resources.
+When all items are already supplied, proceed without duplicate confirmation. Missing information blocks only the spending action; continue safe offline diagnosis.
 
-## Live Iteration
+This skill never authorizes real-money purchases, unrelated game actions, account changes, authored-config changes, or spending beyond the stated budget.
 
-1. Run the narrowest relevant offline tests first.
-2. Let the canonical runtime resolve and launch the configured BlueStacks instance when needed, connect through configured ADB settings, and verify the active account, castle, app, and current screen using typed observations.
-3. Capture a labeled pre-action screenshot and observation, including the relevant resource balance or state when the existing observation pipeline exposes it.
-4. Implement one small runnable slice and execute only the authorized live action for that slice. Use existing tasks, navigation, selectors, observation waits, and artifact storage; do not add raw coordinate or ad hoc ADB control paths.
-5. Capture and inspect the post-action screenshot, OCR/observation data, logs, and any domain-specific proof. Classify the result as confirmed, approved applicability skip, engineering failure, user-input-required, or external blocker.
-6. On an engineering failure, preserve the artifacts, fix the implementation or regression test, rerun focused offline validation, and repeat the smallest relevant live probe. Do not spend again for the same mutation unless the authorization explicitly includes a bounded retry; read-only observation and navigation may iterate within their stated budget.
-7. On ambiguity, missing identity, missing authorization, or unsafe state, stop the mutation and report the exact question or blocker. On budget exhaustion, stop spending but continue offline diagnosis and documentation.
-8. Return the runtime to a safe stable screen when the existing navigation flow can do so, then run the final offline validation required by `write-code`.
+## Workflow
 
-Live success is therefore a development exit condition, not merely a diagnostic result:
-the feature is complete only after its expected postcondition is observed and its
-evidence is recorded, or after a precise blocker/approved skip is recorded.
+1. Implement the smallest slice and run focused offline tests.
+2. Resolve the configured instance through the canonical runtime and verify fresh account, castle, screen, and relevant resource state.
+3. Capture pre-action evidence, perform only the authorized action, and capture the post-action result.
+4. On failure, inspect artifacts and fix offline first. Repeat spending only when the authorization includes a retry and the diagnosis changed; otherwise stop at the remaining blocker.
+5. Return to a safe stable screen when the existing flow supports it, then run any proportionate final validation.
 
-## Scope Boundary
+Do not add generalized retry, recovery, or authorization machinery for unlikely cases. The exact budget and fresh precondition are the safety boundary.
 
-This skill permits only the explicitly authorized in-game resource expenditure required by the test. It does not authorize purchases with real money, account or castle switching, login or logout, sending mail or chat, marching, gathering, attacking, deleting data, changing authored configuration, or unrelated game actions. Treat each resource-spending action as irreversible: verify first, spend once, observe immediately, and stop on uncertainty.
+## Report
 
-## Final Report
-
-Report the exact live command or smoke target, account, active castle, authorized resource budget, amount actually spent, pre-action and post-action artifact paths, observed result, offline tests, and any remaining risk. Never include credentials or secrets. If live validation was blocked, state the exact blocker and remaining command instead of claiming completion.
+State the live command or entry point, target, authorized and actual spend, observed result, relevant artifact paths, offline validation, and any blocker. Never include credentials or secret values.

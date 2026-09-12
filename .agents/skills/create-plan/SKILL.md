@@ -1,86 +1,51 @@
 ---
 name: create-plan
-description: Create or improve repository-grounded implementation, architecture, migration, and execution plans. Use for plans, roadmaps, phased strategies, or saved planning documents when no ChatGPT Pro consultation is requested; use create-plan-with-chatgpt-pro when the user requests Pro input. In PNC, gather required bounded live evidence when material runtime evidence is unavailable.
+description: Create or improve repository-grounded implementation, architecture, migration, or execution plans. Use for requested plans, roadmaps, phased strategies, or saved planning documents; use create-plan-with-chatgpt-pro when Pro input is requested.
 ---
 
 # Create Plan
 
-## Overview
-
-Create plans that are specific enough to execute, review, and verify. Favor deep context gathering, one canonical design per concept, explicit tradeoffs, clear work breakdown, and concrete validation over generic task lists.
+Create a plan that another engineer can execute and verify without prescribing work the task does not need.
 
 ## Workflow
 
-1. Clarify the planning target only when required. Prefer inferring scope from the user's request, repository conventions, issue text, attached artifacts, or referenced documents.
-2. Gather context before designing. Inspect relevant code, docs, configs, tests, prompts, schemas, recent plans, and generated evidence. When the user asks to prioritize internet best practice, or when current external APIs, standards, tools, or platform behavior materially affect the plan, research authoritative internet sources first and cite them in the final answer or plan.
-3. Apply the live-evidence gate before designing. Use repository artifacts first. When a current UI state, selector, navigation path, or emulator behavior is material and no adequate current artifact exists, live evidence is required: use the bounded workflow in [references/live-evidence.md](references/live-evidence.md) before finalizing the target design. A planning-only request is not a reason to skip safe observation. Do not defer required evidence into the plan as a future phase unless a bounded live attempt was made and hit a recorded stop condition. Do not make the user provide a screenshot when the configured runtime can safely capture the required evidence.
-4. State the objective in one or two sentences. Include the intended outcome, user-visible behavior, and any hard constraints.
-5. Define scope boundaries. List in-scope work, non-goals, assumptions, and known unknowns.
-6. Describe the current state. Name the existing architecture, ownership boundaries, canonical interfaces, and pain points the plan must respect or change.
-7. Propose the target design. Identify the single canonical implementation for each concept, ownership of responsibilities, data model or API changes, extension points, and fail-fast validation rules.
-8. Break the work into deliverable-oriented phases. Each phase must have concrete files or components, dependencies, acceptance criteria, and tests or review checks. For runtime-affecting work, read [references/implementation-live-validation.md](references/implementation-live-validation.md) and attach a narrow offline-then-live validation gate to every implementation slice.
-9. Surface risks early. Include migration risks, compatibility risks, live/runtime risks, performance risks, data risks, and test gaps. Pair each risk with a mitigation or validation step.
-10. Finish with an execution checklist. Make the next actions ordered, minimal, and unambiguous.
+1. Infer the objective and scope from the request and repository. Ask only when a missing choice would materially change the design.
+2. Inspect the current owner, callers, tests, config, relevant plans, and recent evidence. Research external behavior only when it affects the design.
+3. Describe the current state and the smallest target design that satisfies the requirement.
+4. Break work into deliverables with concrete acceptance checks and dependencies.
+5. Match validation to risk: focused or affected offline tests for ordinary slices, full validation only for broad integration, and live proof only for behavior that depends on current emulator state.
+6. State material assumptions, tradeoffs, migration needs, and unresolved decisions.
 
-## Live Evidence For Planning
+## Proportional Planning
 
-Treat live evidence as a planning input. Before drafting the target design, identify the current-runtime questions whose answers could change selectors, state transitions, architecture, or validation.
+- Preserve DRY ownership and SOLID boundaries. YAGNI rejects speculative capability, not the structure needed to avoid duplication, mixed responsibilities, or brittle coupling.
+- Prefer existing interfaces and one canonical owner. Choose the least machinery that remains maintainable, not merely the fewest components.
+- Do not add extension points, compatibility paths, generalized recovery, or configuration for hypothetical future requirements.
+- Plan for the normal path, explicit contracts, observed failures, and likely regressions.
+- Include a rare edge case only when an explicit contract requires it, it has been observed, or credible likelihood and impact justify its ongoing complexity. Mere possibility or cheapness is not enough; otherwise record it as a residual risk.
+- Keep phases independently useful. Do not create a phase, matrix, checklist, or proof step solely to make the plan look comprehensive.
+- Judge safeguards by realistic likelihood, impact, and cost. Do not prescribe tests that merely mirror implementation, repeat sufficient proof, or consume live resources for negligible expected protection.
 
-When a material question is not answered by current repository artifacts, read and follow [references/live-evidence.md](references/live-evidence.md) completely and use the `test-bluestacks-live` workflow. That reference is the canonical owner of target resolution, observation budgets, allowed actions, stop conditions, evidence classifications, and reporting requirements.
+## Live Evidence
 
-A planning request authorizes bounded read-only observation within scope, but never a state-changing game action solely to obtain evidence. Gather evidence up to the mutation boundary and report the remaining unknown instead of guessing. A plan that merely postpones required evidence without the bounded attempt and disposition required by the reference fails this skill.
+Use repository artifacts first. Read [references/live-evidence.md](references/live-evidence.md) only when an unresolved current UI, selector, navigation, or emulator fact could materially change the plan and existing evidence is insufficient.
 
-## Planning Principles
+Planning does not automatically require launching BlueStacks. When live evidence is justified, use one bounded, non-spending observation targeted at the decision. Stop at any mutation boundary. Read [references/implementation-live-validation.md](references/implementation-live-validation.md) only when the plan actually changes a live runtime boundary.
 
-- Treat a plan as an implementation artifact, not a brainstorming note.
-- Prioritize current authoritative external best practice when it conflicts with an unproven local habit; adapt it to local architecture instead of copying it blindly.
-- Decompose by deliverable or capability, then by task. Avoid phases that only describe time order without a completed outcome.
-- Prefer architecture that removes duplication instead of adding compatibility shims, legacy support, or parallel code paths.
-- Make dependencies explicit: prerequisites, sequencing constraints, shared interfaces, data migrations, and validation dependencies.
-- Define done with observable acceptance criteria, not vague confidence.
-- Include validation that matches risk: focused component groups or an explained `affected` selection for each implementation slice, full offline suites only for broad/cross-cutting changes and final integration, and opt-in live smoke tests when runtime boundaries require them.
-- When a plan uses coverage contexts or other historical execution data for test selection, define the seed's identity and freshness checks, keep static ownership and fail-closed fallbacks authoritative, and include an independent full-suite audit path. Missing or incompatible evidence must never silently shrink the selected tests.
-- Keep live-affecting slices small and promote them incrementally. Do not batch several unproven runtime behaviors behind one final smoke test.
-- When the plan names live instances or castles, require a disposition for every planned target after every applicable live-affecting slice: `passed`, `applicability_skip`, or `blocked`. A missing matrix cell is not a pass.
-- Treat live screenshots and observations as evidence, not as a substitute for understanding the code or a license for unbounded experimentation. Label each important claim as observed, inferred, or unknown.
-- Keep the plan lean. Expand only where ambiguity, risk, or architecture warrants detail.
+Use multi-target matrices only when the feature contract names multiple targets or repository evidence shows meaningful target-specific variation. Do not require identical proof across interchangeable targets.
 
-## Output Contract
+## Output
 
-When the user asks for a saved plan, create or update a Markdown file in the requested location. If no location is given, follow repository conventions for plans; otherwise use a clear name near related planning documents and avoid overwriting unrelated work.
+For a small plan, return objective, design, steps, validation, and material risks. For a substantial plan, add current state, scope/non-goals, migration, and open decisions. Skip empty sections.
 
-For substantial implementation plans, use this structure:
+When the user requests a saved plan, write it to the requested location or the repository's plan directory without overwriting unrelated work.
 
-- Title
-- Context
-- Goals
-- Non-Goals
-- Current State
-- Target Design
-- Implementation Phases
-- Slice-by-Slice Live Validation Matrix
-- Data, Config, and Migration Notes
-- Validation Plan
-- Risks and Mitigations
-- Open Questions
-- Execution Checklist
+## Quality Check
 
-For smaller requests, provide the same information in a compact form and skip sections that would be empty.
+Before finishing, confirm that:
 
-## Quality Gate
-
-Before finalizing a plan, confirm:
-
-- The plan has one canonical implementation per concept.
-- No duplicated predicates, parsers, formatters, workflows, or compatibility layers are proposed.
-- Obsolete code paths and serialized formats are removed or migrated rather than preserved.
-- Invalid inputs and unexpected states fail fast.
-- Each phase has clear dependencies and acceptance criteria.
-- Validation covers the changed behavior, architectural risk, and likely regressions.
-- Every runtime-affecting slice identifies its mutation boundary, smallest offline test, exact opt-in live entry point, expected pre/post state, artifacts, recovery path, and stopping conditions.
-- Every named live instance/castle has an explicit outcome for every applicable slice; skips name the unmet applicability condition and blockers name the remaining command or evidence needed.
-- A slice cannot be promoted into an unattended routine until its offline checks and required target matrix pass. The next slice may be developed, but it must not hide or bypass a failed promotion gate.
-- Every material current-UI evidence question is answered by an adequate repository artifact, an observed bounded live trace, or a documented failed live attempt with a precise stop condition.
-- Required live evidence was not postponed into an implementation phase merely because the request was planning-only or the final action would be state-changing.
-- Any live evidence has a target, baseline, bounded action trace, post-action artifact, and explicit stop or failure reason.
-- The plan distinguishes live observations from inferences and unresolved unknowns, and preserves artifact paths without exposing secrets.
+- the design solves the requested outcome through one canonical path;
+- each step has a useful deliverable and observable acceptance check;
+- validation is sufficient but not repetitive;
+- live work is included only where offline evidence cannot prove the behavior; and
+- material unknowns are explicit without expanding minor possibilities into design requirements.

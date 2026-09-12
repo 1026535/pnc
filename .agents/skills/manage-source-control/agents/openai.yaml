@@ -1,4 +1,4 @@
 interface:
   display_name: "Manage Source Control"
   short_description: "Safely manage Git branches and integrations"
-  default_prompt: "Use $manage-source-control to safely create, synchronize, review, and integrate this feature branch."
+  default_prompt: "Use $manage-source-control to perform the requested Git operation safely without unrelated workflow steps."
