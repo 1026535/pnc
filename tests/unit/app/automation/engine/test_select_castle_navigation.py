@@ -150,23 +150,39 @@ class SelectCastleNavigationTests(unittest.TestCase):
         )
         actuator = _RecordingActuator()
         navigation = self._navigation(actuator, observer)
-        context = Mock()
-        context.navigate.return_value = self._frame((), screen=ScreenType.PNC_CASTLE_SELECTION, at=1)
-        context.select_castle.side_effect = lambda target: navigation.select_castle(
+        runtime = Mock()
+        initial = self._frame((), screen=ScreenType.PNC_CASTLE_SELECTION, at=0)
+        runtime.observation_count = 0
+        runtime.last_observation = initial
+        runtime.navigation.navigate.return_value = initial
+        runtime.navigation.select_castle.side_effect = lambda target, *, observe_content: navigation.select_castle(
             target,
-            observe_content=observer,
+            observe_content=observe_content,
         )
-        context.verify_active_castle_identity.side_effect = RuntimeError(
-            "postflight active castle did not match target"
+        runtime.preflight_active_castle_identity.return_value = CastleIdentity(
+            kingdom="K229", castle_name=self.target.castle_name, castle_level=self.target.castle_level,
+        )
+
+        def observe(label, *, include_content):
+            self.assertTrue(include_content)
+            frame = observer(label)
+            runtime.observation_count += 1
+            runtime.last_observation = frame
+            return frame
+
+        runtime.observe.side_effect = observe
+        context = WorkflowContext(
+            runtime, last_observation=initial, effect=WorkflowEffect.NONSPENDING_STATE_CHANGE,
         )
         workflow = SelectCastleWorkflow(original_castle=self.target, target_castle=self.target)
 
-        with self.assertRaisesRegex(RuntimeError, "postflight active castle"):
+        with self.assertRaisesRegex(RuntimeError, "did not exactly match"):
             workflow.execute(context)
 
         self.assertEqual(len(actuator.actions), 1)
         self.assertIsInstance(actuator.actions[0][0], TapListEntryAction)
-        context.select_castle.assert_called_once_with(self.target)
+        runtime.navigation.select_castle.assert_called_once()
+        runtime.preflight_active_castle_identity.assert_called_once_with()
 
     def test_offscreen_target_uses_bounded_fresh_scan_then_taps_once(self) -> None:
         other = CastleIdentity(kingdom="K229", castle_name="Other", castle_level=7)
