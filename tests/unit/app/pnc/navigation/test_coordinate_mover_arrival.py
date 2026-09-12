@@ -102,4 +102,4 @@ class CoordinateMoverArrivalTests(WorldMapSearchFixtures, unittest.TestCase):
 
         self.assertEqual(len(actions), 1)
         self.assertEqual(actions[0].timing_profile, ActionTimingProfile.WORLD_MAP_MOVEMENT)
-        self.assertEqual(actions[0].follow_up_request, ObservationRequest.world_map_movement_follow_up())
+        self.assertEqual(actions[0].follow_up_request, ObservationRequest.world_map_movement_proof_follow_up())

@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from pnc_automation.app.pnc.domain.observation import Observation
+from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict, ScreenDecision, ScreenEvidence
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 
 from tests.support.pnc.observations import make_visible
+from tests.support.pnc.capture_vision.fake_screenshot_session import make_captured_frame
 
 
 
@@ -72,7 +74,13 @@ def _make_world_map_overview_observation(
             action_point=marker_point,
         )
     return Observation(
-        screen_type=ScreenType.PNC_WORLD_MAP_OVERVIEW,
+        decision=ScreenDecision(
+            base_screen=ScreenType.PNC_WORLD_MAP_OVERVIEW,
+            effective_screen=ScreenType.PNC_WORLD_MAP_OVERVIEW,
+            guard=GuardVerdict.CLEAR,
+            evidence=(ScreenEvidence(ScreenType.PNC_WORLD_MAP_OVERVIEW, "test"),),
+        ),
         visible_elements=visible_elements,
         image_size=(200, 200),
+        frame_ref=make_captured_frame(b"overview").frame_ref,
     )

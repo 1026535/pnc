@@ -98,7 +98,14 @@ class ScreenFlowPlanner:
                     observe_after=True,
                 )
             ]
-        return [KeyEventAction(key_code="KEYCODE_BACK", reason=reason, observe_after=True)]
+        return [
+            WaitAction(
+                milliseconds=250,
+                reason=f"{reason}_passive_settle",
+                observe_after=True,
+                follow_up_request=ObservationRequest.full_runtime_default(),
+            )
+        ]
 
     def ensure_android_home(self, observation: Observation) -> list[ActionRequest]:
         """Plans a transition to Android home when needed."""
@@ -843,6 +850,12 @@ class ScreenFlowPlanner:
                 )
             ]
         if params.player_name is not None:
+            if observation.screen_type == ScreenType.PNC_MAIL_HUB and MailboxType.PLAYER in observation.empty_mailboxes:
+                raise SelectorResolutionError(
+                    "Direct player-mail compose requires an available Player mailbox; the hub reports No report yet.",
+                    mailbox=MailboxType.PLAYER.value,
+                    mailbox_empty=True,
+                )
             if observation.screen_type != ScreenType.PNC_MAILBOX_LIST or observation.mailbox_type != MailboxType.PLAYER:
                 return self.open_mailbox(observation, MailboxType.PLAYER)
             return [

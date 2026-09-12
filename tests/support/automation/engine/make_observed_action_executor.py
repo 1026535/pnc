@@ -25,9 +25,22 @@ def _make_observed_action_executor(
 ) -> ObservedActionExecutor:
     """Builds the shared observed-action executor used by runner and executor tests."""
 
+    canonical_registry = build_default_selector_registry()
+    if registry is None:
+        resolved_registry = canonical_registry
+    else:
+        custom_ids = {selector.id for selector in registry.all()}
+        resolved_registry = SelectorRegistry(
+            selectors=(
+                *registry.all(),
+                *(selector for selector in canonical_registry.all() if selector.id not in custom_ids),
+            ),
+            surfaces=registry.all_surfaces(),
+        )
     return ObservedActionExecutor(
-        selector_registry=build_default_selector_registry() if registry is None else registry,
+        selector_registry=resolved_registry,
         action_executor=ActionExecutor(
+            selector_registry=resolved_registry,
             session=session,
             stable_click_delay_ms=0,
             post_action_observe_delay_ms=0,

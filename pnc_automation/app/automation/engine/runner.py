@@ -395,6 +395,14 @@ class AutomationRunner:
             parsed_params=parsed_params,
             target_castle=target_castle,
         )
+        task_executor = TaskExecutor(
+            observation_service=self.observation_service,
+            action_executor=self.action_executor,
+            logger=self.logger,
+            max_replans_per_step=self.policy.max_replans_per_step,
+            max_retries_per_step=self.policy.max_retries_per_step,
+        )
+        task_executor.require_recognition_support(task=task)
         current_before = self._run_task_preflight(
             task=task,
             step=step,
@@ -405,13 +413,7 @@ class AutomationRunner:
             mail_archive_store=mail_archive_store,
             chat_archive_store=chat_archive_store,
         )
-        return TaskExecutor(
-            observation_service=self.observation_service,
-            action_executor=self.action_executor,
-            logger=self.logger,
-            max_replans_per_step=self.policy.max_replans_per_step,
-            max_retries_per_step=self.policy.max_retries_per_step,
-        ).execute(task=task, context=context, before=current_before)
+        return task_executor.execute(task=task, context=context, before=current_before)
 
     def _run_task_preflight(
         self,

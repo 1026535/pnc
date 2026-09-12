@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.support.pnc.capture_vision.minimal_runtime_registry import _minimal_runtime_registry
+
 import tempfile
 import unittest
 from pathlib import Path
@@ -47,14 +49,16 @@ class PopupObservationTests(unittest.TestCase):
                 label="home_city_popup",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Build", x=27, y=354, width=65, height=28),
                             _ocr_line("Bag", x=455, y=1565, width=54, height=32),
@@ -65,8 +69,7 @@ class PopupObservationTests(unittest.TestCase):
                             _ocr_line("Join/Apply", x=607, y=888, width=178, height=44),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -91,22 +94,23 @@ class PopupObservationTests(unittest.TestCase):
                 label="exit_game_cancel_right",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Exit the game?", x=59, y=385, width=134, height=22),
                             _ocr_line("Confirm", x=122, y=536, width=73, height=20),
                             _ocr_line("Cancel", x=351, y=533, width=63, height=23),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -133,21 +137,22 @@ class PopupObservationTests(unittest.TestCase):
                 label="world_map_disconnect_popup",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Disconnected. Reconnect now?[-10013]", x=47, y=382, width=422, height=35),
                             _ocr_line("Confirm", x=231, y=533, width=107, height=34),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 

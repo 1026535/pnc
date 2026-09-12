@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.support.pnc.capture_vision.minimal_runtime_registry import _minimal_runtime_registry
+
 import tempfile
 import unittest
 from pathlib import Path
@@ -43,14 +45,16 @@ class BuildingConfirmationObservationTests(unittest.TestCase):
                 label="farm_construction_confirmation",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Farm", x=179, y=23, width=124, height=46),
                             _ocr_line("Build", x=701, y=435, width=89, height=37),
@@ -62,8 +66,7 @@ class BuildingConfirmationObservationTests(unittest.TestCase):
                             _ocr_line("Effect", x=60, y=1036, width=83, height=33),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -84,14 +87,16 @@ class BuildingConfirmationObservationTests(unittest.TestCase):
                 label="farm_upgrade_confirmation",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Farm", x=180, y=23, width=123, height=46),
                             _ocr_line("Where Food is produced. Upgrade", x=471, y=245, width=415, height=26),
@@ -102,8 +107,7 @@ class BuildingConfirmationObservationTests(unittest.TestCase):
                             _ocr_line("Effect", x=60, y=1035, width=83, height=31),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -145,18 +149,19 @@ class BuildingConfirmationObservationTests(unittest.TestCase):
                     label=label,
                 )
                 builder = ObservationBuilder(
-                    selector_registry=SelectorRegistry(selectors=()),
+                    selector_registry=_minimal_runtime_registry(),
                     selector_engine=ImageSelectorEngine(
                         template_matcher=OpenCvTemplateMatcher(),
-                        ocr_service=UnavailableOcrService(),
+
                     ),
                     screen_classifier=ScreenClassifier(),
                     enricher=PncObservationEnricher(
-                        ocr_service=_FakeOcrService(
+
+                    ),
+            ocr_service=_FakeOcrService(
                             lines=lines,
                         )
-                    ),
-                )
+                    )
 
                 observation = builder.build(screenshot)
 

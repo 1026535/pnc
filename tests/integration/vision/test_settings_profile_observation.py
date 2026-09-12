@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.support.pnc.capture_vision.minimal_runtime_registry import _minimal_runtime_registry
+
 import tempfile
 import unittest
 from pathlib import Path
@@ -43,14 +45,16 @@ class SettingsProfileObservationTests(unittest.TestCase):
                 label="more_menu_live_like",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Manage Char", x=78, y=1330, width=178, height=34),
                             _ocr_line("Lord Info", x=315, y=1332, width=154, height=34),
@@ -63,8 +67,7 @@ class SettingsProfileObservationTests(unittest.TestCase):
                             _ocr_line("More", x=794, y=1567, width=71, height=27),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -89,14 +92,16 @@ class SettingsProfileObservationTests(unittest.TestCase):
                 label="more_settings_menu_live_like",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Settings", x=112, y=20, width=128, height=28),
                             _ocr_line("Account", x=120, y=94, width=102, height=24),
@@ -106,13 +111,12 @@ class SettingsProfileObservationTests(unittest.TestCase):
                             _ocr_line("Blacklist", x=320, y=374, width=104, height=24),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
             self.assertEqual(observation.screen_type, ScreenType.PNC_SETTINGS)
-            self.assertTrue(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
+            self.assertFalse(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
             self.assertTrue(observation.has(UiElementId.PNC_MORE_MANAGE_CHAR))
             self.assertFalse(observation.has(UiElementId.PNC_MORE_SETTINGS))
             self.assertFalse(observation.has(UiElementId.PNC_MORE_OVERLAY_MANAGE_CHAR))
@@ -130,14 +134,16 @@ class SettingsProfileObservationTests(unittest.TestCase):
                 label="lord_info_live_like",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Lord Info", x=184, y=20, width=208, height=48),
                             _ocr_line("Gear", x=52, y=111, width=83, height=42),
@@ -149,8 +155,7 @@ class SettingsProfileObservationTests(unittest.TestCase):
                             _ocr_line("Achievements", x=731, y=1567, width=115, height=17),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 

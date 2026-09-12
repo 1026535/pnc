@@ -22,7 +22,12 @@ from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.core.text.normalization import normalize_ocr_text
 from pnc_automation.app.pnc.vision.observation_builder import CapturedObservation, ObservationBuilder
-from pnc_automation.core.vision.ocr.ocr_service import OcrLine, OcrResult, OcrService
+from pnc_automation.core.vision.ocr.ocr_service import (
+    ObservationOcrContext,
+    OcrLine,
+    OcrReadPurpose,
+    OcrResult,
+)
 from pnc_automation.app.pnc.vision.selector_catalog import (
     SelectorCatalogClickDefinition,
     SelectorCatalogClickOutcome,
@@ -207,7 +212,6 @@ class SelectorDiscoveryAnalyzer:
     """Builds discovery snapshots and draft update specs from screenshot evidence."""
 
     observation_builder: ObservationBuilder
-    ocr_service: OcrService
     catalog: SelectorCatalogDocument
     text_anchor_detector: TextAnchorDetector = field(default_factory=TextAnchorDetector)
 
@@ -217,12 +221,18 @@ class SelectorDiscoveryAnalyzer:
         return self._build_snapshot(
             screenshot=captured_observation.screenshot,
             observation=captured_observation.observation,
+            ocr_context=captured_observation.ocr_context,
         )
 
     def analyze_captured_screenshot(self, screenshot: CapturedScreenshot) -> SelectorDiscoverySnapshot:
         """Analyzes one captured screenshot and returns its typed discovery snapshot."""
 
-        return self._build_snapshot(screenshot=screenshot, observation=self.observation_builder.build(screenshot))
+        ocr_context = self.observation_builder.create_ocr_context(screenshot)
+        return self._build_snapshot(
+            screenshot=screenshot,
+            observation=self.observation_builder.build(screenshot, ocr_context=ocr_context),
+            ocr_context=ocr_context,
+        )
 
     def analyze_artifact_path(self, artifact_path: Path) -> SelectorDiscoverySnapshot:
         """Loads one saved screenshot artifact from disk and analyzes it."""
@@ -302,12 +312,35 @@ class SelectorDiscoveryAnalyzer:
         artifact_path: Path,
         selector_ids: Sequence[UiElementId],
         image: Image.Image | None = None,
+        ocr_context: ObservationOcrContext | None = None,
     ) -> tuple[SelectorDiscoveryDraft, ...]:
         """Builds reviewed draft updates from selectors already visible in one live observation."""
 
         ocr_lines = None
         if image is not None:
-            ocr_lines = tuple(sorted(self.ocr_service.read_result(image).lines, key=lambda line: (line.bounds.y, line.bounds.x)))
+            if ocr_context is None:
+                # Artifact-only callers may provide an image without a
+                # CapturedObservation. Bind a fresh context through the
+                # canonical builder owner rather than reaching into a
+                # selector or enricher backend.
+                synthetic_screenshot = CapturedScreenshot(
+                    artifact=None,
+                    image=image,
+                    image_format="PNG",
+                )
+                ocr_context = self.observation_builder.create_ocr_context(synthetic_screenshot)
+                ocr_result = ocr_context.read_result(
+                    image,
+                    purpose=OcrReadPurpose.DEBUG,
+                    detail="selector_discovery_visible_drafts",
+                )
+            else:
+                ocr_result = ocr_context.read_result(
+                    image,
+                    purpose=OcrReadPurpose.DEBUG,
+                    detail="selector_discovery_visible_drafts",
+                )
+            ocr_lines = tuple(sorted(ocr_result.lines, key=lambda line: (line.bounds.y, line.bounds.x)))
         drafts = [
             draft
             for selector_id in selector_ids
@@ -325,6 +358,7 @@ class SelectorDiscoveryAnalyzer:
         *,
         screenshot: CapturedScreenshot,
         observation: Observation,
+        ocr_context: ObservationOcrContext | None = None,
         ocr_result: OcrResult,
     ) -> tuple[SelectorDiscoveryDraft, ...]:
         """Builds draft selectors suggested by one analyzed screenshot."""
@@ -339,10 +373,15 @@ class SelectorDiscoveryAnalyzer:
         *,
         screenshot: CapturedScreenshot,
         observation: Observation,
+        ocr_context: ObservationOcrContext,
     ) -> SelectorDiscoverySnapshot:
         """Builds one discovery snapshot from one screenshot and its already-built observation."""
 
-        ocr_result = self.ocr_service.read_result(screenshot.image)
+        ocr_result = ocr_context.read_result(
+            screenshot.image,
+            purpose=OcrReadPurpose.DEBUG,
+            detail="selector_discovery_snapshot",
+        )
         drafts = self._discover_snapshot_drafts(
             screenshot=screenshot,
             observation=observation,
@@ -500,7 +539,7 @@ class SelectorDiscoveryAnalyzer:
                 element=visible_element,
                 image_size=observation.image_size,
             )
-            if detection_kind == DetectionKind.PLANNED.value:
+            if catalog_entry.status == SelectorStatus.PLANNED.value:
                 detection_kind = DetectionKind.OCR_REGION.value
         elif catalog_entry.relative_bounds is None:
             relative_bounds = _build_relative_bounds_from_observation(
@@ -604,7 +643,7 @@ class SelectorDiscoveryAnalyzer:
         catalog_entry = self._find_catalog_entry(selector_id)
         if catalog_entry is None:
             return True
-        return catalog_entry.status == SelectorStatus.PLANNED.value or catalog_entry.detection_kind == DetectionKind.PLANNED.value
+        return catalog_entry.status == SelectorStatus.PLANNED.value
 
     def _find_catalog_entry(self, selector_id: str) -> SelectorCatalogEntry | None:
         """Returns one catalog entry when present."""
@@ -843,7 +882,7 @@ def _should_stage_ocr_region(*, catalog_entry: SelectorCatalogEntry, element: Vi
     if catalog_entry.detection_kind == DetectionKind.OCR_REGION.value:
         return True
     return (
-        catalog_entry.detection_kind == DetectionKind.PLANNED.value
+        catalog_entry.status == SelectorStatus.PLANNED.value
         and catalog_entry.interaction_kind == SelectorInteractionKind.LABEL.value
     )
 
@@ -1054,7 +1093,7 @@ _SCREEN_DISCOVERY_RULES: tuple[ScreenSelectorDiscoveryRule, ...] = (
     ScreenSelectorDiscoveryRule(
         screen_type=ScreenType.PNC_RESEARCH_TREE,
         selector_id="PNC_RESEARCH_NODE_ENTRY",
-        detection_kind=DetectionKind.COLLECTION,
+        detection_kind=DetectionKind.SEMANTIC,
         status=SelectorStatus.SCREENSHOT_SEEDED,
         notes=("Drafted as a dynamic research-node collection from the live research tree.",),
     ),

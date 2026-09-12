@@ -1,272 +1,364 @@
 {
-  "version": 1,
-  "annotation": "Direct visual review by the implementing agent. References are never counted as holdout. Same-session and same-layout frames remain correlated; no statistical reliability claim.",
+  "version": 2,
+  "annotation": "Direct visual review by the implementing agent. Each sha256 is the decoded RGB digest: width.to_bytes(8, 'big') + height.to_bytes(8, 'big') + RGB bytes. References are never counted as holdout. Same-session and same-layout frames remain correlated; validation samples may share reviewed source groups and are not independent evidence.",
   "samples": [
+    {
+      "image": "loading_publisher_splash.png",
+      "screen": "PNC_LOADING",
+      "split": "reference",
+      "group": "2026-09-12/testing/startup",
+      "sha256": "9e1f031d3c18abd561d596898e69802e59da9df4606dfb230fcf4c6ada712c92",
+      "expected_visual_screens": [
+        "PNC_LOADING"
+      ]
+    },
     {
       "image": "hero_hall.png",
       "screen": "PNC_HERO_HALL",
       "split": "reference",
       "group": "2026-09-10/mega_old_acc",
-      "sha256": "af34dd70e21944d27d7b70a2be2b0b2a82bb6d01d39cdaf048dc39f819813869"
+      "sha256": "fcafe76077e5a2a9c82bdfa1e1adeb40c60ccdc9e90bce11236fbaefa1adfb90",
+      "expected_visual_screens": [
+        "PNC_HERO_HALL"
+      ]
     },
     {
       "image": "event_center.png",
       "screen": "PNC_EVENT_CENTER",
       "split": "reference",
       "group": "2026-09-10/serious_stuff",
-      "sha256": "118f5028b5469b50fe0fad8ab0e846c287a91e1a8225fbbb5a0774ec2383b94e"
+      "sha256": "c090f1d0b49d9e32fa0dde72cdd97b9d8eb86540ef103df396358a7633112fa5",
+      "expected_visual_screens": [
+        "PNC_EVENT_CENTER"
+      ]
     },
     {
       "image": "quest_daily.png",
       "screen": "PNC_QUEST_DAILY",
       "split": "reference",
       "group": "2026-09-08/serious_stuff",
-      "sha256": "495954f85a46db08a895a679f03aa2697c5161743dcd504c47d229bde7a2acb8"
+      "sha256": "8c55e463e878ac66ebdd9689b2596feedc402c5db1cdc7478a33647a82f4ae0a",
+      "expected_visual_screens": [
+        "PNC_QUEST_DAILY"
+      ]
     },
     {
       "image": "quest_main.png",
       "screen": "PNC_QUEST_MAIN",
       "split": "reference",
       "group": "2026-09-08/serious_stuff",
-      "sha256": "8ba7a53f31f85a18ed2f56f4f3d50312d16f1af472dbdb374c93b3943f928eb5"
+      "sha256": "7a6df26369f500c500c1eeab8deb01ee1e52699abf0c95ad8aabd42cedbf2bf7",
+      "expected_visual_screens": [
+        "PNC_QUEST_MAIN"
+      ]
     },
     {
       "image": "bag.png",
       "screen": "PNC_BAG",
       "split": "reference",
       "group": "2026-08-30/mega_old_acc",
-      "sha256": "d3ce42390b9f26c69879a717784be75e998227882bdfff7804ed9a17d060eab7"
+      "sha256": "16d09ecbd0383d86d1e29566008499ee81977227cf13c70b9ddb65e4a2a2f1a8",
+      "expected_visual_screens": [
+        "PNC_BAG"
+      ]
     },
     {
       "image": "settings.png",
       "screen": "PNC_SETTINGS",
       "split": "reference",
       "group": "2026-09-10/testing",
-      "sha256": "0969e37144b3ac398c18671925db76b11b72eddfe484f20d29192fdd9b4b4d19"
+      "sha256": "e5e76e113e109540ca8eb36318f274fbfbfa8698670e8890e0e47742d8cea5d8",
+      "expected_visual_screens": [
+        "PNC_SETTINGS"
+      ]
     },
     {
       "image": "more_overlay.png",
       "screen": "PNC_MORE_MENU",
       "split": "reference",
       "group": "2026-09-10/testing",
-      "sha256": "d1bb8cd85bbd55d38995002eea106ce408ff1fe8ac3734068a4515f5eb6433a4"
+      "sha256": "59648b98115bfaf0ce4876288f6f898e830795082e9ccfd032820a2413a64715",
+      "expected_visual_screens": [
+        "PNC_MORE_MENU"
+      ]
     },
     {
       "image": "manage_char.png",
       "screen": "PNC_CASTLE_SELECTION",
       "split": "reference",
       "group": "2026-09-10/testing",
-      "sha256": "3034a4d12e3716c4cdaaa0edcf21b0e389821d82b0cfc18161effe4514cf5caa"
+      "sha256": "6f8cb563b147f98b8245f7ec58df998f752104037320b2388e01369186fb3e74",
+      "expected_visual_screens": [
+        "PNC_CASTLE_SELECTION"
+      ]
     },
     {
       "image": "alliance_invitation.png",
       "screen": "PNC_POPUP",
       "split": "reference",
       "group": "2026-09-10/testing",
-      "sha256": "962bda7f6119a34ce7ba0baa3bc46f43e3e470bd585c432b2f09386a317878f2"
+      "sha256": "5840f6be2d5a45a5f9222e931d7b2536db5568e5d2ce0ffc1c53bbdaeccdc305",
+      "expected_visual_screens": [
+        "PNC_POPUP"
+      ]
     },
     {
       "image": "hero_hall_aug29.png",
       "screen": "PNC_HERO_HALL",
       "split": "holdout",
       "group": "2026-08-29/mega_old_acc",
-      "sha256": "9006d372fd4c0f7a796880ffe466399398d757a5aa789ebf7e03dbb5a3fc76d6"
+      "sha256": "72eee5eb65b312bd3bd301e41589f027db039e21f88cb7f85351a3f0819c610e",
+      "expected_visual_screens": [
+        "PNC_HERO_HALL"
+      ]
     },
     {
       "image": "quest_main_sep09.png",
       "screen": "PNC_QUEST_MAIN",
       "split": "holdout",
       "group": "2026-09-09/serious_stuff",
-      "sha256": "47648110587784c34cb2deee1e3799e09fb76199efcb0dc137d8312dc8249ed8"
+      "sha256": "35e5c8b81822f6b88cfc60118d11db3ae0a71b75669bb63471947cfb7e2076f7",
+      "expected_visual_screens": [
+        "PNC_QUEST_MAIN"
+      ]
     },
     {
       "image": "quest_daily_sep09.png",
       "screen": "PNC_QUEST_DAILY",
       "split": "holdout",
       "group": "2026-09-09/serious_stuff",
-      "sha256": "8fa253e273c77341e5d86b31a63b6051e179d350dc8fac98ef1fabdd268e8c25"
+      "sha256": "ad64a69e8ba73f1af384f4ac1cb5df0a72eadf4a67f1cf5d3e025abd27b7cf75",
+      "expected_visual_screens": [
+        "PNC_QUEST_DAILY"
+      ]
     },
     {
       "image": "update_over_bag.png",
       "screen": "PNC_POPUP",
       "split": "holdout",
       "group": "2026-09-09/serious_stuff",
-      "sha256": "8b7acd8b210ba21e2606dc0856255cc1ed646ce94b09cc98bf1e8332366015ab"
+      "sha256": "b70bb431e6544f172602ea737a04ddf7e7aa6ccd943fd8082f26b379fbe599eb",
+      "expected_visual_screens": []
     },
     {
       "image": "more_sep04.png",
       "screen": "PNC_MORE_MENU",
       "split": "holdout",
       "group": "2026-09-04/testing",
-      "sha256": "e2357c7e5e2d8e0ebd4035326f57ba896416b567bec022925c62820aceec0649"
+      "sha256": "d3cc5de4639e5bde0cd1c8ad9bf03340a9ff6d1eb0e93b4a8e4bd1ab05669443",
+      "expected_visual_screens": [
+        "PNC_MORE_MENU"
+      ]
     },
     {
       "image": "more_sep01.png",
       "screen": "PNC_MORE_MENU",
       "split": "holdout",
       "group": "2026-09-01/mega_old_acc",
-      "sha256": "9281e8309436a38d56626d3d3f3c80816ccf57a89852c705647564b0b035f1a5"
+      "sha256": "6a70c0082b1554704e826a5965bf0464e27f9bd009aa688e1822eb83080045df",
+      "expected_visual_screens": [
+        "PNC_MORE_MENU"
+      ]
     },
     {
       "image": "home_negative.png",
       "screen": "PNC_HOME_CITY",
       "split": "validation",
       "group": "2026-09-10/testing",
-      "sha256": "a2969f72a5453efe2374bee3d1df3edaf0a53194d2423b41b8d811a1bfb5c6fd"
+      "sha256": "6c0267f7df059296961be9736e1db57f7a51cc630fc276ed00526aaf6ef186bf",
+      "expected_visual_screens": []
     },
     {
       "image": "store_negative.png",
       "screen": "UNKNOWN",
       "split": "validation",
       "group": "2026-09-10/testing",
-      "sha256": "e08bad9204078d13296d3def1052a5811b2fe39543624aada75d42e8a6a89855"
+      "sha256": "45b6a57b37ca363653ff9a9af480d4865c6f493e019e635defe3184c5f2a8475",
+      "expected_visual_screens": []
     },
     {
       "image": "disconnect_negative.png",
       "screen": "PNC_POPUP",
       "split": "holdout",
       "group": "data/world_map",
-      "sha256": "9b65cfed5cfe8870a200aa5848ae815c0fc0058be6180bc1ac5ac95b5a9e94cf"
+      "sha256": "00904979961c1bd8ce18f3633d25a9600fc24a82aa8d567633b8221059e2e2fc",
+      "expected_visual_screens": []
     },
     {
       "image": "institute_audit.png",
       "screen": "PNC_INSTITUTE",
       "split": "reference",
       "group": "2026-09-10/testing",
-      "sha256": "109aaff4e6a7df3997b777ef3e13c55a025c58de96b9cb32cb3c53a92352fd7b"
+      "sha256": "6e0ec65880de25d65422503a5d99184ba9aba55b22496aecb2dab60615d36b6c",
+      "expected_visual_screens": [
+        "PNC_INSTITUTE"
+      ]
     },
     {
       "image": "goddess_statue_audit.png",
       "screen": "PNC_GODDESS_STATUE",
       "split": "reference",
       "group": "2026-09-10/testing",
-      "sha256": "fa2a28eb5b5f88ee46bbc319e7474fcef47df389ab007d508759951a13c80b7a"
+      "sha256": "8f37b8f8cfc507dc690acb6f42aa7ecc3b427bce3efadf60e9d0e4bd58b1fb0e",
+      "expected_visual_screens": [
+        "PNC_GODDESS_STATUE"
+      ]
     },
     {
       "image": "warehouse_audit.png",
       "screen": "PNC_WAREHOUSE",
       "split": "reference",
       "group": "2026-09-10/testing",
-      "sha256": "cbe6b90ded86cb757765cbd3f3db08d71ae873d867285ecbd8c3101ac0932eb9"
+      "sha256": "d3c1c715b3f50f5c9b26ad4212784ba774d80e45eb93eefd375a07e55076b60c",
+      "expected_visual_screens": [
+        "PNC_WAREHOUSE"
+      ]
     },
     {
       "image": "castle_audit.png",
       "screen": "PNC_CASTLE",
       "split": "reference",
       "group": "2026-09-12/serious_stuff",
-      "sha256": "68bef77309b15aa049c52bbe18c6469d600077e9c9e8af813ff2511a300c39c5"
-    },
-    {
-      "image": "home_city_core.png",
-      "screen": "PNC_HOME_CITY",
-      "split": "reference",
-      "group": "2026-09-10/testing",
-      "sha256": "c5d14dc40865df81c7ee617ef6281c56b1a0a5d6feb6daa12e1d0b8cb6a71438"
-    },
-    {
-      "image": "world_map_core.png",
-      "screen": "PNC_WORLD_MAP",
-      "split": "reference",
-      "group": "2026-09-10/testing",
-      "sha256": "60cf6fae1568c3951186c4885939959e3a3b0966aa6768f5e674f93baa663afb"
-    },
-    {
-      "image": "coordinate_dialog_core.png",
-      "screen": "PNC_WORLD_COORDINATE_DIALOG",
-      "split": "reference",
-      "group": "2026-09-10/testing",
-      "sha256": "c389e165cc5e3e60e02ced947d3ceb77bf59fa7811c3235ecbd12f2ac5ebbac5"
-    },
-    {
-      "image": "world_overview_core.png",
-      "screen": "PNC_WORLD_MAP_OVERVIEW",
-      "split": "reference",
-      "group": "2026-09-10/testing",
-      "sha256": "7d8ba05e945cf2e0361e3d86b2a8e48bbe18fd25840de54550f472d4deaef1bf"
-    },
-    {
-      "image": "home_city_core_animation_regression.png",
-      "screen": "PNC_HOME_CITY",
-      "split": "validation",
-      "group": "2026-09-10/testing",
-      "sha256": "586accc8c900c67b2bc805bba015e31659326ef173b17e00305f78c7499b9234"
-    },
-    {
-      "image": "world_expanded_core.png",
-      "screen": "PNC_WORLD_MAP_EXPANDED",
-      "split": "reference",
-      "group": "2026-09-10/testing",
-      "sha256": "59420307fee2ae190a758adb3507f22ba0087802182f549cfc25e5ba01501036"
-    },
-    {
-      "image": "research_queue_core.png",
-      "screen": "PNC_RESEARCH_QUEUE",
-      "split": "reference",
-      "group": "2026-09-10/testing",
-      "sha256": "51e2e0c3a0cc327694825f84a53fa4b9a1e1706c12f0d443698878965d0ba528"
-    },
-    {
-      "image": "home_city_panned_core.png",
-      "screen": "PNC_HOME_CITY",
-      "split": "validation",
-      "group": "2026-09-10/testing",
-      "sha256": "48ebe749a36c5f118659aac3b38e46ba51b34af38dab138aabbb1864238f2726"
+      "sha256": "fb8c70a6b08efabf969177474422e9c8b204046835ef313396a2d0a932dd1ca4",
+      "expected_visual_screens": [
+        "PNC_CASTLE"
+      ]
     },
     {
       "image": "collect_mail_home.png",
       "screen": "PNC_HOME_CITY",
       "split": "reference",
       "group": "2026-09-12/serious_stuff",
-      "sha256": "7163ea34a942a0631b9240ca7337ef2e0068e1ab0da92aae9f9d4cbedb16558c"
+      "sha256": "d3bf6719f20c451c47e3a5f954d18faf724d09a3c3bf10dc0702823926f12730",
+      "expected_visual_screens": [
+        "PNC_HOME_CITY"
+      ]
     },
     {
       "image": "collect_mail_hub.png",
       "screen": "PNC_MAIL_HUB",
       "split": "reference",
       "group": "2026-09-12/serious_stuff",
-      "sha256": "b196764e3100e95400d2ceba90deb028404de759db95a236c11fefbc36a973ad"
+      "sha256": "3c7c772b018e990b182ada27711917fab1d09d4c9051f7a9605366dca4dc9e93",
+      "expected_visual_screens": [
+        "PNC_MAIL_HUB"
+      ]
     },
     {
       "image": "collect_mail_system_list.png",
       "screen": "PNC_MAILBOX_LIST",
       "split": "reference",
       "group": "2026-09-12/serious_stuff",
-      "sha256": "f0960b17cd093347311783bbdc062b0a6ba1f78aa178ac305e7392b50484bf7e"
+      "sha256": "ac3f39c23e7774cdd3ac140f5c23cf401fc2e4a73c84e22feea8318af5f1b27d",
+      "expected_visual_screens": [
+        "PNC_MAILBOX_LIST"
+      ]
     },
     {
       "image": "collect_mail_system_thread.png",
       "screen": "PNC_MAIL_THREAD",
       "split": "reference",
       "group": "2026-09-12/serious_stuff",
-      "sha256": "471f111a61509f7974e77a6037a7a617a079b39f90df83aa16f764b32e4fc3c8"
+      "sha256": "9c6e3c66eccf20f7520df30a6542f09749a30b789ddbebbd867c0657c77862b1",
+      "expected_visual_screens": [
+        "PNC_MAIL_THREAD"
+      ]
     },
     {
       "image": "chat_home_alliance.png",
       "screen": "PNC_HOME_CITY",
       "split": "reference",
       "group": "2026-09-12/serious_stuff",
-      "sha256": "758f63603ae5844ef836b9092efdf37ca4d05725eb99cc016c38b6da1d233dbb"
+      "sha256": "9ba5094a00288c14313cc094baec4986df74268bc30503d95c5e76b6be87a20a",
+      "expected_visual_screens": [
+        "PNC_HOME_CITY"
+      ]
     },
     {
       "image": "chat_home_kingdom.png",
       "screen": "PNC_HOME_CITY",
       "split": "reference",
       "group": "2026-09-12/serious_stuff",
-      "sha256": "4aa27520aba3eb9f33209bcd07b06b178961a3678c59818be0e8a28be2254768"
+      "sha256": "6a45e50a39dbc456b88a2751cdd1a36d1d437816df5bbea9d85705f84513ff86",
+      "expected_visual_screens": [
+        "PNC_HOME_CITY"
+      ]
     },
     {
       "image": "chat_alliance.png",
       "screen": "PNC_CHAT",
       "split": "reference",
       "group": "2026-09-12/serious_stuff",
-      "sha256": "123c71e7ae808a0e9c5fbaabcb616cedab6afa4ae3b039939df079e65471cb96"
+      "sha256": "d2df6d46a55599146130a59815622168f3780f89e8c9a3a8172f46c978fcb24c",
+      "expected_visual_screens": [
+        "PNC_CHAT"
+      ]
     },
     {
       "image": "chat_kingdom.png",
       "screen": "PNC_CHAT",
       "split": "reference",
       "group": "2026-09-12/serious_stuff",
-      "sha256": "f2f19fea098da6b70a82092ff0e36f164e374661576b6c314455a0dfedf409d5"
+      "sha256": "eadda19c347241022047220ddc3dcfc4abe4569f029f73d87d9ea4415f2508c4",
+      "expected_visual_screens": [
+        "PNC_CHAT"
+      ]
+    },
+    {
+      "image": "settings_live_b0.png",
+      "screen": "PNC_SETTINGS",
+      "split": "validation",
+      "group": "testing/live_b0/20260910T225832Z_8b55e757",
+      "sha256": "dbcf1183f17c94705bab30d601accc7a5d741d21b6de2a3f3879e3066899932e",
+      "expected_visual_screens": [
+        "PNC_SETTINGS"
+      ]
+    },
+    {
+      "image": "more_live_b0.png",
+      "screen": "PNC_MORE_MENU",
+      "split": "validation",
+      "group": "testing/live_b0/20260910T225832Z_8b55e757",
+      "sha256": "fbed40ac2c64974b2536f4e4ac63524783442a02e996f7360d26ebd2d5e17463",
+      "expected_visual_screens": [
+        "PNC_MORE_MENU"
+      ]
+    },
+    {
+      "image": "bag_current_testing.png",
+      "screen": "PNC_BAG",
+      "split": "validation",
+      "group": "testing/planning_bag/20260910T203309Z_36134e9b",
+      "sha256": "a3429776d752d40f707439024cb5373705257bf742faef3763af18b1532de385",
+      "expected_visual_screens": [
+        "PNC_BAG"
+      ]
+    },
+    {
+      "image": "upgrade_warning_aug28.png",
+      "screen": "PNC_BUILDING_UPGRADE_WARNING",
+      "split": "validation",
+      "group": "2026-08-28/testing",
+      "sha256": "36e55d466ebaa9f0364ac9dd7f4e84598d0267d72ad14be3fde96ffcf8c6cbc3",
+      "expected_visual_screens": []
+    },
+    {
+      "image": "alliance_home_aug30.png",
+      "screen": "PNC_ALLIANCE_HOME",
+      "split": "validation",
+      "group": "2026-08-30/mega_old_acc",
+      "sha256": "b599564706d9ad00abd548122276be8f265d0a9bc382e8a48d3d2c4fe03745dc",
+      "expected_visual_screens": []
+    },
+    {
+      "image": "castle_aug25.png",
+      "screen": "PNC_CASTLE",
+      "split": "validation",
+      "group": "2026-08-25/testing",
+      "sha256": "15df16a6d5aca4a99cbcfd40d0a3ca2c5c4b1ab1c2df397acf97a886fd70db85",
+      "expected_visual_screens": [
+        "PNC_CASTLE"
+      ]
     }
   ]
 }

@@ -74,7 +74,7 @@ class WorldSearchMovementProofTests(WorldMapRuntimeFixtures, unittest.TestCase):
         self.assertLessEqual(trace["action_follow_up_observe_elapsed_ms"], trace["action_elapsed_ms"])
         self.assertEqual(trace["action_follow_up_observation_count"], 1)
         self.assertGreaterEqual(trace["prove_elapsed_ms"], 0.0)
-        self.assertEqual(observer.requests, [ObservationRequest.world_map_movement_follow_up()])
+        self.assertEqual(observer.requests, [ObservationRequest.world_map_movement_proof_follow_up()])
 
     def test_move_to_checkpoint_uses_movement_proof_scope_on_final_landing(self) -> None:
         """Keeps the mover on the narrow P1 proof contract instead of hiding rich checkpoint analysis inside movement."""

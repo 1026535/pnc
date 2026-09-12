@@ -16,6 +16,7 @@ from pnc_automation.app.pnc.vision.selectors import (
 from tests.support.pnc.capture_vision.recording_ocr_service import _RecordingOcrService
 from tests.support.pnc.capture_vision.materialize_chat_region import _materialize_chat_region
 from tests.support.pnc.capture_vision.ocr_line import _ocr_line
+from tests.support.pnc.capture_vision.fake_screenshot_session import make_captured_frame
 
 
 def _make_chat_ocr_fallback_fixture(
@@ -76,6 +77,7 @@ def _make_chat_ocr_fallback_fixture(
         {
             "image": image,
             "artifact": type("Artifact", (), {"path": Path("synthetic_chat_ocr_fallback.png"), "captured_at": None})(),
+            "frame_ref": make_captured_frame(b"").frame_ref,
         },
     )()
     return screenshot, registry, _RecordingOcrService(lines=tuple(lines))

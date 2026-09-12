@@ -52,20 +52,20 @@ class ChatClassificationTests(unittest.TestCase):
                 selector_registry=build_default_selector_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                    selector_registry=build_default_selector_registry(),
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Chat", x=181, y=20, width=113, height=49),
                             _ocr_line("Kingdom", x=202, y=117, width=143, height=40),
                             _ocr_line("Alliance", x=652, y=116, width=123, height=39),
                         )
-                    ),
-                    selector_registry=build_default_selector_registry(),
-                ),
-            )
+                    ))
 
             observation = builder.build(
                 screenshot,
@@ -120,6 +120,13 @@ class ChatClassificationTests(unittest.TestCase):
             },
         )()
         registry = build_default_selector_registry()
+        ocr_service = _FakeOcrService(
+            lines=(
+                _ocr_line("Chat", x=111, y=16, width=75, height=28),
+                _ocr_line("Kingdom", x=64, y=64, width=82, height=26),
+                _ocr_line("Alliance", x=219, y=64, width=91, height=27),
+            )
+        )
         builder = ObservationBuilder(
             selector_registry=registry,
             selector_engine=ImageSelectorEngine(
@@ -127,16 +134,8 @@ class ChatClassificationTests(unittest.TestCase):
                 ocr_service=UnavailableOcrService(),
             ),
             screen_classifier=ScreenClassifier(),
-            enricher=PncObservationEnricher(
-                ocr_service=_FakeOcrService(
-                    lines=(
-                        _ocr_line("Chat", x=111, y=16, width=75, height=28),
-                        _ocr_line("Kingdom", x=64, y=64, width=82, height=26),
-                        _ocr_line("Alliance", x=219, y=64, width=91, height=27),
-                    )
-                ),
-                selector_registry=registry,
-            ),
+            enricher=PncObservationEnricher(selector_registry=registry),
+            ocr_service=ocr_service,
         )
 
         observation = builder.build(
@@ -166,7 +165,7 @@ class ChatClassificationTests(unittest.TestCase):
         self.assertTrue(observation.chat_draft_empty)
         self.assertIsNone(observation.chat_draft_text)
         self.assertEqual(ocr_service.read_result_calls, 1)
-        self.assertGreater(ocr_service.read_text_calls, 0)
+        self.assertEqual(ocr_service.read_text_calls, 0)
 
     def test_observation_builder_leaves_active_chat_channel_unknown_when_tab_colors_are_ambiguous(self) -> None:
         """Keeps OCR-proven chat observations fail-safe when the highlighted tab cannot be trusted."""
@@ -182,7 +181,7 @@ class ChatClassificationTests(unittest.TestCase):
         self.assertTrue(observation.chat_draft_empty)
         self.assertIsNone(observation.chat_draft_text)
         self.assertEqual(ocr_service.read_result_calls, 1)
-        self.assertGreater(ocr_service.read_text_calls, 0)
+        self.assertEqual(ocr_service.read_text_calls, 0)
 
     def test_observation_builder_escalates_chat_send_follow_up_to_ocr_after_a_geometry_miss(self) -> None:
         """Falls back to OCR for post-send chat confirmation when the chat geometry heuristic misses."""
@@ -195,6 +194,6 @@ class ChatClassificationTests(unittest.TestCase):
 
         self.assertEqual(observation.screen_type, ScreenType.PNC_CHAT)
         self.assertEqual(observation.active_chat_channel, ChatChannel.ALLIANCE)
-        self.assertTrue(observation.chat_draft_empty)
-        self.assertEqual(ocr_service.read_result_calls, 1)
-        self.assertGreater(ocr_service.read_text_calls, 0)
+        self.assertIsNone(observation.chat_draft_empty)
+        self.assertEqual(ocr_service.read_result_calls, 2)
+        self.assertEqual(ocr_service.read_text_calls, 0)

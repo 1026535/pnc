@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
+from dataclasses import replace
+
 import unittest
 
 from pnc_automation.app.automation.engine.action_executor import ActionExecutor
@@ -35,6 +38,7 @@ class ActionTextAndChannelTests(AutomationFrameworkFixtures, unittest.TestCase):
         """Focuses selector-backed text entry through the canonical action point instead of the bounds center."""
 
         executor = ActionExecutor(
+            selector_registry=build_default_selector_registry(),
             session=FakeSession(),
             stable_click_delay_ms=0,
             post_action_observe_delay_ms=0,
@@ -49,21 +53,27 @@ class ActionTextAndChannelTests(AutomationFrameworkFixtures, unittest.TestCase):
             chat_draft_empty=True,
         )
         observation = Observation(
-            screen_type=observation.screen_type,
+            decision=observation.decision,
             visible_elements={
-                UiElementId.PNC_CHAT_INPUT_FIELD: make_visible(
-                    UiElementId.PNC_CHAT_INPUT_FIELD,
-                    x=20,
-                    y=40,
-                    width=90,
-                    height=22,
-                    action_point=(81, 55),
+                UiElementId.PNC_CHAT_INPUT_FIELD: replace(
+                    make_visible(
+                        UiElementId.PNC_CHAT_INPUT_FIELD,
+                        x=20,
+                        y=40,
+                        width=90,
+                        height=22,
+                        action_point=(81, 55),
+                    ),
+                    frame_ref=observation.frame_ref,
+                    source_screen=observation.screen_type,
+                    source_layout_id=observation.decision.layout_id,
                 )
             },
             image_size=observation.image_size,
             active_chat_channel=observation.active_chat_channel,
             chat_draft_empty=observation.chat_draft_empty,
             chat_draft_text=observation.chat_draft_text,
+            frame_ref=observation.frame_ref,
         )
 
         executor.execute_action(
@@ -105,6 +115,7 @@ class ActionTextAndChannelTests(AutomationFrameworkFixtures, unittest.TestCase):
         """Avoids redundant chat-tab taps when the current observation already proves the active channel."""
 
         executor = ActionExecutor(
+            selector_registry=build_default_selector_registry(),
             session=FakeSession(),
             stable_click_delay_ms=0,
             post_action_observe_delay_ms=0,
@@ -131,6 +142,7 @@ class ActionTextAndChannelTests(AutomationFrameworkFixtures, unittest.TestCase):
 
         fake_observer = FakeObservationService(observations=[])
         executor = ActionExecutor(
+            selector_registry=build_default_selector_registry(),
             session=FakeSession(),
             stable_click_delay_ms=0,
             post_action_observe_delay_ms=0,

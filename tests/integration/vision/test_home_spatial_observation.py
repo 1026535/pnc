@@ -47,11 +47,13 @@ class HomeSpatialObservationTests(unittest.TestCase):
                 selector_registry=build_default_selector_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Build", x=27, y=354, width=65, height=28),
                             _ocr_line("Alliance", x=48, y=1500, width=124, height=32),
@@ -61,8 +63,7 @@ class HomeSpatialObservationTests(unittest.TestCase):
                             _ocr_line("Build", x=450, y=840, width=90, height=28),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 

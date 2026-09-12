@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.support.pnc.capture_vision.minimal_runtime_registry import _minimal_runtime_registry
+
 import tempfile
 import unittest
 from pathlib import Path
@@ -43,14 +45,16 @@ class BuildingSpeedupObservationTests(unittest.TestCase):
                 label="wall_upgrade_confirm",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Wall", x=182, y=18, width=107, height=50),
                             _ocr_line("Glory Level", x=655, y=346, width=182, height=42),
@@ -63,8 +67,7 @@ class BuildingSpeedupObservationTests(unittest.TestCase):
                             _ocr_line("Effect", x=60, y=1036, width=83, height=33),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -88,22 +91,23 @@ class BuildingSpeedupObservationTests(unittest.TestCase):
                 label="warehouse_speedup",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Warehouse", x=181, y=18, width=220, height=50),
                             _ocr_line("Glory Level", x=655, y=346, width=182, height=42),
                             _ocr_line("Speedup", x=675, y=438, width=145, height=41),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -122,22 +126,23 @@ class BuildingSpeedupObservationTests(unittest.TestCase):
                 label="build_speedup",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Build Speedup", x=182, y=18, width=280, height=50),
                             _ocr_line("Build Now", x=178, y=1510, width=180, height=45),
                             _ocr_line("Auto Speedup", x=520, y=1510, width=230, height=45),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -157,21 +162,22 @@ class BuildingSpeedupObservationTests(unittest.TestCase):
                 label="build_speedup_confirm",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Build Speedup", x=305, y=420, width=290, height=50),
                             _ocr_line("Confirm", x=362, y=1165, width=180, height=45),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 

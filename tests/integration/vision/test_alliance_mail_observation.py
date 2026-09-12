@@ -127,13 +127,13 @@ class AllianceMailObservationTests(MailWorkflowFixtures, unittest.TestCase):
         )
 
         self.assertEqual(observation.screen_type, ScreenType.UNKNOWN)
-        self.assertTrue(observation.has(UiElementId.PNC_STATUS_BANNER))
+        self.assertFalse(observation.has(UiElementId.PNC_STATUS_BANNER))
 
     def test_observation_builder_keeps_chat_send_button_out_of_mail_compose_popup(self) -> None:
         """Does not treat the shared chat Send button as compose-popup evidence without a mail header."""
 
         observation = _build_observation(
-            request=ObservationRequest.runtime_default(),
+            request=ObservationRequest.full_runtime_default(),
             lines=(
                 _ocr_line("Chat", x=240, y=38, width=100, height=26),
                 _ocr_line("Kingdom", x=210, y=118, width=120, height=34),

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.support.pnc.capture_vision.fake_screenshot_session import make_captured_frame
+
 import unittest
 from pathlib import Path
 
@@ -57,14 +59,14 @@ class ChatObservationRequestsTests(unittest.TestCase):
             selector_registry=registry,
             selector_engine=ImageSelectorEngine(
                 template_matcher=OpenCvTemplateMatcher(),
-                ocr_service=ocr_service,
+
             ),
             screen_classifier=ScreenClassifier(),
             enricher=PncObservationEnricher(
-                ocr_service=ocr_service,
+
                 selector_registry=registry,
             ),
-        )
+            ocr_service=ocr_service)
         screenshot = type(
             "Captured",
             (),
@@ -79,6 +81,7 @@ class ChatObservationRequestsTests(unittest.TestCase):
                     )
                 ),
                 "artifact": type("Artifact", (), {"path": Path("chat.png"), "captured_at": None})(),
+                "frame_ref": make_captured_frame(b"").frame_ref,
             },
         )()
 
@@ -90,8 +93,8 @@ class ChatObservationRequestsTests(unittest.TestCase):
         self.assertEqual(observation.screen_type, ScreenType.PNC_CHAT)
         self.assertEqual(observation.active_chat_channel, ChatChannel.ALLIANCE)
         self.assertTrue(observation.chat_draft_empty)
-        self.assertEqual(ocr_service.read_result_calls, 0)
-        self.assertGreater(ocr_service.read_text_calls, 0)
+        self.assertEqual(ocr_service.read_result_calls, 1)
+        self.assertEqual(ocr_service.read_text_calls, 0)
 
     def test_chat_transcript_observation_still_runs_ocr_after_geometry_proves_chat(self) -> None:
         """Keeps transcript-row extraction enabled for chat transcript polls even when geometry already proves chat."""
@@ -118,20 +121,21 @@ class ChatObservationRequestsTests(unittest.TestCase):
             selector_registry=registry,
             selector_engine=ImageSelectorEngine(
                 template_matcher=OpenCvTemplateMatcher(),
-                ocr_service=UnavailableOcrService(),
+
             ),
             screen_classifier=ScreenClassifier(),
             enricher=PncObservationEnricher(
-                ocr_service=ocr_service,
+
                 selector_registry=registry,
             ),
-        )
+            ocr_service=ocr_service)
         screenshot = type(
             "Captured",
             (),
             {
                 "image": image,
-                "artifact": type("Artifact", (), {"path": Path("chat_transcript.png"), "captured_at": None})(),
+            "artifact": type("Artifact", (), {"path": Path("chat_transcript.png"), "captured_at": None})(),
+            "frame_ref": make_captured_frame(b"").frame_ref,
             },
         )()
 
@@ -141,4 +145,4 @@ class ChatObservationRequestsTests(unittest.TestCase):
         self.assertEqual(observation.active_chat_channel, ChatChannel.WORLD)
         self.assertEqual(len(observation.entries(ListEntryKind.CHAT_MESSAGE)), 1)
         self.assertEqual(observation.entries(ListEntryKind.CHAT_MESSAGE)[0].title_text, "Enemy Bob")
-        self.assertEqual(ocr_service.read_result_calls, 1)
+        self.assertEqual(ocr_service.read_result_calls, 2)

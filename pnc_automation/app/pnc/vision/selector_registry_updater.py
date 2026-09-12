@@ -16,14 +16,18 @@ from pnc_automation.app.pnc.vision.selector_catalog import (
     SelectorCatalogDocument,
     SelectorCatalogEntry,
     SelectorCatalogRelativeBounds,
+    SelectorCatalogTemplateAsset,
+    default_selector_asset_root,
     load_selector_catalog_document,
     load_selector_schema_click_definition,
     load_selector_schema_relative_bounds,
+    load_selector_schema_template_asset,
     load_selector_schema_string_sequence,
     require_selector_schema_bool,
     require_selector_schema_mapping,
     require_selector_schema_sequence,
     require_selector_schema_string,
+    validate_selector_catalog_assets,
     write_selector_catalog_document,
 )
 from pnc_automation.app.pnc.vision.selector_interaction_kind import SelectorInteractionKind
@@ -48,6 +52,8 @@ class SelectorRegistryUpdate:
     update_interaction_kind: bool = False
     relative_bounds: SelectorCatalogRelativeBounds | None = None
     update_relative_bounds: bool = False
+    template_asset: SelectorCatalogTemplateAsset | None = None
+    update_template_asset: bool = False
     materialize_relative_bounds: bool | None = None
     update_materialize_relative_bounds: bool = False
     notes: tuple[str, ...] = ()
@@ -106,8 +112,11 @@ def apply_selector_updates(
                 interaction_kind=update.interaction_kind,
                 click=update.click,
                 relative_bounds=update.relative_bounds,
+                template_asset=update.template_asset,
                 materialize_relative_bounds=(
-                    update.materialize_relative_bounds if update.update_materialize_relative_bounds else True
+                    update.materialize_relative_bounds
+                    if update.update_materialize_relative_bounds
+                    else _default_materialize_for_detection(update.detection_kind)
                 ),
                 notes=update.notes,
             )
@@ -119,10 +128,15 @@ def apply_selector_updates(
             merged_click = update.click if update.update_click else entry.click
             merged_interaction_kind = update.interaction_kind if update.update_interaction_kind else entry.interaction_kind
             merged_relative_bounds = update.relative_bounds if update.update_relative_bounds else entry.relative_bounds
+            merged_template_asset = update.template_asset if update.update_template_asset else entry.template_asset
             merged_materialize_relative_bounds = (
                 update.materialize_relative_bounds
                 if update.update_materialize_relative_bounds
-                else entry.materialize_relative_bounds
+                else (
+                    _default_materialize_for_detection(update.detection_kind)
+                    if update.detection_kind != entry.detection_kind
+                    else entry.materialize_relative_bounds
+                )
             )
             merged_notes = update.notes if update.update_notes else entry.notes
             if (
@@ -132,6 +146,7 @@ def apply_selector_updates(
                 or merged_click != entry.click
                 or merged_interaction_kind != entry.interaction_kind
                 or merged_relative_bounds != entry.relative_bounds
+                or merged_template_asset != entry.template_asset
                 or merged_materialize_relative_bounds != entry.materialize_relative_bounds
                 or merged_notes != entry.notes
             ):
@@ -144,6 +159,7 @@ def apply_selector_updates(
                 interaction_kind=merged_interaction_kind,
                 click=merged_click,
                 relative_bounds=merged_relative_bounds,
+                template_asset=merged_template_asset,
                 materialize_relative_bounds=merged_materialize_relative_bounds,
                 notes=merged_notes,
             )
@@ -202,11 +218,17 @@ def update_selector_registry_files(
     catalog_path: Path,
     ui_element_id_path: Path,
     dry_run: bool = False,
+    asset_root: Path | None = None,
 ) -> SelectorRegistryUpdateResult:
     """Applies one explicit selector update spec to the static catalog and enum source."""
 
     updates = load_selector_update_spec(spec_path)
-    updated_document, result = apply_selector_updates(load_selector_catalog_document(catalog_path), updates)
+    resolved_asset_root = (asset_root or default_selector_asset_root()).resolve()
+    updated_document, result = apply_selector_updates(
+        load_selector_catalog_document(catalog_path, asset_root=resolved_asset_root),
+        updates,
+    )
+    validate_selector_catalog_assets(updated_document, asset_root=resolved_asset_root)
     updated_ui_source, added_ui_element_ids = ensure_ui_element_ids(
         ui_element_id_path.read_text(encoding="utf-8"),
         [update.id for update in updates],
@@ -320,6 +342,16 @@ def _load_update(value: object) -> SelectorRegistryUpdate:
         if "relative_bounds" in mapping
         else None
     )
+    template_asset = (
+        load_selector_schema_template_asset(
+            mapping.get("template_asset"),
+            selector_id=selector_id,
+            document_label="selector update spec",
+            selector_label="selector update",
+        )
+        if "template_asset" in mapping
+        else None
+    )
     materialize_relative_bounds = (
         require_selector_schema_bool(
             mapping.get("materialize_relative_bounds"),
@@ -347,11 +379,19 @@ def _load_update(value: object) -> SelectorRegistryUpdate:
         update_interaction_kind="interaction_kind" in mapping,
         relative_bounds=relative_bounds,
         update_relative_bounds="relative_bounds" in mapping,
+        template_asset=template_asset,
+        update_template_asset="template_asset" in mapping,
         materialize_relative_bounds=materialize_relative_bounds,
         update_materialize_relative_bounds="materialize_relative_bounds" in mapping,
         notes=notes,
         update_notes="notes" in mapping,
     )
+
+
+def _default_materialize_for_detection(detection_kind: str) -> bool:
+    """Returns the only strategy that may auto-materialize fixed relative geometry."""
+
+    return detection_kind == DetectionKind.GUARDED_GEOMETRY.value
 
 
 def _promote_status(existing_status: str, requested_status: str, *, selector_id: str) -> str:

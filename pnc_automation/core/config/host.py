@@ -222,7 +222,7 @@ def load_bluestacks_host_config(path: str | Path, *, env: Mapping[str, str] | No
     )
     instances = _load_host_instances([] if instances_value is None else instances_value)
     accounts = _load_host_accounts([] if accounts_value is None else accounts_value)
-    _validate_host_bindings(instances, accounts)
+    validate_host_bindings(instances, accounts)
     return BlueStacksHostConfig(
         config_path=config_path,
         metadata_path=parse_bluestacks_metadata_path(
@@ -373,7 +373,7 @@ def _load_host_accounts(value: Any) -> tuple[AccountBinding, ...]:
     return tuple(parse_account_binding(item, context=f"accounts[{index}]") for index, item in enumerate(items))
 
 
-def _validate_host_bindings(
+def validate_host_bindings(
     instances: tuple[BlueStacksInstanceBinding, ...],
     accounts: tuple[AccountBinding, ...],
 ) -> None:
@@ -394,6 +394,7 @@ def _validate_host_bindings(
         seen_display_names[normalized] = instance.id
     instance_ids = {instance.id for instance in instances}
     for account in accounts:
+        validate_live_roles(account.live_roles, account_id=account.id)
         if account.instance_id not in instance_ids:
             raise ConfigurationError(
                 f"Account '{account.id}' references unknown instance '{account.instance_id}'.",

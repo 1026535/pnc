@@ -102,14 +102,13 @@ class HomeCityReadinessTests(FlowAndTaskFixtures, unittest.TestCase):
         self.assertEqual(actions[0].follow_up_request, ObservationRequest.full_runtime_default())
 
     def test_ensure_home_city_from_unknown_uses_in_game_recovery_without_relaunching(self) -> None:
-        """Keeps ambiguous states inside the bounded in-game recovery path instead of bouncing through Android home."""
+        """Keeps ambiguous states inside a passive bounded recovery path."""
 
         actions = self.flows.ensure_home_city(make_observation(ScreenType.UNKNOWN))
 
         self.assertEqual(len(actions), 1)
-        self.assertIsInstance(actions[0], KeyEventAction)
-        self.assertEqual(actions[0].key_code, "KEYCODE_BACK")
-        self.assertEqual(actions[0].reason, "recover_unknown_home_city")
+        self.assertIsInstance(actions[0], WaitAction)
+        self.assertEqual(actions[0].reason, "recover_unknown_home_city_passive_settle")
 
     def test_ensure_home_city_proves_coarse_home_city_root_before_treating_it_as_ready(self) -> None:
         """Refreshes a coarse home-city root into an exact home-city proof instead of treating it as already ready."""

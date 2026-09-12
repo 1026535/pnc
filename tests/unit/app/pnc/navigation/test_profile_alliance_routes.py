@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pnc_automation.app.pnc.domain.action_requests import WaitAction
+
 import unittest
 
 from pnc_automation.app.pnc.domain.action_requests import (
@@ -125,8 +127,8 @@ class ProfileAllianceRoutesTests(MailWorkflowFixtures, unittest.TestCase):
         actions = self.flows.open_alliance_home(make_observation(ScreenType.UNKNOWN))
 
         self.assertEqual(len(actions), 1)
-        self.assertIsInstance(actions[0], KeyEventAction)
-        self.assertEqual(actions[0].key_code, "KEYCODE_BACK")
+        self.assertIsInstance(actions[0], WaitAction)
+        self.assertEqual(actions[0].milliseconds, 250)
 
     def test_open_alliance_home_uses_visible_bottom_nav_from_world_map(self) -> None:
         """Uses the visible Alliance bottom nav directly when world-adjacent screens already expose it."""

@@ -9,7 +9,6 @@ from pnc_automation.app.automation.tasks.building_construction_task import Build
 from pnc_automation.app.automation.tasks.campaign_task import CampaignTask
 from pnc_automation.app.automation.tasks.gathering_task import GatheringTask
 from pnc_automation.app.automation.tasks.login_task import LoginTask
-from pnc_automation.app.automation.tasks.open_building_task import OpenBuildingTask
 from pnc_automation.app.automation.tasks.research_task import ResearchTask
 from pnc_automation.app.automation.tasks.select_castle_task import SelectCastleTask
 from pnc_automation.app.automation.tasks.send_chat_message_task import (
@@ -25,6 +24,7 @@ from pnc_automation.app.automation.engine.task import (
     require_no_params,
 )
 from pnc_automation.app.pnc.domain.mail import parse_collect_mail_params
+from pnc_automation.app.pnc.domain.policy_models import OpenBuildingPolicy
 
 
 def build_default_task_registry() -> TaskRegistry:
@@ -62,7 +62,11 @@ def build_default_task_registry() -> TaskRegistry:
                 castle_target_policy=CastleTargetPolicy.OPTIONAL,
                 parameter_parser=partial(require_no_params, TaskId.COLLECT_KINGDOM_CHAT),
             ),
-            OpenBuildingTask(),
+            CoreWorkflowTaskDefinition(
+                id=TaskId.OPEN_BUILDING,
+                castle_target_policy=CastleTargetPolicy.OPTIONAL,
+                parameter_parser=OpenBuildingPolicy.from_params,
+            ),
             BuildingConstructionTask(),
             BuildingUpgradeTask(),
             ResearchTask(),

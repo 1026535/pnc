@@ -355,6 +355,15 @@ class BlueStacksInstanceResolver:
                     instance_keys=tuple(record.instance_key for record in refreshed_matches),
                     bluestacks_config_path=str(self.config_path),
                 )
+            if refreshed_matches[0].instance_key != match.instance_key:
+                raise ConfigurationError(
+                    "BlueStacks instance identity changed during startup.",
+                    display_name=config.display_name,
+                    instance_id=config.id,
+                    expected_instance_key=match.instance_key,
+                    actual_instance_key=refreshed_matches[0].instance_key,
+                    bluestacks_config_path=str(self.config_path),
+                )
             match = refreshed_matches[0]
             started_by_resolver = True
         matched_port = match.require_adb_port(config_path=self.config_path)

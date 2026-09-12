@@ -219,14 +219,19 @@ class NavigationSelectorValidator:
         self,
         *,
         selector_ids: Sequence[UiElementId] | None = None,
+        source_screen: ScreenType | None = None,
     ) -> NavigationSelectorValidationReport:
-        """Validates the requested reviewed navigation selectors and returns a deterministic report."""
+        """Validates requested selectors, optionally limited to one reviewed source screen."""
 
         requested_selector_ids = None if selector_ids is None or not selector_ids else frozenset(selector_ids)
         current_capture = self.observation_service.capture_observation("navigation_validation_start")
         results: list[NavigationSelectorValidationResult] = []
         for case_index, case in enumerate(
-            build_navigation_validation_cases(self.selector_registry, selector_ids=selector_ids),
+            build_navigation_validation_cases(
+                self.selector_registry,
+                selector_ids=selector_ids,
+                source_screen=source_screen,
+            ),
             start=1,
         ):
             if requested_selector_ids is not None and case.selector_id not in requested_selector_ids:
@@ -540,8 +545,9 @@ def build_navigation_validation_cases(
     selector_registry: SelectorRegistry,
     *,
     selector_ids: Sequence[UiElementId] | None = None,
+    source_screen: ScreenType | None = None,
 ) -> tuple[NavigationSelectorValidationCase, ...]:
-    """Returns the reviewed navigation cases that should be live-validated from the registry."""
+    """Returns reviewed cases, optionally limited to one declared source screen."""
 
     requested_selector_ids = None if selector_ids is None or not selector_ids else frozenset(selector_ids)
     cases: list[NavigationSelectorValidationCase] = []
@@ -551,11 +557,13 @@ def build_navigation_validation_cases(
         if requested_selector_ids is not None and selector.id not in requested_selector_ids:
             continue
         safe_outcomes = safe_navigation_outcomes(selector)
-        for source_screen in selector.screens:
+        for case_source_screen in selector.screens:
+            if source_screen is not None and case_source_screen != source_screen:
+                continue
             cases.append(
                 NavigationSelectorValidationCase(
                     selector_id=selector.id,
-                    source_screen=source_screen,
+                    source_screen=case_source_screen,
                     reviewed_outcomes=safe_outcomes,
                 )
             )

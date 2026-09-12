@@ -11,11 +11,18 @@ from typing import Any
 
 from pnc_automation.app.pnc.domain.castles import CastleIdentity, PncAccountCastleRosterConfig
 from pnc_automation.core.errors import SelectorResolutionError
+from pnc_automation.core.infra.emulator.provenance import FrameRef
 from pnc_automation.app.pnc.domain.chat import ChatChannel
 from pnc_automation.app.pnc.domain.mail import MailboxType
 from pnc_automation.app.pnc.domain.popup import PopupOverlayObservation
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
+from pnc_automation.app.pnc.domain.screen_decision import (
+    BLOCKING_SCREEN_TYPES,
+    GuardVerdict,
+    ScreenDecision,
+    ScreenEvidence,
+)
 from pnc_automation.core.vision.image.models import Bounds
 from pnc_automation.core.text.normalization import normalize_ocr_text
 
@@ -38,7 +45,10 @@ class VisibleElement:
     source_kind: VisibleElementSourceKind = VisibleElementSourceKind.TEMPLATE
     extracted_text: str | None = None
     action_point: tuple[int, int] | None = None
-
+    identity_evidence: bool = True
+    frame_ref: FrameRef | None = None
+    source_screen: ScreenType | None = None
+    source_layout_id: str | None = None
 
 class ListEntryKind(StrEnum):
     """Typed list-based collections observed on dynamic screens."""
@@ -60,6 +70,18 @@ class ListEntryKind(StrEnum):
     DAILY_QUEST = "daily_quest"
     RESOURCE_ITEM = "resource_item"
     RESOURCE_INVENTORY_EXCLUSION = "resource_inventory_exclusion"
+    RESOURCE_INVENTORY_UNRESOLVED = "resource_inventory_unresolved"
+
+
+class RowRecognitionStatus(StrEnum):
+    """Describes whether a dynamic row is safe to consume as an actionable target."""
+
+    NOT_EVALUATED = "not_evaluated"
+    COMPLETE = "complete"
+    CLIPPED = "clipped"
+    UNREADABLE = "unreadable"
+    AMBIGUOUS = "ambiguous"
+    NO_ACTION = "no_action"
 
 
 class CurrentCastleEvidenceKind(StrEnum):
@@ -120,6 +142,23 @@ class DetectedListEntry:
     selected: bool = False
     action_point: tuple[int, int] | None = None
     metadata: Mapping[str, Any] = field(default_factory=dict)
+    row_status: RowRecognitionStatus = RowRecognitionStatus.NOT_EVALUATED
+    action_bounds: Bounds | None = None
+    frame_ref: FrameRef | None = None
+    source_screen: ScreenType | None = None
+    source_layout_id: str | None = None
+
+    def __post_init__(self) -> None:
+        """Require independently bounded action geometry for complete actionable rows."""
+
+        if self.row_status != RowRecognitionStatus.COMPLETE:
+            return
+        if self.action_point is None or self.action_bounds is None:
+            raise ValueError("Complete rows require an action point and action bounds.")
+        if not self.bounds.contains_bounds(self.action_bounds):
+            raise ValueError("Complete row action bounds must remain inside the row bounds.")
+        if not self.action_bounds.contains_point(self.action_point):
+            raise ValueError("Complete row action point must lie inside its action bounds.")
 
     def require_metadata(self, key: str) -> Any:
         """Returns a required metadata field or fails fast."""
@@ -400,11 +439,11 @@ class SpatialSurfaceObservation:
         )
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, init=False)
 class Observation:
     """Authoritative interpreted state for one screenshot."""
 
-    screen_type: ScreenType
+    decision: ScreenDecision
     visible_elements: Mapping[UiElementId, VisibleElement]
     list_entries: tuple[DetectedListEntry, ...] = ()
     spatial_surface: SpatialSurfaceObservation | None = None
@@ -412,7 +451,6 @@ class Observation:
     image_size: tuple[int, int] | None = None
     frame_fingerprint: str | None = None
     captured_at: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
-    blocking_popup: bool = False
     popup_overlay: PopupOverlayObservation | None = None
     current_castle: CastleIdentity | None = None
     current_castle_evidence: CurrentCastleEvidenceKind | None = None
@@ -424,9 +462,111 @@ class Observation:
     profile_player_name: str | None = None
     mailbox_type: MailboxType | None = None
     mailbox_empty: bool | None = None
+    empty_mailboxes: frozenset[MailboxType] = frozenset()
     text_field_states: Mapping[UiElementId, ObservedTextFieldState] = field(default_factory=dict)
     chat_draft_empty: bool | None = None
     chat_draft_text: str | None = None
+    frame_ref: FrameRef | None = None
+
+    def __init__(
+        self,
+        decision: ScreenDecision | None = None,
+        visible_elements: Mapping[UiElementId, VisibleElement] | None = None,
+        list_entries: tuple[DetectedListEntry, ...] = (),
+        spatial_surface: SpatialSurfaceObservation | None = None,
+        artifact_path: Path | None = None,
+        image_size: tuple[int, int] | None = None,
+        frame_fingerprint: str | None = None,
+        captured_at: datetime | None = None,
+        popup_overlay: PopupOverlayObservation | None = None,
+        current_castle: CastleIdentity | None = None,
+        current_castle_evidence: CurrentCastleEvidenceKind | None = None,
+        current_pnc_account_id: str | None = None,
+        verified_pnc_account_id: str | None = None,
+        castle_roster_snapshot: PncAccountCastleRosterConfig | None = None,
+        available_march_slots: int | None = None,
+        active_chat_channel: ChatChannel | None = None,
+        profile_player_name: str | None = None,
+        mailbox_type: MailboxType | None = None,
+        mailbox_empty: bool | None = None,
+        empty_mailboxes: frozenset[MailboxType] = frozenset(),
+        text_field_states: Mapping[UiElementId, ObservedTextFieldState] | None = None,
+        chat_draft_empty: bool | None = None,
+        chat_draft_text: str | None = None,
+        frame_ref: FrameRef | None = None,
+        *,
+        screen_type: ScreenType | None = None,
+        blocking_popup: bool | None = None,
+    ) -> None:
+        """Build an observation while accepting the pre-decision fixture API."""
+
+        if decision is None:
+            if screen_type is None:
+                raise TypeError("Observation requires decision or legacy screen_type.")
+            decision = ScreenDecision(
+                base_screen=screen_type,
+                effective_screen=screen_type,
+                guard=GuardVerdict.BLOCKED if blocking_popup else GuardVerdict.CLEAR,
+            )
+        elif screen_type is not None and screen_type != decision.effective_screen:
+            raise ValueError("Legacy screen_type contradicts the supplied screen decision.")
+        if blocking_popup and decision.guard != GuardVerdict.BLOCKED:
+            decision = ScreenDecision(
+                base_screen=decision.base_screen,
+                effective_screen=decision.effective_screen,
+                layout_id=decision.layout_id,
+                guard=GuardVerdict.BLOCKED,
+                evidence=decision.evidence,
+                coordinate_only=decision.coordinate_only,
+            )
+        values = {
+            "decision": decision,
+            "visible_elements": {} if visible_elements is None else visible_elements,
+            "list_entries": list_entries,
+            "spatial_surface": spatial_surface,
+            "artifact_path": artifact_path,
+            "image_size": image_size,
+            "frame_fingerprint": frame_fingerprint,
+            "captured_at": captured_at or datetime.now(tz=UTC),
+            "popup_overlay": popup_overlay,
+            "current_castle": current_castle,
+            "current_castle_evidence": current_castle_evidence,
+            "current_pnc_account_id": current_pnc_account_id,
+            "verified_pnc_account_id": verified_pnc_account_id,
+            "castle_roster_snapshot": castle_roster_snapshot,
+            "available_march_slots": available_march_slots,
+            "active_chat_channel": active_chat_channel,
+            "profile_player_name": profile_player_name,
+            "mailbox_type": mailbox_type,
+            "mailbox_empty": mailbox_empty,
+            "empty_mailboxes": empty_mailboxes,
+            "text_field_states": {} if text_field_states is None else text_field_states,
+            "chat_draft_empty": chat_draft_empty,
+            "chat_draft_text": chat_draft_text,
+            "frame_ref": frame_ref,
+        }
+        for field_name, value in values.items():
+            object.__setattr__(self, field_name, value)
+
+    @property
+    def screen_type(self) -> ScreenType:
+        """Returns the effective screen owned by the immutable decision."""
+
+        return self.decision.effective_screen
+
+    @property
+    def blocking_popup(self) -> bool:
+        """Returns whether the observation exposes a dismissible blocking overlay.
+
+        Loading is still guard-blocked for dispatch, but it is a transient
+        state that must settle passively rather than enter popup dismissal.
+        """
+
+        return (
+            self.screen_type != ScreenType.PNC_LOADING
+            and self.screen_type != ScreenType.PNC_WORLD_COORDINATE_DIALOG
+            and (self.decision.guard == GuardVerdict.BLOCKED or self.screen_type in BLOCKING_SCREEN_TYPES)
+        )
 
     @property
     def current_castle_name(self) -> str | None:

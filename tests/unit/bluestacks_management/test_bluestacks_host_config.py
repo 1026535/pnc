@@ -89,8 +89,8 @@ class BlueStacksHostConfigTests(unittest.TestCase):
                     with self.assertRaises(ConfigurationError):
                         load_bluestacks_host_config(config_path)
 
-    def test_host_loader_rejects_duplicate_display_names_and_mixed_instance_roles(self) -> None:
-        """Host eligibility fails closed for ambiguous or contradictory physical bindings."""
+    def test_loaders_reject_duplicate_display_names_and_mixed_instance_roles(self) -> None:
+        """Both entrypoints reject ambiguous or contradictory physical bindings."""
 
         with tempfile.TemporaryDirectory() as directory:
             config_path = Path(directory) / "accounts.yaml"
@@ -100,22 +100,28 @@ class BlueStacksHostConfigTests(unittest.TestCase):
                     instances:
                       - id: bs-main
                         display_name: Testing
+                        app_package: com.example.game
                       - id: bs-other
                         display_name: testing
+                        app_package: com.example.game
                     accounts:
                       - id: account_a
                         instance_id: bs-main
+                        pnc_account_id: first_user
                         live_roles: [read_only]
                       - id: account_b
                         instance_id: bs-main
+                        pnc_account_id: second_user
                         live_roles: [live_testing]
                     """
                 ).strip(),
                 encoding="utf-8",
             )
 
-            with self.assertRaisesRegex(ConfigurationError, "display_name"):
-                load_bluestacks_host_config(config_path)
+            for loader in (load_bluestacks_host_config, load_app_config):
+                with self.subTest(loader=loader.__name__, boundary="display_name"):
+                    with self.assertRaisesRegex(ConfigurationError, "display_name"):
+                        loader(config_path)
 
             config_path.write_text(
                 textwrap.dedent(
@@ -123,20 +129,25 @@ class BlueStacksHostConfigTests(unittest.TestCase):
                     instances:
                       - id: bs-main
                         display_name: testing
+                        app_package: com.example.game
                     accounts:
                       - id: account_a
                         instance_id: bs-main
+                        pnc_account_id: first_user
                         live_roles: [read_only]
                       - id: account_b
                         instance_id: bs-main
+                        pnc_account_id: second_user
                         live_roles: [live_testing]
                     """
                 ).strip(),
                 encoding="utf-8",
             )
 
-            with self.assertRaisesRegex(ConfigurationError, "cannot combine read_only"):
-                load_bluestacks_host_config(config_path)
+            for loader in (load_bluestacks_host_config, load_app_config):
+                with self.subTest(loader=loader.__name__, boundary="shared roles"):
+                    with self.assertRaisesRegex(ConfigurationError, "cannot combine read_only"):
+                        loader(config_path)
 
     def test_host_errors_do_not_echo_unrelated_secret_values(self) -> None:
         """Malformed host YAML reports a field context without dumping arbitrary input."""

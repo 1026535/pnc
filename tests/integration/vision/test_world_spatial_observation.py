@@ -55,11 +55,13 @@ class WorldSpatialObservationTests(unittest.TestCase):
                 selector_registry=build_default_selector_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("X:253", x=73, y=67, width=71, height=24),
                             _ocr_line("Y:447", x=177, y=67, width=69, height=24),
@@ -76,8 +78,7 @@ class WorldSpatialObservationTests(unittest.TestCase):
                             _ocr_line("Food Farm", x=160, y=920, width=140, height=24),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 

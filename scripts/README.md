@@ -22,6 +22,18 @@ This folder contains authored automation runbooks grouped by intent.
 - Reusable building-upgrade batches belong under `scripts/manual/build_batches/` as ordered building-id files, not as duplicated multi-step run scripts.
 - The catalog-synchronized Home City classification and reusable construction/upgrade target lists live under `scripts/manual/building_inventory/`.
 
+## Selector Catalog Authoring
+
+Selector catalog maturity belongs in `status`; it does not select a runtime detection
+strategy. Use only `template`, `guarded_geometry`, `ocr_region`, `semantic`, or
+`unsupported` for `detection_kind`. A template entry must declare explicit
+`template_asset` metadata: its path is package-relative to `pnc_automation/app/pnc/vision/data`,
+with the reviewed reference size, optional reference-space search region, embedded-alpha
+mask mode, and threshold. The retired `planned`, `collection`, and `anchored_region`
+detection kinds and the old `template_root`/synthesized-filename convention must not be
+authored. Mark undeveloped controls `unsupported` with a reason instead of leaving an
+enabled strategy without a resolver.
+
 Construct one exact missing building with `building_construct` (or the direct `construct --building ...` CLI command):
 
 ```yaml

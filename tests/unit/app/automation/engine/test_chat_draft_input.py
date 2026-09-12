@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
+
 import unittest
 
 from pnc_automation.app.automation.engine.action_executor import ActionExecutor
@@ -24,6 +26,7 @@ class ChatDraftInputTests(AutomationFrameworkFixtures, unittest.TestCase):
         """Uses the shared clear-and-replace policy instead of appending onto a stale chat draft."""
 
         executor = ActionExecutor(
+            selector_registry=build_default_selector_registry(),
             session=FakeSession(),
             stable_click_delay_ms=0,
             post_action_observe_delay_ms=0,

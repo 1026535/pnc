@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from tests.support.pnc.capture_vision.fake_screenshot_session import make_captured_frame
 
 
 class _FakeScreenshotSession:
@@ -12,7 +13,7 @@ class _FakeScreenshotSession:
 
         self._payload = payload
 
-    def capture_screenshot_bytes(self) -> bytes:
-        """Returns the pre-seeded screenshot bytes."""
+    def capture_screenshot_frame(self):
+        """Returns the pre-seeded screenshot bytes with explicit provenance."""
 
-        return self._payload
+        return make_captured_frame(self._payload)

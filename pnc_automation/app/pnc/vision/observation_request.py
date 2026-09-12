@@ -54,12 +54,6 @@ class ObservationRequest:
         )
 
     @classmethod
-    def runtime_default(cls) -> "ObservationRequest":
-        """Returns the legacy alias for the canonical full-frame runtime request."""
-
-        return cls.full_runtime_default()
-
-    @classmethod
     def navigation_follow_up(cls, reviewed_outcomes: Sequence[ClickOutcome]) -> "ObservationRequest":
         """Returns the narrow OCR scope used after one reviewed navigation tap."""
 
@@ -141,12 +135,6 @@ class ObservationRequest:
             ocr_screen_types=frozenset({ScreenType.PNC_WORLD_MAP}),
             expected_world_coordinate=expected_coordinate,
         )
-
-    @classmethod
-    def world_map_movement_follow_up(cls) -> "ObservationRequest":
-        """Returns the legacy alias for the canonical world-map movement-proof observation scope."""
-
-        return cls.world_map_movement_proof_follow_up()
 
     @classmethod
     def world_map_coordinate_dialog_follow_up(cls) -> "ObservationRequest":
@@ -402,7 +390,7 @@ class ObservationRequest:
 
         if self.include_popup_guard:
             return True
-        if self.include_loading_guard and screen_type in {ScreenType.UNKNOWN, ScreenType.PNC_LOADING}:
+        if self.include_loading_guard:
             return True
         if screen_type == ScreenType.UNKNOWN:
             return bool(self.ocr_screen_types)

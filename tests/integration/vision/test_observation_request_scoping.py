@@ -33,6 +33,10 @@ from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateM
 from tests.support.pnc.capture_vision.recording_ocr_service import _RecordingOcrService
 from tests.support.pnc.capture_vision.recording_selector_engine import _RecordingSelectorEngine
 from tests.support.pnc.capture_vision.ocr_line import _ocr_line
+from tests.support.pnc.capture_vision.clear_observation_enricher import _ClearObservationEnricher
+from tests.support.pnc.capture_vision.fake_screenshot_session import make_captured_frame
+from tests.support.pnc.capture_vision.minimal_runtime_registry import _minimal_runtime_registry
+from tests.support.pnc.capture_vision.with_runtime_text_fields import _with_runtime_text_fields
 
 
 class ObservationRequestScopingTests(unittest.TestCase):
@@ -78,8 +82,9 @@ class ObservationRequestScopingTests(unittest.TestCase):
                     status=SelectorStatus.SCREENSHOT_SEEDED,
                     click=ClickDefinition(),
                 ),
+                )
             )
-        )
+        registry = _with_runtime_text_fields(registry)
         selector_engine = _RecordingSelectorEngine(
             responses=[
                 (
@@ -106,14 +111,15 @@ class ObservationRequestScopingTests(unittest.TestCase):
             selector_registry=registry,
             selector_engine=selector_engine,
             screen_classifier=ScreenClassifier(),
-            enricher=DefaultObservationEnricher(),
+            enricher=_ClearObservationEnricher(),
         )
         screenshot = type(
             "Captured",
             (),
             {
-                "image": Image.new("RGB", (100, 100), (0, 0, 0)),
+                "image": Image.new("RGB", (540, 960), (0, 0, 0)),
                 "artifact": type("Artifact", (), {"path": Path("synthetic.png"), "captured_at": None})(),
+                "frame_ref": make_captured_frame(b"").frame_ref,
             },
         )()
 
@@ -142,14 +148,15 @@ class ObservationRequestScopingTests(unittest.TestCase):
             selector_registry=registry,
             selector_engine=selector_engine,
             screen_classifier=ScreenClassifier(),
-            enricher=PncObservationEnricher(ocr_service=ocr_service, selector_registry=registry),
-        )
+            enricher=PncObservationEnricher( selector_registry=registry),
+            ocr_service=ocr_service)
         screenshot = type(
             "Captured",
             (),
             {
                 "image": Image.new("RGB", (100, 100), (0, 0, 0)),
                 "artifact": type("Artifact", (), {"path": Path("synthetic.png"), "captured_at": None})(),
+                "frame_ref": make_captured_frame(b"").frame_ref,
             },
         )()
 
@@ -158,7 +165,7 @@ class ObservationRequestScopingTests(unittest.TestCase):
         self.assertEqual(observation.screen_type, ScreenType.PNC_WORLD_MAP)
         self.assertEqual(len(selector_engine.requested_selector_ids), 1)
         self.assertEqual(selector_engine.requested_selector_ids[0], ())
-        self.assertEqual(ocr_service.read_result_calls, 0)
+        self.assertEqual(ocr_service.read_result_calls, 1)
 
     def test_observation_builder_keeps_click_only_geometry_hidden_without_detection(self) -> None:
         """Does not auto-materialize relative click regions that still require explicit visibility proof."""
@@ -189,7 +196,7 @@ class ObservationRequestScopingTests(unittest.TestCase):
                 SelectorDefinition(
                     id=UiElementId.PNC_HOME_BUILD_BUTTON,
                     screens=(ScreenType.PNC_HOME_CITY,),
-                    detection_kind=DetectionKind.PLANNED,
+                    detection_kind=DetectionKind.GUARDED_GEOMETRY,
                     status=SelectorStatus.PLANNED,
                     click=ClickDefinition(),
                     relative_bounds=RelativeBounds(
@@ -224,18 +231,20 @@ class ObservationRequestScopingTests(unittest.TestCase):
                 (),
             ]
         )
+        registry = _with_runtime_text_fields(registry)
         builder = ObservationBuilder(
             selector_registry=registry,
             selector_engine=selector_engine,
             screen_classifier=ScreenClassifier(),
-            enricher=DefaultObservationEnricher(),
+            enricher=_ClearObservationEnricher(),
         )
         screenshot = type(
             "Captured",
             (),
             {
-                "image": Image.new("RGB", (100, 100), (0, 0, 0)),
+                "image": Image.new("RGB", (540, 960), (0, 0, 0)),
                 "artifact": type("Artifact", (), {"path": Path("synthetic.png"), "captured_at": None})(),
+                "frame_ref": make_captured_frame(b"").frame_ref,
             },
         )()
 
@@ -249,24 +258,45 @@ class ObservationRequestScopingTests(unittest.TestCase):
 
         ocr_service = _RecordingOcrService(lines=())
         builder = ObservationBuilder(
-            selector_registry=SelectorRegistry(selectors=()),
+            selector_registry=_minimal_runtime_registry(),
             selector_engine=ImageSelectorEngine(
                 template_matcher=OpenCvTemplateMatcher(),
-                ocr_service=ocr_service,
+
             ),
             screen_classifier=ScreenClassifier(),
-            enricher=PncObservationEnricher(ocr_service=ocr_service),
-        )
+            enricher=PncObservationEnricher(),
+            ocr_service=ocr_service,
+            )
         screenshot = type(
             "Captured",
             (),
             {
                 "image": Image.new("RGB", (100, 100), (0, 0, 0)),
                 "artifact": type("Artifact", (), {"path": Path("synthetic.png"), "captured_at": None})(),
+                "frame_ref": make_captured_frame(b"").frame_ref,
             },
         )()
 
         builder.build(screenshot, request=ObservationRequest.base())
 
-        self.assertEqual(ocr_service.read_result_calls, 0)
+        self.assertEqual(ocr_service.read_result_calls, 1)
         self.assertEqual(ocr_service.read_text_calls, 0)
+
+    def test_observation_builder_rejects_missing_requested_ocr_selector(self) -> None:
+        """Does not silently drop a requested OCR field from a reduced registry."""
+
+        builder = ObservationBuilder(
+            selector_registry=SelectorRegistry(selectors=()),
+            selector_engine=ImageSelectorEngine(
+                template_matcher=OpenCvTemplateMatcher(),
+            ),
+            screen_classifier=ScreenClassifier(),
+            enricher=PncObservationEnricher(),
+        )
+
+        with self.assertRaisesRegex(ValueError, "PNC_CHAT_INPUT_FIELD.*not registered"):
+            builder.compile_ocr_region_plans(
+                resolved_screen=ScreenType.PNC_CHAT,
+                request=ObservationRequest.chat_transcript_observation(),
+                image_size=(540, 960),
+            )

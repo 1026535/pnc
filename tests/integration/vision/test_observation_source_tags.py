@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from tests.support.pnc.capture_vision.clear_observation_enricher import _ClearObservationEnricher
+from tests.support.pnc.capture_vision.minimal_runtime_registry import _minimal_runtime_registry
+from tests.support.pnc.capture_vision.fake_screenshot_session import make_captured_frame
+
 import unittest
 from pathlib import Path
 
@@ -44,24 +48,26 @@ class ObservationSourceTagsTests(unittest.TestCase):
 
         ocr_service = _RecordingOcrService(lines=())
         builder = ObservationBuilder(
-            selector_registry=SelectorRegistry(selectors=()),
+            selector_registry=_minimal_runtime_registry(),
             selector_engine=ImageSelectorEngine(
                 template_matcher=OpenCvTemplateMatcher(),
-                ocr_service=ocr_service,
+
             ),
             screen_classifier=ScreenClassifier(),
-            enricher=PncObservationEnricher(ocr_service=ocr_service),
-        )
+            enricher=PncObservationEnricher(),
+            ocr_service=ocr_service,
+            )
         screenshot = type(
             "Captured",
             (),
             {
                 "image": Image.new("RGB", (100, 100), (0, 0, 0)),
                 "artifact": type("Artifact", (), {"path": Path("synthetic.png"), "captured_at": None})(),
+                "frame_ref": make_captured_frame(b"").frame_ref,
             },
         )()
 
-        builder.build(screenshot, request=ObservationRequest.runtime_default())
+        builder.build(screenshot, request=ObservationRequest.full_runtime_default())
 
         self.assertEqual(ocr_service.read_result_calls, 1)
 
@@ -94,7 +100,7 @@ class ObservationSourceTagsTests(unittest.TestCase):
                 SelectorDefinition(
                     id=UiElementId.PNC_BOTTOM_NAV_MORE,
                     screens=(ScreenType.PNC_HOME_CITY,),
-                    detection_kind=DetectionKind.PLANNED,
+                    detection_kind=DetectionKind.GUARDED_GEOMETRY,
                     status=SelectorStatus.CLICK_MAPPED,
                     click=ClickDefinition(),
                     relative_bounds=RelativeBounds(
@@ -132,14 +138,15 @@ class ObservationSourceTagsTests(unittest.TestCase):
             selector_registry=registry,
             selector_engine=selector_engine,
             screen_classifier=ScreenClassifier(),
-            enricher=DefaultObservationEnricher(),
+            enricher=_ClearObservationEnricher(),
         )
         screenshot = type(
             "Captured",
             (),
             {
-                "image": Image.new("RGB", (100, 100), (0, 0, 0)),
+                "image": Image.new("RGB", (900, 1600), (0, 0, 0)),
                 "artifact": type("Artifact", (), {"path": Path("synthetic.png"), "captured_at": None})(),
+                "frame_ref": make_captured_frame(b"").frame_ref,
             },
         )()
 
@@ -183,15 +190,10 @@ class ObservationSourceTagsTests(unittest.TestCase):
                 SelectorDefinition(
                     id=UiElementId.PNC_BOTTOM_NAV_MORE,
                     screens=(ScreenType.PNC_HOME_CITY,),
-                    detection_kind=DetectionKind.PLANNED,
+                    detection_kind=DetectionKind.GUARDED_GEOMETRY,
                     status=SelectorStatus.CLICK_MAPPED,
                     click=ClickDefinition(),
-                    relative_bounds=RelativeBounds(
-                        x_ratio=0.70,
-                        y_ratio=0.80,
-                        width_ratio=0.10,
-                        height_ratio=0.10,
-                    ),
+                    relative_bounds=None,
                 ),
             )
         )
@@ -222,20 +224,22 @@ class ObservationSourceTagsTests(unittest.TestCase):
             selector_engine=selector_engine,
             screen_classifier=ScreenClassifier(),
             enricher=PncObservationEnricher(
-                ocr_service=_FakeOcrService(
+
+            ),
+            ocr_service=_FakeOcrService(
                     lines=(
-                        _ocr_line("Alliance", x=48, y=92, width=124, height=8),
-                        _ocr_line("More", x=160, y=92, width=74, height=8),
+                        _ocr_line("Alliance", x=108, y=883, width=124, height=8),
+                        _ocr_line("More", x=360, y=883, width=74, height=8),
                     )
                 )
-            ),
-        )
+            )
         screenshot = type(
             "Captured",
             (),
             {
-                "image": Image.new("RGB", (240, 100), (0, 0, 0)),
+                "image": Image.new("RGB", (540, 960), (0, 0, 0)),
                 "artifact": type("Artifact", (), {"path": Path("synthetic.png"), "captured_at": None})(),
+                "frame_ref": make_captured_frame(b"").frame_ref,
             },
         )()
 

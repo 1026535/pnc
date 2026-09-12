@@ -20,7 +20,7 @@ from pnc_automation.app.pnc.domain.observation import Observation
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
-from pnc_automation.app.pnc.vision.observation_builder import CapturedObservation, ObservationBuilder
+from pnc_automation.app.pnc.vision.observation_builder import CapturedObservation
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.app.pnc.vision.selector_catalog import default_selector_catalog_path, load_selector_catalog_document
 from pnc_automation.app.pnc.vision.selector_discovery import (
@@ -150,30 +150,14 @@ def _build_runtime(*, config_path: Path, catalog_path: Path, verbose: bool) -> S
     """Builds the shared discovery runtime used by artifact and live discovery."""
 
     application = build_application_runner(config_path, verbose=verbose, catalog_path=catalog_path)
+    observation_builder = application.script_runner.observation_builder
     return SelectorDiscoveryRuntime(
         application=application,
         analyzer=SelectorDiscoveryAnalyzer(
-            observation_builder=application.script_runner.observation_builder,
-            ocr_service=_resolve_runtime_ocr_service(application.script_runner.observation_builder),
+            observation_builder=observation_builder,
             catalog=load_selector_catalog_document(catalog_path),
         ),
     )
-
-
-def _resolve_runtime_ocr_service(observation_builder: ObservationBuilder) -> object:
-    """Returns the shared OCR service already used by the runtime observation pipeline."""
-
-    selector_engine_ocr_service = getattr(observation_builder.selector_engine, "ocr_service", None)
-    enricher_ocr_service = getattr(observation_builder.enricher, "ocr_service", None)
-    if selector_engine_ocr_service is None and enricher_ocr_service is None:
-        raise SelectorResolutionError("Selector discovery runtime requires an OCR service on the observation pipeline.")
-    if (
-        selector_engine_ocr_service is not None
-        and enricher_ocr_service is not None
-        and selector_engine_ocr_service is not enricher_ocr_service
-    ):
-        raise SelectorResolutionError("Selector discovery runtime requires one shared OCR service instance.")
-    return selector_engine_ocr_service if selector_engine_ocr_service is not None else enricher_ocr_service
 
 
 def _run_live_discovery(
@@ -215,6 +199,7 @@ def _run_live_discovery(
                 artifact_path=latest_capture.screenshot.artifact.path,
                 selector_ids=stage_visible_selectors,
                 image=latest_capture.screenshot.image,
+                ocr_context=latest_capture.ocr_context,
             )
             staged_drafts.extend(drafts)
             staged_selector_ids.update(UiElementId[draft.id] for draft in drafts)
