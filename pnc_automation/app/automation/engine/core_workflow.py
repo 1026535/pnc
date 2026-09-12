@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Generic, Protocol, TypeVar
+from typing import Generic, Literal, Protocol, TypeVar
 
 from pnc_automation.app.automation.engine.core_runtime import CoreRuntime
 from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
@@ -156,6 +156,19 @@ class WorkflowContext:
         finally:
             self._sync_from_runtime()
 
+    def scroll_castle_roster(self, direction: Literal["up", "down"]) -> Observation:
+        """Scroll one castle-roster window through the reviewed fresh-content boundary."""
+
+        if direction not in {"up", "down"}:
+            raise ValueError("Castle-roster scrolling requires direction 'up' or 'down'.")
+        try:
+            return self._runtime.navigation.scroll_castle_roster(
+                direction,
+                observe_content=self._observe_castle_roster_content,
+            )
+        finally:
+            self._sync_from_runtime()
+
     def select_chat_channel(self, channel: ChatChannel) -> Observation:
         """Select one typed chat channel and require fresh content confirming it."""
 
@@ -178,6 +191,11 @@ class WorkflowContext:
         """Capture fresh chat content for one constrained channel operation."""
 
         return self._observe_operation_content(label, operation="Chat")
+
+    def _observe_castle_roster_content(self, label: str) -> Observation:
+        """Capture fresh roster content for one constrained scroll operation."""
+
+        return self._observe_operation_content(label, operation="Castle roster")
 
     def _observe_operation_content(self, label: str, *, operation: str) -> Observation:
         """Capture fresh content while preserving shared workflow freshness checks."""
