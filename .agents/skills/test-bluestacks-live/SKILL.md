@@ -29,7 +29,7 @@ Run live emulator validation only when the fidelity is worth the cost. Use offli
 
 ## Workflow
 
-1. Start with offline validation. Run the relevant unit tests and saved-screenshot tests before live smoke tests.
+1. Start with offline validation. Run the relevant `tools/run_tests.py group ...` command or an explained `affected` selection, ensuring relevant saved-screenshot tests are included. Run screenshot tests separately only when the selection omits them. Reserve the complete portable suite for cross-cutting changes or final integration; a live smoke flag alone does not justify running every offline test.
 2. Select the smallest live smoke that proves the risky boundary:
    - `PNC_RUN_LIVE_SMOKE=1` for shared account navigation and spatial-surface smoke tests.
    - `PNC_RUN_LIVE_CHAT_SMOKE=1` for chat workflow validation.

@@ -3,15 +3,56 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
-from pnc_automation.core.errors import SelectorResolutionError
+from pnc_automation.core.errors import ScriptValidationError, SelectorResolutionError
+from pnc_automation.app.pnc.domain.castles import (
+    CastleIdentity,
+    normalize_castle_display_name,
+    castle_names_match,
+)
 from pnc_automation.app.pnc.enums.chat import ChatChannel, ChatEntryKind
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 
 if TYPE_CHECKING:
     from pnc_automation.app.pnc.domain.observation import DetectedListEntry
+
+
+@dataclass(frozen=True, slots=True)
+class ChatMessageTaskParams:
+    """Carries the script-facing message payload for one fixed-channel chat task."""
+
+    message: str
+
+
+def parse_chat_message_params(
+    params: Mapping[str, Any],
+    *,
+    task_label: str,
+) -> ChatMessageTaskParams:
+    """Builds one validated single-line message payload for a fixed chat task."""
+
+    message = params.get("message")
+    extra_keys = sorted(key for key in params.keys() if key != "message")
+    if extra_keys:
+        raise ScriptValidationError(
+            f"Task '{task_label}' accepts only the 'message' parameter.",
+            task_id=task_label,
+            extra_keys=extra_keys,
+        )
+    if not isinstance(message, str) or message.strip() == "":
+        raise ScriptValidationError(
+            f"Task '{task_label}' requires a non-empty string 'message' parameter.",
+            task_id=task_label,
+        )
+    if "\n" in message or "\r" in message:
+        raise ScriptValidationError(
+            f"Task '{task_label}' message must be single-line; multiline values are not supported.",
+            task_id=task_label,
+        )
+    return ChatMessageTaskParams(message=message)
 
 
 @dataclass(frozen=True, slots=True)
@@ -129,6 +170,36 @@ def visible_unsupported_chat_entries(entries: tuple["DetectedListEntry", ...]) -
 
     projected = tuple(chat_entry_from_list_entry(entry) for entry in entries if entry.kind == ListEntryKind.CHAT_MESSAGE)
     return tuple(entry for entry in projected if not entry.is_supported)
+
+
+def matching_player_chat_entries(
+    entries: tuple["DetectedListEntry", ...],
+    *,
+    message: str,
+    castle: CastleIdentity,
+) -> tuple[ObservedChatEntry, ...]:
+    """Return visible player rows whose sender and message identify the active castle's receipt."""
+
+    normalized_message = normalize_chat_text(message)
+    normalized_castle = normalize_castle_display_name(castle.castle_name)
+    return tuple(
+        entry
+        for entry in visible_player_chat_entries(entries)
+        if entry.sender_name is not None
+        and castle_names_match(normalize_castle_display_name(entry.sender_name), normalized_castle)
+        and normalize_chat_text(entry.message_text) == normalized_message
+    )
+
+
+def count_matching_player_chat_entries(
+    entries: tuple["DetectedListEntry", ...],
+    *,
+    message: str,
+    castle: CastleIdentity,
+) -> int:
+    """Count exact visible player receipts without guessing aliases or substrings."""
+
+    return len(matching_player_chat_entries(entries, message=message, castle=castle))
 
 
 def normalize_chat_text(value: str) -> str:

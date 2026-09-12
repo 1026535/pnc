@@ -55,9 +55,11 @@ missing defaults skip without reading machine-local fixture configuration.
 .venv/Scripts/python.exe tools/audit_test_selection.py .test-impact/audit-selection.json .test-impact/results.json --output .test-impact/audit-result.json
 ```
 
-`full` is the routine portable baseline. `group` is a focused debugging command
-and does not automatically add other tiers. `measure` runs the full inventory
-with instrumentation; compare its timings separately from uninstrumented `full`.
+`affected` is the routine portable development path and `group` is a focused
+component/debugging command; neither automatically expands to unrelated tiers.
+`full` is the cross-cutting, merge, and nightly baseline. `measure` runs the
+full inventory with instrumentation; compare its timings separately from
+uninstrumented `full`.
 The runner limits collection to the four portable tiers. Existing opt-in live
 tests and commands remain separate; none of these commands authorizes or starts
 live testing. No emulator, ADB, account credentials, or live game state is needed.

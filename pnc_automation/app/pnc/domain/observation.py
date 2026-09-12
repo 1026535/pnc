@@ -9,7 +9,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from pnc_automation.app.pnc.domain.castles import CastleIdentity, PncAccountCastleRosterConfig
+from pnc_automation.app.pnc.domain.castles import CastleIdentity, PncAccountCastleRosterConfig, castle_names_match
 from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.core.infra.emulator.provenance import FrameRef
 from pnc_automation.app.pnc.domain.chat import ChatChannel
@@ -24,7 +24,6 @@ from pnc_automation.app.pnc.domain.screen_decision import (
     ScreenEvidence,
 )
 from pnc_automation.core.vision.image.models import Bounds
-from pnc_automation.core.text.normalization import normalize_ocr_text
 
 
 class VisibleElementSourceKind(StrEnum):
@@ -787,14 +786,6 @@ def castle_identities_match(left: CastleIdentity, right: CastleIdentity) -> bool
     if left.castle_level is None or right.castle_level is None:
         return True
     return left.castle_level == right.castle_level
-
-
-def castle_names_match(left: str, right: str) -> bool:
-    """Returns whether two castle names match exactly or through stable OCR normalization."""
-
-    if left == right:
-        return True
-    return normalize_ocr_text(left) == normalize_ocr_text(right)
 
 
 def resolve_unambiguous_castle_identity(

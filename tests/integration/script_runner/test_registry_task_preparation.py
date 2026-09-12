@@ -8,6 +8,7 @@ from pathlib import Path
 from pnc_automation.app.authoring.scripts.models import RunScript, ScriptStep
 from pnc_automation.app.authoring.scripts.registry import TaskRegistry
 from pnc_automation.app.entrypoints.task_registry import build_default_task_registry
+from pnc_automation.app.pnc.domain.chat import ChatMessageTaskParams
 from pnc_automation.app.automation.engine.task import (
     CastleTargetPolicy,
     CoreWorkflowTaskDefinition,
@@ -62,3 +63,17 @@ class RegistryTaskPreparationTests(AutomationFrameworkFixtures, unittest.TestCas
         self.assertEqual(registry.require(TaskId.SEND_ALLIANCE_CHAT_MESSAGE).id, TaskId.SEND_ALLIANCE_CHAT_MESSAGE)
         self.assertEqual(registry.require(TaskId.SEND_WORLD_CHAT_MESSAGE).id, TaskId.SEND_WORLD_CHAT_MESSAGE)
         self.assertEqual(registry.require(TaskId.COLLECT_KINGDOM_CHAT).id, TaskId.COLLECT_KINGDOM_CHAT)
+
+    def test_world_chat_task_uses_the_typed_single_line_message_parser(self) -> None:
+        """Prepares World Chat as a typed optional-target step without archive dependencies."""
+
+        definition = build_default_task_registry().require(TaskId.SEND_WORLD_CHAT_MESSAGE)
+
+        self.assertIsInstance(definition, CoreWorkflowTaskDefinition)
+        self.assertEqual(definition.castle_target_policy, CastleTargetPolicy.OPTIONAL)
+        self.assertEqual(
+            ChatMessageTaskParams(message="hello"),
+            definition.parse_params({"message": "hello"}),
+        )
+        with self.assertRaisesRegex(ScriptValidationError, "single-line"):
+            definition.parse_params({"message": "hello\nworld"})

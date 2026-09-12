@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
 from typing import Any
 
 from pnc_automation.app.automation.engine.task import BaseAutomationTask, CastleTargetPolicy, TaskId, TaskResult
 from pnc_automation.app.automation.engine.task_context import TaskContext
-from pnc_automation.core.errors import ScriptValidationError
 from pnc_automation.app.pnc.domain.action_requests import ActionRequest, WaitAction
-from pnc_automation.app.pnc.domain.chat import ChatChannel
+from pnc_automation.app.pnc.domain.chat import (
+    ChatChannel,
+    ChatMessageTaskParams,
+    parse_chat_message_params,
+)
 from pnc_automation.app.pnc.domain.observation import Observation
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 
 _CHAT_SEND_READY_SCREENS = frozenset(
     {
@@ -23,13 +26,6 @@ _CHAT_SEND_READY_SCREENS = frozenset(
 )
 
 
-@dataclass(frozen=True, slots=True)
-class ChatMessageTaskParams:
-    """Carries the script-facing message payload for one fixed-channel chat task."""
-
-    message: str
-
-
 class _BaseSendChatMessageTask(BaseAutomationTask):
     """Shares parsing and verification for fixed-channel chat-message tasks."""
 
@@ -38,20 +34,7 @@ class _BaseSendChatMessageTask(BaseAutomationTask):
     def parse_params(self, params: Mapping[str, Any]) -> ChatMessageTaskParams:
         """Builds one validated single-message payload for the fixed chat channel."""
 
-        message = params.get("message")
-        extra_keys = sorted(key for key in params.keys() if key != "message")
-        if extra_keys:
-            raise ScriptValidationError(
-                f"Task '{self.id}' accepts only the 'message' parameter.",
-                task_id=self.id,
-                extra_keys=extra_keys,
-            )
-        if not isinstance(message, str) or message.strip() == "":
-            raise ScriptValidationError(
-                f"Task '{self.id}' requires a non-empty string 'message' parameter.",
-                task_id=self.id,
-            )
-        return ChatMessageTaskParams(message=message)
+        return parse_chat_message_params(params, task_label=self.id)
 
     def is_applicable(self, context: TaskContext, observation: Observation) -> bool:
         """Rejects login-owned states that must be resolved before in-game chat can be used."""
@@ -162,11 +145,7 @@ class SendAllianceChatMessageTask(_BaseSendChatMessageTask):
     id = TaskId.SEND_ALLIANCE_CHAT_MESSAGE
     castle_target_policy = CastleTargetPolicy.OPTIONAL
     channel = ChatChannel.ALLIANCE
-
-
-class SendWorldChatMessageTask(_BaseSendChatMessageTask):
-    """Sends one message to world chat using the canonical reusable chat flow."""
-
-    id = TaskId.SEND_WORLD_CHAT_MESSAGE
-    castle_target_policy = CastleTargetPolicy.OPTIONAL
-    channel = ChatChannel.WORLD
+    # The legacy Alliance implementation still relies on the unqualified blue
+    # Send control. Reject it before task preflight or input until its
+    # canonical typed port is reviewed.
+    required_recognition_selectors = (UiElementId.PNC_CHAT_SEND_BUTTON,)
