@@ -1,5 +1,204 @@
 # PNC Daily Castle Maintenance Automation — Implementation and Live-Promotion Plan
 
+## Restart checkpoint and coordination — 2026-09-12
+
+This section is the current execution plan. It supersedes older implementation-status,
+ownership, migration-order, and command examples below. Retain the earlier feature
+requirements and spending exclusions unless a later explicit decision changes them;
+historical evidence and checklists are not statements of current completion.
+
+The immediate deliverable is this plan update only. Publishing it does not authorize
+Daily implementation, configuration changes, A/B branch integration, live actions,
+castle switching, spending, scheduling activation, or worktree cleanup. Neither task
+has been resumed or sent a handoff by this planning session.
+
+### Verified baseline and ongoing tasks
+
+The audit inspected local main at `6baf665ff3ddaed9e12072520727db0a415013f8`.
+An explicit fetch for this publication verified `origin/main` at
+`7d75c6b30bfd5b37852cb96b08789a2483c7e531`; use that immutable commit as the
+current integration base, rechecking remote freshness before integration. Its six
+additional archive-durability commits also move Daily journal writes to the shared
+atomic-file helper and instance locks to the shared native-locking helper. Retain
+these implementations and their regressions. Local main was not advanced by the
+plan publication. See [archive durability](../instructions/ARCHIVE_DURABILITY.md).
+
+Task names are conversation labels, not branch names. The September 12 checkpoint is:
+
+| Task / slice | Actual branch and HEAD | Existing worktree, relative to repository root | Completed bounded work and remaining limits |
+|---|---|---|---|
+| A: core workflow porting / castle | `codex/select-castle-core-port`, `8f01e1492c265bbe2446e57cbb0e16fb22fa9833` | `.local-data/worktrees/select_castle` | Typed castle-selection work and no-op proof retained; uncommitted real-context postflight regression. Actual switching still needs exact target authorization and live proof. |
+| A: core workflow porting / Campaign | `codex/campaign-navigation-core-port`, `f26deb7b2a05d1a885942656edeead93aa136e75` | `.local-data/worktrees/campaign_navigation` | Assets, endpoint mapping and return routes retained; uncommitted real NavigationCore endpoint/return-chain tests. Automated live navigation and Campaign execution are not complete. |
+| B: Review improve screen recognition | `codex/non-yolo-recognition`, `f74d2673b5aaf0691d22f04a3410c8562aa50e8f` | `artifacts/worktrees/non-yolo-integration-current` | Research production-builder correction and regression complete offline in four uncommitted files. Combined-main acceptance remains pending. |
+
+Both tasks reported completion and stopped at their authorized offline boundaries.
+A reports 146 castle and 193 Campaign affected tests passed without skips. B reports
+1,812 passed and five skipped in its final broad run, plus focused producer/consumer
+checks. These are task-reported component results, not a combined-candidate result.
+B lacks 13 commits from the verified mainline base. This does not prevent publishing
+its reviewed feature commit; it prevents claiming that the combined tree is validated.
+
+The uncommitted files to preserve are A's
+`tests/unit/app/automation/engine/test_select_castle_navigation.py` and
+`tests/unit/app/pnc/navigation/test_navigation_core.py` in their respective worktrees,
+and B's `navigation_perception.py`, `observation_builder.py`,
+`visual_screen_recognizer.py` under `pnc_automation/app/pnc/vision/`, plus
+`tests/integration/vision/test_research_tree_visual_controls.py`.
+
+### Current Daily implementation and reusable proof
+
+The canonical Daily catalog contains 24 intended action capabilities plus the
+operational claims capability. The current evaluator describes 50 feature/role cells;
+this inventory does not itself establish coverage of every Campaign/shop policy variant.
+
+| Responsibility | Current evidence | Remaining completion work |
+|---|---|---|
+| Daily scanning and claiming | `DailyMaintenanceCoordinator`, `daily_viewport_from_observation`, `ConnectedDailyQuestSession`, `JournaledDailyClaimExecutor`, and journal tests exist. The typed `DailyQuestStatusWorkflow` reads one visible viewport only. | Reuse the coordinator and parser through the current core; prove full-list traversal, reordering, honest unknown/incomplete reporting, claims and final Home. |
+| Resource item | `ResourceItemExecutor` and its connected adapter exist. September 10 records report successful one-pack use and Daily verification on both canaries. | Assess relevant revision changes, preserve the proofs, and wire the existing executor into production through the canonical mutation boundary. |
+| Hero Hall | The connected executor journals each free single and persists cooldown readiness. Both September 10 journals contain one committed single. | Complete five-single cooldown/resume and Daily postcondition proof. The coordinator currently defers the feature for the rest of an invocation; bounded resumption/interleaving still needs composition. |
+| Campaign | Legacy `CampaignTask` ends at battle preparation; A's retained slice adds navigation. | Reconcile the canonical policy with Daily's fixed-stage/progress-then-farm requirements; implement natural-AP limits, battle/result handling and Daily reconciliation. |
+| Gathering | Legacy `GatheringTask` selects visible resource nodes and confirms a march. | Implement the required search, cavalry-only formation, capacity and occupancy checks, dispatch receipt and Daily progress. Do not retain default formation as a fallback. |
+| Remaining features | Catalog/policy entries exist, but no complete registered implementations were found for the other feature families. | Implement bounded slices for Arena, hero upgrade, Praise, Saurgil, wishes, shops, enhancements, trials, donations, gifts, alliance mine and output boost. |
+
+Use the existing [Daily application entrypoint](../pnc_automation/app/entrypoints/daily_maintenance.py),
+[coordinator](../pnc_automation/app/automation/daily_maintenance/coordinator.py),
+[task registry](../pnc_automation/app/entrypoints/task_registry.py), and
+[core workflow contract](../instructions/CORE_WORKFLOW_PORTING.md) as implementation
+evidence. A TaskId, selector, catalog entry or navigation endpoint is not a completed
+Daily capability. Research and building upgrades remain excluded from Daily execution;
+completed rows for excluded features may still be claimed. Milestone chests remain excluded.
+
+Saved local evidence under the currently configured `artifacts` root must be retained:
+
+- `canary-evidence/use_resource_item/{npc_2,free_cookies}/result.json` records both
+  September 10 passes; all 84 referenced artifact paths were present during the audit.
+- `canary-evidence/hero_hall/{npc_2,free_cookies}/result.json` records blocked overall
+  evaluation, despite the committed first single on each castle. All 13 referenced
+  paths were present. Do not report the five-single canary as passed.
+- `pnc-reset-2026-09-10-00/{account}/{castle}/daily-maintenance/journal.json` contains
+  the committed resource-item use and first Hero Hall single for each canary.
+- The September 8 free-cookies `resource-item-001` remains reconciled without a proved
+  outcome. Preserve that uncertainty and the original journal; do not clear or replay it
+  automatically, or reinterpret an old-day checkpoint as current-day authority.
+
+The saved resource and Hero Hall fingerprints differ from the inspected current
+implementation fingerprints. Retain them as historical proof, assess the actual changed
+dependencies, and replay relevant saved fixtures before deciding what bounded live
+retest is necessary. Do not rewrite an old result's revision to manufacture compatibility
+or repeat spending merely because a new date or test invocation occurs. The new atomic
+journal helper is another dependency for this assessment. Keep the configured evidence
+and journal root explicit so a path change cannot silently create an empty restart state.
+
+### Release blockers and decisions to resolve
+
+1. **Targets and roles:** local configuration loads and automatic runs remain disabled,
+   but `testing` has only `smoke_test`, whereas the Daily CLI and connected runner require
+   `daily_canary`. None of its seven authored automatic target identities matched its
+   current login-keyed cache. Current canary configuration contains NPC 2 only;
+   `serious_stuff` has `live_testing` and free cookies is absent from `canary_targets`.
+   Decide whether the original paired-canary and seven-target policy still applies.
+   Verify account/cache ownership before proposing exact configuration changes; never
+   restore roles or change credentials merely to make the old plan runnable.
+2. **Promotion:** `ConnectedClaimOnlyCastleRunner` rejects all action capabilities and
+   uses `_RejectingCapabilityExecutor`. Production does not consult `CanaryEvidenceStore`,
+   even for claims. Wire persisted current release decisions into pre-connection checks;
+   removing the rejection or enabling the boolean alone is insufficient. Under the
+   existing policy, evaluate every required case before releasing only accepted features.
+   Preserve explicit policy-variant evidence where behavior differs.
+3. **Mutation integration:** `CoreWorkflowRunner` rejects `RESOURCE_CHANGING`. A must
+   establish reviewed typed operations using the existing `DailyMutationAuthorizer`,
+   `JournaledMutationDispatcher`, `DailyRunJournalStore` and observed action executor.
+   Do not mislabel a mutating workflow as read-only or add a second permission/journal path.
+4. **Roster freshness:** the current cache records ordering, not the planned timestamp,
+   fingerprint and maximum-age acceptance contract. Daily must consume the canonical
+   roster owner's accepted cache, not introduce a second scanner. A fresh active-castle
+   assertion does not by itself validate the full unattended target list.
+5. **Recurring operation:** exact acknowledgements bind to a maintenance date. A static
+   acknowledgement file cannot authorize subsequent dates. Agree a bounded recurring
+   authorization policy through the same canonical authorizer before scheduling; the
+   wrapper must not mint permission by replacing dates. Finalize still-unresolved feature
+   targets/budgets before their execution milestones.
+6. **Completion and scheduler proof:** preserve unresolved outcomes and unknown rows in
+   the production summary. Add bounded Hero Hall resumption while other eligible work
+   proceeds. Existing scheduler tests inspect source text; installed-task settings,
+   password/background BlueStacks operation and a composed run remain unverified.
+
+### Ownership and integration agreement
+
+- **A owns** shared navigation, typed core operations, workflow lifecycle and the
+  canonical mutation bridge. Retain both current castle and Campaign slices. A is the
+  sole proposed integration owner; component ownership alone does not grant Git authority.
+- **B owns** shared perception predicates, screen/layout/guard facts, recognition assets
+  and catalog maintenance, and consistent publication through `ObservationBuilder` and
+  `NavigationPerception`, including current-frame provenance. Its recognition foundation
+  already landed on main is completed work. B's independent Campaign implementation plan
+  is superseded: A owns Campaign navigation/workflow behavior and B maintains its assets.
+- **The future Daily continuation milestone** owns the existing coordinator, Daily policies,
+  capability completion, promotion and scheduling. Its session owner must be assigned
+  before implementation. Shared core changes stay with A and shared vision changes with B;
+  do not duplicate their parsers, guards, popup handling or mutation mechanisms.
+
+B's first Research milestone is now complete offline: the real production builder
+publishes the measured current-frame Start control; its regression exercises the actual
+Research consumer and strict active-detail postcondition. Retain premium exclusions,
+overlay protection and provenance. Do not rewrite Research as a core workflow to conceal
+the former gap. Gathering/March implementation is outside this completed milestone.
+Research is excluded from Daily execution, so that feature is not itself a prerequisite
+for independent Daily planning or offline coordinator work.
+
+After separate Git authorization, publish each task's reviewed changes on its existing
+feature branches. No mainline synchronization or live proof is required merely to publish
+an accurately labelled offline milestone. Then A creates the single combined candidate
+`codex/workflow-recognition-integration` at
+`.local-data/worktrees/workflow-recognition-integration` from the freshly verified mainline
+base. Integrate B's completed recognition branch, A's Campaign branch, then A's castle
+branch, using history-preserving integration of the published commits. If main advances,
+inspect only the relevant delta and update the pinned candidate base before acceptance.
+
+Retain the catalog union: 31 baseline profiles plus A's three Campaign profiles and B's
+three Research profiles, **37 unique profiles at this snapshot**. Recompute after a
+baseline change and retain legitimate newer profiles rather than forcing the old count.
+Do not discard useful overlapping work or clean historical scratch worktrees.
+
+### Bounded restart milestones and acceptance
+
+1. **Publish this plan and preserve component work.** Keep automatic execution disabled.
+   Record approved targets/roles and the Daily continuation owner when decided. A and B
+   remain paused until their next milestones are explicitly delivered/authorized.
+2. **Integrate and validate A/B foundations.** Use the combined candidate above. Retain
+   B's real-builder Research regression, A's castle postflight and Campaign route tests,
+   mainline Chat/core contracts, Daily journal tests and new atomic-file/lease regressions.
+   Run the final portable full suite on the combined tree. Report conflicts or failures;
+   do not substitute component results for combined acceptance.
+3. **Complete Daily core traversal offline.** Reuse `daily_viewport_from_observation` and
+   `DailyMaintenanceCoordinator` through A-owned navigation interfaces. Test the real
+   observation path, full traversal, claim-driven reordering, stale geometry, unknown
+   rows, interruption handling and final Home. A one-viewport status result is not full
+   coverage. Independent policy/evidence work may proceed while core integration waits.
+4. **Bridge mutation and enforce promotion.** A supplies the canonical typed operation
+   boundary; Daily consumes it. Start with claims and reuse resource-item execution.
+   Require exact budgets, durable prepared/dispatched/reconciled/committed behavior,
+   ambiguous-result preservation, no replay and rejection before connection when
+   evidence/authority is missing. Live claims or resource use require a separate exact
+   action/target/budget authorization.
+5. **Finish one capability at a time.** Complete Hero Hall cooldown/resume, then other
+   independent features. Campaign waits for A's route/operation contract; Gathering waits
+   for B's applicable producer facts and A's mutation boundary. Preserve historical
+   successful proof and use only the minimum relevant additional live proof. Stop a
+   mutation slice on uncertain identity, blocked observations or ambiguous postconditions.
+6. **Complete release and scheduling.** Evaluate the required canary matrix and distinct
+   policy variants, compose only accepted capabilities, verify production target/cache
+   acceptance, and prove isolated workers and serial castles. Then validate the disabled
+   scheduler's background launch, 02:00 Toronto/DST behavior, UTC reset accounting,
+   no-overlap/no-catch-up settings and exit propagation. Activation remains a separate
+   explicit decision.
+
+For ordinary implementation slices use the repository runner's focused group or
+`affected --base <verified-base-sha> --explain`; use `full` for shared-contract changes,
+required fallback and final integration. Tests stay portable/offline unless a separately
+authorized live milestone requires otherwise. This document-only update requires
+link/path review and `git diff --check`, not another unit suite or live canary.
+
 ## Interview decisions and implementation status — 2026-09-08
 
 These decisions supersede older review wording. Write failing deterministic acceptance
