@@ -15,7 +15,7 @@ from pnc_automation.core.infra.emulator.session import (
 )
 from pnc_automation.bluestacks_management.instance_lease import InstanceLeaseRegistry
 from pnc_automation.bluestacks_management.policy import BlueStacksCapabilities
-from pnc_automation.core.errors import DeviceConnectionError, InstanceBusyError
+from pnc_automation.core.errors import DeviceConnectionError, GameLaunchError, InstanceBusyError
 
 
 @dataclass(slots=True)
@@ -677,7 +677,7 @@ class BlueStacksSessionTests(unittest.TestCase):
             adb_client = _FakeAdbClient(
                 connect_result=_command_result(returncode=0, stdout_text="connected"),
                 state_result=_command_result(returncode=0, stdout_text="device"),
-                shell_result=_command_result(returncode=0, stdout_text="other.package"),
+                shell_result=_command_result(returncode=0, stdout_text=_launcher_window_dump()),
             )
             session = self._track(BlueStacksSession(
                 adb_client=adb_client,
@@ -716,7 +716,7 @@ class BlueStacksSessionTests(unittest.TestCase):
         adb_client = _FakeAdbClient(
             connect_result=_command_result(returncode=0, stdout_text="connected"),
             state_result=_command_result(returncode=0, stdout_text="device"),
-            shell_result=_command_result(returncode=0, stdout_text="com.global.tmslg"),
+            shell_result=_command_result(returncode=0, stdout_text=_game_window_dump()),
         )
         session = self._make_session(adb_client=adb_client)
 
@@ -729,7 +729,7 @@ class BlueStacksSessionTests(unittest.TestCase):
         adb_client = _FakeAdbClient(
             connect_result=_command_result(returncode=0, stdout_text="connected"),
             state_result=_command_result(returncode=0, stdout_text="device"),
-            shell_result=_command_result(returncode=0, stdout_text="com.android.launcher"),
+            shell_result=_command_result(returncode=0, stdout_text=_launcher_window_dump()),
         )
         session = self._make_session(adb_client=adb_client)
 
@@ -741,6 +741,91 @@ class BlueStacksSessionTests(unittest.TestCase):
             ],
             adb_client.shell_calls,
         )
+
+    def test_foreground_detection_ignores_background_game_window_when_launcher_has_focus(self) -> None:
+        """Reads only mCurrentFocus instead of treating a background game window as foreground."""
+
+        adb_client = _FakeAdbClient(
+            connect_result=_command_result(returncode=0, stdout_text="connected"),
+            state_result=_command_result(returncode=0, stdout_text="device"),
+            shell_result=_command_result(returncode=0, stdout_text=_launcher_window_dump(include_background_game=True)),
+        )
+        session = self._make_session(adb_client=adb_client)
+
+        self.assertFalse(session.is_app_foregrounded())
+
+    def test_foreground_detection_requires_exact_game_component_package(self) -> None:
+        """Does not accept a package whose name merely contains the configured package."""
+
+        for dump, expected in (
+            (_game_window_dump(), True),
+            (_game_window_dump() + "\r\n", True),
+            (_window_dump("com.global.tmslg.backup/com.example.MainActivity"), False),
+        ):
+            with self.subTest(dump=dump):
+                adb_client = _FakeAdbClient(
+                    connect_result=_command_result(returncode=0, stdout_text="connected"),
+                    state_result=_command_result(returncode=0, stdout_text="device"),
+                    shell_result=_command_result(returncode=0, stdout_text=dump),
+                )
+                session = self._make_session(adb_client=adb_client)
+                self.assertEqual(expected, session.is_app_foregrounded())
+                session.close()
+
+    def test_foreground_detection_treats_null_or_title_without_component_as_not_game(self) -> None:
+        """Returns false when WMS has focus without a proven package component."""
+
+        for dump in (
+            "mCurrentFocus=null",
+            _window_dump("Starting Window"),
+        ):
+            with self.subTest(dump=dump):
+                adb_client = _FakeAdbClient(
+                    connect_result=_command_result(returncode=0, stdout_text="connected"),
+                    state_result=_command_result(returncode=0, stdout_text="device"),
+                    shell_result=_command_result(returncode=0, stdout_text=dump),
+                )
+                session = self._make_session(adb_client=adb_client)
+                self.assertFalse(session.is_app_foregrounded())
+                session.close()
+
+    def test_foreground_detection_rejects_missing_duplicate_or_malformed_focus(self) -> None:
+        """Fails with an actionable launch error instead of guessing from another WMS field."""
+
+        dumps = (
+            "mFocusedApp=Window{1 u0 com.global.tmslg/com.example.MainActivity}",
+            "mCurrentFocus=null\nmCurrentFocus=null",
+            "mCurrentFocus=not-a-window",
+            "mCurrentFocus=\nWindow{48fe9e8 u0 com.global.tmslg/com.global.tmslg.MainActivity}",
+            "mCurrentFocus=Window{not-hex u0 com.global.tmslg/com.global.tmslg.MainActivity}",
+            "mCurrentFocus=Window{48fe9e8 u0 com.global.tmslg/com.example.Main/Activity}",
+            "mCurrentFocus=Window{48fe9e8 u0 com.global.tmslg/}",
+            "mCurrentFocus=Window{48fe9e8 u0   }",
+        )
+        for dump in dumps:
+            with self.subTest(dump=dump):
+                adb_client = _FakeAdbClient(
+                    connect_result=_command_result(returncode=0, stdout_text="connected"),
+                    state_result=_command_result(returncode=0, stdout_text="device"),
+                    shell_result=_command_result(returncode=0, stdout_text=dump),
+                )
+                session = self._make_session(adb_client=adb_client)
+                with self.assertRaisesRegex(GameLaunchError, "mCurrentFocus"):
+                    session.is_app_foregrounded()
+                session.close()
+
+    def test_launch_error_from_adb_is_still_propagated(self) -> None:
+        """Keeps the existing GameLaunchError boundary when the launch command itself fails."""
+
+        adb_client = _FakeAdbClient(
+            connect_result=_command_result(returncode=0, stdout_text="connected"),
+            state_result=_command_result(returncode=0, stdout_text="device"),
+            shell_result=_command_result(returncode=1, stderr_text="monkey failed"),
+        )
+        session = self._make_session(adb_client=adb_client)
+
+        with self.assertRaises(GameLaunchError):
+            session.launch_app()
 
     def test_connect_failure_releases_the_supplied_operation_lease(self) -> None:
         """Makes a failed ADB connection immediately available to the next process-shaped owner."""
@@ -769,6 +854,31 @@ class BlueStacksSessionTests(unittest.TestCase):
                 self.assertEqual(acquired.display_name, "serious_stuff")
             finally:
                 competitor.release_all()
+
+
+def _window_dump(component: str) -> str:
+    """Builds one realistic WMS mCurrentFocus line for foreground tests."""
+
+    return f"  mCurrentFocus=Window{{48fe9e8 u0 {component}}}\n"
+
+
+def _game_window_dump() -> str:
+    """Builds a focused P&C WMS window dump."""
+
+    return _window_dump("com.global.tmslg/com.global.tmslg.MainActivity")
+
+
+def _launcher_window_dump(*, include_background_game: bool = False) -> str:
+    """Builds a launcher-focused dump that may also contain a background game window."""
+
+    background = (
+        "  Window #1 Window{1234567 u0 com.global.tmslg/com.global.tmslg.MainActivity}\n"
+        if include_background_game
+        else ""
+    )
+    return background + "  mFocusedApp=Window{7654321 u0 com.global.tmslg/com.global.tmslg.MainActivity}\n" + _window_dump(
+        "com.uncube.launcher3/com.bluestacks.launcher.activity.HomeActivity"
+    )
 
 
 def _make_instance() -> BlueStacksInstance:
