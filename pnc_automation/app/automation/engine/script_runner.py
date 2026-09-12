@@ -47,7 +47,16 @@ from pnc_automation.app.pnc.navigation.world_map_search import (
     WorldMapSearchService,
 )
 from pnc_automation.app.pnc.navigation.world_map_survey_recorder import WorldMapSurveyRecorder
-from pnc_automation.core.infra.emulator.session import BlueStacksSession
+from pnc_automation.core.infra.emulator.session import (
+    BlueStacksInstanceCloser,
+    BlueStacksSession,
+    BlueStacksSessionCleanupPolicy,
+)
+from pnc_automation.core.lifecycle import close_preserving_error
+from pnc_automation.bluestacks_management.instance_shutdown import (
+    InstanceShutdownIntentStore,
+    PowerShellBlueStacksInstanceCloser,
+)
 from pnc_automation.bluestacks_management.instance_lease import (
     PROCESS_INSTANCE_LEASES,
     InstanceLeaseBundle,
@@ -85,7 +94,12 @@ class ConnectedAccountRuntime:
     def __exit__(self, _exception_type: object, _exception: object, _traceback: object) -> None:
         """Releases the connected runtime on normal or exceptional exit."""
 
-        self.close()
+        active_error = _exception if isinstance(_exception, BaseException) else None
+        close_preserving_error(
+            self.close,
+            active_error,
+            message="Connected runtime operation and cleanup both failed.",
+        )
 
     def require_observed_action_executor(self, reason: str) -> ObservedActionExecutor:
         """Returns the selector-backed executor required by live connected-runtime operations."""
@@ -115,7 +129,12 @@ class ConnectedAutomationRuntime:
     def __exit__(self, _exception_type: object, _exception: object, _traceback: object) -> None:
         """Releases the connected runtime bundle on exit."""
 
-        self.close()
+        active_error = _exception if isinstance(_exception, BaseException) else None
+        close_preserving_error(
+            self.close,
+            active_error,
+            message="Connected automation operation and cleanup both failed.",
+        )
 
 
 @dataclass(slots=True)
@@ -137,6 +156,7 @@ class ScriptRunner:
         default_factory=lambda: PROCESS_INSTANCE_LEASES,
         repr=False,
     )
+    instance_closer: BlueStacksInstanceCloser | None = field(default=None, repr=False)
 
     def reserve_accounts(
         self,
@@ -164,6 +184,7 @@ class ScriptRunner:
         script_path: str,
         castle_refs: list[str] | None = None,
         required_role: LiveAutomationRole | None = None,
+        session_cleanup_policy: BlueStacksSessionCleanupPolicy | None = None,
     ) -> RunResult:
         """Executes the selected script for one account and optional ordered castle aliases."""
 
@@ -172,6 +193,7 @@ class ScriptRunner:
             script=load_run_script(script_path),
             castle_refs=castle_refs,
             required_role=required_role,
+            session_cleanup_policy=session_cleanup_policy,
         )
 
     def run_script(
@@ -181,6 +203,7 @@ class ScriptRunner:
         script: RunScript,
         castle_refs: list[str] | None = None,
         required_role: LiveAutomationRole | None = None,
+        session_cleanup_policy: BlueStacksSessionCleanupPolicy | None = None,
     ) -> RunResult:
         """Executes one loaded script for an account and optional ordered castle aliases."""
 
@@ -190,6 +213,7 @@ class ScriptRunner:
             script=script,
             castle_refs=castle_refs,
             required_role=required_role,
+            session_cleanup_policy=session_cleanup_policy,
         )
 
     def _run_script_for_account(
@@ -199,6 +223,7 @@ class ScriptRunner:
         script: RunScript,
         castle_refs: list[str] | None = None,
         required_role: LiveAutomationRole | None = None,
+        session_cleanup_policy: BlueStacksSessionCleanupPolicy | None = None,
     ) -> RunResult:
         """Executes one already-loaded run script for one already-resolved account target."""
 
@@ -207,9 +232,13 @@ class ScriptRunner:
             castle_targets=self.config.find_castle_targets(account.id),
             castle_refs=castle_refs,
         )
-        runner, castle_roster_provider = self._build_runner(account, required_role=required_role)
+        runner, castle_roster_provider = self._build_runner(
+            account,
+            required_role=required_role,
+            session_cleanup_policy=session_cleanup_policy,
+        )
         try:
-            return runner.run(
+            result = runner.run(
                 account,
                 prepared_script,
                 castle_roster_provider=castle_roster_provider,
@@ -217,8 +246,15 @@ class ScriptRunner:
                 mail_archive_store=self.mail_archive_store,
                 chat_archive_store=self.chat_archive_store,
             )
-        finally:
-            runner.close()
+        except BaseException as error:
+            close_preserving_error(
+                runner.close,
+                error,
+                message="Automation execution and BlueStacks phase cleanup both failed.",
+            )
+            raise
+        runner.close()
+        return result
 
     def prepare_account_session(
         self,
@@ -226,6 +262,7 @@ class ScriptRunner:
         account_id: str,
         castle: CastleIdentity | None = None,
         required_role: LiveAutomationRole | None = None,
+        session_cleanup_policy: BlueStacksSessionCleanupPolicy | None = None,
     ) -> RunResult:
         """Runs the canonical session-preparation path for one account and optional castle target."""
 
@@ -237,6 +274,7 @@ class ScriptRunner:
                 steps=_prepare_account_session_steps(castle),
             ),
             required_role=required_role,
+            session_cleanup_policy=session_cleanup_policy,
         )
 
     def run_task(
@@ -246,6 +284,7 @@ class ScriptRunner:
         task_id: TaskId,
         params: dict[str, Any] | None = None,
         required_role: LiveAutomationRole | None = None,
+        session_cleanup_policy: BlueStacksSessionCleanupPolicy | None = None,
     ) -> StepRunResult:
         """Runs one task step against the selected account using current-castle semantics."""
 
@@ -257,6 +296,7 @@ class ScriptRunner:
                 steps=(ScriptStep(task=task_id, params={} if params is None else params),),
             ),
             required_role=required_role,
+            session_cleanup_policy=session_cleanup_policy,
         )
         return result.steps[0]
 
@@ -267,6 +307,7 @@ class ScriptRunner:
         schedule_ids: list[str] | None = None,
         scheduled_for_utc: datetime | None = None,
         required_role: LiveAutomationRole | None = None,
+        session_cleanup_policy: BlueStacksSessionCleanupPolicy | None = None,
     ) -> RunResult:
         """Resolves the due authored mail schedules and executes them as canonical send-mail steps."""
 
@@ -290,6 +331,7 @@ class ScriptRunner:
                 due_mail_dispatches=due_mail_dispatches,
             ),
             required_role=required_role,
+            session_cleanup_policy=session_cleanup_policy,
         )
 
     def build_connected_runtime(
@@ -297,21 +339,37 @@ class ScriptRunner:
         *,
         account: AccountConfig,
         required_role: LiveAutomationRole | None = None,
+        session_cleanup_policy: BlueStacksSessionCleanupPolicy | None = None,
     ) -> ConnectedAccountRuntime:
         """Builds the canonical connected session plus observation-owned runtime helpers for one configured account."""
 
         if required_role is not None:
             account.require_live_role(required_role)
-        return self._build_connected_runtime_services(account=account)
+        return self._build_connected_runtime_services(
+            account=account,
+            session_cleanup_policy=session_cleanup_policy,
+        )
 
-    def _build_connected_runtime_services(self, *, account: AccountConfig) -> ConnectedAccountRuntime:
+    def _build_connected_runtime_services(
+        self,
+        *,
+        account: AccountConfig,
+        session_cleanup_policy: BlueStacksSessionCleanupPolicy | None = None,
+    ) -> ConnectedAccountRuntime:
         """Builds the canonical connected runtime service graph shared by tooling and automation runs."""
 
-        session = self.build_connected_session(account=account)
+        session = self.build_connected_session(
+            account=account,
+            cleanup_policy=session_cleanup_policy,
+        )
         try:
             return self._build_connected_runtime_services_for_session(account=account, session=session)
-        except BaseException:
-            session.close()
+        except BaseException as error:
+            close_preserving_error(
+                session.close,
+                error,
+                message="Connected runtime construction and BlueStacks phase cleanup both failed.",
+            )
             raise
 
     def _build_connected_runtime_services_for_session(
@@ -385,10 +443,15 @@ class ScriptRunner:
         *,
         account: AccountConfig,
         required_role: LiveAutomationRole | None = None,
+        session_cleanup_policy: BlueStacksSessionCleanupPolicy | None = None,
     ) -> AutomationRunner:
         """Builds one connected automation runner through the same canonical runtime wiring used by `run_script()`."""
 
-        runner, _ = self._build_runner(account, required_role=required_role)
+        runner, _ = self._build_runner(
+            account,
+            required_role=required_role,
+            session_cleanup_policy=session_cleanup_policy,
+        )
         return runner
 
     def build_connected_runtime_bundle(
@@ -396,12 +459,16 @@ class ScriptRunner:
         *,
         account: AccountConfig,
         required_role: LiveAutomationRole | None = None,
+        session_cleanup_policy: BlueStacksSessionCleanupPolicy | None = None,
     ) -> ConnectedAutomationRuntime:
         """Builds feature services and an automation runner that share one connected service graph."""
 
         if required_role is not None:
             account.require_live_role(required_role)
-        connected_runtime = self._build_connected_runtime_services(account=account)
+        connected_runtime = self._build_connected_runtime_services(
+            account=account,
+            session_cleanup_policy=session_cleanup_policy,
+        )
         return ConnectedAutomationRuntime(
             runtime=connected_runtime,
             runner=self._build_automation_runner_from_services(
@@ -415,6 +482,7 @@ class ScriptRunner:
         account: AccountConfig,
         *,
         required_role: LiveAutomationRole | None = None,
+        session_cleanup_policy: BlueStacksSessionCleanupPolicy | None = None,
     ) -> tuple[AutomationRunner, Callable[[], PncAccountCastleRosterConfig | None]]:
         """Builds one connected runtime runner and roster provider for a specific account."""
 
@@ -427,7 +495,10 @@ class ScriptRunner:
 
         if required_role is not None:
             account.require_live_role(required_role)
-        connected_runtime = self._build_connected_runtime_services(account=account)
+        connected_runtime = self._build_connected_runtime_services(
+            account=account,
+            session_cleanup_policy=session_cleanup_policy,
+        )
         return (
             self._build_automation_runner_from_services(
                 account=account,
@@ -460,8 +531,12 @@ class ScriptRunner:
                 logger=logging.LoggerAdapter(self.logger.logger, extra={**self.logger.extra, **shared_extra}),
                 close_callback=connected_runtime.close,
             )
-        except BaseException:
-            connected_runtime.close()
+        except BaseException as error:
+            close_preserving_error(
+                connected_runtime.close,
+                error,
+                message="Automation runner construction and BlueStacks phase cleanup both failed.",
+            )
             raise
 
     def build_connected_session(
@@ -469,6 +544,7 @@ class ScriptRunner:
         *,
         account: AccountConfig,
         required_role: LiveAutomationRole | None = None,
+        cleanup_policy: BlueStacksSessionCleanupPolicy | None = None,
     ) -> BlueStacksSession:
         """Resolves, logs, connects, and validates one canonical BlueStacks session for the selected account."""
 
@@ -497,15 +573,44 @@ class ScriptRunner:
             instance=instance,
             lease_registry=self.instance_lease_registry,
             capabilities=account.bluestacks_capabilities,
+            cleanup_policy=cleanup_policy or BlueStacksSessionCleanupPolicy.keep_warm(),
+            instance_closer=self._build_instance_closer(),
             instance_lease=instance_lease,
         )
         try:
             session.connect()
             session.ensure_responsive()
-        except BaseException:
-            session.close()
+        except BaseException as error:
+            close_preserving_error(
+                session.close,
+                error,
+                message="BlueStacks readiness validation and phase cleanup both failed.",
+            )
             raise
         return session
+
+    def _build_instance_closer(self) -> BlueStacksInstanceCloser | None:
+        """Builds the host closer only when the configured resolver exposes live process discovery."""
+
+        if self.instance_closer is not None:
+            return self.instance_closer
+        running_instance_source = getattr(self.instance_resolver, "running_instance_source", None)
+        if running_instance_source is None:
+            return None
+        metadata_path = getattr(self.instance_resolver, "config_path", None)
+        if not isinstance(metadata_path, Path):
+            return None
+        return PowerShellBlueStacksInstanceCloser(
+            running_instance_source=running_instance_source,
+            metadata_path=metadata_path,
+            intent_store=InstanceShutdownIntentStore(
+                self.instance_lease_registry.root / "shutdown-intents"
+            ),
+            lease_registry_factory=lambda: InstanceLeaseRegistry(
+                root=self.instance_lease_registry.root,
+                wait_timeout_seconds=0,
+            ),
+        )
 
     def _build_observation_service(
         self,

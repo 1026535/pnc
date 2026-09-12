@@ -1,6 +1,6 @@
 # Integrate visual recognition, guarded controls, and targeted OCR
 
-Status (2026-09-12): implementation in progress. The reviewed recognition contracts are published at `5c4ce6b`; integration with newer mainline workflow ports and modular tests is underway in `codex/non-yolo-integration-current`. Remaining F family evidence and promotion gates are incomplete. This document does not authorize game mutations.
+Status (2026-09-12): implementation in progress. The reviewed recognition contracts and newer workflow/test owners are integrated in `e6df3bb`; the follow-up integration includes mainline through `c7dfdd5`. Remaining F family evidence and live promotion gates are incomplete. This document does not authorize game mutations.
 
 ## Context and objective
 
@@ -20,11 +20,13 @@ Non-goals: YOLO, trained detectors, replacing current world-map spatial algorith
 
 ## Updated implementation state — 2026-09-12
 
-The published feature branch is `codex/non-yolo-recognition` at `5c4ce6b2c0b9ded17ddc7ddf8622bd6663b42e50`. An isolated integration worktree merges that history into mainline `68e7349`, preserving both parents. Mainline now owns modular test locations, domain castle models, observation-policy modules, direct core mail/Chat/building ports, measured Chat controls, and bounded active-roster scanning. Newer main commits `76c486f` (quiescent instance shutdown) and `0a12e8c` (workflow checkpoint) must also be included before push. Preserve unrelated work in the original feature and main worktrees.
+The feature branch is `codex/non-yolo-recognition`. The isolated integration worktree preserves its published `5c4ce6b` history and incorporates mainline through `c7dfdd5`, including modular tests, canonical domain/observation-policy owners, direct core mail/Chat/building ports, measured Chat controls, bounded active-roster scanning, quiescent shutdown, and generated-output defaults. Integration uses merge commits so the published feature remains an ancestor. Unrelated work in the original feature and main worktrees is preserved.
 
 Use `py tools/run_tests.py group vision` for the first recognition check and `py tools/run_tests.py full` for the combined integration. Historical flat unittest commands later in this document and the report describe past evidence, not current invocations. Replacement navigation's capture-bound OCR, canonical decision and provenance integration is implemented; it requires validation against these newer ports, not a second implementation. Direct workflow ports do not imply authored YAML dispatch has migrated.
 
-Current execution order: resolve and migrate tests; validate the combined contracts and assets; incorporate freshly fetched main; commit and push the integration to the published feature branch; then refresh coverage and resume bounded testing-instance proofs before extending F. Keep existing Research/Gathering/Campaign mutation boundaries unsupported until their own reviewed producer evidence exists. Do not use mainline live evidence from another account as proof for the testing instance.
+Current execution order, updated by the user's latest request: finish validation and push the combined feature branch, then review the published changes. The later Research/Gathering/Campaign evidence work remains pending. The refreshed audit still has 329 selectors (273 enabled, 56 unsupported), 59 orphan enum IDs, and 90 families (7 reviewed region plans, 83 guarded full-frame fallbacks). Keep unsupported controls behind their existing fail-closed boundary until their own reviewed producer evidence exists. Do not use mainline live evidence from another account as proof for the testing instance.
+
+Integration-specific corrections: catalog v3 separates a reviewed layout from appearance-profile IDs so matching Home/Chat-preview variants do not manufacture layout ambiguity. Incompatible layout evidence still abstains. Every manifest image and profile source now uses the canonical dimension-prefixed decoded-RGB hash. Mainline's quiescent shutdown and `.local-data` output defaults are retained alongside frame provenance and bounded probe cleanup. Current readiness attempts on `testing` again failed with `GameLaunchError` and then `DeviceConnectionError` before capture; no game navigation or mutation occurred.
 
 | Slice/owner | Implemented behavior | Remaining acceptance work |
 |---|---|---|

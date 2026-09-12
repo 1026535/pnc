@@ -15,9 +15,20 @@ class BlueStacksInstance:
     display_name: str
     device_id: str
     app_package: str
+    host_instance_key: str | None = None
+    process_id: int | None = None
+    started_by_resolver: bool = False
 
     @classmethod
-    def from_config(cls, config: BlueStacksInstanceConfig, *, device_id: str) -> "BlueStacksInstance":
+    def from_config(
+        cls,
+        config: BlueStacksInstanceConfig,
+        *,
+        device_id: str,
+        host_instance_key: str | None = None,
+        process_id: int | None = None,
+        started_by_resolver: bool = False,
+    ) -> "BlueStacksInstance":
         """Builds a runtime instance target from validated config plus the resolved live ADB endpoint."""
 
         return cls(
@@ -25,4 +36,7 @@ class BlueStacksInstance:
             display_name=config.display_name,
             device_id=device_id,
             app_package=config.app_package,
+            host_instance_key=host_instance_key,
+            process_id=process_id,
+            started_by_resolver=started_by_resolver,
         )

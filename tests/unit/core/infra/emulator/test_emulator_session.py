@@ -9,10 +9,13 @@ from pathlib import Path
 
 from pnc_automation.core.infra.adb.command_result import CommandResult
 from pnc_automation.core.infra.emulator.bluestacks_instance import BlueStacksInstance
-from pnc_automation.core.infra.emulator.session import BlueStacksSession
+from pnc_automation.core.infra.emulator.session import (
+    BlueStacksSession,
+    BlueStacksSessionCleanupPolicy,
+)
 from pnc_automation.bluestacks_management.instance_lease import InstanceLeaseRegistry
 from pnc_automation.bluestacks_management.policy import BlueStacksCapabilities
-from pnc_automation.core.errors import DeviceConnectionError
+from pnc_automation.core.errors import DeviceConnectionError, InstanceBusyError
 
 
 @dataclass(slots=True)
@@ -108,6 +111,71 @@ class _SequencedShellAdbClient:
         return self.shell_results[index]
 
 
+@dataclass(slots=True)
+class _RecordingInstanceCloser:
+    """Records phase-end shutdown requests without touching a host process."""
+
+    instances: list[BlueStacksInstance] = field(default_factory=list)
+    intents: list[tuple[BlueStacksInstance, float]] = field(default_factory=list)
+    canceled: list[BlueStacksInstance] = field(default_factory=list)
+
+    def register_close_intent(
+        self,
+        instance: BlueStacksInstance,
+        *,
+        grace_period_seconds: float,
+    ) -> str:
+        """Records durable-intent registration for the selected process."""
+
+        self.intents.append((instance, grace_period_seconds))
+        return f"intent-{len(self.intents)}"
+
+    def cancel_close_intent(self, instance: BlueStacksInstance) -> None:
+        """Records a keep-warm claim that cancels pending shutdown."""
+
+        self.canceled.append(instance)
+
+    def finalize_close_intent(self, instance: BlueStacksInstance, *, intent_id: str) -> None:
+        """Records the exact resolved instance selected for shutdown."""
+
+        self.assert_intent_id(intent_id)
+        self.instances.append(instance)
+
+    @staticmethod
+    def assert_intent_id(intent_id: str) -> None:
+        """Rejects a finalization detached from its registered intent."""
+
+        if not intent_id.startswith("intent-"):
+            raise AssertionError("Unexpected shutdown intent id.")
+
+
+@dataclass(slots=True)
+class _FailingInstanceCloser:
+    """Raises during shutdown to verify primary failures remain visible."""
+
+    def register_close_intent(
+        self,
+        instance: BlueStacksInstance,
+        *,
+        grace_period_seconds: float,
+    ) -> str:
+        """Accepts the deterministic test intent."""
+
+        del instance, grace_period_seconds
+        return "intent-failing"
+
+    def cancel_close_intent(self, instance: BlueStacksInstance) -> None:
+        """Accepts an unused keep-warm cancellation path."""
+
+        del instance
+
+    def finalize_close_intent(self, instance: BlueStacksInstance, *, intent_id: str) -> None:
+        """Fails one synthetic phase-end shutdown."""
+
+        del instance, intent_id
+        raise RuntimeError("cleanup failed")
+
+
 class BlueStacksSessionTests(unittest.TestCase):
     """Validates BlueStacks connectivity checks."""
 
@@ -162,6 +230,252 @@ class BlueStacksSessionTests(unittest.TestCase):
 
         self.assertEqual(adb_client.connect_calls, ["127.0.0.1:5555", "127.0.0.1:5555"])
         self.assertEqual(adb_client.state_calls, ["127.0.0.1:5555", "127.0.0.1:5555"])
+
+    def test_keep_warm_policy_does_not_close_a_started_instance(self) -> None:
+        """Keeps a short or intermediate live phase warm when the agent selects reuse."""
+
+        closer = _RecordingInstanceCloser()
+        session = self._track(
+            BlueStacksSession(
+                adb_client=_FakeAdbClient(
+                    connect_result=_command_result(returncode=0, stdout_text="connected"),
+                    state_result=_command_result(returncode=0, stdout_text="device"),
+                    shell_result=_command_result(returncode=0, stdout_text="model"),
+                ),
+                instance=BlueStacksInstance(
+                    id="bs-main",
+                    display_name="serious_stuff",
+                    device_id="127.0.0.1:5555",
+                    app_package="com.global.tmslg",
+                    host_instance_key="Nougat32",
+                    process_id=101,
+                    started_by_resolver=True,
+                ),
+                cleanup_policy=BlueStacksSessionCleanupPolicy.keep_warm(),
+                instance_closer=closer,
+                lease_registry=self._lease_registry,
+            )
+        )
+
+        session.connect()
+        session.close()
+
+        self.assertEqual(closer.instances, [])
+        self.assertEqual(len(closer.canceled), 1)
+
+    def test_cleanup_policy_rejects_invalid_shutdown_grace(self) -> None:
+        """Requires a bounded numeric quiescence interval."""
+
+        for value in (True, -1, float("inf"), float("nan")):
+            with self.subTest(value=value):
+                with self.assertRaises(ValueError):
+                    BlueStacksSessionCleanupPolicy.close_at_phase_end(
+                        shutdown_grace_seconds=value,
+                    )
+
+    def test_phase_end_policy_finalizes_after_releasing_session_lease(self) -> None:
+        """Makes the instance claimable before the phase-end finalizer runs."""
+
+        closer = _RecordingInstanceCloser()
+        session = self._track(
+            BlueStacksSession(
+                adb_client=_FakeAdbClient(
+                    connect_result=_command_result(returncode=0, stdout_text="connected"),
+                    state_result=_command_result(returncode=0, stdout_text="device"),
+                    shell_result=_command_result(returncode=0, stdout_text="model"),
+                ),
+                instance=BlueStacksInstance(
+                    id="bs-main",
+                    display_name="serious_stuff",
+                    device_id="127.0.0.1:5555",
+                    app_package="com.global.tmslg",
+                    host_instance_key="Nougat32",
+                    process_id=101,
+                    started_by_resolver=True,
+                ),
+                cleanup_policy=BlueStacksSessionCleanupPolicy.close_at_phase_end(),
+                instance_closer=closer,
+                lease_registry=self._lease_registry,
+            )
+        )
+
+        session.connect()
+        session.close()
+
+        self.assertEqual(len(closer.instances), 1)
+        self.assertEqual(closer.instances[0].process_id, 101)
+        self.assertEqual(len(closer.intents), 1)
+        self.assertEqual(closer.intents[0][1], 120.0)
+        competitor = InstanceLeaseRegistry(root=Path(self._lease_directory.name), wait_timeout_seconds=0)
+        try:
+            acquired = competitor.acquire(display_name="serious_stuff")
+            self.assertEqual(acquired.display_name, "serious_stuff")
+        finally:
+            competitor.release_all()
+
+    def test_phase_end_policy_can_keep_preexisting_instance_warm_when_requested(self) -> None:
+        """Allows an agent to preserve a pre-existing user-opened instance explicitly."""
+
+        closer = _RecordingInstanceCloser()
+        session = self._track(
+            BlueStacksSession(
+                adb_client=_FakeAdbClient(
+                    connect_result=_command_result(returncode=0, stdout_text="connected"),
+                    state_result=_command_result(returncode=0, stdout_text="device"),
+                    shell_result=_command_result(returncode=0, stdout_text="model"),
+                ),
+                instance=_make_instance(),
+                cleanup_policy=BlueStacksSessionCleanupPolicy.close_at_phase_end(
+                    close_preexisting_instance=False,
+                ),
+                instance_closer=closer,
+                lease_registry=self._lease_registry,
+            )
+        )
+
+        session.connect()
+        session.close()
+
+        self.assertEqual(closer.instances, [])
+
+    def test_phase_end_policy_keeps_preexisting_instance_by_default(self) -> None:
+        """Does not treat a manually opened process as phase-owned without an explicit choice."""
+
+        closer = _RecordingInstanceCloser()
+        session = self._track(
+            BlueStacksSession(
+                adb_client=_FakeAdbClient(
+                    connect_result=_command_result(returncode=0, stdout_text="connected"),
+                    state_result=_command_result(returncode=0, stdout_text="device"),
+                    shell_result=_command_result(returncode=0, stdout_text="model"),
+                ),
+                instance=BlueStacksInstance(
+                    id="bs-main",
+                    display_name="serious_stuff",
+                    device_id="127.0.0.1:5555",
+                    app_package="com.global.tmslg",
+                    host_instance_key="Nougat32",
+                    process_id=101,
+                ),
+                cleanup_policy=BlueStacksSessionCleanupPolicy.close_at_phase_end(),
+                instance_closer=closer,
+                lease_registry=self._lease_registry,
+            )
+        )
+
+        session.connect()
+        session.close()
+
+        self.assertEqual(closer.instances, [])
+        self.assertEqual(closer.intents, [])
+
+    def test_phase_end_policy_can_explicitly_close_preexisting_instance(self) -> None:
+        """Closes a selected pre-existing process only when the phase explicitly owns cleanup."""
+
+        closer = _RecordingInstanceCloser()
+        session = self._track(
+            BlueStacksSession(
+                adb_client=_FakeAdbClient(
+                    connect_result=_command_result(returncode=0, stdout_text="connected"),
+                    state_result=_command_result(returncode=0, stdout_text="device"),
+                    shell_result=_command_result(returncode=0, stdout_text="model"),
+                ),
+                instance=BlueStacksInstance(
+                    id="bs-main",
+                    display_name="serious_stuff",
+                    device_id="127.0.0.1:5555",
+                    app_package="com.global.tmslg",
+                    host_instance_key="Nougat32",
+                    process_id=101,
+                ),
+                cleanup_policy=BlueStacksSessionCleanupPolicy.close_at_phase_end(
+                    close_preexisting_instance=True,
+                ),
+                instance_closer=closer,
+                lease_registry=self._lease_registry,
+            )
+        )
+
+        session.connect()
+        session.close()
+
+        self.assertEqual(len(closer.instances), 1)
+        self.assertEqual(len(closer.intents), 1)
+
+    def test_phase_end_shutdown_waits_for_outer_task_series_reservation(self) -> None:
+        """Defers shutdown until the final same-process reservation reference is released."""
+
+        outer_lease = self._lease_registry.acquire(display_name="serious_stuff", timeout_seconds=0)
+        closer = _RecordingInstanceCloser()
+        session = self._track(
+            BlueStacksSession(
+                adb_client=_FakeAdbClient(
+                    connect_result=_command_result(returncode=0, stdout_text="connected"),
+                    state_result=_command_result(returncode=0, stdout_text="device"),
+                    shell_result=_command_result(returncode=0, stdout_text="model"),
+                ),
+                instance=BlueStacksInstance(
+                    id="bs-main",
+                    display_name="serious_stuff",
+                    device_id="127.0.0.1:5555",
+                    app_package="com.global.tmslg",
+                    host_instance_key="Nougat32",
+                    process_id=101,
+                    started_by_resolver=True,
+                ),
+                cleanup_policy=BlueStacksSessionCleanupPolicy.close_at_phase_end(),
+                instance_closer=closer,
+                lease_registry=self._lease_registry,
+            )
+        )
+
+        session.connect()
+        session.close()
+
+        self.assertEqual(closer.instances, [])
+        competitor = InstanceLeaseRegistry(root=Path(self._lease_directory.name), wait_timeout_seconds=0)
+        try:
+            with self.assertRaises(InstanceBusyError):
+                competitor.acquire(display_name="serious_stuff")
+        finally:
+            competitor.release_all()
+
+        outer_lease.release()
+        self.assertEqual(len(closer.instances), 1)
+
+    def test_connect_and_shutdown_failures_are_both_reported(self) -> None:
+        """Preserves the connection error when final phase cleanup also fails."""
+
+        session = self._track(
+            BlueStacksSession(
+                adb_client=_FakeAdbClient(
+                    connect_result=_command_result(returncode=1, stderr_text="offline"),
+                    state_result=_command_result(returncode=1, stdout_text="offline"),
+                    shell_result=_command_result(returncode=0, stdout_text=""),
+                ),
+                instance=BlueStacksInstance(
+                    id="bs-main",
+                    display_name="serious_stuff",
+                    device_id="127.0.0.1:5555",
+                    app_package="com.global.tmslg",
+                    host_instance_key="Nougat32",
+                    process_id=101,
+                    started_by_resolver=True,
+                ),
+                cleanup_policy=BlueStacksSessionCleanupPolicy.close_at_phase_end(),
+                instance_closer=_FailingInstanceCloser(),
+                lease_registry=self._lease_registry,
+                connect_attempts=1,
+            )
+        )
+
+        with self.assertRaises(BaseExceptionGroup) as raised:
+            session.connect()
+
+        self.assertEqual(
+            tuple(type(error) for error in raised.exception.exceptions),
+            (DeviceConnectionError, RuntimeError),
+        )
 
     def test_connect_fails_after_bounded_readiness_retries(self) -> None:
         """Fails clearly when ADB never reports the device-ready state."""

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import unittest
 from dataclasses import replace
-from pathlib import Path
 
 from PIL import Image, ImageDraw
 
@@ -13,6 +12,7 @@ from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.vision.resource_inventory import parse_resource_inventory, resource_inventory_tab_is_selected
 from pnc_automation.core.vision.image.models import Bounds
 from pnc_automation.core.vision.ocr.ocr_service import OcrLine
+from tests.support.paths import TEST_DATA_ROOT
 
 
 class ResourceInventoryVisionTests(unittest.TestCase):
@@ -204,7 +204,7 @@ class ResourceInventoryVisionTests(unittest.TestCase):
         """The saved six-card Bag fixture keeps each blue Use control's visual Y."""
 
         image = Image.open(
-            Path(__file__).parent / "data" / "screen_recognition" / "bag.png"
+            TEST_DATA_ROOT / "screen_recognition" / "bag.png"
         ).convert("RGB")
         lines = _saved_bag_lines()
 
@@ -221,7 +221,7 @@ class ResourceInventoryVisionTests(unittest.TestCase):
 
     def test_saved_900_bag_fixture_action_points_stay_inside_manual_boxes(self) -> None:
         image = Image.open(
-            Path(__file__).parent / "data" / "screen_recognition" / "bag_current_testing.png"
+            TEST_DATA_ROOT / "screen_recognition" / "bag_current_testing.png"
         ).convert("RGB")
         lines = _saved_900_bag_lines()
         manual_cards = (

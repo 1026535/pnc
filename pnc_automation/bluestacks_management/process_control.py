@@ -58,13 +58,34 @@ def wait_for_instance_state(
     """Polls a bounded process snapshot for one exact instance state."""
 
     bounded_attempts = max(1, attempts)
-    for _ in range(bounded_attempts):
-        present = any(item.instance_key == instance_key for item in source.list_running_instances())
-        if present is running:
-            return
-        if interval_seconds > 0:
+    discovery_failures = 0
+    last_discovery_error: ConfigurationError | None = None
+    for attempt_index in range(bounded_attempts):
+        try:
+            present = any(item.instance_key == instance_key for item in source.list_running_instances())
+        except ConfigurationError as error:
+            # A process can disappear between the CIM query and property
+            # materialization during stop/start. Retry the whole snapshot, but
+            # never infer target state from an incomplete row.
+            discovery_failures += 1
+            last_discovery_error = error
+        else:
+            last_discovery_error = None
+            if present is running:
+                return
+        if attempt_index < bounded_attempts - 1 and interval_seconds > 0:
             sleep(interval_seconds)
     expected = "start" if running else "stop"
+    if last_discovery_error is not None:
+        failure_phase = "launch_wait" if running else "stop_wait"
+        raise ConfigurationError(
+            f"BlueStacks instance '{instance_key}' {expected} could not be confirmed because process discovery failed.",
+            instance_key=instance_key,
+            expected_running=running,
+            state_poll_attempts=bounded_attempts,
+            discovery_failures=discovery_failures,
+            failure_phase=failure_phase,
+        ) from last_discovery_error
     raise ConfigurationError(
         f"BlueStacks instance '{instance_key}' did not {expected} during recovery.",
         instance_key=instance_key,

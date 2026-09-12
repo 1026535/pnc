@@ -1061,7 +1061,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=Path("config/accounts.yaml"))
     parser.add_argument("--account", default="testing")
-    parser.add_argument("--output-dir", type=Path, default=Path("artifacts/screen_recognition/live"))
+    parser.add_argument("--output-dir", type=Path, default=Path(".local-data/artifacts/screen_recognition/live"))
     parser.add_argument("--route", choices=tuple(route.value for route in ProbeRoute), default=ProbeRoute.NAVIGATION.value)
     arguments = parser.parse_args()
     print(run_probe(arguments.config, arguments.account, arguments.output_dir, route=arguments.route))
