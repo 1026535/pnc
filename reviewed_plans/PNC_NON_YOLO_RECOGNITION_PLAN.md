@@ -42,11 +42,12 @@ mutation mechanism, YOLO detector, arbitrary new language/aspect or new game tas
    remaining producer/qualification, reassigned to A, or explicitly blocked. Reconcile
    historical inventory counts instead of treating 83 fallback families as 83 mandatory
    rewrites. Reference the generated inventory from this plan; do not copy the whole matrix.
-2. Agree concrete A-consumer/B-producer contracts using the shared procedure. Prioritize
+2. Own and publish producer contracts through the existing canonical models. Prioritize
    B04 Gathering/March node, formation, confirmation, slot and post-dispatch facts through
    both real observation paths, while A builds its mutation boundary. Use one Luna xhigh
-   worker for each bounded code/test slice, reusing the worker sequentially. Missing saved
-   geometry stays blocked; do independent work instead of inventing controls.
+   worker for bounded code/test slices, reusing the worker sequentially. Preserve settled
+   contracts and the current slice; peer approval before coding is not required. Missing
+   saved geometry stays blocked; continue independent work instead of inventing controls.
 3. Implement B08 login/mail/building or other active-family facts as A's dependency requests
    and evidence warrant. Maintain B05 Campaign assets and provide missing content/control
    facts while A owns routes. Complete B06's evidence-supported remaining categories;
@@ -59,10 +60,13 @@ mutation mechanism, YOLO detector, arbitrary new language/aspect or new game tas
    assets, current coverage and latency qualification using the original gates below.
    Coordinate benchmark timing with A so heavy tests do not invalidate measurements.
    Prior successful metrics/proofs are reused unless relevant code or evidence changed.
-6. Publish reviewed component slices for A to integrate. Continue unblocked items without
+6. Publish coherent reviewed producer batches with one contract/evidence record and one
+   ready-to-integrate notice to A per batch. Continue unblocked items without
    waiting for mainline landing or a fresh approval at every milestone. A alone owns combined
-   integration/mainline coordination. If a shared file needs changes, agree its single
-   writer first; do not modify A's branch or simultaneously edit the same registry symbols.
+   integration/mainline coordination. Follow the fixed ownership in the shared plan;
+   no routine status/acknowledgement or per-slice ownership negotiation. B owns observation
+   models and selector declarations; A owns action consumers and runtime composition.
+   Escalate actual breaking changes or material blockers, not previously recorded gaps.
 
 ### Acceptance and completion
 

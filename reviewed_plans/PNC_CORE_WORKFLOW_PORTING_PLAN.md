@@ -35,9 +35,10 @@ while migration of existing Daily execution remains A17.
    tasks: Login, SendMail, BuildingConstruction, BuildingUpgrade, Research, Gathering and
    Campaign. Use that narrow caller check to catch new completed work, not a broad audit.
 2. Supervisor: define X01's smallest concrete typed operation/authority/journal contract
-   and tests, reusing existing exact target/budget semantics. Send B the actual observation
-   requirements for Research/Gathering and any missing login/mail facts. Meanwhile one
-   Luna xhigh worker can implement the independently evidence-supported Login migration.
+   and tests, reusing existing exact target/budget semantics. Consume B's published facts;
+   record missing observations once and batch only material blocker requests under the
+   shared plan's communication rule. One Luna xhigh worker implements an unblocked port;
+   if Login lacks controls, continue the existing Daily adapter or another supported slice.
 3. Implement X01 offline and prove rejection before dispatch, current-frame guards,
    journal continuity, exception/cleanup ownership and ambiguous-result no replay. Do not
    simply enable the resource-changing enum. Resolve concrete authority-model gaps before
@@ -76,8 +77,9 @@ symbol/fixture needed and continue unblocked rows. No worktree cleanup or new ta
 ## Working status
 
 - Start: shared plan baseline; prior A/B component work integrated and offline validated.
-- Next: X01 contract plus A03 independent migration; B04 producer request.
-- Interface agreements: append only concrete agreed symbol/fixture contracts here and
-  reference them from B's plan; do not duplicate the shared ownership table.
+- Continue current X01/consumer work; do not restart or resend settled producer requests.
+- Dependencies: record missing facts once and reference B's published interface evidence.
+  B owns producer contracts; A owns consumer acceptance and integration. No routine peer
+  acknowledgement or shared-file ownership negotiation is required.
 - Live: alternate-castle switch, Campaign automated route and remaining mutating/sending
   workflows need separate exact authorization and evidence.
