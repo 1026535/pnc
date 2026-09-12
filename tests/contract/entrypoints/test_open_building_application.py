@@ -284,8 +284,8 @@ class OpenBuildingApplicationTests(unittest.TestCase):
 
         second_application.reserve_accounts.assert_not_called()
 
-    def test_legacy_task_id_dispatch_remains_available(self) -> None:
-        """Authored TaskId callers retain the legacy ScriptRunner dispatch boundary."""
+    def test_run_task_delegates_to_application_runner(self) -> None:
+        """The generic TaskId API remains an application-runner delegation boundary."""
 
         application = Mock()
         api = AutomationApi(application=application)
