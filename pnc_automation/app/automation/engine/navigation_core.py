@@ -6,7 +6,7 @@ from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
 import time
-from typing import Protocol
+from typing import Literal, Protocol
 
 from pnc_automation.app.pnc.domain.action_requests import (
     ActionRequest,
@@ -243,6 +243,36 @@ class NavigationCore:
             observe_content,
         )
 
+    def scroll_castle_roster(
+        self,
+        direction: Literal["up", "down"],
+        *,
+        observe_content: Callable[[str], Observation],
+    ) -> Observation:
+        """Scroll the Manage Characters roster once without selecting a row."""
+
+        if direction not in {"up", "down"}:
+            raise ValueError("Castle-roster scrolling requires direction 'up' or 'down'.")
+        self._sequence += 1
+        label = f"core_{self._sequence}_castle_roster_scroll"
+        before = observe_content(f"{label}_source")
+        if before.blocking_popup or before.screen_type != ScreenType.PNC_CASTLE_SELECTION:
+            raise RuntimeError(
+                "Castle-roster scrolling requires a freshly observed, unblocked Manage Characters screen."
+            )
+        return self._execute_content_and_confirm(
+            SwipeAction(
+                direction=direction,
+                distance_ratio=0.58,
+                duration_ms=450,
+                reason="replacement_scan_active_castle",
+            ),
+            before,
+            frozenset({ScreenType.PNC_CASTLE_SELECTION}),
+            label,
+            observe_content,
+        )
+
     def _execute_content_and_confirm(
         self,
         action: ActionRequest,
@@ -253,7 +283,7 @@ class NavigationCore:
     ) -> Observation:
         """Execute one bounded content action without replaying a failed gesture."""
         if not self.actuator.execute_action(action, before):
-            raise RuntimeError("Navigation actuator did not execute the mail action.")
+            raise RuntimeError("Navigation actuator did not execute the content action.")
         started = self.clock()
         stable = 0
         previous = ScreenType.UNKNOWN
@@ -266,12 +296,12 @@ class NavigationCore:
             self.record({"event": "observed", "screen": after.screen_type.name,
                          "artifact": str(after.artifact_path), "blocked": after.blocking_popup})
             if after.captured_at <= captured_at:
-                raise RuntimeError("Mail action received a stale capture; completion is unproven.")
+                raise RuntimeError("Content action received a stale capture; completion is unproven.")
             captured_at = after.captured_at
             if self.clock() - started >= self.policy.max_seconds:
                 break
             if after.blocking_popup:
-                raise RuntimeError("Mail action was interrupted; no recovery action or repeated gesture sent.")
+                raise RuntimeError("Content action was interrupted; no recovery action or repeated gesture sent.")
             if after.screen_type in destinations:
                 stable = stable + 1 if after.screen_type == previous else 1
                 if stable >= self.policy.stable_observations:
@@ -280,9 +310,9 @@ class NavigationCore:
             else:
                 stable = 0
                 if after.screen_type not in {before.screen_type, ScreenType.UNKNOWN, ScreenType.PNC_LOADING}:
-                    raise RuntimeError("Mail action reached an unexpected screen; inspect the recorded frame.")
+                    raise RuntimeError("Content action reached an unexpected screen; inspect the recorded frame.")
             previous = after.screen_type
-        raise RuntimeError("Mail action completion budget exhausted; the gesture was not repeated.")
+        raise RuntimeError("Content action completion budget exhausted; the gesture was not repeated.")
 
     def _execute_and_confirm(
         self, action: ActionRequest, before: Observation,

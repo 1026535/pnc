@@ -414,6 +414,37 @@ class NavigationCoreTests(unittest.TestCase):
         self.assertEqual(len(actuator.actions), 1)
         self.assertIsInstance(actuator.actions[0], SwipeAction)
 
+    def test_scroll_castle_roster_uses_one_typed_swipe_without_row_tap(self):
+        """Keeps active-castle search to one reviewed roster gesture per call."""
+
+        actuator = Actuator()
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+        frames = iter(
+            (
+                mail_frame(ScreenType.PNC_CASTLE_SELECTION, captured_at=now),
+                mail_frame(ScreenType.PNC_CASTLE_SELECTION, captured_at=now + timedelta(seconds=1)),
+                mail_frame(ScreenType.PNC_CASTLE_SELECTION, captured_at=now + timedelta(seconds=2)),
+            )
+        )
+        core = NavigationCore(
+            actuator,
+            lambda _: mail_frame(ScreenType.PNC_CASTLE_SELECTION),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+
+        result = core.scroll_castle_roster("down", observe_content=lambda _: next(frames))
+
+        self.assertEqual(ScreenType.PNC_CASTLE_SELECTION, result.screen_type)
+        self.assertEqual(1, len(actuator.actions))
+        self.assertIsInstance(actuator.actions[0], SwipeAction)
+        self.assertEqual("down", actuator.actions[0].direction)
+
+        with self.assertRaisesRegex(ValueError, "direction"):
+            core.scroll_castle_roster("sideways", observe_content=lambda _: next(frames))
+        self.assertEqual(1, len(actuator.actions))
+
 
 class NavigationPerceptionTests(unittest.TestCase):
     def capture(self, name):

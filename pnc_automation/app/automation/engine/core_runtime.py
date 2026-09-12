@@ -10,7 +10,11 @@ from uuid import uuid4
 
 from pnc_automation.app.authoring.config.models import AccountConfig, CastleIdentity, LiveAutomationRole
 from pnc_automation.app.automation.engine.observed_action_executor import ObservedActionExecutor
-from pnc_automation.app.pnc.domain.observation import CurrentCastleEvidenceKind, Observation
+from pnc_automation.app.pnc.domain.observation import (
+    CurrentCastleEvidenceKind,
+    ListEntryKind,
+    Observation,
+)
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.vision.navigation_perception import NavigationPerception
 from pnc_automation.app.automation.engine.navigation_core import (
@@ -133,17 +137,46 @@ class CoreRuntime:
         identity = self.observe("active_castle_identity", include_content=True)
         if identity.captured_at <= selection_observation.captured_at:
             raise RuntimeError("Active castle identity capture was stale relative to navigation completion.")
-        if identity.blocking_popup:
-            raise RuntimeError("Active castle identity was blocked by a popup; no recovery action was sent.")
-        if identity.screen_type != ScreenType.PNC_CASTLE_SELECTION:
-            raise RuntimeError("Active castle identity preflight reached an unexpected screen.")
-        if identity.current_castle is None:
-            raise RuntimeError("Active castle identity was not observed; no castle switch is allowed.")
-        if identity.resolved_current_castle_evidence != CurrentCastleEvidenceKind.EXACT:
-            raise RuntimeError("Active castle identity lacked exact Manage Characters evidence.")
+        identity = self._scan_active_castle_identity(identity)
         self.record({"event": "active_castle_identity_verified", "screen": identity.screen_type.name})
         self.navigation.navigate(ScreenType.PNC_HOME_CITY)
-        return identity.current_castle
+        active_castle = identity.current_castle
+        if active_castle is None:
+            raise RuntimeError("Active castle identity disappeared after the bounded roster scan.")
+        return active_castle
+
+    def _scan_active_castle_identity(self, observation: Observation) -> Observation:
+        """Find the selected roster row with bounded swipes and no row taps."""
+
+        current = observation
+        for direction in ("down", "up"):
+            seen_signatures: set[tuple[tuple[str, str, object], ...]] = set()
+            for _ in range(6):
+                self._require_castle_roster_observation(current)
+                if current.current_castle is not None:
+                    if current.resolved_current_castle_evidence != CurrentCastleEvidenceKind.EXACT:
+                        raise RuntimeError("Active castle identity lacked exact Manage Characters evidence.")
+                    return current
+                signature = _castle_roster_signature(current)
+                if not signature:
+                    raise RuntimeError("Manage Characters exposed no typed castle rows; no castle switch is allowed.")
+                if signature in seen_signatures:
+                    break
+                seen_signatures.add(signature)
+                current = self.navigation.scroll_castle_roster(
+                    direction,
+                    observe_content=lambda label: self.observe(label, include_content=True),
+                )
+        raise RuntimeError("Active castle identity was not found within the bounded roster scan; no castle switch is allowed.")
+
+    @staticmethod
+    def _require_castle_roster_observation(observation: Observation) -> None:
+        """Require one unblocked Manage Characters content frame."""
+
+        if observation.blocking_popup:
+            raise RuntimeError("Active castle identity was blocked by a popup; no castle switch is allowed.")
+        if observation.screen_type != ScreenType.PNC_CASTLE_SELECTION:
+            raise RuntimeError("Active castle identity preflight reached an unexpected screen.")
 
     def _settle_initial_screen(self) -> Observation:
         """Waits passively through loading until a known screen is stable."""
@@ -286,6 +319,23 @@ def _default_trace_path(*, script_runner: ScriptRunner, artifact_directory: str,
         / sanitize_artifact_segment(artifact_directory)
         / f"{run_id}_core_trace.jsonl"
     )
+
+
+def _castle_roster_signature(observation: Observation) -> tuple[tuple[str, str, int | None], ...]:
+    """Return the ordered visible roster identity without exposing it to traces."""
+
+    signature: list[tuple[str, str, int | None]] = []
+    for entry in observation.entries(ListEntryKind.CASTLE):
+        kingdom = entry.metadata.get("kingdom")
+        castle_level = entry.metadata.get("castle_level")
+        signature.append(
+            (
+                kingdom if isinstance(kingdom, str) else "",
+                entry.title_text or "",
+                castle_level if isinstance(castle_level, int) else None,
+            )
+        )
+    return tuple(signature)
 
 
 def _sanitize_trace_entry(entry: dict[str, object]) -> dict[str, object]:
