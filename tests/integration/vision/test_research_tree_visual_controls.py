@@ -5,18 +5,23 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import UTC, datetime
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from PIL import Image
 
 from pnc_automation.app.automation.engine.action_executor import ActionExecutor
+from pnc_automation.app.automation.tasks.research_task import ResearchTask
 from pnc_automation.app.pnc.domain.action_requests import TapAction
 from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict, ScreenEvidence
-from pnc_automation.app.pnc.domain.observation import VisibleElementSourceKind
+from pnc_automation.app.pnc.domain.observation import ListEntryKind, VisibleElementSourceKind
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.navigation_perception import NavigationPerception
-from pnc_automation.app.pnc.vision.observation_builder import ObservationAdditions
+from pnc_automation.app.pnc.vision.observation_builder import (
+    ImageSelectorEngine,
+    ObservationAdditions,
+    ObservationBuilder,
+)
 from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservationEnricher
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
 from pnc_automation.app.pnc.vision.selectors import (
@@ -29,13 +34,18 @@ from pnc_automation.app.pnc.vision.visual_screen_recognizer import load_visual_s
 from pnc_automation.core.infra.capture.screenshot_service import CapturedScreenshot
 from pnc_automation.core.vision.image.models import Bounds
 from pnc_automation.core.vision.ocr.ocr_service import OcrLine, ObservationOcrContext
+from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
 
 from tests.support.automation.session import FakeSession
+from tests.support.automation.engine.make_observed_action_executor import (
+    _make_observed_action_executor,
+)
 from tests.support.core.logging import build_logger
 from tests.support.paths import TEST_DATA_ROOT
 from tests.support.pnc.capture_vision.encode_png import _encode_png
 from tests.support.pnc.capture_vision.fake_ocr_service import _FakeOcrService
 from tests.support.pnc.capture_vision.fake_screenshot_session import make_captured_frame
+from tests.support.pnc.observations import make_entry, make_observation
 
 
 FIXTURE_PATH = TEST_DATA_ROOT / "screen_recognition" / "research_tree_development.png"
@@ -176,6 +186,21 @@ def _perception(lines: tuple[OcrLine, ...] = ()) -> NavigationPerception:
             capture.frame_ref,
             "research-tree-visual-controls-test",
         ),
+    )
+
+
+def _observation_builder(lines: tuple[OcrLine, ...]) -> ObservationBuilder:
+    """Wire the production builder, registry, recognizer, and selector engine."""
+
+    registry = build_default_selector_registry()
+    matcher = OpenCvTemplateMatcher()
+    return ObservationBuilder(
+        selector_registry=registry,
+        selector_engine=ImageSelectorEngine(matcher),
+        screen_classifier=ScreenClassifier(),
+        enricher=PncObservationEnricher(selector_registry=registry),
+        visual_recognizer=load_visual_screen_recognizer(matcher=matcher),
+        ocr_service=_FakeOcrService(lines=lines),
     )
 
 
@@ -345,6 +370,71 @@ class ResearchTreeVisualControlTests(unittest.TestCase):
         self.assertEqual(start.source_screen, ScreenType.PNC_RESEARCH_TREE)
         self.assertEqual(start.source_layout_id, "research_tree_development")
         self.assertEqual(start.frame_ref, observation.frame_ref)
+
+    def test_production_builder_publishes_start_to_research_consumer(self) -> None:
+        """Carries the measured Start through the legacy task's observed action boundary."""
+
+        detail = _observation_builder(_detail_ocr_lines()).build(
+            _capture(_load_detail_fixture())
+        )
+        self.assertEqual(detail.screen_type, ScreenType.PNC_RESEARCH_TREE)
+        self.assertEqual(detail.decision.guard, GuardVerdict.CLEAR)
+        start = detail.require(UiElementId.PNC_RESEARCH_START_BUTTON)
+        self.assertEqual(start.source_kind, VisibleElementSourceKind.TEMPLATE)
+        self.assertEqual(start.source_screen, ScreenType.PNC_RESEARCH_TREE)
+        self.assertEqual(start.source_layout_id, "research_tree_development")
+        self.assertEqual(start.frame_ref, detail.frame_ref)
+
+        task = ResearchTask()
+        context = Mock(params=task.parse_params({"priority": ["development"]}))
+        before = make_observation(
+            ScreenType.PNC_RESEARCH_TREE,
+            list_entries=(
+                make_entry(
+                    ListEntryKind.RESEARCH,
+                    title="Construction I",
+                    metadata={"category": "development"},
+                ),
+            ),
+        )
+        start_action = next(
+            action
+            for action in task.plan(context, before)
+            if isinstance(action, TapAction)
+            and action.selector_id == UiElementId.PNC_RESEARCH_START_BUTTON
+        )
+        active = _observation_builder(_active_detail_ocr_lines()).build(
+            _capture(_load_active_detail_fixture())
+        )
+        session = FakeSession()
+        result = _make_observed_action_executor(session).execute_actions(
+            (start_action,),
+            detail,
+            observe=lambda label, request=None: active,
+        )
+
+        self.assertEqual(session.taps, [start.action_point])
+        self.assertTrue(task.verify(context, before, result.observation).succeeded)
+
+    def test_production_builder_blocks_start_behind_required_update(self) -> None:
+        """Keeps the measured background Start unavailable when an update owns the frame."""
+
+        popup_lines = (
+            *_detail_ocr_lines(),
+            OcrLine(
+                "New version detected. Tap Confirm to update.",
+                Bounds(58, 380, 420, 28),
+                1.0,
+            ),
+            OcrLine("Confirm", Bounds(221, 531, 90, 27), 1.0),
+        )
+        observation = _observation_builder(popup_lines).build(
+            _capture(_load_detail_fixture())
+        )
+
+        self.assertEqual(observation.screen_type, ScreenType.PNC_POPUP)
+        self.assertTrue(observation.blocking_popup)
+        self.assertFalse(observation.has(UiElementId.PNC_RESEARCH_START_BUTTON))
 
     def test_research_detail_owns_frame_before_generic_popup_fallback(self) -> None:
         """Keeps live detail OCR from letting a generic popup fallback steal ownership."""

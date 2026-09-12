@@ -73,7 +73,11 @@ from pnc_automation.core.vision.ocr.ocr_service import (
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
 from pnc_automation.app.pnc.vision.selectors import DetectionKind, SelectorRegistry
 from pnc_automation.app.pnc.vision.world_map_coordinates import read_world_coordinate_bar_text, world_coordinate_text_matches
-from pnc_automation.app.pnc.vision.visual_screen_recognizer import VisualRecognition, VisualScreenRecognizer
+from pnc_automation.app.pnc.vision.visual_screen_recognizer import (
+    VisualRecognition,
+    VisualScreenRecognizer,
+    visual_controls_for_decision,
+)
 from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher, PreparedFrame
 
 class ObservationEnricher(Protocol):
@@ -579,6 +583,16 @@ class ObservationBuilder:
         visible_elements = _merge_visible_element_maps(
             visible_elements,
             additions.visible_elements,
+        )
+        decision = self.screen_classifier.decide(
+            visible_elements,
+            combined_evidence,
+            guard=guard_verdict,
+            viewport_reviewed=viewport_reviewed,
+        )
+        visible_elements = _merge_visible_element_maps(
+            visible_elements,
+            visual_controls_for_decision(visual, decision),
         )
         decision = self.screen_classifier.decide(
             visible_elements,
