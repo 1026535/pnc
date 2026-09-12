@@ -61,7 +61,7 @@ class ResourceInventoryVisionTests(unittest.TestCase):
         self.assertEqual("invalid_pack_amount", rows[0].metadata["unresolved_reason"])
 
     def test_malformed_pack_separators_are_unresolved(self) -> None:
-        for title in ("1.2.3K Food", "1,,2K Food"):
+        for title in ("1.2.3K Food", "1,,2K Food", "1,5K Food", "1,5K Fo0d"):
             with self.subTest(title=title):
                 lines = tuple(
                     replace(line, text=title) if line.text == "1K Food" else line
@@ -83,8 +83,21 @@ class ResourceInventoryVisionTests(unittest.TestCase):
 
         self.assertEqual(1_500, rows[0].metadata["amount"])
 
+    def test_preserves_numeric_punctuation_when_recovering_resource_word(self) -> None:
+        """Known resource glyph repair cannot change the observed denomination."""
+
+        for title, amount in (("1.5K Fo0d", 1_500), ("1,500 Wo0d", 1_500)):
+            with self.subTest(title=title):
+                lines = tuple(
+                    replace(line, text=title) if line.text == "1K Food" else line
+                    for line in _lines()
+                )
+                rows = parse_resource_inventory(image=_image(), lines=lines)
+                self.assertEqual(1, len(rows))
+                self.assertEqual(amount, rows[0].metadata["amount"])
+
     def test_malformed_owned_grouping_is_unresolved(self) -> None:
-        for owned in ("1,2", "1,,2"):
+        for owned in ("1,2", "1,,2", ",", "35,17"):
             with self.subTest(owned=owned):
                 lines = tuple(
                     replace(line, text=f"Owned: {owned}") if line.text.startswith("Owned")
