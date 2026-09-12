@@ -118,25 +118,6 @@ class RunnerEndToEndTests(unittest.TestCase):
                 ),
             ),
             make_observation(
-                ScreenType.PNC_MORE_MENU,
-                visible_ids=(UiElementId.PNC_BOTTOM_NAV_MORE, UiElementId.PNC_MORE_SETTINGS),
-            ),
-            make_observation(
-                ScreenType.PNC_SETTINGS,
-                visible_ids=(UiElementId.PNC_MORE_MANAGE_CHAR,),
-            ),
-            make_observation(
-                ScreenType.PNC_CASTLE_SELECTION,
-                list_entries=(
-                    make_entry(
-                        ListEntryKind.CASTLE,
-                        title="Main",
-                        selected=False,
-                        metadata={"kingdom": "K230", "castle_level": 8},
-                    ),
-                ),
-            ),
-            make_observation(
                 ScreenType.PNC_HOME_CITY,
                 visible_ids=(
                     UiElementId.PNC_HOME_WORLD_SWITCH,
@@ -336,10 +317,14 @@ class RunnerEndToEndTests(unittest.TestCase):
         # registry rejects the unsupported research selector when that step
         # is reached, before any research tap is dispatched.
         self.assertEqual(fake_session.launches, 0)
-        core_step_executor.execute.assert_called_once()
+        self.assertEqual(core_step_executor.execute.call_count, 2)
+        self.assertEqual(
+            [call.kwargs["step"].task for call in core_step_executor.execute.call_args_list],
+            [TaskId.ENSURE_GAME_RUNNING, TaskId.SELECT_CASTLE],
+        )
         self.assertIn("user@example.com", fake_session.texts)
         self.assertIn("secret", fake_session.texts)
-        self.assertEqual(len(fake_session.taps), 9)
+        self.assertEqual(len(fake_session.taps), 7)
 
     def test_runner_dispatches_world_chat_task_to_typed_core_executor(self) -> None:
         """Routes the registered World Chat task without entering the legacy action loop."""
