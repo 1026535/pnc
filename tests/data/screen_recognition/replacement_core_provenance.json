@@ -809,6 +809,78 @@
     "notes": "Measured independent Castle body description anchor; positive endpoint frame was redacted only in the account/avatar band for the portable fixture."
   },
   {
+    "asset": "screen_anchors/research_tree_development_0.png",
+    "source": "artifacts/2026-09-12/testing/20260912T180007Z_core_20260912T175539Z_09c5f27b_0034_development_evidence_1.png",
+    "source_sha256": "96e54c06720c36840b7e6ae31d7c89201c40b1dce7122957398f8b37417e4ce7",
+    "reference_size": [540, 960],
+    "crop": [108, 10, 303, 43],
+    "notes": "Measured Development Research Tree title identity anchor from the reviewed live frame."
+  },
+  {
+    "asset": "screen_anchors/research_tree_development_1.png",
+    "source": "artifacts/2026-09-12/testing/20260912T180007Z_core_20260912T175539Z_09c5f27b_0034_development_evidence_1.png",
+    "source_sha256": "96e54c06720c36840b7e6ae31d7c89201c40b1dce7122957398f8b37417e4ce7",
+    "reference_size": [540, 960],
+    "crop": [463, 80, 530, 120],
+    "notes": "Measured independent Master Researcher icon identity anchor; caption excluded."
+  },
+  {
+    "asset": "screen_anchors/research_node_detail_0.png",
+    "source": "artifacts/2026-09-12/testing/20260912T192049Z_core_20260912T183757Z_5d65bcbf_0046_research_node_detail.png",
+    "source_sha256": "86cd3fb14a72b09d374c96bf82107734fad6cc7d9c343bc6c2f18d62c62213c8",
+    "reference_size": [540, 960],
+    "crop": [480, 276, 522, 317],
+    "notes": "Measured generic right edge of the reviewed research detail panel header; title and resource values excluded."
+  },
+  {
+    "asset": "screen_anchors/research_node_detail_1.png",
+    "source": "artifacts/2026-09-12/testing/20260912T192049Z_core_20260912T183757Z_5d65bcbf_0046_research_node_detail.png",
+    "source_sha256": "86cd3fb14a72b09d374c96bf82107734fad6cc7d9c343bc6c2f18d62c62213c8",
+    "reference_size": [540, 960],
+    "crop": [100, 526, 365, 549],
+    "notes": "Measured stable Original Time and Actual Time section labels from the reviewed research detail frame; values excluded."
+  },
+  {
+    "asset": "screen_anchors/research_node_detail_research_button.png",
+    "source": "artifacts/2026-09-12/testing/20260912T192049Z_core_20260912T183757Z_5d65bcbf_0046_research_node_detail.png",
+    "source_sha256": "86cd3fb14a72b09d374c96bf82107734fad6cc7d9c343bc6c2f18d62c62213c8",
+    "reference_size": [540, 960],
+    "crop": [304, 447, 439, 496],
+    "notes": "Measured the distinct blue normal Research button; the adjacent gold Research Now control is excluded."
+  },
+  {
+    "asset": "tests/data/screen_recognition/research_node_detail.png",
+    "source": "artifacts/2026-09-12/testing/20260912T192049Z_core_20260912T183757Z_5d65bcbf_0046_research_node_detail.png",
+    "source_sha256": "86cd3fb14a72b09d374c96bf82107734fad6cc7d9c343bc6c2f18d62c62213c8",
+    "reference_size": [540, 960],
+    "preserved_regions": [[0, 0, 540, 960]],
+    "notes": "Portable 540x960 fixture normalized from the reviewed 900x1600 research detail frame."
+  },
+  {
+    "asset": "screen_anchors/research_node_detail_active_speedup.png",
+    "source": "artifacts/2026-09-12/testing/20260912T201102Z_core_20260912T183757Z_5d65bcbf_0051_research_start_postcondition.png",
+    "source_sha256": "eb59090b5a18bb8bb31b4214ebb10457df7c096a09a21b685e4e60eafdcc219d",
+    "reference_size": [540, 960],
+    "crop": [372, 425, 502, 469],
+    "notes": "Measured the stable blue Speedup button chrome in the active research detail frame; mutable progress fill and timer text are excluded."
+  },
+  {
+    "asset": "tests/data/screen_recognition/research_node_detail_active.png",
+    "source": "artifacts/2026-09-12/testing/20260912T201102Z_core_20260912T183757Z_5d65bcbf_0051_research_start_postcondition.png",
+    "source_sha256": "eb59090b5a18bb8bb31b4214ebb10457df7c096a09a21b685e4e60eafdcc219d",
+    "reference_size": [540, 960],
+    "preserved_regions": [[0, 0, 540, 960]],
+    "notes": "Portable 540x960 fixture normalized from the reviewed active research detail frame."
+  },
+  {
+    "asset": "tests/data/screen_recognition/research_node_detail_active_reloaded.png",
+    "source": "artifacts/2026-09-12/testing/20260912T202536Z_core_20260912T183757Z_5d65bcbf_0052_research_detail_reloaded.png",
+    "source_sha256": "da70056a626358902149ea7eb8ff1cb76da2d3e6c98eb593c67e9772b840e3b5",
+    "reference_size": [540, 960],
+    "preserved_regions": [[0, 0, 540, 960]],
+    "notes": "Portable 540x960 fixture normalized from a second reviewed active detail frame after elapsed research progress."
+  },
+  {
     "asset": "screen_anchors/chat_input_field.png",
     "source": "artifacts/2026-09-12/serious_stuff/20260912T180229Z_core_20260912T175827Z_c90c90fa_0035_kingdom_send_eligibility.png",
     "source_sha256": "639129b94ec3dd74ebb65f344e4ce23281a7287511a5b3e2b300210f0d205c1f",
