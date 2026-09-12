@@ -1,5 +1,19 @@
 # Replacement core porting validation ledger
 
+## Resumed ports — September 12, 2026
+
+The recovered work now implements direct roster refresh and authored Kingdom Chat dispatch. The candidate includes `origin/main` through `c7dfdd5`, preserving quiescent shutdown, scoped reservations, and generated-output defaults. It combines the roster branch through `93c2f84` and Chat branch through `23be5d0`; both feature checkpoints were pushed before integration. Older checkpoints below remain historical evidence.
+
+Roster refresh passed the corrected live scan on `serious_stuff`: 12 castles, `full_scan`, two top-seek swipes, three scan swipes, and two distinct scan windows. The canonical store wrote `artifacts/replacement_core/roster_port_castles.yaml`. The helper checked that the real `config/castles.yaml` bytes were unchanged. Trace: `artifacts/2026-09-12/serious_stuff/20260912T070027Z_4bf42509_core_trace.jsonl`; final Home: `20260912T070534Z_core_20260912T070027Z_4bf42509_0063_core_18_after_1.png`. The earlier whitespace-gap failure is resolved; the overlap, duplicate, cycle, and exact selected-identity guards remain enabled.
+
+Authored Kingdom Chat passed through `ApplicationRunner.run` using generated YAML with one current-castle `collect_kingdom_chat` step. The result was `CoreStepRunResult`, `success`, and final `pnc_home_city`. Trace: `artifacts/2026-09-12/serious_stuff/20260912T070604Z_fa61a59e_core_trace.jsonl`; final Home: `20260912T071116Z_core_20260912T070604Z_fa61a59e_0046_core_12_after_1.png`. Result: `artifacts/replacement_core/authored_chat_port_result.json`. This proves the typed authored dispatch path; it does not claim live validation of switching to another castle.
+
+One process held the canonical `serious_stuff` reservation across both proofs and their preparation. Coding workers remained offline. The configured game returned to Home between workflows, no castle was selected, no message was sent, and no resource was spent. The earlier launcher/UNKNOWN interruption was superseded by a fresh confirmed Home observation before these proofs. The pre-existing instance stayed open with `keep_warm` cleanup.
+
+Focused integration validation passed 69 tests. The final `tools/run_tests.py full` gate passed: 1,490 total tests, 1,486 passed and four expected skips, in 146.614 seconds. Results are in the integration worktree's `.test-impact/results.json`. `git diff --check` passed, and root review found no remaining actionable issues in these two slices. The Windows `py` launcher was unavailable after the sandbox profile changed; the gate used `C:/Users/lebel/AppData/Local/Programs/Python/Python313/python.exe tools/run_tests.py full` instead.
+
+Remaining caller migration: authored mail, open-building, and roster task IDs still need their typed bindings. Authored mail is being implemented separately on `codex/collect-mail-script-core-port`; its unlanded work must not be confused with the already integrated direct mail workflow. Login, castle selection, sending, resource-changing tasks, and Daily maintenance execution remain outside these completed slices.
+
 ## Recovery checkpoint — September 12, 2026
 
 This checkpoint was reconstructed from fetched `origin/main` at `76c486f`, the current task registry, application entrypoints, branch ancestry, and preserved worktree diffs after a reported loss of conversation context. Earlier sections below are chronological evidence; their old blockers and limitations are superseded where this checkpoint or the final role-selected evidence says otherwise.

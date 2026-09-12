@@ -87,7 +87,7 @@ This guide describes the bounded path for moving one workflow onto the reviewed 
 
 ## Current boundary
 
-The direct `open-building` CLI and Python entry points use the replacement core. Authored scripts with `TaskId.OPEN_BUILDING` remain a legacy compatibility boundary until core script dispatch is available.
+The direct `open-building` CLI and Python entry points use the replacement core. Authored scripts with `TaskId.OPEN_BUILDING` still need their binding migrated to the typed script dispatcher.
 
 `DailyQuestStatusWorkflow` reports one `visible_viewport` from the fresh Daily screen. It does not scroll, claim, acknowledge, select a castle, infer unseen rows, or claim full-screen coverage. It fails when both recognized rows and unknown titles are absent. Known safe popup recovery belongs to the connected runtime and shared observed-action executor; the workflow has no generic popup dismissal policy. Navigation does not retry a tap, replay a failed workflow, or use the legacy observer as a fallback. A task-owned dialog or popup without an explicit safe selector still stops the route.
 
@@ -104,7 +104,7 @@ The full workflow migration is incomplete. A direct API port does not migrate an
 | Collect-mail | Integrated direct Python port; authored task dispatch remains legacy. |
 | Kingdom Chat collection | Integrated direct Python port and typed authored `TaskId.COLLECT_KINGDOM_CHAT` dispatch. |
 | Authored scripts | `TaskId.COLLECT_KINGDOM_CHAT` uses the typed core dispatcher; other registered `TaskId`/YAML steps remain on legacy dispatch. |
-| Bootstrap and roster workflows | Login, castle selection, and roster refresh remain unported. Core preflight reuses foreground/bootstrap behavior; safe popup recovery belongs to the canonical runtime. Neither is an empty workflow to recreate. |
+| Bootstrap and roster workflows | Roster refresh has a typed direct Python API; its authored task remains legacy. Login and castle selection remain unported. Core preflight reuses foreground/bootstrap behavior; safe popup recovery belongs to the canonical runtime. Neither is an empty workflow to recreate. |
 | Chat and mail sending | Need typed input/send operations and explicit authorization for the actual message and destination before live sending. |
 | Resource-changing workflows | Construction, upgrade, research, gathering, campaign actions, and Daily maintenance execution still need reviewed typed operations and the existing authorizer/executor/journal bridge. Live spending needs an exact action, target, and budget. |
 
@@ -157,6 +157,16 @@ Earlier Daily validation recorded a visible cavalry Go control that OCR classifi
 The replacement runner supports `WorkflowEffect.READ_ONLY` and `WorkflowEffect.NONSPENDING_STATE_CHANGE`. Collect-mail uses the latter because opening unread mail may update read state and archive persistence writes local files, while it spends no in-game resources. Resource-changing work remains behind the existing Daily authorizer, executor, and journal contracts. Adding a boolean acknowledgement, direct executor access, or a second journal would bypass the intended boundary and is not a valid port.
 
 Direct Python entry points for collect-mail and Kingdom Chat route through their dedicated `ApplicationRunner` methods and return typed core results. Their direct API calls use the canonical account reservation scope. Authored `TaskId.COLLECT_MAIL` script steps remain on the legacy `ScriptRunner` dispatch path; authored `TaskId.COLLECT_KINGDOM_CHAT` steps use the typed core dispatcher. Typed dispatch has no legacy fallback or replay.
+
+## Typed roster refresh and phase cleanup
+
+`RefreshCastleRosterWorkflow` performs a bounded Home-to-Home scan without selecting a castle. It requires two unchanged scroll outcomes at each end, ordered overlap between advancing windows, and exact selected-castle evidence matching preflight. Gaps, duplicates, cycles, exhausted budgets, or changed identities stop before persistence. Scan matching uses the exact kingdom and canonical `normalize_ocr_text` name; it preserves observed names and gives observed levels priority over cached hints.
+
+The canonical `CastleRosterStore.replace_full_scan` owns persistence and preserves other accounts. The September 12 live proof found 12 castles across two distinct scan windows, with two top-seek swipes and three scan swipes. It wrote an artifact roster and confirmed Home without changing the protected castle configuration. Evidence: `artifacts/replacement_core/roster_port_result.json`, trace `artifacts/2026-09-12/serious_stuff/20260912T070027Z_4bf42509_core_trace.jsonl`, and final Home frame `20260912T070534Z_core_20260912T070027Z_4bf42509_0063_core_18_after_1.png` in the same trace directory.
+
+Mail, Chat, open-building, and roster direct entrypoints inherit the outer reservation's `session_cleanup_policy`. They use the canonical `close_preserving_error` boundary to retain both execution and cleanup failures. Authored dispatch borrows the connected graph; only the outer script runner closes it. Use focused tests during development, then the required final full suite on the reviewed integration candidate.
+
+The authored Chat proof used one current-castle YAML step through `ApplicationRunner.run` and returned `CoreStepRunResult` with success and final Home. Its trace is `artifacts/2026-09-12/serious_stuff/20260912T070604Z_fa61a59e_core_trace.jsonl`; final Home is `20260912T071116Z_core_20260912T070604Z_fa61a59e_0046_core_12_after_1.png`. The same exclusive process reservation covered preparation and both completed proofs. No castle selection, message sending, or resource spending occurred. The integrated roster/Chat candidate passed 69 focused tests and the final portable gate: 1,490 total, 1,486 passed, four expected skips. Exact commands and recovery history are in the validation ledger.
 
 ## Acceptance checklist
 
