@@ -96,6 +96,7 @@ class CollectMailApplicationTests(unittest.TestCase):
             account,
             account.artifact_directory_name,
             required_role=LiveAutomationRole.LIVE_TESTING,
+            session_cleanup_policy=None,
         )
         runtime.close.assert_called_once_with()
 
@@ -168,6 +169,7 @@ class CollectMailApplicationTests(unittest.TestCase):
                 "limit_per_mailbox": 25,
                 "only_new": True,
             },
+            session_cleanup_policy=None,
         )
         application.reserve_accounts.assert_called_once_with(("account",))
         application.reserve_accounts.return_value.close.assert_called_once_with()
@@ -183,6 +185,7 @@ class CollectMailApplicationTests(unittest.TestCase):
                 "limit_per_mailbox": 2,
                 "only_new": True,
             },
+            session_cleanup_policy=None,
         )
         application.reserve_accounts.assert_called_once_with(("account",))
         application.reserve_accounts.return_value.close.assert_called_once_with()

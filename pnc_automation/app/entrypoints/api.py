@@ -464,6 +464,7 @@ class AutomationApi:
             lambda: self.application.run_open_building(
                 account_id=resolved_account_id,
                 building=building,
+                session_cleanup_policy=self._cleanup_policy_for(resolved_account_id),
             ),
         )
 
@@ -624,6 +625,7 @@ class AutomationApi:
                     "limit_per_mailbox": limit_per_mailbox,
                     "only_new": only_new,
                 },
+                session_cleanup_policy=self._cleanup_policy_for(resolved_account_id),
             ),
         )
 
@@ -637,7 +639,10 @@ class AutomationApi:
         resolved_account_id = self._resolve_account_id(account_id)
         return self._run_with_account_reservation(
             resolved_account_id,
-            lambda: self.application.run_collect_kingdom_chat(account_id=resolved_account_id),
+            lambda: self.application.run_collect_kingdom_chat(
+                account_id=resolved_account_id,
+                session_cleanup_policy=self._cleanup_policy_for(resolved_account_id),
+            ),
         )
 
     def refresh_castle_roster(
@@ -650,7 +655,10 @@ class AutomationApi:
         resolved_account_id = self._resolve_account_id(account_id)
         return self._run_with_account_reservation(
             resolved_account_id,
-            lambda: self.application.run_refresh_castle_roster(account_id=resolved_account_id),
+            lambda: self.application.run_refresh_castle_roster(
+                account_id=resolved_account_id,
+                session_cleanup_policy=self._cleanup_policy_for(resolved_account_id),
+            ),
         )
 
     def run_mail_schedules(
