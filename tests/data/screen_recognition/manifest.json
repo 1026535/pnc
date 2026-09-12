@@ -195,6 +195,16 @@
       ]
     },
     {
+      "image": "research_tree_development.png",
+      "screen": "PNC_RESEARCH_TREE",
+      "split": "reference",
+      "group": "2026-09-12/testing",
+      "sha256": "c0ed2d5f824812ff0ea4582bb12d407bbced432c2dead11cf35a2b76ce7c4ccb",
+      "expected_visual_screens": [
+        "PNC_RESEARCH_TREE"
+      ]
+    },
+    {
       "image": "goddess_statue_audit.png",
       "screen": "PNC_GODDESS_STATUE",
       "split": "reference",

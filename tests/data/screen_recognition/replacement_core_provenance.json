@@ -807,5 +807,21 @@
     "reference_size": [540, 960],
     "crop": [278, 142, 518, 182],
     "notes": "Measured independent Castle body description anchor; positive endpoint frame was redacted only in the account/avatar band for the portable fixture."
+  },
+  {
+    "asset": "screen_anchors/research_tree_development_0.png",
+    "source": "artifacts/2026-09-12/testing/20260912T180007Z_core_20260912T175539Z_09c5f27b_0034_development_evidence_1.png",
+    "source_sha256": "96e54c06720c36840b7e6ae31d7c89201c40b1dce7122957398f8b37417e4ce7",
+    "reference_size": [540, 960],
+    "crop": [108, 10, 303, 43],
+    "notes": "Measured Development Research Tree title identity anchor from the reviewed live frame."
+  },
+  {
+    "asset": "screen_anchors/research_tree_development_1.png",
+    "source": "artifacts/2026-09-12/testing/20260912T180007Z_core_20260912T175539Z_09c5f27b_0034_development_evidence_1.png",
+    "source_sha256": "96e54c06720c36840b7e6ae31d7c89201c40b1dce7122957398f8b37417e4ce7",
+    "reference_size": [540, 960],
+    "crop": [463, 80, 530, 120],
+    "notes": "Measured independent Master Researcher icon identity anchor; caption excluded."
   }
 ]
