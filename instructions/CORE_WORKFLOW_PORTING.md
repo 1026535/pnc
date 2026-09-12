@@ -13,7 +13,7 @@ This guide describes the bounded path for moving one workflow onto the reviewed 
 | Workflow effect and lifecycle | `pnc_automation/app/automation/engine/core_workflow.py` | `WorkflowSpec` validates known entry/exit screens and a `WorkflowEffect`. `CoreWorkflowRunner` allows `READ_ONLY` and `NONSPENDING_STATE_CHANGE`, owns entry, execution, and exit, and reports success only after exit is confirmed. |
 | Workflow access | `WorkflowContext` | Exposes only reviewed `navigate` and fresh expected-screen `observe_content`. It has no raw executor, claim, swipe, selector-tap, or transition API. |
 | Typed Daily Quest conversion | `pnc_automation/app/automation/daily_maintenance/coordinator.py:daily_viewport_from_observation` | Converts the canonical typed observation. Do not reimplement row parsing or claim semantics in a replacement workflow. |
-| Application and direct API wiring | `ApplicationRunner.run_daily_quest_status`, `ApplicationRunner.run_collect_mail`, and `pnc_automation.app.entrypoints.api` | Direct application and Python API calls parse and validate before connection, perform explicit active-castle identity preflight, and return typed core results. The `daily-quest-status` CLI remains the structured JSON example; collect-mail has no CLI command. |
+| Application and direct API wiring | `ApplicationRunner.run_daily_quest_status`, `ApplicationRunner.run_collect_mail`, `ApplicationRunner.run_collect_kingdom_chat`, and `pnc_automation.app.entrypoints.api` | Direct application and Python API calls validate before connection, perform explicit active-castle identity preflight, hold the configured account reservation for the complete operation, and return typed core results. The `daily-quest-status` CLI remains the structured JSON example; typed collect-mail and Kingdom Chat are direct Python ports. |
 | Mutation authorization | `daily_maintenance/authorization.py:DailyMutationAuthorizer`, `daily_maintenance/coordinator.py:ForbiddenDailyMutationExecutor`, `pnc_automation/app/pnc/persistence/daily_run_journal_store.py:DailyRunJournalStore` | These are the existing approval, executor, and journal owners for future resource-changing work. Do not add a second approval flag or a parallel journal. |
 
 ## Porting sequence
@@ -91,29 +91,21 @@ This guide describes the bounded path for moving one workflow onto the reviewed 
 
 Active-castle preflight recognizes the selected row through exact Manage Characters evidence. It searches a long roster with bounded swipes in both directions and stops on repeated viewport signatures without tapping a castle row.
 
-## Two remaining issues
+## Typed Kingdom Chat port
 
-### 1. One Daily Quest action was not classified
+`CollectKingdomChatWorkflow` is the typed direct Python port for one Kingdom Chat heartbeat. Its `WorkflowSpec` uses `PNC_HOME_CITY` for both entry and exit and `WorkflowEffect.NONSPENDING_STATE_CHANGE`: opening the chat may update in-game read state, while the canonical `ChatArchiveStore` writes the local archive. The workflow enters Chat through the reviewed Home shortcut, captures content with the Chat transcript observation scope, and leaves final Home confirmation to `CoreWorkflowRunner`.
 
-The `serious_stuff` proof found five visible quest rows. Four were classified as `go`. The fifth row, `Train Cavalry x250`, showed a Go button on screen but was returned as `unknown_action` because OCR did not resolve the button text.
+`WorkflowContext.select_chat_channel(ChatChannel.WORLD)` validates the enum and delegates to `NavigationCore`. The core reacquires a fresh unblocked Chat frame, skips the tap when Kingdom is already active, or requires the current-frame template-backed Kingdom tab, taps once, and accepts completion only after bounded fresh Chat frames confirm the requested active channel. The workflow uses the canonical `visible_player_chat_entries` and `visible_unsupported_chat_entries` projections before persisting through `ChatArchiveStore`; unsupported transcript shapes fail closed before archive writes.
 
-This does not make the read-only status result unsafe: the workflow preserves the uncertainty and never clicks a quest-row action. It does mean consumers cannot yet assume that every visible row has a known action state.
+`ApplicationRunner.run_collect_kingdom_chat` performs archive availability and exact active-castle preflight before constructing the workflow, then closes its one connected runtime on every outcome. The direct `AutomationApi.collect_kingdom_chat` and module helper hold or reuse the canonical scoped account reservation for the complete call and return the typed core result. Authored `TaskId.COLLECT_KINGDOM_CHAT` YAML steps remain on the legacy `ScriptRunner` dispatch boundary until typed script dispatch is implemented; no adapter routes those steps through `CoreWorkflowRunner`.
 
-Fix this in the canonical Daily Quest parser or its visual evidence. Do not add a special case to `DailyQuestStatusWorkflow`. The fix is complete when a deterministic screenshot test classifies this row as `go`, the live status command reports all five observed states correctly, and the workflow still treats genuinely unclear buttons as `unknown_action`.
+## Historical issues resolved
 
-### 2. A City HUD sparkle was mistaken for a popup Close button
-
-After the selector check left the game on Daily Quest, a separate `recover_to_home` proof reached City. Its next confirmation frame contained a sparkle on a right-side HUD icon. The generic upper-right Close-X detector classified that sparkle as `PNC_POPUP`, so navigation stopped before confirming recovery.
-
-The stop was safe: no second tap was sent, and the game remained in City. The false positive still makes recovery unreliable because a normal City animation can look like a blocking popup.
-
-Fix this in the canonical popup detector by requiring stronger popup ownership than an isolated X-shaped patch. Do not weaken `NavigationCore` so it ignores reported interruptions. The fix is complete when the saved City frame is classified as `PNC_HOME_CITY` without a blocking popup, real popup fixtures still block navigation, and a live `recover_to_home` run confirms two fresh City frames.
-
-Until both issues are fixed, report the Daily result with its `unknown_action` value and do not describe the replacement boundary as merge-ready.
+Earlier Daily validation recorded a visible cavalry Go control that OCR classified as `unknown_action` and a City HUD sparkle that was mistaken for a popup close control. The canonical parser and popup ownership fixes now have deterministic regressions and final role-selected validation. The original evidence and limits remain in the [replacement-core validation ledger](../reviewed_plans/PNC_CORE_PORTING_VALIDATION.md); those historical observations do not describe the current Daily result. The new Kingdom Chat port still requires its own bounded live proof.
 
 The replacement runner supports `WorkflowEffect.READ_ONLY` and `WorkflowEffect.NONSPENDING_STATE_CHANGE`. Collect-mail uses the latter because opening unread mail may update read state and archive persistence writes local files, while it spends no in-game resources. Resource-changing work remains behind the existing Daily authorizer, executor, and journal contracts. Adding a boolean acknowledgement, direct executor access, or a second journal would bypass the intended boundary and is not a valid port.
 
-Direct Python entry points for collect-mail route through `ApplicationRunner.run_collect_mail` and return its typed core result. Authored `TaskId.COLLECT_MAIL` script steps remain on the legacy `ScriptRunner` dispatch path until typed script dispatch is implemented; do not add an adapter that routes those steps through `CoreWorkflowRunner`.
+Direct Python entry points for collect-mail and Kingdom Chat route through their dedicated `ApplicationRunner` methods and return typed core results. Their direct API calls use the canonical account reservation scope. Authored `TaskId.COLLECT_MAIL` and `TaskId.COLLECT_KINGDOM_CHAT` script steps remain on the legacy `ScriptRunner` dispatch path until typed script dispatch is implemented; do not add adapters that route those steps through `CoreWorkflowRunner`.
 
 ## Acceptance checklist
 

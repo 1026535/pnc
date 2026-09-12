@@ -103,21 +103,16 @@ class CollectKingdomChatWorkflow(CoreWorkflow[CollectKingdomChatResult]):
             observation = context.select_chat_channel(ChatChannel.WORLD)
         self._require_kingdom_transcript(observation)
         chat_entries = observation.entries(ListEntryKind.CHAT_MESSAGE)
+        if not chat_entries:
+            raise TaskVerificationError(
+                "Kingdom Chat transcript contained no typed chat rows; no archive write was attempted.",
+                artifact_path=None if observation.artifact_path is None else str(observation.artifact_path),
+            )
         unsupported_entries = visible_unsupported_chat_entries(chat_entries)
         if unsupported_entries:
-            reasons = tuple(
-                sorted(
-                    {
-                        entry.message_text
-                        for entry in unsupported_entries
-                        if entry.message_text.strip()
-                    }
-                )
-            )
             raise TaskVerificationError(
                 "Kingdom Chat contained unsupported transcript rows; no archive write was attempted.",
                 unsupported_count=len(unsupported_entries),
-                unsupported_shapes=len(reasons),
                 artifact_path=None if observation.artifact_path is None else str(observation.artifact_path),
             )
         player_entries = visible_player_chat_entries(chat_entries)
