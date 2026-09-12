@@ -122,3 +122,30 @@ Other mutation capabilities and Resource Item/Hero Hall core adapters remain pen
 
 The connected summary also rejects an otherwise finished sweep with unknown quest
 titles; the real composition regression preserves these as incomplete work.
+
+### September 12 continuation: bounded Research consumer
+
+`codex/research-workflow-core-port` adds the typed Development-only workflow and
+extends the same boundary as `CoreMutationBoundary`. The exact scope permits one
+normal Research Start with zero diamond spend. Node selection reacquires the exact
+published row and proves idle detail before the canonical journaled dispatch. Two
+fresh guarded active-detail observations prove the receipt; disappearance of Start
+alone does not. Refused or uncertain dispatch retains its durable intent without replay.
+
+The workflow rejects mixed-category policies and reports missing supported rows as
+pending clarification, not evidence that no eligible research exists. Existing claims
+continue through the renamed shared boundary. No recognition assets, producer facts,
+premium controls, or mutation owners were added. Direct/authored Research migration
+and other categories remain pending; this is not a completed replacement of Research.
+
+The user's current spending authorization permits necessary validation, but no spending
+occurred. Fresh canonical runtime discovery for `serious_stuff` failed before any game
+capture or input: running host instances `Nougat32` and `Pie64` both claim port `5555`.
+The selected device cannot safely be inferred. No current Home or castle state was
+confirmed, and no instance/configuration was changed to bypass the conflict.
+
+Validation: 22 focused workflow/mutation tests passed. Repository affected selection
+against `origin/main` at `2eacb126` required the final portable fallback: 1,911 passed,
+six skipped (1,917 total), no failures; 138.332 seconds including selection/reporting.
+The six existing skips remain five optional screenshots and Windows symlink privilege.
+`git diff --check` passed. No live action or resource use was validated.
