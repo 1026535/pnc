@@ -5,13 +5,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 from pathlib import Path
+import string
 
 from PIL import Image
 
+from pnc_automation.app.pnc.domain.screen_decision import ScreenEvidence
+from pnc_automation.app.pnc.domain.observation import VisibleElement, VisibleElementSourceKind
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
-from pnc_automation.app.pnc.domain.observation import VisibleElement
-from pnc_automation.app.pnc.vision.screen_classifier import ScreenEvidence
 from pnc_automation.core.vision.image.models import Bounds
 from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
 
@@ -26,8 +27,23 @@ class VisualAnchor:
 
 
 @dataclass(frozen=True, slots=True)
+class VisualScreenProfile:
+    """An anchor variant whose reviewed layout may be shared by other appearances."""
+
+    id: str
+    layout_id: str
+    screen_type: ScreenType
+    revision: int
+    source: "VisualProfileSource"
+    review: "VisualProfileReview"
+    anchors: tuple[VisualAnchor, ...]
+    controls: tuple["VisualControl", ...] = ()
+    occludes: tuple[ScreenType, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class VisualControl:
-    """A control whose clickable bounds must be detected on this frame."""
+    """One measured control owned by a recognized visual profile."""
 
     selector_id: UiElementId
     anchor: VisualAnchor
@@ -35,14 +51,23 @@ class VisualControl:
 
 
 @dataclass(frozen=True, slots=True)
-class VisualScreenProfile:
-    """An all-required group of anchors for one reviewed screen variant."""
+class VisualProfileSource:
+    """Immutable provenance for the reviewed source frame behind one profile."""
 
-    id: str
-    screen_type: ScreenType
-    anchors: tuple[VisualAnchor, ...]
-    controls: tuple[VisualControl, ...] = ()
-    occludes: frozenset[ScreenType] = frozenset()
+    fixture: str
+    decoded_sha256: str
+    capture_group: str
+
+
+@dataclass(frozen=True, slots=True)
+class VisualProfileReview:
+    """Immutable review metadata that does not affect runtime matching."""
+
+    reference_manifest: str
+    description: str
+    build: str | None
+    locale: str | None
+    qualification: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,15 +95,15 @@ class VisualScreenRecognizer:
 
     def recognize(self, image: Image.Image) -> VisualRecognition:
         """Return all matching profiles; the canonical classifier resolves evidence."""
-        prepared = self.matcher.prepare_image(image, reference_size=self.reference_size)
-        if prepared is None:
+        prepared_frame = self.matcher.prepare_frame(image, reference_size=self.reference_size)
+        if prepared_frame is None:
             return VisualRecognition()
         matching = tuple(
             profile
             for profile in self.profiles
             if all(
-                self.matcher.find_best_match_prepared(
-                    prepared,
+                self.matcher.find_best_match(
+                    prepared_frame,
                     anchor.path,
                     threshold=anchor.threshold,
                     search_region=anchor.search_region,
@@ -86,28 +111,48 @@ class VisualScreenRecognizer:
                 for anchor in profile.anchors
             )
         )
-        # An observed overlay can cover a still-visible root. Only authored
-        # containment relationships resolve overlap; unrelated matches abstain.
-        occluded = {screen for profile in matching for screen in profile.occludes}
-        matching = tuple(profile for profile in matching if profile.screen_type not in occluded)
+        occluded_screens = {
+            screen
+            for profile in matching
+            for screen in profile.occludes
+        }
+        if occluded_screens:
+            matching = tuple(
+                profile
+                for profile in matching
+                if profile.screen_type not in occluded_screens
+            )
         controls: dict[UiElementId, VisibleElement] = {}
         dismiss_ids: set[UiElementId] = set()
         if len({profile.screen_type for profile in matching}) == 1:
             for profile in matching:
                 for control in profile.controls:
-                    match = self.matcher.find_best_match_prepared(
-                        prepared, control.anchor.path, threshold=control.anchor.threshold,
+                    match = self.matcher.find_best_match(
+                        prepared_frame,
+                        control.anchor.path,
+                        threshold=control.anchor.threshold,
                         search_region=control.anchor.search_region,
                     )
-                    if match is not None:
-                        controls[control.selector_id] = VisibleElement(
-                            control.selector_id, match.bounds, match.confidence,
-                        )
-                        if control.dismisses_surface:
-                            dismiss_ids.add(control.selector_id)
+                    if match is None:
+                        continue
+                    element = VisibleElement(
+                        selector_id=control.selector_id,
+                        bounds=match.bounds,
+                        confidence=match.confidence,
+                        source_kind=VisibleElementSourceKind.TEMPLATE,
+                        action_point=match.bounds.center(),
+                    )
+                    controls[control.selector_id] = element
+                    if control.dismisses_surface:
+                        dismiss_ids.add(control.selector_id)
         return VisualRecognition(
             evidence=tuple(
-                ScreenEvidence(profile.screen_type, f"visual_anchor:{profile.id}")
+                ScreenEvidence(
+                    profile.screen_type,
+                    f"visual_anchor:{profile.id}",
+                    layout_id=profile.layout_id,
+                    layout_revision=profile.revision,
+                )
                 for profile in matching
             ),
             profile_ids=tuple(profile.id for profile in matching),
@@ -126,8 +171,8 @@ def load_visual_screen_recognizer(
     document = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(document, dict) or set(document) != {"version", "reference_size", "profiles"}:
         raise ValueError(f"Invalid visual screen catalog fields: {path}")
-    if type(document["version"]) is not int or document["version"] != 1:
-        raise ValueError("Unsupported visual screen catalog version; expected 1.")
+    if type(document["version"]) is not int or document["version"] != 3:
+        raise ValueError("Unsupported visual screen catalog version; expected 3.")
     size = document["reference_size"]
     if not isinstance(size, list) or len(size) != 2 or any(type(v) is not int or v <= 0 for v in size):
         raise ValueError("Visual screen reference_size must contain two positive integers.")
@@ -136,9 +181,13 @@ def load_visual_screen_recognizer(
         raise ValueError("Visual screen profiles must be a non-empty list.")
     profiles: list[VisualScreenProfile] = []
     ids: set[str] = set()
+    layout_screens: dict[str, ScreenType] = {}
     for entry in entries:
-        if not isinstance(entry, dict) or not {"id", "screen", "anchors"} <= set(entry) or set(entry) - {"id", "screen", "anchors", "controls", "occludes"}:
-            raise ValueError("Each visual profile requires exactly id, screen, and anchors.")
+        if not isinstance(entry, dict) or not {"id", "layout_id", "screen", "revision", "source", "review", "anchors"} <= set(entry):
+            raise ValueError("Each visual profile requires id, layout_id, screen, revision, source, review, and anchors.")
+        unknown = set(entry) - {"id", "layout_id", "screen", "revision", "source", "review", "anchors", "controls", "occludes"}
+        if unknown:
+            raise ValueError(f"Visual profile has unknown fields: {sorted(unknown)}")
         identifier = entry["id"]
         if not isinstance(identifier, str) or not identifier or identifier in ids:
             raise ValueError("Visual profile IDs must be non-empty and unique.")
@@ -149,6 +198,17 @@ def load_visual_screen_recognizer(
             raise ValueError(f"Invalid screen for visual profile {identifier}.") from error
         if screen == ScreenType.UNKNOWN:
             raise ValueError("UNKNOWN cannot be a positive visual profile.")
+        layout_id = entry["layout_id"]
+        if not isinstance(layout_id, str) or not layout_id.strip():
+            raise ValueError(f"Visual profile {identifier} requires a non-empty layout_id.")
+        if layout_id in layout_screens and layout_screens[layout_id] != screen:
+            raise ValueError(f"Visual layout {layout_id} cannot identify different screens.")
+        layout_screens[layout_id] = screen
+        revision = entry["revision"]
+        if type(revision) is not int or revision <= 0:
+            raise ValueError(f"Visual profile {identifier} revision must be a positive integer.")
+        source = _load_profile_source(entry["source"], identifier=identifier)
+        review = _load_profile_review(entry["review"], identifier=identifier)
         raw_anchors = entry["anchors"]
         if not isinstance(raw_anchors, list) or len(raw_anchors) < 2:
             raise ValueError(f"Visual profile {identifier} requires at least two anchors.")
@@ -159,29 +219,31 @@ def load_visual_screen_recognizer(
         if not isinstance(raw_controls, list):
             raise ValueError(f"Visual profile {identifier} controls must be a list.")
         controls: list[VisualControl] = []
-        for control in raw_controls:
-            if not isinstance(control, dict) or not {"selector", "anchor"} <= set(control) or set(control) - {"selector", "anchor", "dismisses_surface"}:
-                raise ValueError("Each visual control requires exactly selector and anchor.")
+        for raw_control in raw_controls:
+            if not isinstance(raw_control, dict) or set(raw_control) - {"selector", "anchor", "dismisses_surface"} or "selector" not in raw_control or "anchor" not in raw_control:
+                raise ValueError(f"Visual profile {identifier} has malformed controls.")
             try:
-                selector = UiElementId(control["selector"])
-            except (ValueError, TypeError) as error:
-                raise ValueError(f"Invalid control selector in {identifier}.") from error
-            if any(item.selector_id == selector for item in controls):
-                raise ValueError(f"Duplicate control selector in {identifier}.")
-            dismisses = control.get("dismisses_surface", False)
+                selector = UiElementId(raw_control["selector"])
+            except (KeyError, TypeError, ValueError) as error:
+                raise ValueError(f"Visual profile {identifier} has an invalid control selector.") from error
+            dismisses = raw_control.get("dismisses_surface", False)
             if type(dismisses) is not bool:
-                raise ValueError("Control dismisses_surface must be a boolean.")
-            controls.append(VisualControl(selector, _load_anchor(control["anchor"], root=path.parent, reference_size=tuple(size)), dismisses))
+                raise ValueError(f"Visual profile {identifier} control dismisses_surface must be boolean.")
+            controls.append(
+                VisualControl(
+                    selector_id=selector,
+                    anchor=_load_anchor(raw_control["anchor"], root=path.parent, reference_size=tuple(size)),
+                    dismisses_surface=dismisses,
+                )
+            )
         raw_occludes = entry.get("occludes", [])
         if not isinstance(raw_occludes, list):
-            raise ValueError("Visual profile occludes must be a list of screen names.")
+            raise ValueError(f"Visual profile {identifier} occludes must be a list.")
         try:
-            occludes = frozenset(ScreenType[name] for name in raw_occludes)
+            occludes = tuple(ScreenType[value] for value in raw_occludes)
         except (KeyError, TypeError) as error:
-            raise ValueError("Invalid occluded screen.") from error
-        if screen in occludes or ScreenType.UNKNOWN in occludes:
-            raise ValueError("A profile cannot occlude itself or UNKNOWN.")
-        profiles.append(VisualScreenProfile(identifier, screen, anchors, tuple(controls), occludes))
+            raise ValueError(f"Visual profile {identifier} has invalid occluded screen types.") from error
+        profiles.append(VisualScreenProfile(identifier, layout_id, screen, revision, source, review, anchors, tuple(controls), occludes))
     return VisualScreenRecognizer(tuple(profiles), tuple(size), matcher or OpenCvTemplateMatcher())
 
 
@@ -209,3 +271,55 @@ def _load_anchor(entry: object, *, root: Path, reference_size: tuple[int, int]) 
         if image.width > width or image.height > height:
             raise ValueError(f"Anchor {image_name} cannot fit inside its search region.")
     return VisualAnchor(path, Bounds(x, y, width, height), float(threshold))
+
+
+def _load_profile_source(entry: object, *, identifier: str) -> VisualProfileSource:
+    """Validate source provenance without resolving artifact paths at runtime."""
+    if not isinstance(entry, dict) or set(entry) != {"fixture", "decoded_sha256", "capture_group"}:
+        raise ValueError(f"Visual profile {identifier} source requires fixture, decoded_sha256, and capture_group.")
+    fixture = entry["fixture"]
+    if not isinstance(fixture, str) or not fixture or Path(fixture).is_absolute() or ".." in Path(fixture).parts:
+        raise ValueError(f"Visual profile {identifier} source fixture must be a relative path without traversal.")
+    digest = entry["decoded_sha256"]
+    if (
+        not isinstance(digest, str)
+        or len(digest) != 64
+        or any(character not in string.hexdigits for character in digest)
+    ):
+        raise ValueError(f"Visual profile {identifier} source decoded_sha256 must be a 64-character hex digest.")
+    capture_group = entry["capture_group"]
+    if not isinstance(capture_group, str) or not capture_group.strip():
+        raise ValueError(f"Visual profile {identifier} source capture_group must be a non-empty string.")
+    return VisualProfileSource(fixture=fixture, decoded_sha256=digest.lower(), capture_group=capture_group)
+
+
+def _load_profile_review(entry: object, *, identifier: str) -> VisualProfileReview:
+    """Validate review metadata while keeping build and locale explicitly nullable."""
+    required = {"reference_manifest", "description", "build", "locale", "qualification"}
+    if not isinstance(entry, dict) or set(entry) != required:
+        raise ValueError(f"Visual profile {identifier} review metadata is incomplete or has unknown fields.")
+    reference_manifest = entry["reference_manifest"]
+    description = entry["description"]
+    if (
+        not isinstance(reference_manifest, str)
+        or not reference_manifest
+        or Path(reference_manifest).is_absolute()
+        or ".." in Path(reference_manifest).parts
+    ):
+        raise ValueError(f"Visual profile {identifier} reference_manifest must be a relative path without traversal.")
+    if not isinstance(description, str) or not description.strip():
+        raise ValueError(f"Visual profile {identifier} review description must be a non-empty string.")
+    build = entry["build"]
+    locale = entry["locale"]
+    for field_name, value in (("build", build), ("locale", locale)):
+        if value is not None and (not isinstance(value, str) or not value.strip()):
+            raise ValueError(f"Visual profile {identifier} review {field_name} must be a string or null.")
+    if entry["qualification"] != "guarded_reference_only":
+        raise ValueError(f"Visual profile {identifier} has an unsupported review qualification.")
+    return VisualProfileReview(
+        reference_manifest=reference_manifest,
+        description=description,
+        build=build,
+        locale=locale,
+        qualification="guarded_reference_only",
+    )

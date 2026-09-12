@@ -62,22 +62,22 @@ class UnknownRootRecoveryTests(FlowAndTaskFixtures, unittest.TestCase):
         self.assertIsNone(actions[0].follow_up_request)
 
     def test_open_world_map_from_unknown_only_recovers_toward_home_city_first(self) -> None:
-        """Plans a single recovery increment from unknown instead of bundling a stale world-switch tail action."""
+        """Plans one passive recovery increment from unknown instead of guessing a Back action."""
 
         actions = self.flows.open_world_map(make_observation(ScreenType.UNKNOWN))
 
         self.assertEqual(len(actions), 1)
-        self.assertIsInstance(actions[0], KeyEventAction)
-        self.assertEqual(actions[0].key_code, "KEYCODE_BACK")
+        self.assertIsInstance(actions[0], WaitAction)
+        self.assertEqual(actions[0].reason, "recover_unknown_home_city_passive_settle")
 
     def test_open_chat_from_unknown_only_recovers_toward_home_city_first(self) -> None:
-        """Plans a single recovery increment from unknown instead of assuming the chat shortcut is already reachable."""
+        """Plans one passive recovery increment from unknown instead of assuming the chat shortcut is reachable."""
 
         actions = self.flows.open_chat(make_observation(ScreenType.UNKNOWN))
 
         self.assertEqual(len(actions), 1)
-        self.assertIsInstance(actions[0], KeyEventAction)
-        self.assertEqual(actions[0].key_code, "KEYCODE_BACK")
+        self.assertIsInstance(actions[0], WaitAction)
+        self.assertEqual(actions[0].reason, "recover_unknown_home_city_passive_settle")
 
     def test_open_chat_from_world_map_uses_shared_shortcut(self) -> None:
         """Uses the shared chat shortcut instead of forcing a return to home city first."""

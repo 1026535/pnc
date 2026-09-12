@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pnc_automation.core.vision.ocr.ocr_service import ObservationOcrContext
+
 import tempfile
 import unittest
 from pathlib import Path
@@ -22,6 +24,9 @@ from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateM
 
 from tests.support.pnc.capture_vision.coordinate_bar_filtering_ocr_service import (
     _CoordinateBarFilteringOcrService,
+)
+from tests.support.pnc.capture_vision.coordinate_bar_filtering_full_ocr_service import (
+    _CoordinateBarFilteringFullOcrService,
 )
 from tests.support.pnc.capture_vision.fake_ocr_service import _FakeOcrService
 from tests.support.pnc.capture_vision.ocr_line import _ocr_line
@@ -51,21 +56,24 @@ class SelectorCoordinateOcrTests(unittest.TestCase):
                                 width_ratio=0.4,
                                 height_ratio=0.18,
                             ),
+                            materialize_relative_bounds=False,
                         ),
                     )
                 ),
             )
-            registry = build_default_selector_registry(catalog_path=catalog_path, template_root=root)
+            registry = build_default_selector_registry(catalog_path=catalog_path, asset_root=root)
             selector_engine = ImageSelectorEngine(
                 template_matcher=OpenCvTemplateMatcher(),
-                ocr_service=_FakeOcrService(
-                    lines=(
-                        _ocr_line("Daily Sale", x=12, y=22, width=32, height=12),
-                    )
-                ),
+            )
+            image = Image.new("RGB", (100, 100), (0, 0, 0))
+            ocr_context = ObservationOcrContext(
+                image,
+                _FakeOcrService(lines=(_ocr_line("Daily Sale", x=12, y=22, width=32, height=12),)),
+                None,
+                "test",
             )
 
-            matches = selector_engine.detect(Image.new("RGB", (100, 100), (0, 0, 0)), registry)
+            matches = selector_engine.detect(image, registry, ocr_context=ocr_context)
 
             self.assertEqual(len(matches), 1)
             self.assertEqual(matches[0].selector_id, UiElementId.PNC_CASH_MALL_ENTRY_TITLE_REGION)
@@ -82,18 +90,20 @@ class SelectorCoordinateOcrTests(unittest.TestCase):
         registry = build_default_selector_registry()
         selector_engine = ImageSelectorEngine(
             template_matcher=OpenCvTemplateMatcher(),
-            ocr_service=_FakeOcrService(
-                lines=(
-                    _ocr_line("Build", x=18, y=47, width=46, height=14),
-                    _ocr_line("Hero", x=16, y=920, width=44, height=18),
-                )
-            ),
+        )
+        image = Image.new("RGB", (540, 960), (0, 0, 0))
+        ocr_context = ObservationOcrContext(
+            image,
+            _FakeOcrService(lines=()),
+            None,
+            "test",
         )
 
         matches = selector_engine.detect(
-            Image.new("RGB", (540, 960), (0, 0, 0)),
+            image,
             registry,
             selector_ids=(UiElementId.PNC_WORLD_COORDINATE_BAR, UiElementId.PNC_WORLD_HOME_NAV),
+            ocr_context=ocr_context,
         )
 
         self.assertEqual(matches, [])
@@ -104,10 +114,6 @@ class SelectorCoordinateOcrTests(unittest.TestCase):
         registry = build_default_selector_registry()
         selector_engine = ImageSelectorEngine(
             template_matcher=OpenCvTemplateMatcher(),
-            ocr_service=_CoordinateBarFilteringOcrService(
-                raw_text="X:272-kV.498",
-                filtered_text="X:272 Y:498",
-            ),
         )
         image = Image.new("RGB", (540, 960), (18, 24, 40))
         coordinate_region = registry.require(UiElementId.PNC_WORLD_COORDINATE_BAR).relative_bounds
@@ -117,10 +123,21 @@ class SelectorCoordinateOcrTests(unittest.TestCase):
             for y in range(bounds.y + 8, bounds.y + bounds.height - 8):
                 image.putpixel((x, y), (42, 198, 224))
 
+        ocr_context = ObservationOcrContext(
+            image,
+            _CoordinateBarFilteringFullOcrService(
+                raw_text="X:272-kV.498",
+                filtered_text="X:272 Y:498",
+            ),
+            None,
+            "test",
+        )
+
         matches = selector_engine.detect(
             image,
             registry,
             selector_ids=(UiElementId.PNC_WORLD_COORDINATE_BAR,),
+            ocr_context=ocr_context,
         )
 
         self.assertEqual(len(matches), 1)

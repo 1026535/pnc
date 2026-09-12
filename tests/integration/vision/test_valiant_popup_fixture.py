@@ -67,6 +67,7 @@ class ValiantPopupFixtureTests(unittest.TestCase):
                 artifact_directory="valiant_conquest_popup",
                 label="known_event_popup",
             )
+            ocr_service = _FakeOcrService(lines=lines)
             observation = ObservationBuilder(
                 selector_registry=SelectorRegistry(selectors=()),
                 selector_engine=ImageSelectorEngine(
@@ -74,7 +75,8 @@ class ValiantPopupFixtureTests(unittest.TestCase):
                     ocr_service=UnavailableOcrService(),
                 ),
                 screen_classifier=ScreenClassifier(),
-                enricher=PncObservationEnricher(ocr_service=_FakeOcrService(lines=lines)),
+                enricher=PncObservationEnricher(),
+                ocr_service=ocr_service,
             ).build(screenshot)
 
         self.assertEqual(ScreenType.PNC_POPUP, observation.screen_type)

@@ -25,10 +25,11 @@ class _RecordingSelectorEngine:
         registry: SelectorRegistry,
         *,
         selector_ids: tuple[UiElementId, ...] | None = None,
+        ocr_context=None,
     ) -> tuple[SelectorMatch, ...]:
         """Records one selector request and returns the queued response."""
 
-        del image, registry
+        del image, registry, ocr_context
         self.requested_selector_ids.append(()) if selector_ids is None else self.requested_selector_ids.append(tuple(selector_ids))
         if not self.responses:
             raise AssertionError("No selector-engine response queued.")

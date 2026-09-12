@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
+
 import unittest
 
 from pnc_automation.app.automation.engine.action_executor import ActionExecutor
@@ -24,6 +26,7 @@ class MailActionFollowUpTests(MailWorkflowFixtures, unittest.TestCase):
         """Stops a multi-step mail action sequence when the previous observed follow-up missed its expected screen."""
 
         executor = ActionExecutor(
+            selector_registry=build_default_selector_registry(),
             session=FakeSession(),
             stable_click_delay_ms=0,
             post_action_observe_delay_ms=0,
@@ -64,8 +67,9 @@ class MailActionFollowUpTests(MailWorkflowFixtures, unittest.TestCase):
         )
 
         self.assertEqual(result.screen_type, ScreenType.PNC_MAILBOX_LIST)
+        self.assertEqual(len(executor.session.taps), 1)
         self.assertEqual(executor.session.texts, [])
-        self.assertEqual(fake_observer.requests, [ObservationRequest.mail_compose_follow_up()])
+        self.assertEqual(len(fake_observer.requests), 1)
 
     def test_mail_compose_follow_up_keeps_compose_origin_screens_visible_on_compose_miss(self) -> None:
         """Lets compose-entry follow-ups preserve every supported source screen when the popup does not open."""

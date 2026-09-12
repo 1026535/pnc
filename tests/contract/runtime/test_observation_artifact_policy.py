@@ -5,6 +5,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from dataclasses import dataclass, replace
+from datetime import UTC, datetime
 from pathlib import Path
 
 from PIL import Image
@@ -27,7 +28,9 @@ from pnc_automation.core.vision.observation_policy import ObservationMode
 from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.core.infra.capture.screenshot_service import ScreenshotService
 from pnc_automation.core.infra.storage.artifact_store import ArtifactStore
+from pnc_automation.core.vision.ocr.ocr_service import ObservationOcrContext, UnavailableOcrService
 from pnc_automation.app.pnc.domain.observation import SpatialObjectKind, SpatialSurfaceType
+from pnc_automation.core.infra.emulator.provenance import CapturedFrame, FrameRef
 
 from tests.support.pnc.observations import make_observation
 from tests.support.pnc.spatial import make_spatial_object, make_spatial_surface
@@ -321,10 +324,24 @@ class _ArtifactAwareObservationBuilder:
 
     observations: list
 
-    def build(self, screenshot: object, *, request: ObservationRequest | None = None) -> object:
+    def create_ocr_context(self, screenshot: object) -> ObservationOcrContext:
+        return ObservationOcrContext(
+            screenshot.image,
+            UnavailableOcrService(),
+            screenshot.frame_ref,
+            "test",
+        )
+
+    def build(
+        self,
+        screenshot: object,
+        *,
+        request: ObservationRequest | None = None,
+        ocr_context: ObservationOcrContext | None = None,
+    ) -> object:
         """Returns the next queued observation while preserving the current screenshot provenance."""
 
-        del request
+        del request, ocr_context
         if not self.observations:
             raise AssertionError("No observation queued for ObservationService.")
         observation = self.observations.pop(0)
@@ -338,15 +355,24 @@ class _ArtifactAwareObservationBuilder:
 class _FakeScreenshotSession:
     """Returns one deterministic in-memory PNG payload for screenshot capture tests."""
 
-    def capture_screenshot_bytes(self) -> bytes:
-        """Returns a simple valid PNG payload."""
+    def capture_screenshot_frame(self):
+        """Returns a simple valid PNG payload with explicit provenance."""
 
         image = Image.new("RGB", (40, 40), (15, 28, 68))
         from io import BytesIO
 
         buffer = BytesIO()
         image.save(buffer, format="PNG")
-        return buffer.getvalue()
+        return CapturedFrame(
+            payload=buffer.getvalue(),
+            frame_ref=FrameRef(
+                session_id="artifact-test",
+                session_epoch=1,
+                capture_sequence=1,
+                input_sequence=0,
+                captured_at=datetime.now(tz=UTC),
+            ),
+        )
 
 
 def _make_recorder(

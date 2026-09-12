@@ -31,22 +31,25 @@ from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.navigation_perception import NavigationPerception
 from pnc_automation.app.pnc.vision.observation_builder import ObservationAdditions
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
-from pnc_automation.app.pnc.vision.screen_classifier import ScreenEvidence
+from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict, ScreenEvidence
 from pnc_automation.app.pnc.vision.visual_screen_recognizer import (
     VisualRecognition,
     load_visual_screen_recognizer,
 )
+from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
 from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservationEnricher
 from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.core.infra.capture.screenshot_service import CapturedScreenshot
+from pnc_automation.core.infra.emulator.provenance import FrameRef
 from pnc_automation.core.infra.storage.artifact_store import ArtifactRecord
 from pnc_automation.core.vision.image.models import Bounds
-from pnc_automation.core.vision.ocr.ocr_service import OcrResult, OcrService
+from pnc_automation.core.vision.ocr.ocr_service import ObservationOcrContext, OcrResult, OcrService
 
 from tests.support.automation.session import FakeSession
 from tests.support.core.logging import build_logger
+from tests.support.paths import TEST_DATA_ROOT
 
 
 class CoreRuntimeTests(unittest.TestCase):
@@ -239,17 +242,20 @@ class CoreRuntimeTests(unittest.TestCase):
                 return VisualRecognition()
 
         class _Guard:
-            def detect_interruption(self, image, *, owned_dismiss_bounds=()):
-                del image, owned_dismiss_bounds
-                return ObservationAdditions()
+            ocr_service = Mock(spec=OcrService)
+            def detect_interruption(
+                self, image, *, ocr_context, owned_dismiss_bounds=(), owned_navigation_screen=None,
+            ):
+                del image, ocr_context, owned_dismiss_bounds, owned_navigation_screen
+                return ObservationAdditions(guard_verdict=GuardVerdict.CLEAR)
 
         black_capture = CapturedScreenshot(
             artifact=None,
-            image=Image.new("RGB", (10, 10), (5, 5, 5)),
+            image=Image.new("RGB", (540, 960), (5, 5, 5)),
             image_format="PNG",
             ephemeral_captured_at=datetime(2026, 9, 10, tzinfo=UTC),
         )
-        black = NavigationPerception(_Recognizer(), _Guard()).build(black_capture)
+        black = NavigationPerception(_Recognizer(), _Guard(), ScreenClassifier(), lambda capture: ObservationOcrContext(capture.image, _Guard.ocr_service, capture.frame_ref, "test")).build(black_capture)
         self.assertEqual(ScreenType.PNC_LOADING, black.screen_type)
 
         clock = _FakeClock()
@@ -436,7 +442,7 @@ class CoreRuntimeTests(unittest.TestCase):
     def test_popup_recovery_dispatches_real_fixture_close_and_stable_completion(self) -> None:
         """Carries a measured fixture close point through the public popup recovery boundary."""
 
-        fixture_directory = Path("tests/data/screen_recognition")
+        fixture_directory = TEST_DATA_ROOT / "screen_recognition"
         with (
             Image.open(fixture_directory / "generic_popup_offer_real_sanitized.png") as popup_source,
             Image.open(fixture_directory / "home_city_core.png") as home_source,
@@ -447,7 +453,9 @@ class CoreRuntimeTests(unittest.TestCase):
         ocr.read_result.return_value = OcrResult(lines=(), words=())
         perception = NavigationPerception(
             load_visual_screen_recognizer(),
-            PncObservationEnricher(ocr),
+            PncObservationEnricher(),
+            ScreenClassifier(),
+            lambda capture: ObservationOcrContext(capture.image, ocr, capture.frame_ref, "test"),
         )
         captured_at = datetime(2026, 9, 10, 12, 0, tzinfo=UTC)
 
@@ -462,6 +470,13 @@ class CoreRuntimeTests(unittest.TestCase):
                 ),
                 image=image.copy(),
                 image_format="PNG",
+                frame_ref=FrameRef(
+                    session_id="core-runtime-test",
+                    session_epoch=1,
+                    capture_sequence=1,
+                    input_sequence=0,
+                    captured_at=captured_at,
+                ),
             )
 
         screenshot_service = Mock()
@@ -475,6 +490,7 @@ class CoreRuntimeTests(unittest.TestCase):
             selector_registry=build_default_selector_registry(),
             action_executor=ActionExecutor(
                 session=session,
+                selector_registry=build_default_selector_registry(),
                 stable_click_delay_ms=0,
                 post_action_observe_delay_ms=0,
                 chat_stable_click_delay_ms=0,
@@ -703,11 +719,14 @@ class CoreRuntimeTests(unittest.TestCase):
                 )
 
         class _Guard:
-            def detect_interruption(self, image, *, owned_dismiss_bounds=()):
-                del image, owned_dismiss_bounds
-                return ObservationAdditions()
+            ocr_service = Mock(spec=OcrService)
+            def detect_interruption(
+                self, image, *, ocr_context, owned_dismiss_bounds=(), owned_navigation_screen=None,
+            ):
+                del image, ocr_context, owned_dismiss_bounds, owned_navigation_screen
+                return ObservationAdditions(guard_verdict=GuardVerdict.CLEAR)
 
-            def enrich(self, image, screen_type, visible_elements, request):
+            def enrich(self, image, screen_type, visible_elements, request, *, ocr_context, ocr_regions):
                 del image, screen_type, visible_elements, request
                 return ObservationAdditions(
                     current_castle=identity,
@@ -716,11 +735,11 @@ class CoreRuntimeTests(unittest.TestCase):
 
         screenshot = CapturedScreenshot(
             artifact=None,
-            image=Image.new("RGB", (20, 20)),
+            image=Image.new("RGB", (540, 960)),
             image_format="PNG",
             ephemeral_captured_at=datetime.now(tz=UTC),
         )
-        observation = NavigationPerception(_Recognizer(), _Guard()).build(screenshot, include_content=True)
+        observation = NavigationPerception(_Recognizer(), _Guard(), ScreenClassifier(), lambda capture: ObservationOcrContext(capture.image, _Guard.ocr_service, capture.frame_ref, "test")).build(screenshot, include_content=True)
 
         self.assertEqual(ScreenType.PNC_CASTLE_SELECTION, observation.screen_type)
         self.assertEqual(identity, observation.current_castle)

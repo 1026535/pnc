@@ -11,6 +11,7 @@ from typing import Any, Protocol, TypeVar
 from pnc_automation.core.errors import ScriptValidationError
 from pnc_automation.app.pnc.domain.action_requests import ActionRequest
 from pnc_automation.app.pnc.domain.observation import DetectedListEntry, Observation
+from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 
 TPriority = TypeVar("TPriority")
 TCandidate = TypeVar("TCandidate")
@@ -178,6 +179,7 @@ class AutomationTask(Protocol):
     id: TaskId
     castle_target_policy: CastleTargetPolicy
     preflight: TaskPreflight
+    required_recognition_selectors: tuple[UiElementId, ...]
 
     def parse_params(self, params: Mapping[str, Any]) -> Any:
         """Validates and converts raw script parameters."""
@@ -201,6 +203,7 @@ class BaseAutomationTask(ABC):
     id: TaskId
     castle_target_policy = CastleTargetPolicy.DISALLOWED
     preflight = TaskPreflight.NONE
+    required_recognition_selectors: tuple[UiElementId, ...] = ()
 
     @abstractmethod
     def parse_params(self, params: Mapping[str, Any]) -> Any:

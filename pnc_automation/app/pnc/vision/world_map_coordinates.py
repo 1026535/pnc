@@ -11,7 +11,11 @@ from pnc_automation.app.pnc.domain.observation import Bounds, SpatialViewport, S
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.navigation.world_map_coordinate_domain import WorldMapCoordinateDomain
 from pnc_automation.core.errors import SelectorResolutionError
-from pnc_automation.core.vision.ocr.ocr_service import OcrLine, OcrService
+from pnc_automation.core.vision.ocr.ocr_service import (
+    ObservationOcrContext,
+    OcrLine,
+    OcrReadPurpose,
+)
 
 _WORLD_X_COORDINATE_LABEL_PATTERN = re.compile(r"X\s*[:\uff1a]?", re.IGNORECASE)
 _WORLD_Y_COORDINATE_LABEL_PATTERN = re.compile(r"Y\s*[:\uff1a]?", re.IGNORECASE)
@@ -71,19 +75,33 @@ def read_world_coordinate_bar_viewport(
     *,
     image: Image.Image,
     bounds: object,
-    ocr_service: OcrService,
+    ocr_context: ObservationOcrContext,
 ) -> ParsedWorldViewport | None:
     """Returns the parsed coordinate-bar viewport from cheap focused OCR passes."""
 
-    text = read_world_coordinate_bar_text(image=image, bounds=bounds, ocr_service=ocr_service)
+    text = read_world_coordinate_bar_text(image=image, bounds=bounds, ocr_context=ocr_context)
     pair = parse_world_coordinate_text(text)
     if pair is None:
-        parsed = _parse_world_viewport_from_lines(ocr_service.read_lines(image, bounds))
+        parsed = _parse_world_viewport_from_lines(
+            ocr_context.read_lines(
+                image,
+                bounds,
+                reuse_full_frame=False,
+                purpose=OcrReadPurpose.IDENTITY,
+                detail="world_coordinate_bar_lines",
+            )
+        )
         if parsed is not None:
             return parsed
         return parse_world_viewport(
             image=image,
-            lines=ocr_service.read_lines(image, _world_coordinate_top_hud_region(image=image)),
+            lines=ocr_context.read_lines(
+                image,
+                _world_coordinate_top_hud_region(image=image),
+                reuse_full_frame=False,
+                purpose=OcrReadPurpose.IDENTITY,
+                detail="world_coordinate_top_hud_fallback",
+            ),
         )
     return _build_parsed_world_viewport(
         x=pair[0],
@@ -96,18 +114,33 @@ def read_world_coordinate_bar_text(
     *,
     image: Image.Image,
     bounds: object,
-    ocr_service: OcrService,
+    ocr_context: ObservationOcrContext,
 ) -> str:
     """Returns OCR text from a blue-text-isolated coordinate-bar crop so background text cannot pollute recognition."""
 
-    filtered = build_world_coordinate_bar_ocr_image(image=image, bounds=bounds)
-    if filtered is None:
-        return ""
-    region_type = type(bounds)
-    return ocr_service.read_text(
-        filtered,
-        region_type(x=0, y=0, width=filtered.width, height=filtered.height),
+    result = ocr_context.read_preprocessed_result(
+        image,
+        bounds,
+        preprocessing_id="world-coordinate-blue-3x",
+        prepare=lambda owned_image, owned_bounds: build_world_coordinate_bar_ocr_image(
+            image=owned_image,
+            bounds=owned_bounds,
+        ),
+        purpose=OcrReadPurpose.IDENTITY,
+        detail="world_coordinate_bar_blue_filtered",
     )
+    if result is None:
+        return ""
+    text = "\n".join(line.text for line in result.lines)
+    if world_coordinate_text_matches(text):
+        return text
+    coordinate_lines = tuple(
+        line
+        for line in result.lines
+        if _WORLD_X_COORDINATE_LABEL_PATTERN.search(line.text)
+        or _WORLD_Y_COORDINATE_LABEL_PATTERN.search(line.text)
+    )
+    return "\n".join(line.text for line in coordinate_lines)
 
 
 def build_world_coordinate_bar_ocr_image(*, image: Image.Image, bounds: object) -> Image.Image | None:

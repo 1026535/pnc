@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 
+from pnc_automation.core.errors import FrameProvenanceError
+from pnc_automation.core.infra.emulator.provenance import FrameRef
 from pnc_automation.app.pnc.domain.action_requests import SwipeGesturePrimitive, SwipeInputSource
 
 
@@ -19,6 +22,22 @@ class FakeSession:
     swipes: list[tuple[int, int, int, int, int]] = field(default_factory=list)
     swipe_input_sources: list[SwipeInputSource] = field(default_factory=list)
     swipe_gesture_primitives: list[SwipeGesturePrimitive] = field(default_factory=list)
+    _consumed_frame_identity: tuple[str, int, int, int] | None = field(default=None, init=False, repr=False)
+
+    @contextmanager
+    def authorized_input(self, frame_ref: FrameRef):
+        """Models one explicit frame authorization transaction for offline tests."""
+
+        identity = (
+            frame_ref.session_id,
+            frame_ref.session_epoch,
+            frame_ref.capture_sequence,
+            frame_ref.input_sequence,
+        )
+        if self._consumed_frame_identity == identity:
+            raise FrameProvenanceError("Synthetic frame proof was replayed.")
+        self._consumed_frame_identity = identity
+        yield
 
     def tap_point(self, x: int, y: int) -> None:
         """Records one tap."""

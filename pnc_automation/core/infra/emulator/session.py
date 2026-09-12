@@ -4,11 +4,17 @@ from __future__ import annotations
 
 import math
 import re
+import shlex
 import time
 from collections.abc import Callable
+from contextlib import contextmanager
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from enum import StrEnum
+from functools import wraps
+from threading import RLock
 from typing import Protocol
+from uuid import uuid4
 
 from pnc_automation.core.infra.adb.client import AdbClient
 from pnc_automation.core.infra.emulator.bluestacks_instance import BlueStacksInstance
@@ -18,8 +24,26 @@ from pnc_automation.bluestacks_management.instance_lease import (
     ProcessInstanceLease,
 )
 from pnc_automation.core.config.host import BlueStacksCapabilities
-from pnc_automation.core.errors import DeviceConnectionError, GameLaunchError, ScreenshotCaptureError
+from pnc_automation.core.errors import (
+    DeviceConnectionError,
+    FrameProvenanceError,
+    GameLaunchError,
+    ScreenshotCaptureError,
+)
+from pnc_automation.core.infra.emulator.provenance import CapturedFrame, FrameRef
 from pnc_automation.core.lifecycle import close_preserving_error
+
+
+def _input_dispatch(function: Callable[..., object]) -> Callable[..., object]:
+    """Serializes one entire ADB input call with capture provenance state."""
+
+    @wraps(function)
+    def wrapped(session: BlueStacksSession, *args: object, **kwargs: object) -> object:
+        with session._provenance_lock:
+            session._input_sequence += 1
+            return function(session, *args, **kwargs)
+
+    return wrapped
 
 
 DEFAULT_BLUESTACKS_SHUTDOWN_GRACE_SECONDS = 120.0
@@ -118,10 +142,18 @@ class BlueStacksSession:
     cleanup_policy: BlueStacksSessionCleanupPolicy = field(default_factory=BlueStacksSessionCleanupPolicy.keep_warm)
     instance_closer: BlueStacksInstanceCloser | None = field(default=None, repr=False)
     instance_lease: ProcessInstanceLease | None = field(default=None, repr=False)
+    provenance_max_age_seconds: float = 30.0
     _instance_lease: ProcessInstanceLease | None = field(default=None, init=False, repr=False)
     _cleanup_intent_registered: bool = field(default=False, init=False, repr=False)
     _cleanup_intent_id: str | None = field(default=None, init=False, repr=False)
     _closed: bool = field(default=False, init=False, repr=False)
+    _session_id: str = field(default_factory=lambda: uuid4().hex, init=False, repr=False)
+    _session_epoch: int = field(default=0, init=False, repr=False)
+    _capture_sequence: int = field(default=0, init=False, repr=False)
+    _input_sequence: int = field(default=0, init=False, repr=False)
+    _latest_frame: FrameRef | None = field(default=None, init=False, repr=False)
+    _consumed_frame: tuple[str, int, int, int] | None = field(default=None, init=False, repr=False)
+    _provenance_lock: RLock = field(default_factory=RLock, init=False, repr=False)
 
     def connect(self) -> None:
         """Connects to the configured ADB endpoint and validates device readiness."""
@@ -137,6 +169,7 @@ class BlueStacksSession:
                 if last_connect_result.succeeded:
                     last_state_result = self.adb_client.get_state(self.instance.device_id)
                     if last_state_result.succeeded and last_state_result.stdout_text.strip() == "device":
+                        self._start_session_epoch()
                         return
                 if attempt_index < attempts - 1 and self.connect_retry_delay_seconds > 0:
                     self.sleep(self.connect_retry_delay_seconds)
@@ -205,6 +238,7 @@ class BlueStacksSession:
         self.launch_app()
         return True
 
+    @_input_dispatch
     def launch_app(self) -> None:
         """Launches the configured Puzzles & Conquest package."""
 
@@ -227,6 +261,7 @@ class BlueStacksSession:
                 stderr=result.stderr_text,
             )
 
+    @_input_dispatch
     def tap_point(self, x: int, y: int) -> None:
         """Sends one screen tap to the device."""
 
@@ -241,6 +276,7 @@ class BlueStacksSession:
                 stderr=result.stderr_text,
             )
 
+    @_input_dispatch
     def input_text(self, text: str) -> None:
         """Inputs one text payload using Android's input subsystem."""
 
@@ -254,6 +290,7 @@ class BlueStacksSession:
                 stderr=result.stderr_text,
             )
 
+    @_input_dispatch
     def press_key(self, key_code: str) -> None:
         """Sends one Android key event."""
 
@@ -267,6 +304,7 @@ class BlueStacksSession:
                 stderr=result.stderr_text,
             )
 
+    @_input_dispatch
     def swipe(
         self,
         start_x: int,
@@ -340,7 +378,28 @@ class BlueStacksSession:
     def capture_screenshot_bytes(self) -> bytes:
         """Captures a PNG screenshot through `adb exec-out screencap -p`."""
 
+        return self.capture_screenshot_frame().payload
+
+    def capture_screenshot_frame(self) -> CapturedFrame:
+        """Captures one atomically provenance-stamped screenshot.
+
+        The input sequence is sampled before and after the ADB capture.  Any
+        concurrent input invalidates the capture instead of allowing a frame
+        whose pixels may describe a different UI state to authorize an action.
+        """
+
         self._ensure_lease()
+        with self._provenance_lock:
+            input_sequence = self._input_sequence
+            session_epoch = self._session_epoch
+            self._capture_sequence += 1
+            capture_sequence = self._capture_sequence
+            # A newer capture start invalidates the previous frame immediately;
+            # an older backend completion must never republish it as newest.
+            self._latest_frame = None
+            self._consumed_frame = None
+        captured_at = datetime.now(tz=UTC)
+        captured_monotonic = time.monotonic()
         result = self.adb_client.exec_out(self.instance.device_id, "screencap", "-p", timeout_seconds=20)
         if not result.succeeded or result.stdout == b"":
             raise ScreenshotCaptureError(
@@ -348,7 +407,94 @@ class BlueStacksSession:
                 device_id=self.instance.device_id,
                 stderr=result.stderr_text,
             )
-        return result.stdout
+        with self._provenance_lock:
+            if (
+                input_sequence != self._input_sequence
+                or session_epoch != self._session_epoch
+                or capture_sequence != self._capture_sequence
+            ):
+                raise ScreenshotCaptureError(
+                    "Screenshot capture overlapped session input or epoch change, or a newer capture began, and was discarded.",
+                    device_id=self.instance.device_id,
+                    capture_input_sequence=input_sequence,
+                    current_input_sequence=self._input_sequence,
+                    capture_session_epoch=session_epoch,
+                    current_session_epoch=self._session_epoch,
+                    capture_sequence=capture_sequence,
+                    current_capture_sequence=self._capture_sequence,
+                )
+            frame_ref = FrameRef(
+                session_id=self._session_id,
+                session_epoch=self._session_epoch,
+                capture_sequence=capture_sequence,
+                input_sequence=self._input_sequence,
+                captured_at=captured_at,
+                captured_monotonic=captured_monotonic,
+            )
+            self._latest_frame = frame_ref
+            self._consumed_frame = None
+        return CapturedFrame(payload=result.stdout, frame_ref=frame_ref)
+
+    def validate_and_consume_frame(self, frame_ref: FrameRef) -> None:
+        """Atomically validates and consumes one fresh frame authorization proof."""
+
+        with self.authorized_input(frame_ref):
+            return
+
+    @contextmanager
+    def authorized_input(self, frame_ref: FrameRef):
+        """Holds the provenance lock across one logical input dispatch."""
+
+        with self._provenance_lock:
+            self._validate_frame_locked(frame_ref)
+            self._consumed_frame = _frame_identity(frame_ref)
+            yield
+
+    def _validate_frame_locked(self, frame_ref: FrameRef) -> None:
+        """Validates a frame while the caller holds the provenance lock."""
+
+        identity = _frame_identity(frame_ref)
+        if frame_ref.session_id != self._session_id:
+            raise FrameProvenanceError(
+                "Action proof belongs to a different emulator session.",
+                expected_session_id=self._session_id,
+                actual_session_id=frame_ref.session_id,
+            )
+        if frame_ref.session_epoch != self._session_epoch:
+            raise FrameProvenanceError(
+                "Action proof belongs to an expired emulator session epoch.",
+                expected_session_epoch=self._session_epoch,
+                actual_session_epoch=frame_ref.session_epoch,
+            )
+        if self._latest_frame != frame_ref or frame_ref.input_sequence != self._input_sequence:
+            raise FrameProvenanceError(
+                "Action proof is stale because the session input or latest capture changed.",
+                capture_sequence=frame_ref.capture_sequence,
+                input_sequence=frame_ref.input_sequence,
+                current_input_sequence=self._input_sequence,
+            )
+        age_seconds = time.monotonic() - frame_ref.captured_monotonic
+        if age_seconds < 0.0 or age_seconds > self.provenance_max_age_seconds:
+            raise FrameProvenanceError(
+                "Action proof exceeded the bounded frame age policy.",
+                age_seconds=age_seconds,
+                max_age_seconds=self.provenance_max_age_seconds,
+            )
+        if self._consumed_frame == identity:
+            raise FrameProvenanceError(
+                "Action proof was already consumed and cannot authorize replay.",
+                capture_sequence=frame_ref.capture_sequence,
+            )
+
+    def _start_session_epoch(self) -> None:
+        """Starts a new connected epoch and clears prior frame authorization state."""
+
+        with self._provenance_lock:
+            self._session_epoch += 1
+            self._capture_sequence = 0
+            self._input_sequence = 0
+            self._latest_frame = None
+            self._consumed_frame = None
 
     def close(self) -> None:
         """Optionally closes the selected phase target, then releases its operation lease."""
@@ -467,6 +613,17 @@ class BlueStacksSession:
             )
 
 
+def _frame_identity(frame_ref: FrameRef) -> tuple[str, int, int, int]:
+    """Returns the stable identity used for one-frame replay protection."""
+
+    return (
+        frame_ref.session_id,
+        frame_ref.session_epoch,
+        frame_ref.capture_sequence,
+        frame_ref.input_sequence,
+    )
+
+
 _CURRENT_FOCUS_FIELD = re.compile(r"^[ \t]*mCurrentFocus[ \t]*=[ \t]*(?P<value>[^\r\n]*)[ \t]*\r?$", re.MULTILINE)
 _WINDOW_FOCUS_VALUE = re.compile(
     r"^Window\{(?P<token>[0-9A-Fa-f]+)[ \t]+(?P<user>u[0-9]+)[ \t]+(?P<title>[^{}\r\n]+)\}$"
@@ -521,23 +678,11 @@ def _parse_current_focus_package(window_dump: str, *, device_id: str) -> str | N
 
 
 def _encode_adb_text(text: str) -> str:
-    """Encodes text for `adb shell input text` without shell quoting."""
+    """Encodes Android spaces and quotes one literal argument for its remote shell."""
 
     if "\n" in text or "\r" in text:
-        raise DeviceConnectionError("ADB text input does not support multiline values.", text=text)
-    replacements = {
-        " ": "%s",
-        "&": "\\&",
-        "<": "\\<",
-        ">": "\\>",
-        "|": "\\|",
-        ";": "\\;",
-        "(": "\\(",
-        ")": "\\)",
-        "'": "\\'",
-        '"': '\\"',
-    }
-    return "".join(replacements.get(character, character) for character in text)
+        raise DeviceConnectionError("ADB text input does not support multiline values.")
+    return shlex.quote(text.replace(" ", "%s"))
 
 
 def _input_command_prefix(*, input_source: str, device_id: str) -> list[str]:

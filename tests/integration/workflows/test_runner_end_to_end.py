@@ -42,6 +42,7 @@ from tests.support.core.logging import build_logger
 from tests.support.pnc.observations import make_entry, make_observation
 from tests.support.pnc.spatial import make_spatial_object, make_spatial_surface
 from tests.support.runtime.observation_service import FakeObservationService
+from pnc_automation.core.errors import TaskVerificationError
 
 
 class RunnerEndToEndTests(unittest.TestCase):
@@ -77,6 +78,16 @@ class RunnerEndToEndTests(unittest.TestCase):
         )
 
         observations = [
+            # Each credential/submit input consumes a fresh Login frame.
+            make_observation(
+                ScreenType.PNC_LOGIN,
+                visible_ids=(
+                    UiElementId.PNC_LOGIN_USERNAME_FIELD,
+                    UiElementId.PNC_LOGIN_PASSWORD_FIELD,
+                    UiElementId.PNC_LOGIN_SUBMIT_BUTTON,
+                ),
+                current_pnc_account_id="user@example.com",
+            ),
             make_observation(
                 ScreenType.PNC_LOGIN,
                 visible_ids=(
@@ -310,22 +321,25 @@ class RunnerEndToEndTests(unittest.TestCase):
             core_step_executor=core_step_executor,
         )
 
-        result = runner.run(
-            account,
-            registry.prepare_script(script),
-            castle_roster_provider=lambda: PncAccountCastleRosterConfig(
-                pnc_account_id=account.pnc_account_id,
-                castles=(target_castle,),
-            ),
-        )
+        with self.assertRaises(TaskVerificationError) as raised:
+            runner.run(
+                account,
+                registry.prepare_script(script),
+                castle_roster_provider=lambda: PncAccountCastleRosterConfig(
+                    pnc_account_id=account.pnc_account_id,
+                    castles=(target_castle,),
+                ),
+            )
 
-        self.assertEqual(len(result.steps), 7)
-        self.assertEqual(result.steps[-1].status.value, "success")
+        self.assertEqual(raised.exception.details["selector_id"], UiElementId.PNC_RESEARCH_START_BUTTON)
+        # Earlier steps in the script are still allowed to complete.  The
+        # registry rejects the unsupported research selector when that step
+        # is reached, before any research tap is dispatched.
         self.assertEqual(fake_session.launches, 0)
         core_step_executor.execute.assert_called_once()
         self.assertIn("user@example.com", fake_session.texts)
         self.assertIn("secret", fake_session.texts)
-        self.assertGreaterEqual(len(fake_session.taps), 8)
+        self.assertEqual(len(fake_session.taps), 9)
 
     def test_runner_executes_world_chat_task_through_registered_task_loop(self) -> None:
         """Runs a direct chat-send task through runner replans and the shared observed-action executor."""
@@ -354,6 +368,12 @@ class RunnerEndToEndTests(unittest.TestCase):
                 ScreenType.PNC_CHAT,
                 visible_ids=chat_controls,
                 active_chat_channel=ChatChannel.ALLIANCE,
+                chat_draft_empty=True,
+            ),
+            make_observation(
+                ScreenType.PNC_CHAT,
+                visible_ids=chat_controls,
+                active_chat_channel=ChatChannel.WORLD,
                 chat_draft_empty=True,
             ),
             make_observation(
@@ -403,6 +423,7 @@ def _make_runner(
         action_executor=ObservedActionExecutor(
             selector_registry=build_default_selector_registry(),
             action_executor=ActionExecutor(
+                selector_registry=build_default_selector_registry(),
                 session=session,
                 stable_click_delay_ms=defaults.stable_click_delay_ms,
                 post_action_observe_delay_ms=defaults.post_action_observe_delay_ms,

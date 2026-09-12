@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.support.pnc.capture_vision.fake_screenshot_session import make_captured_frame
+
 import tempfile
 import unittest
 from pathlib import Path
@@ -52,7 +54,8 @@ class MovementProofOcrTests(unittest.TestCase):
             (),
             {
                 "image": image,
-                "artifact": type("Artifact", (), {"path": Path("synthetic.png"), "captured_at": None})(),
+            "artifact": type("Artifact", (), {"path": Path("synthetic.png"), "captured_at": None})(),
+            "frame_ref": make_captured_frame(b"").frame_ref,
             },
         )()
         ocr_service = _RecordingOcrService(
@@ -65,20 +68,20 @@ class MovementProofOcrTests(unittest.TestCase):
             selector_registry=registry,
             selector_engine=ImageSelectorEngine(
                 template_matcher=OpenCvTemplateMatcher(),
-                ocr_service=ocr_service,
+
             ),
             screen_classifier=ScreenClassifier(),
             enricher=PncObservationEnricher(
-                ocr_service=ocr_service,
+
                 selector_registry=registry,
             ),
-        )
+            ocr_service=ocr_service)
 
         observation = builder.build(screenshot, request=ObservationRequest.world_map_movement_proof_follow_up())
 
         self.assertEqual(observation.screen_type, ScreenType.PNC_WORLD_MAP)
-        self.assertEqual(ocr_service.read_result_calls, 0)
-        self.assertGreater(ocr_service.read_text_calls, 0)
+        self.assertEqual(ocr_service.read_result_calls, 1)
+        self.assertEqual(ocr_service.read_text_calls, 0)
         self.assertIsNotNone(observation.spatial_surface)
         assert observation.spatial_surface is not None
         self.assertEqual(observation.spatial_surface.viewport.coordinate, (230, 958))
@@ -112,14 +115,14 @@ class MovementProofOcrTests(unittest.TestCase):
                 selector_registry=registry,
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=ocr_service,
+
                     selector_registry=registry,
                 ),
-            )
+            ocr_service=ocr_service)
 
             observation = builder.build(screenshot, request=ObservationRequest.world_map_movement_proof_follow_up())
 
@@ -128,5 +131,5 @@ class MovementProofOcrTests(unittest.TestCase):
             assert observation.spatial_surface is not None
             self.assertEqual(observation.spatial_surface.viewport.coordinate, (370, 510))
             self.assertEqual(observation.spatial_surface.objects, ())
-            self.assertEqual(ocr_service.read_text_calls, 1)
+            self.assertEqual(ocr_service.read_text_calls, 0)
             self.assertTrue(any(region is not None and region.x == 0 for region in ocr_service.read_lines_regions))

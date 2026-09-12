@@ -34,7 +34,9 @@ class GiftCenterTests(unittest.TestCase):
             "Login Gift", "Lucifer Special Offer", "Deluxe Summons",
         ])
         self.assertTrue(all(entry.kind == ListEntryKind.GIFT_ENTRY for entry in additions.list_entries))
-        self.assertIn(UiElementId.PNC_BACK_BUTTON_TOP_LEFT, additions.visible_elements)
+        # Back is published only from catalog-reviewed safe-root screens;
+        # Gift Center has no independently proved Back control.
+        self.assertNotIn(UiElementId.PNC_BACK_BUTTON_TOP_LEFT, additions.visible_elements)
         self.assertEqual(ScreenClassifier().classify(additions.visible_elements, additions.screen_evidence), ScreenType.PNC_GIFT_CENTER)
         self.assertTrue(ObservationRequest.full_runtime_default().requires_ocr(ScreenType.PNC_GIFT_CENTER))
 

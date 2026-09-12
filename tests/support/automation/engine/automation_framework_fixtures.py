@@ -71,7 +71,7 @@ class AutomationFrameworkFixtures:
                 SelectorDefinition(
                     id=selector_id,
                     screens=(source_screen,),
-                    detection_kind=DetectionKind.PLANNED,
+                    detection_kind=DetectionKind.SEMANTIC,
                     status=SelectorStatus.CLICK_MAPPED,
                     interaction_kind=interaction_kind,
                     click=ClickDefinition(),

@@ -5,6 +5,7 @@ from __future__ import annotations
 import atexit
 import hashlib
 import json
+import math
 import os
 import tempfile
 import threading
@@ -105,8 +106,10 @@ class _NativeInstanceLease:
     def release(self) -> None:
         """Releases the native lock and closes its file handle."""
 
-        _unlock_file(self.handle)
-        self.handle.close()
+        try:
+            _unlock_file(self.handle)
+        finally:
+            self.handle.close()
 
 
 @dataclass(slots=True)
@@ -143,10 +146,20 @@ class InstanceLeaseRegistry:
 
         requested = _normalize_display_names(display_names)
         wait_seconds = self.wait_timeout_seconds if timeout_seconds is None else timeout_seconds
-        if wait_seconds < 0:
-            raise ValueError("Instance lease timeout cannot be negative.")
-        if self.poll_interval_seconds <= 0:
-            raise ValueError("Instance lease poll interval must be positive.")
+        if (
+            isinstance(wait_seconds, bool)
+            or not isinstance(wait_seconds, (int, float))
+            or not math.isfinite(wait_seconds)
+            or wait_seconds < 0
+        ):
+            raise ValueError("Instance lease timeout must be finite and non-negative.")
+        if (
+            isinstance(self.poll_interval_seconds, bool)
+            or not isinstance(self.poll_interval_seconds, (int, float))
+            or not math.isfinite(self.poll_interval_seconds)
+            or self.poll_interval_seconds <= 0
+        ):
+            raise ValueError("Instance lease poll interval must be finite and positive.")
         ordered = tuple(sorted(requested, key=lambda item: item[0]))
         with self._lock:
             requested_keys = {key for key, _ in ordered}
@@ -169,9 +182,20 @@ class InstanceLeaseRegistry:
                             lease_key=lease_key,
                             display_name=display_name,
                         )
-                except InstanceBusyError as error:
+                except BaseException as error:
+                    cleanup_errors: list[BaseException] = []
                     for lease in acquired.values():
-                        lease.release()
+                        try:
+                            lease.release()
+                        except BaseException as cleanup_error:
+                            cleanup_errors.append(cleanup_error)
+                    if cleanup_errors:
+                        raise BaseExceptionGroup(
+                            "BlueStacks lease acquisition and rollback both failed.",
+                            [error, *cleanup_errors],
+                        ) from None
+                    if not isinstance(error, InstanceBusyError):
+                        raise
                     remaining = deadline - time.monotonic()
                     if remaining <= 0:
                         raise InstanceBusyError(
@@ -214,20 +238,27 @@ class InstanceLeaseRegistry:
         # append-on-write semantics, which caused owner JSON to accumulate on reuse.
         path.touch(exist_ok=True)
         handle = path.open("r+b", buffering=0)
-        _ensure_lock_byte(handle)
         try:
-            _lock_file_nonblocking(handle)
-        except OSError as error:
-            owner = _read_owner(handle)
-            handle.close()
-            owner_description = _format_owner(owner)
-            raise InstanceBusyError(
-                f"BlueStacks instance '{display_name}' is owned by another PNC process{owner_description}",
-                display_name=display_name,
-                owner_pid=owner.get("pid"),
-                acquired_at=owner.get("acquired_at"),
-            ) from error
-        _write_owner(handle, display_name=display_name)
+            _ensure_lock_byte(handle)
+            try:
+                _lock_file_nonblocking(handle)
+            except OSError as error:
+                owner = _read_owner(handle)
+                owner_description = _format_owner(owner)
+                raise InstanceBusyError(
+                    f"BlueStacks instance '{display_name}' is owned by another PNC process{owner_description}",
+                    display_name=display_name,
+                    owner_pid=owner.get("pid"),
+                    acquired_at=owner.get("acquired_at"),
+                ) from error
+            _write_owner(handle, display_name=display_name)
+        except BaseException as error:
+            close_preserving_error(
+                handle.close,
+                error,
+                message="BlueStacks lease acquisition and handle cleanup both failed.",
+            )
+            raise
         return _NativeInstanceLease(display_name=display_name, path=path, handle=handle)
 
     def _release_reference(

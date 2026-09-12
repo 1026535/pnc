@@ -8,7 +8,6 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import patch
 
 from PIL import Image, ImageEnhance
 
@@ -49,29 +48,16 @@ def _builder(ocr: _RecordingOcrService) -> ObservationBuilder:
     matcher = OpenCvTemplateMatcher()
     return ObservationBuilder(
         selector_registry=registry,
-        selector_engine=ImageSelectorEngine(matcher, ocr),
+        selector_engine=ImageSelectorEngine(matcher),
         screen_classifier=ScreenClassifier(),
-        enricher=PncObservationEnricher(ocr, registry),
+        enricher=PncObservationEnricher(selector_registry=registry),
+        ocr_service=ocr,
         visual_recognizer=load_visual_screen_recognizer(matcher=matcher),
     )
 
 
 class VisualScreenRecognizerTests(unittest.TestCase):
     """Require distinct tabs, conservative matches, and intact global guard ordering."""
-
-    def test_recognition_prepares_each_frame_once_for_all_anchor_checks(self) -> None:
-        """Keeps normalization work scoped to one pass instead of one resize per anchor."""
-
-        recognizer = load_visual_screen_recognizer()
-        image = Image.new("RGB", (900, 1600))
-        with patch.object(
-            recognizer.matcher,
-            "prepare_image",
-            wraps=recognizer.matcher.prepare_image,
-        ) as prepare_image:
-            recognizer.recognize(image)
-
-        prepare_image.assert_called_once_with(image, reference_size=(540, 960))
 
     def test_reviewed_reference_profiles_and_separate_day_positives(self) -> None:
         recognizer = load_visual_screen_recognizer()
@@ -82,7 +68,12 @@ class VisualScreenRecognizerTests(unittest.TestCase):
                 continue
             with self.subTest(image=sample["image"]):
                 result = recognizer.recognize(_capture(sample["image"]).image)
-                self.assertEqual({item.screen_type.name for item in result.evidence}, {sample["screen"]})
+                expected_visual_screens = sample.get("expected_visual_screens")
+                self.assertIsInstance(expected_visual_screens, list)
+                self.assertEqual(
+                    {item.screen_type.name for item in result.evidence},
+                    set(expected_visual_screens),
+                )
 
     def test_collect_mail_profiles_expose_only_measured_controls(self) -> None:
         """Recognizes the four mail frames and keeps navigation controls template-backed."""

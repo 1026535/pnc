@@ -70,6 +70,8 @@ class MailComposeObservationTests(MailWorkflowFixtures, unittest.TestCase):
             observation.require_text_field_state(UiElementId.PNC_MAIL_COMPOSE_TARGET_FIELD).text,
             "Alliance Mail",
         )
-        self.assertTrue(observation.require_text_field_state(UiElementId.PNC_MAIL_COMPOSE_SUBJECT_FIELD).empty)
+        # No subject placeholder is visible in this centered capture; OCR
+        # absence is an unknown field state, not proof of emptiness.
+        self.assertIsNone(observation.require_text_field_state(UiElementId.PNC_MAIL_COMPOSE_SUBJECT_FIELD).empty)
         self.assertTrue(observation.require_text_field_state(UiElementId.PNC_MAIL_COMPOSE_BODY_FIELD).empty)
         self.assertTrue(observation.has(UiElementId.PNC_MAIL_COMPOSE_SEND_BUTTON))

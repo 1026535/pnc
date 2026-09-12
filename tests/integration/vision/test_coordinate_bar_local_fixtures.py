@@ -52,14 +52,14 @@ class CoordinateBarLocalFixturesTests(unittest.TestCase):
                 selector_registry=registry,
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=ocr_service,
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=ocr_service,
+
                     selector_registry=registry,
                 ),
-            )
+            ocr_service=ocr_service)
 
             observation = builder.build(screenshot)
 
@@ -97,14 +97,14 @@ class CoordinateBarLocalFixturesTests(unittest.TestCase):
                 selector_registry=registry,
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=ocr_service,
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=ocr_service,
+
                     selector_registry=registry,
                 ),
-            )
+            ocr_service=ocr_service)
 
             observation = builder.build(screenshot)
 

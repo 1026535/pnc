@@ -55,12 +55,14 @@ class WorldMapRuntimeFixtures(WorldMapSearchFixtures):
                     return replace(capture.observation)
             raise AssertionError("P2 received a screenshot that P1 did not capture.")
 
+        test_registry = build_default_selector_registry()
         service = WorldMapSearchService(
             screen_flows=self.flows,
             observation_service=observer,
             action_executor=ObservedActionExecutor(
-                selector_registry=build_default_selector_registry(),
+                selector_registry=test_registry,
                 action_executor=ActionExecutor(
+                    selector_registry=test_registry,
                     session=session,
                     stable_click_delay_ms=0,
                     post_action_observe_delay_ms=0,

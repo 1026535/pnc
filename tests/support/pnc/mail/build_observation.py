@@ -44,16 +44,18 @@ def _build_observation(
             artifact_directory="mail_test",
             label="synthetic",
         )
+        ocr_service = _FakeOcrService(lines=lines)
         builder = ObservationBuilder(
             selector_registry=build_default_selector_registry(),
             selector_engine=ImageSelectorEngine(
                 template_matcher=OpenCvTemplateMatcher(),
-                ocr_service=UnavailableOcrService(),
+
             ),
             screen_classifier=ScreenClassifier(),
             enricher=PncObservationEnricher(
-                ocr_service=_FakeOcrService(lines=lines),
+
                 selector_registry=build_default_selector_registry(),
             ),
+            ocr_service=ocr_service,
         )
         return builder.build(screenshot, request=request)

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pnc_automation.core.errors import SelectorResolutionError
+
 import unittest
 
 from pnc_automation.app.automation.engine.action_executor import ActionExecutor
@@ -18,6 +20,7 @@ from pnc_automation.app.pnc.domain.observation import (
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
+from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
 
 from tests.support.automation.session import FakeSession
 from tests.support.core.logging import build_logger
@@ -26,6 +29,9 @@ from tests.support.pnc.spatial import make_spatial_object, make_spatial_surface
 from tests.support.runtime.observation_service import FakeObservationService
 from tests.support.automation.engine.automation_framework_fixtures import (
     AutomationFrameworkFixtures,
+)
+from tests.support.automation.engine.make_observed_action_executor import (
+    _make_observed_action_executor,
 )
 
 
@@ -42,6 +48,7 @@ class ActionFollowUpTests(AutomationFrameworkFixtures, unittest.TestCase):
             ]
         )
         executor = ActionExecutor(
+            selector_registry=build_default_selector_registry(),
             session=FakeSession(),
             stable_click_delay_ms=0,
             post_action_observe_delay_ms=0,
@@ -86,6 +93,7 @@ class ActionFollowUpTests(AutomationFrameworkFixtures, unittest.TestCase):
             ]
         )
         executor = ActionExecutor(
+            selector_registry=build_default_selector_registry(),
             session=FakeSession(),
             stable_click_delay_ms=0,
             post_action_observe_delay_ms=0,
@@ -123,15 +131,7 @@ class ActionFollowUpTests(AutomationFrameworkFixtures, unittest.TestCase):
 
         fake_session = FakeSession()
         fake_observer = FakeObservationService(observations=[make_observation(ScreenType.PNC_WORLD_MAP)])
-        executor = ActionExecutor(
-            session=fake_session,
-            stable_click_delay_ms=0,
-            post_action_observe_delay_ms=0,
-            chat_stable_click_delay_ms=0,
-            chat_post_action_observe_delay_ms=0,
-            logger=build_logger(),
-            sleep=lambda _: None,
-        )
+        executor = _make_observed_action_executor(fake_session)
         resource_node = make_spatial_object(
             SpatialObjectKind.RESOURCE_NODE,
             name_text="Food Farm",
@@ -171,6 +171,7 @@ class ActionFollowUpTests(AutomationFrameworkFixtures, unittest.TestCase):
         fake_session = FakeSession()
         fake_observer = FakeObservationService(observations=[make_observation(ScreenType.PNC_GATHER_NODE)])
         executor = ActionExecutor(
+            selector_registry=build_default_selector_registry(),
             session=fake_session,
             stable_click_delay_ms=0,
             post_action_observe_delay_ms=0,
@@ -180,19 +181,19 @@ class ActionFollowUpTests(AutomationFrameworkFixtures, unittest.TestCase):
             sleep=lambda _: None,
         )
 
-        result = executor.execute_actions(
-            (
-                TapAction(
-                    selector_id=UiElementId.PNC_GATHER_BUTTON,
-                    reason="open_gather_march",
-                    observe_after=True,
-                    follow_up_request=ObservationRequest.march_confirm_follow_up(),
+        with self.assertRaises(SelectorResolutionError):
+            executor.execute_actions(
+                (
+                    TapAction(
+                        selector_id=UiElementId.PNC_GATHER_BUTTON,
+                        reason="open_gather_march",
+                        observe_after=True,
+                        follow_up_request=ObservationRequest.march_confirm_follow_up(),
+                    ),
+                    TapAction(selector_id=UiElementId.PNC_MARCH_CONFIRM_BUTTON, reason="confirm_gather_march"),
                 ),
-                TapAction(selector_id=UiElementId.PNC_MARCH_CONFIRM_BUTTON, reason="confirm_gather_march"),
-            ),
-            make_observation(ScreenType.PNC_GATHER_NODE, visible_ids=(UiElementId.PNC_GATHER_BUTTON,)),
-            observe=fake_observer.observe,
-        )
+                make_observation(ScreenType.PNC_GATHER_NODE, visible_ids=(UiElementId.PNC_GATHER_BUTTON,)),
+                observe=fake_observer.observe,
+            )
 
-        self.assertEqual(result.screen_type, ScreenType.PNC_GATHER_NODE)
-        self.assertEqual(fake_session.taps, [(5, 5)])
+        self.assertEqual(fake_session.taps, [])

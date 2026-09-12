@@ -88,18 +88,18 @@ class OverviewMarkerObservationTests(unittest.TestCase):
                 selector_registry=registry,
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                    selector_registry=registry,
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("K:226 Reset", x=228, y=22, width=144, height=32),
                         )
-                    ),
-                    selector_registry=registry,
-                ),
-            )
+                    ))
 
             observation = builder.build(
                 screenshot,
@@ -157,18 +157,18 @@ class OverviewMarkerObservationTests(unittest.TestCase):
                 selector_registry=registry,
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                    selector_registry=registry,
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("K:226 Reset", x=228, y=22, width=144, height=32),
                         )
-                    ),
-                    selector_registry=registry,
-                ),
-            )
+                    ))
 
             observation = builder.build(
                 screenshot,

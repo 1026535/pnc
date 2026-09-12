@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.support.pnc.capture_vision.minimal_runtime_registry import _minimal_runtime_registry
+
 import tempfile
 import unittest
 from pathlib import Path
@@ -55,14 +57,16 @@ class SystemPopupObservationTests(unittest.TestCase):
                 label="bluestacks_android_home",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Search for games & apps", x=125, y=56, width=113, height=16),
                             _ocr_line("Store", x=86, y=215, width=44, height=20),
@@ -70,8 +74,7 @@ class SystemPopupObservationTests(unittest.TestCase):
                             _ocr_line("Puzzles & Conquest", x=359, y=217, width=146, height=17),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot, request=ObservationRequest.full_runtime_default())
 
@@ -91,14 +94,16 @@ class SystemPopupObservationTests(unittest.TestCase):
                 label="research_queue_popup",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Research Queue", x=288, y=427, width=328, height=45),
                             _ocr_line("1st Research Queue", x=213, y=544, width=265, height=30),
@@ -106,8 +111,7 @@ class SystemPopupObservationTests(unittest.TestCase):
                             _ocr_line("Idle", x=208, y=596, width=58, height=33),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -126,14 +130,16 @@ class SystemPopupObservationTests(unittest.TestCase):
                 label="google_play_games_popup",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Google Play Games", x=369, y=440, width=214, height=27),
                             _ocr_line("Create a Play Games profile", x=233, y=960, width=424, height=30),
@@ -142,8 +148,7 @@ class SystemPopupObservationTests(unittest.TestCase):
                             _ocr_line("Next", x=782, y=1530, width=56, height=22),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 

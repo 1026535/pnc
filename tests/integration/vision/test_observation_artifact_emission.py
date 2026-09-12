@@ -120,15 +120,15 @@ class ObservationArtifactEmissionTests(unittest.TestCase):
                         selector_registry=registry,
                         selector_engine=ImageSelectorEngine(
                             template_matcher=OpenCvTemplateMatcher(),
-                            ocr_service=UnavailableOcrService(),
+
                         ),
                         screen_classifier=ScreenClassifier(),
                         enricher=PncObservationEnricher(
-                            ocr_service=ocr_service,
+
                             selector_registry=registry,
                         ),
-                        debug_artifact_collector=ObservationDebugArtifactCollector(ocr_service=ocr_service),
-                    )
+                        debug_artifact_collector=ObservationDebugArtifactCollector(),
+            ocr_service=ocr_service)
                     service = ObservationService(
                         screenshot_service=screenshot_service,
                         observation_builder=builder,
@@ -139,7 +139,7 @@ class ObservationArtifactEmissionTests(unittest.TestCase):
 
                     capture = service.capture_observation("world_scan", request=persist_request)
 
-                    expected_screen_type = ScreenType.UNKNOWN if persist_request is not None else ScreenType.PNC_WORLD_MAP
+                    expected_screen_type = ScreenType.PNC_WORLD_MAP
                     self.assertEqual(capture.observation.screen_type, expected_screen_type)
                     if expect_artifact:
                         self.assertIsNotNone(capture.screenshot.artifact_path)

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.support.pnc.capture_vision.minimal_runtime_registry import _minimal_runtime_registry
+
 import tempfile
 import unittest
 from pathlib import Path
@@ -43,14 +45,16 @@ class BuildQueueObservationTests(unittest.TestCase):
                 label="build_queue",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Build Queue", x=315, y=64, width=256, height=36),
                             _ocr_line("Upgrading: Wall", x=115, y=250, width=250, height=34),
@@ -61,8 +65,7 @@ class BuildQueueObservationTests(unittest.TestCase):
                             _ocr_line("Go", x=754, y=468, width=52, height=28),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -85,14 +88,16 @@ class BuildQueueObservationTests(unittest.TestCase):
                 label="centered_idle_build_queue",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Build Queue", x=327, y=428, width=249, height=44),
                             _ocr_line("1st Build Queue", x=212, y=541, width=216, height=32),
@@ -102,8 +107,7 @@ class BuildQueueObservationTests(unittest.TestCase):
                             _ocr_line("Inactive", x=211, y=758, width=110, height=30),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 

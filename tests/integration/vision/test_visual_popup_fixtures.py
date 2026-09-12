@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pnc_automation.core.vision.ocr.ocr_service import ObservationOcrContext
+
 import unittest
 
 from PIL import Image, ImageDraw
@@ -80,16 +82,18 @@ class VisualPopupFixturesTests(unittest.TestCase):
         drawing.rectangle((25, 100, 515, 780), fill=(25, 33, 50), outline=(65, 82, 110), width=4)
         drawing.line((476, 46, 504, 74), fill=(255, 247, 218), width=7)
         drawing.line((504, 46, 476, 74), fill=(255, 247, 218), width=7)
-        enricher = PncObservationEnricher(
-            ocr_service=_FakeOcrService(
-                lines=(
-                    _ocr_line("New version detected. Tap Confirm to update.", x=58, y=300, width=420, height=28),
-                    _ocr_line("Confirm", x=221, y=531, width=90, height=27),
-                )
+        ocr_service = _FakeOcrService(
+            lines=(
+                _ocr_line("New version detected. Tap Confirm to update.", x=58, y=300, width=420, height=28),
+                _ocr_line("Confirm", x=221, y=531, width=90, height=27),
             )
         )
+        enricher = PncObservationEnricher()
 
-        additions = enricher.detect_interruption(image)
+        additions = enricher.detect_interruption(
+            image,
+            ocr_context=ObservationOcrContext(image, ocr_service, None, "test"),
+        )
 
         self.assertIn(UiElementId.PNC_UPDATE_CONFIRM_BUTTON, additions.visible_elements)
         self.assertNotIn(UiElementId.PNC_POPUP_CLOSE_BUTTON, additions.visible_elements)

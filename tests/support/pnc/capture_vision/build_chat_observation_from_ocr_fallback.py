@@ -35,12 +35,12 @@ def _build_chat_observation_from_ocr_fallback(
         selector_registry=registry,
         selector_engine=ImageSelectorEngine(
             template_matcher=OpenCvTemplateMatcher(),
-            ocr_service=UnavailableOcrService(),
+
         ),
         screen_classifier=ScreenClassifier(),
         enricher=PncObservationEnricher(
-            ocr_service=ocr_service,
             selector_registry=registry,
         ),
+        ocr_service=ocr_service,
     )
     return builder.build(screenshot, request=request), ocr_service

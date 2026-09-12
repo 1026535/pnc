@@ -46,11 +46,13 @@ class NoisyCoordinateObservationTests(unittest.TestCase):
                 selector_registry=build_default_selector_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("X:253", x=73, y=67, width=71, height=24),
                             _ocr_line("Home", x=63, y=1563, width=76, height=28),
@@ -61,8 +63,7 @@ class NoisyCoordinateObservationTests(unittest.TestCase):
                             _ocr_line("More", x=795, y=1568, width=70, height=25),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -84,11 +85,13 @@ class NoisyCoordinateObservationTests(unittest.TestCase):
                 selector_registry=build_default_selector_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("X292Y:540", x=346, y=140, width=223, height=39),
                             _ocr_line("[LFG]Mr_Zero", x=249, y=307, width=126, height=23),
@@ -101,8 +104,7 @@ class NoisyCoordinateObservationTests(unittest.TestCase):
                             _ocr_line("More", x=795, y=1568, width=70, height=25),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -126,11 +128,13 @@ class NoisyCoordinateObservationTests(unittest.TestCase):
                 selector_registry=build_default_selector_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("X:99287Y:707414", x=371, y=141, width=222, height=38),
                             _ocr_line("Venom Spider", x=447, y=379, width=135, height=25),
@@ -142,8 +146,7 @@ class NoisyCoordinateObservationTests(unittest.TestCase):
                             _ocr_line("More", x=795, y=1568, width=70, height=25),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -167,11 +170,13 @@ class NoisyCoordinateObservationTests(unittest.TestCase):
                 selector_registry=build_default_selector_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("X:101 4Y:695", x=371, y=146, width=197, height=30),
                             _ocr_line("Enchanted Reptilian", x=194, y=582, width=192, height=25),
@@ -183,8 +188,7 @@ class NoisyCoordinateObservationTests(unittest.TestCase):
                             _ocr_line("More", x=795, y=1568, width=70, height=25),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 

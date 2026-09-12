@@ -436,7 +436,11 @@ class ScriptRunner:
             survey_recorder=world_map_survey_recorder,
             search_service=world_map_search_service,
         )
-        observed_executor = self._build_observed_action_executor(account=account, session=session)
+        observed_executor = self._build_observed_action_executor(
+            account=account,
+            session=session,
+            canonical_observe=observation_service.observe,
+        )
         if observed_executor is not None:
             world_map_search_service.action_executor = observed_executor
             world_map_search_service.castle_inspector = ObservationBackedWorldMapCastleInspector(
@@ -708,6 +712,7 @@ class ScriptRunner:
         *,
         account: AccountConfig,
         session: BlueStacksSession,
+        canonical_observe: Callable[[str, ObservationRequest | None], Observation] | None = None,
     ) -> ObservedActionExecutor | None:
         """Builds the canonical observed-action executor when the observation builder exposes selector metadata."""
 
@@ -719,6 +724,7 @@ class ScriptRunner:
             selector_registry=selector_registry,
             action_executor=ActionExecutor(
                 session=session,
+                selector_registry=selector_registry,
                 stable_click_delay_ms=self.config.defaults.stable_click_delay_ms,
                 post_action_observe_delay_ms=self.config.defaults.post_action_observe_delay_ms,
                 chat_stable_click_delay_ms=self.config.defaults.chat_stable_click_delay_ms,
@@ -728,6 +734,7 @@ class ScriptRunner:
                 logger=logging.LoggerAdapter(self.logger.logger, extra={**self.logger.extra, **shared_extra}),
             ),
             logger=logging.LoggerAdapter(self.logger.logger, extra={**self.logger.extra, **shared_extra}),
+            canonical_observe=canonical_observe,
         )
 
 
