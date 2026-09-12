@@ -508,17 +508,7 @@ class Observation:
                 guard=GuardVerdict.BLOCKED if blocking_popup else GuardVerdict.CLEAR,
             )
         elif screen_type is not None and screen_type != decision.effective_screen:
-            # ``dataclasses.replace`` passes the legacy compatibility property
-            # alongside the original decision. Rebind the decision so old
-            # fixtures can still replace the projected screen safely.
-            decision = ScreenDecision(
-                base_screen=screen_type,
-                effective_screen=screen_type,
-                layout_id=decision.layout_id,
-                guard=decision.guard,
-                evidence=decision.evidence,
-                coordinate_only=decision.coordinate_only,
-            )
+            raise ValueError("Legacy screen_type contradicts the supplied screen decision.")
         if blocking_popup and decision.guard != GuardVerdict.BLOCKED:
             decision = ScreenDecision(
                 base_screen=decision.base_screen,

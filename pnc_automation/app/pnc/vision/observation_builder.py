@@ -48,6 +48,7 @@ from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.core.text.normalization import normalize_ocr_text
 from pnc_automation.app.pnc.vision.image_models import SelectorMatch
+from pnc_automation.app.pnc.vision.observation_provenance import bind_list_entry, bind_visible_elements
 from pnc_automation.app.pnc.vision.observation_request import (
     ObservationRequest,
     world_map_coordinate_dialog_text_field_selector_ids,
@@ -374,15 +375,6 @@ class ObservationBuilder:
     ) -> tuple[OcrRegionPlan, ...]:
         """Compile fixed OCR fields and coordinate regions for one resolved frame."""
 
-        available_selector_ids = {selector.id for selector in self.selector_registry.all()}
-        request = replace(
-            request,
-            text_field_selectors=frozenset(
-                selector_id
-                for selector_id in request.text_field_selectors
-                if selector_id in available_selector_ids
-            ),
-        )
         return compile_ocr_region_plans(
             registry=self.selector_registry,
             resolved_screen=resolved_screen,
@@ -657,14 +649,14 @@ class ObservationBuilder:
             decision=decision,
             additions=additions,
         )
-        visible_elements = _bind_visible_elements(
+        visible_elements = bind_visible_elements(
             visible_elements,
             frame_ref=getattr(screenshot, "frame_ref", None),
             source_screen=decision.effective_screen,
             source_layout_id=decision.layout_id,
         )
         bound_list_entries = tuple(
-            _bind_one_list_entry(
+            bind_list_entry(
                 entry,
                 frame_ref=getattr(screenshot, "frame_ref", None),
                 source_screen=decision.effective_screen,
@@ -1040,85 +1032,6 @@ def _merge_guard_verdicts(*verdicts: GuardVerdict) -> GuardVerdict:
     if GuardVerdict.CLEAR in verdicts:
         return GuardVerdict.CLEAR
     return GuardVerdict.NOT_EVALUATED
-
-
-def _bind_visible_elements(
-    elements: Mapping[UiElementId, VisibleElement],
-    *,
-    frame_ref: object,
-    source_screen: ScreenType,
-    source_layout_id: str | None,
-) -> dict[UiElementId, VisibleElement]:
-    """Stamps published selector geometry with the observation provenance and source."""
-
-    return {
-        selector_id: _bind_one_visible_element(
-            element,
-            frame_ref=frame_ref,
-            source_screen=source_screen,
-            source_layout_id=source_layout_id,
-        )
-        for selector_id, element in elements.items()
-    }
-
-
-def _bind_one_visible_element(
-    element: VisibleElement,
-    *,
-    frame_ref: object,
-    source_screen: ScreenType,
-    source_layout_id: str | None,
-) -> VisibleElement:
-    """Adds missing publication provenance while rejecting contradictory existing proof."""
-
-    if element.frame_ref is not None and element.frame_ref != frame_ref:
-        raise SelectorResolutionError(
-            "Visible selector proof belongs to a different capture frame.",
-            selector_id=element.selector_id,
-        )
-    if element.source_screen is not None and element.source_screen != source_screen:
-        raise SelectorResolutionError(
-            "Visible selector proof belongs to a different source screen.",
-            selector_id=element.selector_id,
-            source_screen=element.source_screen,
-            effective_screen=source_screen,
-        )
-    if element.source_layout_id is not None and element.source_layout_id != source_layout_id:
-        raise SelectorResolutionError(
-            "Visible selector proof belongs to a different source layout.",
-            selector_id=element.selector_id,
-            source_layout_id=element.source_layout_id,
-            effective_layout_id=source_layout_id,
-        )
-    return replace(
-        element,
-        frame_ref=element.frame_ref or frame_ref,
-        source_screen=element.source_screen or source_screen,
-        source_layout_id=element.source_layout_id if element.source_layout_id is not None else source_layout_id,
-    )
-
-
-def _bind_one_list_entry(
-    entry: DetectedListEntry,
-    *,
-    frame_ref: object,
-    source_screen: ScreenType,
-    source_layout_id: str | None,
-) -> DetectedListEntry:
-    """Adds missing list-row provenance while rejecting contradictory proof."""
-
-    if entry.frame_ref is not None and entry.frame_ref != frame_ref:
-        raise SelectorResolutionError("List entry proof belongs to a different capture frame.", entry_kind=entry.kind)
-    if entry.source_screen is not None and entry.source_screen != source_screen:
-        raise SelectorResolutionError("List entry proof belongs to a different source screen.", entry_kind=entry.kind)
-    if entry.source_layout_id is not None and entry.source_layout_id != source_layout_id:
-        raise SelectorResolutionError("List entry proof belongs to a different source layout.", entry_kind=entry.kind)
-    return replace(
-        entry,
-        frame_ref=entry.frame_ref or frame_ref,
-        source_screen=entry.source_screen or source_screen,
-        source_layout_id=entry.source_layout_id if entry.source_layout_id is not None else source_layout_id,
-    )
 
 
 def _matches_to_visible_elements(matches: Sequence[SelectorMatch]) -> dict[UiElementId, VisibleElement]:

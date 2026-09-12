@@ -2820,7 +2820,7 @@ class FlowAndTaskTests(unittest.TestCase):
     def test_return_to_safe_root_screen_unwinds_build_speedup_confirmation(self) -> None:
         """Refuses an unconfirmed speedup popup without a typed, proved close control."""
 
-        with self.assertRaisesRegex(SelectorResolutionError, "typed safe close"):
+        with self.assertRaisesRegex(SelectorResolutionError, "Task-owned popup controls cannot be consumed by generic recovery"):
             self.flows.return_to_safe_root_screen(make_observation(ScreenType.PNC_BUILD_SPEEDUP_CONFIRM))
 
     def test_return_to_safe_root_screen_closes_more_overlay_without_triggering_exit_popup(self) -> None:

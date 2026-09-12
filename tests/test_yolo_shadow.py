@@ -59,12 +59,39 @@ class YoloShadowTests(unittest.TestCase):
         shadow = YoloShadowObserver(FakeDetector(), {"monster": SpatialObjectKind.MONSTER})
         for observation in (
             replace(self.observation, blocking_popup=True),
-            replace(self.observation, screen_type=ScreenType.UNKNOWN),
-            replace(self.observation, screen_type=ScreenType.PNC_POPUP),
-            replace(self.observation, screen_type=ScreenType.PNC_HOME_CITY),
+            replace(
+                self.observation,
+                decision=replace(
+                    self.observation.decision,
+                    base_screen=ScreenType.UNKNOWN,
+                    effective_screen=ScreenType.UNKNOWN,
+                ),
+            ),
+            replace(
+                self.observation,
+                decision=replace(
+                    self.observation.decision,
+                    base_screen=ScreenType.PNC_POPUP,
+                    effective_screen=ScreenType.PNC_POPUP,
+                ),
+            ),
+            replace(
+                self.observation,
+                decision=replace(
+                    self.observation.decision,
+                    base_screen=ScreenType.PNC_HOME_CITY,
+                    effective_screen=ScreenType.PNC_HOME_CITY,
+                ),
+            ),
             replace(self.observation, spatial_surface=None),
         ):
             self.assertEqual(shadow.observe(self.capture, observation).candidates, ())
+
+    def test_explicit_legacy_screen_type_cannot_override_decision(self) -> None:
+        """Requires callers to replace the canonical decision when changing screens."""
+
+        with self.assertRaisesRegex(ValueError, "contradicts the supplied screen decision"):
+            replace(self.observation, screen_type=ScreenType.UNKNOWN)
 
     def test_mismatched_frame_and_class_map_fail_before_use(self) -> None:
         shadow = YoloShadowObserver(FakeDetector())
