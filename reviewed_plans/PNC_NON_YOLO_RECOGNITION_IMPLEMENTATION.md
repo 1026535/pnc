@@ -253,6 +253,8 @@ crop-only guard replacement, account switch or mutation result is approved here.
 
 ## 2026-09-12 integration outcome
 
+Final publication and review: feature code pushed at `6f3f732`. `py -u tools/run_tests.py full` passed **1,642 tests with 5 skips**; the eight newly relocated shutdown tests passed separately. The exact scope, command results, and remaining acceptance limits are in [PNC_NON_YOLO_INTEGRATION_REVIEW.md](PNC_NON_YOLO_INTEGRATION_REVIEW.md). Main advanced to `b0ba590` while validation ran; following the user's push-then-review instruction, this publication includes main through `c7dfdd5` and records the newer integration as pending.
+
 The combined feature preserves published history through `5c4ce6b` and mainline through `c7dfdd5`. Local merge commits are `e6df3bb` and `8697789`; the latter retains quiescent BlueStacks cleanup and the `.local-data` defaults. All conflict files were resolved. The split-test migration carried 175 feature test definitions into canonical owners, removed seven obsolete monoliths, and relocated 11 new feature tests. Mainline's eight shutdown tests were also moved into the portable inventory and passed.
 
 The fresh coverage audit passes on the actual tracked catalog and manifest: 329 selectors, 273 enabled, 56 unsupported, 59 orphan IDs; 90 families include seven reviewed region plans and 83 guarded full-frame fallbacks. All 35 manifest hashes and 29 profile-source hashes match the canonical dimension-prefixed decoded-RGB contract. The catalog now declares layout identity independently of appearance identity, preserving Home recognition when multiple compatible variants match.
