@@ -259,12 +259,7 @@ class AutomationRunner:
         task = self.task_registry.require(step.task)
         if isinstance(task, CoreWorkflowTaskDefinition):
             return self._run_core_step(
-                account=account,
                 step=step,
-                castle_roster_provider=castle_roster_provider,
-                castle_roster_store=castle_roster_store,
-                mail_archive_store=mail_archive_store,
-                chat_archive_store=chat_archive_store,
             )
         before = self.observation_service.observe(f"{step.task.value}_before")
         before = self._align_step_castle_target(
@@ -299,12 +294,7 @@ class AutomationRunner:
     def _run_core_step(
         self,
         *,
-        account: AccountConfig,
         step: PreparedScriptStep,
-        castle_roster_provider: Callable[[], PncAccountCastleRosterConfig | None] | None,
-        castle_roster_store: CastleRosterStore | None,
-        mail_archive_store: MailArchiveStore | None,
-        chat_archive_store: ChatArchiveStore | None,
     ) -> CoreStepRunResult:
         """Runs a typed core step without invoking legacy observation or task execution."""
 
@@ -312,17 +302,6 @@ class AutomationRunner:
         if executor is None:
             raise RuntimeError(
                 f"Typed core task '{step.task}' has no configured core-step executor; dispatch failed closed."
-            )
-        if step.castle is not None:
-            before = self.observation_service.observe(f"{step.task.value}_before")
-            self._align_step_castle_target(
-                account=account,
-                step=step,
-                before=before,
-                castle_roster_provider=castle_roster_provider,
-                castle_roster_store=castle_roster_store,
-                mail_archive_store=mail_archive_store,
-                chat_archive_store=chat_archive_store,
             )
         workflow_result = executor.execute(step=step)
         if not workflow_result.succeeded:
