@@ -8,13 +8,29 @@ from dataclasses import dataclass, field
 import time
 from typing import Protocol
 
-from pnc_automation.app.pnc.domain.action_requests import ActionRequest, TapAction, TapSpatialObjectAction
+from pnc_automation.app.pnc.domain.action_requests import (
+    ActionRequest,
+    SwipeAction,
+    TapAction,
+    TapPointAction,
+    TapSpatialObjectAction,
+)
 from pnc_automation.app.pnc.domain.building_catalog import (
     HomeCityObjectId,
     home_city_object_id_from_metadata,
     primary_screen_type_for_home_city_object,
 )
-from pnc_automation.app.pnc.domain.observation import Observation, VisibleElementSourceKind
+from pnc_automation.app.pnc.domain.observation import (
+    ListEntryKind,
+    Observation,
+    VisibleElementSourceKind,
+)
+from pnc_automation.app.pnc.domain.mail import (
+    MailboxAvailability,
+    MailboxType,
+    mailbox_category_selector_id,
+    mail_thread_row_key,
+)
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 
@@ -140,6 +156,134 @@ class NavigationCore:
             self.transition(focus)
         return self.open_visible_building(target, observe_content=observe_content)
 
+    def open_mailbox(
+        self, mailbox: MailboxType, *, observe_content: Callable[[str], Observation],
+    ) -> MailboxAvailability:
+        """Open one typed mail category after proving its fresh hub availability."""
+        if not isinstance(mailbox, MailboxType):
+            raise ValueError("Mailbox navigation requires a MailboxType value.")
+        self._sequence += 1
+        label = f"core_{self._sequence}_mailbox"
+        hub = observe_content(f"{label}_hub")
+        if hub.blocking_popup or hub.screen_type != ScreenType.PNC_MAIL_HUB:
+            raise RuntimeError("Mailbox navigation requires a freshly observed, unblocked mail hub.")
+        candidates = tuple(
+            entry
+            for entry in hub.entries(ListEntryKind.MAILBOX_CATEGORY)
+            if entry.metadata.get("mailbox_type") == mailbox.value
+        )
+        if len(candidates) != 1:
+            raise RuntimeError("Requested mailbox category is missing or ambiguous; no tap sent.")
+        available = candidates[0].metadata.get("available")
+        if type(available) is not bool:
+            raise RuntimeError("Requested mailbox category has no typed availability disposition; no tap sent.")
+        if not available:
+            self.record({"event": "mailbox_unavailable", "mailbox": mailbox.value})
+            return MailboxAvailability.UNAVAILABLE
+        selector = mailbox_category_selector_id(mailbox)
+        edge = next(
+            (
+                candidate
+                for candidate in self.edges
+                if candidate.source == ScreenType.PNC_MAIL_HUB and candidate.selector == selector
+            ),
+            None,
+        )
+        if edge is None:
+            raise ValueError("Requested mailbox category is missing from the reviewed navigation graph.")
+        self.transition(edge)
+        return MailboxAvailability.AVAILABLE
+
+    def open_mail_thread(
+        self, row_key: str, *, observe_content: Callable[[str], Observation],
+    ) -> Observation:
+        """Open exactly one freshly observed mailbox thread row by its canonical identity."""
+        if not isinstance(row_key, str) or row_key.strip() == "":
+            raise ValueError("Mail thread navigation requires a non-empty canonical row key.")
+        self._sequence += 1
+        label = f"core_{self._sequence}_mail_thread"
+        before = observe_content(f"{label}_source")
+        if before.blocking_popup or before.screen_type != ScreenType.PNC_MAILBOX_LIST:
+            raise RuntimeError("Mail thread navigation requires a freshly observed, unblocked mailbox list.")
+        candidates = tuple(
+            entry
+            for entry in before.entries(ListEntryKind.MAIL_THREAD)
+            if mail_thread_row_key(entry) == row_key
+        )
+        if len(candidates) != 1 or candidates[0].action_point is None:
+            raise RuntimeError("Mail thread row is absent, ambiguous, or lacks an observed action point; no tap sent.")
+        point = candidates[0].action_point
+        self.record({"event": "pending_mail_thread", "artifact": str(before.artifact_path), "row_key": row_key})
+        return self._execute_and_confirm(
+            TapPointAction(x=point[0], y=point[1], reason="replacement_open_mail_thread"),
+            before,
+            frozenset({ScreenType.PNC_MAIL_THREAD}),
+            label,
+        )
+
+    def scroll_mailbox(
+        self, *, observe_content: Callable[[str], Observation],
+    ) -> Observation:
+        """Scroll one freshly observed mailbox list and require a fresh list frame."""
+        self._sequence += 1
+        label = f"core_{self._sequence}_mailbox_scroll"
+        before = observe_content(f"{label}_source")
+        if before.blocking_popup or before.screen_type != ScreenType.PNC_MAILBOX_LIST:
+            raise RuntimeError("Mailbox scrolling requires a freshly observed, unblocked mailbox list.")
+        return self._execute_content_and_confirm(
+            SwipeAction(
+                direction="up",
+                distance_ratio=0.58,
+                duration_ms=450,
+                reason="replacement_scroll_mailbox",
+            ),
+            before,
+            frozenset({ScreenType.PNC_MAILBOX_LIST}),
+            label,
+            observe_content,
+        )
+
+    def _execute_content_and_confirm(
+        self,
+        action: ActionRequest,
+        before: Observation,
+        destinations: frozenset[ScreenType],
+        label: str,
+        observe_content: Callable[[str], Observation],
+    ) -> Observation:
+        """Execute one bounded content action without replaying a failed gesture."""
+        if not self.actuator.execute_action(action, before):
+            raise RuntimeError("Navigation actuator did not execute the mail action.")
+        started = self.clock()
+        stable = 0
+        previous = ScreenType.UNKNOWN
+        captured_at = before.captured_at
+        for index in range(self.policy.max_observations):
+            if self.clock() - started >= self.policy.max_seconds:
+                break
+            self.sleep(self.policy.poll_seconds)
+            after = observe_content(f"{label}_after_{index}")
+            self.record({"event": "observed", "screen": after.screen_type.name,
+                         "artifact": str(after.artifact_path), "blocked": after.blocking_popup})
+            if after.captured_at <= captured_at:
+                raise RuntimeError("Mail action received a stale capture; completion is unproven.")
+            captured_at = after.captured_at
+            if self.clock() - started >= self.policy.max_seconds:
+                break
+            if after.blocking_popup:
+                raise RuntimeError("Mail action was interrupted; no recovery action or repeated gesture sent.")
+            if after.screen_type in destinations:
+                stable = stable + 1 if after.screen_type == previous else 1
+                if stable >= self.policy.stable_observations:
+                    self.record({"event": "confirmed", "screen": after.screen_type.name})
+                    return after
+            else:
+                stable = 0
+                if after.screen_type not in {before.screen_type, ScreenType.UNKNOWN, ScreenType.PNC_LOADING}:
+                    raise RuntimeError("Mail action reached an unexpected screen; inspect the recorded frame.")
+            previous = after.screen_type
+        raise RuntimeError("Mail action completion budget exhausted; the gesture was not repeated.")
+
     def _execute_and_confirm(
         self, action: ActionRequest, before: Observation,
         destinations: frozenset[ScreenType], label: str,
@@ -224,6 +368,12 @@ def reviewed_navigation_edges() -> tuple[NavigationEdge, ...]:
         NavigationEdge(screen.PNC_WORLD_MAP, selector.PNC_WORLD_HOME_NAV, frozenset({screen.PNC_HOME_CITY})),
         NavigationEdge(screen.PNC_HOME_CITY, selector.PNC_BOTTOM_NAV_QUEST, quest),
         NavigationEdge(screen.PNC_HOME_CITY, selector.PNC_BOTTOM_NAV_BAG, frozenset({screen.PNC_BAG})),
+        NavigationEdge(screen.PNC_HOME_CITY, selector.PNC_BOTTOM_NAV_MAIL, frozenset({screen.PNC_MAIL_HUB})),
+        NavigationEdge(screen.PNC_MAIL_HUB, selector.PNC_BACK_BUTTON_TOP_LEFT, frozenset({screen.PNC_HOME_CITY})),
+        NavigationEdge(screen.PNC_MAIL_HUB, selector.PNC_MAIL_ROW_PLAYER_MAIL, frozenset({screen.PNC_MAILBOX_LIST})),
+        NavigationEdge(screen.PNC_MAIL_HUB, selector.PNC_MAIL_ROW_ALLIANCE_MAIL, frozenset({screen.PNC_MAILBOX_LIST})),
+        NavigationEdge(screen.PNC_MAILBOX_LIST, selector.PNC_BACK_BUTTON_TOP_LEFT, frozenset({screen.PNC_MAIL_HUB})),
+        NavigationEdge(screen.PNC_MAIL_THREAD, selector.PNC_BACK_BUTTON_TOP_LEFT, frozenset({screen.PNC_MAILBOX_LIST})),
         NavigationEdge(screen.PNC_QUEST_MAIN, selector.PNC_QUEST_TAB_DAILY, frozenset({screen.PNC_QUEST_DAILY})),
         NavigationEdge(screen.PNC_QUEST_DAILY, selector.PNC_QUEST_TAB_MAIN, frozenset({screen.PNC_QUEST_MAIN})),
         NavigationEdge(screen.PNC_HOME_CITY, selector.PNC_BOTTOM_NAV_MORE, frozenset({screen.PNC_MORE_MENU})),

@@ -8,6 +8,7 @@ from typing import Generic, Protocol, TypeVar
 
 from pnc_automation.app.automation.engine.core_runtime import CoreRuntime
 from pnc_automation.app.pnc.domain.observation import Observation
+from pnc_automation.app.pnc.domain.mail import MailboxAvailability, MailboxType
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 
 
@@ -106,6 +107,59 @@ class WorkflowContext:
         self._last_navigation_count = self._runtime.observation_count
         self._last_observation = observation
         return observation
+
+    def open_mailbox(self, mailbox: MailboxType) -> MailboxAvailability:
+        """Inspect and, when available, open one reviewed mail category."""
+
+        if not isinstance(mailbox, MailboxType):
+            raise ValueError("Mailbox navigation requires a MailboxType value.")
+        try:
+            return self._runtime.navigation.open_mailbox(
+                mailbox,
+                observe_content=self._observe_mail_content,
+            )
+        finally:
+            self._sync_from_runtime()
+
+    def open_mail_thread(self, row_key: str) -> Observation:
+        """Open one exact observed mailbox thread row by its canonical key."""
+
+        try:
+            return self._runtime.navigation.open_mail_thread(
+                row_key,
+                observe_content=self._observe_mail_content,
+            )
+        finally:
+            self._sync_from_runtime()
+
+    def scroll_mailbox(self) -> Observation:
+        """Scroll one observed mailbox list once and prove a fresh list frame."""
+
+        try:
+            return self._runtime.navigation.scroll_mailbox(observe_content=self._observe_mail_content)
+        finally:
+            self._sync_from_runtime()
+
+    def _observe_mail_content(self, label: str) -> Observation:
+        """Capture fresh mail content for one constrained operation."""
+
+        observation = self._runtime.observe(label, include_content=True)
+        if self._runtime.observation_count <= self._last_navigation_count:
+            raise RuntimeError("Mail operation content was not captured after the previous workflow observation.")
+        if self._last_observation is not None and observation.captured_at <= self._last_observation.captured_at:
+            raise RuntimeError("Mail operation content was stale relative to the previous workflow observation.")
+        if observation.blocking_popup:
+            raise RuntimeError("Mail operation content encountered a blocking popup.")
+        self._last_navigation_count = self._runtime.observation_count
+        self._last_observation = observation
+        return observation
+
+    def _sync_from_runtime(self) -> None:
+        """Keep freshness bookkeeping aligned after core-owned completion polling."""
+
+        if self._runtime.last_observation is not None:
+            self._last_navigation_count = self._runtime.observation_count
+            self._last_observation = self._runtime.last_observation
 
 
 @dataclass(slots=True)

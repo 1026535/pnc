@@ -7,12 +7,29 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from enum import StrEnum
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from pnc_automation.core.errors import ScriptValidationError
 from pnc_automation.core.infra.storage.path_segments import sanitize_artifact_segment
-from pnc_automation.app.pnc.enums.mail import MailArchiveMode, MailRecipientKind, MailboxType, PlayerProfileRouteKind
+from pnc_automation.app.pnc.enums.mail import (
+    MailArchiveMode,
+    MailRecipientKind,
+    MailboxType,
+    PlayerProfileRouteKind,
+)
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
+
+if TYPE_CHECKING:
+    from pnc_automation.app.pnc.domain.observation import DetectedListEntry
+
+
+class MailboxAvailability(StrEnum):
+    """Reports whether one requested mail-hub category can be opened."""
+
+    AVAILABLE = "available"
+    UNAVAILABLE = "unavailable"
 
 
 @dataclass(frozen=True, slots=True)
@@ -257,6 +274,20 @@ def normalize_mail_thread_text(lines: Sequence[str]) -> str:
 
     normalized_lines = [line.strip() for line in lines if line.strip() != ""]
     return "\n".join(normalized_lines)
+
+
+def mail_thread_row_key(entry: "DetectedListEntry") -> str:
+    """Builds the stable identity used to select one visible mailbox thread row."""
+
+    date_text = entry.metadata.get("date_text")
+    normalized_date = normalize_mail_text(date_text) if isinstance(date_text, str) else ""
+    return "|".join(
+        (
+            normalize_mail_text(entry.title_text or ""),
+            normalize_mail_text(entry.subtitle_text or ""),
+            normalized_date,
+        )
+    )
 
 
 def thread_partner_directory_name(sender_name: str) -> str:

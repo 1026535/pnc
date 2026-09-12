@@ -10,7 +10,20 @@ from unittest.mock import Mock
 from PIL import Image
 
 from pnc_automation.app.automation.engine.navigation_core import NavigationCore, NavigationPolicy, reviewed_navigation_edges
-from pnc_automation.app.pnc.domain.observation import Bounds, Observation, VisibleElement, VisibleElementSourceKind
+from pnc_automation.app.pnc.domain.action_requests import SwipeAction, TapPointAction
+from pnc_automation.app.pnc.domain.mail import (
+    MailboxAvailability,
+    MailboxType,
+    mail_thread_row_key,
+)
+from pnc_automation.app.pnc.domain.observation import (
+    Bounds,
+    DetectedListEntry,
+    ListEntryKind,
+    Observation,
+    VisibleElement,
+    VisibleElementSourceKind,
+)
 from pnc_automation.app.pnc.domain.popup import decide_popup_recovery
 from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
@@ -50,6 +63,59 @@ def observation(screen, *, geometry=False, blocked=False):
             UiElementId.PNC_HOME_WORLD_SWITCH, Bounds(10, 20, 30, 40), 0.99,
             source_kind=VisibleElementSourceKind.GEOMETRY if geometry else VisibleElementSourceKind.TEMPLATE,
         )},
+    )
+
+
+def mail_frame(
+    screen: ScreenType,
+    *,
+    selector: UiElementId | None = None,
+    entries: tuple[DetectedListEntry, ...] = (),
+    captured_at: datetime | None = None,
+    blocked: bool = False,
+) -> Observation:
+    """Build one typed mail frame with optional current-frame template control."""
+
+    visible_elements = {}
+    if selector is not None:
+        visible_elements[selector] = VisibleElement(
+            selector,
+            Bounds(10, 20, 40, 40),
+            1.0,
+            source_kind=VisibleElementSourceKind.TEMPLATE,
+        )
+    return Observation(
+        screen_type=screen,
+        visible_elements=visible_elements,
+        list_entries=entries,
+        image_size=(540, 960),
+        captured_at=captured_at or datetime.now(UTC),
+        blocking_popup=blocked,
+    )
+
+
+def mailbox_category(mailbox: MailboxType, *, available: bool) -> DetectedListEntry:
+    """Build one typed mail-hub category entry for constrained navigation tests."""
+
+    return DetectedListEntry(
+        kind=ListEntryKind.MAILBOX_CATEGORY,
+        bounds=Bounds(20, 150, 500, 80),
+        title_text=f"{mailbox.value} mail",
+        action_point=(480, 190),
+        metadata={"mailbox_type": mailbox.value, "available": available},
+    )
+
+
+def mail_thread_entry(title: str = "Lux") -> DetectedListEntry:
+    """Build one canonical dynamic mailbox row."""
+
+    return DetectedListEntry(
+        kind=ListEntryKind.MAIL_THREAD,
+        bounds=Bounds(20, 160, 500, 100),
+        title_text=title,
+        subtitle_text="Daily Donation Rank Reward",
+        action_point=(270, 210),
+        metadata={"date_text": "2026/09/11 20:02:00"},
     )
 
 
@@ -203,6 +269,150 @@ class NavigationCoreTests(unittest.TestCase):
             self.assertEqual(actuator.actions[0].selector_id, UiElementId.PNC_HOME_RESEARCH_BUTTON)
             self.assertEqual(actuator.actions[1].selector_id, UiElementId.PNC_RESEARCH_QUEUE_GO)
             self.assertEqual(len(actuator.actions), 3 if visible else 2)
+
+    def test_open_mailbox_unavailable_category_returns_without_tap(self):
+        actuator = Actuator()
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+        core = NavigationCore(
+            actuator,
+            lambda _: mail_frame(ScreenType.PNC_MAIL_HUB, selector=UiElementId.PNC_MAIL_ROW_PLAYER_MAIL),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+        hub = mail_frame(
+            ScreenType.PNC_MAIL_HUB,
+            entries=(mailbox_category(MailboxType.PLAYER, available=False),),
+            captured_at=now,
+        )
+        self.assertEqual(
+            core.open_mailbox(MailboxType.PLAYER, observe_content=lambda _: hub),
+            MailboxAvailability.UNAVAILABLE,
+        )
+        self.assertEqual(actuator.actions, [])
+
+    def test_open_mailbox_available_category_uses_exact_reviewed_tap_once(self):
+        actuator = Actuator()
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+        frames = iter(
+            (
+                mail_frame(ScreenType.PNC_MAIL_HUB, selector=UiElementId.PNC_MAIL_ROW_PLAYER_MAIL, captured_at=now),
+                mail_frame(ScreenType.PNC_MAILBOX_LIST, captured_at=now + timedelta(seconds=1)),
+                mail_frame(ScreenType.PNC_MAILBOX_LIST, captured_at=now + timedelta(seconds=2)),
+            )
+        )
+        core = NavigationCore(
+            actuator,
+            lambda _: next(frames),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+        hub = mail_frame(
+            ScreenType.PNC_MAIL_HUB,
+            entries=(mailbox_category(MailboxType.PLAYER, available=True),),
+            captured_at=now,
+        )
+        self.assertEqual(
+            core.open_mailbox(MailboxType.PLAYER, observe_content=lambda _: hub),
+            MailboxAvailability.AVAILABLE,
+        )
+        self.assertEqual(len(actuator.actions), 1)
+        self.assertEqual(actuator.actions[0].selector_id, UiElementId.PNC_MAIL_ROW_PLAYER_MAIL)
+
+    def test_open_mailbox_ambiguous_or_missing_category_sends_no_action(self):
+        for entries in (
+            (),
+            (mailbox_category(MailboxType.PLAYER, available=True), mailbox_category(MailboxType.PLAYER, available=True)),
+        ):
+            actuator = Actuator()
+            core = NavigationCore(
+                actuator,
+                lambda _: mail_frame(ScreenType.PNC_MAIL_HUB),
+                reviewed_navigation_edges(),
+                NavigationPolicy(max_observations=4),
+                sleep=lambda _: None,
+            )
+            with self.assertRaisesRegex(RuntimeError, "missing or ambiguous"):
+                core.open_mailbox(
+                    MailboxType.PLAYER,
+                    observe_content=lambda _: mail_frame(ScreenType.PNC_MAIL_HUB, entries=entries),
+                )
+            self.assertEqual(actuator.actions, [])
+
+    def test_open_mail_thread_matches_one_row_and_rejects_stale_or_popup_completion(self):
+        row = mail_thread_entry()
+        row_key = mail_thread_row_key(row)
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+        for completion in (
+            (
+                mail_frame(ScreenType.PNC_MAIL_THREAD, captured_at=now),
+                mail_frame(ScreenType.PNC_MAIL_THREAD, captured_at=now),
+            ),
+            (
+                mail_frame(ScreenType.PNC_POPUP, blocked=True, captured_at=now + timedelta(seconds=1)),
+            ),
+        ):
+            actuator = Actuator()
+            frames = iter(completion)
+            core = NavigationCore(
+                actuator,
+                lambda _: next(frames),
+                reviewed_navigation_edges(),
+                NavigationPolicy(max_observations=4),
+                sleep=lambda _: None,
+            )
+            with self.assertRaises(RuntimeError):
+                core.open_mail_thread(
+                    row_key,
+                    observe_content=lambda _: mail_frame(
+                        ScreenType.PNC_MAILBOX_LIST,
+                        entries=(row,),
+                        captured_at=now,
+                    ),
+                )
+            self.assertEqual(len(actuator.actions), 1)
+            self.assertIsInstance(actuator.actions[0], TapPointAction)
+
+    def test_open_mail_thread_missing_or_ambiguous_row_sends_no_action(self):
+        row = mail_thread_entry()
+        for entries in ((), (row, row)):
+            actuator = Actuator()
+            core = NavigationCore(
+                actuator,
+                lambda _: mail_frame(ScreenType.PNC_MAIL_THREAD),
+                reviewed_navigation_edges(),
+                NavigationPolicy(max_observations=4),
+                sleep=lambda _: None,
+            )
+            with self.assertRaisesRegex(RuntimeError, "absent, ambiguous"):
+                core.open_mail_thread(
+                    mail_thread_row_key(row),
+                    observe_content=lambda _: mail_frame(ScreenType.PNC_MAILBOX_LIST, entries=entries),
+                )
+            self.assertEqual(actuator.actions, [])
+
+    def test_scroll_mailbox_uses_one_bounded_swipe_without_replay(self):
+        actuator = Actuator()
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+        frames = iter(
+            (
+                mail_frame(ScreenType.PNC_MAILBOX_LIST, captured_at=now + timedelta(seconds=1)),
+                mail_frame(ScreenType.PNC_MAILBOX_LIST, captured_at=now + timedelta(seconds=2)),
+                mail_frame(ScreenType.PNC_MAILBOX_LIST, captured_at=now + timedelta(seconds=3)),
+            )
+        )
+        core = NavigationCore(
+            actuator,
+            lambda _: mail_frame(ScreenType.PNC_MAILBOX_LIST),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+        result = core.scroll_mailbox(observe_content=lambda _: next(frames))
+        self.assertEqual(result.screen_type, ScreenType.PNC_MAILBOX_LIST)
+        self.assertEqual(len(actuator.actions), 1)
+        self.assertIsInstance(actuator.actions[0], SwipeAction)
 
 
 class NavigationPerceptionTests(unittest.TestCase):
@@ -400,6 +610,21 @@ class NavigationPerceptionTests(unittest.TestCase):
         })
         result = perception.build(self.capture('home_city_core.png'), include_content=True)
         self.assertFalse(result.has(UiElementId.PNC_BAG_USE_BUTTON))
+
+    def test_content_parser_preserves_mailbox_fields_and_dynamic_entries(self):
+        guard = Guard()
+        category = mailbox_category(MailboxType.PLAYER, available=False)
+        guard.enrich = Mock(return_value=ObservationAdditions(
+            list_entries=(category,),
+            screen_evidence=(ScreenEvidence(ScreenType.PNC_HOME_CITY, 'home_content'),),
+            mailbox_type=MailboxType.PLAYER,
+            mailbox_empty=True,
+        ))
+        perception = NavigationPerception(load_visual_screen_recognizer(), guard)
+        result = perception.build(self.capture('home_city_core.png'), include_content=True)
+        self.assertEqual(result.entries(ListEntryKind.MAILBOX_CATEGORY), (category,))
+        self.assertEqual(result.mailbox_type, MailboxType.PLAYER)
+        self.assertTrue(result.mailbox_empty)
 
 
 class GameFirstNavigationEvidenceTests(unittest.TestCase):

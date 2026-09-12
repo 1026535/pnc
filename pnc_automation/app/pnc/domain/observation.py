@@ -51,6 +51,7 @@ class ListEntryKind(StrEnum):
     EVENT_ENTRY = "event_entry"
     GIFT_ENTRY = "gift_entry"
     STORE_ENTRY = "store_entry"
+    MAILBOX_CATEGORY = "mailbox_category"
     MAIL_THREAD = "mail_thread"
     MAIL_MESSAGE = "mail_message"
     CHAT_MESSAGE = "chat_message"

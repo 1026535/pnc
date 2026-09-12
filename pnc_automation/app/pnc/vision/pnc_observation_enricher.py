@@ -2700,6 +2700,7 @@ def _build_mail_hub_additions(
 
     category_max_y = int(image.height * 0.93)
     visible_elements: dict[UiElementId, VisibleElement] = {}
+    category_entries: list[DetectedListEntry] = []
     for line in lines:
         if line.bounds.y > category_max_y:
             continue
@@ -2712,6 +2713,20 @@ def _build_mail_hub_additions(
             selector_id=selector_id,
             line=line,
         )
+        mailbox_type = _mailbox_type_for_hub_selector(selector_id)
+        if mailbox_type is not None:
+            category_entries.append(
+                DetectedListEntry(
+                    kind=ListEntryKind.MAILBOX_CATEGORY,
+                    bounds=visible_elements[selector_id].bounds,
+                    title_text=line.text.strip(),
+                    action_point=visible_elements[selector_id].action_point,
+                    metadata={
+                        "mailbox_type": mailbox_type.value,
+                        "available": not _mail_hub_row_is_unavailable(line=line, lines=lines),
+                    },
+                )
+            )
     if UiElementId.PNC_MAIL_ROW_PLAYER_MAIL not in visible_elements and UiElementId.PNC_MAIL_ROW_ALLIANCE_MAIL not in visible_elements:
         return None
     header = _find_first_line_in_texts(lines=lines, texts=frozenset({"MAIL"}), max_y=120)
@@ -2724,6 +2739,7 @@ def _build_mail_hub_additions(
         )
     return ObservationAdditions(
         visible_elements=visible_elements,
+        list_entries=tuple(category_entries),
         screen_evidence=(ScreenEvidence(ScreenType.PNC_MAIL_HUB, "ocr_mail_hub"),),
     )
 
@@ -3599,6 +3615,29 @@ def _mail_hub_selector_id(normalized_text: str) -> UiElementId | None:
     if normalized_text == "TRANSPORTREPORT":
         return UiElementId.PNC_MAIL_ROW_TRANSPORT_REPORT
     return None
+
+
+def _mailbox_type_for_hub_selector(selector_id: UiElementId) -> MailboxType | None:
+    """Returns the typed mailbox represented by one supported hub category row."""
+
+    if selector_id == UiElementId.PNC_MAIL_ROW_PLAYER_MAIL:
+        return MailboxType.PLAYER
+    if selector_id == UiElementId.PNC_MAIL_ROW_ALLIANCE_MAIL:
+        return MailboxType.ALLIANCE
+    return None
+
+
+def _mail_hub_row_is_unavailable(*, line: OcrLine, lines: tuple[OcrLine, ...]) -> bool:
+    """Returns whether a hub category row carries the adjacent empty-state label."""
+
+    row_center = line.bounds.y + (line.bounds.height // 2)
+    row_tolerance = max(24, line.bounds.height * 2)
+    return any(
+        normalize_ocr_text(candidate.text) == _MAILBOX_EMPTY_TEXT
+        and abs((candidate.bounds.y + (candidate.bounds.height // 2)) - row_center) <= row_tolerance
+        and candidate.bounds.x >= line.bounds.x
+        for candidate in lines
+    )
 
 
 def _matches_alliance_home_bottom_tab_text(*, normalized_text: str, expected_text: str) -> bool:

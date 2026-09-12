@@ -21,6 +21,7 @@ from pnc_automation.app.automation.engine.core_workflow import (
     WorkflowSpec,
 )
 from pnc_automation.app.pnc.domain.observation import DetectedListEntry, Observation, ListEntryKind
+from pnc_automation.app.pnc.domain.mail import MailboxAvailability, MailboxType
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.core.errors import TaskVerificationError
 from pnc_automation.core.vision.image.models import Bounds
@@ -143,6 +144,25 @@ class CoreWorkflowTests(unittest.TestCase):
         document = json.loads(output.call_args.args[0])
         self.assertEqual("daily_quest_status", document["workflow_name"])
         self.assertEqual("visible_viewport", document["value"]["coverage"])
+
+    def test_mail_context_delegates_once_and_does_not_replay_after_failure(self) -> None:
+        """Keeps mail-specific operations constrained to one core call each."""
+
+        runtime = Mock()
+        runtime.observation_count = 0
+        runtime.last_observation = None
+        runtime.navigation.open_mailbox.return_value = MailboxAvailability.UNAVAILABLE
+        context = WorkflowContext(runtime, last_observation=_home_observation(datetime.now(UTC)))
+
+        self.assertEqual(
+            context.open_mailbox(MailboxType.PLAYER),
+            MailboxAvailability.UNAVAILABLE,
+        )
+        runtime.navigation.open_mailbox.assert_called_once()
+        runtime.navigation.scroll_mailbox.side_effect = RuntimeError("scroll failed")
+        with self.assertRaisesRegex(RuntimeError, "scroll failed"):
+            context.scroll_mailbox()
+        runtime.navigation.scroll_mailbox.assert_called_once()
 
 
 class _ContentOnlyWorkflow:

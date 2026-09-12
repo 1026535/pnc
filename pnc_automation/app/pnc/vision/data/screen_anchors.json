@@ -652,6 +652,19 @@
             ],
             "threshold": 0.93
           }
+        },
+        {
+          "selector": "PNC_BOTTOM_NAV_MAIL",
+          "anchor": {
+            "image": "screen_anchors/collect_mail_home_pnc_bottom_nav_mail.png",
+            "search_region": [
+              325,
+              886,
+              75,
+              74
+            ],
+            "threshold": 0.93
+          }
         }
       ]
     },
@@ -1109,6 +1122,185 @@
               9,
               56,
               36
+            ],
+            "threshold": 0.93
+          }
+        }
+      ]
+    },
+    {
+      "id": "collect_mail_hub",
+      "screen": "PNC_MAIL_HUB",
+      "anchors": [
+        {
+          "image": "screen_anchors/collect_mail_hub_identity_0.png",
+          "search_region": [
+            10,
+            0,
+            270,
+            55
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/collect_mail_hub_identity_1.png",
+          "search_region": [
+            30,
+            170,
+            280,
+            65
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/collect_mail_hub_back.png",
+            "search_region": [
+              10,
+              0,
+              80,
+              55
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_MAIL_ROW_PLAYER_MAIL",
+          "anchor": {
+            "image": "screen_anchors/collect_mail_hub_player_row.png",
+            "search_region": [
+              20,
+              150,
+              320,
+              100
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_MAIL_ROW_ALLIANCE_MAIL",
+          "anchor": {
+            "image": "screen_anchors/collect_mail_hub_alliance_row.png",
+            "search_region": [
+              20,
+              245,
+              320,
+              105
+            ],
+            "threshold": 0.93
+          }
+        }
+      ]
+    },
+    {
+      "id": "collect_mail_mailbox_list",
+      "screen": "PNC_MAILBOX_LIST",
+      "anchors": [
+        {
+          "image": "screen_anchors/collect_mail_list_identity_0.png",
+          "search_region": [
+            10,
+            0,
+            85,
+            55
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/collect_mail_list_identity_1.png",
+          "search_region": [
+            160,
+            850,
+            230,
+            105
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/collect_mail_list_identity_2.png",
+          "search_region": [
+            390,
+            850,
+            150,
+            105
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/collect_mail_list_identity_3.png",
+          "search_region": [
+            50,
+            850,
+            130,
+            105
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/collect_mail_list_identity_0.png",
+            "search_region": [
+              10,
+              0,
+              85,
+              55
+            ],
+            "threshold": 0.93
+          }
+        }
+      ]
+    },
+    {
+      "id": "collect_mail_thread",
+      "screen": "PNC_MAIL_THREAD",
+      "anchors": [
+        {
+          "image": "screen_anchors/collect_mail_thread_identity_0.png",
+          "search_region": [
+            10,
+            0,
+            85,
+            55
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/collect_mail_thread_identity_1.png",
+          "search_region": [
+            455,
+            100,
+            85,
+            90
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/collect_mail_thread_identity_2.png",
+          "search_region": [
+            440,
+            40,
+            100,
+            110
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/collect_mail_thread_identity_0.png",
+            "search_region": [
+              10,
+              0,
+              85,
+              55
             ],
             "threshold": 0.93
           }

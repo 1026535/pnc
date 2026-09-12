@@ -78,6 +78,50 @@ class VisualScreenRecognizerTests(unittest.TestCase):
                 result = recognizer.recognize(_capture(sample["image"]).image)
                 self.assertEqual({item.screen_type.name for item in result.evidence}, {sample["screen"]})
 
+    def test_collect_mail_profiles_expose_only_measured_controls(self) -> None:
+        """Recognizes the four mail frames and keeps navigation controls template-backed."""
+
+        recognizer = load_visual_screen_recognizer()
+        expected = {
+            "collect_mail_home.png": (ScreenType.PNC_HOME_CITY, {UiElementId.PNC_BOTTOM_NAV_MAIL}),
+            "collect_mail_hub.png": (
+                ScreenType.PNC_MAIL_HUB,
+                {
+                    UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+                    UiElementId.PNC_MAIL_ROW_PLAYER_MAIL,
+                    UiElementId.PNC_MAIL_ROW_ALLIANCE_MAIL,
+                },
+            ),
+            "collect_mail_system_list.png": (ScreenType.PNC_MAILBOX_LIST, {UiElementId.PNC_BACK_BUTTON_TOP_LEFT}),
+            "collect_mail_system_thread.png": (ScreenType.PNC_MAIL_THREAD, {UiElementId.PNC_BACK_BUTTON_TOP_LEFT}),
+        }
+        for name, (screen, controls) in expected.items():
+            with self.subTest(name=name):
+                result = recognizer.recognize(_capture(name).image)
+                self.assertEqual({item.screen_type for item in result.evidence}, {screen})
+                observed_controls = {item.selector_id for item in result.controls}
+                if screen == ScreenType.PNC_HOME_CITY:
+                    self.assertTrue(controls <= observed_controls)
+                else:
+                    self.assertEqual(observed_controls, controls)
+                self.assertTrue(all(item.source_kind.name == "TEMPLATE" for item in result.controls))
+                scaled = recognizer.recognize(_capture(name).image.resize((900, 1600)))
+                self.assertEqual({item.screen_type for item in scaled.evidence}, {screen})
+
+    def test_collect_mail_list_and_thread_profiles_are_mutually_exclusive(self) -> None:
+        """Requires footer-versus-detail chrome to keep the dynamic mail screens distinct."""
+
+        recognizer = load_visual_screen_recognizer()
+        with Image.open(FIXTURES / "collect_mail_system_list.png") as source:
+            list_result = recognizer.recognize(source.convert("RGB"))
+        with Image.open(FIXTURES / "collect_mail_system_thread.png") as source:
+            thread_result = recognizer.recognize(source.convert("RGB"))
+        self.assertEqual({item.screen_type for item in list_result.evidence}, {ScreenType.PNC_MAILBOX_LIST})
+        self.assertEqual({item.screen_type for item in thread_result.evidence}, {ScreenType.PNC_MAIL_THREAD})
+        self.assertNotEqual(list_result.profile_ids, thread_result.profile_ids)
+        self.assertEqual({item.selector_id for item in list_result.controls}, {UiElementId.PNC_BACK_BUTTON_TOP_LEFT})
+        self.assertEqual({item.selector_id for item in thread_result.controls}, {UiElementId.PNC_BACK_BUTTON_TOP_LEFT})
+
     def test_unknown_blank_dimmed_and_wrong_aspect_frames_abstain(self) -> None:
         recognizer = load_visual_screen_recognizer()
         hero = _capture("hero_hall.png").image
