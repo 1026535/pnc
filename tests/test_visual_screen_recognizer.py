@@ -108,6 +108,47 @@ class VisualScreenRecognizerTests(unittest.TestCase):
                 scaled = recognizer.recognize(_capture(name).image.resize((900, 1600)))
                 self.assertEqual({item.screen_type for item in scaled.evidence}, {screen})
 
+    def test_chat_profiles_expose_measured_back_and_channel_controls(self) -> None:
+        """Recognizes both live Chat tab variants and exposes their measured controls."""
+
+        expected = {
+            "chat_alliance.png": {
+                UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+                UiElementId.PNC_CHAT_TAB_KINGDOM,
+                UiElementId.PNC_CHAT_TAB_ALLIANCE,
+            },
+            "chat_kingdom.png": {
+                UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+                UiElementId.PNC_CHAT_TAB_KINGDOM,
+                UiElementId.PNC_CHAT_TAB_ALLIANCE,
+            },
+        }
+        recognizer = load_visual_screen_recognizer()
+        for name, selectors in expected.items():
+            with self.subTest(name=name):
+                result = recognizer.recognize(_capture(name).image)
+                self.assertEqual({item.screen_type for item in result.evidence}, {ScreenType.PNC_CHAT})
+                self.assertEqual({item.selector_id for item in result.controls}, selectors)
+                self.assertTrue(all(item.source_kind.name == "TEMPLATE" for item in result.controls))
+
+    def test_home_chat_shortcut_profiles_cover_both_channel_icon_variants(self) -> None:
+        """Keeps Home identity anchors required while recognizing both measured shortcut icons."""
+
+        recognizer = load_visual_screen_recognizer()
+        for name, profile_id in (
+            ("chat_home_alliance.png", "home_city_chat_alliance"),
+            ("chat_home_kingdom.png", "home_city_chat_kingdom"),
+        ):
+            with self.subTest(name=name):
+                result = recognizer.recognize(_capture(name).image)
+                self.assertEqual({item.screen_type for item in result.evidence}, {ScreenType.PNC_HOME_CITY})
+                self.assertIn(profile_id, result.profile_ids)
+                shortcut = next(
+                    item for item in result.controls if item.selector_id == UiElementId.PNC_CHAT_SHORTCUT
+                )
+                self.assertEqual(shortcut.source_kind.name, "TEMPLATE")
+                self.assertEqual(shortcut.bounds, Bounds(5, 805, 58, 70))
+
     def test_collect_mail_list_and_thread_profiles_are_mutually_exclusive(self) -> None:
         """Requires footer-versus-detail chrome to keep the dynamic mail screens distinct."""
 

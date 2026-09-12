@@ -10,6 +10,7 @@ from typing import Literal, Protocol
 
 from pnc_automation.app.pnc.domain.action_requests import (
     ActionRequest,
+    SelectChatChannelAction,
     SwipeAction,
     TapAction,
     TapPointAction,
@@ -25,6 +26,7 @@ from pnc_automation.app.pnc.domain.observation import (
     Observation,
     VisibleElementSourceKind,
 )
+from pnc_automation.app.pnc.domain.chat import ChatChannel, chat_channel_selector_id
 from pnc_automation.app.pnc.domain.mail import (
     MailboxAvailability,
     MailboxType,
@@ -221,6 +223,35 @@ class NavigationCore:
             label,
         )
 
+    def select_chat_channel(
+        self, channel: ChatChannel, *, observe_content: Callable[[str], Observation],
+    ) -> Observation:
+        """Select one observed chat tab and require fresh frames confirming its channel."""
+
+        if not isinstance(channel, ChatChannel):
+            raise ValueError("Chat channel selection requires a ChatChannel value.")
+        self._sequence += 1
+        label = f"core_{self._sequence}_chat_channel"
+        before = observe_content(f"{label}_source")
+        if before.blocking_popup or before.screen_type != ScreenType.PNC_CHAT:
+            raise RuntimeError("Chat channel selection requires a freshly observed, unblocked Chat screen.")
+        if before.active_chat_channel == channel:
+            return before
+        selector = chat_channel_selector_id(channel)
+        element = before.visible_elements.get(selector)
+        if element is None or element.source_kind != VisibleElementSourceKind.TEMPLATE:
+            raise RuntimeError("Chat channel control lacks current-frame visual evidence; no action sent.")
+        self.record({"event": "pending_chat_channel", "channel": channel.value,
+                     "selector": selector.value, "artifact": str(before.artifact_path)})
+        return self._execute_content_and_confirm(
+            SelectChatChannelAction(channel=channel, reason="replacement_select_chat_channel"),
+            before,
+            frozenset({ScreenType.PNC_CHAT}),
+            label,
+            observe_content,
+            completion_predicate=lambda observation: observation.active_chat_channel == channel,
+        )
+
     def scroll_mailbox(
         self, *, observe_content: Callable[[str], Observation],
     ) -> Observation:
@@ -280,6 +311,8 @@ class NavigationCore:
         destinations: frozenset[ScreenType],
         label: str,
         observe_content: Callable[[str], Observation],
+        *,
+        completion_predicate: Callable[[Observation], bool] | None = None,
     ) -> Observation:
         """Execute one bounded content action without replaying a failed gesture."""
         if not self.actuator.execute_action(action, before):
@@ -287,6 +320,7 @@ class NavigationCore:
         started = self.clock()
         stable = 0
         previous = ScreenType.UNKNOWN
+        previous_completed = False
         captured_at = before.captured_at
         for index in range(self.policy.max_observations):
             if self.clock() - started >= self.policy.max_seconds:
@@ -302,8 +336,11 @@ class NavigationCore:
                 break
             if after.blocking_popup:
                 raise RuntimeError("Content action was interrupted; no recovery action or repeated gesture sent.")
-            if after.screen_type in destinations:
-                stable = stable + 1 if after.screen_type == previous else 1
+            completed = after.screen_type in destinations and (
+                completion_predicate is None or completion_predicate(after)
+            )
+            if completed:
+                stable = stable + 1 if previous_completed and after.screen_type == previous else 1
                 if stable >= self.policy.stable_observations:
                     self.record({"event": "confirmed", "screen": after.screen_type.name})
                     return after
@@ -312,6 +349,7 @@ class NavigationCore:
                 if after.screen_type not in {before.screen_type, ScreenType.UNKNOWN, ScreenType.PNC_LOADING}:
                     raise RuntimeError("Content action reached an unexpected screen; inspect the recorded frame.")
             previous = after.screen_type
+            previous_completed = completed
         raise RuntimeError("Content action completion budget exhausted; the gesture was not repeated.")
 
     def _execute_and_confirm(
@@ -399,6 +437,8 @@ def reviewed_navigation_edges() -> tuple[NavigationEdge, ...]:
         NavigationEdge(screen.PNC_HOME_CITY, selector.PNC_BOTTOM_NAV_QUEST, quest),
         NavigationEdge(screen.PNC_HOME_CITY, selector.PNC_BOTTOM_NAV_BAG, frozenset({screen.PNC_BAG})),
         NavigationEdge(screen.PNC_HOME_CITY, selector.PNC_BOTTOM_NAV_MAIL, frozenset({screen.PNC_MAIL_HUB})),
+        NavigationEdge(screen.PNC_HOME_CITY, selector.PNC_CHAT_SHORTCUT, frozenset({screen.PNC_CHAT})),
+        NavigationEdge(screen.PNC_CHAT, selector.PNC_BACK_BUTTON_TOP_LEFT, frozenset({screen.PNC_HOME_CITY})),
         NavigationEdge(screen.PNC_MAIL_HUB, selector.PNC_BACK_BUTTON_TOP_LEFT, frozenset({screen.PNC_HOME_CITY})),
         NavigationEdge(screen.PNC_MAIL_HUB, selector.PNC_MAIL_ROW_PLAYER_MAIL, frozenset({screen.PNC_MAILBOX_LIST})),
         NavigationEdge(screen.PNC_MAIL_HUB, selector.PNC_MAIL_ROW_ALLIANCE_MAIL, frozenset({screen.PNC_MAILBOX_LIST})),

@@ -669,6 +669,154 @@
       ]
     },
     {
+      "id": "home_city_chat_alliance",
+      "screen": "PNC_HOME_CITY",
+      "anchors": [
+        {
+          "image": "screen_anchors/core_home_city_identity_0.png",
+          "search_region": [12, 929, 65, 28],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/core_home_city_identity_1.png",
+          "search_region": [12, 210, 45, 22],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/home_chat_shortcut_alliance.png",
+          "search_region": [0, 780, 100, 110],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_CHAT_SHORTCUT",
+          "anchor": {
+            "image": "screen_anchors/home_chat_shortcut_alliance.png",
+            "search_region": [0, 780, 100, 110],
+            "threshold": 0.93
+          }
+        }
+      ]
+    },
+    {
+      "id": "home_city_chat_kingdom",
+      "screen": "PNC_HOME_CITY",
+      "anchors": [
+        {
+          "image": "screen_anchors/core_home_city_identity_0.png",
+          "search_region": [12, 929, 65, 28],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/core_home_city_identity_1.png",
+          "search_region": [12, 210, 45, 22],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/home_chat_shortcut_kingdom.png",
+          "search_region": [0, 780, 100, 110],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_CHAT_SHORTCUT",
+          "anchor": {
+            "image": "screen_anchors/home_chat_shortcut_kingdom.png",
+            "search_region": [0, 780, 100, 110],
+            "threshold": 0.93
+          }
+        }
+      ]
+    },
+    {
+      "id": "chat_alliance",
+      "screen": "PNC_CHAT",
+      "anchors": [
+        {
+          "image": "screen_anchors/chat_identity_header.png",
+          "search_region": [90, 0, 220, 52],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/chat_tab_alliance_active.png",
+          "search_region": [150, 50, 165, 60],
+          "threshold": 0.93
+        }
+      ],
+      "occludes": ["PNC_HOME_CITY", "PNC_WORLD_MAP"],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/chat_back_button.png",
+            "search_region": [0, 0, 90, 60],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_CHAT_TAB_KINGDOM",
+          "anchor": {
+            "image": "screen_anchors/chat_tab_kingdom_inactive.png",
+            "search_region": [0, 50, 160, 60],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_CHAT_TAB_ALLIANCE",
+          "anchor": {
+            "image": "screen_anchors/chat_tab_alliance_active.png",
+            "search_region": [150, 50, 165, 60],
+            "threshold": 0.93
+          }
+        }
+      ]
+    },
+    {
+      "id": "chat_kingdom",
+      "screen": "PNC_CHAT",
+      "anchors": [
+        {
+          "image": "screen_anchors/chat_identity_header.png",
+          "search_region": [90, 0, 220, 52],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/chat_tab_kingdom_active.png",
+          "search_region": [0, 50, 160, 60],
+          "threshold": 0.93
+        }
+      ],
+      "occludes": ["PNC_HOME_CITY", "PNC_WORLD_MAP"],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/chat_back_button.png",
+            "search_region": [0, 0, 90, 60],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_CHAT_TAB_KINGDOM",
+          "anchor": {
+            "image": "screen_anchors/chat_tab_kingdom_active.png",
+            "search_region": [0, 50, 160, 60],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_CHAT_TAB_ALLIANCE",
+          "anchor": {
+            "image": "screen_anchors/chat_tab_alliance_inactive.png",
+            "search_region": [150, 50, 165, 60],
+            "threshold": 0.93
+          }
+        }
+      ]
+    },
+    {
       "id": "world_map",
       "screen": "PNC_WORLD_MAP",
       "anchors": [
