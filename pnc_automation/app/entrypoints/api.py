@@ -6,10 +6,14 @@ from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 from pnc_automation.core.vision.observation_policy import ObservationMode
 from pnc_automation.app import ApplicationRunner, build_application_runner
+from pnc_automation.app.automation.collect_mail import CollectMailResult
+from pnc_automation.app.automation.collect_kingdom_chat import CollectKingdomChatResult
+from pnc_automation.app.automation.engine.core_workflow import CoreWorkflowResult
 from pnc_automation.app.automation.engine.runner import RunResult, StepRunResult
 from pnc_automation.app.automation.engine.script_runner import require_successful_preparation
 from pnc_automation.app.automation.engine.task import TaskId
@@ -23,6 +27,7 @@ _ACTIVE_RESERVATION: ContextVar["_ActiveReservation | None"] = ContextVar(
     default=None,
 )
 _DEFAULT_API: "AutomationApi | None" = None
+TResult = TypeVar("TResult")
 
 
 @dataclass(frozen=True, slots=True)
@@ -254,8 +259,8 @@ class AutomationSession:
         archive_mode: str = "both",
         limit_per_mailbox: int = 25,
         only_new: bool = True,
-    ) -> StepRunResult:
-        """Runs one direct mail-collection step against the prepared session."""
+    ) -> CoreWorkflowResult[CollectMailResult]:
+        """Runs one typed replacement-core mail collection against the prepared session."""
 
         return self.api.collect_mail(
             account_id=self.account_id,
@@ -265,8 +270,8 @@ class AutomationSession:
             only_new=only_new,
         )
 
-    def collect_kingdom_chat(self) -> StepRunResult:
-        """Runs one direct Kingdom Chat heartbeat poll against the prepared session."""
+    def collect_kingdom_chat(self) -> CoreWorkflowResult[CollectKingdomChatResult]:
+        """Runs one typed replacement-core Kingdom Chat poll against the prepared session."""
 
         return self.api.collect_kingdom_chat(account_id=self.account_id)
 
@@ -527,27 +532,34 @@ class AutomationApi:
         archive_mode: str = "both",
         limit_per_mailbox: int = 25,
         only_new: bool = True,
-    ) -> StepRunResult:
-        """Runs one direct collect_mail task using current-castle semantics."""
+    ) -> CoreWorkflowResult[CollectMailResult]:
+        """Runs one typed replacement-core collect_mail workflow using current-castle semantics."""
 
-        return self.run_task(
-            account_id=self._resolve_account_id(account_id),
-            task_id=TaskId.COLLECT_MAIL,
-            params={
-                "mailboxes": list(mailboxes),
-                "archive_mode": archive_mode,
-                "limit_per_mailbox": limit_per_mailbox,
-                "only_new": only_new,
-            },
+        resolved_account_id = self._resolve_account_id(account_id)
+        return self._run_with_account_reservation(
+            resolved_account_id,
+            lambda: self.application.run_collect_mail(
+                account_id=resolved_account_id,
+                params={
+                    "mailboxes": list(mailboxes),
+                    "archive_mode": archive_mode,
+                    "limit_per_mailbox": limit_per_mailbox,
+                    "only_new": only_new,
+                },
+            ),
         )
 
-    def collect_kingdom_chat(self, *, account_id: str | None = None) -> StepRunResult:
-        """Runs one direct collect_kingdom_chat task using current-castle semantics."""
+    def collect_kingdom_chat(
+        self,
+        *,
+        account_id: str | None = None,
+    ) -> CoreWorkflowResult[CollectKingdomChatResult]:
+        """Runs one typed replacement-core Kingdom Chat poll using current-castle semantics."""
 
-        return self.run_task(
-            account_id=self._resolve_account_id(account_id),
-            task_id=TaskId.COLLECT_KINGDOM_CHAT,
-            params={},
+        resolved_account_id = self._resolve_account_id(account_id)
+        return self._run_with_account_reservation(
+            resolved_account_id,
+            lambda: self.application.run_collect_kingdom_chat(account_id=resolved_account_id),
         )
 
     def run_mail_schedules(
@@ -605,6 +617,23 @@ class AutomationApi:
                 f"Account '{account_id}' is outside the active workflow reservation. "
                 f"Declare its complete account bundle before entering the workflow."
             )
+
+    def _run_with_account_reservation(
+        self,
+        account_id: str,
+        operation: Callable[[], TResult],
+    ) -> TResult:
+        """Runs one live call under its active bundle or a temporary account lease."""
+
+        active_reservation = _ACTIVE_RESERVATION.get()
+        if active_reservation is not None:
+            self._require_account_in_active_reservation(account_id)
+            return operation()
+        reservation = self.application.reserve_accounts((account_id,))
+        try:
+            return operation()
+        finally:
+            reservation.close()
 
 
 def build_api(
@@ -761,8 +790,8 @@ def collect_mail(
     archive_mode: str = "both",
     limit_per_mailbox: int = 25,
     only_new: bool = True,
-) -> StepRunResult:
-    """Runs one direct collect_mail step through the default application facade."""
+) -> CoreWorkflowResult[CollectMailResult]:
+    """Runs one typed replacement-core collect_mail workflow through the default facade."""
 
     return _default_api().collect_mail(
         account_id=account_id,
@@ -773,8 +802,11 @@ def collect_mail(
     )
 
 
-def collect_kingdom_chat(*, account_id: str | None = None) -> StepRunResult:
-    """Runs one direct Kingdom Chat heartbeat poll through the default application facade."""
+def collect_kingdom_chat(
+    *,
+    account_id: str | None = None,
+) -> CoreWorkflowResult[CollectKingdomChatResult]:
+    """Runs one typed replacement-core Kingdom Chat poll through the default facade."""
 
     return _default_api().collect_kingdom_chat(account_id=account_id)
 

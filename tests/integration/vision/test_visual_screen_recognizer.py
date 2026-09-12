@@ -83,6 +83,122 @@ class VisualScreenRecognizerTests(unittest.TestCase):
                 result = recognizer.recognize(_capture(sample["image"]).image)
                 self.assertEqual({item.screen_type.name for item in result.evidence}, {sample["screen"]})
 
+    def test_collect_mail_profiles_expose_only_measured_controls(self) -> None:
+        """Recognizes the four mail frames and keeps navigation controls template-backed."""
+
+        recognizer = load_visual_screen_recognizer()
+        expected = {
+            "collect_mail_home.png": (ScreenType.PNC_HOME_CITY, {UiElementId.PNC_BOTTOM_NAV_MAIL}),
+            "collect_mail_hub.png": (
+                ScreenType.PNC_MAIL_HUB,
+                {
+                    UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+                    UiElementId.PNC_MAIL_ROW_PLAYER_MAIL,
+                    UiElementId.PNC_MAIL_ROW_ALLIANCE_MAIL,
+                },
+            ),
+            "collect_mail_system_list.png": (ScreenType.PNC_MAILBOX_LIST, {UiElementId.PNC_BACK_BUTTON_TOP_LEFT}),
+            "collect_mail_system_thread.png": (ScreenType.PNC_MAIL_THREAD, {UiElementId.PNC_BACK_BUTTON_TOP_LEFT}),
+        }
+        for name, (screen, controls) in expected.items():
+            with self.subTest(name=name):
+                result = recognizer.recognize(_capture(name).image)
+                self.assertEqual({item.screen_type for item in result.evidence}, {screen})
+                observed_controls = {item.selector_id for item in result.controls}
+                if screen == ScreenType.PNC_HOME_CITY:
+                    self.assertTrue(controls <= observed_controls)
+                else:
+                    self.assertEqual(observed_controls, controls)
+                self.assertTrue(all(item.source_kind.name == "TEMPLATE" for item in result.controls))
+                scaled = recognizer.recognize(_capture(name).image.resize((900, 1600)))
+                self.assertEqual({item.screen_type for item in scaled.evidence}, {screen})
+
+    def test_chat_profiles_expose_measured_back_and_channel_controls(self) -> None:
+        """Recognizes both live Chat tab variants and exposes their measured controls."""
+
+        expected = {
+            "chat_alliance.png": {
+                UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+                UiElementId.PNC_CHAT_TAB_KINGDOM,
+                UiElementId.PNC_CHAT_TAB_ALLIANCE,
+            },
+            "chat_kingdom.png": {
+                UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+                UiElementId.PNC_CHAT_TAB_KINGDOM,
+                UiElementId.PNC_CHAT_TAB_ALLIANCE,
+            },
+        }
+        recognizer = load_visual_screen_recognizer()
+        for name, selectors in expected.items():
+            with self.subTest(name=name):
+                result = recognizer.recognize(_capture(name).image)
+                self.assertEqual({item.screen_type for item in result.evidence}, {ScreenType.PNC_CHAT})
+                self.assertEqual({item.selector_id for item in result.controls}, selectors)
+                self.assertTrue(all(item.source_kind.name == "TEMPLATE" for item in result.controls))
+
+    def test_home_chat_shortcut_profiles_cover_both_channel_icon_variants(self) -> None:
+        """Keeps Home identity anchors required while recognizing both measured shortcut icons."""
+
+        recognizer = load_visual_screen_recognizer()
+        shortcut_definition = build_default_selector_registry().require(UiElementId.PNC_CHAT_SHORTCUT)
+        self.assertIsNotNone(shortcut_definition.relative_bounds)
+        shortcut_geometry = shortcut_definition.relative_bounds.materialize(
+            selector_id=UiElementId.PNC_CHAT_SHORTCUT,
+            image_size=(540, 960),
+        )
+        self.assertEqual(shortcut_geometry.bounds, Bounds(4, 849, 45, 40))
+        self.assertEqual(shortcut_geometry.action_point, (26, 869))
+        self.assertTrue(4 <= shortcut_geometry.action_point[0] <= 49)
+        self.assertTrue(849 <= shortcut_geometry.action_point[1] <= 889)
+        self.assertGreater(shortcut_geometry.action_point[1], 840)
+        for name, profile_id in (
+            ("chat_home_alliance.png", "home_city_chat_alliance"),
+            ("chat_home_kingdom.png", "home_city_chat_kingdom"),
+        ):
+            with self.subTest(name=name):
+                result = recognizer.recognize(_capture(name).image)
+                self.assertEqual({item.screen_type for item in result.evidence}, {ScreenType.PNC_HOME_CITY})
+                self.assertIn(profile_id, result.profile_ids)
+                shortcut = next(
+                    item for item in result.controls if item.selector_id == UiElementId.PNC_CHAT_SHORTCUT
+                )
+                self.assertEqual(shortcut.source_kind.name, "TEMPLATE")
+                self.assertEqual(shortcut.bounds, Bounds(4, 849, 45, 40))
+                center_x, center_y = shortcut.bounds.center()
+                self.assertTrue(4 <= center_x <= 49)
+                self.assertTrue(849 <= center_y <= 889)
+                self.assertNotEqual(center_y, 840)
+                scaled = recognizer.recognize(_capture(name).image.resize((900, 1600)))
+                scaled_shortcut = next(
+                    item for item in scaled.controls if item.selector_id == UiElementId.PNC_CHAT_SHORTCUT
+                )
+                scaled_center_x, scaled_center_y = scaled_shortcut.bounds.center()
+                self.assertTrue(round(4 * 900 / 540) <= scaled_center_x <= round(49 * 900 / 540))
+                self.assertTrue(round(849 * 1600 / 960) <= scaled_center_y <= round(889 * 1600 / 960))
+                self.assertNotEqual(scaled_center_y, round(840 * 1600 / 960))
+                scaled_geometry = shortcut_definition.relative_bounds.materialize(
+                    selector_id=UiElementId.PNC_CHAT_SHORTCUT,
+                    image_size=(900, 1600),
+                )
+                scaled_action_x, scaled_action_y = scaled_geometry.action_point
+                self.assertTrue(round(4 * 900 / 540) <= scaled_action_x <= round(49 * 900 / 540))
+                self.assertTrue(round(849 * 1600 / 960) <= scaled_action_y <= round(889 * 1600 / 960))
+                self.assertNotEqual(scaled_action_y, round(840 * 1600 / 960))
+
+    def test_collect_mail_list_and_thread_profiles_are_mutually_exclusive(self) -> None:
+        """Requires footer-versus-detail chrome to keep the dynamic mail screens distinct."""
+
+        recognizer = load_visual_screen_recognizer()
+        with Image.open(FIXTURES / "collect_mail_system_list.png") as source:
+            list_result = recognizer.recognize(source.convert("RGB"))
+        with Image.open(FIXTURES / "collect_mail_system_thread.png") as source:
+            thread_result = recognizer.recognize(source.convert("RGB"))
+        self.assertEqual({item.screen_type for item in list_result.evidence}, {ScreenType.PNC_MAILBOX_LIST})
+        self.assertEqual({item.screen_type for item in thread_result.evidence}, {ScreenType.PNC_MAIL_THREAD})
+        self.assertNotEqual(list_result.profile_ids, thread_result.profile_ids)
+        self.assertEqual({item.selector_id for item in list_result.controls}, {UiElementId.PNC_BACK_BUTTON_TOP_LEFT})
+        self.assertEqual({item.selector_id for item in thread_result.controls}, {UiElementId.PNC_BACK_BUTTON_TOP_LEFT})
+
     def test_unknown_blank_dimmed_and_wrong_aspect_frames_abstain(self) -> None:
         recognizer = load_visual_screen_recognizer()
         hero = _capture("hero_hall.png").image

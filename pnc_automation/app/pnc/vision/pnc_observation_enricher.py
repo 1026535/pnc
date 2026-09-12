@@ -2292,7 +2292,12 @@ class PncObservationEnricher:
         chat = _build_chat_overlay_additions(image=image, lines=lines)
         if chat is None:
             return None
-        chat_state = self._build_proven_chat_state_additions(image=image, request=request)
+        chat_state = self._build_proven_chat_state_additions(
+            image=image,
+            request=request,
+            kingdom_region=chat.visible_elements[UiElementId.PNC_CHAT_TAB_KINGDOM].bounds,
+            alliance_region=chat.visible_elements[UiElementId.PNC_CHAT_TAB_ALLIANCE].bounds,
+        )
         return ObservationAdditions(
             visible_elements=chat.visible_elements,
             list_entries=self._extract_chat_message_entries(image=image, lines=lines),
@@ -2311,7 +2316,7 @@ class PncObservationEnricher:
     ) -> tuple[DetectedListEntry, ...]:
         """Extracts normalized chat rows using the trusted chat viewport and one canonical candidate pipeline."""
 
-        viewport = self._resolve_chat_transcript_viewport(image=image)
+        viewport = self._resolve_chat_transcript_viewport(image=image, lines=lines)
         candidate_lines = [line for line in lines if _is_chat_message_candidate_line(line=line, viewport=viewport)]
         grouped_rows: list[_ChatRowCandidate] = []
         for row_lines in _group_lines_by_vertical_gap(candidate_lines, gap=max(24, image.height // 36)):
@@ -2331,14 +2336,32 @@ class PncObservationEnricher:
             for visible_order, candidate in enumerate(candidate for candidate in normalized_rows if candidate.kind is not None)
         )
 
-    def _resolve_chat_transcript_viewport(self, *, image: Image.Image) -> _ChatTranscriptViewport:
-        """Returns the shared trusted transcript viewport bounded by the chat tabs and input field."""
+    def _resolve_chat_transcript_viewport(
+        self,
+        *,
+        image: Image.Image,
+        lines: tuple[OcrLine, ...] = (),
+    ) -> _ChatTranscriptViewport:
+        """Returns the trusted transcript viewport bounded by observed tabs and the input field."""
 
         input_region = self._require_chat_region(UiElementId.PNC_CHAT_INPUT_FIELD, image=image)
         kingdom_region = self._require_chat_region(UiElementId.PNC_CHAT_TAB_KINGDOM, image=image)
         alliance_region = self._require_chat_region(UiElementId.PNC_CHAT_TAB_ALLIANCE, image=image)
+        observed_tab_lines = [
+            line
+            for line in lines
+            if normalize_ocr_text(line.text) in {_CHAT_KINGDOM_TEXT, _CHAT_ALLIANCE_TEXT}
+            and line.bounds.y <= int(image.height * 0.14)
+        ]
+        observed_tab_bottoms = [line.bounds.y + line.bounds.height for line in observed_tab_lines]
+        observed_tab_texts = {normalize_ocr_text(line.text) for line in observed_tab_lines}
+        tab_bottom = (
+            max(observed_tab_bottoms)
+            if {_CHAT_KINGDOM_TEXT, _CHAT_ALLIANCE_TEXT}.issubset(observed_tab_texts)
+            else max(kingdom_region.y + kingdom_region.height, alliance_region.y + alliance_region.height)
+        )
         return _ChatTranscriptViewport(
-            top=max(int(image.height * 0.14), max(kingdom_region.y + kingdom_region.height, alliance_region.y + alliance_region.height) + 12),
+            top=tab_bottom + 12,
             bottom=max(1, input_region.y - 12),
             content_left=max(0, int(image.width * 0.14)),
             content_right=min(image.width, int(image.width * 0.78)),
@@ -2350,6 +2373,8 @@ class PncObservationEnricher:
         image: Image.Image,
         request: ObservationRequest,
         active_chat_channel: ChatChannel | None = None,
+        kingdom_region: Bounds | None = None,
+        alliance_region: Bounds | None = None,
     ) -> ObservationAdditions:
         """Returns active-channel and draft facts for one observation that has already proven chat."""
 
@@ -2357,8 +2382,10 @@ class PncObservationEnricher:
             return ObservationAdditions()
         input_region = self._require_chat_region(UiElementId.PNC_CHAT_INPUT_FIELD, image=image)
         if active_chat_channel is None:
-            kingdom_region = self._require_chat_region(UiElementId.PNC_CHAT_TAB_KINGDOM, image=image)
-            alliance_region = self._require_chat_region(UiElementId.PNC_CHAT_TAB_ALLIANCE, image=image)
+            if kingdom_region is None:
+                kingdom_region = self._require_chat_region(UiElementId.PNC_CHAT_TAB_KINGDOM, image=image)
+            if alliance_region is None:
+                alliance_region = self._require_chat_region(UiElementId.PNC_CHAT_TAB_ALLIANCE, image=image)
             active_chat_channel = _resolve_active_chat_channel(
                 image=image,
                 kingdom_region=kingdom_region,
@@ -2700,6 +2727,7 @@ def _build_mail_hub_additions(
 
     category_max_y = int(image.height * 0.93)
     visible_elements: dict[UiElementId, VisibleElement] = {}
+    category_entries: list[DetectedListEntry] = []
     for line in lines:
         if line.bounds.y > category_max_y:
             continue
@@ -2712,6 +2740,20 @@ def _build_mail_hub_additions(
             selector_id=selector_id,
             line=line,
         )
+        mailbox_type = _mailbox_type_for_hub_selector(selector_id)
+        if mailbox_type is not None:
+            category_entries.append(
+                DetectedListEntry(
+                    kind=ListEntryKind.MAILBOX_CATEGORY,
+                    bounds=visible_elements[selector_id].bounds,
+                    title_text=line.text.strip(),
+                    action_point=visible_elements[selector_id].action_point,
+                    metadata={
+                        "mailbox_type": mailbox_type.value,
+                        "available": not _mail_hub_row_is_unavailable(line=line, lines=lines),
+                    },
+                )
+            )
     if UiElementId.PNC_MAIL_ROW_PLAYER_MAIL not in visible_elements and UiElementId.PNC_MAIL_ROW_ALLIANCE_MAIL not in visible_elements:
         return None
     header = _find_first_line_in_texts(lines=lines, texts=frozenset({"MAIL"}), max_y=120)
@@ -2724,6 +2766,7 @@ def _build_mail_hub_additions(
         )
     return ObservationAdditions(
         visible_elements=visible_elements,
+        list_entries=tuple(category_entries),
         screen_evidence=(ScreenEvidence(ScreenType.PNC_MAIL_HUB, "ocr_mail_hub"),),
     )
 
@@ -3601,6 +3644,29 @@ def _mail_hub_selector_id(normalized_text: str) -> UiElementId | None:
     return None
 
 
+def _mailbox_type_for_hub_selector(selector_id: UiElementId) -> MailboxType | None:
+    """Returns the typed mailbox represented by one supported hub category row."""
+
+    if selector_id == UiElementId.PNC_MAIL_ROW_PLAYER_MAIL:
+        return MailboxType.PLAYER
+    if selector_id == UiElementId.PNC_MAIL_ROW_ALLIANCE_MAIL:
+        return MailboxType.ALLIANCE
+    return None
+
+
+def _mail_hub_row_is_unavailable(*, line: OcrLine, lines: tuple[OcrLine, ...]) -> bool:
+    """Returns whether a hub category row carries the adjacent empty-state label."""
+
+    row_center = line.bounds.y + (line.bounds.height // 2)
+    row_tolerance = max(24, line.bounds.height * 2)
+    return any(
+        normalize_ocr_text(candidate.text) == _MAILBOX_EMPTY_TEXT
+        and abs((candidate.bounds.y + (candidate.bounds.height // 2)) - row_center) <= row_tolerance
+        and candidate.bounds.x >= line.bounds.x
+        for candidate in lines
+    )
+
+
 def _matches_alliance_home_bottom_tab_text(*, normalized_text: str, expected_text: str) -> bool:
     """Returns whether one OCR line matches the requested alliance-home bottom-tab label."""
 
@@ -4116,8 +4182,13 @@ def _looks_like_player_chat_sender_text(text: str) -> bool:
         return False
     if len(normalized_text) < 3 or len(normalized_text) > _CHAT_MAX_SENDER_LENGTH:
         return False
-    if len(re.findall(r"\S+", text.strip())) > 4:
-        return False
+    tokens = re.findall(r"\S+", text.strip())
+    if len(tokens) > 4:
+        bracketed_prefixes = re.findall(r"\[[^\]\r\n]{1,24}\]", text)
+        if len(bracketed_prefixes) < 2 or len(tokens) > 6:
+            return False
+        if re.match(r"^\s*(?:\[[^\]\r\n]{1,24}\]\s*){1,2}\S+(?:\s+\S+){0,3}\s*$", text) is None:
+            return False
     if ":" in text:
         return False
     letters = sum(character.isalpha() for character in normalized_text)
@@ -6656,22 +6727,20 @@ def _build_chat_overlay_additions(
     kingdom = _find_line_with_normalized_text(
         lines=lines,
         normalized_text=_CHAT_KINGDOM_TEXT,
-        min_x=int(image.width * 0.12),
+        min_x=int(image.width * 0.08),
         min_y=int(image.height * 0.05),
         max_y=int(image.height * 0.14),
     )
-    # The current 540 px capture uses a compact tab layout. Keep the wider
-    # legacy threshold for 900 px captures while accepting the measured
-    # current Alliance tab around x=219.
-    alliance_min_x = int(image.width * (0.35 if image.width <= 600 else 0.55))
+    if header is None or kingdom is None:
+        return None
     alliance = _find_line_with_normalized_text(
         lines=lines,
         normalized_text=_CHAT_ALLIANCE_TEXT,
-        min_x=alliance_min_x,
+        min_x=kingdom.bounds.x + kingdom.bounds.width,
         min_y=int(image.height * 0.05),
         max_y=int(image.height * 0.14),
     )
-    if header is None or kingdom is None or alliance is None:
+    if alliance is None:
         return None
     return ObservationAdditions(
         visible_elements={

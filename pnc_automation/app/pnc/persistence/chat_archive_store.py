@@ -126,6 +126,11 @@ class ChatArchiveStore:
             channel=channel,
             captured_at=captured_at,
         )
+        persisted_snapshot = (
+            previous_state.snapshot
+            if previous_state is not None and not snapshot.entries
+            else snapshot
+        )
         appended_entries, gap_detected = _compute_snapshot_delta(
             previous=previous_state.snapshot if previous_state is not None else None,
             current=snapshot,
@@ -145,7 +150,7 @@ class ChatArchiveStore:
         self._write_state(
             state_path,
             ChatArchiveState(
-                snapshot=snapshot,
+                snapshot=persisted_snapshot,
                 last_captured_at=captured_at,
                 gap_detected=gap_detected,
             ),

@@ -19,7 +19,7 @@ from pnc_automation.app.pnc.domain.mail import (
     MailArchiveRecord,
     MailboxType,
     compute_mail_thread_fingerprint,
-    normalize_mail_text,
+    mail_thread_row_key,
     normalize_mail_thread_text,
     parse_collect_mail_params,
 )
@@ -77,7 +77,7 @@ class CollectMailTask(BaseAutomationTask):
         if entry is not None:
             target = entry.action_point if entry.action_point is not None else entry.bounds.center()
             context.runtime_state["collect_mail_pending_sender"] = entry.title_text
-            context.runtime_state["collect_mail_pending_row_key"] = _mailbox_row_key(entry)
+            context.runtime_state["collect_mail_pending_row_key"] = mail_thread_row_key(entry)
             return [
                 TapPointAction(
                     x=target[0],
@@ -192,7 +192,7 @@ def _current_visible_thread_entry(context: TaskContext, observation: Observation
         return None
     seen_row_keys = _mailbox_seen_row_keys(context)
     for entry in observation.entries(ListEntryKind.MAIL_THREAD):
-        if _mailbox_row_key(entry) not in seen_row_keys:
+        if mail_thread_row_key(entry) not in seen_row_keys:
             return entry
     return None
 
@@ -314,28 +314,14 @@ def _mailbox_seen_row_keys(context: TaskContext) -> set[str]:
     return seen_row_keys
 
 
-def _mailbox_row_key(entry: DetectedListEntry) -> str:
-    """Builds a stable mailbox-row identity from the visible sender, preview, and date chrome."""
-
-    date_text = entry.metadata.get("date_text")
-    normalized_date = normalize_mail_text(date_text) if isinstance(date_text, str) else ""
-    return "|".join(
-        (
-            normalize_mail_text(entry.title_text or ""),
-            normalize_mail_text(entry.subtitle_text or ""),
-            normalized_date,
-        )
-    )
-
-
 def _mailbox_scroll_stalled(context: TaskContext, *, before: Observation, after: Observation) -> bool:
     """Returns whether a mailbox-list swipe failed to reveal any new row identities."""
 
-    after_signature = tuple(_mailbox_row_key(entry) for entry in after.entries(ListEntryKind.MAIL_THREAD))
+    after_signature = tuple(mail_thread_row_key(entry) for entry in after.entries(ListEntryKind.MAIL_THREAD))
     if not after_signature:
         return True
     before_signature = (
-        tuple(_mailbox_row_key(entry) for entry in before.entries(ListEntryKind.MAIL_THREAD))
+        tuple(mail_thread_row_key(entry) for entry in before.entries(ListEntryKind.MAIL_THREAD))
         if before.screen_type == ScreenType.PNC_MAILBOX_LIST and before.mailbox_type == after.mailbox_type
         else ()
     )

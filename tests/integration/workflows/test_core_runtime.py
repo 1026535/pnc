@@ -22,6 +22,8 @@ from pnc_automation.app.automation.engine.observed_action_executor import Observ
 from pnc_automation.app.entrypoints.app import ApplicationRunner
 from pnc_automation.app.pnc.domain.observation import (
     CurrentCastleEvidenceKind,
+    DetectedListEntry,
+    ListEntryKind,
     Observation,
     VisibleElement,
 )
@@ -440,6 +442,53 @@ class CoreRuntimeTests(unittest.TestCase):
 
             navigation.navigate.assert_called_once_with(ScreenType.PNC_CASTLE_SELECTION)
 
+    def test_identity_scan_rewinds_then_finds_selected_row_without_row_tap(self) -> None:
+        """Searches both roster directions through the constrained swipe operation."""
+
+        navigation = Mock()
+        initial = _castle_roster_frame("K1", "First")
+        selected = _castle_roster_frame("K2", "Selected", selected=True)
+        navigation.scroll_castle_roster.side_effect = (initial, selected)
+        runtime = CoreRuntime(
+            runtime=SimpleNamespace(session=Mock()),
+            navigation=navigation,
+            artifact_directory="account",
+            trace_path=Path("trace.jsonl"),
+            _perception=Mock(),
+            _run_id="run",
+        )
+
+        result = runtime._scan_active_castle_identity(initial)
+
+        self.assertEqual(CastleIdentity("K2", "Selected", 22), result.current_castle)
+        self.assertEqual(
+            ["down", "up"],
+            [call.args[0] for call in navigation.scroll_castle_roster.call_args_list],
+        )
+
+    def test_identity_scan_stops_at_repeated_boundaries(self) -> None:
+        """Fails after one bounded swipe at each unchanged roster boundary."""
+
+        navigation = Mock()
+        initial = _castle_roster_frame("K1", "First")
+        navigation.scroll_castle_roster.return_value = initial
+        runtime = CoreRuntime(
+            runtime=SimpleNamespace(session=Mock()),
+            navigation=navigation,
+            artifact_directory="account",
+            trace_path=Path("trace.jsonl"),
+            _perception=Mock(),
+            _run_id="run",
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "bounded roster scan"):
+            runtime._scan_active_castle_identity(initial)
+
+        self.assertEqual(
+            ["down", "up"],
+            [call.args[0] for call in navigation.scroll_castle_roster.call_args_list],
+        )
+
 
     def test_factory_builds_one_connected_runtime_and_core_graph(self) -> None:
         """Uses one ScriptRunner runtime and does not construct a legacy observer graph."""
@@ -618,6 +667,28 @@ def _frame_at(
         visible_elements={},
         captured_at=captured_at,
         blocking_popup=blocking_popup,
+    )
+
+
+def _castle_roster_frame(kingdom: str, name: str, *, selected: bool = False) -> Observation:
+    """Build one typed Manage Characters viewport for bounded scan tests."""
+
+    identity = CastleIdentity(kingdom, name, 22)
+    return Observation(
+        screen_type=ScreenType.PNC_CASTLE_SELECTION,
+        visible_elements={},
+        list_entries=(
+            DetectedListEntry(
+                kind=ListEntryKind.CASTLE,
+                bounds=Bounds(0, 70, 540, 100),
+                title_text=name,
+                selected=selected,
+                metadata={"kingdom": kingdom, "castle_level": 22},
+            ),
+        ),
+        captured_at=datetime.now(tz=UTC),
+        current_castle=identity if selected else None,
+        current_castle_evidence=CurrentCastleEvidenceKind.EXACT if selected else None,
     )
 
 

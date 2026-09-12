@@ -83,10 +83,12 @@ class NavigationPerception:
         )
         if not include_content or interrupted or blocked or screen == ScreenType.UNKNOWN:
             return observation
-        content = self.guard.enrich(
-            image, screen, controls,
-            ObservationRequest(ocr_screen_types=frozenset({screen})),
+        content_request = (
+            ObservationRequest.chat_transcript_observation()
+            if screen == ScreenType.PNC_CHAT
+            else ObservationRequest(ocr_screen_types=frozenset({screen}))
         )
+        content = self.guard.enrich(image, screen, controls, content_request)
         if any(item.screen_type != screen for item in content.screen_evidence):
             raise ValueError("Content parser contradicted independent screen identity.")
         # Parsed content cannot create controls, replace identity, or redirect a
@@ -96,8 +98,13 @@ class NavigationPerception:
             spatial_surface=content.spatial_surface,
             current_castle=content.current_castle,
             current_castle_evidence=content.current_castle_evidence,
+            mailbox_type=content.mailbox_type,
+            mailbox_empty=content.mailbox_empty,
             text_field_states=content.text_field_states,
             available_march_slots=content.available_march_slots,
+            active_chat_channel=content.active_chat_channel,
+            chat_draft_empty=content.chat_draft_empty,
+            chat_draft_text=content.chat_draft_text,
         )
 
 

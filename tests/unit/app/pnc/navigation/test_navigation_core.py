@@ -4,6 +4,7 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 import json
 from pathlib import Path
+import time
 import unittest
 from unittest.mock import Mock
 
@@ -11,11 +12,21 @@ from PIL import Image
 
 from pnc_automation.app.automation.engine.navigation_core import (
     NavigationCore,
+    NavigationEdge,
     NavigationPolicy,
     reviewed_navigation_edges,
 )
+from pnc_automation.app.pnc.domain.action_requests import SelectChatChannelAction, SwipeAction, TapPointAction
+from pnc_automation.app.pnc.domain.mail import (
+    MailboxAvailability,
+    MailboxType,
+    mail_thread_row_key,
+)
+from pnc_automation.app.pnc.domain.chat import ChatChannel
 from pnc_automation.app.pnc.domain.observation import (
     Bounds,
+    DetectedListEntry,
+    ListEntryKind,
     Observation,
     VisibleElement,
     VisibleElementSourceKind,
@@ -25,6 +36,7 @@ from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.navigation_perception import NavigationPerception
+from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservationEnricher
 from pnc_automation.app.pnc.vision.observation_builder import ObservationAdditions
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenEvidence
@@ -62,6 +74,88 @@ def observation(screen, *, geometry=False, blocked=False):
     )
 
 
+def mail_frame(
+    screen: ScreenType,
+    *,
+    selector: UiElementId | None = None,
+    entries: tuple[DetectedListEntry, ...] = (),
+    captured_at: datetime | None = None,
+    blocked: bool = False,
+) -> Observation:
+    """Build one typed mail frame with optional current-frame template control."""
+
+    visible_elements = {}
+    if selector is not None:
+        visible_elements[selector] = VisibleElement(
+            selector,
+            Bounds(10, 20, 40, 40),
+            1.0,
+            source_kind=VisibleElementSourceKind.TEMPLATE,
+        )
+    return Observation(
+        screen_type=screen,
+        visible_elements=visible_elements,
+        list_entries=entries,
+        image_size=(540, 960),
+        captured_at=captured_at or datetime.now(UTC),
+        blocking_popup=blocked,
+    )
+
+
+def chat_frame(
+    active_channel: ChatChannel | None,
+    *,
+    selector: UiElementId | None = None,
+    source_kind: VisibleElementSourceKind = VisibleElementSourceKind.TEMPLATE,
+    captured_at: datetime | None = None,
+    blocked: bool = False,
+    screen: ScreenType = ScreenType.PNC_CHAT,
+) -> Observation:
+    """Build one typed Chat frame with optional current-frame tab evidence."""
+
+    visible_elements = {}
+    if selector is not None:
+        visible_elements[selector] = VisibleElement(
+            selector,
+            Bounds(10, 20, 40, 40),
+            1.0,
+            source_kind=source_kind,
+        )
+    return Observation(
+        screen_type=screen,
+        visible_elements=visible_elements,
+        image_size=(540, 960),
+        captured_at=captured_at or datetime.now(UTC),
+        blocking_popup=blocked,
+        active_chat_channel=active_channel,
+    )
+
+
+def mailbox_category(mailbox: MailboxType, *, available: bool) -> DetectedListEntry:
+    """Build one typed mail-hub category entry for constrained navigation tests."""
+
+    return DetectedListEntry(
+        kind=ListEntryKind.MAILBOX_CATEGORY,
+        bounds=Bounds(20, 150, 500, 80),
+        title_text=f"{mailbox.value} mail",
+        action_point=(480, 190),
+        metadata={"mailbox_type": mailbox.value, "available": available},
+    )
+
+
+def mail_thread_entry(title: str = "Lux") -> DetectedListEntry:
+    """Build one canonical dynamic mailbox row."""
+
+    return DetectedListEntry(
+        kind=ListEntryKind.MAIL_THREAD,
+        bounds=Bounds(20, 160, 500, 100),
+        title_text=title,
+        subtitle_text="Daily Donation Rank Reward",
+        action_point=(270, 210),
+        metadata={"date_text": "2026/09/11 20:02:00"},
+    )
+
+
 class NavigationCoreTests(unittest.TestCase):
     def make_core(self, frames):
         actuator = Actuator()
@@ -70,6 +164,250 @@ class NavigationCoreTests(unittest.TestCase):
         core = NavigationCore(actuator, lambda _: next(iterator), reviewed_navigation_edges(),
                               NavigationPolicy(max_observations=4), sleep=lambda _: None)
         return core, actuator, core.edges[0]
+
+    def test_chat_route_has_reviewed_home_entry_and_back_edges(self):
+        edges = reviewed_navigation_edges()
+
+        self.assertIn(
+            (ScreenType.PNC_HOME_CITY, UiElementId.PNC_CHAT_SHORTCUT, frozenset({ScreenType.PNC_CHAT})),
+            {(edge.source, edge.selector, edge.destinations) for edge in edges},
+        )
+        self.assertIn(
+            (
+                ScreenType.PNC_CHAT,
+                UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+                frozenset({ScreenType.PNC_HOME_CITY, ScreenType.PNC_WORLD_MAP}),
+            ),
+            {(edge.source, edge.selector, edge.destinations) for edge in edges},
+        )
+
+    def test_chat_back_replans_from_world_parent_and_returns_home_once(self):
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+
+        def frame(screen, selector, captured_at):
+            return Observation(
+                screen_type=screen,
+                visible_elements={
+                    selector: VisibleElement(
+                        selector,
+                        Bounds(10, 20, 40, 40),
+                        1.0,
+                        source_kind=VisibleElementSourceKind.TEMPLATE,
+                    ),
+                },
+                image_size=(540, 960),
+                captured_at=captured_at,
+            )
+
+        frames = iter(
+            (
+                frame(ScreenType.PNC_CHAT, UiElementId.PNC_BACK_BUTTON_TOP_LEFT, now),
+                frame(ScreenType.PNC_CHAT, UiElementId.PNC_BACK_BUTTON_TOP_LEFT, now + timedelta(seconds=1)),
+                frame(ScreenType.PNC_WORLD_MAP, UiElementId.PNC_WORLD_HOME_NAV, now + timedelta(seconds=2)),
+                frame(ScreenType.PNC_WORLD_MAP, UiElementId.PNC_WORLD_HOME_NAV, now + timedelta(seconds=3)),
+                frame(ScreenType.PNC_WORLD_MAP, UiElementId.PNC_WORLD_HOME_NAV, now + timedelta(seconds=4)),
+                frame(ScreenType.PNC_HOME_CITY, UiElementId.PNC_HOME_WORLD_SWITCH, now + timedelta(seconds=5)),
+                frame(ScreenType.PNC_HOME_CITY, UiElementId.PNC_HOME_WORLD_SWITCH, now + timedelta(seconds=6)),
+            )
+        )
+        observed_labels = []
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator,
+            lambda label: (observed_labels.append(label) or next(frames)),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+
+        result = core.navigate(ScreenType.PNC_HOME_CITY)
+
+        self.assertEqual(ScreenType.PNC_HOME_CITY, result.screen_type)
+        self.assertEqual(
+            [UiElementId.PNC_BACK_BUTTON_TOP_LEFT, UiElementId.PNC_WORLD_HOME_NAV],
+            [action.selector_id for action in actuator.actions],
+        )
+        self.assertEqual(1, sum(action.selector_id == UiElementId.PNC_BACK_BUTTON_TOP_LEFT for action in actuator.actions))
+        self.assertEqual(2, len(actuator.actions))
+        self.assertEqual(
+            [
+                "core_route_source",
+                "core_1_source",
+                "core_1_after_0",
+                "core_1_after_1",
+                "core_2_source",
+                "core_2_after_0",
+                "core_2_after_1",
+            ],
+            observed_labels,
+        )
+
+    def test_navigation_edge_rejects_unknown_destination(self):
+        with self.assertRaises(ValueError):
+            NavigationEdge(
+                ScreenType.PNC_CHAT,
+                UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+                frozenset({ScreenType.UNKNOWN}),
+            )
+
+    def test_select_chat_channel_returns_without_tap_when_requested_channel_is_active(self):
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+        source = chat_frame(ChatChannel.ALLIANCE, captured_at=now)
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator,
+            lambda _: source,
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+
+        result = core.select_chat_channel(
+            ChatChannel.ALLIANCE,
+            observe_content=lambda _: source,
+        )
+
+        self.assertIs(source, result)
+        self.assertEqual([], actuator.actions)
+
+    def test_select_chat_channel_requires_fresh_chat_source_and_template_tab(self):
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+        cases = (
+            chat_frame(None, screen=ScreenType.PNC_HOME_CITY, captured_at=now),
+            chat_frame(ChatChannel.ALLIANCE, captured_at=now),
+            chat_frame(
+                ChatChannel.ALLIANCE,
+                selector=UiElementId.PNC_CHAT_TAB_KINGDOM,
+                source_kind=VisibleElementSourceKind.GEOMETRY,
+                captured_at=now,
+            ),
+        )
+        for source in cases:
+            with self.subTest(source=source.screen_type, selectors=tuple(source.visible_elements)):
+                actuator = Actuator()
+                core = NavigationCore(
+                    actuator,
+                    lambda _: source,
+                    reviewed_navigation_edges(),
+                    NavigationPolicy(max_observations=4),
+                    sleep=lambda _: None,
+                )
+                with self.assertRaises(RuntimeError):
+                    core.select_chat_channel(
+                        ChatChannel.WORLD,
+                        observe_content=lambda _: source,
+                    )
+                self.assertEqual([], actuator.actions)
+
+    def test_select_chat_channel_timeout_on_wrong_or_unknown_channel_never_retaps(self):
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+        source = chat_frame(
+            ChatChannel.ALLIANCE,
+            selector=UiElementId.PNC_CHAT_TAB_KINGDOM,
+            captured_at=now,
+        )
+        after_frames = tuple(
+            chat_frame(channel, captured_at=now + timedelta(seconds=index + 1))
+            for index, channel in enumerate(
+                (ChatChannel.ALLIANCE, None, ChatChannel.ALLIANCE, None)
+            )
+        )
+        frames = iter((source, *after_frames))
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator,
+            lambda _: source,
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "budget exhausted"):
+            core.select_chat_channel(
+                ChatChannel.WORLD,
+                observe_content=lambda _: next(frames),
+            )
+
+        self.assertEqual(1, len(actuator.actions))
+        self.assertIsInstance(actuator.actions[0], SelectChatChannelAction)
+
+    def test_select_chat_channel_rejects_stale_interrupted_and_late_completion_without_retapping(self):
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+        source = chat_frame(
+            ChatChannel.WORLD,
+            selector=UiElementId.PNC_CHAT_TAB_ALLIANCE,
+            captured_at=now,
+        )
+        cases = (
+            (
+                "stale",
+                (chat_frame(ChatChannel.ALLIANCE, captured_at=now),),
+                NavigationPolicy(max_observations=4),
+                None,
+            ),
+            (
+                "interrupted",
+                (chat_frame(ChatChannel.ALLIANCE, captured_at=now + timedelta(seconds=1), blocked=True),),
+                NavigationPolicy(max_observations=4),
+                None,
+            ),
+            (
+                "late",
+                (chat_frame(ChatChannel.ALLIANCE, captured_at=now + timedelta(seconds=1)),),
+                NavigationPolicy(max_observations=4, max_seconds=1),
+                iter((0.0, 0.0, 1.0)).__next__,
+            ),
+        )
+        for name, frames, policy, clock in cases:
+            with self.subTest(reason=name):
+                actuator = Actuator()
+                frame_iterator = iter((source, *frames))
+                core = NavigationCore(
+                    actuator,
+                    lambda _: source,
+                    reviewed_navigation_edges(),
+                    policy,
+                    sleep=lambda _: None,
+                    clock=clock or time.monotonic,
+                )
+                with self.assertRaises(RuntimeError):
+                    core.select_chat_channel(
+                        ChatChannel.ALLIANCE,
+                        observe_content=lambda _: next(frame_iterator),
+                    )
+                self.assertEqual(1, len(actuator.actions))
+
+    def test_select_chat_channel_taps_once_and_requires_stable_requested_channel(self):
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+        source = chat_frame(
+            ChatChannel.WORLD,
+            selector=UiElementId.PNC_CHAT_TAB_ALLIANCE,
+            captured_at=now,
+        )
+        after_frames = (
+            chat_frame(ChatChannel.WORLD, captured_at=now + timedelta(seconds=1)),
+            chat_frame(ChatChannel.ALLIANCE, captured_at=now + timedelta(seconds=2)),
+            chat_frame(ChatChannel.ALLIANCE, captured_at=now + timedelta(seconds=3)),
+        )
+        frames = iter((source, *after_frames))
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator,
+            lambda _: source,
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+
+        result = core.select_chat_channel(
+            ChatChannel.ALLIANCE,
+            observe_content=lambda _: next(frames),
+        )
+
+        self.assertEqual(ChatChannel.ALLIANCE, result.active_chat_channel)
+        self.assertEqual(1, len(actuator.actions))
+        self.assertIsInstance(actuator.actions[0], SelectChatChannelAction)
+        self.assertEqual(ChatChannel.ALLIANCE, actuator.actions[0].channel)
 
     def test_unknown_during_transition_waits_without_retapping(self):
         home = observation(ScreenType.PNC_HOME_CITY)
@@ -213,6 +551,181 @@ class NavigationCoreTests(unittest.TestCase):
             self.assertEqual(actuator.actions[1].selector_id, UiElementId.PNC_RESEARCH_QUEUE_GO)
             self.assertEqual(len(actuator.actions), 3 if visible else 2)
 
+    def test_open_mailbox_unavailable_category_returns_without_tap(self):
+        actuator = Actuator()
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+        core = NavigationCore(
+            actuator,
+            lambda _: mail_frame(ScreenType.PNC_MAIL_HUB, selector=UiElementId.PNC_MAIL_ROW_PLAYER_MAIL),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+        hub = mail_frame(
+            ScreenType.PNC_MAIL_HUB,
+            entries=(mailbox_category(MailboxType.PLAYER, available=False),),
+            captured_at=now,
+        )
+        self.assertEqual(
+            core.open_mailbox(MailboxType.PLAYER, observe_content=lambda _: hub),
+            MailboxAvailability.UNAVAILABLE,
+        )
+        self.assertEqual(actuator.actions, [])
+
+    def test_open_mailbox_available_category_uses_exact_reviewed_tap_once(self):
+        actuator = Actuator()
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+        frames = iter(
+            (
+                mail_frame(ScreenType.PNC_MAIL_HUB, selector=UiElementId.PNC_MAIL_ROW_PLAYER_MAIL, captured_at=now),
+                mail_frame(ScreenType.PNC_MAILBOX_LIST, captured_at=now + timedelta(seconds=1)),
+                mail_frame(ScreenType.PNC_MAILBOX_LIST, captured_at=now + timedelta(seconds=2)),
+            )
+        )
+        core = NavigationCore(
+            actuator,
+            lambda _: next(frames),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+        hub = mail_frame(
+            ScreenType.PNC_MAIL_HUB,
+            entries=(mailbox_category(MailboxType.PLAYER, available=True),),
+            captured_at=now,
+        )
+        self.assertEqual(
+            core.open_mailbox(MailboxType.PLAYER, observe_content=lambda _: hub),
+            MailboxAvailability.AVAILABLE,
+        )
+        self.assertEqual(len(actuator.actions), 1)
+        self.assertEqual(actuator.actions[0].selector_id, UiElementId.PNC_MAIL_ROW_PLAYER_MAIL)
+
+    def test_open_mailbox_ambiguous_or_missing_category_sends_no_action(self):
+        for entries in (
+            (),
+            (mailbox_category(MailboxType.PLAYER, available=True), mailbox_category(MailboxType.PLAYER, available=True)),
+        ):
+            actuator = Actuator()
+            core = NavigationCore(
+                actuator,
+                lambda _: mail_frame(ScreenType.PNC_MAIL_HUB),
+                reviewed_navigation_edges(),
+                NavigationPolicy(max_observations=4),
+                sleep=lambda _: None,
+            )
+            with self.assertRaisesRegex(RuntimeError, "missing or ambiguous"):
+                core.open_mailbox(
+                    MailboxType.PLAYER,
+                    observe_content=lambda _: mail_frame(ScreenType.PNC_MAIL_HUB, entries=entries),
+                )
+            self.assertEqual(actuator.actions, [])
+
+    def test_open_mail_thread_matches_one_row_and_rejects_stale_or_popup_completion(self):
+        row = mail_thread_entry()
+        row_key = mail_thread_row_key(row)
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+        for completion in (
+            (
+                mail_frame(ScreenType.PNC_MAIL_THREAD, captured_at=now),
+                mail_frame(ScreenType.PNC_MAIL_THREAD, captured_at=now),
+            ),
+            (
+                mail_frame(ScreenType.PNC_POPUP, blocked=True, captured_at=now + timedelta(seconds=1)),
+            ),
+        ):
+            actuator = Actuator()
+            frames = iter(completion)
+            core = NavigationCore(
+                actuator,
+                lambda _: next(frames),
+                reviewed_navigation_edges(),
+                NavigationPolicy(max_observations=4),
+                sleep=lambda _: None,
+            )
+            with self.assertRaises(RuntimeError):
+                core.open_mail_thread(
+                    row_key,
+                    observe_content=lambda _: mail_frame(
+                        ScreenType.PNC_MAILBOX_LIST,
+                        entries=(row,),
+                        captured_at=now,
+                    ),
+                )
+            self.assertEqual(len(actuator.actions), 1)
+            self.assertIsInstance(actuator.actions[0], TapPointAction)
+
+    def test_open_mail_thread_missing_or_ambiguous_row_sends_no_action(self):
+        row = mail_thread_entry()
+        for entries in ((), (row, row)):
+            actuator = Actuator()
+            core = NavigationCore(
+                actuator,
+                lambda _: mail_frame(ScreenType.PNC_MAIL_THREAD),
+                reviewed_navigation_edges(),
+                NavigationPolicy(max_observations=4),
+                sleep=lambda _: None,
+            )
+            with self.assertRaisesRegex(RuntimeError, "absent, ambiguous"):
+                core.open_mail_thread(
+                    mail_thread_row_key(row),
+                    observe_content=lambda _: mail_frame(ScreenType.PNC_MAILBOX_LIST, entries=entries),
+                )
+            self.assertEqual(actuator.actions, [])
+
+    def test_scroll_mailbox_uses_one_bounded_swipe_without_replay(self):
+        actuator = Actuator()
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+        frames = iter(
+            (
+                mail_frame(ScreenType.PNC_MAILBOX_LIST, captured_at=now + timedelta(seconds=1)),
+                mail_frame(ScreenType.PNC_MAILBOX_LIST, captured_at=now + timedelta(seconds=2)),
+                mail_frame(ScreenType.PNC_MAILBOX_LIST, captured_at=now + timedelta(seconds=3)),
+            )
+        )
+        core = NavigationCore(
+            actuator,
+            lambda _: mail_frame(ScreenType.PNC_MAILBOX_LIST),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+        result = core.scroll_mailbox(observe_content=lambda _: next(frames))
+        self.assertEqual(result.screen_type, ScreenType.PNC_MAILBOX_LIST)
+        self.assertEqual(len(actuator.actions), 1)
+        self.assertIsInstance(actuator.actions[0], SwipeAction)
+
+    def test_scroll_castle_roster_uses_one_typed_swipe_without_row_tap(self):
+        """Keeps active-castle search to one reviewed roster gesture per call."""
+
+        actuator = Actuator()
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+        frames = iter(
+            (
+                mail_frame(ScreenType.PNC_CASTLE_SELECTION, captured_at=now),
+                mail_frame(ScreenType.PNC_CASTLE_SELECTION, captured_at=now + timedelta(seconds=1)),
+                mail_frame(ScreenType.PNC_CASTLE_SELECTION, captured_at=now + timedelta(seconds=2)),
+            )
+        )
+        core = NavigationCore(
+            actuator,
+            lambda _: mail_frame(ScreenType.PNC_CASTLE_SELECTION),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+
+        result = core.scroll_castle_roster("down", observe_content=lambda _: next(frames))
+
+        self.assertEqual(ScreenType.PNC_CASTLE_SELECTION, result.screen_type)
+        self.assertEqual(1, len(actuator.actions))
+        self.assertIsInstance(actuator.actions[0], SwipeAction)
+        self.assertEqual("down", actuator.actions[0].direction)
+
+        with self.assertRaisesRegex(ValueError, "direction"):
+            core.scroll_castle_roster("sideways", observe_content=lambda _: next(frames))
+        self.assertEqual(1, len(actuator.actions))
+
 
 class NavigationPerceptionTests(unittest.TestCase):
     def capture(self, name):
@@ -230,6 +743,39 @@ class NavigationPerceptionTests(unittest.TestCase):
             self.assertTrue(190 <= x * 540 / size[0] <= 253)
             self.assertTrue(900 <= y * 960 / size[1] <= 958)
             self.assertTrue(all(c.source_kind == VisibleElementSourceKind.TEMPLATE for c in result.visible_elements.values()))
+
+    def test_chat_content_capture_uses_transcript_scope_and_preserves_chat_state(self):
+        """Uses the transcript request for Chat and carries its typed state through perception."""
+
+        class ChatGuard(Guard):
+            def __init__(self):
+                super().__init__()
+                self.requests = []
+
+            def enrich(self, image, screen_type, visible_elements, request):
+                del image, screen_type, visible_elements
+                self.requests.append(request)
+                return ObservationAdditions(
+                    screen_evidence=(ScreenEvidence(ScreenType.PNC_CHAT, "chat_content"),),
+                    active_chat_channel=ChatChannel.ALLIANCE,
+                    chat_draft_empty=True,
+                    chat_draft_text=None,
+                )
+
+        guard = ChatGuard()
+        result = NavigationPerception(load_visual_screen_recognizer(), guard).build(
+            self.capture("chat_alliance.png"),
+            include_content=True,
+        )
+
+        self.assertEqual(result.screen_type, ScreenType.PNC_CHAT)
+        self.assertTrue(result.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
+        self.assertTrue(result.has(UiElementId.PNC_CHAT_TAB_KINGDOM))
+        self.assertTrue(result.has(UiElementId.PNC_CHAT_TAB_ALLIANCE))
+        self.assertEqual(result.active_chat_channel, ChatChannel.ALLIANCE)
+        self.assertTrue(result.chat_draft_empty)
+        self.assertIsNone(result.chat_draft_text)
+        self.assertEqual(guard.requests, [ObservationRequest.chat_transcript_observation()])
 
     def test_missing_control_does_not_invent_a_click_or_erase_identity(self):
         capture = self.capture('home_city_core.png')
@@ -409,6 +955,21 @@ class NavigationPerceptionTests(unittest.TestCase):
         })
         result = perception.build(self.capture('home_city_core.png'), include_content=True)
         self.assertFalse(result.has(UiElementId.PNC_BAG_USE_BUTTON))
+
+    def test_content_parser_preserves_mailbox_fields_and_dynamic_entries(self):
+        guard = Guard()
+        category = mailbox_category(MailboxType.PLAYER, available=False)
+        guard.enrich = Mock(return_value=ObservationAdditions(
+            list_entries=(category,),
+            screen_evidence=(ScreenEvidence(ScreenType.PNC_HOME_CITY, 'home_content'),),
+            mailbox_type=MailboxType.PLAYER,
+            mailbox_empty=True,
+        ))
+        perception = NavigationPerception(load_visual_screen_recognizer(), guard)
+        result = perception.build(self.capture('home_city_core.png'), include_content=True)
+        self.assertEqual(result.entries(ListEntryKind.MAILBOX_CATEGORY), (category,))
+        self.assertEqual(result.mailbox_type, MailboxType.PLAYER)
+        self.assertTrue(result.mailbox_empty)
 
 
 class GameFirstNavigationEvidenceTests(unittest.TestCase):
