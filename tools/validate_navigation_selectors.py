@@ -42,7 +42,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--output-dir",
-        default=str(root / "navigation_selector_validation_output"),
+        default=str(root / ".local-data" / "reports" / "navigation_selector_validation"),
         help="Directory where the YAML validation report should be written.",
     )
     parser.add_argument("--verbose", action="store_true", help="Enable verbose structured logging.")

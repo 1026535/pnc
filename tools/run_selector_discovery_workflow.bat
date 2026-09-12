@@ -3,7 +3,7 @@ setlocal EnableExtensions
 
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..") do set "REPO_ROOT=%%~fI"
-set "OUTPUT_DIR=%REPO_ROOT%\selector_discovery_output"
+set "OUTPUT_DIR=%REPO_ROOT%\.local-data\reports\selector_discovery"
 set "AUTO_APPLY=0"
 set "DISCOVERY_ARGS="
 

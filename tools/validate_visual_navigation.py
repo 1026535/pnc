@@ -189,7 +189,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=Path("config/accounts.yaml"))
     parser.add_argument("--account", default="testing")
-    parser.add_argument("--output-dir", type=Path, default=Path("artifacts/screen_recognition/live"))
+    parser.add_argument("--output-dir", type=Path, default=Path(".local-data/artifacts/screen_recognition/live"))
     parser.add_argument("--replacement-core", action="store_true", help="Prove identity, then exercise the independent visual navigation core.")
     parser.add_argument("--game-first-routes", action="store_true", help="With --replacement-core, prove newly explored menus and their actual return parents.")
     arguments = parser.parse_args()

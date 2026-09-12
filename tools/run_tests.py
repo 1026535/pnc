@@ -29,6 +29,12 @@ from tools.test_selection.reporting import TimingResult, describe_tests, environ
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def local_report_root() -> Path:
+    """Returns the generated report root for the current repository root."""
+
+    return ROOT / ".local-data" / "reports"
+
+
 def flatten(suite):
     for test in suite:
         if isinstance(test, unittest.TestSuite):
@@ -46,7 +52,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dry-run", action="store_true", help="Print selection without importing tests")
     parser.add_argument("--explain", action="store_true")
     parser.add_argument("--json", type=Path, default=ROOT / ".test-impact/selection.json")
-    parser.add_argument("--csv", type=Path, help="Per-test timing output (measure defaults to test_timings.csv)")
+    parser.add_argument(
+        "--csv",
+        type=Path,
+        help="Per-test timing output (measure defaults to .local-data/reports/test_timings.csv)",
+    )
     parser.add_argument("--results", type=Path, default=ROOT / ".test-impact/results.json")
     parser.add_argument("--contexts", action="store_true", help="Use optional additive coverage seed; invalid seed runs full")
     parser.add_argument("--verbose", action="store_true")
@@ -137,7 +147,7 @@ def main(argv: list[str] | None = None) -> int:
                    "discovered_test_ids": ids, "discovered_tests": discovered,
                    "inventory_modules": plan.inventory_modules,
                    "tests": records, "succeeded": result.wasSuccessful()})
-        csv_path = args.csv or (ROOT / "test_timings.csv" if args.mode == "measure" else None)
+        csv_path = args.csv or (local_report_root() / "test_timings.csv" if args.mode == "measure" else None)
         if csv_path:
             write_timings(csv_path, records, metadata)
         print(f"Total including selection/collection/reporting: {elapsed:.3f}s", flush=True)
