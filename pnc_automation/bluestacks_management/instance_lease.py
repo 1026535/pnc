@@ -18,6 +18,11 @@ from typing import BinaryIO
 
 from pnc_automation.core.errors import InstanceBusyError
 from pnc_automation.core.lifecycle import close_preserving_error
+from pnc_automation.core.infra.storage.native_locking import (
+    ensure_lock_byte as _ensure_lock_byte,
+    lock_file_nonblocking as _lock_file_nonblocking,
+    unlock_file as _unlock_file,
+)
 
 DEFAULT_INSTANCE_LEASE_ROOT = Path(tempfile.gettempdir()) / "pnc-automation-instance-leases"
 
@@ -348,44 +353,6 @@ def _normalize_display_names(display_names: tuple[str, ...]) -> tuple[tuple[str,
     if len({key for key, _ in requested}) != len(requested):
         raise ValueError("An emulator lease bundle cannot contain duplicate display names.")
     return requested
-
-
-def _ensure_lock_byte(handle: BinaryIO) -> None:
-    """Ensures the file contains the byte used as the Windows lock region."""
-
-    handle.seek(0, os.SEEK_END)
-    if handle.tell() == 0:
-        handle.write(b"\0")
-        handle.flush()
-    handle.seek(0)
-
-
-def _lock_file_nonblocking(handle: BinaryIO) -> None:
-    """Takes a non-blocking exclusive lock using the host platform's native primitive."""
-
-    handle.seek(0)
-    if os.name == "nt":
-        import msvcrt
-
-        msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
-        return
-    import fcntl
-
-    fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-
-
-def _unlock_file(handle: BinaryIO) -> None:
-    """Releases the native file lock held by one process."""
-
-    handle.seek(0)
-    if os.name == "nt":
-        import msvcrt
-
-        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
-        return
-    import fcntl
-
-    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
 def _write_owner(handle: BinaryIO, *, display_name: str) -> None:

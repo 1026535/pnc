@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Iterable
 
 from pnc_automation.app.pnc.domain.chat import normalize_chat_text
+from pnc_automation.app.pnc.persistence.archive_ownership import ArchiveOwnershipError, chat_scope_from_transcript_path
+from pnc_automation.core.infra.storage.atomic_file import atomic_write_bytes
 
 _TRANSCRIPT_LINE_PATTERN = re.compile(r"^\[(?P<timestamp>[^\]]+)\]\s+(?P<sender>.+?):\s+(?P<message>.+)$")
 
@@ -151,3 +154,18 @@ def match_chat_transcript_cleanup_pattern(
         if pattern.message_pattern.match(normalized_message):
             return pattern
     return None
+
+
+def persist_cleaned_chat_transcript(path: Path, cleaned_text: str) -> None:
+    """Publishes an intentional cleanup edit under the chat stream ownership boundary."""
+
+    try:
+        scope = chat_scope_from_transcript_path(path)
+    except ArchiveOwnershipError as error:
+        raise ValueError(str(error)) from error
+    with scope.lock():
+        if scope.pending_path.exists():
+            raise RuntimeError("Chat transcript cleanup is blocked while pending archive recovery exists.")
+        if not path.is_file():
+            raise ValueError(f"Chat transcript cleanup target is not a regular file: {path}")
+        atomic_write_bytes(path.resolve(), cleaned_text.encode("utf-8"), prefix="cleanup-", suffix=".tmp")
