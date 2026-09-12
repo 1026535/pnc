@@ -1,5 +1,13 @@
 # Replacement core porting validation ledger
 
+## Authored SELECT_CASTLE — September 12, 2026
+
+The typed `SelectCastleWorkflow` implementation is complete on the original feature checkpoint `e6e61a15da247c601d5879ed61413c971884303e`. It is a Home-to-Home `NONSPENDING_STATE_CHANGE` workflow with exact Manage Characters evidence, fresh bounded roster scanning, one observed row tap when switching is needed, and exact active-castle postflight verification. The feature was documentation-only rebased onto guidance commit `d84e27126b314b7d43b17e4f645f499749555a97`; no selection production code changed in that rebase.
+
+Root's live no-op proof on active `free cookies` passed with a row-tap veto and final Home. Result: `.local-data/artifacts/replacement_core/select_castle_noop_result.json`. Final Home: `artifacts/2026-09-12/serious_stuff/20260912T202358Z_core_20260912T202043Z_e730f2c8_0056_core_route_source.png`. No alternate-castle switch was attempted. Actual switching proof remains pending the user's target answer, so this port is not yet accepted or landed as a full switch proof.
+
+Validation on the original feature checkpoint used Python 3.13.5: the focused selection/dispatcher/runner set passed 122 tests; the full portable gate passed 1,772 of 1,777 tests with five optional fixture skips (`.test-impact/select-castle-full-results.json`, source fingerprint `32dbe249c64e22839aed774da9c5430b34dac59ff6ea726002b24e497ced85be`). `git diff --check` passed. The full metadata retains commit `e6e61a15da247c601d5879ed61413c971884303e`; the guidance-only rebase does not supersede that production validation.
+
 ## Alliance Chat sending — September 12, 2026
 
 `codex/send-alliance-chat-core-port` starts at main `91793c880cc4893d196859e56ba9fbacaf9a44e5`. Both authored chat sends now use `SendChatWorkflow`, the existing typed parser, and the same guarded core composer sequence. The obsolete legacy chat task and duplicate send flow were removed. Mail sending remains unported. Luna implemented and self-reviewed the changes; root reviewed the consolidated result, owned every live operation, and found no remaining actionable code findings after the corrections below.
