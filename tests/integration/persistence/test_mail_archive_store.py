@@ -124,12 +124,18 @@ class MailArchiveStoreTests(MailWorkflowFixtures, unittest.TestCase):
             legacy_directory = store._build_directory(record)
             legacy_directory.mkdir(parents=True)
             (legacy_directory / "metadata.json").write_text(
-                '{"active_castle":"Main","mailbox_type":"player","fingerprint":"deadbeef",'
-                '"normalized_thread_text":"Greetings"}',
+                json.dumps({
+                    "active_castle": record.active_castle,
+                    "mailbox_type": record.mailbox_type.value,
+                    "fingerprint": record.fingerprint.value,
+                    "normalized_thread_text": record.normalized_thread_text,
+                }),
                 encoding="utf-8",
             )
             self.assertFalse(store.has_fingerprint(
-                active_castle="Main", mailbox_type="player", fingerprint="deadbeef"
+                active_castle=record.active_castle,
+                mailbox_type=record.mailbox_type.value,
+                fingerprint=record.fingerprint.value,
             ))
             retry = store.persist(record=record, archive_mode=MailArchiveMode.TEXT, skip_existing=True)
             self.assertTrue(retry.created)
@@ -148,6 +154,61 @@ class MailArchiveStoreTests(MailWorkflowFixtures, unittest.TestCase):
             self.assertEqual(
                 (first.directory / "thread.txt").read_bytes(),
                 (second.directory / "thread.txt").read_bytes(),
+            )
+
+    def test_versioned_metadata_contradiction_does_not_suppress_retry(self) -> None:
+        """A complete-looking versioned directory is retryable when its identity disagrees internally."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory) / "mail"
+            store = MailArchiveStore(root=root)
+            record = _mail_archive_record()
+            first = store.persist(record=record, archive_mode=MailArchiveMode.TEXT)
+            metadata_path = first.directory / "metadata.json"
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            metadata["normalized_thread_text"] = "Contradictory text"
+            metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+
+            self.assertFalse(store.has_fingerprint(
+                active_castle=record.active_castle,
+                mailbox_type=record.mailbox_type.value,
+                fingerprint=record.fingerprint.value,
+            ))
+            retry = store.persist(record=record, archive_mode=MailArchiveMode.TEXT, skip_existing=True)
+            self.assertTrue(retry.created)
+            self.assertNotEqual(first.directory, retry.directory)
+
+    def test_skip_existing_prefers_manifest_verified_versioned_capture_over_legacy(self) -> None:
+        """A later dedup lookup selects the suffixed verified capture and retains both diagnostics."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory) / "mail"
+            store = MailArchiveStore(root=root)
+            record = _mail_archive_record()
+            legacy_directory = store._build_directory(record)
+            legacy_directory.mkdir(parents=True)
+            (legacy_directory / "metadata.json").write_text(json.dumps({
+                "active_castle": record.active_castle,
+                "mailbox_type": record.mailbox_type.value,
+                "fingerprint": record.fingerprint.value,
+                "normalized_thread_text": record.normalized_thread_text,
+            }), encoding="utf-8")
+            (legacy_directory / "thread.txt").write_text(record.normalized_thread_text, encoding="utf-8")
+
+            versioned = store.persist(
+                record=record,
+                archive_mode=MailArchiveMode.TEXT,
+                skip_existing=False,
+            )
+            self.assertTrue(versioned.created)
+            self.assertTrue(versioned.directory.name.endswith("-1"))
+
+            reused = store.persist(record=record, archive_mode=MailArchiveMode.TEXT, skip_existing=True)
+            self.assertFalse(reused.created)
+            self.assertEqual(versioned.directory, reused.directory)
+            self.assertEqual(
+                ("complete", "complete"),
+                tuple(diagnostic.status.value for diagnostic in store.last_candidate_diagnostics),
             )
 
     def test_existing_complete_record_is_reused_before_requiring_new_screenshot(self) -> None:

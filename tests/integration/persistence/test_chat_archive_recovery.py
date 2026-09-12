@@ -24,6 +24,7 @@ from pnc_automation.app.pnc.persistence.chat_archive_store import (
     NormalizedPlayerChatEntry,
     VisibleChatSnapshot,
 )
+from pnc_automation.app.pnc.persistence.chat_archive_state import ChatArchiveSchemaError
 from pnc_automation.app.pnc.persistence.chat_archive_transaction import (
     ChatArchiveConsistencyError,
     canonical_json_bytes,
@@ -310,6 +311,83 @@ class ChatArchiveRecoveryTests(unittest.TestCase):
                             screenshot_payload=b"filename", screenshot_extension=extension,
                         )
                     self.assertEqual((), tuple(root.rglob("screenshots")))
+
+    def test_append_and_pending_limits_fail_before_publishing_screenshot(self) -> None:
+        """Rejected append/pending bytes leave every authoritative archive file absent."""
+
+        cases = (
+            ("append", {"MAX_APPEND_BYTES": 10, "MAX_PENDING_BYTES": 1024 * 1024}, "append limit"),
+            ("pending", {"MAX_APPEND_BYTES": 1024 * 1024, "MAX_PENDING_BYTES": 1000}, "pending limit"),
+        )
+        for label, limits, expected_label in cases:
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as temporary_directory:
+                root = Path(temporary_directory)
+                store = ChatArchiveStore(root)
+                message = "x" if label == "append" else "state duplication " + ("x" * 1000)
+                snapshot = self._snapshot(message)
+                with patch.multiple(
+                    "pnc_automation.app.pnc.persistence.chat_archive_transaction",
+                    **limits,
+                ):
+                    with self.assertRaises(ChatArchiveSchemaError, msg=expected_label):
+                        store.persist_heartbeat(
+                            account_id="account",
+                            castle=self.castle,
+                            channel=ChatChannel.WORLD,
+                            captured_at=self.captured_at,
+                            snapshot=snapshot,
+                            screenshot_payload=b"must not publish",
+                        )
+                self.assertEqual((), tuple(root.rglob("screenshots/*.png")))
+                self.assertEqual((), tuple(root.rglob("pending.json")))
+                self.assertEqual((), tuple(root.rglob("transcript.log")))
+                self.assertEqual((), tuple(root.rglob("state.json")))
+
+    def test_pending_rejects_self_consistent_unrelated_screenshot_filename(self) -> None:
+        """A recomputed pending digest cannot redirect recovery to an unrelated filename."""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            snapshot = self._snapshot("redirected")
+
+            def crash(stage: str) -> None:
+                if stage == "after_pending_publish":
+                    raise SystemExit(stage)
+
+            with self.assertRaises(SystemExit):
+                ChatArchiveStore(root, fault_injector=crash).persist_heartbeat(
+                    account_id="account",
+                    castle=self.castle,
+                    channel=ChatChannel.WORLD,
+                    captured_at=self.captured_at,
+                    snapshot=snapshot,
+                    screenshot_payload=b"screenshot",
+                )
+            pending = next((root / ".archive-control").rglob("pending.json"))
+            transaction = decode_pending_bytes(pending.read_bytes())
+            original_screenshot = root / transaction.screenshot_relative_path
+            unrelated_screenshot = original_screenshot.with_name("unrelated.png")
+            unrelated_screenshot.write_bytes(original_screenshot.read_bytes())
+            tampered = transaction.to_document()
+            tampered["screenshot"]["path"] = unrelated_screenshot.relative_to(root).as_posix()
+            tampered["screenshot"]["length"] = unrelated_screenshot.stat().st_size
+            tampered["screenshot"]["sha256"] = hashlib.sha256(unrelated_screenshot.read_bytes()).hexdigest()
+            tampered["record_sha256"] = hashlib.sha256(
+                canonical_json_bytes({key: value for key, value in tampered.items() if key != "record_sha256"})
+            ).hexdigest()
+            pending.write_bytes(canonical_json_bytes(tampered))
+            before_pending = pending.read_bytes()
+            before_unrelated = unrelated_screenshot.read_bytes()
+            with self.assertRaises(ChatArchiveConsistencyError):
+                ChatArchiveStore(root).persist_heartbeat(
+                    account_id="account",
+                    castle=self.castle,
+                    channel=ChatChannel.WORLD,
+                    captured_at=self.captured_at,
+                    snapshot=snapshot,
+                )
+            self.assertEqual(before_pending, pending.read_bytes())
+            self.assertEqual(before_unrelated, unrelated_screenshot.read_bytes())
 
     def test_truncated_state_fails_closed_without_defaulting_to_empty_history(self) -> None:
         """A corrupt existing state cannot turn the next heartbeat into a new baseline."""

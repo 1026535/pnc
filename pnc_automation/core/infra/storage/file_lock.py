@@ -39,7 +39,14 @@ class NativePathLock:
         self._released = True
         try:
             unlock_file(self.handle)
-        finally:
+        except BaseException as error:
+            close_preserving_error(
+                self.handle.close,
+                error,
+                message="Storage lock release and handle cleanup both failed.",
+            )
+            raise
+        else:
             self.handle.close()
 
 
