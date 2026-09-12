@@ -10,6 +10,34 @@ The isolated worktree preserves the relevant recognition/journal baseline record
 reserved for the user's other task. No configuration changes, castle switches,
 resource actions, messages, YOLO, or trained detectors were introduced.
 
+## 2026-09-12 publication: navigation gaps, startup, and Bag confirmation
+
+Authoritative worktree: `artifacts/worktrees/non-yolo-integration-current`, published to `origin/codex/non-yolo-recognition`. This increment integrates main through `87e6151` (building focus, popup vectorization, offline-test improvements, and Castle endpoint). Main subsequently advanced independently to `4b63bd9` with workflow safety; that later change is not included or claimed validated here. This is feature publication, not landing to main.
+
+Five missing graph selectors are registered without guessed geometry and live-confirmed: More Rank, Settings Rank, Settings Preferences, Settings Notifications, and World HUD Toggle in both directions. The final graph includes 46 edges after the upstream Castle return edge; registry support remains 336 selectors with 56 explicitly unsupported controls. Planned maturity and independent visual/frame proof remain required.
+
+The audit handoff's resource numeric fixes were already present in the canonical `numeric_parsing`/resource parser. Added only missing regression cases combining decimal/grouped amounts with OCR glyph repairs (`1.5K Fo0d` and `1,500 Wo0d` remain 1,500), plus malformed count/amount cases. The publisher splash profile was missing: two measured logo anchors at 0.95 now identify passive loading, expose no controls, and abstain when either logo is absent. Tests cover 540x960 and 900x1600; this is reference qualification, not independent broad accuracy.
+
+The upstream Castle profile retains its anchors and measured Back unchanged. Its metadata is migrated to catalog v3, and its manifest entry uses the canonical decoded-image digest. The existing clear `castle_aug25.png` validation frame now correctly expects Castle recognition. No duplicate legacy samples were imported. Final catalog: 31 profiles, 26 distinct screen types.
+
+The exact previously failing Bag screenshot now produces six complete resource entries through both `NavigationPerception(include_content=True)` and `ObservationRequest.source_screen_retry(PNC_BAG)`, using the production OCR pipeline. No new parser owner or threshold adjustment was needed. Fresh live confirmation after integration through `39ce6fc` reproduced all six entries, verified current-castle identity, and returned Home with 7 inputs/30 observations in 108.537 seconds. No Use taps, spending, setting changes, messages, or castle switches occurred. Bag: `artifacts/2026-09-12/testing/20260912T170823Z_core_20260912T170700Z_5c128bf4_0025_bag_content_proof.png`; final Home: `artifacts/2026-09-12/testing/20260912T170845Z_core_20260912T170700Z_5c128bf4_0030_core_route_source.png`. Saved replay and live summaries: `.local-data/reports/non_yolo_gap_20260912/bag_replay.json` and `bag_summary.json`. The pre-existing instance remains at Home.
+
+The eight incomplete main-checkout helper copies had no unique changes beyond correct feature versions already committed at `cb9a879`. After root review and Luna equivalence checks, the main-owning task preserved the exact patch at `C:/Users/lebel/pnc/.local-data/reports/main_checkout_incomplete_non_yolo_helpers_20260912.patch`, removed only those superseded copies, and fast-forwarded local main. No duplicate fixture migration commit was created. The separate offline provenance test defect was corrected using per-test temporary lease registries; both helper and direct real-session construction retain production provenance checks without contending with live instances.
+
+Validation (direct Python 3.13 interpreter; report directory `.local-data/reports/non_yolo_gap_20260912`):
+
+- `tools/run_tests.py group vision`: passed, 397 tests/5 optional skips.
+- Navigation registry regressions: 4 passed; frame-provenance module: 15 passed.
+- Main integration targeted navigation/popup/provenance group: 80 passed.
+- Numeric/startup/metadata/schema/recognizer/benchmark group: 72 passed; final Castle metadata/recognizer/benchmark/navigation group: 95 passed.
+- Initial full run: failed, 1,721 tests/5 skips/one real-lease fixture collision; corrected as above. Pre-Castle full checkpoint: passed, 1,735 tests/5 skips.
+- Final `tools/run_tests.py full --json .local-data/reports/non_yolo_gap_20260912/castle_final_selection.json --results .local-data/reports/non_yolo_gap_20260912/castle_final_results.json`: passed, 1,737 tests/5 skips, 70.645 test seconds (72.731 total). All skips are unavailable optional local screenshots. Tested source fingerprint `115d6c64eb53bd5e13773054db7242e4d8b3b362608a67b93fbb7d5a99fdcc91` matched the final code/assets before this documentation-only ledger update.
+- Legacy navigation-selector CLI: rejected before connection because its metadata/allowlist does not support these planned core semantic controls. The successful canonical core live routes provide the relevant proof; no legacy bypass was added.
+- Live first combined probe: More/Settings passed; world entry exhausted an overly tight three-observation harness budget. The six-observation rerun passed both HUD directions and final Home. Production defaults and classification thresholds were unchanged.
+- `git diff --check`: passed. Root review found no remaining actionable issue in this increment after Luna corrections/self-review.
+
+The complete vision plan remains broader than this increment. Research/Gathering/Campaign producer gaps, mutation-backed postconditions, member-only applicability, and independent target/build/locale promotion remain explicit gates. This publication does not authorize resource-changing actions or claim those gates complete.
+
 ## 2026-09-12 Institute controls and live ownership repair
 
 Current implementation worktree: `artifacts/worktrees/non-yolo-integration-current`; published integration commit `5261b1d` includes freshly fetched main `15845b8`. Earlier baseline/status entries below are historical.

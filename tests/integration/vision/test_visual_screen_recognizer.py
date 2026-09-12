@@ -11,6 +11,7 @@ import unittest
 
 from PIL import Image, ImageEnhance
 
+from pnc_automation.app.pnc.domain.observation import VisibleElementSourceKind
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.observation_builder import (
@@ -208,6 +209,7 @@ class VisualScreenRecognizerTests(unittest.TestCase):
             ("institute", ScreenType.PNC_INSTITUTE),
             ("goddess_statue", ScreenType.PNC_GODDESS_STATUE),
             ("warehouse", ScreenType.PNC_WAREHOUSE),
+            ("castle", ScreenType.PNC_CASTLE),
         ):
             with self.subTest(screen=screen):
                 source = _capture(f"{name}_audit.png").image
@@ -217,6 +219,26 @@ class VisualScreenRecognizerTests(unittest.TestCase):
                 obscured = source.copy()
                 obscured.paste((0, 0, 0), (280, 140, 535, 187))
                 self.assertEqual(recognizer.recognize(obscured).evidence, ())
+
+    def test_castle_profile_requires_title_and_body_and_exposes_only_template_back(self) -> None:
+        """Requires both independent Castle anchors and exposes only its reviewed Back control."""
+
+        recognizer = load_visual_screen_recognizer()
+        source = _capture("castle_audit.png").image
+        result = recognizer.recognize(source)
+        self.assertEqual({item.screen_type for item in result.evidence}, {ScreenType.PNC_CASTLE})
+        self.assertEqual({item.selector_id for item in result.controls}, {UiElementId.PNC_BACK_BUTTON_TOP_LEFT})
+        control = result.controls[0]
+        self.assertEqual(VisibleElementSourceKind.TEMPLATE, control.source_kind)
+        self.assertTrue(22 <= control.bounds.center()[0] <= 80)
+        self.assertTrue(8 <= control.bounds.center()[1] <= 46)
+
+        title_only = source.copy()
+        title_only.paste((0, 0, 0), (98, 3, 297, 46))
+        self.assertEqual(recognizer.recognize(title_only).evidence, ())
+        body_only = source.copy()
+        body_only.paste((0, 0, 0), (278, 142, 518, 182))
+        self.assertEqual(recognizer.recognize(body_only).evidence, ())
 
     def test_scope_cannot_hide_hero_hall_and_identity_does_not_invent_recruit(self) -> None:
         ocr = _RecordingOcrService(lines=())

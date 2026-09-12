@@ -714,6 +714,61 @@
       "layout_id": "institute"
     },
     {
+      "id": "castle",
+      "layout_id": "castle",
+      "screen": "PNC_CASTLE",
+      "revision": 1,
+      "source": {
+        "fixture": "castle_audit.png",
+        "decoded_sha256": "fb8c70a6b08efabf969177474422e9c8b204046835ef313396a2d0a932dd1ca4",
+        "capture_group": "2026-09-12/serious_stuff"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Reviewed Castle endpoint identity anchors from the frozen reference fixture.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/castle_0.png",
+          "search_region": [
+            98,
+            3,
+            199,
+            43
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/castle_1.png",
+          "search_region": [
+            278,
+            142,
+            240,
+            40
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/core_institute_pnc_back_button_top_left.png",
+            "search_region": [
+              22,
+              8,
+              58,
+              38
+            ],
+            "threshold": 0.93
+          }
+        }
+      ]
+    },
+    {
       "id": "goddess_statue",
       "screen": "PNC_GODDESS_STATUE",
       "anchors": [
