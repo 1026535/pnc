@@ -142,8 +142,7 @@ class CoreRuntime:
     def preflight_active_castle_identity(self) -> CastleIdentity:
         """Verifies the active castle through Manage Characters without switching it."""
 
-        self.runtime.session.ensure_app_foregrounded()
-        self._settle_initial_screen()
+        self.ensure_game_ready()
         selection_observation = self.navigation.navigate(ScreenType.PNC_CASTLE_SELECTION)
         identity = self.observe("active_castle_identity", include_content=True)
         if identity.captured_at <= selection_observation.captured_at:
@@ -155,6 +154,15 @@ class CoreRuntime:
         if active_castle is None:
             raise RuntimeError("Active castle identity disappeared after the bounded roster scan.")
         return active_castle
+
+    def ensure_game_ready(self) -> Observation:
+        """Foregrounds Puzzles & Conquest and proves one stable in-game screen."""
+
+        launch_started = self.runtime.session.ensure_app_foregrounded()
+        settled = self._settle_initial_screen(launch_started=launch_started is True)
+        if settled.screen_type == ScreenType.ANDROID_HOME:
+            raise RuntimeError("Preflight remained on Android Home; Puzzles & Conquest is not game-ready.")
+        return settled
 
     def _scan_active_castle_identity(self, observation: Observation) -> Observation:
         """Find the selected roster row with bounded swipes and no row taps."""
@@ -189,7 +197,7 @@ class CoreRuntime:
         if observation.screen_type != ScreenType.PNC_CASTLE_SELECTION:
             raise RuntimeError("Active castle identity preflight reached an unexpected screen.")
 
-    def _settle_initial_screen(self) -> Observation:
+    def _settle_initial_screen(self, *, launch_started: bool = False) -> Observation:
         """Waits passively through loading until a known screen is stable."""
 
         policy = self.navigation.policy
@@ -214,9 +222,11 @@ class CoreRuntime:
             previous_captured_at = observation.captured_at
             if observation.blocking_popup:
                 raise RuntimeError("Preflight encountered a blocking popup; no recovery action was sent.")
-            if observation.screen_type == ScreenType.UNKNOWN:
+            if launch_started and observation.screen_type in {ScreenType.UNKNOWN, ScreenType.ANDROID_HOME}:
+                stable = 0
+            elif observation.screen_type == ScreenType.UNKNOWN:
                 raise RuntimeError("Preflight encountered an unknown screen; no recovery action was sent.")
-            if observation.screen_type == ScreenType.PNC_LOADING:
+            elif observation.screen_type == ScreenType.PNC_LOADING:
                 stable = 0
             else:
                 stable = stable + 1 if observation.screen_type == previous_screen else 1

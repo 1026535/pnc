@@ -710,6 +710,38 @@ class BlueStacksSessionTests(unittest.TestCase):
                 session.close()
                 registry.release_all()
 
+    def test_ensure_app_foregrounded_reports_false_when_package_is_already_foregrounded(self) -> None:
+        """Distinguishes an existing foreground app from a newly started launch."""
+
+        adb_client = _FakeAdbClient(
+            connect_result=_command_result(returncode=0, stdout_text="connected"),
+            state_result=_command_result(returncode=0, stdout_text="device"),
+            shell_result=_command_result(returncode=0, stdout_text="com.global.tmslg"),
+        )
+        session = self._make_session(adb_client=adb_client)
+
+        self.assertFalse(session.ensure_app_foregrounded())
+        self.assertEqual(1, len(adb_client.shell_calls))
+
+    def test_ensure_app_foregrounded_reports_true_when_it_starts_a_launch(self) -> None:
+        """Reports the launch boundary needed by passive post-launch screen settling."""
+
+        adb_client = _FakeAdbClient(
+            connect_result=_command_result(returncode=0, stdout_text="connected"),
+            state_result=_command_result(returncode=0, stdout_text="device"),
+            shell_result=_command_result(returncode=0, stdout_text="com.android.launcher"),
+        )
+        session = self._make_session(adb_client=adb_client)
+
+        self.assertTrue(session.ensure_app_foregrounded())
+        self.assertEqual(
+            [
+                ("127.0.0.1:5555", ("dumpsys", "window", "windows")),
+                ("127.0.0.1:5555", ("monkey", "-p", "com.global.tmslg", "-c", "android.intent.category.LAUNCHER", "1")),
+            ],
+            adb_client.shell_calls,
+        )
+
     def test_connect_failure_releases_the_supplied_operation_lease(self) -> None:
         """Makes a failed ADB connection immediately available to the next process-shaped owner."""
 

@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import unittest
+from datetime import UTC, datetime
 from pathlib import Path
+from unittest.mock import Mock
 
 from pnc_automation.app.automation.engine.action_executor import ActionExecutor
+from pnc_automation.app.automation.engine.core_script_dispatcher import GameReadyResult
+from pnc_automation.app.automation.engine.core_workflow import CoreWorkflowResult
 from pnc_automation.app.automation.engine.observed_action_executor import ObservedActionExecutor
 from pnc_automation.app.automation.engine.runner import AutomationRunner
 from pnc_automation.app.authoring.scripts.models import RunScript, ScriptStep
@@ -73,7 +77,6 @@ class RunnerEndToEndTests(unittest.TestCase):
         )
 
         observations = [
-            make_observation(ScreenType.ANDROID_HOME, visible_ids=(UiElementId.ANDROID_HOME_PNC_ICON,)),
             make_observation(
                 ScreenType.PNC_LOGIN,
                 visible_ids=(
@@ -287,11 +290,24 @@ class RunnerEndToEndTests(unittest.TestCase):
         fake_observer = FakeObservationService(observations=observations)
         fake_session = FakeSession()
         registry = build_default_task_registry()
+        core_step_executor = Mock()
+        core_step_executor.execute.return_value = CoreWorkflowResult(
+            workflow_name=TaskId.ENSURE_GAME_RUNNING.value,
+            succeeded=True,
+            value=GameReadyResult(
+                screen_type=ScreenType.PNC_LOGIN,
+                captured_at=datetime.now(tz=UTC),
+                artifact_path=None,
+            ),
+            exit_screen=ScreenType.PNC_LOGIN,
+            trace_path="trace.jsonl",
+        )
         runner = _make_runner(
             defaults=defaults,
             observation_service=fake_observer,
             session=fake_session,
             registry=registry,
+            core_step_executor=core_step_executor,
         )
 
         result = runner.run(
@@ -305,7 +321,8 @@ class RunnerEndToEndTests(unittest.TestCase):
 
         self.assertEqual(len(result.steps), 7)
         self.assertEqual(result.steps[-1].status.value, "success")
-        self.assertEqual(fake_session.launches, 1)
+        self.assertEqual(fake_session.launches, 0)
+        core_step_executor.execute.assert_called_once()
         self.assertIn("user@example.com", fake_session.texts)
         self.assertIn("secret", fake_session.texts)
         self.assertGreaterEqual(len(fake_session.taps), 8)
@@ -376,6 +393,7 @@ def _make_runner(
     observation_service: FakeObservationService,
     session: FakeSession,
     registry: object,
+    core_step_executor: object | None = None,
 ) -> AutomationRunner:
     """Builds the fake-device production runner used by end-to-end parity scenarios."""
 
@@ -399,6 +417,7 @@ def _make_runner(
         task_registry=registry,
         flow_planner=ScreenFlowPlanner(),
         logger=build_logger(),
+        core_step_executor=core_step_executor,
     )
 
 
