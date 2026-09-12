@@ -155,7 +155,7 @@ def parse_send_mail_params(*, task_label: object, params: Mapping[str, object]) 
     )
 
 
-def parse_collect_mail_params(*, task_label: object, params: Mapping[str, object]) -> CollectMailParams:
+def parse_collect_mail_params(params: Mapping[str, object], *, task_label: object) -> CollectMailParams:
     """Builds the canonical validated collect-mail payload from raw script parameters."""
 
     mailboxes = _parse_mailboxes(task_label=task_label, value=params.get("mailboxes"))
