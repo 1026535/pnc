@@ -870,7 +870,7 @@
   },
   {
     "asset": "screen_anchors/campaign_map_scene.png",
-    "source": "artifacts/2026-09-12/serious_stuff/20260912T195710Z_core_20260912T195338Z_6a8f4869_0013_campaign_entry_settled.png",
+    "source": ".local-data/artifacts/2026-09-12/serious_stuff/20260912T195710Z_core_20260912T195338Z_6a8f4869_0013_campaign_entry_settled.png",
     "source_sha256": "97a15f36f9d7c1ac56ca7f8ba3903c329a04c3179323d94eb98e2d4ffdca91c1",
     "reference_size": [540, 960],
     "crop": [180, 220, 350, 350],
@@ -879,7 +879,7 @@
   },
   {
     "asset": "screen_anchors/campaign_map_nodes.png",
-    "source": "artifacts/2026-09-12/serious_stuff/20260912T195710Z_core_20260912T195338Z_6a8f4869_0013_campaign_entry_settled.png",
+    "source": ".local-data/artifacts/2026-09-12/serious_stuff/20260912T195710Z_core_20260912T195338Z_6a8f4869_0013_campaign_entry_settled.png",
     "source_sha256": "97a15f36f9d7c1ac56ca7f8ba3903c329a04c3179323d94eb98e2d4ffdca91c1",
     "reference_size": [540, 960],
     "crop": [175, 445, 335, 560],
@@ -888,7 +888,7 @@
   },
   {
     "asset": "screen_anchors/campaign_chapter_title.png",
-    "source": "artifacts/2026-09-12/serious_stuff/20260912T195809Z_core_20260912T195338Z_6a8f4869_0015_campaign_chapter_10_settled.png",
+    "source": ".local-data/artifacts/2026-09-12/serious_stuff/20260912T195809Z_core_20260912T195338Z_6a8f4869_0015_campaign_chapter_10_settled.png",
     "source_sha256": "738f8218eb53c6e802f55f5d1056f35fd907e907c62c800605ade61d63314d56",
     "reference_size": [540, 960],
     "crop": [205, 38, 530, 98],
@@ -897,7 +897,7 @@
   },
   {
     "asset": "screen_anchors/campaign_chapter_path.png",
-    "source": "artifacts/2026-09-12/serious_stuff/20260912T195809Z_core_20260912T195338Z_6a8f4869_0015_campaign_chapter_10_settled.png",
+    "source": ".local-data/artifacts/2026-09-12/serious_stuff/20260912T195809Z_core_20260912T195338Z_6a8f4869_0015_campaign_chapter_10_settled.png",
     "source_sha256": "738f8218eb53c6e802f55f5d1056f35fd907e907c62c800605ade61d63314d56",
     "reference_size": [540, 960],
     "crop": [105, 500, 320, 675],
@@ -906,7 +906,7 @@
   },
   {
     "asset": "screen_anchors/campaign_stage_title.png",
-    "source": "artifacts/2026-09-12/serious_stuff/20260912T195913Z_core_20260912T195338Z_6a8f4869_0017_campaign_stage_10_3_settled.png",
+    "source": ".local-data/artifacts/2026-09-12/serious_stuff/20260912T195913Z_core_20260912T195338Z_6a8f4869_0017_campaign_stage_10_3_settled.png",
     "source_sha256": "0a3f70a93cba682c50afeca8e432faaf401e75138d255195f6356e32a37bde70",
     "reference_size": [540, 960],
     "crop": [120, 201, 420, 250],
@@ -915,7 +915,7 @@
   },
   {
     "asset": "screen_anchors/campaign_stage_enemy_lineup.png",
-    "source": "artifacts/2026-09-12/serious_stuff/20260912T195913Z_core_20260912T195338Z_6a8f4869_0017_campaign_stage_10_3_settled.png",
+    "source": ".local-data/artifacts/2026-09-12/serious_stuff/20260912T195913Z_core_20260912T195338Z_6a8f4869_0017_campaign_stage_10_3_settled.png",
     "source_sha256": "0a3f70a93cba682c50afeca8e432faaf401e75138d255195f6356e32a37bde70",
     "reference_size": [540, 960],
     "crop": [190, 260, 450, 310],
@@ -924,7 +924,7 @@
   },
   {
     "asset": "screen_anchors/campaign_home_portal.png",
-    "source": "artifacts/2026-09-12/serious_stuff/20260912T195710Z_core_20260912T195338Z_6a8f4869_0013_campaign_entry_settled.png",
+    "source": ".local-data/artifacts/2026-09-12/serious_stuff/20260912T195710Z_core_20260912T195338Z_6a8f4869_0013_campaign_entry_settled.png",
     "source_sha256": "97a15f36f9d7c1ac56ca7f8ba3903c329a04c3179323d94eb98e2d4ffdca91c1",
     "reference_size": [540, 960],
     "crop": [466, 775, 521, 820],
@@ -933,7 +933,7 @@
   },
   {
     "asset": "screen_anchors/campaign_back_button.png",
-    "source": "artifacts/2026-09-12/serious_stuff/20260912T195809Z_core_20260912T195338Z_6a8f4869_0015_campaign_chapter_10_settled.png",
+    "source": ".local-data/artifacts/2026-09-12/serious_stuff/20260912T195809Z_core_20260912T195338Z_6a8f4869_0015_campaign_chapter_10_settled.png",
     "source_sha256": "738f8218eb53c6e802f55f5d1056f35fd907e907c62c800605ade61d63314d56",
     "reference_size": [540, 960],
     "crop": [450, 760, 535, 830],
@@ -942,7 +942,7 @@
   },
   {
     "asset": "screen_anchors/campaign_close_button.png",
-    "source": "artifacts/2026-09-12/serious_stuff/20260912T195913Z_core_20260912T195338Z_6a8f4869_0017_campaign_stage_10_3_settled.png",
+    "source": ".local-data/artifacts/2026-09-12/serious_stuff/20260912T195913Z_core_20260912T195338Z_6a8f4869_0017_campaign_stage_10_3_settled.png",
     "source_sha256": "0a3f70a93cba682c50afeca8e432faaf401e75138d255195f6356e32a37bde70",
     "reference_size": [540, 960],
     "crop": [466, 200, 512, 248],
@@ -951,7 +951,7 @@
   },
   {
     "asset": "tests/data/screen_recognition/campaign_map.png",
-    "source": "artifacts/2026-09-12/serious_stuff/20260912T195710Z_core_20260912T195338Z_6a8f4869_0013_campaign_entry_settled.png",
+    "source": ".local-data/artifacts/2026-09-12/serious_stuff/20260912T195710Z_core_20260912T195338Z_6a8f4869_0013_campaign_entry_settled.png",
     "source_sha256": "97a15f36f9d7c1ac56ca7f8ba3903c329a04c3179323d94eb98e2d4ffdca91c1",
     "reference_size": [540, 960],
     "capture_group": "2026-09-12/serious_stuff/campaign_navigation",
@@ -962,7 +962,7 @@
   },
   {
     "asset": "tests/data/screen_recognition/campaign_chapter_10.png",
-    "source": "artifacts/2026-09-12/serious_stuff/20260912T195809Z_core_20260912T195338Z_6a8f4869_0015_campaign_chapter_10_settled.png",
+    "source": ".local-data/artifacts/2026-09-12/serious_stuff/20260912T195809Z_core_20260912T195338Z_6a8f4869_0015_campaign_chapter_10_settled.png",
     "source_sha256": "738f8218eb53c6e802f55f5d1056f35fd907e907c62c800605ade61d63314d56",
     "reference_size": [540, 960],
     "capture_group": "2026-09-12/serious_stuff/campaign_navigation",
@@ -973,7 +973,7 @@
   },
   {
     "asset": "tests/data/screen_recognition/campaign_stage_10_3.png",
-    "source": "artifacts/2026-09-12/serious_stuff/20260912T195913Z_core_20260912T195338Z_6a8f4869_0017_campaign_stage_10_3_settled.png",
+    "source": ".local-data/artifacts/2026-09-12/serious_stuff/20260912T195913Z_core_20260912T195338Z_6a8f4869_0017_campaign_stage_10_3_settled.png",
     "source_sha256": "0a3f70a93cba682c50afeca8e432faaf401e75138d255195f6356e32a37bde70",
     "reference_size": [540, 960],
     "capture_group": "2026-09-12/serious_stuff/campaign_navigation",

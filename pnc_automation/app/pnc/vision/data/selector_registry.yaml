@@ -2446,7 +2446,15 @@ selectors:
   - PNC_CAMPAIGN_CHAPTER
   status: interaction_validated
   detection_kind: template
-  interaction_kind: action
+  interaction_kind: navigation
+  click:
+    anchor: center
+    outcomes:
+    - safe_to_click: true
+      monetized: false
+      target_screen: PNC_CAMPAIGN_MAP
+      notes:
+      - 'Live reviewed Chapter 10 gold Back return to Campaign map.'
   materialize_relative_bounds: false
   template_asset:
     path: screen_anchors/campaign_back_button.png
@@ -2467,7 +2475,15 @@ selectors:
   - PNC_CAMPAIGN_STAGE
   status: interaction_validated
   detection_kind: template
-  interaction_kind: action
+  interaction_kind: navigation
+  click:
+    anchor: center
+    outcomes:
+    - safe_to_click: true
+      monetized: false
+      target_screen: PNC_CAMPAIGN_CHAPTER
+      notes:
+      - 'Live reviewed stage-detail Close return to Chapter 10.'
   materialize_relative_bounds: false
   template_asset:
     path: screen_anchors/campaign_close_button.png
