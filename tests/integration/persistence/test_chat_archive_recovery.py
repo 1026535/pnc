@@ -241,8 +241,8 @@ class ChatArchiveRecoveryTests(unittest.TestCase):
                 )
             self.assertEqual(before, tuple(path.relative_to(root) for path in root.rglob("*")))
 
-    def test_archive_day_uses_capture_offset_not_host_timezone(self) -> None:
-        """The captured timestamp's own offset owns the archive day."""
+    def test_archive_day_preserves_host_local_legacy_path_resolution(self) -> None:
+        """New writes retain the pre-existing host-local day path contract."""
 
         captured_at = datetime(2026, 1, 2, 0, 30, tzinfo=timezone(timedelta(hours=14)))
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -252,12 +252,46 @@ class ChatArchiveRecoveryTests(unittest.TestCase):
                 account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
                 captured_at=captured_at, snapshot=self._snapshot("offset day"), screenshot_payload=b"offset",
             )
-            self.assertEqual("2026-01-02", update.directory.relative_to(root).parts[0])
+            expected_day = captured_at.astimezone().date().isoformat()
+            self.assertEqual(expected_day, update.directory.relative_to(root).parts[0])
             repeated = store.persist_heartbeat(
                 account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
                 captured_at=captured_at + timedelta(seconds=1), snapshot=update.snapshot,
             )
             self.assertFalse(repeated.changed)
+
+    def test_invalid_snapshot_is_rejected_before_no_delta_archive_mutation(self) -> None:
+        """Malformed empty/no-delta snapshots cannot create state or control paths."""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            store = ChatArchiveStore(root)
+            valid = self._snapshot("valid")
+            invalid_snapshots = (
+                VisibleChatSnapshot(entries=(), fingerprint="not-hex"),
+                VisibleChatSnapshot(entries=[], fingerprint=valid.fingerprint),  # type: ignore[arg-type]
+                VisibleChatSnapshot(entries=(object(),), fingerprint=valid.fingerprint),  # type: ignore[arg-type]
+            )
+
+            def tree_bytes() -> tuple[tuple[str, bool, bytes | None], ...]:
+                return tuple(sorted(
+                    (
+                        path.relative_to(root).as_posix(),
+                        path.is_dir(),
+                        None if path.is_dir() else path.read_bytes(),
+                    )
+                    for path in root.rglob("*")
+                ))
+
+            for snapshot in invalid_snapshots:
+                with self.subTest(snapshot=snapshot):
+                    before = tree_bytes()
+                    with self.assertRaisesRegex(ChatArchiveConsistencyError, "snapshot is malformed"):
+                        store.persist_heartbeat(
+                            account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                            captured_at=self.captured_at, snapshot=snapshot,
+                        )
+                    self.assertEqual(before, tree_bytes())
 
     def test_screenshot_filename_inputs_are_rejected_before_screenshot_mutation(self) -> None:
         """Screenshot names remain confined to the canonical layout even for public snapshot values."""

@@ -138,6 +138,29 @@ def state_bytes(state: ChatArchiveState) -> bytes:
     return canonical_json_bytes(state_document(state))
 
 
+def validate_snapshot(snapshot: object) -> VisibleChatSnapshot:
+    """Validates and canonicalizes one caller-supplied visible snapshot."""
+
+    if not isinstance(snapshot, VisibleChatSnapshot):
+        raise ChatArchiveSchemaError("Chat snapshot must be a VisibleChatSnapshot.")
+    if type(snapshot.entries) is not tuple:
+        raise ChatArchiveSchemaError("Chat snapshot entries must be a tuple.")
+    entries: list[dict[str, object]] = []
+    for index, item in enumerate(snapshot.entries):
+        if not isinstance(item, NormalizedPlayerChatEntry):
+            raise ChatArchiveSchemaError(f"Chat snapshot entry {index} has an invalid type.")
+        entries.append(
+            {
+                "sender_name": item.sender_name,
+                "message_text": item.message_text,
+                "visible_order": item.visible_order,
+            }
+        )
+    return _decode_snapshot_document(
+        {"fingerprint": snapshot.fingerprint, "entries": entries}
+    )
+
+
 def decode_state_document(document: dict[str, Any], *, allow_legacy: bool = True) -> DecodedChatArchiveState:
     """Strictly decodes version-two state or the supported legacy state shape."""
 
@@ -153,7 +176,37 @@ def decode_state_document(document: dict[str, Any], *, allow_legacy: bool = True
             raise ChatArchiveSchemaError("Unsupported chat archive state schema.")
         legacy = False
 
-    snapshot_document = _mapping(document["snapshot"], "snapshot")
+    snapshot = _decode_snapshot_document(document["snapshot"])
+    entries = snapshot.entries
+    captured = document.get("last_captured_at")
+    if captured is not None and not isinstance(captured, str):
+        raise ChatArchiveSchemaError("Chat archive state last_captured_at must be an ISO timestamp or null.")
+    last_captured_at = None if captured is None else _aware_datetime(captured, "last_captured_at")
+    gap_detected = document.get("gap_detected", False)
+    if type(gap_detected) is not bool:
+        raise ChatArchiveSchemaError("Chat archive state gap_detected must be a boolean.")
+    evidence = None if legacy else _decode_evidence(document["transcript_evidence"])
+    if evidence is None and not legacy and entries and last_captured_at is None:
+        raise ChatArchiveSchemaError("Chat archive state with visible rows requires a capture timestamp.")
+    return DecodedChatArchiveState(
+        state=ChatArchiveState(
+            snapshot=snapshot,
+            last_captured_at=last_captured_at,
+            gap_detected=gap_detected,
+            transcript_evidence=evidence,
+        ),
+        legacy=legacy,
+    )
+
+
+def validate_state_document(document: dict[str, Any], *, allow_legacy: bool = False) -> ChatArchiveState:
+    """Validates one state mapping and returns its typed value."""
+
+    return decode_state_document(document, allow_legacy=allow_legacy).state
+
+
+def _decode_snapshot_document(value: object) -> VisibleChatSnapshot:
+    snapshot_document = _mapping(value, "snapshot")
     if set(snapshot_document) != {"fingerprint", "entries"} or not isinstance(snapshot_document["entries"], list):
         raise ChatArchiveSchemaError("Chat archive state snapshot has an invalid schema.")
     fingerprint = snapshot_document["fingerprint"]
@@ -171,31 +224,7 @@ def decode_state_document(document: dict[str, Any], *, allow_legacy: bool = True
                 visible_order=_non_negative_int(entry["visible_order"], f"snapshot.entries[{index}].visible_order"),
             )
         )
-    captured = document.get("last_captured_at")
-    if captured is not None and not isinstance(captured, str):
-        raise ChatArchiveSchemaError("Chat archive state last_captured_at must be an ISO timestamp or null.")
-    last_captured_at = None if captured is None else _aware_datetime(captured, "last_captured_at")
-    gap_detected = document.get("gap_detected", False)
-    if type(gap_detected) is not bool:
-        raise ChatArchiveSchemaError("Chat archive state gap_detected must be a boolean.")
-    evidence = None if legacy else _decode_evidence(document["transcript_evidence"])
-    if evidence is None and not legacy and entries and last_captured_at is None:
-        raise ChatArchiveSchemaError("Chat archive state with visible rows requires a capture timestamp.")
-    return DecodedChatArchiveState(
-        state=ChatArchiveState(
-            snapshot=VisibleChatSnapshot(entries=tuple(entries), fingerprint=fingerprint),
-            last_captured_at=last_captured_at,
-            gap_detected=gap_detected,
-            transcript_evidence=evidence,
-        ),
-        legacy=legacy,
-    )
-
-
-def validate_state_document(document: dict[str, Any], *, allow_legacy: bool = False) -> ChatArchiveState:
-    """Validates one state mapping and returns its typed value."""
-
-    return decode_state_document(document, allow_legacy=allow_legacy).state
+    return VisibleChatSnapshot(entries=tuple(entries), fingerprint=fingerprint)
 
 
 def _decode_evidence(value: object) -> ChatTranscriptEvidence | None:

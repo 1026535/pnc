@@ -14,8 +14,10 @@ pending transaction. The private control data is under
 `<chat-root>/.archive-control/`; `pending.json` is a version-one record containing
 the resolved archive day, capture timestamp, transcript byte offset and prefix
 digest, exact UTF-8 append bytes, next state, and screenshot length/digest.
-The stored day is an exact, validated `YYYY-MM-DD` calendar owner; it is not
-recomputed by converting the persisted timestamp through the current host
+For a new write, the host-local day is resolved once from the aware capture
+timestamp and reused for directory, state, and pending construction. The stored
+day is then an exact, validated `YYYY-MM-DD` calendar owner; recovery does not
+recompute it by converting the persisted timestamp through the current host
 timezone. State validation likewise trusts the physical day owner, preserving
 legacy local-day paths without deriving a new day from a timestamp.
 
