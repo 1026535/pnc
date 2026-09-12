@@ -148,6 +148,65 @@ class CoreRuntimeTests(unittest.TestCase):
 
         self.assertEqual([], navigation.navigate_calls)
 
+    def test_recover_popup_reuses_passive_settle_without_foregrounding(self) -> None:
+        """Re-settles the current app through the canonical boundary without app lifecycle actions."""
+
+        clock = _FakeClock()
+        navigation = _SettleNavigation(clock)
+        session = Mock()
+        runtime = _SequencedCoreRuntime(
+            navigation,
+            [_frame(ScreenType.PNC_HOME_CITY, 0), _frame(ScreenType.PNC_HOME_CITY, 1)],
+        )
+        runtime.runtime.session = session
+
+        recovered = runtime.recover_popup()
+
+        self.assertEqual(ScreenType.PNC_HOME_CITY, recovered.screen_type)
+        session.ensure_app_foregrounded.assert_not_called()
+        self.assertEqual([], navigation.navigate_calls)
+        self.assertEqual(2, runtime.observation_count)
+
+    def test_recover_popup_rejects_blocked_unknown_and_android_home_frames(self) -> None:
+        """Shares fail-closed settle guards instead of adding popup-specific recovery policy."""
+
+        for frame, message in (
+            (_frame(ScreenType.PNC_HOME_CITY, 0, blocking_popup=True), "blocking popup"),
+            (_frame(ScreenType.UNKNOWN, 0), "unknown screen"),
+            (_frame(ScreenType.ANDROID_HOME, 0), "Android Home"),
+        ):
+            clock = _FakeClock()
+            navigation = _SettleNavigation(clock)
+            runtime = _SequencedCoreRuntime(navigation, [frame])
+
+            with self.assertRaisesRegex(RuntimeError, message):
+                runtime.recover_popup()
+
+            self.assertEqual([], navigation.navigate_calls)
+            self.assertEqual([], navigation.sleep_calls)
+
+    def test_recover_popup_rejects_stale_and_budget_exhausted_frames(self) -> None:
+        """Applies the shared freshness and time bounds to popup recovery."""
+
+        stale_clock = _FakeClock()
+        stale_navigation = _SettleNavigation(stale_clock)
+        stale_runtime = _SequencedCoreRuntime(
+            stale_navigation,
+            [_frame(ScreenType.PNC_HOME_CITY, 0), _frame(ScreenType.PNC_HOME_CITY, 0)],
+        )
+        with self.assertRaisesRegex(RuntimeError, "stale capture"):
+            stale_runtime.recover_popup()
+
+        budget_clock = _FakeClock()
+        budget_navigation = _SettleNavigation(budget_clock, max_seconds=1.0)
+        budget_runtime = _SequencedCoreRuntime(
+            budget_navigation,
+            [_frame(ScreenType.PNC_HOME_CITY, 0), _frame(ScreenType.PNC_HOME_CITY, 1)],
+            capture_delays=[0.0, 2.0],
+        )
+        with self.assertRaisesRegex(RuntimeError, "budget exhausted"):
+            budget_runtime.recover_popup()
+
     def test_initial_settle_passively_waits_for_loading_then_known_stable_screen(self) -> None:
         """Settling consumes loading frames and never invokes navigation actions."""
 
@@ -374,8 +433,8 @@ class CoreRuntimeTests(unittest.TestCase):
             self.assertEqual(2, trace.count('"event": "capture"'))
             self.assertEqual(2, trace.count('"event": "observation"'))
 
-    def test_observation_boundary_dispatches_real_popup_fixture_close_selector(self) -> None:
-        """Carries a measured fixture close point from perception into popup recovery dispatch."""
+    def test_popup_recovery_dispatches_real_fixture_close_and_stable_completion(self) -> None:
+        """Carries a measured fixture close point through the public popup recovery boundary."""
 
         fixture_directory = Path("tests/data/screen_recognition")
         with (
@@ -409,6 +468,7 @@ class CoreRuntimeTests(unittest.TestCase):
         screenshot_service.capture.side_effect = [
             screenshot(popup_image, "popup.png", 0),
             screenshot(home_image, "home.png", 1),
+            screenshot(home_image, "home_stable.png", 2),
         ]
         session = FakeSession()
         observed_executor = ObservedActionExecutor(
@@ -432,7 +492,7 @@ class CoreRuntimeTests(unittest.TestCase):
                     session=session,
                     observation_service=SimpleNamespace(screenshot_service=screenshot_service),
                 ),
-                navigation=Mock(),
+                navigation=_SettleNavigation(_FakeClock()),
                 artifact_directory="account",
                 trace_path=Path(temporary_directory) / "trace.jsonl",
                 _perception=perception,
@@ -441,7 +501,7 @@ class CoreRuntimeTests(unittest.TestCase):
             )
 
             expected_popup = perception.build(screenshot(popup_image, "expected.png", 0))
-            result = runtime.observe("entry")
+            result = runtime.recover_popup()
 
         self.assertEqual(ScreenType.PNC_HOME_CITY, result.screen_type)
         self.assertEqual(1, len(session.taps))
