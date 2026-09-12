@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.support.pnc.capture_vision.minimal_runtime_registry import _minimal_runtime_registry
+
 import tempfile
 import unittest
 from pathlib import Path
@@ -49,14 +51,16 @@ class NavigationScreenDisambiguationTests(unittest.TestCase):
                 label="lord_info_tagged",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Lord Info", x=184, y=20, width=208, height=48),
                             _ocr_line("Gear", x=52, y=111, width=83, height=42),
@@ -68,8 +72,7 @@ class NavigationScreenDisambiguationTests(unittest.TestCase):
                             _ocr_line("Achievements", x=731, y=1567, width=115, height=17),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
             target_castle = CastleIdentity(kingdom="K287", castle_name="pine cobaye 1")
@@ -98,14 +101,16 @@ class NavigationScreenDisambiguationTests(unittest.TestCase):
                 label="more_settings_follow_up",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Settings", x=112, y=20, width=128, height=28),
                             _ocr_line("Account", x=120, y=94, width=102, height=24),
@@ -115,8 +120,7 @@ class NavigationScreenDisambiguationTests(unittest.TestCase):
                             _ocr_line("Blacklist", x=320, y=374, width=104, height=24),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(
                 screenshot,
@@ -127,7 +131,7 @@ class NavigationScreenDisambiguationTests(unittest.TestCase):
             )
 
             self.assertEqual(observation.screen_type, ScreenType.PNC_SETTINGS)
-            self.assertTrue(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
+            self.assertFalse(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
             self.assertTrue(observation.has(UiElementId.PNC_MORE_MANAGE_CHAR))
             self.assertFalse(observation.has(UiElementId.PNC_MORE_SETTINGS))
 
@@ -146,11 +150,13 @@ class NavigationScreenDisambiguationTests(unittest.TestCase):
                 selector_registry=build_default_selector_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Manage Char.", x=304, y=94, width=134, height=24),
                             _ocr_line("K304 Kingdom", x=214, y=194, width=127, height=18),
@@ -161,8 +167,7 @@ class NavigationScreenDisambiguationTests(unittest.TestCase):
                             _ocr_line("Castle Level 9", x=214, y=648, width=126, height=18),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(
                 screenshot,
@@ -188,14 +193,16 @@ class NavigationScreenDisambiguationTests(unittest.TestCase):
                 label="trial_challenge_live_like",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Trial Challenge", x=184, y=18, width=340, height=55),
                             _ocr_line("Exchange", x=227, y=147, width=158, height=45),
@@ -213,8 +220,7 @@ class NavigationScreenDisambiguationTests(unittest.TestCase):
                             _ocr_line("Rank", x=263, y=1545, width=61, height=28),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from tests.support.automation.engine.make_observed_action_executor import _make_observed_action_executor
+from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
+
 import unittest
 
 from pnc_automation.app.automation.engine.action_executor import ActionExecutor
@@ -43,6 +46,7 @@ class ChatSendFollowUpTests(AutomationFrameworkFixtures, unittest.TestCase):
             ]
         )
         executor = ActionExecutor(
+            selector_registry=build_default_selector_registry(),
             session=fake_session,
             stable_click_delay_ms=0,
             post_action_observe_delay_ms=0,
@@ -93,6 +97,7 @@ class ChatSendFollowUpTests(AutomationFrameworkFixtures, unittest.TestCase):
         fake_session = FakeSession()
         fake_observer = FakeObservationService(observations=[make_observation(ScreenType.PNC_LOADING)])
         executor = ActionExecutor(
+            selector_registry=build_default_selector_registry(),
             session=fake_session,
             stable_click_delay_ms=0,
             post_action_observe_delay_ms=0,
@@ -141,15 +146,7 @@ class ChatSendFollowUpTests(AutomationFrameworkFixtures, unittest.TestCase):
         """Refreshes chat state after a tab change and only types on the next chat-ready increment."""
 
         fake_session = FakeSession()
-        executor = ActionExecutor(
-            session=fake_session,
-            stable_click_delay_ms=0,
-            post_action_observe_delay_ms=0,
-            chat_stable_click_delay_ms=0,
-            chat_post_action_observe_delay_ms=0,
-            logger=build_logger(),
-            sleep=lambda _: None,
-        )
+        executor = _make_observed_action_executor(fake_session)
         first_observer = FakeObservationService(
             observations=[
                 make_observation(
@@ -211,23 +208,37 @@ class ChatSendFollowUpTests(AutomationFrameworkFixtures, unittest.TestCase):
                     ),
                     active_chat_channel=ChatChannel.ALLIANCE,
                     chat_draft_empty=True,
-                )
+                ),
+                make_observation(
+                    ScreenType.PNC_CHAT,
+                    visible_ids=(
+                        UiElementId.PNC_CHAT_TAB_KINGDOM,
+                        UiElementId.PNC_CHAT_TAB_ALLIANCE,
+                        UiElementId.PNC_CHAT_INPUT_FIELD,
+                        UiElementId.PNC_CHAT_SEND_BUTTON,
+                    ),
+                    active_chat_channel=ChatChannel.ALLIANCE,
+                    chat_draft_empty=True,
+                ),
             ]
         )
         second_actions = ScreenFlowPlanner().send_chat_message(
-            first_result,
+            first_result.observation,
             message="hello",
             channel=ChatChannel.ALLIANCE,
         )
 
         executor.execute_actions(
             second_actions,
-            first_result,
+            first_result.observation,
             observe=second_observer.observe,
         )
 
         self.assertEqual(first_observer.requests, [ObservationRequest.source_screen_retry(ScreenType.PNC_CHAT)])
-        self.assertEqual(second_observer.requests, [ObservationRequest.chat_send_follow_up()])
+        self.assertEqual(
+            second_observer.requests,
+            [ObservationRequest.full_runtime_default(), ObservationRequest.chat_send_follow_up()],
+        )
         self.assertEqual(fake_session.key_events[0], "KEYCODE_MOVE_END")
         self.assertEqual(fake_session.key_events.count("KEYCODE_DEL"), 28)
         self.assertEqual(fake_session.texts, ["hello"])

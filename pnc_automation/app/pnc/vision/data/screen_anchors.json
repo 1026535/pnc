@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 3,
   "reference_size": [
     540,
     960
@@ -30,6 +30,19 @@
           "threshold": 0.93
         }
       ],
+      "revision": 1,
+      "source": {
+        "fixture": "hero_hall.png",
+        "decoded_sha256": "fcafe76077e5a2a9c82bdfa1e1adeb40c60ccdc9e90bce11236fbaefa1adfb90",
+        "capture_group": "2026-09-10/mega_old_acc"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Reviewed PNC_HERO_HALL identity anchor group from the frozen reference fixture.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
       "controls": [
         {
           "selector": "PNC_BACK_BUTTON_TOP_LEFT",
@@ -44,7 +57,8 @@
             "threshold": 0.93
           }
         }
-      ]
+      ],
+      "layout_id": "hero_hall"
     },
     {
       "id": "event_center",
@@ -70,7 +84,21 @@
           ],
           "threshold": 0.93
         }
-      ]
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "event_center.png",
+        "decoded_sha256": "c090f1d0b49d9e32fa0dde72cdd97b9d8eb86540ef103df396358a7633112fa5",
+        "capture_group": "2026-09-10/serious_stuff"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Reviewed PNC_EVENT_CENTER identity anchor group from the frozen reference fixture.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "layout_id": "event_center"
     },
     {
       "id": "quest_daily",
@@ -97,6 +125,19 @@
           "threshold": 0.93
         }
       ],
+      "revision": 1,
+      "source": {
+        "fixture": "quest_daily.png",
+        "decoded_sha256": "8c55e463e878ac66ebdd9689b2596feedc402c5db1cdc7478a33647a82f4ae0a",
+        "capture_group": "2026-09-08/serious_stuff"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Reviewed PNC_QUEST_DAILY identity anchor group from the frozen reference fixture.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
       "controls": [
         {
           "selector": "PNC_QUEST_TAB_MAIN",
@@ -124,7 +165,8 @@
             "threshold": 0.93
           }
         }
-      ]
+      ],
+      "layout_id": "quest_daily"
     },
     {
       "id": "quest_main",
@@ -151,6 +193,19 @@
           "threshold": 0.93
         }
       ],
+      "revision": 1,
+      "source": {
+        "fixture": "quest_main.png",
+        "decoded_sha256": "7a6df26369f500c500c1eeab8deb01ee1e52699abf0c95ad8aabd42cedbf2bf7",
+        "capture_group": "2026-09-08/serious_stuff"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Reviewed PNC_QUEST_MAIN identity anchor group from the frozen reference fixture.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
       "controls": [
         {
           "selector": "PNC_QUEST_TAB_DAILY",
@@ -178,7 +233,8 @@
             "threshold": 0.93
           }
         }
-      ]
+      ],
+      "layout_id": "quest_main"
     },
     {
       "id": "bag",
@@ -205,6 +261,19 @@
           "threshold": 0.93
         }
       ],
+      "revision": 1,
+      "source": {
+        "fixture": "bag.png",
+        "decoded_sha256": "16d09ecbd0383d86d1e29566008499ee81977227cf13c70b9ddb65e4a2a2f1a8",
+        "capture_group": "2026-08-30/mega_old_acc"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Reviewed PNC_BAG identity anchor group from the frozen reference fixture.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
       "controls": [
         {
           "selector": "PNC_BACK_BUTTON_TOP_LEFT",
@@ -219,7 +288,8 @@
             "threshold": 0.93
           }
         }
-      ]
+      ],
+      "layout_id": "bag"
     },
     {
       "id": "settings",
@@ -246,6 +316,19 @@
           "threshold": 0.93
         }
       ],
+      "revision": 1,
+      "source": {
+        "fixture": "settings.png",
+        "decoded_sha256": "e5e76e113e109540ca8eb36318f274fbfbfa8698670e8890e0e47742d8cea5d8",
+        "capture_group": "2026-09-10/testing"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Reviewed PNC_SETTINGS identity anchor group from the frozen reference fixture.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
       "controls": [
         {
           "selector": "PNC_BACK_BUTTON_TOP_LEFT",
@@ -312,7 +395,8 @@
             "threshold": 0.93
           }
         }
-      ]
+      ],
+      "layout_id": "settings"
     },
     {
       "id": "more_overlay",
@@ -339,10 +423,19 @@
           "threshold": 0.93
         }
       ],
-      "occludes": [
-        "PNC_HOME_CITY",
-        "PNC_WORLD_MAP"
-      ],
+      "revision": 1,
+      "source": {
+        "fixture": "more_overlay.png",
+        "decoded_sha256": "59648b98115bfaf0ce4876288f6f898e830795082e9ccfd032820a2413a64715",
+        "capture_group": "2026-09-10/testing"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Reviewed PNC_MORE_MENU identity anchor group from the frozen reference fixture.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
       "controls": [
         {
           "selector": "PNC_MORE_SETTINGS",
@@ -370,7 +463,12 @@
             "threshold": 0.93
           }
         }
-      ]
+      ],
+      "occludes": [
+        "PNC_HOME_CITY",
+        "PNC_WORLD_MAP"
+      ],
+      "layout_id": "more_overlay"
     },
     {
       "id": "manage_char",
@@ -397,6 +495,19 @@
           "threshold": 0.93
         }
       ],
+      "revision": 1,
+      "source": {
+        "fixture": "manage_char.png",
+        "decoded_sha256": "6f8cb563b147f98b8245f7ec58df998f752104037320b2388e01369186fb3e74",
+        "capture_group": "2026-09-10/testing"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Reviewed PNC_CASTLE_SELECTION identity anchor group from the frozen reference fixture.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
       "controls": [
         {
           "selector": "PNC_BACK_BUTTON_TOP_LEFT",
@@ -411,7 +522,8 @@
             "threshold": 0.93
           }
         }
-      ]
+      ],
+      "layout_id": "manage_char"
     },
     {
       "id": "alliance_invitation",
@@ -437,7 +549,21 @@
           ],
           "threshold": 0.93
         }
-      ]
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "alliance_invitation.png",
+        "decoded_sha256": "5840f6be2d5a45a5f9222e931d7b2536db5568e5d2ce0ffc1c53bbdaeccdc305",
+        "capture_group": "2026-09-10/testing"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Reviewed PNC_POPUP identity anchor group from the frozen reference fixture.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "layout_id": "alliance_invitation"
     },
     {
       "id": "institute",
@@ -464,6 +590,19 @@
           "threshold": 0.93
         }
       ],
+      "revision": 1,
+      "source": {
+        "fixture": "institute_audit.png",
+        "decoded_sha256": "6e0ec65880de25d65422503a5d99184ba9aba55b22496aecb2dab60615d36b6c",
+        "capture_group": "2026-09-10/testing"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Reviewed PNC_INSTITUTE identity anchor group from the frozen reference fixture.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
       "controls": [
         {
           "selector": "PNC_BACK_BUTTON_TOP_LEFT",
@@ -478,7 +617,8 @@
             "threshold": 0.93
           }
         }
-      ]
+      ],
+      "layout_id": "institute"
     },
     {
       "id": "goddess_statue",
@@ -505,6 +645,19 @@
           "threshold": 0.93
         }
       ],
+      "revision": 1,
+      "source": {
+        "fixture": "goddess_statue_audit.png",
+        "decoded_sha256": "8f37b8f8cfc507dc690acb6f42aa7ecc3b427bce3efadf60e9d0e4bd58b1fb0e",
+        "capture_group": "2026-09-10/testing"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Reviewed PNC_GODDESS_STATUE identity anchor group from the frozen reference fixture.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
       "controls": [
         {
           "selector": "PNC_BACK_BUTTON_TOP_LEFT",
@@ -519,7 +672,8 @@
             "threshold": 0.93
           }
         }
-      ]
+      ],
+      "layout_id": "goddess_statue"
     },
     {
       "id": "warehouse",
@@ -546,6 +700,19 @@
           "threshold": 0.93
         }
       ],
+      "revision": 1,
+      "source": {
+        "fixture": "warehouse_audit.png",
+        "decoded_sha256": "d3c1c715b3f50f5c9b26ad4212784ba774d80e45eb93eefd375a07e55076b60c",
+        "capture_group": "2026-09-10/testing"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Reviewed PNC_WAREHOUSE identity anchor group from the frozen reference fixture.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
       "controls": [
         {
           "selector": "PNC_BACK_BUTTON_TOP_LEFT",
@@ -560,7 +727,8 @@
             "threshold": 0.93
           }
         }
-      ]
+      ],
+      "layout_id": "warehouse"
     },
     {
       "id": "home_city",
@@ -666,155 +834,21 @@
             "threshold": 0.93
           }
         }
-      ]
-    },
-    {
-      "id": "home_city_chat_alliance",
-      "screen": "PNC_HOME_CITY",
-      "anchors": [
-        {
-          "image": "screen_anchors/core_home_city_identity_0.png",
-          "search_region": [12, 929, 65, 28],
-          "threshold": 0.93
-        },
-        {
-          "image": "screen_anchors/core_home_city_identity_1.png",
-          "search_region": [12, 210, 45, 22],
-          "threshold": 0.93
-        },
-        {
-          "image": "screen_anchors/home_chat_shortcut_alliance.png",
-          "search_region": [0, 840, 55, 55],
-          "threshold": 0.93
-        }
       ],
-      "controls": [
-        {
-          "selector": "PNC_CHAT_SHORTCUT",
-          "anchor": {
-            "image": "screen_anchors/home_chat_shortcut_alliance.png",
-            "search_region": [0, 840, 55, 55],
-            "threshold": 0.93
-          }
-        }
-      ]
-    },
-    {
-      "id": "home_city_chat_kingdom",
-      "screen": "PNC_HOME_CITY",
-      "anchors": [
-        {
-          "image": "screen_anchors/core_home_city_identity_0.png",
-          "search_region": [12, 929, 65, 28],
-          "threshold": 0.93
-        },
-        {
-          "image": "screen_anchors/core_home_city_identity_1.png",
-          "search_region": [12, 210, 45, 22],
-          "threshold": 0.93
-        },
-        {
-          "image": "screen_anchors/home_chat_shortcut_kingdom.png",
-          "search_region": [0, 840, 55, 55],
-          "threshold": 0.93
-        }
-      ],
-      "controls": [
-        {
-          "selector": "PNC_CHAT_SHORTCUT",
-          "anchor": {
-            "image": "screen_anchors/home_chat_shortcut_kingdom.png",
-            "search_region": [0, 840, 55, 55],
-            "threshold": 0.93
-          }
-        }
-      ]
-    },
-    {
-      "id": "chat_alliance",
-      "screen": "PNC_CHAT",
-      "anchors": [
-        {
-          "image": "screen_anchors/chat_identity_header.png",
-          "search_region": [90, 0, 220, 52],
-          "threshold": 0.93
-        },
-        {
-          "image": "screen_anchors/chat_tab_alliance_active.png",
-          "search_region": [150, 50, 165, 60],
-          "threshold": 0.93
-        }
-      ],
-      "occludes": ["PNC_HOME_CITY", "PNC_WORLD_MAP"],
-      "controls": [
-        {
-          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
-          "anchor": {
-            "image": "screen_anchors/chat_back_button.png",
-            "search_region": [0, 0, 90, 60],
-            "threshold": 0.93
-          }
-        },
-        {
-          "selector": "PNC_CHAT_TAB_KINGDOM",
-          "anchor": {
-            "image": "screen_anchors/chat_tab_kingdom_inactive.png",
-            "search_region": [0, 50, 160, 60],
-            "threshold": 0.93
-          }
-        },
-        {
-          "selector": "PNC_CHAT_TAB_ALLIANCE",
-          "anchor": {
-            "image": "screen_anchors/chat_tab_alliance_active.png",
-            "search_region": [150, 50, 165, 60],
-            "threshold": 0.93
-          }
-        }
-      ]
-    },
-    {
-      "id": "chat_kingdom",
-      "screen": "PNC_CHAT",
-      "anchors": [
-        {
-          "image": "screen_anchors/chat_identity_header.png",
-          "search_region": [90, 0, 220, 52],
-          "threshold": 0.93
-        },
-        {
-          "image": "screen_anchors/chat_tab_kingdom_active.png",
-          "search_region": [0, 50, 160, 60],
-          "threshold": 0.93
-        }
-      ],
-      "occludes": ["PNC_HOME_CITY", "PNC_WORLD_MAP"],
-      "controls": [
-        {
-          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
-          "anchor": {
-            "image": "screen_anchors/chat_back_button.png",
-            "search_region": [0, 0, 90, 60],
-            "threshold": 0.93
-          }
-        },
-        {
-          "selector": "PNC_CHAT_TAB_KINGDOM",
-          "anchor": {
-            "image": "screen_anchors/chat_tab_kingdom_active.png",
-            "search_region": [0, 50, 160, 60],
-            "threshold": 0.93
-          }
-        },
-        {
-          "selector": "PNC_CHAT_TAB_ALLIANCE",
-          "anchor": {
-            "image": "screen_anchors/chat_tab_alliance_inactive.png",
-            "search_region": [150, 50, 165, 60],
-            "threshold": 0.93
-          }
-        }
-      ]
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/home_city_core.png",
+        "decoded_sha256": "8d31fc8d74814eccbbb125f3e340d6514d48fed7fc5a89d0d7e8c52de543c15f",
+        "capture_group": "rebased-origin-main/screen_recognition"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Rebased reviewed PNC_HOME_CITY identity and control anchors from origin/main.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "layout_id": "home_city"
     },
     {
       "id": "world_map",
@@ -907,7 +941,21 @@
             "threshold": 0.93
           }
         }
-      ]
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/world_map_core.png",
+        "decoded_sha256": "d3e13823aa5ccc3962c6faf6689e161303e9d418f728f2f15fd01413f8ac45b8",
+        "capture_group": "rebased-origin-main/screen_recognition"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Rebased reviewed PNC_WORLD_MAP identity and control anchors from origin/main.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "layout_id": "world_map"
     },
     {
       "id": "coordinate_dialog",
@@ -959,7 +1007,21 @@
           },
           "dismisses_surface": true
         }
-      ]
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/coordinate_dialog_core.png",
+        "decoded_sha256": "80266aa435ace85cc0be3402cec77ec7a9b0ce00f8e4bcb012ce061656211dbf",
+        "capture_group": "rebased-origin-main/screen_recognition"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Rebased reviewed PNC_WORLD_COORDINATE_DIALOG identity and control anchors from origin/main.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "layout_id": "coordinate_dialog"
     },
     {
       "id": "world_overview",
@@ -1014,7 +1076,21 @@
             "threshold": 0.93
           }
         }
-      ]
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/world_overview_core.png",
+        "decoded_sha256": "b3d587f53a5b0266f60b5b87774753afaeb5d3ad84d44dcc478edda0934ce4c9",
+        "capture_group": "rebased-origin-main/screen_recognition"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Rebased reviewed PNC_WORLD_MAP_OVERVIEW identity and control anchors from origin/main.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "layout_id": "world_overview"
     },
     {
       "id": "world_expanded",
@@ -1055,7 +1131,21 @@
             "threshold": 0.93
           }
         }
-      ]
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/world_expanded_core.png",
+        "decoded_sha256": "0ac6296cf2afcbef46326b3a571f7c8e0eeb08d5dc610246a70581b089dfb6f7",
+        "capture_group": "rebased-origin-main/screen_recognition"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Rebased reviewed PNC_WORLD_MAP_EXPANDED identity and control anchors from origin/main.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "layout_id": "world_expanded"
     },
     {
       "id": "research_queue",
@@ -1110,7 +1200,21 @@
             "threshold": 0.93
           }
         }
-      ]
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/research_queue_core.png",
+        "decoded_sha256": "da9dcec5feaf2ae0dc4f8aa3ba32851701d42b8076839a15311fd37332981d4e",
+        "capture_group": "rebased-origin-main/screen_recognition"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Rebased reviewed PNC_RESEARCH_QUEUE identity and control anchors from origin/main.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "layout_id": "research_queue"
     },
     {
       "id": "settings_preferences",
@@ -1151,7 +1255,21 @@
             "threshold": 0.93
           }
         }
-      ]
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/game_first_navigation/settings_preferences_after.png",
+        "decoded_sha256": "f4116dd69692127fb04dd7c4196782b3c5f9209681c5d76e999ac4bdb6c4fe9f",
+        "capture_group": "rebased-origin-main/game_first_navigation"
+      },
+      "review": {
+        "reference_manifest": "tests/data/game_first_navigation/provenance.json",
+        "description": "Rebased reviewed PNC_SETTINGS_PREFERENCES identity and control anchors from origin/main.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "layout_id": "settings_preferences"
     },
     {
       "id": "notifications",
@@ -1192,7 +1310,21 @@
             "threshold": 0.93
           }
         }
-      ]
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/game_first_navigation/settings_notifications_after.png",
+        "decoded_sha256": "c81305752c83f49dead2408f07f26336c9bebd0adaafece3dd99fd8bffcdc1bd",
+        "capture_group": "rebased-origin-main/game_first_navigation"
+      },
+      "review": {
+        "reference_manifest": "tests/data/game_first_navigation/provenance.json",
+        "description": "Rebased reviewed PNC_NOTIFICATIONS identity and control anchors from origin/main.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "layout_id": "notifications"
     },
     {
       "id": "rank_hub",
@@ -1233,7 +1365,21 @@
             "threshold": 0.93
           }
         }
-      ]
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/game_first_navigation/settings_rank_after.png",
+        "decoded_sha256": "5b888be7824369f5a51c54f8c9027f614814e6f7f464011197a5146318a59790",
+        "capture_group": "rebased-origin-main/game_first_navigation"
+      },
+      "review": {
+        "reference_manifest": "tests/data/game_first_navigation/provenance.json",
+        "description": "Rebased reviewed PNC_RANK_HUB identity and control anchors from origin/main.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "layout_id": "rank_hub"
     },
     {
       "id": "kingdom_list",
@@ -1274,7 +1420,321 @@
             "threshold": 0.93
           }
         }
-      ]
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/game_first_navigation/kingdoms_settled_before.png",
+        "decoded_sha256": "538306bb8c6e5679502aadd9567fa8ccc57178b73875c046b9aacb31265430b9",
+        "capture_group": "rebased-origin-main/game_first_navigation"
+      },
+      "review": {
+        "reference_manifest": "tests/data/game_first_navigation/provenance.json",
+        "description": "Rebased reviewed PNC_WORLD_KINGDOM_LIST identity and control anchors from origin/main.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "layout_id": "kingdom_list"
+    },
+    {
+      "id": "home_city_chat_alliance",
+      "screen": "PNC_HOME_CITY",
+      "anchors": [
+        {
+          "image": "screen_anchors/core_home_city_identity_0.png",
+          "search_region": [
+            12,
+            929,
+            65,
+            28
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/core_home_city_identity_1.png",
+          "search_region": [
+            12,
+            210,
+            45,
+            22
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/home_chat_shortcut_alliance.png",
+          "search_region": [
+            0,
+            840,
+            55,
+            55
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_CHAT_SHORTCUT",
+          "anchor": {
+            "image": "screen_anchors/home_chat_shortcut_alliance.png",
+            "search_region": [
+              0,
+              840,
+              55,
+              55
+            ],
+            "threshold": 0.93
+          }
+        }
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "chat_home_alliance.png",
+        "decoded_sha256": "9ba5094a00288c14313cc094baec4986df74268bc30503d95c5e76b6be87a20a",
+        "capture_group": "2026-09-12/serious_stuff"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Mainline reviewed home_city_chat_alliance anchors retained during non-YOLO integration.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "layout_id": "home_city"
+    },
+    {
+      "id": "home_city_chat_kingdom",
+      "screen": "PNC_HOME_CITY",
+      "anchors": [
+        {
+          "image": "screen_anchors/core_home_city_identity_0.png",
+          "search_region": [
+            12,
+            929,
+            65,
+            28
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/core_home_city_identity_1.png",
+          "search_region": [
+            12,
+            210,
+            45,
+            22
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/home_chat_shortcut_kingdom.png",
+          "search_region": [
+            0,
+            840,
+            55,
+            55
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_CHAT_SHORTCUT",
+          "anchor": {
+            "image": "screen_anchors/home_chat_shortcut_kingdom.png",
+            "search_region": [
+              0,
+              840,
+              55,
+              55
+            ],
+            "threshold": 0.93
+          }
+        }
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "chat_home_kingdom.png",
+        "decoded_sha256": "6a45e50a39dbc456b88a2751cdd1a36d1d437816df5bbea9d85705f84513ff86",
+        "capture_group": "2026-09-12/serious_stuff"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Mainline reviewed home_city_chat_kingdom anchors retained during non-YOLO integration.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "layout_id": "home_city"
+    },
+    {
+      "id": "chat_alliance",
+      "screen": "PNC_CHAT",
+      "anchors": [
+        {
+          "image": "screen_anchors/chat_identity_header.png",
+          "search_region": [
+            90,
+            0,
+            220,
+            52
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/chat_tab_alliance_active.png",
+          "search_region": [
+            150,
+            50,
+            165,
+            60
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "occludes": [
+        "PNC_HOME_CITY",
+        "PNC_WORLD_MAP"
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/chat_back_button.png",
+            "search_region": [
+              0,
+              0,
+              90,
+              60
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_CHAT_TAB_KINGDOM",
+          "anchor": {
+            "image": "screen_anchors/chat_tab_kingdom_inactive.png",
+            "search_region": [
+              0,
+              50,
+              160,
+              60
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_CHAT_TAB_ALLIANCE",
+          "anchor": {
+            "image": "screen_anchors/chat_tab_alliance_active.png",
+            "search_region": [
+              150,
+              50,
+              165,
+              60
+            ],
+            "threshold": 0.93
+          }
+        }
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "chat_alliance.png",
+        "decoded_sha256": "d2df6d46a55599146130a59815622168f3780f89e8c9a3a8172f46c978fcb24c",
+        "capture_group": "2026-09-12/serious_stuff"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Mainline reviewed chat_alliance anchors retained during non-YOLO integration.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "layout_id": "chat_alliance"
+    },
+    {
+      "id": "chat_kingdom",
+      "screen": "PNC_CHAT",
+      "anchors": [
+        {
+          "image": "screen_anchors/chat_identity_header.png",
+          "search_region": [
+            90,
+            0,
+            220,
+            52
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/chat_tab_kingdom_active.png",
+          "search_region": [
+            0,
+            50,
+            160,
+            60
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "occludes": [
+        "PNC_HOME_CITY",
+        "PNC_WORLD_MAP"
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/chat_back_button.png",
+            "search_region": [
+              0,
+              0,
+              90,
+              60
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_CHAT_TAB_KINGDOM",
+          "anchor": {
+            "image": "screen_anchors/chat_tab_kingdom_active.png",
+            "search_region": [
+              0,
+              50,
+              160,
+              60
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_CHAT_TAB_ALLIANCE",
+          "anchor": {
+            "image": "screen_anchors/chat_tab_alliance_inactive.png",
+            "search_region": [
+              150,
+              50,
+              165,
+              60
+            ],
+            "threshold": 0.93
+          }
+        }
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "chat_kingdom.png",
+        "decoded_sha256": "eadda19c347241022047220ddc3dcfc4abe4569f029f73d87d9ea4415f2508c4",
+        "capture_group": "2026-09-12/serious_stuff"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Mainline reviewed chat_kingdom anchors retained during non-YOLO integration.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "layout_id": "chat_kingdom"
     },
     {
       "id": "collect_mail_hub",
@@ -1341,7 +1801,21 @@
             "threshold": 0.93
           }
         }
-      ]
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "collect_mail_hub.png",
+        "decoded_sha256": "3c7c772b018e990b182ada27711917fab1d09d4c9051f7a9605366dca4dc9e93",
+        "capture_group": "2026-09-12/serious_stuff"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Mainline reviewed collect_mail_hub anchors retained during non-YOLO integration.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "layout_id": "collect_mail_hub"
     },
     {
       "id": "collect_mail_mailbox_list",
@@ -1402,7 +1876,21 @@
             "threshold": 0.93
           }
         }
-      ]
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "collect_mail_system_list.png",
+        "decoded_sha256": "ac3f39c23e7774cdd3ac140f5c23cf401fc2e4a73c84e22feea8318af5f1b27d",
+        "capture_group": "2026-09-12/serious_stuff"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Mainline reviewed collect_mail_mailbox_list anchors retained during non-YOLO integration.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "layout_id": "collect_mail_mailbox_list"
     },
     {
       "id": "collect_mail_thread",
@@ -1453,7 +1941,21 @@
             "threshold": 0.93
           }
         }
-      ]
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "collect_mail_system_thread.png",
+        "decoded_sha256": "9c6e3c66eccf20f7520df30a6542f09749a30b789ddbebbd867c0657c77862b1",
+        "capture_group": "2026-09-12/serious_stuff"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Mainline reviewed collect_mail_thread anchors retained during non-YOLO integration.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "layout_id": "collect_mail_thread"
     }
   ]
 }

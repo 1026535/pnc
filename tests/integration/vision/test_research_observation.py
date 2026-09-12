@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.support.pnc.capture_vision.minimal_runtime_registry import _minimal_runtime_registry
+
 import tempfile
 import unittest
 from pathlib import Path
@@ -43,14 +45,16 @@ class ResearchObservationTests(unittest.TestCase):
                 label="research_tree_live_like",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Military", x=107, y=9, width=109, height=38),
                             _ocr_line("Troop Size I", x=229, y=340, width=90, height=20),
@@ -59,8 +63,7 @@ class ResearchObservationTests(unittest.TestCase):
                             _ocr_line("0/5", x=230, y=615, width=27, height=16),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -78,14 +81,16 @@ class ResearchObservationTests(unittest.TestCase):
                 label="academy_live_like",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Institute", x=108, y=12, width=115, height=29),
                             _ocr_line("Upgrade", x=404, y=263, width=88, height=25),
@@ -95,13 +100,12 @@ class ResearchObservationTests(unittest.TestCase):
                             _ocr_line("Fortification", x=306, y=415, width=99, height=17),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
             self.assertEqual(observation.screen_type, ScreenType.PNC_INSTITUTE)
-            self.assertTrue(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
+            self.assertFalse(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
             self.assertTrue(observation.has(UiElementId.PNC_INSTITUTE_DEVELOPMENT_BUTTON))
             self.assertTrue(observation.has(UiElementId.PNC_INSTITUTE_ECONOMY_BUTTON))
 
@@ -117,21 +121,22 @@ class ResearchObservationTests(unittest.TestCase):
                 label="academy_near_match",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Institute", x=108, y=12, width=115, height=29),
                             _ocr_line("Rewards", x=220, y=300, width=100, height=24),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -149,21 +154,22 @@ class ResearchObservationTests(unittest.TestCase):
                 label="research_tree_near_match",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Military", x=107, y=9, width=109, height=38),
                             _ocr_line("Rewards", x=220, y=300, width=100, height=24),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -176,7 +182,7 @@ class ResearchObservationTests(unittest.TestCase):
             (
                 "bag",
                 (
-                    _ocr_line("Bag", x=360, y=240, width=72, height=28),
+                    _ocr_line("Inventory", x=360, y=240, width=110, height=28),
                     _ocr_line("Alliance", x=48, y=1500, width=124, height=32),
                     _ocr_line("More", x=740, y=1500, width=74, height=32),
                 ),
@@ -217,18 +223,19 @@ class ResearchObservationTests(unittest.TestCase):
                     label=label,
                 )
                 builder = ObservationBuilder(
-                    selector_registry=SelectorRegistry(selectors=()),
+                    selector_registry=_minimal_runtime_registry(),
                     selector_engine=ImageSelectorEngine(
                         template_matcher=OpenCvTemplateMatcher(),
-                        ocr_service=UnavailableOcrService(),
+
                     ),
                     screen_classifier=ScreenClassifier(),
                     enricher=PncObservationEnricher(
-                        ocr_service=_FakeOcrService(
+
+                    ),
+            ocr_service=_FakeOcrService(
                             lines=lines,
                         )
-                    ),
-                )
+                    )
 
             observation = builder.build(screenshot)
 

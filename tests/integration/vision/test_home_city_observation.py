@@ -48,19 +48,20 @@ class HomeCityObservationTests(unittest.TestCase):
                 selector_registry=build_default_selector_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Build", x=120, y=1180, width=90, height=30),
                             _ocr_line("Alliance", x=48, y=1500, width=124, height=32),
                             _ocr_line("More", x=740, y=1500, width=74, height=32),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -89,11 +90,13 @@ class HomeCityObservationTests(unittest.TestCase):
                 selector_registry=build_default_selector_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Build", x=27, y=354, width=65, height=28),
                             _ocr_line("Hero", x=219, y=1567, width=62, height=25),
@@ -103,8 +106,7 @@ class HomeCityObservationTests(unittest.TestCase):
                             _ocr_line("More", x=795, y=1568, width=70, height=25),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -131,11 +133,13 @@ class HomeCityObservationTests(unittest.TestCase):
                 selector_registry=build_default_selector_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Help", x=27, y=354, width=58, height=28),
                             _ocr_line("(1/1)", x=20, y=389, width=76, height=26),
@@ -148,8 +152,7 @@ class HomeCityObservationTests(unittest.TestCase):
                             _ocr_line("More", x=795, y=1568, width=70, height=25),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -174,11 +177,13 @@ class HomeCityObservationTests(unittest.TestCase):
                 selector_registry=build_default_selector_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Build", x=27, y=354, width=65, height=28),
                             _ocr_line("Wall", x=455, y=918, width=81, height=28),
@@ -188,8 +193,7 @@ class HomeCityObservationTests(unittest.TestCase):
                             _ocr_line("More", x=795, y=1568, width=70, height=25),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 

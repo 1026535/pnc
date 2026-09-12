@@ -52,7 +52,7 @@ class WorldMapSwipePlanningTests(FlowAndTaskFixtures, unittest.TestCase):
         self.assertAlmostEqual(actions[0].start_x_ratio, 0.68)
         self.assertAlmostEqual(actions[0].end_x_ratio, 0.28)
         self.assertTrue(actions[0].observe_after)
-        self.assertEqual(actions[0].follow_up_request, ObservationRequest.world_map_movement_follow_up())
+        self.assertEqual(actions[0].follow_up_request, ObservationRequest.world_map_movement_proof_follow_up())
 
     def test_world_map_navigator_prefers_native_diagonal_profile_when_both_axes_are_unresolved(self) -> None:
         """Uses the reviewed diagonal swipe profile directly instead of decomposing diagonal movement into cardinals."""
@@ -83,7 +83,7 @@ class WorldMapSwipePlanningTests(FlowAndTaskFixtures, unittest.TestCase):
         self.assertIsNotNone(actions[0].start_x_ratio)
         self.assertIsNotNone(actions[0].end_x_ratio)
         self.assertTrue(actions[0].observe_after)
-        self.assertEqual(actions[0].follow_up_request, ObservationRequest.world_map_movement_follow_up())
+        self.assertEqual(actions[0].follow_up_request, ObservationRequest.world_map_movement_proof_follow_up())
 
     def test_world_map_navigator_uses_live_backed_vertical_swipe_lane(self) -> None:
         """Keeps vertical world-map swipes on the reviewed X lane that moves reliably in live probing."""

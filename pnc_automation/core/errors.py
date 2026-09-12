@@ -56,6 +56,10 @@ class DeviceConnectionError(AutomationError):
         super().__init__(message=message, kind=AutomationErrorKind.DEVICE_CONNECTION, details=details)
 
 
+class FrameProvenanceError(DeviceConnectionError):
+    """Raised when a screenshot proof cannot authorize a new input dispatch."""
+
+
 class GameLaunchError(AutomationError):
     """Raised when the game cannot be foregrounded."""
 

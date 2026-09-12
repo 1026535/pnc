@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.support.pnc.capture_vision.minimal_runtime_registry import _minimal_runtime_registry
+
 import tempfile
 import unittest
 from pathlib import Path
@@ -44,14 +46,16 @@ class EventObservationTests(unittest.TestCase):
                 label="vip_live_like",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("VIP", x=180, y=19, width=83, height=48),
                             _ocr_line("Get Pts", x=741, y=254, width=108, height=31),
@@ -61,8 +65,7 @@ class EventObservationTests(unittest.TestCase):
                             _ocr_line("VIP 2", x=625, y=457, width=101, height=41),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -81,28 +84,27 @@ class EventObservationTests(unittest.TestCase):
                 label="might_rank_live_like",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Rank", x=330, y=30, width=80, height=30),
                             _ocr_line("free cookies", x=80, y=500, width=180, height=30),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
             self.assertEqual(observation.screen_type, ScreenType.PNC_MIGHT_RANK)
-            back = observation.require(UiElementId.PNC_BACK_BUTTON_TOP_LEFT)
-            self.assertEqual(back.source_kind, VisibleElementSourceKind.GEOMETRY)
-            self.assertEqual(back.bounds.center(), (72, 44))
+            self.assertFalse(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
 
     def test_observation_builder_classifies_event_center_from_live_like_ocr(self) -> None:
         """Recognizes Event Center rows so safe-root recovery does not treat the surface as unknown."""
@@ -116,14 +118,16 @@ class EventObservationTests(unittest.TestCase):
                 label="event_center_live_like",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Event Center", x=112, y=15, width=170, height=25),
                             _ocr_line("Regular Events", x=7, y=70, width=174, height=24),
@@ -133,13 +137,12 @@ class EventObservationTests(unittest.TestCase):
                             _ocr_line("Time left: 5d 10:28:21", x=31, y=287, width=196, height=19),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
             self.assertEqual(observation.screen_type, ScreenType.PNC_EVENT_CENTER)
-            self.assertTrue(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
+            self.assertFalse(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
             self.assertTrue(observation.has(UiElementId.PNC_EVENT_CENTER_EVENT_ROW))
             self.assertEqual("Banner Brawl", observation.entries(ListEntryKind.EVENT_ENTRY)[0].title_text)
 
@@ -155,14 +158,16 @@ class EventObservationTests(unittest.TestCase):
                 label="improve_might_live_like",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Improve Might", x=296, y=352, width=307, height=49),
                             _ocr_line("Improve", x=685, y=494, width=122, height=37),
@@ -170,8 +175,7 @@ class EventObservationTests(unittest.TestCase):
                             _ocr_line("or craft traps to improve Might.", x=236, y=1196, width=426, height=30),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -190,21 +194,22 @@ class EventObservationTests(unittest.TestCase):
                 label="reconnect_near_match",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Rewards", x=210, y=112, width=90, height=24),
                             _ocr_line("Reconnect", x=195, y=668, width=112, height=30),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 

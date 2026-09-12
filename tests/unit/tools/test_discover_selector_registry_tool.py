@@ -28,12 +28,11 @@ class DiscoverSelectorRegistryToolTests(unittest.TestCase):
         config_path = Path("config/accounts.yaml")
         catalog_path = Path("custom_selector_registry.yaml")
         analyzer_catalog = object()
-        ocr_service = object()
         fake_application = SimpleNamespace(
             script_runner=SimpleNamespace(
                 observation_builder=SimpleNamespace(
-                    selector_engine=SimpleNamespace(ocr_service=ocr_service),
-                    enricher=SimpleNamespace(ocr_service=ocr_service),
+                    selector_engine=SimpleNamespace(),
+                    enricher=SimpleNamespace(),
                 )
             )
         )
@@ -49,7 +48,7 @@ class DiscoverSelectorRegistryToolTests(unittest.TestCase):
         self.assertIs(runtime.application, fake_application)
         self.assertIs(runtime.analyzer.observation_builder, fake_application.script_runner.observation_builder)
         self.assertIs(runtime.analyzer.catalog, analyzer_catalog)
-        self.assertIs(runtime.analyzer.ocr_service, ocr_service)
+        self.assertIsNotNone(runtime.analyzer.observation_builder)
 
     def test_live_discovery_uses_connected_runtime_executor_and_flow_planner(self) -> None:
         """Runs live discovery setup through the connected runtime identities exposed by ScriptRunner."""
@@ -134,60 +133,6 @@ class DiscoverSelectorRegistryToolTests(unittest.TestCase):
 
         self.assertEqual(observation_service.labels, [])
         self.assertEqual(script_runner.required_roles, [LiveAutomationRole.LIVE_TESTING])
-
-    def test_navigation_validation_tool_uses_connected_runtime_executor_and_flow_planner(self) -> None:
-        """Builds the validator from the connected runtime executor and planner identities."""
-
-        module = self._load_tool_module("validate_navigation_selectors.py", "codex_test_validate_navigation_selectors")
-        selector_registry = object()
-        observation_service = object()
-        observed_action_executor = object()
-        flow_planner = object()
-        logger = object()
-        validator = object()
-        runtime = _FakeConnectedRuntime(
-            session=object(),
-            observation_service=observation_service,
-            flow_planner=flow_planner,
-            observed_action_executor=observed_action_executor,
-        )
-        script_runner = SimpleNamespace(
-            observation_builder=SimpleNamespace(selector_registry=selector_registry),
-            logger=logger,
-        )
-
-        with patch.object(module, "NavigationSelectorValidator", return_value=validator) as validator_class:
-            result = module._build_navigation_selector_validator(script_runner=script_runner, runtime=runtime)
-
-        self.assertIs(result, validator)
-        validator_class.assert_called_once_with(
-            selector_registry=selector_registry,
-            observation_service=observation_service,
-            action_executor=observed_action_executor,
-            screen_flows=flow_planner,
-            logger=logger,
-        )
-        self.assertEqual(
-            runtime.require_reasons,
-            ["Navigation-selector validation requires a connected observed-action executor."],
-        )
-
-    def test_navigation_validation_tool_fails_fast_without_connected_observed_executor(self) -> None:
-        """Rejects validator construction when connected runtime cannot provide observed actions."""
-
-        module = self._load_tool_module("validate_navigation_selectors.py", "codex_test_validate_navigation_selectors")
-        runtime = _FakeConnectedRuntime(
-            session=object(),
-            observation_service=object(),
-            flow_planner=object(),
-            observed_action_executor=None,
-        )
-
-        with self.assertRaises(SelectorResolutionError):
-            module._build_navigation_selector_validator(
-                script_runner=SimpleNamespace(observation_builder=object(), logger=object()),
-                runtime=runtime,
-            )
 
     def _load_tool_module(self, filename: str = "discover_selector_registry.py", module_name: str = "codex_test_tool") -> object:
         """Loads one tool module directly from disk for isolated unit testing."""

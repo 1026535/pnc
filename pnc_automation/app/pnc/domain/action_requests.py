@@ -34,6 +34,13 @@ class SwipeGesturePrimitive(StrEnum):
     PRESS_MOVE_RELEASE = "press_move_release"
 
 
+class SwipePurpose(StrEnum):
+    """Identifies whether a swipe is ordinary UI scrolling or typed world movement."""
+
+    UI_SCROLL = "ui_scroll"
+    WORLD_MAP_MOVEMENT = "world_map_movement"
+
+
 @dataclass(frozen=True, slots=True)
 class ActionRequest:
     """Base metadata shared by all declarative actions."""
@@ -142,6 +149,7 @@ class SwipeAction(ActionRequest):
     duration_ms: int = 300
     input_source: SwipeInputSource = SwipeInputSource.TOUCHSCREEN
     gesture_primitive: SwipeGesturePrimitive = SwipeGesturePrimitive.SWIPE
+    purpose: SwipePurpose = SwipePurpose.UI_SCROLL
     start_x_ratio: float | None = None
     start_y_ratio: float | None = None
     end_x_ratio: float | None = None

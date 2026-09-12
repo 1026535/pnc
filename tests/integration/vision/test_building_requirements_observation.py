@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.support.pnc.capture_vision.minimal_runtime_registry import _minimal_runtime_registry
+
 import tempfile
 import unittest
 from pathlib import Path
@@ -43,27 +45,28 @@ class BuildingRequirementsObservationTests(unittest.TestCase):
                 label="building_detail",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Castle", x=88, y=16, width=120, height=30),
                             _ocr_line("Upgrade", x=682, y=308, width=120, height=40),
                             _ocr_line("ColdDukeOfTheNorth", x=101, y=465, width=256, height=32),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
             self.assertEqual(observation.screen_type, ScreenType.PNC_BUILDING_DETAILS)
-            self.assertTrue(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
+            self.assertFalse(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
             self.assertTrue(observation.has(UiElementId.PNC_BUILDING_UPGRADE_BUTTON))
 
     def test_observation_builder_exposes_shared_building_requirement_controls_on_exact_building_screens(self) -> None:
@@ -78,14 +81,16 @@ class BuildingRequirementsObservationTests(unittest.TestCase):
                 label="infantry_requirement",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Infantry Barracks", x=88, y=16, width=240, height=30),
                             _ocr_line("Glory Level", x=588, y=142, width=154, height=32),
@@ -96,8 +101,7 @@ class BuildingRequirementsObservationTests(unittest.TestCase):
                             _ocr_line("Materials required", x=58, y=866, width=246, height=33),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -123,14 +127,16 @@ class BuildingRequirementsObservationTests(unittest.TestCase):
                 label="castle_multi_requirement",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Castle", x=88, y=16, width=120, height=30),
                             _ocr_line("Territory Overview", x=620, y=130, width=220, height=32),
@@ -142,8 +148,7 @@ class BuildingRequirementsObservationTests(unittest.TestCase):
                             _ocr_line("Materials required", x=58, y=931, width=246, height=33),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 
@@ -165,14 +170,16 @@ class BuildingRequirementsObservationTests(unittest.TestCase):
                 label="castle_split_overview",
             )
             builder = ObservationBuilder(
-                selector_registry=SelectorRegistry(selectors=()),
+                selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Castle", x=181, y=18, width=144, height=51),
                             _ocr_line("Territory", x=691, y=129, width=108, height=32),
@@ -181,8 +188,7 @@ class BuildingRequirementsObservationTests(unittest.TestCase):
                             _ocr_line("Upgrade", x=673, y=438, width=146, height=41),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
 

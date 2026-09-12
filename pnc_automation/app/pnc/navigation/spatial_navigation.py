@@ -12,6 +12,7 @@ from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.app.pnc.domain.action_requests import (
     ActionRequest,
     SwipeGesturePrimitive,
+    SwipePurpose,
     ActionTimingProfile,
     SwipeAction,
     SwipeInputSource,
@@ -1173,6 +1174,7 @@ def _build_world_map_navigation_swipe_action(
         observe_after=observe_after,
         follow_up_request=follow_up_request,
         timing_profile=timing_profile,
+        purpose=SwipePurpose.WORLD_MAP_MOVEMENT,
         start_x_ratio=start_x_ratio,
         start_y_ratio=start_y_ratio,
         end_x_ratio=end_x_ratio,

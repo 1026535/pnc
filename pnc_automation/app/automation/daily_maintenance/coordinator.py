@@ -18,7 +18,7 @@ from pnc_automation.app.pnc.domain.daily_maintenance import (
     NormalizedBounds,
 )
 from pnc_automation.app.pnc.domain.daily_quest_catalog import DailyQuestCatalog
-from pnc_automation.app.pnc.domain.observation import ListEntryKind, Observation
+from pnc_automation.app.pnc.domain.observation import ListEntryKind, Observation, RowRecognitionStatus
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.persistence.daily_run_journal_store import DailyRunJournalStore
 from pnc_automation.core.errors import TaskVerificationError
@@ -191,7 +191,14 @@ class DailyMaintenanceCoordinator:
                 if title not in unknown_titles:
                     unknown_titles.append(title)
 
-            claim_row = next((row for row in viewport.rows if row.state == DailyQuestRowState.CLAIM), None)
+            claim_row = next(
+                (
+                    row for row in viewport.rows
+                    if row.row_status == RowRecognitionStatus.COMPLETE
+                    and row.state == DailyQuestRowState.CLAIM
+                ),
+                None,
+            )
             if claim_row is not None:
                 current_checkpoint, outcome = self.claim_executor.claim(
                     row=claim_row,
@@ -318,7 +325,7 @@ class DailyMaintenanceCoordinator:
                 or row.quest_id in (deferred_quest_ids or set())
             ):
                 continue
-            if row.state == DailyQuestRowState.GO:
+            if row.row_status == RowRecognitionStatus.COMPLETE and row.state == DailyQuestRowState.GO:
                 return row
         return None
 
@@ -331,7 +338,11 @@ class DailyMaintenanceCoordinator:
     ) -> bool:
         """Returns whether the current bottom viewport still contains coordinator work."""
 
-        return any(row.state == DailyQuestRowState.CLAIM for row in viewport.rows) or self._select_actionable_row(
+        return any(
+            row.row_status == RowRecognitionStatus.COMPLETE
+            and row.state == DailyQuestRowState.CLAIM
+            for row in viewport.rows
+        ) or self._select_actionable_row(
             viewport=viewport,
             target=target,
             checkpoint=checkpoint,
@@ -403,6 +414,7 @@ def daily_viewport_from_observation(observation: Observation) -> DailyQuestViewp
                 progress_current=_optional_int(entry.metadata.get("progress_current")),
                 progress_required=_optional_int(entry.metadata.get("progress_required")),
                 coordinate_provenance=provenance,
+                row_status=entry.row_status,
             )
         )
     return DailyQuestViewport(

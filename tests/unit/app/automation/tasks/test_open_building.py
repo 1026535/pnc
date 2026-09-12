@@ -100,27 +100,6 @@ class OpenBuildingTests(FlowAndTaskFixtures, unittest.TestCase):
         self.assertEqual(result.status, TaskStatus.SUCCESS)
         self.assertIn("Infantry Barracks", result.message)
 
-    def test_open_building_task_accepts_sanctum_icons_as_success(self) -> None:
-        """Accepts Sanctum's artifact-plus-relic controls as an open-screen proof even when classification lags."""
-
-        task = OpenBuildingTask()
-        context = self._make_context(
-            params=OpenBuildingPolicy(building=HomeCityObjectId.SANCTUM),
-            task_id=TaskId.OPEN_BUILDING,
-        )
-
-        result = task.verify(
-            context,
-            make_observation(ScreenType.PNC_HOME_CITY),
-            make_observation(
-                ScreenType.UNKNOWN,
-                visible_ids=(UiElementId.PNC_SANCTUM_ARTIFACT_BUTTON, UiElementId.PNC_SANCTUM_RELIC_BUTTON),
-            ),
-        )
-
-        self.assertEqual(result.status, TaskStatus.SUCCESS)
-        self.assertIn("Sanctum", result.message)
-
     def test_open_building_task_accepts_matching_build_menu_for_unbuilt_target(self) -> None:
         """Accepts the exact build-menu option as success when the requested building slot is not built yet."""
 

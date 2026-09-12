@@ -11,6 +11,7 @@ from PIL import Image, UnidentifiedImageError
 
 from pnc_automation.core.infra.storage.artifact_store import ArtifactRecord, ArtifactStore
 from pnc_automation.core.infra.emulator.session import BlueStacksSession
+from pnc_automation.core.infra.emulator.provenance import FrameRef
 from pnc_automation.core.errors import ScreenshotCaptureError
 
 
@@ -23,6 +24,7 @@ class CapturedScreenshot:
     image_format: str
     payload: bytes | None = None
     ephemeral_captured_at: datetime | None = None
+    frame_ref: FrameRef | None = None
 
     @property
     def artifact_path(self) -> Path | None:
@@ -60,7 +62,9 @@ class ScreenshotService:
     ) -> CapturedScreenshot:
         """Captures a screenshot and optionally persists it under the provided artifact directory."""
 
-        payload = session.capture_screenshot_bytes()
+        captured = session.capture_screenshot_frame()
+        payload = captured.payload
+        frame_ref = captured.frame_ref
         image = _decode_image(payload)
         artifact = (
             self.artifact_store.persist_bytes(
@@ -78,6 +82,7 @@ class ScreenshotService:
             image_format=image.format or self.screenshot_format.upper(),
             payload=payload,
             ephemeral_captured_at=None if persist else datetime.now(tz=UTC),
+            frame_ref=frame_ref,
         )
 
 

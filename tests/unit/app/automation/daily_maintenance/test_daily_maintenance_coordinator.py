@@ -14,6 +14,10 @@ from pnc_automation.app.authoring.config.daily_maintenance import (
 )
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.automation.daily_maintenance.coordinator import DailyMaintenanceCoordinator
+from pnc_automation.app.automation.daily_maintenance.coordinator import (
+    DailyMaintenanceCoordinator,
+    daily_viewport_from_observation,
+)
 from pnc_automation.app.automation.engine.task import TaskId
 from pnc_automation.app.pnc.domain.daily_maintenance import (
     DailyQuestId,
@@ -22,10 +26,16 @@ from pnc_automation.app.pnc.domain.daily_maintenance import (
     DailyTaskCheckpoint,
 )
 from pnc_automation.app.pnc.domain.daily_quest_catalog import DailyQuestCatalog
-from pnc_automation.app.pnc.domain.observation import DetectedListEntry, ListEntryKind, Observation
+from pnc_automation.app.pnc.domain.observation import (
+    DetectedListEntry,
+    ListEntryKind,
+    Observation,
+    RowRecognitionStatus,
+)
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.persistence.daily_run_journal_store import DailyRunJournalStore
 from pnc_automation.core.vision.image.models import Bounds
+from tests.support.pnc.observations import make_observation
 
 
 class DailyMaintenanceCoordinatorTests(unittest.TestCase):
@@ -92,6 +102,26 @@ class DailyMaintenanceCoordinatorTests(unittest.TestCase):
 
         self.assertEqual([], events)
         self.assertEqual((), result.outcomes)
+
+    def test_incomplete_go_row_is_preserved_as_unknown_and_not_selected(self) -> None:
+        """A known Quest row with clipped geometry cannot enter capability execution."""
+
+        clipped = _observation(replace(_entry(DailyQuestId.HERO_ARENA, "go"), row_status=RowRecognitionStatus.CLIPPED))
+        viewport = daily_viewport_from_observation(clipped)
+        row = viewport.rows[0]
+        self.assertEqual(RowRecognitionStatus.CLIPPED, row.row_status)
+        coordinator = self._coordinator(
+            session=_FakeSession(observations=[clipped]),
+            claim_executor=_FakeClaimExecutor([]),
+            capability_executor=_FakeCapabilityExecutor([]),
+        )
+        self.assertIsNone(
+            coordinator._select_actionable_row(
+                viewport=viewport,
+                target=self.target,
+                checkpoint=self.checkpoint,
+            )
+        )
 
     def test_completed_checkpoint_prevents_replay(self) -> None:
         """Does not execute an actionable row whose capability already committed."""
@@ -300,12 +330,7 @@ class _FakeCapabilityExecutor:
 def _observation(*entries: DetectedListEntry) -> Observation:
     """Builds one typed Daily Quest observation."""
 
-    return Observation(
-        screen_type=ScreenType.PNC_QUEST_DAILY,
-        visible_elements={},
-        list_entries=entries,
-        image_size=(540, 960),
-    )
+    return make_observation(ScreenType.PNC_QUEST_DAILY, list_entries=entries, image_size=(540, 960))
 
 
 def _entry(quest_id: DailyQuestId, state: str, *, bottom: bool = False) -> DetectedListEntry:
@@ -316,6 +341,8 @@ def _entry(quest_id: DailyQuestId, state: str, *, bottom: bool = False) -> Detec
         bounds=Bounds(9, 372, 518, 99),
         title_text=quest_id.value,
         action_point=(454, 421),
+        action_bounds=Bounds(430, 400, 60, 40),
+        row_status=RowRecognitionStatus.COMPLETE,
         metadata={
             "quest_id": quest_id.value,
             "row_state": state,

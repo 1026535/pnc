@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pnc_automation.app.pnc.domain.action_requests import WaitAction
+
 import unittest
 
 from pnc_automation.app.pnc.domain.action_requests import KeyEventAction, TapAction
@@ -30,9 +32,21 @@ class MailboxEntryTests(MailWorkflowFixtures, unittest.TestCase):
         self.assertEqual(len(actions), 1)
         self.assertIsInstance(actions[0], TapAction)
         self.assertEqual(actions[0].selector_id, UiElementId.PNC_BOTTOM_NAV_MAIL)
+
+    def test_open_other_mailbox_from_player_mailbox_returns_to_hub_with_back(self) -> None:
+        """Uses Android Back to return from one mailbox category before opening another."""
+
+        actions = self.flows.open_mailbox(
+            make_observation(ScreenType.PNC_MAILBOX_LIST, mailbox_type=MailboxType.PLAYER),
+            MailboxType.ALLIANCE,
+        )
+
+        self.assertEqual(len(actions), 1)
+        self.assertIsInstance(actions[0], KeyEventAction)
+        self.assertEqual(actions[0].key_code, "KEYCODE_BACK")
         self.assertEqual(
             actions[0].follow_up_request,
-            ObservationRequest.mail_navigation_follow_up(ScreenType.PNC_MAIL_HUB, ScreenType.PNC_MAILBOX_LIST),
+            ObservationRequest.mail_navigation_follow_up(ScreenType.PNC_MAIL_HUB),
         )
 
     def test_open_mail_hub_uses_visible_bottom_nav_from_world_map(self) -> None:
@@ -59,8 +73,8 @@ class MailboxEntryTests(MailWorkflowFixtures, unittest.TestCase):
         actions = self.flows.open_mail_hub(make_observation(ScreenType.UNKNOWN))
 
         self.assertEqual(len(actions), 1)
-        self.assertIsInstance(actions[0], KeyEventAction)
-        self.assertEqual(actions[0].key_code, "KEYCODE_BACK")
+        self.assertIsInstance(actions[0], WaitAction)
+        self.assertEqual(actions[0].milliseconds, 250)
 
     def test_open_mailbox_from_mail_hub_taps_requested_category(self) -> None:
         """Uses the requested mailbox category row instead of duplicating hub-specific navigation logic."""

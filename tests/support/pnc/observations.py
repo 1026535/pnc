@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+from datetime import UTC, datetime
+from itertools import count
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +22,7 @@ from pnc_automation.app.pnc.domain.observation import (
     VisibleElement,
     VisibleElementSourceKind,
 )
+from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict, ScreenDecision, ScreenEvidence
 from pnc_automation.app.pnc.domain.popup import (
     PopupControlKind,
     PopupDismissCandidate,
@@ -27,6 +31,10 @@ from pnc_automation.app.pnc.domain.popup import (
 )
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
+from pnc_automation.core.infra.emulator.provenance import FrameRef
+
+
+_SYNTHETIC_FRAME_SEQUENCE = count(1)
 
 
 
@@ -104,6 +112,8 @@ def make_observation(
     image_size: tuple[int, int] = (200, 100),
     frame_fingerprint: str | None = None,
     popup_overlay: PopupOverlayObservation | None = None,
+    frame_ref: FrameRef | None = None,
+    decision: ScreenDecision | None = None,
 ) -> Observation:
     """Builds a typed observation with synthetic visible elements."""
 
@@ -133,13 +143,44 @@ def make_observation(
                 ),
             ),
         )
+    resolved_frame_ref = frame_ref or FrameRef(
+        session_id="synthetic-test-session",
+        session_epoch=1,
+        capture_sequence=next(_SYNTHETIC_FRAME_SEQUENCE),
+        input_sequence=0,
+        captured_at=datetime.now(tz=UTC),
+    )
+    resolved_decision = decision or ScreenDecision(
+        base_screen=screen_type,
+        effective_screen=screen_type,
+        guard=GuardVerdict.BLOCKED if blocking_popup else (
+            GuardVerdict.UNRESOLVED if screen_type == ScreenType.UNKNOWN else GuardVerdict.CLEAR
+        ),
+        evidence=(ScreenEvidence(screen_type, "synthetic_fixture"),),
+    )
+    visible_elements = {
+        selector_id: replace(
+            element,
+            frame_ref=resolved_frame_ref,
+            source_screen=resolved_decision.effective_screen,
+            source_layout_id=resolved_decision.layout_id,
+        )
+        for selector_id, element in visible_elements.items()
+    }
+    resolved_entries = tuple(
+        replace(
+            entry,
+            frame_ref=resolved_frame_ref,
+            source_screen=resolved_decision.effective_screen,
+            source_layout_id=resolved_decision.layout_id,
+        )
+        for entry in list_entries
+    )
     return Observation(
-        screen_type=screen_type,
+        decision=resolved_decision,
         visible_elements=visible_elements,
-        list_entries=list_entries,
+        list_entries=resolved_entries,
         spatial_surface=spatial_surface,
-        blocking_popup=blocking_popup,
-        popup_overlay=popup_overlay,
         current_castle=current_castle or _make_current_castle(current_castle_name),
         current_castle_evidence=_resolve_current_castle_evidence(
             current_castle=current_castle,
@@ -160,6 +201,8 @@ def make_observation(
         artifact_path=artifact_path,
         image_size=image_size,
         frame_fingerprint=frame_fingerprint or f"synthetic:{screen_type.value}:{','.join(item.value for item in visible_ids)}",
+        popup_overlay=popup_overlay,
+        frame_ref=resolved_frame_ref,
     )
 
 

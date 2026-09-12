@@ -4,21 +4,26 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from PIL import Image
-
 from pnc_automation.app.automation.daily_maintenance.coordinator import DailyMaintenanceCoordinator
 from pnc_automation.app.automation.engine.observed_action_executor import ObservedActionExecutor
 from pnc_automation.app.pnc.domain.action_requests import SwipeAction, TapAction, TapListEntryAction
 from pnc_automation.app.pnc.domain.daily_maintenance import DailyQuestId, DailyQuestRowState
-from pnc_automation.app.pnc.domain.observation import ListEntryKind, Observation
-from pnc_automation.app.pnc.domain.resource_items import ResourceInventory, ResourceItem
+from pnc_automation.app.pnc.domain.observation import (
+    DetectedListEntry,
+    ListEntryKind,
+    Observation,
+    RowRecognitionStatus,
+)
+from pnc_automation.app.pnc.domain.resource_items import (
+    ResourceInventory,
+    ResourceInventoryStatus,
+    ResourceItem,
+)
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
 from pnc_automation.app.pnc.vision.observation_builder import ObservationService
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
-from pnc_automation.app.pnc.vision.resource_inventory import detect_resource_card_bounds
-from pnc_automation.core.vision.image.models import Bounds
 
 
 @dataclass(slots=True)
@@ -37,18 +42,55 @@ class ConnectedResourceItemSession:
 
         self._open_inventory()
         current = self._stable("resource_scan_start")
-        current = self._reach_top(current)
+        initial_unresolved_reasons = self._require_complete_view(current)
+        if initial_unresolved_reasons:
+            return ResourceInventory(
+                self._best_effort_items(current),
+                False,
+                self.artifact_paths(),
+                ResourceInventoryStatus.UNKNOWN,
+                initial_unresolved_reasons,
+            )
         collected: dict[tuple[str, str, int], ResourceItem] = {}
+        for item in self._items(current):
+            collected[item.identity] = item
+        current = self._reach_top(current)
         for index in range(self.max_viewports):
-            self._require_complete_view(current)
+            unresolved_reasons = self._require_complete_view(current)
+            if unresolved_reasons:
+                return ResourceInventory(
+                    tuple(collected.values()),
+                    False,
+                    self.artifact_paths(),
+                    ResourceInventoryStatus.UNKNOWN,
+                    unresolved_reasons,
+                )
             for item in self._items(current):
                 previous = collected.get(item.identity)
                 if previous is not None and previous.owned != item.owned:
                     raise ValueError("Resource inventory changed during the full scan.")
                 collected[item.identity] = item
             after = self._scroll(current, upward=False, adjusted=False)
+            after_unresolved_reasons = self._require_complete_view(after)
+            if after_unresolved_reasons:
+                return ResourceInventory(
+                    tuple(collected.values()),
+                    False,
+                    self.artifact_paths(),
+                    ResourceInventoryStatus.UNKNOWN,
+                    after_unresolved_reasons,
+                )
             if self._signature(after) == self._signature(current):
                 adjusted = self._scroll(after, upward=False, adjusted=True)
+                adjusted_unresolved_reasons = self._require_complete_view(adjusted)
+                if adjusted_unresolved_reasons:
+                    return ResourceInventory(
+                        tuple(collected.values()),
+                        False,
+                        self.artifact_paths(),
+                        ResourceInventoryStatus.UNKNOWN,
+                        adjusted_unresolved_reasons,
+                    )
                 if self._signature(adjusted) == self._signature(after):
                     return ResourceInventory(tuple(collected.values()), True, self.artifact_paths())
                 after = adjusted
@@ -124,7 +166,11 @@ class ConnectedResourceItemSession:
         for index in range(8):
             current = self._observe_with_update_recovery(f"resource_open_{index}")
             if current.screen_type == ScreenType.PNC_BAG:
-                if current.entries(ListEntryKind.RESOURCE_ITEM) or current.entries(ListEntryKind.RESOURCE_INVENTORY_EXCLUSION):
+                if (
+                    current.entries(ListEntryKind.RESOURCE_ITEM)
+                    or current.entries(ListEntryKind.RESOURCE_INVENTORY_EXCLUSION)
+                    or current.entries(ListEntryKind.RESOURCE_INVENTORY_UNRESOLVED)
+                ):
                     return
                 action = TapAction(
                     selector_id=UiElementId.PNC_BAG_SUBTAB_RESOURCE,
@@ -249,8 +295,12 @@ class ConnectedResourceItemSession:
 
         for index in range(self.max_viewports):
             after = self._scroll(current, upward=True, adjusted=False)
+            if self._require_complete_view(after):
+                return after
             if self._signature(after) == self._signature(current):
                 adjusted = self._scroll(after, upward=True, adjusted=True)
+                if self._require_complete_view(adjusted):
+                    return adjusted
                 if self._signature(adjusted) == self._signature(after):
                     return adjusted
                 after = adjusted
@@ -262,63 +312,131 @@ class ConnectedResourceItemSession:
         """Converts only exact resource-row metadata with visual action provenance."""
 
         items: list[ResourceItem] = []
+        identities: set[tuple[str, str, int]] = set()
         for entry in observation.entries(ListEntryKind.RESOURCE_ITEM):
-            if entry.require_metadata("coordinate_provenance") != "visual_geometry" or entry.action_point is None:
-                raise ValueError("Resource item requires a visual single-Use action point.")
-            items.append(ResourceItem(
-                item_id=entry.require_metadata("item_id"),
-                resource=entry.require_metadata("resource"),
-                amount=entry.require_metadata("amount"),
-                owned=entry.require_metadata("owned"),
-                fingerprint=entry.require_metadata("observation_fingerprint"),
-            ))
+            item = ConnectedResourceItemSession._item_from_entry(entry)
+            if item is None:
+                raise ValueError("Resource item requires a complete visual single-Use action row.")
+            if item.identity in identities:
+                raise ValueError("Resource inventory contains duplicate item identities in one observation.")
+            identities.add(item.identity)
+            items.append(item)
         return tuple(items)
+
+    @staticmethod
+    def _best_effort_items(observation: Observation) -> tuple[ResourceItem, ...]:
+        """Retain independently valid rows while an inventory remains explicitly unknown."""
+
+        return tuple(
+            item
+            for entry in observation.entries(ListEntryKind.RESOURCE_ITEM)
+            if (item := ConnectedResourceItemSession._item_from_entry(entry)) is not None
+        )
+
+    @staticmethod
+    def _item_from_entry(entry: object) -> ResourceItem | None:
+        """Build one resource item only when all action and identity evidence is present."""
+
+        if not isinstance(entry, DetectedListEntry):
+            return None
+        if (
+            entry.row_status != RowRecognitionStatus.COMPLETE
+            or entry.action_point is None
+            or entry.action_bounds is None
+            or entry.metadata.get("coordinate_provenance") != "visual_geometry"
+        ):
+            return None
+        try:
+            return ResourceItem(
+                item_id=entry.metadata["item_id"],
+                resource=entry.metadata["resource"],
+                amount=entry.metadata["amount"],
+                owned=entry.metadata["owned"],
+                fingerprint=entry.metadata["observation_fingerprint"],
+            )
+        except (KeyError, TypeError, ValueError):
+            return None
 
     @classmethod
     def _signature(cls, observation: Observation) -> tuple[tuple[object, ...], ...]:
         """Compares row identity, stock and card geometry without noisy full-frame hashing."""
 
         resources = tuple(
-            (item.identity, item.owned, entry.bounds)
-            for item, entry in zip(cls._items(observation), observation.entries(ListEntryKind.RESOURCE_ITEM), strict=True)
+            (
+                "resource",
+                entry.metadata.get("item_id"),
+                entry.metadata.get("resource"),
+                entry.metadata.get("amount"),
+                entry.metadata.get("owned"),
+                entry.row_status,
+                entry.bounds,
+            )
+            for entry in observation.entries(ListEntryKind.RESOURCE_ITEM)
         )
         exclusions = tuple(
-            (entry.title_text, entry.require_metadata("owned"), entry.bounds)
+            ("exclusion", entry.title_text, entry.metadata.get("owned"), entry.row_status, entry.bounds)
             for entry in observation.entries(ListEntryKind.RESOURCE_INVENTORY_EXCLUSION)
         )
-        return resources + exclusions
+        unresolved = tuple(
+            (
+                "unresolved",
+                entry.title_text,
+                entry.metadata.get("unresolved_reason", entry.row_status.value),
+                entry.row_status,
+                entry.bounds,
+            )
+            for entry in observation.entries(ListEntryKind.RESOURCE_INVENTORY_UNRESOLVED)
+        )
+        return resources + exclusions + unresolved
 
     @staticmethod
-    def _require_complete_view(observation: Observation) -> None:
-        """Rejects missing OCR semantics rather than silently overlooking a smaller pack."""
+    def _require_complete_view(observation: Observation) -> tuple[str, ...]:
+        """Return explicit unknown reasons from parser rows without reopening screenshots."""
 
-        if observation.artifact_path is None:
-            raise ValueError("Full inventory scan requires a saved screenshot.")
-        with Image.open(observation.artifact_path) as image:
-            card_bounds = detect_resource_card_bounds(image)
-            image_height = image.height
-        parsed_count = len(observation.entries(ListEntryKind.RESOURCE_ITEM)) + len(
-            observation.entries(ListEntryKind.RESOURCE_INVENTORY_EXCLUSION)
+        rows = (
+            *observation.entries(ListEntryKind.RESOURCE_ITEM),
+            *observation.entries(ListEntryKind.RESOURCE_INVENTORY_EXCLUSION),
+            *observation.entries(ListEntryKind.RESOURCE_INVENTORY_UNRESOLVED),
         )
-        parsed_bounds = {
-            entry.bounds
-            for entry in (
-                *observation.entries(ListEntryKind.RESOURCE_ITEM),
-                *observation.entries(ListEntryKind.RESOURCE_INVENTORY_EXCLUSION),
+        if not rows:
+            return ("no_visual_rows",)
+        unresolved = observation.entries(ListEntryKind.RESOURCE_INVENTORY_UNRESOLVED)
+        if unresolved:
+            return tuple(
+                str(entry.metadata.get("unresolved_reason", entry.row_status.value))
+                for entry in unresolved
             )
-        }
-        missing_bounds = tuple(bounds for bounds in card_bounds if bounds not in parsed_bounds)
-        edge_missing = tuple(
-            bounds for bounds in missing_bounds
-            if _is_edge_clipped_card(bounds, image_height=image_height)
+        incomplete = tuple(
+            entry for entry in observation.entries(ListEntryKind.RESOURCE_ITEM)
+            if entry.row_status != RowRecognitionStatus.COMPLETE
+            or entry.action_point is None
+            or entry.action_bounds is None
         )
-        if parsed_count + len(edge_missing) != len(card_bounds):
-            raise ValueError("Resource inventory contains an unparsed card; full scan is unproved.")
-
-
-def _is_edge_clipped_card(bounds: Bounds, *, image_height: int) -> bool:
-    """Returns whether a card touches the fixed viewport edge where its title may be clipped."""
-
-    top_edge = int(image_height * 0.17) + 32
-    bottom_edge = image_height - 12
-    return bounds.y <= top_edge or bounds.y + bounds.height >= bottom_edge
+        if incomplete:
+            return ("incomplete_item_row",)
+        required_metadata = {
+            "item_id",
+            "resource",
+            "amount",
+            "owned",
+            "observation_fingerprint",
+            "coordinate_provenance",
+        }
+        if any(
+            not required_metadata.issubset(entry.metadata)
+            or entry.metadata.get("coordinate_provenance") != "visual_geometry"
+            for entry in observation.entries(ListEntryKind.RESOURCE_ITEM)
+        ):
+            return ("incomplete_item_row",)
+        identities = tuple(
+            entry.metadata.get("item_id")
+            for entry in observation.entries(ListEntryKind.RESOURCE_ITEM)
+        )
+        duplicate_identities = {
+            item_id
+            for item_id in identities
+            if item_id is not None and identities.count(item_id) > 1
+        }
+        if duplicate_identities:
+            return ("duplicate_item_identity",)
+        return ()

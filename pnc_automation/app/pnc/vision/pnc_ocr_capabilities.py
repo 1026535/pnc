@@ -2,7 +2,52 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from enum import StrEnum
+
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
+
+
+class ScreenFamilyOcrStrategy(StrEnum):
+    """Declares how a registered screen family may obtain content OCR."""
+
+    REVIEWED_REGION_PLAN = "reviewed_region_plan"
+    GUARDED_FULL_FRAME_REUSE = "guarded_full_frame_reuse"
+
+
+@dataclass(frozen=True, slots=True)
+class ScreenFamilyOcrCapability:
+    """Typed content strategy for one registered screen family."""
+
+    family: ScreenType
+    strategy: ScreenFamilyOcrStrategy
+    fallback_reason: str | None = None
+
+    def __post_init__(self) -> None:
+        """Keep fallback diagnostics explicit and reviewed plans unambiguous."""
+
+        if self.strategy == ScreenFamilyOcrStrategy.REVIEWED_REGION_PLAN:
+            if self.fallback_reason is not None:
+                raise ValueError("Reviewed region plans cannot carry a fallback reason.")
+        elif self.fallback_reason is None:
+            raise ValueError("Guarded full-frame strategies require a fallback reason.")
+
+
+FAMILY_REGIONS_NOT_REVIEWED = "family_regions_not_reviewed"
+
+# These families are backed by compiled fixed-field, coordinate, or body-row
+# region-plan owners. Other families retain the guarded full-frame strategy.
+_REVIEWED_REGION_PLAN_FAMILIES = frozenset(
+    {
+        ScreenType.PNC_BAG,
+        ScreenType.PNC_CHAT,
+        ScreenType.PNC_MAIL_COMPOSE_POPUP,
+        ScreenType.PNC_QUEST_MAIN,
+        ScreenType.PNC_QUEST_DAILY,
+        ScreenType.PNC_WORLD_COORDINATE_DIALOG,
+        ScreenType.PNC_WORLD_MAP,
+    }
+)
 
 _HOME_CITY_ADJACENT_SCREENS = frozenset(
     {
@@ -252,6 +297,32 @@ _SCREEN_FAMILY_OBSERVED_SCREENS = {
 }
 
 
+def screen_family_ocr_capability(screen_type: ScreenType) -> ScreenFamilyOcrCapability:
+    """Returns the typed content strategy for one registered screen family."""
+
+    if screen_type not in _SCREEN_FAMILY_OBSERVED_SCREENS:
+        raise KeyError(f"Screen family '{screen_type}' is not registered for OCR.")
+    if screen_type in _REVIEWED_REGION_PLAN_FAMILIES:
+        return ScreenFamilyOcrCapability(
+            family=screen_type,
+            strategy=ScreenFamilyOcrStrategy.REVIEWED_REGION_PLAN,
+        )
+    return ScreenFamilyOcrCapability(
+        family=screen_type,
+        strategy=ScreenFamilyOcrStrategy.GUARDED_FULL_FRAME_REUSE,
+        fallback_reason=FAMILY_REGIONS_NOT_REVIEWED,
+    )
+
+
+def runtime_screen_family_ocr_capabilities() -> tuple[ScreenFamilyOcrCapability, ...]:
+    """Returns one typed content strategy for every registered screen family."""
+
+    return tuple(
+        screen_family_ocr_capability(screen_type)
+        for screen_type in sorted(_SCREEN_FAMILY_OBSERVED_SCREENS, key=lambda value: value.value)
+    )
+
+
 def runtime_screen_family_ocr_types() -> frozenset[ScreenType]:
     """Returns the screen families with concrete OCR enrichers in the runtime."""
 
@@ -264,4 +335,8 @@ def can_attempt_screen_family_ocr(*, request_screen: ScreenType, observed_screen
     observed_screens = _SCREEN_FAMILY_OBSERVED_SCREENS.get(request_screen)
     if observed_screens is None:
         return False
-    return observed_screen in observed_screens
+    # Every registered family must admit its exact screen.  Some legacy
+    # adjacency tables intentionally omit the family itself, which otherwise
+    # prevents exact-screen OCR capabilities from ever running after a prior
+    # observation already established that identity.
+    return observed_screen == request_screen or observed_screen in observed_screens

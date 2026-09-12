@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.support.pnc.capture_vision.fake_screenshot_session import make_captured_frame
+
 import tempfile
 import unittest
 from pathlib import Path
@@ -39,20 +41,13 @@ class CastleSelectionObservationTests(unittest.TestCase):
             selector_registry=build_default_selector_registry(),
             selector_engine=ImageSelectorEngine(
                 template_matcher=OpenCvTemplateMatcher(),
-                ocr_service=_FakeOcrService(
-                    lines=(
-                        _ocr_line("Build", x=18, y=47, width=46, height=14),
-                        _ocr_line("Hero", x=124, y=938, width=40, height=16),
-                        _ocr_line("Quest", x=198, y=938, width=45, height=16),
-                        _ocr_line("Mail", x=320, y=938, width=35, height=16),
-                        _ocr_line("Alliance", x=401, y=938, width=73, height=16),
-                        _ocr_line("More", x=478, y=938, width=40, height=16),
-                    )
-                ),
+
             ),
             screen_classifier=ScreenClassifier(),
             enricher=PncObservationEnricher(
-                ocr_service=_FakeOcrService(
+
+            ),
+            ocr_service=_FakeOcrService(
                     lines=(
                         _ocr_line("Build", x=18, y=47, width=46, height=14),
                         _ocr_line("Hero", x=124, y=938, width=40, height=16),
@@ -62,14 +57,14 @@ class CastleSelectionObservationTests(unittest.TestCase):
                         _ocr_line("More", x=478, y=938, width=40, height=16),
                     )
                 )
-            ),
-        )
+            )
         screenshot = type(
             "Captured",
             (),
             {
                 "image": Image.new("RGB", (540, 960), (0, 0, 0)),
                 "artifact": type("Artifact", (), {"path": Path("synthetic_home_city_noise.png"), "captured_at": None})(),
+                "frame_ref": make_captured_frame(b"").frame_ref,
             },
         )()
 
@@ -85,7 +80,7 @@ class CastleSelectionObservationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_directory:
             root = Path(temp_directory)
             screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
-            image = Image.new("RGB", (480, 854), (15, 28, 68))
+            image = Image.new("RGB", (540, 960), (15, 28, 68))
             for x in range(410, 470):
                 for y in range(520, 590):
                     image.putpixel((x, y), (40, 200, 70))
@@ -98,11 +93,13 @@ class CastleSelectionObservationTests(unittest.TestCase):
                 selector_registry=build_default_selector_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Manage Char.", x=132, y=18, width=152, height=24),
                             _ocr_line("K304 Kingdom", x=99, y=97, width=127, height=18),
@@ -113,8 +110,7 @@ class CastleSelectionObservationTests(unittest.TestCase):
                             _ocr_line("Castle Level 9", x=98, y=549, width=126, height=18),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
             castle_entries = observation.entries(ListEntryKind.CASTLE)
@@ -139,7 +135,7 @@ class CastleSelectionObservationTests(unittest.TestCase):
             root = Path(temp_directory)
             screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
             screenshot = screenshot_service.capture(
-                _FakeScreenshotSession(_encode_png(Image.new("RGB", (480, 854), (15, 28, 68)))),
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (540, 960), (15, 28, 68)))),
                 artifact_directory="k230_single_castle_manage_char",
                 label="single_castle_manage_char",
             )
@@ -147,11 +143,13 @@ class CastleSelectionObservationTests(unittest.TestCase):
                 selector_registry=build_default_selector_registry(),
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("Manage Char.", x=132, y=18, width=152, height=24),
                             _ocr_line("K230 Kingdom", x=98, y=494, width=128, height=18),
@@ -159,8 +157,7 @@ class CastleSelectionObservationTests(unittest.TestCase):
                             _ocr_line("Castle Level 9", x=98, y=549, width=126, height=18),
                         )
                     )
-                ),
-            )
+                )
 
             observation = builder.build(screenshot)
             castle_entries = observation.entries(ListEntryKind.CASTLE)

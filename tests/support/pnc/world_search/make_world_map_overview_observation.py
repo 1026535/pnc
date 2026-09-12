@@ -72,7 +72,13 @@ def _make_world_map_overview_observation(
             action_point=marker_point,
         )
     return Observation(
-        screen_type=ScreenType.PNC_WORLD_MAP_OVERVIEW,
+        decision=ScreenDecision(
+            base_screen=ScreenType.PNC_WORLD_MAP_OVERVIEW,
+            effective_screen=ScreenType.PNC_WORLD_MAP_OVERVIEW,
+            guard=GuardVerdict.CLEAR,
+            evidence=(ScreenEvidence(ScreenType.PNC_WORLD_MAP_OVERVIEW, "test"),),
+        ),
         visible_elements=visible_elements,
         image_size=(200, 200),
+        frame_ref=make_captured_frame(b"overview").frame_ref,
     )

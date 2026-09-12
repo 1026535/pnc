@@ -19,7 +19,7 @@ from pnc_automation.app.automation.engine.task import TaskPreflight
 from pnc_automation.app.automation.tasks.select_castle_task import SelectCastleTask
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
-from pnc_automation.app.pnc.domain.action_requests import WaitAction
+from pnc_automation.app.pnc.domain.action_requests import TapAction, WaitAction
 from pnc_automation.app.pnc.domain.observation import Observation
 from pnc_automation.app.pnc.domain.popup import (
     PopupControlKind,
@@ -49,6 +49,7 @@ class PopupRecoveryTests(unittest.TestCase):
         self.executor = ObservedActionExecutor(
             selector_registry=build_default_selector_registry(),
             action_executor=ActionExecutor(
+                selector_registry=build_default_selector_registry(),
                 session=self.session,
                 stable_click_delay_ms=0,
                 post_action_observe_delay_ms=0,
@@ -536,6 +537,93 @@ class PopupRecoveryTests(unittest.TestCase):
 
         self.assertEqual(result.observation, home)
         self.assertFalse(result.update_recovered)
+        self.assertEqual(len(self.session.taps), 1)
+
+    def test_read_only_explicit_vip_close_is_allowed_once(self) -> None:
+        """Allows the reviewed VIP close control while suppressing implicit recovery."""
+
+        self.executor.configure_read_only_probe_mode(
+            allowed_selectors=frozenset({UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON}),
+            allowed_selector_screens=(
+                (
+                    UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON,
+                    frozenset({ScreenType.PNC_VIP_DAILY_RESET}),
+                ),
+            ),
+        )
+        vip = make_observation(
+            ScreenType.PNC_VIP_DAILY_RESET,
+            visible_ids=(UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON,),
+        )
+        home = make_observation(ScreenType.PNC_HOME_CITY)
+        observer = FakeObservationService([home])
+
+        result = self.executor.execute_actions(
+            [TapAction(selector_id=UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON)],
+            vip,
+            observe=observer.observe,
+        )
+
+        self.assertEqual(result.observation, home)
+        self.assertEqual(len(self.session.taps), 1)
+
+    def test_read_only_background_tap_on_vip_is_rejected_without_input(self) -> None:
+        """Implicit recovery suppression must not widen the explicit selector allowlist."""
+
+        self.executor.configure_read_only_probe_mode(
+            allowed_selectors=frozenset({UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON}),
+            allowed_selector_screens=(
+                (
+                    UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON,
+                    frozenset({ScreenType.PNC_VIP_DAILY_RESET}),
+                ),
+            ),
+        )
+        vip = make_observation(
+            ScreenType.PNC_VIP_DAILY_RESET,
+            visible_ids=(
+                UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON,
+                UiElementId.PNC_HOME_BUILD_BUTTON,
+            ),
+        )
+
+        with self.assertRaisesRegex(SelectorResolutionError, "outside its explicit safety policy"):
+            self.executor.execute_actions(
+                [TapAction(selector_id=UiElementId.PNC_HOME_BUILD_BUTTON)],
+                vip,
+                observe=lambda *_args, **_kwargs: self.fail("background action must not observe"),
+            )
+        self.assertEqual(self.session.taps, [])
+
+    def test_read_only_post_action_vip_popup_is_returned_without_auto_dismissal(self) -> None:
+        """Returns a post-action transient popup for its next explicit close step."""
+
+        self.executor.configure_read_only_probe_mode(
+            allowed_selectors=frozenset({UiElementId.PNC_HOME_BUILD_BUTTON}),
+            allowed_selector_screens=(
+                (
+                    UiElementId.PNC_HOME_BUILD_BUTTON,
+                    frozenset({ScreenType.PNC_HOME_CITY}),
+                ),
+            ),
+        )
+        initial = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            visible_ids=(UiElementId.PNC_HOME_BUILD_BUTTON,),
+        )
+        vip = make_observation(
+            ScreenType.PNC_VIP_DAILY_RESET,
+            visible_ids=(UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON,),
+        )
+        observer = FakeObservationService([vip])
+
+        result = self.executor.execute_actions(
+            [TapAction(selector_id=UiElementId.PNC_HOME_BUILD_BUTTON, observe_after=True)],
+            initial,
+            observe=observer.observe,
+        )
+
+        self.assertEqual(result.observation, vip)
         self.assertEqual(len(self.session.taps), 1)
 
     def test_preflight_popup_recovery_does_not_consume_navigation_budget(self) -> None:

@@ -51,11 +51,14 @@ class CoordinateDialogObservationTests(unittest.TestCase):
                 selector_registry=registry,
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                    selector_registry=registry,
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("K:", x=76, y=398, width=26, height=26),
                             _ocr_line("226", x=132, y=400, width=38, height=24),
@@ -65,10 +68,7 @@ class CoordinateDialogObservationTests(unittest.TestCase):
                             _ocr_line("436", x=384, y=400, width=42, height=24),
                             _ocr_line("Go", x=253, y=532, width=36, height=26),
                         )
-                    ),
-                    selector_registry=registry,
-                ),
-            )
+                    ))
 
             observation = builder.build(
                 screenshot,
@@ -112,11 +112,14 @@ class CoordinateDialogObservationTests(unittest.TestCase):
                 selector_registry=registry,
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                    selector_registry=registry,
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("K:", x=76, y=398, width=26, height=26),
                             _ocr_line("230", x=132, y=400, width=41, height=24),
@@ -124,10 +127,7 @@ class CoordinateDialogObservationTests(unittest.TestCase):
                             _ocr_line("Y:", x=332, y=399, width=27, height=25),
                             _ocr_line("Go", x=253, y=532, width=36, height=26),
                         )
-                    ),
-                    selector_registry=registry,
-                ),
-            )
+                    ))
 
             observation = builder.build(
                 screenshot,
@@ -168,21 +168,21 @@ class CoordinateDialogObservationTests(unittest.TestCase):
                 selector_registry=registry,
                 selector_engine=ImageSelectorEngine(
                     template_matcher=OpenCvTemplateMatcher(),
-                    ocr_service=UnavailableOcrService(),
+
                 ),
                 screen_classifier=ScreenClassifier(),
                 enricher=PncObservationEnricher(
-                    ocr_service=_FakeOcrService(
+
+                    selector_registry=registry,
+                ),
+            ocr_service=_FakeOcrService(
                         lines=(
                             _ocr_line("K:", x=76, y=398, width=26, height=26),
                             _ocr_line("226", x=132, y=400, width=41, height=24),
                             _ocr_line("X:", x=202, y=397, width=30, height=29),
                             _ocr_line("Go", x=253, y=532, width=36, height=26),
                         )
-                    ),
-                    selector_registry=registry,
-                ),
-            )
+                    ))
 
             observation = builder.build(
                 screenshot,

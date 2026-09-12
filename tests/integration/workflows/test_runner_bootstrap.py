@@ -202,4 +202,4 @@ class RunnerBootstrapTests(AutomationFrameworkFixtures, unittest.TestCase):
 
         self.assertEqual(result.steps[0].status.value, "success")
         self.assertEqual(fake_session.launches, 1)
-        self.assertEqual(fake_session.key_events, ["KEYCODE_BACK", "KEYCODE_BACK", "KEYCODE_BACK"])
+        self.assertEqual(fake_session.key_events, [])

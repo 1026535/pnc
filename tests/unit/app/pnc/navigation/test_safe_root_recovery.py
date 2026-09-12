@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pnc_automation.core.errors import SelectorResolutionError
+
 import unittest
 
 from pnc_automation.app.pnc.domain.action_requests import KeyEventAction, TapAction
@@ -16,15 +18,10 @@ class SafeRootRecoveryTests(FlowAndTaskFixtures, unittest.TestCase):
     """Proves safe root recovery."""
 
     def test_return_to_safe_root_screen_unwinds_build_speedup_confirmation(self) -> None:
-        """Dismisses an unconfirmed speedup popup with Android Back without consuming inventory."""
+        """Refuses an unconfirmed speedup popup without a typed, proved close control."""
 
-        actions = self.flows.return_to_safe_root_screen(
-            make_observation(ScreenType.PNC_BUILD_SPEEDUP_CONFIRM)
-        )
-
-        self.assertEqual(len(actions), 1)
-        self.assertIsInstance(actions[0], KeyEventAction)
-        self.assertEqual(actions[0].key_code, "KEYCODE_BACK")
+        with self.assertRaisesRegex(SelectorResolutionError, "Task-owned popup controls cannot be consumed by generic recovery"):
+            self.flows.return_to_safe_root_screen(make_observation(ScreenType.PNC_BUILD_SPEEDUP_CONFIRM))
 
     def test_return_to_safe_root_screen_closes_more_overlay_without_triggering_exit_popup(self) -> None:
         """Closes the live More overlay with its own toggle instead of using Android back."""

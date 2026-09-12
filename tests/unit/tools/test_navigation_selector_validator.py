@@ -90,7 +90,7 @@ class NavigationSelectorValidatorTests(unittest.TestCase):
                 SelectorDefinition(
                     id=UiElementId.PNC_BOTTOM_NAV_MORE,
                     screens=(ScreenType.PNC_HOME_CITY, ScreenType.PNC_MORE_MENU),
-                    detection_kind=DetectionKind.PLANNED,
+                    detection_kind=DetectionKind.SEMANTIC,
                     status=SelectorStatus.CLICK_MAPPED,
                     interaction_kind=SelectorInteractionKind.NAVIGATION,
                     click=ClickDefinition(),
@@ -99,7 +99,7 @@ class NavigationSelectorValidatorTests(unittest.TestCase):
                 SelectorDefinition(
                     id=UiElementId.PNC_LOGIN_SUBMIT_BUTTON,
                     screens=(ScreenType.PNC_LOGIN,),
-                    detection_kind=DetectionKind.PLANNED,
+                    detection_kind=DetectionKind.SEMANTIC,
                     status=SelectorStatus.PLANNED,
                     interaction_kind=SelectorInteractionKind.ACTION,
                     click=None,
@@ -115,6 +115,13 @@ class NavigationSelectorValidatorTests(unittest.TestCase):
                 (UiElementId.PNC_BOTTOM_NAV_MORE, ScreenType.PNC_HOME_CITY),
                 (UiElementId.PNC_BOTTOM_NAV_MORE, ScreenType.PNC_MORE_MENU),
             ],
+        )
+        self.assertEqual(
+            [(case.selector_id, case.source_screen) for case in build_navigation_validation_cases(
+                registry,
+                source_screen=ScreenType.PNC_MORE_MENU,
+            )],
+            [(UiElementId.PNC_BOTTOM_NAV_MORE, ScreenType.PNC_MORE_MENU)],
         )
 
     def test_match_reviewed_navigation_outcome_reports_missing_verification_selectors(self) -> None:
@@ -159,7 +166,7 @@ class NavigationSelectorValidatorTests(unittest.TestCase):
                 SelectorDefinition(
                     id=UiElementId.PNC_MORE_MANAGE_CHAR,
                     screens=(ScreenType.PNC_SETTINGS,),
-                    detection_kind=DetectionKind.PLANNED,
+                    detection_kind=DetectionKind.SEMANTIC,
                     status=SelectorStatus.CLICK_MAPPED,
                     interaction_kind=SelectorInteractionKind.NAVIGATION,
                     click=ClickDefinition(),
@@ -239,7 +246,7 @@ class NavigationSelectorValidatorTests(unittest.TestCase):
                 SelectorDefinition(
                     id=UiElementId.PNC_HOME_WORLD_SWITCH,
                     screens=(ScreenType.PNC_HOME_CITY,),
-                    detection_kind=DetectionKind.PLANNED,
+                    detection_kind=DetectionKind.SEMANTIC,
                     status=SelectorStatus.CLICK_MAPPED,
                     interaction_kind=SelectorInteractionKind.NAVIGATION,
                     click=ClickDefinition(),
@@ -308,7 +315,7 @@ class NavigationSelectorValidatorTests(unittest.TestCase):
                 SelectorDefinition(
                     id=UiElementId.PNC_HOME_WORLD_SWITCH,
                     screens=(ScreenType.PNC_HOME_CITY,),
-                    detection_kind=DetectionKind.PLANNED,
+                    detection_kind=DetectionKind.SEMANTIC,
                     status=SelectorStatus.CLICK_MAPPED,
                     interaction_kind=SelectorInteractionKind.NAVIGATION,
                     click=ClickDefinition(),
@@ -381,7 +388,7 @@ class NavigationSelectorValidatorTests(unittest.TestCase):
                 SelectorDefinition(
                     id=UiElementId.PNC_HOME_WORLD_SWITCH,
                     screens=(ScreenType.PNC_HOME_CITY,),
-                    detection_kind=DetectionKind.PLANNED,
+                    detection_kind=DetectionKind.SEMANTIC,
                     status=SelectorStatus.CLICK_MAPPED,
                     interaction_kind=SelectorInteractionKind.NAVIGATION,
                     click=ClickDefinition(),
@@ -459,7 +466,7 @@ class NavigationSelectorValidatorTests(unittest.TestCase):
                 SelectorDefinition(
                     id=UiElementId.PNC_BOTTOM_NAV_MORE,
                     screens=(ScreenType.PNC_HOME_CITY,),
-                    detection_kind=DetectionKind.PLANNED,
+                    detection_kind=DetectionKind.SEMANTIC,
                     status=SelectorStatus.CLICK_MAPPED,
                     interaction_kind=SelectorInteractionKind.NAVIGATION,
                     click=ClickDefinition(),
@@ -589,10 +596,12 @@ def _make_validator_action_executor(session: FakeSession, registry: SelectorRegi
         for selector in build_default_selector_registry().all()
     }
     merged_selectors.update({selector.id: selector for selector in registry.all()})
+    resolved_registry = SelectorRegistry(selectors=tuple(merged_selectors.values()))
     return ObservedActionExecutor(
-        selector_registry=SelectorRegistry(selectors=tuple(merged_selectors.values())),
+        selector_registry=resolved_registry,
         action_executor=ActionExecutor(
             session=session,
+            selector_registry=resolved_registry,
             stable_click_delay_ms=0,
             post_action_observe_delay_ms=0,
             chat_stable_click_delay_ms=0,
