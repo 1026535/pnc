@@ -21,6 +21,11 @@ from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.automation.open_building import OpenBuildingResult
 from pnc_automation.app.pnc.domain.building_priority_input import resolve_building_priority_values
 from pnc_automation.bluestacks_management.instance_lease import InstanceLeaseBundle
+from pnc_automation.core.infra.emulator.session import (
+    BlueStacksSessionCleanupMode,
+    BlueStacksSessionCleanupPolicy,
+)
+from pnc_automation.core.lifecycle import close_preserving_error
 
 _ACTIVE_SESSION: ContextVar["_ActiveSession | None"] = ContextVar("pnc_automation_active_session", default=None)
 _ACTIVE_RESERVATION: ContextVar["_ActiveReservation | None"] = ContextVar(
@@ -45,6 +50,7 @@ class _ActiveReservation:
 
     api: "AutomationApi"
     account_ids: frozenset[str]
+    session_cleanup_policy: BlueStacksSessionCleanupPolicy
 
 
 @dataclass(slots=True)
@@ -53,6 +59,9 @@ class AutomationReservation:
 
     api: "AutomationApi"
     account_ids: tuple[str, ...]
+    session_cleanup_policy: BlueStacksSessionCleanupPolicy = field(
+        default_factory=BlueStacksSessionCleanupPolicy.keep_warm,
+    )
     _reservation: InstanceLeaseBundle | None = field(default=None, init=False, repr=False)
     _token: Token[_ActiveReservation | None] | None = field(default=None, init=False, repr=False)
 
@@ -77,10 +86,18 @@ class AutomationReservation:
         reservation = self.api.application.reserve_accounts(self.account_ids)
         try:
             token = _ACTIVE_RESERVATION.set(
-                _ActiveReservation(api=self.api, account_ids=frozenset(self.account_ids))
+                _ActiveReservation(
+                    api=self.api,
+                    account_ids=frozenset(self.account_ids),
+                    session_cleanup_policy=self.session_cleanup_policy,
+                )
             )
-        except BaseException:
-            reservation.close()
+        except BaseException as error:
+            close_preserving_error(
+                reservation.close,
+                error,
+                message="Workflow reservation setup and cleanup both failed.",
+            )
             raise
         self._reservation = reservation
         self._token = token
@@ -101,7 +118,12 @@ class AutomationReservation:
     def __exit__(self, _exception_type: object, _exception: object, _traceback: object) -> None:
         """Releases the complete workflow reservation on normal or exceptional exit."""
 
-        self.close()
+        active_error = _exception if isinstance(_exception, BaseException) else None
+        close_preserving_error(
+            self.close,
+            active_error,
+            message="Reserved workflow and BlueStacks phase cleanup both failed.",
+        )
 
 
 @dataclass(slots=True)
@@ -111,6 +133,9 @@ class AutomationSession:
     api: "AutomationApi"
     account_id: str
     castle: CastleIdentity | None = None
+    session_cleanup_policy: BlueStacksSessionCleanupPolicy = field(
+        default_factory=BlueStacksSessionCleanupPolicy.keep_warm,
+    )
     preparation_result: RunResult | None = None
     _reservation: AutomationReservation | None = field(default=None, init=False, repr=False)
     _token: Token[_ActiveSession | None] | None = field(default=None, init=False, repr=False)
@@ -118,7 +143,10 @@ class AutomationSession:
     def __enter__(self) -> "AutomationSession":
         """Prepares the account session and exposes it as the active direct-call scope."""
 
-        reservation = self.api.reserve_accounts((self.account_id,))
+        reservation = self.api.reserve_accounts(
+            (self.account_id,),
+            session_cleanup_policy=self.session_cleanup_policy,
+        )
         try:
             reservation.__enter__()
             self.preparation_result = require_successful_preparation(
@@ -130,14 +158,18 @@ class AutomationSession:
             self._reservation = reservation
             self._token = _ACTIVE_SESSION.set(_ActiveSession(api=self.api, account_id=self.account_id))
             return self
-        except BaseException:
-            reservation.close()
+        except BaseException as error:
+            close_preserving_error(
+                reservation.close,
+                error,
+                message="Account preparation and BlueStacks phase cleanup both failed.",
+            )
             raise
 
     def __exit__(self, exc_type: object, exc: object, traceback: object) -> None:
         """Leaves the active scope without logging out or restoring a previous castle."""
 
-        del exc_type, exc, traceback
+        del exc_type, traceback
         try:
             if self._token is not None:
                 _ACTIVE_SESSION.reset(self._token)
@@ -146,7 +178,12 @@ class AutomationSession:
             reservation = self._reservation
             self._reservation = None
             if reservation is not None:
-                reservation.close()
+                active_error = exc if isinstance(exc, BaseException) else None
+                close_preserving_error(
+                    reservation.close,
+                    active_error,
+                    message="Account workflow and BlueStacks phase cleanup both failed.",
+                )
 
     def building_upgrade(
         self,
@@ -306,22 +343,44 @@ class AutomationApi:
         """Runs the shared session-preparation path for one account and optional castle target."""
 
         self._require_account_in_active_reservation(account_id)
-        return self.application.prepare_account_session(account_id=account_id, castle=castle)
+        cleanup_policy = self._cleanup_policy_for(account_id)
+        if cleanup_policy is None:
+            return self.application.prepare_account_session(account_id=account_id, castle=castle)
+        return self.application.prepare_account_session(
+            account_id=account_id,
+            castle=castle,
+            session_cleanup_policy=cleanup_policy,
+        )
 
-    def reserve_accounts(self, account_ids: tuple[str, ...]) -> AutomationReservation:
+    def reserve_accounts(
+        self,
+        account_ids: tuple[str, ...],
+        *,
+        session_cleanup_policy: BlueStacksSessionCleanupPolicy | None = None,
+    ) -> AutomationReservation:
         """Returns a scope that holds every physical instance used by a workflow."""
 
-        return AutomationReservation(api=self, account_ids=tuple(account_ids))
+        return AutomationReservation(
+            api=self,
+            account_ids=tuple(account_ids),
+            session_cleanup_policy=session_cleanup_policy or BlueStacksSessionCleanupPolicy.keep_warm(),
+        )
 
     def use_account(
         self,
         account_id: str,
         *,
         castle: CastleIdentity | None = None,
+        session_cleanup_policy: BlueStacksSessionCleanupPolicy | None = None,
     ) -> AutomationSession:
         """Returns a context manager that prepares one account session on entry."""
 
-        return AutomationSession(api=self, account_id=account_id, castle=castle)
+        return AutomationSession(
+            api=self,
+            account_id=account_id,
+            castle=castle,
+            session_cleanup_policy=session_cleanup_policy or BlueStacksSessionCleanupPolicy.keep_warm(),
+        )
 
     def run_task(
         self,
@@ -332,10 +391,19 @@ class AutomationApi:
     ) -> StepRunResult:
         """Runs one direct task call against the selected account using current-castle semantics."""
 
+        resolved_account_id = self._resolve_account_id(account_id)
+        cleanup_policy = self._cleanup_policy_for(resolved_account_id)
+        if cleanup_policy is None:
+            return self.application.run_task(
+                account_id=resolved_account_id,
+                task_id=task_id,
+                params=params,
+            )
         return self.application.run_task(
-            account_id=self._resolve_account_id(account_id),
+            account_id=resolved_account_id,
             task_id=task_id,
             params=params,
+            session_cleanup_policy=cleanup_policy,
         )
 
     def building_upgrade(
@@ -575,11 +643,35 @@ class AutomationApi:
     ) -> RunResult:
         """Runs the authored scheduled-mail expansion path for the selected account."""
 
+        resolved_account_id = self._resolve_account_id(account_id)
+        cleanup_policy = self._cleanup_policy_for(resolved_account_id)
+        if cleanup_policy is None:
+            return self.application.run_mail_schedules(
+                account_id=resolved_account_id,
+                schedule_ids=None if schedule_ids is None else list(schedule_ids),
+                scheduled_for_utc=scheduled_for_utc,
+            )
         return self.application.run_mail_schedules(
-            account_id=self._resolve_account_id(account_id),
+            account_id=resolved_account_id,
             schedule_ids=None if schedule_ids is None else list(schedule_ids),
             scheduled_for_utc=scheduled_for_utc,
+            session_cleanup_policy=cleanup_policy,
         )
+
+    def _cleanup_policy_for(self, account_id: str) -> BlueStacksSessionCleanupPolicy | None:
+        """Returns the active outer phase policy for one declared account."""
+
+        active_reservation = _ACTIVE_RESERVATION.get()
+        if (
+            active_reservation is None
+            or active_reservation.api is not self
+            or account_id not in active_reservation.account_ids
+        ):
+            return None
+        policy = active_reservation.session_cleanup_policy
+        if policy.mode is BlueStacksSessionCleanupMode.KEEP_WARM:
+            return None
+        return policy
 
     def _resolve_account_id(self, account_id: str | None) -> str:
         """Returns an explicit account id or the currently active context-scoped account."""
@@ -659,16 +751,32 @@ def build_api(
     )
 
 
-def use_account(account_id: str, *, castle: CastleIdentity | None = None) -> AutomationSession:
+def use_account(
+    account_id: str,
+    *,
+    castle: CastleIdentity | None = None,
+    session_cleanup_policy: BlueStacksSessionCleanupPolicy | None = None,
+) -> AutomationSession:
     """Returns a context manager backed by the default application configuration."""
 
-    return _default_api().use_account(account_id, castle=castle)
+    return _default_api().use_account(
+        account_id,
+        castle=castle,
+        session_cleanup_policy=session_cleanup_policy,
+    )
 
 
-def reserve_accounts(account_ids: tuple[str, ...]) -> AutomationReservation:
+def reserve_accounts(
+    account_ids: tuple[str, ...],
+    *,
+    session_cleanup_policy: BlueStacksSessionCleanupPolicy | None = None,
+) -> AutomationReservation:
     """Returns a workflow reservation backed by the default application facade."""
 
-    return _default_api().reserve_accounts(account_ids)
+    return _default_api().reserve_accounts(
+        account_ids,
+        session_cleanup_policy=session_cleanup_policy,
+    )
 
 
 def building_upgrade(

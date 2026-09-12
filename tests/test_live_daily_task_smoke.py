@@ -14,6 +14,7 @@ from pnc_automation.app.authoring.config.mutation_acknowledgement import (
     parse_mutation_acknowledgement,
 )
 from pnc_automation.app.authoring.config.models import LiveAutomationRole
+from tests.live_smoke_support import live_session_cleanup_policy_from_environment
 
 
 def _live_daily_task_smoke_enabled() -> bool:
@@ -69,6 +70,7 @@ class LiveDailyTaskSmokeTests(unittest.TestCase):
             script_path=str(cls.script_path),
             castle_refs=[castle_ref],
             required_role=LiveAutomationRole.DAILY_CANARY,
+            session_cleanup_policy=live_session_cleanup_policy_from_environment(),
         )
 
     def test_live_daily_task_smoke_completes_without_failure(self) -> None:

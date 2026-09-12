@@ -8,6 +8,7 @@ import unittest
 
 from pnc_automation.app.entrypoints.api import AutomationApi
 from pnc_automation.app.automation.engine.task import TaskId
+from pnc_automation.core.infra.emulator.session import BlueStacksSessionCleanupPolicy
 
 from tests.support.entrypoints.castle_targeting.runtime_castle_targeting_fixtures import (
     RuntimeCastleTargetingFixtures,
@@ -35,6 +36,21 @@ class AutomationApiRunnerTests(RuntimeCastleTargetingFixtures, unittest.TestCase
 
             application.probe_after_scope()
             self.assertTrue(application.competitor_acquired_after_scope)
+
+    def test_python_use_account_propagates_one_cleanup_policy_across_the_phase(self) -> None:
+        """Applies the outer cleanup decision to preparation and every dependent action."""
+
+        fake_runner = _FakeApplicationRunner()
+        api = AutomationApi(application=fake_runner)
+        policy = BlueStacksSessionCleanupPolicy.close_at_phase_end(
+            close_preexisting_instance=True,
+        )
+
+        with api.use_account("account_a", session_cleanup_policy=policy) as session:
+            session.research(priority=["economy"])
+
+        self.assertEqual(fake_runner.prepare_cleanup_policies, [policy])
+        self.assertEqual(fake_runner.task_cleanup_policies, [policy])
 
     def test_python_use_account_holds_real_lease_between_dependent_actions(self) -> None:
         """Prevents another process-shaped registry from entering between two dependent actions."""

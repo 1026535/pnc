@@ -45,6 +45,51 @@ class InstanceLeaseRegistryTests(unittest.TestCase):
             finally:
                 registry.release_all()
 
+    def test_finalizer_waits_for_last_reference_and_runs_after_native_release(self) -> None:
+        """Lets follow-up work claim the target before phase-end finalization."""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            registry = InstanceLeaseRegistry(root=root)
+            first = registry.acquire(display_name="testing")
+            second = registry.acquire(display_name="testing")
+            finalizer_calls: list[str] = []
+
+            def finalize() -> None:
+                competitor = InstanceLeaseRegistry(root=root, wait_timeout_seconds=0)
+                try:
+                    acquired = competitor.acquire(display_name="testing")
+                    self.assertEqual(acquired.display_name, "testing")
+                finally:
+                    competitor.release_all()
+                finalizer_calls.append("testing")
+
+            first.release(finalizer=finalize)
+            self.assertEqual(finalizer_calls, [])
+            second.release()
+
+            self.assertEqual(finalizer_calls, ["testing"])
+
+    def test_finalizer_failure_still_releases_native_lock(self) -> None:
+        """Surfaces shutdown failure without deadlocking the next instance owner."""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            registry = InstanceLeaseRegistry(root=root)
+            lease = registry.acquire(display_name="testing")
+
+            def fail_cleanup() -> None:
+                raise RuntimeError("cleanup failed")
+
+            with self.assertRaisesRegex(RuntimeError, "cleanup failed"):
+                lease.release(finalizer=fail_cleanup)
+
+            competitor = InstanceLeaseRegistry(root=root, wait_timeout_seconds=0)
+            try:
+                self.assertEqual(competitor.acquire(display_name="testing").display_name, "testing")
+            finally:
+                competitor.release_all()
+
     def test_reacquisition_after_contention_writes_one_readable_owner_document(self) -> None:
         """Replaces owner metadata when a waiting process-shaped registry reacquires the lock."""
 
