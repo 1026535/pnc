@@ -1,5 +1,94 @@
 # Integrate visual recognition, guarded controls, and targeted OCR
 
+## Coordinated continuation: task B — 2026-09-12
+
+This is B's current implementation plan. Follow the single
+[A/B ownership, backlog and interface agreement](PNC_AB_COORDINATED_CONTINUATION.md).
+It supersedes earlier pause/first-Research-only/integration-only instructions and the
+historical progress statements below. Preserve the original design and qualification
+requirements unless explicitly reassigned here. Original phase names A/B/C are not
+the conversation owners; all recognition phases are task B's responsibility.
+
+### Completed work to retain
+
+Recognition foundation, frame/input provenance, immutable shared OCR context, canonical
+decisions and mandatory guards, catalog v3, measured fixed controls, strict numeric parsing,
+Quest/Bag row association and startup recognition are implemented. Later navigation,
+Institute/Development, Bag and Research evidence supersedes older readiness failures;
+do not repeat successful work solely because older sections still say blocked.
+
+Development node/control and active-detail recognition, strict Research postconditions,
+and the real production-builder Start publication correction are included in main
+`2eacb126cfbcb943c08d78104df2200ab9bae9e0` via component `6c48073b`.
+The combined candidate `8a7d1a9d259120544c5382d246f810602527839d` retains all 37
+profiles and passed the recorded combined offline checks. Keep the real-builder consumer
+regression, premium exclusions, overlay protection and current-frame provenance.
+The historical Construction I resource action is evidence, not permission to repeat it.
+
+### Reassigned scope and exclusions
+
+A owns all navigation graph/route implementation, endpoint behavior, workflow/caller
+porting and mutation authorization/execution/journaling. B no longer implements an
+independent Campaign workflow or Research/Gathering execution. B retains and maintains
+A's Campaign recognition assets, produces shared predicates/controls and validates both
+observation paths. SendMail/Login/building recognition dependencies belong to B; their
+workflow implementations belong to A. No duplicate parser, local popup bypass, alternate
+mutation mechanism, YOLO detector, arbitrary new language/aspect or new game task.
+
+### Remaining execution sequence
+
+1. Refresh B01's canonical coverage inventory once against current callers/registry and
+   saved evidence. Disposition every original phase A through F item as retained complete,
+   remaining producer/qualification, reassigned to A, or explicitly blocked. Reconcile
+   historical inventory counts instead of treating 83 fallback families as 83 mandatory
+   rewrites. Reference the generated inventory from this plan; do not copy the whole matrix.
+2. Agree concrete A-consumer/B-producer contracts using the shared procedure. Prioritize
+   B04 Gathering/March node, formation, confirmation, slot and post-dispatch facts through
+   both real observation paths, while A builds its mutation boundary. Use one Luna xhigh
+   worker for each bounded code/test slice, reusing the worker sequentially. Missing saved
+   geometry stays blocked; do independent work instead of inventing controls.
+3. Implement B08 login/mail/building or other active-family facts as A's dependency requests
+   and evidence warrant. Maintain B05 Campaign assets and provide missing content/control
+   facts while A owns routes. Complete B06's evidence-supported remaining categories;
+   Development Start itself is finished. Do not enable inaccessible or premium actions.
+4. Finish B03's genuinely missing OCR/region/caller migrations and B07's demonstrated
+   Quest/Bag gaps. Keep full-frame guard/fallback where qualification is insufficient.
+   Preserve recovery of valid fields, same-frame caching, row/control association and
+   coordinate-only semantics; abstaining on everything is not acceptance.
+5. Complete B09's missing independent annotations, held-out negatives, installed-package
+   assets, current coverage and latency qualification using the original gates below.
+   Coordinate benchmark timing with A so heavy tests do not invalidate measurements.
+   Prior successful metrics/proofs are reused unless relevant code or evidence changed.
+6. Publish reviewed component slices for A to integrate. Continue unblocked items without
+   waiting for mainline landing or a fresh approval at every milestone. A alone owns combined
+   integration/mainline coordination. If a shared file needs changes, agree its single
+   writer first; do not modify A's branch or simultaneously edit the same registry symbols.
+
+### Acceptance and completion
+
+Producer tests must use production registry/classifier/recognizer/builder composition,
+including corresponding NavigationPerception publication, blocked/missing/conflicting
+states and provenance. Keep the strict postcondition tests even when their consumer is
+migrated by A. Use focused/affected checks; broaden only for shared contracts, required
+fallback or combined acceptance. Do not run repeated broad suites for unchanged slices.
+
+Treat broader target/build/locale and member-only qualification as explicit evidence
+cells within the original supported scope. Missing captures or live availability are
+concrete blockers, not proof of support. This continuation authorizes offline work; it
+does not renew historical live budgets. Prepare exact bounded evidence requests while
+continuing independent code/qualification work. Luna never drives the game.
+
+Finish when all B01–B09 rows have an evidence-backed disposition and completed producer
+slices are published and accepted by A's combined validation. Do not mark unimplemented
+active producers complete merely because their selectors remain unsupported. Keep live
+acceptance separate from implementation. Record compact progress and interface references
+here; retain detailed historical evidence in the implementation report.
+
+---
+
+The dated sections below retain original requirements and historical evidence. Their
+old statuses, live permissions and overlapping workflow assignments are superseded above.
+
 Status (2026-09-12): work is paused at a durable checkpoint on `codex/non-yolo-recognition` in `artifacts/worktrees/non-yolo-integration-current`. Development Research Tree identity, node selection, the blue normal Research control, and active-detail reconciliation are implemented and live-confirmed on `testing`. One authorized Construction I research action spent exactly 16,400 food and 7,010 wood with zero premium currency; the active detail was closed and the instance was returned to Home before releasing its reservation. Remaining Gathering/March, Campaign, broader category, member-only, target, build, and locale gates are incomplete. Exact evidence and validation are recorded in the implementation report.
 
 ## Resumed gap: Development research-tree identity

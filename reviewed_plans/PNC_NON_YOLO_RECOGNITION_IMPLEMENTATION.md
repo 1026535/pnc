@@ -1,5 +1,11 @@
 # Non-YOLO recognition implementation
 
+Current continuation and ownership are in [B's revised plan](PNC_NON_YOLO_RECOGNITION_PLAN.md)
+and the [shared A/B backlog](PNC_AB_COORDINATED_CONTINUATION.md). The foundation and
+Research production-builder correction are now integrated in main `2eacb12`; later
+combined candidate `8a7d1a9` was published and validated. Preserve the dated evidence
+below; its historical pause/baseline statements do not override the resumed plan.
+
 Feature branch: `codex/non-yolo-recognition` in `artifacts/worktrees/non-yolo-integration-current`.
 Current landed baseline: `2bb3c9074d99a532018e071ed121d12e6d75cd8f` on `origin/main` (2026-09-12).
 Status: implemented recognition foundation validated; remaining F integrations

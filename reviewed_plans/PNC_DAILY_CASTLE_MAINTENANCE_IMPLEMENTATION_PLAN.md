@@ -1,5 +1,12 @@
 # PNC Daily Castle Maintenance Automation — Implementation and Live-Promotion Plan
 
+Current A/B continuation: [shared workload and ownership](PNC_AB_COORDINATED_CONTINUATION.md).
+The user has now requested sustained completion of their original combined scope, which
+supersedes this document's earlier A/B pause and publication-only statements. A owns
+migration of existing Daily execution and the canonical mutation bridge; broader Daily
+capability completion, release policy, target repair and scheduling remain this plan's
+separate workload. Automatic execution and live actions are not enabled by that handoff.
+
 ## Restart checkpoint and coordination — 2026-09-12
 
 This section is the current execution plan. It supersedes older implementation-status,
