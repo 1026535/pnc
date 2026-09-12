@@ -2119,6 +2119,172 @@
       "layout_id": "collect_mail_mailbox_list"
     },
     {
+      "id": "campaign_map",
+      "screen": "PNC_CAMPAIGN_MAP",
+      "anchors": [
+        {
+          "image": "screen_anchors/campaign_map_scene.png",
+          "search_region": [
+            180,
+            220,
+            170,
+            130
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/campaign_map_nodes.png",
+          "search_region": [
+            175,
+            445,
+            160,
+            115
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_CAMPAIGN_HOME_PORTAL",
+          "anchor": {
+            "image": "screen_anchors/campaign_home_portal.png",
+            "search_region": [
+              466,
+              775,
+              55,
+              45
+            ],
+            "threshold": 0.95
+          }
+        }
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/campaign_map.png",
+        "decoded_sha256": "05f3d0ff1fba60751a71e366a89946f8750e38fd48eabb6ce377548a74bf3059",
+        "capture_group": "2026-09-12/serious_stuff/campaign_navigation"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Evidence-backed Campaign map identity with bounded map-scene and node anchors plus the reviewed lower-right Home portal.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "layout_id": "campaign_map"
+    },
+    {
+      "id": "campaign_chapter_10",
+      "screen": "PNC_CAMPAIGN_CHAPTER",
+      "anchors": [
+        {
+          "image": "screen_anchors/campaign_chapter_title.png",
+          "search_region": [
+            205,
+            38,
+            325,
+            60
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/campaign_chapter_path.png",
+          "search_region": [
+            105,
+            500,
+            215,
+            175
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_CAMPAIGN_BACK_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/campaign_back_button.png",
+            "search_region": [
+              450,
+              760,
+              85,
+              70
+            ],
+            "threshold": 0.95
+          }
+        }
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/campaign_chapter_10.png",
+        "decoded_sha256": "b45dc5a7d432665647fe2f5c7541124db8ff09ac31fc3c21df25e63c53c93678",
+        "capture_group": "2026-09-12/serious_stuff/campaign_navigation"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Chapter 10 Campaign-node evidence only: title and path anchors are bound to the observed chapter layout; no all-chapters claim is made.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "layout_id": "campaign_chapter_10"
+    },
+    {
+      "id": "campaign_stage_10_3",
+      "screen": "PNC_CAMPAIGN_STAGE",
+      "anchors": [
+        {
+          "image": "screen_anchors/campaign_stage_title.png",
+          "search_region": [
+            120,
+            201,
+            300,
+            49
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/campaign_stage_enemy_lineup.png",
+          "search_region": [
+            190,
+            260,
+            260,
+            50
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_CAMPAIGN_CLOSE_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/campaign_close_button.png",
+            "search_region": [
+              466,
+              200,
+              46,
+              48
+            ],
+            "threshold": 0.95
+          },
+          "dismisses_surface": true
+        }
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/campaign_stage_10_3.png",
+        "decoded_sha256": "efab0c7ecb4c30187e057235bfe9efdfb831fc212aa61bc42548791177628157",
+        "capture_group": "2026-09-12/serious_stuff/campaign_navigation"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Evidence-backed Campaign stage detail identity with owned Close surface dismissal; Challenge remains intentionally unregistered.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "layout_id": "campaign_stage_10_3"
+    },
+    {
       "id": "collect_mail_thread",
       "screen": "PNC_MAIL_THREAD",
       "anchors": [

@@ -1001,6 +1001,9 @@ def reviewed_navigation_edges() -> tuple[NavigationEdge, ...]:
     edges = [
         NavigationEdge(screen.PNC_HOME_CITY, selector.PNC_HOME_WORLD_SWITCH, frozenset({screen.PNC_WORLD_MAP})),
         NavigationEdge(screen.PNC_WORLD_MAP, selector.PNC_WORLD_HOME_NAV, frozenset({screen.PNC_HOME_CITY})),
+        NavigationEdge(screen.PNC_CAMPAIGN_MAP, selector.PNC_CAMPAIGN_HOME_PORTAL, frozenset({screen.PNC_HOME_CITY})),
+        NavigationEdge(screen.PNC_CAMPAIGN_CHAPTER, selector.PNC_CAMPAIGN_BACK_BUTTON, frozenset({screen.PNC_CAMPAIGN_MAP})),
+        NavigationEdge(screen.PNC_CAMPAIGN_STAGE, selector.PNC_CAMPAIGN_CLOSE_BUTTON, frozenset({screen.PNC_CAMPAIGN_CHAPTER})),
         NavigationEdge(screen.PNC_HOME_CITY, selector.PNC_BOTTOM_NAV_QUEST, quest),
         NavigationEdge(screen.PNC_HOME_CITY, selector.PNC_BOTTOM_NAV_BAG, frozenset({screen.PNC_BAG})),
         NavigationEdge(screen.PNC_HOME_CITY, selector.PNC_BOTTOM_NAV_MAIL, frozenset({screen.PNC_MAIL_HUB})),

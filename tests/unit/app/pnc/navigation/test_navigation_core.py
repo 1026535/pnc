@@ -241,6 +241,77 @@ def mail_thread_entry(title: str = "Lux") -> DetectedListEntry:
 
 
 class NavigationCoreTests(unittest.TestCase):
+    def test_campaign_endpoint_opens_after_fresh_target_reacquisition(self):
+        target = home_building_object(HomeCityObjectId.CAMPAIGN)
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+        content_frames = iter((
+            home_building_frame((target,), captured_at=now),
+            home_building_frame((target,), captured_at=now + timedelta(seconds=1)),
+        ))
+        destination_frames = iter(
+            replace(observation(screen), captured_at=now + timedelta(seconds=index))
+            for index, screen in enumerate((
+                ScreenType.PNC_LOADING, ScreenType.PNC_CAMPAIGN_MAP, ScreenType.PNC_CAMPAIGN_MAP,
+            ), start=2)
+        )
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator, lambda _: next(destination_frames), reviewed_navigation_edges(),
+            sleep=lambda _: None,
+        )
+
+        opened = core.open_building(
+            HomeCityObjectId.CAMPAIGN, observe_content=lambda _: next(content_frames),
+        )
+
+        self.assertEqual(ScreenType.PNC_CAMPAIGN_MAP, opened.screen_type)
+        self.assertEqual(now + timedelta(seconds=4), opened.captured_at)
+        self.assertEqual(1, len(actuator.actions))
+        self.assertIsInstance(actuator.actions[0], TapSpatialObjectAction)
+        self.assertEqual(target.action_point, actuator.actions[0].target_point)
+        self.assertIsNone(next(content_frames, None))
+
+    def test_campaign_stage_routes_through_chapter_and_map_to_home(self):
+        controls = {
+            ScreenType.PNC_CAMPAIGN_STAGE: UiElementId.PNC_CAMPAIGN_CLOSE_BUTTON,
+            ScreenType.PNC_CAMPAIGN_CHAPTER: UiElementId.PNC_CAMPAIGN_BACK_BUTTON,
+            ScreenType.PNC_CAMPAIGN_MAP: UiElementId.PNC_CAMPAIGN_HOME_PORTAL,
+        }
+        screens = (
+            ScreenType.PNC_CAMPAIGN_STAGE, ScreenType.PNC_CAMPAIGN_STAGE,
+            ScreenType.PNC_CAMPAIGN_CHAPTER, ScreenType.PNC_CAMPAIGN_CHAPTER,
+            ScreenType.PNC_CAMPAIGN_CHAPTER,
+            ScreenType.PNC_CAMPAIGN_MAP, ScreenType.PNC_CAMPAIGN_MAP,
+            ScreenType.PNC_CAMPAIGN_MAP, ScreenType.PNC_LOADING,
+            ScreenType.PNC_HOME_CITY, ScreenType.PNC_HOME_CITY,
+        )
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+        frames = []
+        for index, screen in enumerate(screens):
+            selector = controls.get(screen)
+            visible = {} if selector is None else {
+                selector: VisibleElement(
+                    selector, Bounds(450, 200, 50, 50), 1.0,
+                    source_kind=VisibleElementSourceKind.TEMPLATE,
+                ),
+            }
+            frames.append(replace(
+                observation(screen), visible_elements=visible,
+                captured_at=now + timedelta(seconds=index),
+            ))
+        pending = iter(frames)
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator, lambda _: next(pending), reviewed_navigation_edges(), sleep=lambda _: None,
+        )
+
+        returned = core.navigate(ScreenType.PNC_HOME_CITY)
+
+        self.assertIs(frames[-1], returned)
+        self.assertEqual(ScreenType.PNC_HOME_CITY, returned.screen_type)
+        self.assertEqual(list(controls.values()), [action.selector_id for action in actuator.actions])
+        self.assertIsNone(next(pending, None))
+
     def make_core(self, frames):
         actuator = Actuator()
         now = datetime.now(UTC)
@@ -879,7 +950,7 @@ class NavigationCoreTests(unittest.TestCase):
         )
 
         with self.assertRaisesRegex(ValueError, "return route"):
-            core.open_building(HomeCityObjectId.CAMPAIGN, observe_content=observed)
+            core.open_building(HomeCityObjectId.BANK, observe_content=observed)
 
         observed.assert_not_called()
 
