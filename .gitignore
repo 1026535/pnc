@@ -8,12 +8,17 @@ __pycache__/
 .coverage.*
 coverage.json
 htmlcov/
-test_timings.csv
+
+# Generated local output (preserve locally; do not commit)
+/test_timings.csv
 .testmondata*
 .venv/
 venv/
 artifacts/
-selector_discovery_output/
+/selector_discovery_output/
+/navigation_selector_validation_output/
+/archives/
+/.local-data/
 home_city_blended_gui_removed.png
 home_city_landscape_atlas.png
 home_city_map_unlabeled.png

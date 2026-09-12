@@ -44,11 +44,24 @@
 - Authored automation YAML: `scripts/`
 - Script authoring guide: `scripts/README.md`
 - Config templates: `config/*.example.yaml`
-- Runtime evidence: `artifacts/`
+- Runtime evidence: `.local-data/artifacts/` (local and ignored)
 - Reviewed plans and implementation reviews: `reviewed_plans/`
 - Local workflow skills: `.agents/skills/`
 - Shared browser/session instructions: `instructions/`
 - Legacy prompt references: `prompts/`
+
+## Generated Local Data
+
+- Use the repository-root `.local-data/` directory for generated local data. It
+  is ignored by Git and is created on demand. Standard locations are
+  `.local-data/artifacts/` for runtime evidence, `.local-data/archives/` for
+  chat/mail archives, and `.local-data/reports/` for reports, timing CSVs,
+  selector discovery output, and similar run products.
+- `.test-impact/` remains the ignored test-selection scratch and CI evidence
+  directory. Do not commit either local-data tree.
+- Keep authored fixtures and runtime assets tracked: `tests/data/`,
+  `pnc_automation/**/data/`, example configuration, reviewed plans, and
+  selector catalogs are not generated local data.
 - Package metadata and Python requirement: `pyproject.toml`
 
 ## Config And Secrets
@@ -105,7 +118,7 @@ Before and during a live run:
 - The daily 01:55 America/Toronto maintenance boundary may restart every configured instance that is open at its initial snapshot, including an open `main`. It must acquire that complete open-instance bundle before stopping anything and must leave configured closed instances closed.
 - Default to read-only or non-spending proof. Any live validation that can spend in-game resources requires the exact action, target, and budget from the current request or a user-approved execution plan and must use `.agents/skills/write-code-live`. Do not request duplicate confirmation when those details are complete.
 - Start with the smallest smoke path that proves the risky boundary. Use observation-based waits and existing runner/navigation abstractions.
-- On failure, inspect screenshots, OCR JSON, logs, and observation artifacts under `artifacts/` before changing code. Preserve relevant artifact paths in the final response.
+- On failure, inspect screenshots, OCR JSON, logs, and observation artifacts under `.local-data/artifacts/` before changing code. Preserve relevant artifact paths in the final response.
 
 ## Local Skills
 
@@ -143,6 +156,23 @@ Use `.agents/skills/manage-source-control` for new feature branches, branch sync
 - Before integrating, inspect the merge base and commits and diffs unique to both the feature and target branches. Resolve overlaps according to the intent, tests, and canonical ownership of both changesets; never select one side wholesale merely to clear conflicts.
 - Prefer rebasing a local or private feature branch onto the latest target. Do not rewrite a published or shared branch without explicit authorization; merge the target into it when shared history must be preserved.
 - Review and validate the combined result, fetch the target again immediately before landing, and repeat synchronization if it moved. Never force-push the default or a protected branch.
+
+## Generated Output During Git Work
+
+- Before staging, classify every new or changed path as authored source/config,
+  a fixture/plan, or generated local output. Generated reports, CSVs, logs,
+  screenshots, archives, state, coverage, and selector-validation products
+  belong under `.local-data/`; test-selection evidence belongs under
+  `.test-impact/`.
+- Check `git status --short --ignored` and use `git check-ignore -v <path>`
+  when output appears in the worktree. Do not use a broad `*.csv` rule because
+  an authored CSV fixture may be a real repository input.
+- If an old generated path is tracked, preserve its bytes by moving it into
+  the matching `.local-data/` subdirectory, stage the old path's removal, and
+  update the producer's default. Do not commit a generated copy or delete it
+  merely to make status clean.
+- Do not move `tests/data/`, package data, example configuration, or reviewed
+  plans into `.local-data/`; their contents are authored contracts.
 
 ## Working Tree Safety
 

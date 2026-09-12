@@ -1,8 +1,8 @@
 artifacts:
-  root: artifacts
+  root: .local-data/artifacts
 
 archives:
-  root: archives
+  root: .local-data/archives
 
 runtime:
   observation_mode: debug
