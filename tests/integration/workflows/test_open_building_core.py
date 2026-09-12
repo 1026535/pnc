@@ -13,7 +13,11 @@ from pnc_automation.app.automation.open_building import (
     OpenBuildingWorkflow,
     build_open_building_workflow,
 )
-from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
+from pnc_automation.app.pnc.domain.building_catalog import (
+    HomeCityObjectId,
+    home_city_object_id_for_screen,
+    primary_screen_type_for_home_city_object,
+)
 from pnc_automation.app.pnc.domain.observation import Observation
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 
@@ -46,6 +50,20 @@ class OpenBuildingCoreTests(unittest.TestCase):
             result,
         )
         context.open_building.assert_called_once_with(HomeCityObjectId.INSTITUTE)
+
+    def test_campaign_uses_canonical_primary_screen_and_workflow_endpoint(self) -> None:
+        workflow = build_open_building_workflow({"building": HomeCityObjectId.CAMPAIGN.value})
+
+        self.assertEqual(
+            ScreenType.PNC_CAMPAIGN_MAP,
+            primary_screen_type_for_home_city_object(HomeCityObjectId.CAMPAIGN),
+        )
+        self.assertEqual(
+            HomeCityObjectId.CAMPAIGN,
+            home_city_object_id_for_screen(ScreenType.PNC_CAMPAIGN_MAP),
+        )
+        self.assertEqual(HomeCityObjectId.CAMPAIGN, workflow.policy.building)
+        self.assertEqual(ScreenType.PNC_CAMPAIGN_MAP, workflow.spec.exit_screen)
 
     def test_context_delegates_once_and_does_not_replay_failure(self) -> None:
         runtime = Mock()
