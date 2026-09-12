@@ -19,6 +19,7 @@ from pnc_automation.app.automation.refresh_castle_roster import (
     RefreshCastleRosterPolicy,
     RefreshCastleRosterWorkflow,
 )
+from pnc_automation.app.pnc.domain.castle_roster_scan import castle_roster_scan_identity_key
 from pnc_automation.app.entrypoints import api as api_module
 from pnc_automation.app.entrypoints.api import AutomationApi, AutomationSession
 from pnc_automation.app.entrypoints.app import ApplicationRunner
@@ -79,6 +80,92 @@ class RefreshCastleRosterWorkflowTests(unittest.TestCase):
             self.assertEqual((alpha, bravo, CastleIdentity("K3", "Charlie", 7), delta), refreshed.castles)
             self.assertEqual(CastleRosterOrdering.FULL_SCAN, refreshed.ordering)
             self.assertEqual((other,), store.get("other").castles)
+
+    def test_scan_normalizes_overlapping_names_and_active_identity(self) -> None:
+        """Matches OCR whitespace, punctuation, and case drift while preserving observed names."""
+
+        top_gimme = CastleIdentity("K1", "Gimme Cookies")
+        top_toast = CastleIdentity("K2", "not Toast")
+        top_hellound = CastleIdentity("K3", "Lv.6 hellound")
+        next_toast = CastleIdentity("K2", "notToast")
+        next_hellound = CastleIdentity("K3", "Lv.6 hellound")
+        bottom_hellound = CastleIdentity("K3", "Lv-6hellound")
+        bottom_new = CastleIdentity("K4", "New Castle")
+        active = CastleIdentity("K1", "gimmecookies")
+        with TemporaryDirectory() as temporary_directory:
+            store = CastleRosterStore(path=Path(temporary_directory) / "castles.yaml")
+            top = _window((top_gimme, top_toast, top_hellound), current=active)
+            advancing = _window((next_toast, next_hellound))
+            bottom = _window((bottom_hellound, bottom_new))
+            context = _FakeContext(top, down=(top, top), up=(advancing, bottom, bottom, bottom))
+
+            result = RefreshCastleRosterWorkflow("account", "account", active, store).execute(context)
+
+            self.assertEqual(
+                (top_gimme, next_toast, bottom_hellound, bottom_new),
+                result.castles,
+            )
+            self.assertEqual(
+                castle_roster_scan_identity_key(top_gimme),
+                castle_roster_scan_identity_key(active),
+            )
+
+    def test_cached_level_hint_matches_normalized_spelling(self) -> None:
+        """Uses a cached level hint when OCR changes only the castle-name spelling."""
+
+        cached = CastleIdentity("K1", "Gimme Cookies", 9)
+        observed = CastleIdentity("K1", "gimmecookies")
+        active = CastleIdentity("K1", "GIMME COOKIES")
+        with TemporaryDirectory() as temporary_directory:
+            store = CastleRosterStore(path=Path(temporary_directory) / "castles.yaml")
+            store.sync("account", (cached,))
+            top = _window((observed,), current=active)
+            context = _FakeContext(top, down=(top, top), up=(top, top, top))
+
+            result = RefreshCastleRosterWorkflow("account", "account", active, store).execute(context)
+
+            self.assertEqual((CastleIdentity("K1", "gimmecookies", 9),), result.castles)
+
+    def test_true_name_or_kingdom_difference_breaks_overlap(self) -> None:
+        """Keeps true identity changes fail-closed despite tolerant OCR name matching."""
+
+        active = CastleIdentity("K1", "Gimme Cookies")
+        cases = (
+            (CastleIdentity("K1", "Gimme Cookie"), "name"),
+            (CastleIdentity("K2", "gimmecookies"), "kingdom"),
+        )
+        for next_row, label in cases:
+            with self.subTest(label=label), TemporaryDirectory() as temporary_directory:
+                path = Path(temporary_directory) / "castles.yaml"
+                store = CastleRosterStore(path=path)
+                store.sync("account", (active,))
+                before_bytes = path.read_bytes()
+                top = _window((active,), current=active)
+                advancing = _window((next_row,))
+                context = _FakeContext(top, down=(top, top), up=(advancing,))
+
+                with self.assertRaises(TaskVerificationError):
+                    RefreshCastleRosterWorkflow("account", "account", active, store).execute(context)
+
+                self.assertEqual(before_bytes, path.read_bytes())
+
+    def test_same_window_normalized_duplicate_is_rejected(self) -> None:
+        """Rejects two rows collapsing to one kingdom/name scan identity."""
+
+        active = CastleIdentity("K1", "Gimme Cookies")
+        duplicate = CastleIdentity("K1", "gimmecookies")
+        with TemporaryDirectory() as temporary_directory:
+            path = Path(temporary_directory) / "castles.yaml"
+            store = CastleRosterStore(path=path)
+            store.sync("account", (active,))
+            before_bytes = path.read_bytes()
+            top = _window((active, duplicate), current=active)
+            context = _FakeContext(top, down=(top, top), up=(top, top))
+
+            with self.assertRaises(TaskVerificationError):
+                RefreshCastleRosterWorkflow("account", "account", active, store).execute(context)
+
+            self.assertEqual(before_bytes, path.read_bytes())
 
     def test_top_and_end_require_two_unchanged_windows(self) -> None:
         """Does not accept a one-frame stall at either scan boundary."""

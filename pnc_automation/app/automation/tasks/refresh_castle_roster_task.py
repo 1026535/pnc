@@ -9,12 +9,12 @@ from typing import Any
 
 from pnc_automation.app.automation.engine.task import BaseAutomationTask, CastleTargetPolicy, TaskId, TaskResult
 from pnc_automation.app.automation.engine.task_context import TaskContext
-from pnc_automation.app.pnc.domain.castles import castle_identity_key
 from pnc_automation.core.errors import TaskVerificationError
 from pnc_automation.app.pnc.domain.action_requests import ActionRequest, SwipeAction, WaitAction
 from pnc_automation.app.pnc.domain.observation import Observation
 from pnc_automation.app.pnc.domain.castle_roster_scan import (
     CastleRosterScanState,
+    castle_roster_scan_identity_key,
     castle_roster_window_castles,
     castle_roster_window_signature,
 )
@@ -234,7 +234,14 @@ def _require_scan_state(context: TaskContext) -> CastleRosterScanState:
     scan_state = context.runtime_state.get("refresh_scan_state")
     if scan_state is None:
         roster = context.castle_roster
-        level_hints = {} if roster is None else {castle_identity_key(castle): castle.castle_level for castle in roster.castles}
+        level_hints = (
+            {}
+            if roster is None
+            else {
+                castle_roster_scan_identity_key(castle): castle.castle_level
+                for castle in roster.castles
+            }
+        )
         scan_state = CastleRosterScanState(level_hints=level_hints)
         context.runtime_state["refresh_scan_state"] = scan_state
     if isinstance(scan_state, CastleRosterScanState):
