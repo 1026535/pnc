@@ -146,6 +146,6 @@ class SendAllianceChatMessageTask(_BaseSendChatMessageTask):
     castle_target_policy = CastleTargetPolicy.OPTIONAL
     channel = ChatChannel.ALLIANCE
     # The legacy Alliance implementation still relies on the unqualified blue
-    # Send control. Reject it before any runtime is constructed until its
+    # Send control. Reject it before task preflight or input until its
     # canonical typed port is reviewed.
     required_recognition_selectors = (UiElementId.PNC_CHAT_SEND_BUTTON,)
