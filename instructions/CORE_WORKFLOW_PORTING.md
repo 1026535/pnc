@@ -8,7 +8,8 @@ This guide describes the bounded path for moving one workflow onto the reviewed 
 | --- | --- | --- |
 | Screenshot capture and independent typed perception | `pnc_automation/app/automation/engine/core_runtime.py:CoreRuntime.observe` and `pnc_automation/app/pnc/vision/navigation_perception.py:NavigationPerception` | One fresh persisted screenshot is parsed. Content is optional and cannot create or replace screen controls. Capture metadata is recorded before parsing so a parser failure keeps its artifact evidence. |
 | Connected runtime composition | `build_core_runtime` | Builds exactly one `ConnectedAccountRuntime`, uses its existing screenshot service and observed action executor, and does not navigate while constructing the graph. |
-| Reviewed routing and completion | `pnc_automation/app/automation/engine/navigation_core.py:NavigationCore` and `reviewed_navigation_edges` | Current-frame visual evidence authorizes a single action. Completion requires fresh observed destination frames. Unknown screens, popups, stale frames, and unexpected destinations stop the route. |
+| Reviewed routing and completion | `pnc_automation/app/automation/engine/navigation_core.py:NavigationCore` and `reviewed_navigation_edges` | Current-frame visual evidence authorizes a single action. Completion requires fresh observed destination frames. Unknown screens, unresolved popups, stale frames, and unexpected destinations stop the route. The connected `ObservedActionExecutor` may clear each newly observed safe popup through its explicit selector before routing continues. |
+| Known popup recovery | `CoreRuntime.observe` and `ObservedActionExecutor.recover_interruption_if_required` | Core observations pass through the canonical bounded recovery path. OCR-owned reconnect and Valiant Conquest modals, VIP reset, and generic X popups with an explicit safe selector may be dismissed once per visual fingerprint. Task-owned dialogs, unknown screens, missing selectors, and repeated fingerprints remain fail-closed; Android Back is never inferred. |
 | Workflow effect and lifecycle | `pnc_automation/app/automation/engine/core_workflow.py` | `WorkflowSpec` validates known entry/exit screens and a `WorkflowEffect`. `CoreWorkflowRunner` allows `READ_ONLY`, owns entry, execution, and exit, and reports success only after exit is confirmed. |
 | Workflow access | `WorkflowContext` | Exposes only reviewed `navigate` and fresh expected-screen `observe_content`. It has no raw executor, claim, swipe, selector-tap, or transition API. |
 | Typed Daily Quest conversion | `pnc_automation/app/automation/daily_maintenance/coordinator.py:daily_viewport_from_observation` | Converts the canonical typed observation. Do not reimplement row parsing or claim semantics in a replacement workflow. |
@@ -34,7 +35,7 @@ This guide describes the bounded path for moving one workflow onto the reviewed 
 
    A resource-changing spec is intentionally rejected by `CoreWorkflowRunner` before navigation or capture. A future mutation port must first define how the existing exact-budget authorizer, mutation executor, and journal are bridged into the constrained lifecycle.
 
-4. Implement the workflow body through `WorkflowContext`. Navigate to the content screen, call `observe_content(expected_screen=...)` once the destination is confirmed, and pass that observation to the canonical typed converter. The context requires a fresh capture newer than the last navigation observation and rejects a blocking popup. Do not expose the raw runtime or actuator to the workflow.
+4. Implement the workflow body through `WorkflowContext`. Navigate to the content screen, call `observe_content(expected_screen=...)` once the destination is confirmed, and pass that observation to the canonical typed converter. The context requires a fresh capture newer than the last navigation observation and rejects an unresolved blocking popup. Known safe popups are handled at the connected runtime observation boundary before the workflow sees them. Do not expose the raw runtime or actuator to the workflow.
 
    The current Daily status implementation is the minimal pattern:
 
@@ -78,15 +79,15 @@ This guide describes the bounded path for moving one workflow onto the reviewed 
    py -m pnc_automation.app.entrypoints.cli daily-quest-status --config <config-path> --account <account-id>
    ```
 
-   The proof may foreground the configured app and navigate through reviewed controls. The status workflow must not scroll, claim, switch castles, or spend resources. A route that sees an unknown screen, popup, stale capture, or competing source frame must stop and preserve its evidence.
+   The proof may foreground the configured app and navigate through reviewed controls. The status workflow must not scroll, claim, switch castles, or spend resources. A route that sees an unknown screen, unresolved popup, stale capture, or competing source frame must stop and preserve its evidence.
 
-8. Require final Home evidence. A successful result is emitted only after the runner confirms the declared exit screen. A failure at exit propagates without an automatic retry or `finally` navigation. Recovery is a separate explicit call to `CoreWorkflowRunner.recover_to_home`; it uses the reviewed graph and stops on unknown or popup states.
+8. Require final Home evidence. A successful result is emitted only after the runner confirms the declared exit screen. A failure at exit propagates without an automatic retry or `finally` navigation. Recovery is a separate explicit call to `CoreWorkflowRunner.recover_to_home`; it uses the reviewed graph, allows the connected safe-popup recovery boundary to clear known interruptions, and stops on unknown or unresolved popup states.
 
 9. Migrate production callers only after offline parity and the bounded proof are complete. Then remove the obsolete duplicate capture/perception/construction path for that caller. Keep unrelated legacy daily maintenance unchanged until each workflow has its own reviewed port and evidence.
 
 ## Current boundary
 
-`DailyQuestStatusWorkflow` reports one `visible_viewport` from the fresh Daily screen. It does not scroll, claim, acknowledge, select a castle, infer unseen rows, or claim full-screen coverage. It fails when both recognized rows and unknown titles are absent. Popup handling is fail-closed; the workflow has no generic popup dismissal or recovery policy. Navigation does not retry a tap, replay a failed workflow, or use the legacy observer as a fallback.
+`DailyQuestStatusWorkflow` reports one `visible_viewport` from the fresh Daily screen. It does not scroll, claim, acknowledge, select a castle, infer unseen rows, or claim full-screen coverage. It fails when both recognized rows and unknown titles are absent. Known safe popup recovery belongs to the connected runtime and shared observed-action executor; the workflow has no generic popup dismissal policy. Navigation does not retry a tap, replay a failed workflow, or use the legacy observer as a fallback. A task-owned dialog or popup without an explicit safe selector still stops the route.
 
 Active-castle preflight currently sees only the selected row that is visible in the Manage Characters viewport. A separate read-only roster setup may prepare that viewport, but the replacement workflow does not automate roster search or scrolling yet.
 
