@@ -118,6 +118,56 @@ class SelectCastleNavigationTests(unittest.TestCase):
         self.assertIsInstance(actuator.actions[0][0], TapListEntryAction)
         self.assertEqual(actuator.actions[0][0].metadata_value, "K230")
 
+    def test_row_tap_accepts_loading_then_stable_home_completion(self) -> None:
+        observer = _SequenceObserver(
+            [
+                self._window(self.target, at=1),
+                self._window(self.target, at=2),
+                self._frame((), screen=ScreenType.PNC_LOADING, at=3),
+                self._frame((), screen=ScreenType.PNC_HOME_CITY, at=4),
+                self._frame((), screen=ScreenType.PNC_HOME_CITY, at=5),
+            ]
+        )
+        actuator = _RecordingActuator()
+
+        result = self._navigation(actuator, observer).select_castle(
+            self.target,
+            observe_content=observer,
+        )
+
+        self.assertEqual(result.screen_type, ScreenType.PNC_HOME_CITY)
+        self.assertEqual(len(actuator.actions), 1)
+        self.assertIsInstance(actuator.actions[0][0], TapListEntryAction)
+
+    def test_mismatched_postflight_after_home_does_not_replay_castle_tap(self) -> None:
+        observer = _SequenceObserver(
+            [
+                self._window(self.target, at=1),
+                self._window(self.target, at=2),
+                self._frame((), screen=ScreenType.PNC_HOME_CITY, at=3),
+                self._frame((), screen=ScreenType.PNC_HOME_CITY, at=4),
+            ]
+        )
+        actuator = _RecordingActuator()
+        navigation = self._navigation(actuator, observer)
+        context = Mock()
+        context.navigate.return_value = self._frame((), screen=ScreenType.PNC_CASTLE_SELECTION, at=1)
+        context.select_castle.side_effect = lambda target: navigation.select_castle(
+            target,
+            observe_content=observer,
+        )
+        context.verify_active_castle_identity.side_effect = RuntimeError(
+            "postflight active castle did not match target"
+        )
+        workflow = SelectCastleWorkflow(original_castle=self.target, target_castle=self.target)
+
+        with self.assertRaisesRegex(RuntimeError, "postflight active castle"):
+            workflow.execute(context)
+
+        self.assertEqual(len(actuator.actions), 1)
+        self.assertIsInstance(actuator.actions[0][0], TapListEntryAction)
+        context.select_castle.assert_called_once_with(self.target)
+
     def test_offscreen_target_uses_bounded_fresh_scan_then_taps_once(self) -> None:
         other = CastleIdentity(kingdom="K229", castle_name="Other", castle_level=7)
         observer = _SequenceObserver(

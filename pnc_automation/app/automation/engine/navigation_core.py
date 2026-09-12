@@ -31,6 +31,7 @@ from pnc_automation.app.pnc.domain.observation import (
     Observation,
     SpatialSurfaceType,
     VisibleElementSourceKind,
+    castle_entry_matches,
     castle_entry_identity_matches,
 )
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
@@ -505,17 +506,13 @@ class NavigationCore:
                 if signature in seen_windows:
                     break
                 seen_windows.add(signature)
-                candidates = tuple(
-                    entry
-                    for entry in current.entries(ListEntryKind.CASTLE)
-                    if entry.title_text is not None and castle_entry_identity_matches(entry, target)
-                )
+                candidates = _matching_castle_entries(current, target)
                 if len(candidates) > 1:
                     raise RuntimeError(
                         "Requested castle row is ambiguous; no further gesture or building tap was sent."
                     )
                 if candidates:
-                    if not _castle_entry_level_matches(candidates[0], target):
+                    if not castle_entry_matches(candidates[0], target):
                         raise RuntimeError(
                             "Requested castle row has a mismatched level; no further gesture or building tap was sent."
                         )
@@ -565,17 +562,13 @@ class NavigationCore:
         if reacquired.captured_at <= source.captured_at:
             raise RuntimeError("Castle selection reacquired a stale roster frame; no castle selection tap was sent.")
         self._require_castle_selection_source(reacquired)
-        candidates = tuple(
-            entry
-            for entry in reacquired.entries(ListEntryKind.CASTLE)
-            if entry.title_text is not None and castle_entry_identity_matches(entry, target)
-        )
+        candidates = _matching_castle_entries(reacquired, target)
         if len(candidates) != 1:
             raise RuntimeError(
                 "Requested castle row changed or became ambiguous; no castle selection tap was sent."
             )
         entry = candidates[0]
-        if not _castle_entry_level_matches(entry, target):
+        if not castle_entry_matches(entry, target):
             raise RuntimeError(
                 "Requested castle row changed to a mismatched level; no castle selection tap was sent."
             )
@@ -621,12 +614,12 @@ class NavigationCore:
                 reason="replacement_select_castle",
             ),
             reacquired,
-            frozenset({ScreenType.PNC_CASTLE_SELECTION}),
+            frozenset({ScreenType.PNC_CASTLE_SELECTION, ScreenType.PNC_HOME_CITY}),
             label,
             observe_content,
-            completion_predicate=lambda observation: _selected_castle_observed(
-                observation,
-                target=target,
+            completion_predicate=lambda observation: (
+                observation.screen_type == ScreenType.PNC_HOME_CITY
+                or _selected_castle_observed(observation, target=target)
             ),
         )
 
@@ -778,19 +771,21 @@ def _selected_castle_observed(observation: Observation, *, target: CastleIdentit
 
     if observation.blocking_popup or observation.screen_type != ScreenType.PNC_CASTLE_SELECTION:
         return False
-    matches = tuple(
+    matches = _matching_castle_entries(observation, target)
+    return len(matches) == 1 and matches[0].selected and castle_entry_matches(matches[0], target)
+
+
+def _matching_castle_entries(
+    observation: Observation,
+    target: CastleIdentity,
+) -> tuple[DetectedListEntry, ...]:
+    """Returns all observed castle rows with the exact kingdom/name identity."""
+
+    return tuple(
         entry
         for entry in observation.entries(ListEntryKind.CASTLE)
         if entry.title_text is not None and castle_entry_identity_matches(entry, target)
     )
-    return len(matches) == 1 and matches[0].selected
-
-
-def _castle_entry_level_matches(entry: DetectedListEntry, target: CastleIdentity) -> bool:
-    """Returns whether one name/kingdom row is compatible with an optional target level."""
-
-    level = entry.metadata.get("castle_level")
-    return target.castle_level is None or level is None or level == target.castle_level
 
 
 def _resolve_observed_building_target(
