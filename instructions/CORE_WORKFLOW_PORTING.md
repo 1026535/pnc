@@ -6,7 +6,7 @@ These supersede historical pause/publication-only status, while this guide remai
 canonical porting contract. Resource-changing execution remains rejected until A's
 reviewed canonical mutation bridge is implemented; the plan is not a bypass.
 
-This guide describes the bounded path for moving one workflow onto the reviewed navigation core. It applies to the shared runtime in `pnc_automation/app/automation/engine/`, the typed PNC observations, and the application and CLI entrypoints. The core permits read-only and non-spending state-change workflows; resource-changing workflows are rejected before they observe the device.
+This guide describes the bounded path for moving one workflow onto the reviewed navigation core. It applies to the shared runtime in `pnc_automation/app/automation/engine/`, the typed PNC observations, and the application and CLI entrypoints. The core permits read-only and non-spending state-change workflows. Resource-changing workflows remain rejected before device observation except for the exact, claim-only boundary described below.
 
 ## Canonical owners
 
@@ -17,7 +17,7 @@ This guide describes the bounded path for moving one workflow onto the reviewed 
 | Reviewed routing and completion | `pnc_automation/app/automation/engine/navigation_core.py:NavigationCore` and `reviewed_navigation_edges` | Current-frame visual evidence authorizes a single action. Completion requires fresh observed destination frames. Unknown screens, unresolved popups, stale frames, and unexpected destinations stop the route. The connected `ObservedActionExecutor` may clear each newly observed safe popup through its explicit selector before routing continues. |
 | Known popup recovery | `CoreRuntime.observe` and `ObservedActionExecutor.recover_interruption_if_required` | Core observations pass through the canonical bounded recovery path. OCR-owned reconnect and Valiant Conquest modals, VIP reset, and generic X popups with an explicit safe selector may be dismissed once per visual fingerprint. Task-owned dialogs, unknown screens, missing selectors, and repeated fingerprints remain fail-closed; Android Back is never inferred. |
 | Workflow effect and lifecycle | `pnc_automation/app/automation/engine/core_workflow.py` | `WorkflowSpec` validates known entry/exit screens and a `WorkflowEffect`. `CoreWorkflowRunner` allows `READ_ONLY` and `NONSPENDING_STATE_CHANGE`, owns entry, execution, and exit, and reports success only after exit is confirmed. |
-| Workflow access | `WorkflowContext` | Exposes only reviewed `navigate` and fresh expected-screen `observe_content`. It has no raw executor, claim, swipe, selector-tap, or transition API. |
+| Workflow access | `WorkflowContext` | Exposes only reviewed `navigate` and fresh expected-screen `observe_content`. It has no raw executor, arbitrary swipe, selector-tap, or transition API. Typed Daily scrolling and exactly authorized `claim_daily_reward` use their canonical owners. |
 | Typed Daily Quest conversion | `pnc_automation/app/automation/daily_maintenance/coordinator.py:daily_viewport_from_observation` | Converts the canonical typed observation. Do not reimplement row parsing or claim semantics in a replacement workflow. |
 | Application and direct API wiring | `ApplicationRunner.run_daily_quest_status`, `ApplicationRunner.run_collect_mail`, `ApplicationRunner.run_collect_kingdom_chat`, and `pnc_automation.app.entrypoints.api` | Direct application and Python API calls validate before connection, perform explicit active-castle identity preflight, hold the configured account reservation for the complete operation, and return typed core results. The `daily-quest-status` CLI remains the structured JSON example; typed collect-mail and Kingdom Chat are direct Python ports. |
 | Mutation authorization | `daily_maintenance/authorization.py:DailyMutationAuthorizer`, `daily_maintenance/coordinator.py:ForbiddenDailyMutationExecutor`, `pnc_automation/app/pnc/persistence/daily_run_journal_store.py:DailyRunJournalStore` | These are the existing approval, executor, and journal owners for future resource-changing work. Do not add a second approval flag or a parallel journal. |
@@ -39,7 +39,7 @@ This guide describes the bounded path for moving one workflow onto the reviewed 
    )
    ```
 
-   A resource-changing spec is intentionally rejected by `CoreWorkflowRunner` before navigation or capture. A non-spending state change may use `WorkflowEffect.NONSPENDING_STATE_CHANGE`; resource-changing work must first define how the existing exact-budget authorizer, mutation executor, and journal are bridged into the constrained lifecycle.
+   A resource-changing spec is rejected before navigation or capture unless it declares `mutation_capability=DailyQuestId.CLAIM_COMPLETED` and the runner has an exact `CoreDailyClaimBoundary`. Other capabilities remain denied. A non-spending state change may use `WorkflowEffect.NONSPENDING_STATE_CHANGE`; resource-changing work must first define how the existing exact-budget authorizer, mutation executor, and journal are bridged into the constrained lifecycle.
 
 4. Implement the workflow body through `WorkflowContext`. Navigate to the content screen, call `observe_content(expected_screen=...)` once the destination is confirmed, and pass that observation to the canonical typed converter. The context requires a fresh capture newer than the last navigation observation and rejects an unresolved blocking popup. Known safe popups are handled at the connected runtime observation boundary before the workflow sees them. Do not expose the raw runtime or actuator to the workflow.
 
@@ -224,3 +224,23 @@ The canary identity helper also borrows the caller's connected runtime through `
 - [ ] CLI output is structured typed-result JSON with `visible_viewport` coverage where applicable.
 - [ ] Bounded proof is non-spending and ends with confirmed Home evidence.
 - [ ] Resource-changing ports use the existing exact-budget authorizer, executor, and journal before any implementation is accepted.
+
+## Existing Daily claims on the core
+
+`CoreDailyMaintenanceWorkflow` adapts the existing full-sweep coordinator to typed
+navigation, fresh content and bounded Daily scrolling. It retains claim-first ordering,
+reopening after a claim, unknown rows, ambiguous outcomes and final Home. It does not
+replace `DailyQuestStatusWorkflow` or turn that one-viewport report into a full survey.
+
+`CoreDailyClaimBoundary` reuses `DailyMutationAuthorizer`, `JournaledDailyClaimExecutor`,
+`JournaledMutationDispatcher`, `DailyRunJournalStore` and the connected observed-action
+executor. Exact account/castle/date/count authority is required before preflight. The
+canonical preflight must prove the authorized active castle without selecting a row.
+Before a claim, the supplied checkpoint must match the durable journal and contain no
+unresolved mutation. Fresh unblocked Daily observations govern reacquisition and
+reconciliation. An uncertain action retains its receipt and is never replayed.
+
+The connected claim-only runner uses this workflow. Action capabilities remain rejected;
+Resource Item and Hero Hall adapter migration is separate. Existing automatic-execution
+and promotion restrictions remain in force. Offline integration does not renew a live
+claim budget or prove a new live claim.

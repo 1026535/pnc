@@ -7,6 +7,11 @@ from enum import StrEnum
 from typing import Generic, Literal, Protocol, TypeVar
 
 from pnc_automation.app.automation.engine.core_runtime import CoreRuntime
+from pnc_automation.app.automation.engine.core_daily_mutation import CoreDailyClaimBoundary
+from pnc_automation.app.pnc.domain.daily_maintenance import (
+    DailyQuestId, DailyQuestRow, DailyTaskCheckpoint, DailyTargetOutcome,
+)
+from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.domain.chat import ChatChannel
@@ -36,6 +41,7 @@ class WorkflowSpec:
     entry_screen: ScreenType
     exit_screen: ScreenType
     effect: WorkflowEffect
+    mutation_capability: DailyQuestId | None = None
 
     def __post_init__(self) -> None:
         """Rejects malformed workflow identity, endpoints, or effect declarations."""
@@ -48,6 +54,11 @@ class WorkflowSpec:
             raise ValueError("WorkflowSpec.exit_screen must be a known screen.")
         if not isinstance(self.effect, WorkflowEffect):
             raise TypeError("WorkflowSpec.effect must be a WorkflowEffect enum value.")
+        if self.mutation_capability is not None:
+            if not isinstance(self.mutation_capability, DailyQuestId):
+                raise TypeError("WorkflowSpec.mutation_capability must be a DailyQuestId.")
+            if self.effect != WorkflowEffect.RESOURCE_CHANGING:
+                raise ValueError("A mutation capability requires the RESOURCE_CHANGING effect.")
 
 
 T = TypeVar("T")
@@ -78,7 +89,7 @@ class CoreWorkflowResult(Generic[T]):
 class WorkflowContext:
     """Exposes only reviewed navigation and fresh, expected-screen content capture."""
 
-    __slots__ = ("_runtime", "_last_navigation_count", "_last_observation", "_effect")
+    __slots__ = ("_runtime", "_last_navigation_count", "_last_observation", "_effect", "_daily_claims")
 
     def __init__(
         self,
@@ -86,6 +97,7 @@ class WorkflowContext:
         *,
         last_observation: Observation,
         effect: WorkflowEffect = WorkflowEffect.READ_ONLY,
+        daily_claims: CoreDailyClaimBoundary | None = None,
     ) -> None:
         """Starts a context after the runner has confirmed the workflow entry screen."""
 
@@ -95,6 +107,42 @@ class WorkflowContext:
         self._last_navigation_count = runtime.observation_count
         self._last_observation = last_observation
         self._effect = effect
+        self._daily_claims = daily_claims
+
+    def claim_daily_reward(
+        self, row: DailyQuestRow, checkpoint: DailyTaskCheckpoint,
+    ) -> tuple[DailyTaskCheckpoint, DailyTargetOutcome]:
+        """Claim one exact row through the authorized canonical journal boundary."""
+
+        if self._effect != WorkflowEffect.RESOURCE_CHANGING or self._daily_claims is None:
+            raise PermissionError("Daily claims require an authorized resource-changing workflow.")
+        return self._daily_claims.claim(
+            runtime=self._runtime, observe=self._observe_daily_claim,
+            row=row, checkpoint=checkpoint,
+        )
+
+    def _observe_daily_claim(self, label: str) -> Observation:
+        """Require fresh, positively unblocked Daily evidence on both sides of a claim."""
+
+        observation = self._observe_operation_content(label, operation="Daily claim")
+        if (
+            observation.screen_type != ScreenType.PNC_QUEST_DAILY
+            or observation.decision is None
+            or observation.decision.effective_screen != ScreenType.PNC_QUEST_DAILY
+            or observation.decision.guard != GuardVerdict.CLEAR
+        ):
+            raise RuntimeError("Daily claim requires a positively unblocked Daily screen.")
+        return observation
+
+    def scroll_daily_quest(self, *, adjusted: bool = False) -> Observation:
+        """Scroll a fresh Daily viewport without exposing a general swipe operation."""
+
+        try:
+            return self._runtime.navigation.scroll_daily_quest(
+                adjusted=adjusted, observe_content=self._observe_daily_claim,
+            )
+        finally:
+            self._sync_from_runtime()
 
     def navigate(self, target: ScreenType) -> Observation:
         """Navigates through the reviewed graph and records the fresh completion observation."""
@@ -296,14 +344,18 @@ class CoreWorkflowRunner(Generic[T]):
     """Owns entry, execution, and exit without replaying failed or ambiguous actions."""
 
     runtime: CoreRuntime
+    daily_claims: CoreDailyClaimBoundary | None = None
 
     def run(self, workflow: CoreWorkflow[T]) -> CoreWorkflowResult[T]:
-        """Runs one read-only or non-spending state-change workflow after confirmed exit."""
+        """Run a bounded workflow, requiring exact authority for supported mutations."""
 
         spec = workflow.spec
         if not isinstance(spec, WorkflowSpec):
             raise TypeError("Core workflows must expose a validated WorkflowSpec.")
-        if spec.effect == WorkflowEffect.RESOURCE_CHANGING:
+        mutating = spec.effect == WorkflowEffect.RESOURCE_CHANGING
+        if mutating and (
+            self.daily_claims is None or spec.mutation_capability != DailyQuestId.CLAIM_COMPLETED
+        ):
             self.runtime.record(
                 {
                     "event": "workflow_rejected",
@@ -312,12 +364,19 @@ class CoreWorkflowRunner(Generic[T]):
                 }
             )
             raise PermissionError(
-                "The replacement core runner permits read-only and non-spending state-change workflows only."
+                "The resource-changing workflow has no supported exact mutation boundary."
             )
+        if mutating:
+            self.daily_claims.authorize()
         self.runtime.record({"event": "workflow_started", "workflow": spec.name, "effect": spec.effect.value})
         try:
+            if mutating:
+                self.daily_claims.verify_active_castle(self.runtime)
             entry = self.runtime.navigation.navigate(spec.entry_screen)
-            context = WorkflowContext(self.runtime, last_observation=entry, effect=spec.effect)
+            context = WorkflowContext(
+                self.runtime, last_observation=entry, effect=spec.effect,
+                daily_claims=self.daily_claims if mutating else None,
+            )
             value = workflow.execute(context)
             exit_observation = self.runtime.navigation.navigate(spec.exit_screen)
             result = CoreWorkflowResult(

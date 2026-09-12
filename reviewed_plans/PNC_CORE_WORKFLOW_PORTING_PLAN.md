@@ -81,3 +81,42 @@ symbol/fixture needed and continue unblocked rows. No worktree cleanup or new ta
   reference them from B's plan; do not duplicate the shared ownership table.
 - Live: alternate-castle switch, Campaign automated route and remaining mutating/sending
   workflows need separate exact authorization and evidence.
+
+### September 12 continuation: first implementation slice
+
+- `codex/daily-mutation-core-bridge` starts at published `bad1898f`.
+  X01 initially admits only `CLAIM_COMPLETED` through `CoreDailyClaimBoundary`:
+  exact `DailyMutationAuthorizer` acknowledgement, canonical active-castle preflight,
+  matching durable checkpoint, existing `JournaledDailyClaimExecutor`,
+  `JournaledMutationDispatcher` and `DailyRunJournalStore`. The context exposes a typed
+  claim operation, never a raw action callback. Unsupported resource effects remain denied.
+- A17's existing claim-only connected runner now uses `CoreDailyMaintenanceWorkflow`
+  and the canonical coordinator through core navigation/observations. Normal/adjusted
+  Daily scrolling preserves the existing measured gestures and requires fresh completion.
+  Claims, ambiguous outcomes, full traversal and reorder policy retain their existing owners.
+  Resource-item and Hero Hall adapters remain separate pending migration; this slice
+  does not promote action capabilities or enable automatic execution.
+- A03 Login: Luna's bounded inventory found credential/submit/account-switch/reconnect
+  controls still planned, with no independent visual profiles or reliable saved frames.
+  B received the exact producer requirements. The existing Login binding is retained;
+  no partial implementation is labelled a completed port.
+- A15/B04: B owns the proved Gather-node and formation profiles/controls in both
+  observation paths. Existing resource-node metadata stays canonical. Exact march-slot
+  counts and a correlated post-dispatch receipt are not proved by saved evidence.
+  A must preserve ambiguity without replay; World-map return alone is insufficient.
+- A16/B05: the remaining consumer ends at battle preparation. B was asked for supported
+  stage identity/geometry, the stage-to-preparation control and preparation screen proof.
+  Existing A map/chapter/stage assets and measured return routes stay intact.
+- Device: A acquired the canonical `serious_stuff` account reservation for implementation.
+  Lease acquisition performed no game action. Workers remain offline; no prior live
+  budget has been replayed or treated as renewed authority.
+
+Reviewed X01 claim boundary and A17 claim-only adapter: 16 focused new tests passed;
+`tools/run_tests.py affected --base origin/main --explain` selected the mandatory
+full fallback (shared contracts/new modules): 1,901 passed, six skipped, no failures
+on September 12. Five skips are unavailable optional screenshots; one is Windows
+symlink privilege. `git diff --check` passed. No live claim was attempted.
+Other mutation capabilities and Resource Item/Hero Hall core adapters remain pending.
+
+The connected summary also rejects an otherwise finished sweep with unknown quest
+titles; the real composition regression preserves these as incomplete work.
