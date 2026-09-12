@@ -5,10 +5,11 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
-from pnc_automation.app.automation.engine.runner import AutomationRunner, StepExecutionPolicy
+from pnc_automation.app.automation.engine.runner import AutomationRunner
 from pnc_automation.app.authoring.scripts.models import RunScript, ScriptStep
-from pnc_automation.app.entrypoints.task_registry import build_default_task_registry
-from pnc_automation.app.automation.engine.task import TaskId
+from pnc_automation.app.authoring.scripts.registry import TaskRegistry
+from pnc_automation.app.automation.engine.task import BaseAutomationTask, TaskId, TaskResult, require_no_params
+from pnc_automation.app.pnc.domain.action_requests import WaitAction
 from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
@@ -32,7 +33,7 @@ class RunnerBootstrapTests(AutomationFrameworkFixtures, unittest.TestCase):
     def test_bootstrap_owns_popup_recovery_inside_the_canonical_task_loop(self) -> None:
         """Keeps visual-X recovery in the executor-owned preflight boundary."""
 
-        registry = build_default_task_registry()
+        registry = TaskRegistry(tasks=(_LegacyPopupProbeTask(),))
         script = registry.prepare_script(
             RunScript(
                 name="popup_guard",
@@ -47,6 +48,7 @@ class RunnerBootstrapTests(AutomationFrameworkFixtures, unittest.TestCase):
                     visible_ids=(UiElementId.PNC_POPUP_CLOSE_BUTTON,),
                     blocking_popup=True,
                 ),
+                make_observation(ScreenType.PNC_HOME_CITY),
                 make_observation(ScreenType.PNC_HOME_CITY),
             ]
         )
@@ -68,6 +70,7 @@ class RunnerBootstrapTests(AutomationFrameworkFixtures, unittest.TestCase):
             [
                 "ensure_game_running_before",
                 "ensure_game_running_ensure_game_running_preflight_update_popup_1",
+                "ensure_game_running_post_action_1",
             ],
         )
         self.assertEqual(fake_session.taps, [(5, 5)])
@@ -75,7 +78,7 @@ class RunnerBootstrapTests(AutomationFrameworkFixtures, unittest.TestCase):
     def test_bootstrap_never_taps_the_same_popup_fingerprint_twice(self) -> None:
         """Fails closed when one visual bootstrap popup remains after its single X tap."""
 
-        registry = build_default_task_registry()
+        registry = TaskRegistry(tasks=(_LegacyPopupProbeTask(),))
         script = registry.prepare_script(
             RunScript(
                 name="popup_fingerprint_guard",
@@ -104,102 +107,23 @@ class RunnerBootstrapTests(AutomationFrameworkFixtures, unittest.TestCase):
 
         self.assertEqual(fake_session.taps, [(5, 5)])
 
-    def test_ensure_game_running_waits_through_unknown_launch_splash_without_relaunching(self) -> None:
-        """Keeps one app launch in flight while the splash is still classified as unknown."""
+class _LegacyPopupProbeTask(BaseAutomationTask):
+    """Purpose-specific legacy fixture retaining generic popup recovery coverage."""
 
-        registry = build_default_task_registry()
-        script = registry.prepare_script(
-            RunScript(
-                name="ensure_game_running_splash",
-                path=Path("ensure_game_running_splash.yaml"),
-                steps=(ScriptStep(task=TaskId.ENSURE_GAME_RUNNING),),
-            )
-        )
-        fake_observer = FakeObservationService(
-            observations=[
-                make_observation(ScreenType.ANDROID_HOME, visible_ids=(UiElementId.ANDROID_HOME_PNC_ICON,)),
-                make_observation(ScreenType.UNKNOWN),
-                make_observation(ScreenType.UNKNOWN),
-                make_observation(
-                    ScreenType.PNC_LOGIN,
-                    visible_ids=(
-                        UiElementId.PNC_LOGIN_USERNAME_FIELD,
-                        UiElementId.PNC_LOGIN_PASSWORD_FIELD,
-                        UiElementId.PNC_LOGIN_SUBMIT_BUTTON,
-                    ),
-                ),
-            ]
-        )
-        fake_session = FakeSession()
-        runner = AutomationRunner(
-            defaults=self.defaults,
-            observation_service=fake_observer,
-            action_executor=_make_observed_action_executor(fake_session),
-            task_registry=registry,
-            flow_planner=ScreenFlowPlanner(),
-            logger=build_logger(),
-        )
+    id = TaskId.ENSURE_GAME_RUNNING
 
-        result = runner.run(self.account, script)
+    def parse_params(self, params):
+        require_no_params(self.id, params)
+        return None
 
-        self.assertEqual(result.steps[0].status.value, "success")
-        self.assertEqual(fake_session.launches, 1)
-        self.assertEqual(fake_session.key_events, [])
+    def is_applicable(self, context, observation):
+        del context, observation
+        return True
 
-    def test_ensure_game_running_allows_the_full_unknown_recovery_then_launch_wait_path(self) -> None:
-        """Allows the longest intended unknown-recovery plus launch-wait sequence without tripping the replan limit."""
+    def plan(self, context, observation):
+        del context, observation
+        return [WaitAction(milliseconds=0, reason="legacy_probe", observe_after=True)]
 
-        registry = build_default_task_registry()
-        script = registry.prepare_script(
-            RunScript(
-                name="ensure_game_running_long_recovery",
-                path=Path("ensure_game_running_long_recovery.yaml"),
-                steps=(ScriptStep(task=TaskId.ENSURE_GAME_RUNNING),),
-            )
-        )
-        fake_observer = FakeObservationService(
-            observations=[
-                make_observation(ScreenType.UNKNOWN),
-                make_observation(ScreenType.UNKNOWN),
-                make_observation(ScreenType.UNKNOWN),
-                make_observation(ScreenType.ANDROID_HOME, visible_ids=(UiElementId.ANDROID_HOME_PNC_ICON,)),
-                make_observation(ScreenType.ANDROID_HOME, visible_ids=(UiElementId.ANDROID_HOME_PNC_ICON,)),
-                make_observation(ScreenType.UNKNOWN),
-                make_observation(ScreenType.UNKNOWN),
-                make_observation(ScreenType.UNKNOWN),
-                make_observation(ScreenType.UNKNOWN),
-                make_observation(ScreenType.UNKNOWN),
-                make_observation(ScreenType.UNKNOWN),
-                make_observation(ScreenType.UNKNOWN),
-                make_observation(ScreenType.UNKNOWN),
-                make_observation(ScreenType.UNKNOWN),
-                make_observation(ScreenType.UNKNOWN),
-                make_observation(ScreenType.UNKNOWN),
-                make_observation(ScreenType.UNKNOWN),
-                make_observation(ScreenType.UNKNOWN),
-                make_observation(
-                    ScreenType.PNC_LOGIN,
-                    visible_ids=(
-                        UiElementId.PNC_LOGIN_USERNAME_FIELD,
-                        UiElementId.PNC_LOGIN_PASSWORD_FIELD,
-                        UiElementId.PNC_LOGIN_SUBMIT_BUTTON,
-                    ),
-                ),
-            ]
-        )
-        fake_session = FakeSession()
-        runner = AutomationRunner(
-            defaults=self.defaults,
-            observation_service=fake_observer,
-            action_executor=_make_observed_action_executor(fake_session),
-            task_registry=registry,
-            flow_planner=ScreenFlowPlanner(),
-            logger=build_logger(),
-            policy=StepExecutionPolicy(max_retries_per_step=3),
-        )
-
-        result = runner.run(self.account, script)
-
-        self.assertEqual(result.steps[0].status.value, "success")
-        self.assertEqual(fake_session.launches, 1)
-        self.assertEqual(fake_session.key_events, ["KEYCODE_BACK", "KEYCODE_BACK", "KEYCODE_BACK"])
+    def verify(self, context, before, after):
+        del context, before, after
+        return TaskResult.success("legacy probe complete")

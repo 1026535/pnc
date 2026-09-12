@@ -191,13 +191,14 @@ class BlueStacksSession:
             )
         return self.instance.app_package in result.stdout_text
 
-    def ensure_app_foregrounded(self) -> None:
-        """Launches the game when it is not already foregrounded."""
+    def ensure_app_foregrounded(self) -> bool:
+        """Launches the game when needed and reports whether a launch was started."""
 
         if self.is_app_foregrounded():
-            return
+            return False
         self._require_app_launch()
         self.launch_app()
+        return True
 
     def launch_app(self) -> None:
         """Launches the configured Puzzles & Conquest package."""

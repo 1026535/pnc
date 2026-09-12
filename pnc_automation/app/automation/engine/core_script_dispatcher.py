@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
 from typing import Any, cast
 
 from pnc_automation.app.automation.collect_kingdom_chat import (
@@ -16,7 +18,11 @@ from pnc_automation.app.automation.refresh_castle_roster import (
     RefreshCastleRosterWorkflow,
 )
 from pnc_automation.app.automation.engine.core_runtime import CoreRuntime
-from pnc_automation.app.automation.engine.core_workflow import CoreWorkflowResult, CoreWorkflowRunner
+from pnc_automation.app.automation.engine.core_workflow import (
+    CoreWorkflowResult,
+    CoreWorkflowRunner,
+    WorkflowEffect,
+)
 from pnc_automation.app.authoring.config.models import AccountConfig, LiveAutomationRole
 from pnc_automation.app.authoring.scripts.models import PreparedScriptStep
 from pnc_automation.app.pnc.domain.mail import CollectMailParams
@@ -29,6 +35,16 @@ from pnc_automation.app.pnc.persistence.chat_archive_store import ChatArchiveSto
 from pnc_automation.app.pnc.persistence.castle_roster_store import CastleRosterStore
 from pnc_automation.app.pnc.persistence.mail_archive_store import MailArchiveStore
 from pnc_automation.app.automation.engine.task import TaskId
+from pnc_automation.app.pnc.enums.screen_type import ScreenType
+
+
+@dataclass(frozen=True, slots=True)
+class GameReadyResult:
+    """Captures the stable in-game endpoint proved by lifecycle preflight."""
+
+    screen_type: ScreenType
+    captured_at: datetime
+    artifact_path: Path | None
 
 
 @dataclass(slots=True)
@@ -48,11 +64,13 @@ class CoreScriptDispatcher:
         self,
         *,
         step: PreparedScriptStep,
-    ) -> CoreWorkflowResult[CollectKingdomChatResult | CollectMailResult | RefreshCastleRosterResult]:
+    ) -> CoreWorkflowResult[GameReadyResult | CollectKingdomChatResult | CollectMailResult | RefreshCastleRosterResult]:
         """Runs one supported typed step without closing the shared connected runtime."""
 
         self._validate_step(step)
         core_runtime = self._require_core_runtime()
+        if step.task == TaskId.ENSURE_GAME_RUNNING:
+            return self._execute_game_ready(core_runtime)
         active_castle = core_runtime.preflight_active_castle_identity()
         if step.castle is not None:
             match = resolve_current_castle_match(
@@ -94,6 +112,47 @@ class CoreScriptDispatcher:
             self._workflow_runner = runner
         return runner.run(workflow)
 
+    def _execute_game_ready(self, core_runtime: CoreRuntime) -> CoreWorkflowResult[GameReadyResult]:
+        """Runs lifecycle readiness without castle identity or workflow navigation."""
+
+        core_runtime.record(
+            {
+                "event": "workflow_started",
+                "workflow": TaskId.ENSURE_GAME_RUNNING.value,
+                "effect": WorkflowEffect.READ_ONLY.value,
+            }
+        )
+        try:
+            observation = core_runtime.ensure_game_ready()
+            result = CoreWorkflowResult(
+                workflow_name=TaskId.ENSURE_GAME_RUNNING.value,
+                succeeded=True,
+                value=GameReadyResult(
+                    screen_type=observation.screen_type,
+                    captured_at=observation.captured_at,
+                    artifact_path=observation.artifact_path,
+                ),
+                exit_screen=observation.screen_type,
+                trace_path=str(core_runtime.trace_path),
+            )
+            core_runtime.record(
+                {
+                    "event": "workflow_succeeded",
+                    "workflow": TaskId.ENSURE_GAME_RUNNING.value,
+                    "screen": observation.screen_type.name,
+                }
+            )
+            return result
+        except Exception as error:
+            core_runtime.record(
+                {
+                    "event": "workflow_failed",
+                    "workflow": TaskId.ENSURE_GAME_RUNNING.value,
+                    "error_type": type(error).__name__,
+                }
+            )
+            raise
+
     def _validate_step(self, step: PreparedScriptStep) -> None:
         """Rejects unsupported definitions and malformed parsed parameters before navigation."""
 
@@ -118,12 +177,16 @@ class CoreScriptDispatcher:
 def validate_core_script_step(
     step: PreparedScriptStep,
     *,
-    chat_archive_store: ChatArchiveStore | None,
+    chat_archive_store: ChatArchiveStore | None = None,
     mail_archive_store: MailArchiveStore | None = None,
     castle_roster_store: CastleRosterStore | None = None,
 ) -> None:
     """Validates one supported typed binding before connect and before navigation."""
 
+    if step.task == TaskId.ENSURE_GAME_RUNNING:
+        if step.parsed_params is not None:
+            raise RuntimeError("Typed Ensure Game Running dispatch requires parameterless parsed parameters.")
+        return
     if step.task not in {
         TaskId.COLLECT_KINGDOM_CHAT,
         TaskId.COLLECT_MAIL,

@@ -103,10 +103,13 @@ The full workflow migration is incomplete. A direct API port does not migrate an
 | Open-building | Integrated direct CLI/Python port; authored task dispatch remains legacy. |
 | Collect-mail | Direct Python port and typed authored `TaskId.COLLECT_MAIL` dispatch share `CollectMailWorkflow`. |
 | Kingdom Chat collection | Integrated direct Python port and typed authored `TaskId.COLLECT_KINGDOM_CHAT` dispatch. |
-| Authored scripts | `TaskId.COLLECT_KINGDOM_CHAT`, `TaskId.COLLECT_MAIL`, and `TaskId.REFRESH_CASTLE_ROSTER` use the typed core dispatcher; other registered `TaskId`/YAML steps remain on legacy dispatch. |
+| Session readiness | `TaskId.ENSURE_GAME_RUNNING` is a typed lifecycle step backed by `CoreRuntime.ensure_game_ready`; it proves a stable known P&C screen and does not prove login or account identity. |
+| Authored scripts | `TaskId.ENSURE_GAME_RUNNING`, `TaskId.COLLECT_KINGDOM_CHAT`, `TaskId.COLLECT_MAIL`, and `TaskId.REFRESH_CASTLE_ROSTER` use the typed core dispatcher; other registered `TaskId`/YAML steps remain on legacy dispatch. |
 | Bootstrap and roster workflows | Roster refresh has typed direct Python and authored dispatch. Login and castle selection remain unported. Core preflight reuses foreground/bootstrap behavior; safe popup recovery belongs to the canonical runtime. Neither is an empty workflow to recreate. |
 | Chat and mail sending | Need typed input/send operations and explicit authorization for the actual message and destination before live sending. |
 | Resource-changing workflows | Construction, upgrade, research, gathering, campaign actions, and Daily maintenance execution still need reviewed typed operations and the existing authorizer/executor/journal bridge. Live spending needs an exact action, target, and budget. |
+
+Generated session preparation runs the typed readiness step before the existing legacy Login step. Readiness foregrounds the configured app, passively waits through bounded loading, and returns only a stable known P&C screen; Android Home, unknown screens, stale captures, unresolved blocking popups, and exhausted time budgets fail closed. When this call actually launches the app, transient UNKNOWN or Android Home frames are tolerated within the existing settle budget; an already-foreground app still fails immediately on UNKNOWN. The canonical runtime observation boundary may dismiss an explicitly safe popup during this check. Unknown frames do not use the legacy Back or relaunch fallback, and a known login screen is only a game-ready endpoint, not account or login verification.
 
 ## Typed Kingdom Chat port
 

@@ -12,7 +12,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from pnc_automation.app.automation.engine.core_runtime import build_core_runtime
-from pnc_automation.app.automation.engine.core_script_dispatcher import CoreScriptDispatcher
+from pnc_automation.app.automation.engine.core_script_dispatcher import CoreScriptDispatcher, GameReadyResult
 from pnc_automation.app.automation.engine.core_workflow import CoreWorkflowResult
 from pnc_automation.app.automation.collect_mail import (
     CollectMailMailboxResult,
@@ -49,6 +49,7 @@ from pnc_automation.app.authoring.scripts.registry import TaskRegistry
 from pnc_automation.app.entrypoints.task_registry import build_default_task_registry
 from pnc_automation.app.entrypoints.cli import _serialize_run_result
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
+from pnc_automation.app.pnc.domain.observation import Observation
 from pnc_automation.app.pnc.domain.mail import (
     CollectMailParams,
     MailArchiveMode,
@@ -253,6 +254,7 @@ class TypedCoreDispatchTests(unittest.TestCase):
                 ),
             )
         )
+
         script_runner.task_registry = registry
         script = registry.prepare_script(
             RunScript(
@@ -282,6 +284,103 @@ class TypedCoreDispatchTests(unittest.TestCase):
         connected_runtime.require_observed_action_executor.assert_called_once()
         connected_runtime.close.assert_called_once_with()
         self.assertEqual(1, observation_service.observe.call_count)
+
+    def test_default_registry_uses_parameterless_lifecycle_definition(self) -> None:
+        """Registers readiness as a castle-independent typed lifecycle operation."""
+
+        definition = build_default_task_registry().require(TaskId.ENSURE_GAME_RUNNING)
+
+        self.assertIsInstance(definition, CoreWorkflowTaskDefinition)
+        self.assertEqual(definition.castle_target_policy, CastleTargetPolicy.DISALLOWED)
+        self.assertIsNone(definition.parse_params({}))
+        with self.assertRaisesRegex(Exception, "does not accept"):
+            definition.parse_params({"unexpected": True})
+
+    def test_dispatcher_lifecycle_step_proves_readiness_without_identity_or_store(self) -> None:
+        """Runs lifecycle readiness on the shared core graph without castle preflight or archive access."""
+
+        captured_at = datetime(2026, 9, 12, 5, 0, tzinfo=UTC)
+        observation = Observation(
+            screen_type=ScreenType.PNC_LOGIN,
+            visible_elements={},
+            captured_at=captured_at,
+            artifact_path=Path("ready.png"),
+        )
+        core_runtime = Mock()
+        core_runtime.ensure_game_ready.return_value = observation
+        core_runtime.trace_path = Path("trace.jsonl")
+        runtime_factory = Mock(return_value=core_runtime)
+        dispatcher = CoreScriptDispatcher(
+            account=_account(),
+            chat_archive_store=None,
+            core_runtime_factory=runtime_factory,
+        )
+
+        result = dispatcher.execute(step=_prepared_ensure_step())
+
+        self.assertTrue(result.succeeded)
+        self.assertEqual(TaskId.ENSURE_GAME_RUNNING.value, result.workflow_name)
+        self.assertEqual(
+            GameReadyResult(ScreenType.PNC_LOGIN, captured_at, Path("ready.png")),
+            result.value,
+        )
+        self.assertEqual(ScreenType.PNC_LOGIN, result.exit_screen)
+        core_runtime.ensure_game_ready.assert_called_once_with()
+        core_runtime.preflight_active_castle_identity.assert_not_called()
+        runtime_factory.assert_called_once_with()
+        core_runtime.close.assert_not_called()
+
+    def test_dispatcher_lifecycle_failure_does_not_fallback_or_close_shared_runtime(self) -> None:
+        """Propagates readiness failure without invoking identity preflight, legacy execution, or close."""
+
+        core_runtime = Mock()
+        core_runtime.ensure_game_ready.side_effect = RuntimeError("unknown startup screen")
+        core_runtime.trace_path = Path("trace.jsonl")
+        dispatcher = CoreScriptDispatcher(
+            account=_account(),
+            chat_archive_store=None,
+            core_runtime_factory=Mock(return_value=core_runtime),
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "unknown startup screen"):
+            dispatcher.execute(step=_prepared_ensure_step())
+
+        core_runtime.ensure_game_ready.assert_called_once_with()
+        core_runtime.preflight_active_castle_identity.assert_not_called()
+        core_runtime.close.assert_not_called()
+
+    def test_script_runner_accepts_lifecycle_step_without_archive_before_connection(self) -> None:
+        """Validates parameterless lifecycle preparation without requiring a workflow store."""
+
+        script_runner = _minimal_script_runner(archive_store=None)
+        fake_runner = Mock()
+        fake_runner.run.return_value = Mock()
+
+        with patch.object(
+            ScriptRunner,
+            "_build_runner",
+            return_value=(fake_runner, lambda: None),
+        ) as build_runner:
+            script_runner._run_script_for_account(
+                account=_account(),
+                script=_run_ensure_script(params={}),
+            )
+
+        build_runner.assert_called_once()
+        fake_runner.close.assert_called_once_with()
+
+    def test_script_runner_rejects_lifecycle_params_before_connection(self) -> None:
+        """Rejects authored lifecycle parameters before constructing a connected runner."""
+
+        script_runner = _minimal_script_runner(archive_store=None)
+        with patch.object(ScriptRunner, "_build_runner") as build_runner:
+            with self.assertRaisesRegex(Exception, "does not accept"):
+                script_runner._run_script_for_account(
+                    account=_account(),
+                    script=_run_ensure_script(params={"unexpected": True}),
+                )
+
+        build_runner.assert_not_called()
 
     def test_explicit_castle_uses_existing_alignment_once_before_core_dispatch(self) -> None:
         """Runs the established synthetic castle alignment once, then delegates the typed step."""
@@ -799,6 +898,16 @@ def _prepared_roster_step() -> PreparedScriptStep:
     )
 
 
+def _prepared_ensure_step(*, params: object | None = None) -> PreparedScriptStep:
+    """Builds one already-prepared parameterless lifecycle step."""
+
+    return PreparedScriptStep(
+        script_step=ScriptStep(task=TaskId.ENSURE_GAME_RUNNING),
+        parsed_params=params,
+        castle_target_policy=CastleTargetPolicy.DISALLOWED,
+    )
+
+
 def _mail_params() -> CollectMailParams:
     """Builds one canonical typed mail payload for dispatcher tests."""
 
@@ -871,6 +980,16 @@ def _run_script(*, params: dict[str, object]) -> RunScript:
         name="chat",
         path=Path("chat.yaml"),
         steps=(ScriptStep(task=TaskId.COLLECT_KINGDOM_CHAT, params=params),),
+    )
+
+
+def _run_ensure_script(*, params: dict[str, object]) -> RunScript:
+    """Builds one authored lifecycle script for pre-connect validation tests."""
+
+    return RunScript(
+        name="ensure",
+        path=Path("ensure.yaml"),
+        steps=(ScriptStep(task=TaskId.ENSURE_GAME_RUNNING, params=params),),
     )
 
 
