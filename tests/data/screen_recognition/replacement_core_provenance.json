@@ -823,5 +823,65 @@
     "reference_size": [540, 960],
     "crop": [463, 80, 530, 120],
     "notes": "Measured independent Master Researcher icon identity anchor; caption excluded."
+  },
+  {
+    "asset": "screen_anchors/chat_input_field.png",
+    "source": "artifacts/2026-09-12/serious_stuff/20260912T180229Z_core_20260912T175827Z_c90c90fa_0035_kingdom_send_eligibility.png",
+    "source_sha256": "639129b94ec3dd74ebb65f344e4ce23281a7287511a5b3e2b300210f0d205c1f",
+    "reference_size": [540, 960],
+    "crop": [60, 918, 220, 943],
+    "capture_group": "2026-09-12/serious_stuff",
+    "notes": "Measured normal white Please enter content placeholder; the bounded matcher center is inside the placeholder and is the reviewed focus action point."
+  },
+  {
+    "asset": "screen_anchors/chat_focused_empty_input.png",
+    "source": "artifacts/2026-09-12/serious_stuff/20260912T180345Z_core_20260912T175827Z_c90c90fa_0038_kingdom_send_focus_1.png",
+    "source_sha256": "406c5d50cca160076f8958112f80659da5b1c9313bcb22f8b9871fde21507318",
+    "reference_size": [540, 960],
+    "crop": [80, 914, 300, 942],
+    "capture_group": "2026-09-12/serious_stuff",
+    "notes": "Measured pink focused-empty placeholder as positive composer emptiness evidence; it is never a click target."
+  },
+  {
+    "asset": "screen_anchors/chat_focused_send_button.png",
+    "source": "artifacts/2026-09-12/serious_stuff/20260912T180454Z_core_20260912T175827Z_c90c90fa_0041_kingdom_hello_draft_1.png",
+    "source_sha256": "b29eae39e31a514ade58890884a7e1239931a649f19002c71ce1c4af88b482db",
+    "reference_size": [540, 960],
+    "crop": [448, 906, 530, 943],
+    "capture_group": "2026-09-12/serious_stuff",
+    "notes": "Measured gold return control visible with the authorized hello draft; the reviewed control remains in the focused composer after posting."
+  },
+  {
+    "asset": "tests/data/screen_recognition/chat_kingdom_normal_empty.png",
+    "source": "artifacts/2026-09-12/serious_stuff/20260912T180229Z_core_20260912T175827Z_c90c90fa_0035_kingdom_send_eligibility.png",
+    "source_sha256": "639129b94ec3dd74ebb65f344e4ce23281a7287511a5b3e2b300210f0d205c1f",
+    "reference_size": [540, 960],
+    "capture_group": "2026-09-12/serious_stuff/kingdom_chat_composer",
+    "preserved_regions": [[0, 0, 540, 109], [0, 885, 540, 960]],
+    "redacted_region": [0, 110, 540, 885],
+    "redaction_fill_rgb": [15, 28, 68],
+    "notes": "Portable sanitized validation fixture: header rows 0-108 and composer rows 885-959 retained; transcript rows 110-884 replaced with flat background."
+  },
+  {
+    "asset": "tests/data/screen_recognition/chat_kingdom_focused_empty.png",
+    "source": "artifacts/2026-09-12/serious_stuff/20260912T180345Z_core_20260912T175827Z_c90c90fa_0038_kingdom_send_focus_1.png",
+    "source_sha256": "406c5d50cca160076f8958112f80659da5b1c9313bcb22f8b9871fde21507318",
+    "reference_size": [540, 960],
+    "capture_group": "2026-09-12/serious_stuff/kingdom_chat_composer",
+    "preserved_regions": [[0, 0, 540, 109], [0, 885, 540, 960]],
+    "redacted_region": [0, 110, 540, 885],
+    "redaction_fill_rgb": [15, 28, 68],
+    "notes": "Portable sanitized validation fixture: header rows 0-108 and composer rows 885-959 retained; transcript rows 110-884 replaced with flat background."
+  },
+  {
+    "asset": "tests/data/screen_recognition/chat_kingdom_focused_send.png",
+    "source": "artifacts/2026-09-12/serious_stuff/20260912T180454Z_core_20260912T175827Z_c90c90fa_0041_kingdom_hello_draft_1.png",
+    "source_sha256": "b29eae39e31a514ade58890884a7e1239931a649f19002c71ce1c4af88b482db",
+    "reference_size": [540, 960],
+    "capture_group": "2026-09-12/serious_stuff/kingdom_chat_composer",
+    "preserved_regions": [[0, 0, 540, 109], [0, 885, 540, 960]],
+    "redacted_region": [0, 110, 540, 885],
+    "redaction_fill_rgb": [15, 28, 68],
+    "notes": "Portable sanitized validation fixture: header rows 0-108 and composer rows 885-959 retained; transcript rows 110-884 replaced with flat background; authorized hello draft retained."
   }
 ]

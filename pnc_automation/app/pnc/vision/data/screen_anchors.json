@@ -1837,6 +1837,45 @@
             ],
             "threshold": 0.93
           }
+        },
+        {
+          "selector": "PNC_CHAT_INPUT_FIELD",
+          "anchor": {
+            "image": "screen_anchors/chat_input_field.png",
+            "search_region": [
+              60,
+              918,
+              160,
+              25
+            ],
+            "threshold": 0.95
+          }
+        },
+        {
+          "selector": "PNC_CHAT_FOCUSED_EMPTY_INPUT",
+          "anchor": {
+            "image": "screen_anchors/chat_focused_empty_input.png",
+            "search_region": [
+              80,
+              914,
+              220,
+              28
+            ],
+            "threshold": 0.95
+          }
+        },
+        {
+          "selector": "PNC_CHAT_FOCUSED_SEND_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/chat_focused_send_button.png",
+            "search_region": [
+              448,
+              906,
+              82,
+              37
+            ],
+            "threshold": 0.95
+          }
         }
       ],
       "revision": 1,
@@ -1921,6 +1960,45 @@
               60
             ],
             "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_CHAT_INPUT_FIELD",
+          "anchor": {
+            "image": "screen_anchors/chat_input_field.png",
+            "search_region": [
+              60,
+              918,
+              160,
+              25
+            ],
+            "threshold": 0.95
+          }
+        },
+        {
+          "selector": "PNC_CHAT_FOCUSED_EMPTY_INPUT",
+          "anchor": {
+            "image": "screen_anchors/chat_focused_empty_input.png",
+            "search_region": [
+              80,
+              914,
+              220,
+              28
+            ],
+            "threshold": 0.95
+          }
+        },
+        {
+          "selector": "PNC_CHAT_FOCUSED_SEND_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/chat_focused_send_button.png",
+            "search_region": [
+              448,
+              906,
+              82,
+              37
+            ],
+            "threshold": 0.95
           }
         }
       ],

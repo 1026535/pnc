@@ -38,7 +38,8 @@ A planning request authorizes bounded read-only observation within scope, but ne
 - Prefer architecture that removes duplication instead of adding compatibility shims, legacy support, or parallel code paths.
 - Make dependencies explicit: prerequisites, sequencing constraints, shared interfaces, data migrations, and validation dependencies.
 - Define done with observable acceptance criteria, not vague confidence.
-- Include validation that matches risk: focused tests first, full offline suites for broad code changes, and opt-in live smoke tests when runtime boundaries require them.
+- Include validation that matches risk: focused component groups or an explained `affected` selection for each implementation slice, full offline suites only for broad/cross-cutting changes and final integration, and opt-in live smoke tests when runtime boundaries require them.
+- When a plan uses coverage contexts or other historical execution data for test selection, define the seed's identity and freshness checks, keep static ownership and fail-closed fallbacks authoritative, and include an independent full-suite audit path. Missing or incompatible evidence must never silently shrink the selected tests.
 - Keep live-affecting slices small and promote them incrementally. Do not batch several unproven runtime behaviors behind one final smoke test.
 - When the plan names live instances or castles, require a disposition for every planned target after every applicable live-affecting slice: `passed`, `applicability_skip`, or `blocked`. A missing matrix cell is not a pass.
 - Treat live screenshots and observations as evidence, not as a substitute for understanding the code or a license for unbounded experimentation. Label each important claim as observed, inferred, or unknown.

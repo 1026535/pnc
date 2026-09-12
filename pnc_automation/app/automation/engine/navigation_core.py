@@ -10,6 +10,7 @@ from typing import Literal, Protocol
 
 from pnc_automation.app.pnc.domain.action_requests import (
     ActionRequest,
+    InputTextAction,
     SelectChatChannelAction,
     SwipeAction,
     TapAction,
@@ -28,7 +29,13 @@ from pnc_automation.app.pnc.domain.observation import (
     SpatialSurfaceType,
     VisibleElementSourceKind,
 )
-from pnc_automation.app.pnc.domain.chat import ChatChannel, chat_channel_selector_id
+from pnc_automation.app.pnc.domain.castles import CastleIdentity
+from pnc_automation.app.pnc.domain.chat import (
+    ChatChannel,
+    chat_channel_selector_id,
+    count_matching_player_chat_entries,
+    parse_chat_message_params,
+)
 from pnc_automation.app.pnc.domain.mail import (
     MailboxAvailability,
     MailboxType,
@@ -326,6 +333,99 @@ class NavigationCore:
             completion_predicate=lambda observation: observation.active_chat_channel == channel,
         )
 
+    def send_chat_message(
+        self,
+        channel: ChatChannel,
+        message: str,
+        active_castle: CastleIdentity,
+        *,
+        observe_content: Callable[[str], Observation],
+    ) -> Observation:
+        """Send one validated chat message through fresh observed controls."""
+
+        if (
+            not isinstance(channel, ChatChannel)
+            or channel not in {ChatChannel.WORLD, ChatChannel.ALLIANCE}
+        ):
+            raise ValueError("Chat sending requires a supported ChatChannel value.")
+        params = parse_chat_message_params(
+            {"message": message},
+            task_label="send_chat_message",
+        )
+        if not isinstance(active_castle, CastleIdentity):
+            raise ValueError("Chat sending requires a CastleIdentity.")
+        self._sequence += 1
+        label = f"core_{self._sequence}_chat_send"
+        before = observe_content(f"{label}_source")
+        _require_chat_send_source(before)
+        if before.active_chat_channel == channel:
+            requested = before
+        else:
+            requested = self.select_chat_channel(
+                channel,
+                observe_content=_guard_chat_empty_selection_observer(observe_content),
+            )
+            _require_chat_send_source(requested, channel=channel)
+        baseline = count_matching_player_chat_entries(
+            requested.entries(ListEntryKind.CHAT_MESSAGE),
+            message=params.message,
+            castle=active_castle,
+        )
+        send_observe_content = _guard_chat_send_observer(observe_content, channel=channel)
+        if _chat_focused_empty_ready(requested, channel=channel):
+            focused = requested
+        else:
+            input_element = requested.get(UiElementId.PNC_CHAT_INPUT_FIELD)
+            if input_element is None or input_element.source_kind != VisibleElementSourceKind.TEMPLATE:
+                raise RuntimeError(
+                    "Chat sending requires current-frame template input and focused-empty controls; no action sent."
+                )
+            focused = self._execute_content_and_confirm(
+                TapAction(
+                    selector_id=UiElementId.PNC_CHAT_INPUT_FIELD,
+                    reason="replacement_focus_chat_input",
+                ),
+                requested,
+                frozenset({ScreenType.PNC_CHAT}),
+                f"{label}_focus",
+                send_observe_content,
+                completion_predicate=lambda observation: _chat_focused_empty_ready(
+                    observation, channel=channel
+                ),
+            )
+        typed = self._execute_content_and_confirm(
+            InputTextAction(
+                text=params.message,
+                selector_id=None,
+                replace_existing=False,
+                reason="replacement_type_chat_message",
+            ),
+            focused,
+            frozenset({ScreenType.PNC_CHAT}),
+            f"{label}_type",
+            send_observe_content,
+            completion_predicate=lambda observation: _chat_typed_message_ready(
+                observation, params.message, channel=channel
+            ),
+        )
+        return self._execute_content_and_confirm(
+            TapAction(
+                selector_id=UiElementId.PNC_CHAT_FOCUSED_SEND_BUTTON,
+                reason="replacement_submit_chat_message",
+            ),
+            typed,
+            frozenset({ScreenType.PNC_CHAT}),
+            f"{label}_submit",
+            send_observe_content,
+            completion_predicate=lambda observation: _chat_receipt_ready(
+                observation,
+                channel=channel,
+                message=params.message,
+                active_castle=active_castle,
+                baseline=baseline,
+            ),
+        )
+
     def scroll_mailbox(
         self, *, observe_content: Callable[[str], Observation],
     ) -> Observation:
@@ -599,6 +699,127 @@ def _observe_home_city_scan_content(
         return observation
 
     return observe
+
+
+def _template_control(observation: Observation, selector_id: UiElementId) -> bool:
+    """Return whether one selector was matched by a current-frame template."""
+
+    element = observation.get(selector_id)
+    return element is not None and element.source_kind == VisibleElementSourceKind.TEMPLATE
+
+
+def _require_chat_send_source(
+    observation: Observation,
+    *,
+    channel: ChatChannel | None = None,
+) -> None:
+    """Require an unblocked Chat frame with explicit empty-draft template evidence."""
+
+    supported_active_channel = observation.active_chat_channel in {
+        ChatChannel.WORLD,
+        ChatChannel.ALLIANCE,
+    }
+    if (
+        observation.screen_type != ScreenType.PNC_CHAT
+        or observation.blocking_popup
+        or not supported_active_channel
+        or (channel is not None and observation.active_chat_channel != channel)
+    ):
+        channel_text = "" if channel is None else f" {channel.value}"
+        raise RuntimeError(
+            f"Chat sending requires a fresh, unblocked{channel_text} Chat frame; no action sent."
+        )
+    if observation.chat_draft_empty is not True:
+        raise RuntimeError("Chat draft is not explicitly empty; no focus or text action sent.")
+    if not (
+        _template_control(observation, UiElementId.PNC_CHAT_INPUT_FIELD)
+        or _template_control(observation, UiElementId.PNC_CHAT_FOCUSED_EMPTY_INPUT)
+    ):
+        raise RuntimeError("Chat draft emptiness lacks positive template evidence; no action sent.")
+
+
+def _guard_chat_send_observer(
+    observe_content: Callable[[str], Observation],
+    *,
+    channel: ChatChannel,
+) -> Callable[[str], Observation]:
+    """Reject interruption and channel drift before send completion can authorize another action."""
+
+    def observe(label: str) -> Observation:
+        observation = observe_content(label)
+        if observation.screen_type in {ScreenType.UNKNOWN, ScreenType.PNC_LOADING}:
+            raise RuntimeError("Chat send observed an unknown or loading frame; completion is unproven.")
+        if observation.blocking_popup:
+            raise RuntimeError("Chat send was interrupted by a blocking popup; no repeated action sent.")
+        if observation.screen_type != ScreenType.PNC_CHAT or observation.active_chat_channel != channel:
+            raise RuntimeError("Chat send observed the wrong channel or screen; completion is unproven.")
+        return observation
+
+    return observe
+
+
+def _guard_chat_empty_selection_observer(
+    observe_content: Callable[[str], Observation],
+) -> Callable[[str], Observation]:
+    """Keep every channel-selection frame within the pre-switch empty-draft contract."""
+
+    def observe(label: str) -> Observation:
+        observation = observe_content(label)
+        _require_chat_send_source(observation)
+        return observation
+
+    return observe
+
+
+def _chat_focused_empty_ready(observation: Observation, *, channel: ChatChannel) -> bool:
+    """Require focused placeholder, gold return control, channel, and OCR empty state."""
+
+    return (
+        observation.screen_type == ScreenType.PNC_CHAT
+        and not observation.blocking_popup
+        and observation.active_chat_channel == channel
+        and observation.chat_draft_empty is True
+        and _template_control(observation, UiElementId.PNC_CHAT_FOCUSED_EMPTY_INPUT)
+        and _template_control(observation, UiElementId.PNC_CHAT_FOCUSED_SEND_BUTTON)
+    )
+
+
+def _chat_typed_message_ready(observation: Observation, message: str, *, channel: ChatChannel) -> bool:
+    """Require exact OCR draft text and the still-visible focused send control."""
+
+    return (
+        observation.screen_type == ScreenType.PNC_CHAT
+        and not observation.blocking_popup
+        and observation.active_chat_channel == channel
+        and observation.chat_draft_empty is False
+        and observation.chat_draft_text == message
+        and _template_control(observation, UiElementId.PNC_CHAT_FOCUSED_SEND_BUTTON)
+    )
+
+
+def _chat_receipt_ready(
+    observation: Observation,
+    *,
+    channel: ChatChannel,
+    message: str,
+    active_castle: CastleIdentity,
+    baseline: int,
+) -> bool:
+    """Require a fresh empty draft and a strictly increased canonical own-row count."""
+
+    if (
+        observation.screen_type != ScreenType.PNC_CHAT
+        or observation.blocking_popup
+        or observation.active_chat_channel != channel
+        or observation.chat_draft_empty is not True
+    ):
+        return False
+    receipt_count = count_matching_player_chat_entries(
+        observation.entries(ListEntryKind.CHAT_MESSAGE),
+        message=message,
+        castle=active_castle,
+    )
+    return receipt_count > baseline
 
 
 def reviewed_navigation_edges() -> tuple[NavigationEdge, ...]:

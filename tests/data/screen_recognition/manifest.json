@@ -315,6 +315,36 @@
       ]
     },
     {
+      "image": "chat_kingdom_normal_empty.png",
+      "screen": "PNC_CHAT",
+      "split": "validation",
+      "group": "2026-09-12/serious_stuff/kingdom_chat_composer",
+      "sha256": "4bc4470ec7ae3b21bf3dc60abaad368457a3a4e8380100a4c11b1d5277fc4f77",
+      "expected_visual_screens": [
+        "PNC_CHAT"
+      ]
+    },
+    {
+      "image": "chat_kingdom_focused_empty.png",
+      "screen": "PNC_CHAT",
+      "split": "validation",
+      "group": "2026-09-12/serious_stuff/kingdom_chat_composer",
+      "sha256": "b92b58b0b28d990143db4d32de1aef9d4c70085aae489cb23e43bd4a3de61b52",
+      "expected_visual_screens": [
+        "PNC_CHAT"
+      ]
+    },
+    {
+      "image": "chat_kingdom_focused_send.png",
+      "screen": "PNC_CHAT",
+      "split": "validation",
+      "group": "2026-09-12/serious_stuff/kingdom_chat_composer",
+      "sha256": "c358bb63de4ffd12098f4ec94d27485b6d03c7ee3680a34a299cc34ca156c46b",
+      "expected_visual_screens": [
+        "PNC_CHAT"
+      ]
+    },
+    {
       "image": "settings_live_b0.png",
       "screen": "PNC_SETTINGS",
       "split": "validation",

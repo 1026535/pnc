@@ -11,7 +11,7 @@ import time
 import unittest
 from pathlib import Path
 from typing import BinaryIO
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from pnc_automation.bluestacks_management import instance_lease
 from pnc_automation.bluestacks_management.instance_lease import InstanceLeaseRegistry
@@ -308,6 +308,27 @@ class InstanceLeaseRegistryTests(unittest.TestCase):
             finally:
                 native.handle.close()
                 registry.release_all()
+
+    def test_unlock_and_close_failures_are_both_preserved(self) -> None:
+        """Keeps native unlock and file-handle cleanup failures available together."""
+
+        handle = Mock()
+        handle.close.side_effect = OSError("close failed")
+        native = instance_lease._NativeInstanceLease(
+            display_name="testing",
+            path=Path("testing.lock"),
+            handle=handle,
+        )
+
+        with patch.object(instance_lease, "_unlock_file", side_effect=OSError("unlock failed")):
+            with self.assertRaises(BaseExceptionGroup) as raised:
+                native.release()
+
+        self.assertEqual(
+            [str(error) for error in raised.exception.exceptions],
+            ["unlock failed", "close failed"],
+        )
+        handle.close.assert_called_once_with()
 
     def test_released_instance_can_be_acquired_again(self) -> None:
         """Relies on native lock release rather than stale metadata after a process exits."""

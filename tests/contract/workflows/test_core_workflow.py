@@ -20,8 +20,9 @@ from pnc_automation.app.automation.engine.core_workflow import (
     WorkflowEffect,
     WorkflowSpec,
 )
-from pnc_automation.app.pnc.domain.observation import DetectedListEntry, Observation, ListEntryKind
+from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.domain.chat import ChatChannel
+from pnc_automation.app.pnc.domain.observation import DetectedListEntry, Observation, ListEntryKind
 from pnc_automation.app.pnc.domain.mail import MailboxAvailability, MailboxType
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.core.errors import TaskVerificationError
@@ -247,6 +248,48 @@ class CoreWorkflowTests(unittest.TestCase):
 
                 with self.assertRaisesRegex(RuntimeError, "not captured after|stale"):
                     context.select_chat_channel(ChatChannel.ALLIANCE)
+
+    def test_chat_context_forwards_generic_send_channel_and_requires_state_change_effect(self) -> None:
+        """Routes both typed channels through one core operation behind the effect gate."""
+
+        initial = _home_observation(datetime(2026, 9, 12, 12, 0, 0, tzinfo=UTC))
+        sent = Observation(
+            screen_type=ScreenType.PNC_CHAT,
+            active_chat_channel=ChatChannel.ALLIANCE,
+            captured_at=initial.captured_at + timedelta(seconds=1),
+        )
+        runtime = Mock()
+        runtime.observation_count = 1
+        runtime.last_observation = sent
+        runtime.navigation.send_chat_message.return_value = sent
+        context = WorkflowContext(
+            runtime,
+            last_observation=initial,
+            effect=WorkflowEffect.NONSPENDING_STATE_CHANGE,
+        )
+
+        result = context.send_chat_message(
+            ChatChannel.ALLIANCE,
+            "hello",
+            CastleIdentity("K1", "free cookies"),
+        )
+
+        self.assertIs(sent, result)
+        runtime.navigation.send_chat_message.assert_called_once()
+        call = runtime.navigation.send_chat_message.call_args
+        self.assertEqual(
+            (ChatChannel.ALLIANCE, "hello", CastleIdentity("K1", "free cookies")),
+            call.args,
+        )
+        self.assertTrue(callable(call.kwargs["observe_content"]))
+
+        read_only = WorkflowContext(runtime, last_observation=initial)
+        with self.assertRaisesRegex(PermissionError, "NONSPENDING_STATE_CHANGE"):
+            read_only.send_chat_message(
+                ChatChannel.WORLD,
+                "hello",
+                CastleIdentity("K1", "free cookies"),
+            )
 
 
 class _ContentOnlyWorkflow:

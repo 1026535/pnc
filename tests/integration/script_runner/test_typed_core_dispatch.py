@@ -20,6 +20,7 @@ from pnc_automation.app.automation.collect_mail import (
     CollectMailWorkflow,
 )
 from pnc_automation.app.automation.open_building import OpenBuildingResult, OpenBuildingWorkflow
+from pnc_automation.app.automation.send_kingdom_chat import SendKingdomChatWorkflow
 from pnc_automation.app.automation.refresh_castle_roster import (
     RefreshCastleRosterResult,
     RefreshCastleRosterWorkflow,
@@ -51,6 +52,7 @@ from pnc_automation.app.entrypoints.task_registry import build_default_task_regi
 from pnc_automation.app.entrypoints.cli import _serialize_run_result
 from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
+from pnc_automation.app.pnc.domain.chat import ChatMessageTaskParams
 from pnc_automation.app.pnc.domain.observation import Observation
 from pnc_automation.app.pnc.domain.mail import (
     CollectMailParams,
@@ -85,6 +87,71 @@ class TypedCoreDispatchTests(unittest.TestCase):
             definition.parse_params({"unexpected": True})
         with self.assertRaises(AttributeError):
             definition.id = TaskId.COLLECT_MAIL  # type: ignore[misc]
+
+    def test_default_registry_uses_typed_world_chat_message_definition(self) -> None:
+        """Keeps authored World Chat metadata independent from the workflow implementation."""
+
+        definition = build_default_task_registry().require(TaskId.SEND_WORLD_CHAT_MESSAGE)
+
+        self.assertIsInstance(definition, CoreWorkflowTaskDefinition)
+        self.assertEqual(CastleTargetPolicy.OPTIONAL, definition.castle_target_policy)
+        self.assertEqual(
+            ChatMessageTaskParams(message="hello"),
+            definition.parse_params({"message": "hello"}),
+        )
+
+    def test_dispatcher_rejects_malformed_world_chat_params_before_runtime(self) -> None:
+        """Rejects an unparsed typed World Chat payload without composing the runtime."""
+
+        for malformed_params in (None, {"message": "hello"}):
+            with self.subTest(malformed_params=malformed_params):
+                runtime_factory = Mock()
+                dispatcher = CoreScriptDispatcher(
+                    account=_account(),
+                    chat_archive_store=None,
+                    core_runtime_factory=runtime_factory,
+                )
+
+                with self.assertRaisesRegex(RuntimeError, "ChatMessageTaskParams"):
+                    dispatcher.execute(
+                        step=replace(
+                            _prepared_world_chat_step(),
+                            parsed_params=malformed_params,
+                        )
+                    )
+
+                runtime_factory.assert_not_called()
+
+    def test_dispatcher_builds_world_chat_workflow_without_archive_store(self) -> None:
+        """Builds the fixed World Chat workflow from typed params without Chat storage."""
+
+        active = CastleIdentity("K1", "free cookies", 12)
+        core_runtime = Mock()
+        core_runtime.preflight_active_castle_identity.return_value = active
+        typed_result = _workflow_result()
+        workflow_runner = Mock()
+        workflow_runner.run.return_value = typed_result
+        runtime_factory = Mock(return_value=core_runtime)
+        runner_factory = Mock(return_value=workflow_runner)
+        dispatcher = CoreScriptDispatcher(
+            account=_account(),
+            chat_archive_store=None,
+            core_runtime_factory=runtime_factory,
+        )
+
+        with patch(
+            "pnc_automation.app.automation.engine.core_script_dispatcher.CoreWorkflowRunner",
+            runner_factory,
+        ):
+            result = dispatcher.execute(step=_prepared_world_chat_step())
+
+        self.assertIs(typed_result, result)
+        workflow = workflow_runner.run.call_args.args[0]
+        self.assertIsInstance(workflow, SendKingdomChatWorkflow)
+        self.assertEqual(ChatMessageTaskParams(message="hello"), workflow.params)
+        self.assertIs(active, workflow.active_castle)
+        runtime_factory.assert_called_once_with()
+        core_runtime.preflight_active_castle_identity.assert_called_once_with()
 
     def test_default_registry_uses_canonical_mail_parser(self) -> None:
         """Registers authored mail as an optional typed step with the shared domain parser."""
@@ -1144,6 +1211,18 @@ def _prepared_chat_step(*, castle: CastleIdentity | None = None) -> PreparedScri
     return PreparedScriptStep(
         script_step=script_step,
         parsed_params=None,
+        castle_target_policy=CastleTargetPolicy.OPTIONAL,
+        resolved_castle=castle,
+    )
+
+
+def _prepared_world_chat_step(*, castle: CastleIdentity | None = None) -> PreparedScriptStep:
+    """Builds one already-prepared typed World Chat send step."""
+
+    script_step = ScriptStep(task=TaskId.SEND_WORLD_CHAT_MESSAGE, castle=castle)
+    return PreparedScriptStep(
+        script_step=script_step,
+        parsed_params=ChatMessageTaskParams(message="hello"),
         castle_target_policy=CastleTargetPolicy.OPTIONAL,
         resolved_castle=castle,
     )
