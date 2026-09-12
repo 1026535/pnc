@@ -133,6 +133,21 @@ class RunnerCliTests(unittest.TestCase):
         self.assert_available_suite_ran()
         self.assertEqual(self.flag_snapshots, [([], "portable")])
 
+    def test_measure_defaults_timing_csv_under_local_data(self) -> None:
+        """Keeps the default measurement report out of the repository root."""
+
+        coverage_module = ModuleType("coverage")
+        coverage_factory = Mock()
+        coverage_module.Coverage = coverage_factory
+        with (
+            patch.dict(sys.modules, {"coverage": coverage_module}),
+            patch.object(run_tests, "seed_contexts"),
+        ):
+            self.assertEqual(self.invoke("measure"), 0)
+
+        self.assertTrue((self.root / ".local-data" / "reports" / "test_timings.csv").is_file())
+        self.assertFalse((self.root / "test_timings.csv").exists())
+
     def test_candidate_fingerprint_changes_for_non_python_resource_edit(self) -> None:
         self.assertEqual(self.invoke("full", "--dry-run"), 0)
         before = self.document("selection.json")

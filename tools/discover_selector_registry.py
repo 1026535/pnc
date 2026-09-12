@@ -87,7 +87,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--output-dir",
-        default=str(root / "selector_discovery_output"),
+        default=str(root / ".local-data" / "reports" / "selector_discovery"),
         help="Directory where the report and draft spec should be written.",
     )
     parser.add_argument("--verbose", action="store_true", help="Enable verbose runtime logging.")

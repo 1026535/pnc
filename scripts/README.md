@@ -175,6 +175,6 @@ For every new daily feature:
    py -m unittest tests.test_live_daily_task_smoke
    ```
 
-4. Inspect the generated screenshots and logs under `artifacts/`.
+4. Inspect the generated screenshots and logs under `.local-data/artifacts/`.
 5. Convert live failures into offline regressions when practical.
 6. Add the capability to the typed local Daily config only after its promotion gate passes.
