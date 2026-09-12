@@ -8,13 +8,13 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from pnc_automation.app.authoring.config.models import (
+from pnc_automation.app.authoring.config.models import LiveAutomationRole
+from pnc_automation.app.automation.engine.core_workflow import CoreWorkflowResult, WorkflowContext
+from pnc_automation.app.pnc.domain.castles import (
     CastleIdentity,
     CastleRosterOrdering,
-    LiveAutomationRole,
     PncAccountCastleRosterConfig,
 )
-from pnc_automation.app.automation.engine.core_workflow import CoreWorkflowResult, WorkflowContext
 from pnc_automation.app.automation.refresh_castle_roster import (
     RefreshCastleRosterPolicy,
     RefreshCastleRosterWorkflow,
@@ -31,7 +31,7 @@ from pnc_automation.app.pnc.domain.observation import (
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.persistence.castle_roster_store import CastleRosterStore
 from pnc_automation.core.errors import TaskVerificationError
-from tests.test_support import make_entry, make_observation
+from tests.support.pnc.observations import make_entry, make_observation
 
 
 class RefreshCastleRosterWorkflowTests(unittest.TestCase):
