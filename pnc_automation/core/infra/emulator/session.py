@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import re
+import shlex
 import time
 from collections.abc import Callable
 from contextlib import contextmanager
@@ -677,23 +678,11 @@ def _parse_current_focus_package(window_dump: str, *, device_id: str) -> str | N
 
 
 def _encode_adb_text(text: str) -> str:
-    """Encodes text for `adb shell input text` without shell quoting."""
+    """Encodes Android spaces and quotes one literal argument for its remote shell."""
 
     if "\n" in text or "\r" in text:
-        raise DeviceConnectionError("ADB text input does not support multiline values.", text=text)
-    replacements = {
-        " ": "%s",
-        "&": "\\&",
-        "<": "\\<",
-        ">": "\\>",
-        "|": "\\|",
-        ";": "\\;",
-        "(": "\\(",
-        ")": "\\)",
-        "'": "\\'",
-        '"': '\\"',
-    }
-    return "".join(replacements.get(character, character) for character in text)
+        raise DeviceConnectionError("ADB text input does not support multiline values.")
+    return shlex.quote(text.replace(" ", "%s"))
 
 
 def _input_command_prefix(*, input_source: str, device_id: str) -> list[str]:

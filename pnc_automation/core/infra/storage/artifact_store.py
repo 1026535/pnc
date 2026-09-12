@@ -39,9 +39,20 @@ class ArtifactStore:
         artifact_directory_path = self.root / captured_at.strftime("%Y-%m-%d") / sanitize_artifact_segment(artifact_directory)
         artifact_directory_path.mkdir(parents=True, exist_ok=True)
 
-        filename = f"{captured_at.strftime('%Y%m%dT%H%M%SZ')}_{sanitize_artifact_segment(label)}.{extension.lstrip('.')}"
-        path = artifact_directory_path / filename
-        path.write_bytes(payload)
+        stem = f"{captured_at.strftime('%Y%m%dT%H%M%SZ')}_{sanitize_artifact_segment(label)}"
+        suffix = extension.lstrip(".")
+        collision_index = 0
+        while True:
+            discriminator = "" if collision_index == 0 else f"_{collision_index}"
+            path = artifact_directory_path / f"{stem}{discriminator}.{suffix}"
+            try:
+                handle = path.open("xb")
+            except FileExistsError:
+                collision_index += 1
+                continue
+            with handle:
+                handle.write(payload)
+            break
 
         return ArtifactRecord(
             path=path,

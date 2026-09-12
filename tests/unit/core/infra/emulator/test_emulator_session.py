@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import shlex
+import tempfile
 import unittest
 from dataclasses import dataclass, field
-import tempfile
 from pathlib import Path
 
 from pnc_automation.core.infra.adb.command_result import CommandResult
@@ -581,6 +582,43 @@ class BlueStacksSessionTests(unittest.TestCase):
             session.ensure_responsive()
 
         self.assertEqual(len(adb_client.shell_calls), 2)
+
+    def test_input_text_quotes_android_shell_expansions(self) -> None:
+        """Sends shell metacharacters literally, including in credential text."""
+
+        adb_client = _FakeAdbClient(
+            connect_result=_command_result(returncode=0),
+            state_result=_command_result(returncode=0),
+            shell_result=_command_result(returncode=0),
+        )
+        session = self._make_session(adb_client=adb_client)
+        for value in ("$HOME", "`id`", "$(id)", r"path\name", "*?[ab]", "hello\tworld"):
+            with self.subTest(value=value):
+                session.input_text(value)
+                arguments = adb_client.shell_calls[-1][1]
+                self.assertEqual(arguments, ("input", "text", f"'{value}'"))
+
+        value = "it's a test & example"
+        session.input_text(value)
+        self.assertEqual(
+            shlex.split(" ".join(adb_client.shell_calls[-1][1])),
+            ["input", "text", value.replace(" ", "%s")],
+        )
+
+    def test_input_text_rejection_does_not_include_the_input_value(self) -> None:
+        """Keeps rejected multiline credentials out of structured diagnostics."""
+
+        adb_client = _FakeAdbClient(
+            connect_result=_command_result(returncode=0),
+            state_result=_command_result(returncode=0),
+            shell_result=_command_result(returncode=0),
+        )
+        session = self._make_session(adb_client=adb_client)
+        with self.assertRaises(DeviceConnectionError) as raised:
+            session.input_text("synthetic-sensitive-value\nsecond-line")
+
+        self.assertNotIn("synthetic-sensitive-value", str(raised.exception.details))
+        self.assertEqual(adb_client.shell_calls, [])
 
     def test_swipe_uses_explicit_touchscreen_source(self) -> None:
         """Uses the touchscreen-qualified input command so drag gestures are unambiguous to ADB-backed emulators."""

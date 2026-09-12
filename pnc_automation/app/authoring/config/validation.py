@@ -12,22 +12,36 @@ from pnc_automation.app.authoring.config.models import (
     AppConfig,
 )
 from pnc_automation.app.pnc.domain.castles import PncAccountCastleRosterConfig, castle_identity_key
-from pnc_automation.core.config.host import validate_live_roles
+from pnc_automation.core.config.host import (
+    AccountBinding,
+    BlueStacksInstanceBinding,
+    validate_host_bindings,
+)
 from pnc_automation.core.errors import ConfigurationError
 
 
 def validate_app_config(config: AppConfig) -> AppConfig:
     """Validates the loaded configuration and returns it when consistent."""
 
-    _validate_unique_ids("instance", (instance.id for instance in config.instances))
-    _validate_unique_instance_display_names(config)
-    _validate_unique_ids("account", (account.id for account in config.accounts))
+    validate_host_bindings(
+        tuple(
+            BlueStacksInstanceBinding(id=instance.id, display_name=instance.display_name)
+            for instance in config.instances
+        ),
+        tuple(
+            AccountBinding(
+                id=account.id,
+                instance_id=account.instance_id,
+                live_roles=account.live_roles,
+            )
+            for account in config.accounts
+        ),
+    )
     _validate_unique_runtime_targets(config.accounts)
     _validate_unique_account_artifact_directories(config.accounts)
 
-    instance_ids = {instance.id for instance in config.instances}
     for account in config.accounts:
-        _validate_account(account, instance_ids)
+        _validate_account(account)
 
     _validate_shared_pnc_credentials(config.accounts)
     _validate_castle_rosters(config)
@@ -36,21 +50,6 @@ def validate_app_config(config: AppConfig) -> AppConfig:
     _validate_archive_root(config)
     _validate_distinct_output_roots(config)
     return config
-
-
-def _validate_unique_instance_display_names(config: AppConfig) -> None:
-    """Ensures authored BlueStacks display names remain a single canonical mapping."""
-
-    seen: dict[str, str] = {}
-    for instance in config.instances:
-        if instance.display_name in seen:
-            raise ConfigurationError(
-                "Each configured BlueStacks display_name may map to only one instance id.",
-                display_name=instance.display_name,
-                first_instance_id=seen[instance.display_name],
-                duplicate_instance_id=instance.id,
-            )
-        seen[instance.display_name] = instance.id
 
 
 def _validate_unique_ids(label: str, values: Iterable[str]) -> None:
@@ -63,16 +62,9 @@ def _validate_unique_ids(label: str, values: Iterable[str]) -> None:
         seen.add(value)
 
 
-def _validate_account(account: AccountConfig, instance_ids: set[str]) -> None:
-    """Validates one account binding and its login identity contract."""
+def _validate_account(account: AccountConfig) -> None:
+    """Validates one account's application-owned login identity contract."""
 
-    if account.instance_id not in instance_ids:
-        raise ConfigurationError(
-            f"Account '{account.id}' references unknown instance '{account.instance_id}'.",
-            account_id=account.id,
-            instance_id=account.instance_id,
-        )
-    validate_live_roles(account.live_roles, account_id=account.id)
     if account.pnc_account_id.strip() == "":
         raise ConfigurationError(
             f"Account '{account.id}' has an empty P&C account identifier.",
