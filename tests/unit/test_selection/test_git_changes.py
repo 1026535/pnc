@@ -1,8 +1,10 @@
 """Git snapshot tests exercise real, isolated repositories without user config."""
 
 import subprocess
+import shutil
 import tempfile
 import unittest
+from typing import ClassVar
 from pathlib import Path
 from unittest.mock import patch
 
@@ -16,37 +18,62 @@ from tools.test_selection.git_changes import (
 
 
 class GitChangesTests(unittest.TestCase):
+    _seed_root: ClassVar[Path]
+    _seed_base: ClassVar[str]
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        directory = tempfile.TemporaryDirectory(prefix="selection-git-seed-")
+        cls.addClassCleanup(directory.cleanup)
+        cls._seed_root = Path(directory.name)
+        cls._run_git(cls._seed_root, "init", "--quiet", "-b", "fixture")
+        for key, value in (
+            ("user.name", "Offline Fixture"), ("user.email", "fixture@example.invalid"),
+            ("commit.gpgSign", "false"), ("core.autocrlf", "false"),
+            ("core.hooksPath", ".git/disabled-hooks"),
+            ("core.excludesFile", ".git/empty-excludes"),
+        ):
+            cls._run_git(cls._seed_root, "config", "--local", key, value)
+        cls._write(cls._seed_root, "pkg/alpha.py", "VALUE = 'base alpha'\n")
+        cls._write(cls._seed_root, "pkg/beta.py", "VALUE = 'base beta'\n")
+        cls._write(cls._seed_root, "docs/notes.md", "base docs\n")
+        cls._write(cls._seed_root, ".gitignore", "ignored/\n")
+        cls._run_git(cls._seed_root, "add", "--all")
+        cls._run_git(cls._seed_root, "commit", "--quiet", "-m", "baseline")
+        cls._seed_base = resolve(cls._seed_root, "HEAD")
+
     def setUp(self) -> None:
         directory = tempfile.TemporaryDirectory(prefix="selection-git-")
         self.addCleanup(directory.cleanup)
         self.root = Path(directory.name)
-        self.git("init", "--quiet", "-b", "fixture")
-        for key, value in (
-            ("user.name", "Offline Fixture"), ("user.email", "fixture@example.invalid"),
-            ("commit.gpgSign", "false"), ("core.autocrlf", "false"),
-            ("core.hooksPath", str(self.root / ".git" / "disabled-hooks")),
-            ("core.excludesFile", str(self.root / ".git" / "empty-excludes")),
-        ):
-            self.git("config", "--local", key, value)
-        self.write("pkg/alpha.py", "VALUE = 'base alpha'\n")
-        self.write("pkg/beta.py", "VALUE = 'base beta'\n")
-        self.write("docs/notes.md", "base docs\n")
-        self.write(".gitignore", "ignored/\n")
-        self.commit("baseline")
-        self.base = resolve(self.root, "HEAD")
+        shutil.copytree(self._seed_root, self.root, dirs_exist_ok=True)
+        self.base = self._seed_base
 
-    def git(self, *args: str) -> str:
+    @staticmethod
+    def _run_git(root: Path, *args: str) -> str:
         result = subprocess.run(
-            ["git", "-C", str(self.root), *args], capture_output=True,
+            ["git", "-C", str(root), *args], capture_output=True,
             text=True, encoding="utf-8", errors="replace", timeout=20, check=False,
         )
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        if result.returncode != 0:
+            raise RuntimeError(result.stdout + result.stderr)
         return result.stdout.strip()
 
-    def write(self, path: str, source: str) -> None:
-        target = self.root / path
+    def git(self, *args: str) -> str:
+        try:
+            return self._run_git(self.root, *args)
+        except RuntimeError as error:
+            self.fail(str(error))
+
+    @staticmethod
+    def _write(root: Path, path: str, source: str) -> None:
+        target = root / path
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(source, encoding="utf-8", newline="\n")
+
+    def write(self, path: str, source: str) -> None:
+        self._write(self.root, path, source)
 
     def commit(self, message: str) -> None:
         self.git("add", "--all")

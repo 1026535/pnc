@@ -110,9 +110,17 @@ def record_owners(inventory: list[TestIdentity]) -> dict[str, RecordOwner]:
 class TimingResult(unittest.TextTestResult):
     """Record skips, failures, subtest failures, and per-test setup/cleanup duration."""
 
-    def __init__(self, *args, inventory: list[TestIdentity], coverage=None, **kwargs):
+    def __init__(
+        self,
+        *args,
+        inventory: list[TestIdentity],
+        coverage=None,
+        switch_contexts: bool = True,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         self.coverage = coverage
+        self.switch_contexts = coverage is not None and switch_contexts
         self.owners = record_owners(inventory)
         self.records: dict[str, dict] = {}
         self.started: dict[str, float] = {}
@@ -120,13 +128,13 @@ class TimingResult(unittest.TextTestResult):
     def startTest(self, test):
         self.started[test.id()] = time.perf_counter()
         self.records[test.id()] = self._record(test)
-        if self.coverage is not None:
+        if self.switch_contexts:
             self.coverage.switch_context(test.id())
         super().startTest(test)
 
     def stopTest(self, test):
         self.records[test.id()]["duration_seconds"] = round(time.perf_counter() - self.started.pop(test.id()), 6)
-        if self.coverage is not None:
+        if self.switch_contexts:
             # Imports and class/module fixtures must not inherit the previous test.
             self.coverage.switch_context("")
         super().stopTest(test)

@@ -39,8 +39,11 @@ missing defaults skip without reading machine-local fixture configuration.
 # Execute affected selection and retain its reasoning and results.
 .venv/Scripts/python.exe tools/run_tests.py affected --base origin/main --explain --json .test-impact/selection.json --results .test-impact/results.json --csv .test-impact/timings.csv
 
-# Full instrumented run: branch coverage, per-test timing, context seed.
+# Full instrumented run: branch coverage and per-test timing.
 .venv/Scripts/python.exe tools/run_tests.py measure --csv .test-impact/measurement-timings.csv
+
+# Full measurement with opt-in per-test contexts and empirical seed publication.
+.venv/Scripts/python.exe tools/run_tests.py measure --contexts --csv .test-impact/measurement-timings.csv
 
 # Optional context evidence can add tests to the static selection.
 .venv/Scripts/python.exe tools/run_tests.py affected --base origin/main --contexts --explain
@@ -80,7 +83,11 @@ each module's reasons and every full fallback. Static imports cannot completely
 describe reflection, plugins, source-as-data, or arbitrary external resources;
 affected success is fast feedback and cannot replace the pre-merge full check.
 
-`measure` writes `.test-impact/contexts.json` after a successful full run.
+`measure` always runs the full portable inventory and writes branch coverage and
+timing evidence. It does not switch per-test Coverage contexts or manipulate
+`.test-impact/contexts.json`. `measure --contexts` additionally switches
+contexts and writes `.test-impact/contexts.json` only after a successful,
+complete run; stale or incomplete context-learning state is removed.
 Dynamic test contexts begin before per-test setup and reset after cleanup;
 unattributed import/class/module-fixture execution belongs conservatively to
 every module. With `--contexts`, observed dependencies are unioned with the
@@ -92,10 +99,12 @@ checks deliberately make evidence from a different environment ineligible.
 Runtime observations do not establish dependencies on unexecuted branches or
 non-Python files. Resource ownership and full fallbacks still apply.
 
-The context store is local generated evidence, not a trusted shared CI cache.
-CI does not restore or publish context seeds. Use separate output paths for
-independent concurrent runs; atomic replacement prevents partial files but does
-not combine competing reports.
+The context store is generated evidence, not a trusted shared CI cache. PR and
+ordinary local runs do not restore or publish context seeds; the nightly
+`measure --contexts` job publishes its empirical seed alongside the other
+measurement artifacts. Use separate output paths for independent concurrent
+runs; atomic replacement prevents partial files but does not combine competing
+reports.
 
 ## Evidence and exit status
 
@@ -130,8 +139,9 @@ selection), `1` for test failures/errors, and `2` for runner/configuration error
 filters. PR events run `affected` against the event's base SHA on GitHub's merge
 candidate, with mandatory guards owned by the runner. Superseded PR runs cancel.
 Merge groups, pushes to `main`, and manual dispatches run `full`. Nightly runs
-at 07:23 UTC run `measure` over the full portable inventory for branch coverage
-and timing evidence. Before measuring, the nightly job records a separate
+at 07:23 UTC run `measure --contexts` over the full portable inventory for
+branch coverage, timing evidence, and the empirical context map. Before
+measuring, the nightly job records a separate
 `affected --base HEAD^ --dry-run` plan in `.test-impact/audit-selection.json`.
 Recording that plan is informational: a failure is visible but does not suppress
 the independent full measurement. The full measurement's exit status remains
