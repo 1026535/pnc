@@ -2292,7 +2292,12 @@ class PncObservationEnricher:
         chat = _build_chat_overlay_additions(image=image, lines=lines)
         if chat is None:
             return None
-        chat_state = self._build_proven_chat_state_additions(image=image, request=request)
+        chat_state = self._build_proven_chat_state_additions(
+            image=image,
+            request=request,
+            kingdom_region=chat.visible_elements[UiElementId.PNC_CHAT_TAB_KINGDOM].bounds,
+            alliance_region=chat.visible_elements[UiElementId.PNC_CHAT_TAB_ALLIANCE].bounds,
+        )
         return ObservationAdditions(
             visible_elements=chat.visible_elements,
             list_entries=self._extract_chat_message_entries(image=image, lines=lines),
@@ -2350,6 +2355,8 @@ class PncObservationEnricher:
         image: Image.Image,
         request: ObservationRequest,
         active_chat_channel: ChatChannel | None = None,
+        kingdom_region: Bounds | None = None,
+        alliance_region: Bounds | None = None,
     ) -> ObservationAdditions:
         """Returns active-channel and draft facts for one observation that has already proven chat."""
 
@@ -2357,8 +2364,10 @@ class PncObservationEnricher:
             return ObservationAdditions()
         input_region = self._require_chat_region(UiElementId.PNC_CHAT_INPUT_FIELD, image=image)
         if active_chat_channel is None:
-            kingdom_region = self._require_chat_region(UiElementId.PNC_CHAT_TAB_KINGDOM, image=image)
-            alliance_region = self._require_chat_region(UiElementId.PNC_CHAT_TAB_ALLIANCE, image=image)
+            if kingdom_region is None:
+                kingdom_region = self._require_chat_region(UiElementId.PNC_CHAT_TAB_KINGDOM, image=image)
+            if alliance_region is None:
+                alliance_region = self._require_chat_region(UiElementId.PNC_CHAT_TAB_ALLIANCE, image=image)
             active_chat_channel = _resolve_active_chat_channel(
                 image=image,
                 kingdom_region=kingdom_region,
@@ -6695,22 +6704,20 @@ def _build_chat_overlay_additions(
     kingdom = _find_line_with_normalized_text(
         lines=lines,
         normalized_text=_CHAT_KINGDOM_TEXT,
-        min_x=int(image.width * 0.12),
+        min_x=int(image.width * 0.08),
         min_y=int(image.height * 0.05),
         max_y=int(image.height * 0.14),
     )
-    # The current 540 px capture uses a compact tab layout. Keep the wider
-    # legacy threshold for 900 px captures while accepting the measured
-    # current Alliance tab around x=219.
-    alliance_min_x = int(image.width * (0.35 if image.width <= 600 else 0.55))
+    if header is None or kingdom is None:
+        return None
     alliance = _find_line_with_normalized_text(
         lines=lines,
         normalized_text=_CHAT_ALLIANCE_TEXT,
-        min_x=alliance_min_x,
+        min_x=kingdom.bounds.x + kingdom.bounds.width,
         min_y=int(image.height * 0.05),
         max_y=int(image.height * 0.14),
     )
-    if header is None or kingdom is None or alliance is None:
+    if alliance is None:
         return None
     return ObservationAdditions(
         visible_elements={
