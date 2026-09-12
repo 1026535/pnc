@@ -12,6 +12,8 @@ Acceptance: deterministic positive/missing-anchor/wrong-screen/blocked-control t
 
 Live disposition: passed on current testing castle, 13 inputs/49 observations within the 24-input/20-minute phase budget. The measured Back returned to Institute, and final graph replay returned Home. The implementation report records exact captures, commands and remaining gates. Treat the checkpoints below as historical where superseded by this status.
 
+Subsequent synchronization includes main `69ae648`: authored Open Building now shares the strict core workflow, and host binding/lease/artifact safety changes are retained. The merged runtime passed a capture-only Home check. These changes do not enable Research Start or add category routes. Continue future F work from this combined ownership and retain the legacy canary CLI limitation documented in the report.
+
 ## Earlier reviewed implementation checkpoint (2026-09-12)
 
 This publication integrates main through `87e6151`, preserving bounded observed building focus and the Castle endpoint while migrating the added visual profile to the feature's catalog/provenance schema. Later independent main workflow-safety changes are a subsequent synchronization boundary, not part of this result. The five previously missing graph registrations are implemented and live-confirmed on testing. The saved and fresh live Bag content mismatch is resolved by the existing canonical pipeline: six complete entries, zero Use taps, final Home. Dual-logo publisher startup recognition is now implemented with passive loading/no controls and missing-logo abstention. Numeric repair already used the shared strict parser; mixed punctuation/OCR regressions were added without a second parser.
