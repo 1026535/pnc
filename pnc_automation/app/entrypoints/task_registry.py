@@ -10,7 +10,6 @@ from pnc_automation.app.automation.tasks.campaign_task import CampaignTask
 from pnc_automation.app.automation.tasks.gathering_task import GatheringTask
 from pnc_automation.app.automation.tasks.login_task import LoginTask
 from pnc_automation.app.automation.tasks.research_task import ResearchTask
-from pnc_automation.app.automation.tasks.select_castle_task import SelectCastleTask
 from pnc_automation.app.automation.tasks.send_mail_task import SendMailTask
 from pnc_automation.app.authoring.scripts.registry import TaskRegistry
 from pnc_automation.app.automation.engine.task import (
@@ -40,7 +39,11 @@ def build_default_task_registry() -> TaskRegistry:
                 parameter_parser=partial(require_no_params, TaskId.POPUP_RECOVERY),
             ),
             LoginTask(),
-            SelectCastleTask(),
+            CoreWorkflowTaskDefinition(
+                id=TaskId.SELECT_CASTLE,
+                castle_target_policy=CastleTargetPolicy.REQUIRED,
+                parameter_parser=partial(require_no_params, TaskId.SELECT_CASTLE),
+            ),
             CoreWorkflowTaskDefinition(
                 id=TaskId.REFRESH_CASTLE_ROSTER,
                 castle_target_policy=CastleTargetPolicy.DISALLOWED,

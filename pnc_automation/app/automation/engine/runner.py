@@ -263,13 +263,8 @@ class AutomationRunner:
             )
         before = self.observation_service.observe(f"{step.task.value}_before")
         before = self._align_step_castle_target(
-            account=account,
             step=step,
             before=before,
-            castle_roster_provider=castle_roster_provider,
-            castle_roster_store=castle_roster_store,
-            mail_archive_store=mail_archive_store,
-            chat_archive_store=chat_archive_store,
         )
         execution = self._execute_step_loop(
             account=account,
@@ -321,32 +316,33 @@ class AutomationRunner:
     def _align_step_castle_target(
         self,
         *,
-        account: AccountConfig,
         step: PreparedScriptStep,
         before: Observation,
-        castle_roster_provider: Callable[[], PncAccountCastleRosterConfig | None] | None,
-        castle_roster_store: CastleRosterStore | None,
-        mail_archive_store: MailArchiveStore | None,
-        chat_archive_store: ChatArchiveStore | None,
     ) -> Observation:
         """Runs the canonical synthetic pre-step castle alignment when one target was requested."""
 
         if step.castle is None or step.castle_target_policy != CastleTargetPolicy.OPTIONAL:
             return before
+        core_step_executor = self.core_step_executor
+        if core_step_executor is None:
+            raise RuntimeError(
+                "Castle-targeted legacy steps require the typed Select Castle core dispatcher; "
+                "alignment failed closed."
+            )
         synthetic_step = ScriptStep(task=TaskId.SELECT_CASTLE, castle=step.castle)
-        select_castle_task = self.task_registry.require(TaskId.SELECT_CASTLE)
-        execution = self._execute_step_loop(
-            account=account,
-            castle_roster_provider=castle_roster_provider,
-            castle_roster_store=castle_roster_store,
-            mail_archive_store=mail_archive_store,
-            chat_archive_store=chat_archive_store,
-            step=synthetic_step,
-            parsed_params=select_castle_task.parse_params({}),
-            target_castle=step.castle,
-            before=before,
+        typed_step = PreparedScriptStep(
+            script_step=synthetic_step,
+            parsed_params=None,
+            castle_target_policy=CastleTargetPolicy.REQUIRED,
+            resolved_castle=step.castle,
         )
-        return execution.final_observation
+        workflow_result = core_step_executor.execute(step=typed_step)
+        if not workflow_result.succeeded:
+            raise RuntimeError(
+                f"Core workflow '{workflow_result.workflow_name}' reported failure; "
+                "legacy task alignment stopped without fallback."
+            )
+        return self.observation_service.observe(f"{step.task.value}_before_after_castle_selection")
 
     def _execute_step_loop(
         self,

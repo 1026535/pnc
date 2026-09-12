@@ -19,6 +19,7 @@ from pnc_automation.app.automation.refresh_castle_roster import (
     RefreshCastleRosterResult,
     RefreshCastleRosterWorkflow,
 )
+from pnc_automation.app.automation.select_castle import SelectCastleResult, SelectCastleWorkflow
 from pnc_automation.app.automation.engine.task import TaskId
 from pnc_automation.app.automation.engine.core_runtime import CoreRuntime
 from pnc_automation.app.automation.engine.core_workflow import (
@@ -29,6 +30,7 @@ from pnc_automation.app.automation.engine.core_workflow import (
 from pnc_automation.app.authoring.config.models import AccountConfig, LiveAutomationRole
 from pnc_automation.app.authoring.scripts.models import PreparedScriptStep
 from pnc_automation.app.pnc.domain.chat import ChatChannel, ChatMessageTaskParams
+from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.domain.mail import CollectMailParams
 from pnc_automation.app.pnc.domain.policy_models import OpenBuildingPolicy
 from pnc_automation.app.pnc.domain.observation import (
@@ -74,6 +76,7 @@ class CoreScriptDispatcher:
         | CollectMailResult
         | OpenBuildingResult
         | RefreshCastleRosterResult
+        | SelectCastleResult
         | SendChatResult
     ]:
         """Runs one supported typed step without closing the shared connected runtime."""
@@ -83,53 +86,61 @@ class CoreScriptDispatcher:
         if step.task in {TaskId.ENSURE_GAME_RUNNING, TaskId.POPUP_RECOVERY}:
             return self._execute_lifecycle_step(core_runtime, step.task)
         active_castle = core_runtime.preflight_active_castle_identity()
-        if step.castle is not None:
-            match = resolve_current_castle_match(
-                current_castle=active_castle,
-                evidence_kind=CurrentCastleEvidenceKind.EXACT,
-                target=step.castle,
-                roster=None,
+        if step.task == TaskId.SELECT_CASTLE:
+            if step.castle is None:
+                raise RuntimeError("Typed Select Castle dispatch requires an explicit castle target.")
+            workflow = SelectCastleWorkflow(
+                original_castle=active_castle,
+                target_castle=step.castle,
             )
-            if match.status != CurrentCastleMatchStatus.MATCH:
-                raise RuntimeError(
-                    f"Typed '{step.task}' dispatch preflight did not confirm the requested castle target."
-                )
-        if step.task == TaskId.COLLECT_KINGDOM_CHAT:
-            workflow = CollectKingdomChatWorkflow(
-                account_id=self.account.id,
-                active_castle=active_castle,
-                archive_store=cast(ChatArchiveStore, self.chat_archive_store),
-            )
-        elif step.task in {TaskId.SEND_WORLD_CHAT_MESSAGE, TaskId.SEND_ALLIANCE_CHAT_MESSAGE}:
-            channel = (
-                ChatChannel.WORLD
-                if step.task == TaskId.SEND_WORLD_CHAT_MESSAGE
-                else ChatChannel.ALLIANCE
-            )
-            workflow = SendChatWorkflow(
-                params=cast(ChatMessageTaskParams, step.parsed_params),
-                active_castle=active_castle,
-                channel=channel,
-            )
-        elif step.task == TaskId.COLLECT_MAIL:
-            workflow = CollectMailWorkflow(
-                params=cast(CollectMailParams, step.parsed_params),
-                account_id=self.account.id,
-                pnc_account_id=self.account.pnc_account_id,
-                active_castle=active_castle.castle_name,
-                archive_store=cast(MailArchiveStore, self.mail_archive_store),
-            )
-        elif step.task == TaskId.REFRESH_CASTLE_ROSTER:
-            workflow = RefreshCastleRosterWorkflow(
-                account_id=self.account.id,
-                pnc_account_id=self.account.pnc_account_id,
-                active_castle=active_castle,
-                roster_store=cast(CastleRosterStore, self.castle_roster_store),
-            )
-        elif step.task == TaskId.OPEN_BUILDING:
-            workflow = OpenBuildingWorkflow(policy=cast(OpenBuildingPolicy, step.parsed_params))
         else:
-            raise RuntimeError(f"No typed core dispatcher is registered for task '{step.task}'.")
+            if step.castle is not None:
+                match = resolve_current_castle_match(
+                    current_castle=active_castle,
+                    evidence_kind=CurrentCastleEvidenceKind.EXACT,
+                    target=step.castle,
+                    roster=None,
+                )
+                if match.status != CurrentCastleMatchStatus.MATCH:
+                    raise RuntimeError(
+                        f"Typed '{step.task}' dispatch preflight did not confirm the requested castle target."
+                    )
+            if step.task == TaskId.COLLECT_KINGDOM_CHAT:
+                workflow = CollectKingdomChatWorkflow(
+                    account_id=self.account.id,
+                    active_castle=active_castle,
+                    archive_store=cast(ChatArchiveStore, self.chat_archive_store),
+                )
+            elif step.task in {TaskId.SEND_WORLD_CHAT_MESSAGE, TaskId.SEND_ALLIANCE_CHAT_MESSAGE}:
+                channel = (
+                    ChatChannel.WORLD
+                    if step.task == TaskId.SEND_WORLD_CHAT_MESSAGE
+                    else ChatChannel.ALLIANCE
+                )
+                workflow = SendChatWorkflow(
+                    params=cast(ChatMessageTaskParams, step.parsed_params),
+                    active_castle=active_castle,
+                    channel=channel,
+                )
+            elif step.task == TaskId.COLLECT_MAIL:
+                workflow = CollectMailWorkflow(
+                    params=cast(CollectMailParams, step.parsed_params),
+                    account_id=self.account.id,
+                    pnc_account_id=self.account.pnc_account_id,
+                    active_castle=active_castle.castle_name,
+                    archive_store=cast(MailArchiveStore, self.mail_archive_store),
+                )
+            elif step.task == TaskId.REFRESH_CASTLE_ROSTER:
+                workflow = RefreshCastleRosterWorkflow(
+                    account_id=self.account.id,
+                    pnc_account_id=self.account.pnc_account_id,
+                    active_castle=active_castle,
+                    roster_store=cast(CastleRosterStore, self.castle_roster_store),
+                )
+            elif step.task == TaskId.OPEN_BUILDING:
+                workflow = OpenBuildingWorkflow(policy=cast(OpenBuildingPolicy, step.parsed_params))
+            else:
+                raise RuntimeError(f"No typed core dispatcher is registered for task '{step.task}'.")
         runner = self._workflow_runner
         if runner is None:
             runner = CoreWorkflowRunner(core_runtime)
@@ -223,6 +234,12 @@ def validate_core_script_step(
             raise RuntimeError(
                 f"Typed {step.task.value} dispatch requires parameterless parsed parameters."
             )
+        return
+    if step.task == TaskId.SELECT_CASTLE:
+        if step.parsed_params is not None:
+            raise RuntimeError("Typed Select Castle dispatch requires parameterless parsed parameters.")
+        if not isinstance(step.castle, CastleIdentity):
+            raise RuntimeError("Typed Select Castle dispatch requires an explicit castle target.")
         return
     if step.task not in {
         TaskId.SEND_WORLD_CHAT_MESSAGE,

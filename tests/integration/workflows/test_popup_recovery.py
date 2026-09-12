@@ -16,8 +16,6 @@ from pnc_automation.app.automation.engine.observed_action_executor import (
 )
 from pnc_automation.app.automation.engine.runner import AutomationRunner
 from pnc_automation.app.automation.engine.task import TaskPreflight
-from pnc_automation.app.automation.tasks.select_castle_task import SelectCastleTask
-from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
 from pnc_automation.app.pnc.domain.action_requests import TapAction, WaitAction
 from pnc_automation.app.pnc.domain.observation import Observation
@@ -657,17 +655,6 @@ class PopupRecoveryTests(unittest.TestCase):
         self.assertEqual(recovered, home)
         self.assertEqual(len(self.session.taps), 1)
         self.assertEqual(observer.requests, [ObservationRequest.full_runtime_default()])
-
-    def test_castle_switch_join_alliance_landing_replans_to_home(self) -> None:
-        target = CastleIdentity("K157", "NPC 2", 22)
-        context = SimpleNamespace(require_target_castle=lambda: target, castle_roster=None)
-        before = make_observation(ScreenType.PNC_CASTLE_SELECTION)
-        after = make_observation(ScreenType.PNC_ALLIANCE_JOIN)
-
-        result = SelectCastleTask().verify(context, before, after)
-
-        self.assertEqual(result.status.value, "replan")
-        self.assertIn("returning to Home", result.message)
 
     @staticmethod
     def _typed_popup(

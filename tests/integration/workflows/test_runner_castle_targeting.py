@@ -5,6 +5,7 @@ from __future__ import annotations
 from functools import partial
 from pathlib import Path
 import unittest
+from unittest.mock import Mock
 
 from pnc_automation.app.automation.engine.action_executor import ActionExecutor
 from pnc_automation.app.automation.engine.observed_action_executor import ObservedActionExecutor
@@ -17,9 +18,7 @@ from pnc_automation.app.automation.engine.task import (
     TaskId,
     require_no_params,
 )
-from pnc_automation.app.automation.tasks.select_castle_task import SelectCastleTask
 from pnc_automation.app.pnc.domain.castles import CastleIdentity, PncAccountCastleRosterConfig
-from pnc_automation.app.pnc.domain.observation import ListEntryKind
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
@@ -27,12 +26,31 @@ from pnc_automation.app.pnc.vision.selectors import build_default_selector_regis
 
 from tests.support.automation.session import FakeSession
 from tests.support.core.logging import build_logger
-from tests.support.pnc.observations import make_entry, make_observation
+from tests.support.pnc.observations import make_observation
 from tests.support.runtime.observation_service import FakeObservationService
 from tests.support.entrypoints.castle_targeting.runtime_castle_targeting_fixtures import (
     RuntimeCastleTargetingFixtures,
 )
 from tests.support.entrypoints.castle_targeting.optional_castle_task import _OptionalCastleTask
+
+
+class _SuccessfulCoreExecutor:
+    """Captures synthetic typed selection dispatch used by optional legacy alignment."""
+
+    def __init__(self) -> None:
+        self.steps = []
+
+    def execute(self, *, step):
+        from pnc_automation.app.automation.engine.core_workflow import CoreWorkflowResult
+
+        self.steps.append(step)
+        return CoreWorkflowResult(
+            workflow_name="select_castle",
+            succeeded=True,
+            value=Mock(),
+            exit_screen=ScreenType.PNC_HOME_CITY,
+            trace_path="trace",
+        )
 
 
 class RunnerCastleTargetingTests(RuntimeCastleTargetingFixtures, unittest.TestCase):
@@ -52,34 +70,13 @@ class RunnerCastleTargetingTests(RuntimeCastleTargetingFixtures, unittest.TestCa
         """Runs the canonical select-castle pre-step before an optional castle-targeted task."""
 
         registry = TaskRegistry(
-            tasks=(self._popup_recovery_definition(), SelectCastleTask(), _OptionalCastleTask())
+            tasks=(self._popup_recovery_definition(), _OptionalCastleTask())
         )
         fake_observer = FakeObservationService(
             observations=[
                 make_observation(
                     ScreenType.PNC_HOME_CITY,
-                    visible_ids=(UiElementId.PNC_BOTTOM_NAV_MORE,),
-                    current_castle=CastleIdentity(kingdom="K229", castle_name="Wrong"),
-                ),
-                make_observation(
-                    ScreenType.PNC_MORE_MENU,
-                    visible_ids=(UiElementId.PNC_MORE_SETTINGS,),
-                    current_castle_name="Wrong",
-                ),
-                make_observation(
-                    ScreenType.PNC_SETTINGS,
-                    visible_ids=(UiElementId.PNC_MORE_MANAGE_CHAR,),
-                    current_castle_name="Wrong",
-                ),
-                make_observation(
-                    ScreenType.PNC_CASTLE_SELECTION,
-                    list_entries=(
-                        make_entry(
-                            ListEntryKind.CASTLE,
-                            title="Main",
-                            metadata={"kingdom": "K230", "castle_level": 8},
-                        ),
-                    ),
+                    current_castle_name="Main",
                 ),
                 make_observation(
                     ScreenType.PNC_HOME_CITY,
@@ -88,6 +85,7 @@ class RunnerCastleTargetingTests(RuntimeCastleTargetingFixtures, unittest.TestCa
             ]
         )
         fake_session = FakeSession()
+        core_executor = _SuccessfulCoreExecutor()
         runner = AutomationRunner(
             defaults=self.defaults,
             observation_service=fake_observer,
@@ -109,6 +107,7 @@ class RunnerCastleTargetingTests(RuntimeCastleTargetingFixtures, unittest.TestCa
             task_registry=registry,
             flow_planner=ScreenFlowPlanner(),
             logger=build_logger(),
+            core_step_executor=core_executor,
         )
         prepared = registry.prepare_script(
             RunScript(
@@ -128,14 +127,20 @@ class RunnerCastleTargetingTests(RuntimeCastleTargetingFixtures, unittest.TestCa
         )
 
         self.assertEqual(result.steps[0].requested_castle, self.target_castle)
-        self.assertTrue(any(label.startswith("select_castle_") for label in fake_observer.labels))
-        self.assertGreaterEqual(len(fake_session.taps), 4)
+        self.assertEqual(len(core_executor.steps), 1)
+        self.assertEqual(core_executor.steps[0].task, TaskId.SELECT_CASTLE)
+        self.assertEqual(core_executor.steps[0].castle, self.target_castle)
+        self.assertEqual(fake_observer.labels, [
+            "building_upgrade_before",
+            "building_upgrade_before_after_castle_selection",
+        ])
+        self.assertEqual(fake_session.taps, [])
 
     def test_runner_does_not_select_castle_when_optional_task_has_no_target(self) -> None:
         """Leaves optional tasks on current-castle semantics when the step omits `castle`."""
 
         registry = TaskRegistry(
-            tasks=(self._popup_recovery_definition(), SelectCastleTask(), _OptionalCastleTask())
+            tasks=(self._popup_recovery_definition(), _OptionalCastleTask())
         )
         fake_observer = FakeObservationService(observations=[make_observation(ScreenType.PNC_HOME_CITY)])
         runner = AutomationRunner(

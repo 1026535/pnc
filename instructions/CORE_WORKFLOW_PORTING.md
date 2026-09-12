@@ -99,6 +99,8 @@ Castle now has an independent visual profile requiring both the measured `Castle
 
 Active-castle preflight recognizes the selected row through exact Manage Characters evidence. It searches a long roster with bounded swipes in both directions and stops on repeated viewport signatures without tapping a castle row.
 
+`SelectCastleWorkflow` is the typed Home-to-Home `NONSPENDING_STATE_CHANGE` port for authored `TaskId.SELECT_CASTLE`. It enters Manage Characters through the reviewed graph, searches only fresh observed roster windows with at most six swipes in each direction, reacquires one exact kingdom/name row before a single observed-point tap, and requires exact active-identity proof before returning Home. A selected target is a no-op; missing, ambiguous, stale, interrupted, or changed rows fail closed without fallback or replay. The focused offline port checks are complete; root-owned live switching proof remains pending.
+
 ## Migration status
 
 The full workflow migration is incomplete. A direct API port does not migrate an authored YAML task with the same name. The integrated direct ports below retain that distinction.
@@ -111,8 +113,8 @@ The full workflow migration is incomplete. A direct API port does not migrate an
 | Kingdom Chat collection | Integrated direct Python port and typed authored `TaskId.COLLECT_KINGDOM_CHAT` dispatch. |
 | Session readiness | `TaskId.ENSURE_GAME_RUNNING` is a typed lifecycle step backed by `CoreRuntime.ensure_game_ready`; it proves a stable known P&C screen and does not prove login or account identity. |
 | Popup recovery | `TaskId.POPUP_RECOVERY` is a typed lifecycle step backed by `CoreRuntime.recover_popup`; it reuses the canonical bounded observation settle and does not own foregrounding, navigation, or a second popup policy. |
-| Authored scripts | `TaskId.ENSURE_GAME_RUNNING`, `TaskId.POPUP_RECOVERY`, `TaskId.COLLECT_KINGDOM_CHAT`, `TaskId.SEND_WORLD_CHAT_MESSAGE`, `TaskId.SEND_ALLIANCE_CHAT_MESSAGE`, `TaskId.COLLECT_MAIL`, `TaskId.OPEN_BUILDING`, and `TaskId.REFRESH_CASTLE_ROSTER` use the typed core dispatcher; other registered `TaskId`/YAML steps remain on legacy dispatch. |
-| Bootstrap and roster workflows | Roster refresh has typed direct Python and authored dispatch. Login and castle selection remain unported. Core preflight reuses foreground/bootstrap behavior; safe popup recovery belongs to the canonical runtime. Neither is an empty workflow to recreate. |
+| Authored scripts | `TaskId.ENSURE_GAME_RUNNING`, `TaskId.POPUP_RECOVERY`, `TaskId.SELECT_CASTLE`, `TaskId.COLLECT_KINGDOM_CHAT`, `TaskId.SEND_WORLD_CHAT_MESSAGE`, `TaskId.SEND_ALLIANCE_CHAT_MESSAGE`, `TaskId.COLLECT_MAIL`, `TaskId.OPEN_BUILDING`, and `TaskId.REFRESH_CASTLE_ROSTER` use the typed core dispatcher; other registered `TaskId`/YAML steps remain on legacy dispatch. |
+| Bootstrap and roster workflows | Roster refresh and castle selection have typed direct/authored ports; Login remains legacy. Core preflight reuses foreground/bootstrap behavior; safe popup recovery belongs to the canonical runtime. Neither is an empty workflow to recreate. |
 | Chat and mail sending | Authored `SEND_WORLD_CHAT_MESSAGE` and `SEND_ALLIANCE_CHAT_MESSAGE` use the shared typed `SendChatWorkflow` and chat-send operation. Mail sending remains legacy. Live messages need an authorized destination and exact content. |
 | Resource-changing workflows | Construction, upgrade, research, gathering, campaign actions, and Daily maintenance execution still need reviewed typed operations and the existing authorizer/executor/journal bridge. Live spending needs an exact action, target, and budget. |
 
@@ -120,7 +122,7 @@ Generated session preparation runs the typed readiness step before the existing 
 
 `BlueStacksSession.ensure_app_foregrounded` reports whether it launched the app. Foreground detection reads the exact component package in one Android `mCurrentFocus` field, ignoring background windows. Missing, ambiguous, or malformed focus evidence raises `GameLaunchError`; it does not guess from another window field. Live readiness passed both from an already-running Home screen and from the launcher with the game backgrounded. These proofs do not establish cold-start or credential-entry coverage; see the validation ledger for evidence and limits.
 
-An explicit `castle_ref` on a typed core step is a current-target assertion checked by the core dispatcher; it does not authorize legacy roster alignment or an implicit castle switch. Authored scripts that need a different castle must request a separate `SELECT_CASTLE` step until that workflow is ported.
+An explicit `castle_ref` on a typed core step is a current-target assertion checked by the core dispatcher; it does not authorize legacy roster alignment or an implicit castle switch. Authored scripts that need a different castle must request a separate `SELECT_CASTLE` step, whose typed workflow owns the explicit selection path. Optional targets on remaining legacy steps use that same typed selection owner before the legacy step continues; they do not fall back to the removed legacy castle task.
 
 ## Typed chat sending
 

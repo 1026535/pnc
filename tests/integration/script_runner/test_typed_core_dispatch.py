@@ -26,6 +26,7 @@ from pnc_automation.app.automation.collect_mail import (
 )
 from pnc_automation.app.automation.open_building import OpenBuildingResult, OpenBuildingWorkflow
 from pnc_automation.app.automation.send_chat import SendChatWorkflow
+from pnc_automation.app.automation.select_castle import SelectCastleWorkflow
 from pnc_automation.app.automation.refresh_castle_roster import (
     RefreshCastleRosterResult,
     RefreshCastleRosterWorkflow,
@@ -107,6 +108,64 @@ class TypedCoreDispatchTests(unittest.TestCase):
             ChatMessageTaskParams(message="hello"),
             definition.parse_params({"message": "hello"}),
         )
+
+    def test_default_registry_uses_required_typed_select_castle_definition(self) -> None:
+        """Keeps authored castle selection parameterless while requiring its explicit target."""
+
+        definition = build_default_task_registry().require(TaskId.SELECT_CASTLE)
+
+        self.assertIsInstance(definition, CoreWorkflowTaskDefinition)
+        self.assertEqual(CastleTargetPolicy.REQUIRED, definition.castle_target_policy)
+        self.assertIsNone(definition.parse_params({}))
+
+    def test_dispatcher_builds_select_castle_workflow_without_storage_dependencies(self) -> None:
+        """Builds typed selection after active identity preflight and keeps the target exact."""
+
+        active = CastleIdentity("K1", "Current", 12)
+        target = CastleIdentity("K2", "Target", 11)
+        core_runtime = Mock()
+        core_runtime.preflight_active_castle_identity.return_value = active
+        typed_result = _workflow_result()
+        workflow_runner = Mock()
+        workflow_runner.run.return_value = typed_result
+        runtime_factory = Mock(return_value=core_runtime)
+        runner_factory = Mock(return_value=workflow_runner)
+        dispatcher = CoreScriptDispatcher(
+            account=_account(),
+            chat_archive_store=None,
+            mail_archive_store=None,
+            castle_roster_store=None,
+            core_runtime_factory=runtime_factory,
+        )
+
+        with patch(
+            "pnc_automation.app.automation.engine.core_script_dispatcher.CoreWorkflowRunner",
+            runner_factory,
+        ):
+            result = dispatcher.execute(step=_prepared_select_step(target))
+
+        self.assertIs(typed_result, result)
+        workflow = workflow_runner.run.call_args.args[0]
+        self.assertIsInstance(workflow, SelectCastleWorkflow)
+        self.assertEqual(active, workflow.original_castle)
+        self.assertEqual(target, workflow.target_castle)
+        runtime_factory.assert_called_once_with()
+        core_runtime.preflight_active_castle_identity.assert_called_once_with()
+
+    def test_dispatcher_rejects_select_castle_without_target_before_runtime(self) -> None:
+        """Rejects malformed typed selection before composing a connected runtime."""
+
+        runtime_factory = Mock()
+        dispatcher = CoreScriptDispatcher(
+            account=_account(),
+            chat_archive_store=None,
+            core_runtime_factory=runtime_factory,
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "explicit castle target"):
+            dispatcher.execute(step=_prepared_select_step(None))
+
+        runtime_factory.assert_not_called()
 
     def test_dispatcher_rejects_malformed_chat_params_before_runtime(self) -> None:
         """Rejects unparsed typed World and Alliance payloads without composing the runtime."""
@@ -1407,6 +1466,18 @@ def _prepared_chat_step(*, castle: CastleIdentity | None = None) -> PreparedScri
         parsed_params=None,
         castle_target_policy=CastleTargetPolicy.OPTIONAL,
         resolved_castle=castle,
+    )
+
+
+def _prepared_select_step(target: CastleIdentity | None) -> PreparedScriptStep:
+    """Builds one prepared typed Select Castle step for dispatcher validation tests."""
+
+    script_step = ScriptStep(task=TaskId.SELECT_CASTLE, castle=target)
+    return PreparedScriptStep(
+        script_step=script_step,
+        parsed_params=None,
+        castle_target_policy=CastleTargetPolicy.REQUIRED,
+        resolved_castle=target,
     )
 
 
