@@ -69,8 +69,8 @@ class CoreScriptDispatcher:
 
         self._validate_step(step)
         core_runtime = self._require_core_runtime()
-        if step.task == TaskId.ENSURE_GAME_RUNNING:
-            return self._execute_game_ready(core_runtime)
+        if step.task in {TaskId.ENSURE_GAME_RUNNING, TaskId.POPUP_RECOVERY}:
+            return self._execute_lifecycle_step(core_runtime, step.task)
         active_castle = core_runtime.preflight_active_castle_identity()
         if step.castle is not None:
             match = resolve_current_castle_match(
@@ -112,20 +112,31 @@ class CoreScriptDispatcher:
             self._workflow_runner = runner
         return runner.run(workflow)
 
-    def _execute_game_ready(self, core_runtime: CoreRuntime) -> CoreWorkflowResult[GameReadyResult]:
-        """Runs lifecycle readiness without castle identity or workflow navigation."""
+    def _execute_lifecycle_step(
+        self,
+        core_runtime: CoreRuntime,
+        task_id: TaskId,
+    ) -> CoreWorkflowResult[GameReadyResult]:
+        """Runs one lifecycle step without castle identity or workflow navigation."""
+
+        if task_id == TaskId.ENSURE_GAME_RUNNING:
+            lifecycle_observation = core_runtime.ensure_game_ready
+        elif task_id == TaskId.POPUP_RECOVERY:
+            lifecycle_observation = core_runtime.recover_popup
+        else:
+            raise RuntimeError(f"Unsupported typed lifecycle task '{task_id}'.")
 
         core_runtime.record(
             {
                 "event": "workflow_started",
-                "workflow": TaskId.ENSURE_GAME_RUNNING.value,
+                "workflow": task_id.value,
                 "effect": WorkflowEffect.READ_ONLY.value,
             }
         )
         try:
-            observation = core_runtime.ensure_game_ready()
+            observation = lifecycle_observation()
             result = CoreWorkflowResult(
-                workflow_name=TaskId.ENSURE_GAME_RUNNING.value,
+                workflow_name=task_id.value,
                 succeeded=True,
                 value=GameReadyResult(
                     screen_type=observation.screen_type,
@@ -138,7 +149,7 @@ class CoreScriptDispatcher:
             core_runtime.record(
                 {
                     "event": "workflow_succeeded",
-                    "workflow": TaskId.ENSURE_GAME_RUNNING.value,
+                    "workflow": task_id.value,
                     "screen": observation.screen_type.name,
                 }
             )
@@ -147,7 +158,7 @@ class CoreScriptDispatcher:
             core_runtime.record(
                 {
                     "event": "workflow_failed",
-                    "workflow": TaskId.ENSURE_GAME_RUNNING.value,
+                    "workflow": task_id.value,
                     "error_type": type(error).__name__,
                 }
             )
@@ -183,9 +194,11 @@ def validate_core_script_step(
 ) -> None:
     """Validates one supported typed binding before connect and before navigation."""
 
-    if step.task == TaskId.ENSURE_GAME_RUNNING:
+    if step.task in {TaskId.ENSURE_GAME_RUNNING, TaskId.POPUP_RECOVERY}:
         if step.parsed_params is not None:
-            raise RuntimeError("Typed Ensure Game Running dispatch requires parameterless parsed parameters.")
+            raise RuntimeError(
+                f"Typed {step.task.value} dispatch requires parameterless parsed parameters."
+            )
         return
     if step.task not in {
         TaskId.COLLECT_KINGDOM_CHAT,

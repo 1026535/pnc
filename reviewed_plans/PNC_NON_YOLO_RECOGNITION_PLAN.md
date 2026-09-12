@@ -1,6 +1,6 @@
 # Integrate visual recognition, guarded controls, and targeted OCR
 
-Status (2026-09-12): implementation resumed. Published Institute increment `0cd24ad` builds on merge `5261b1d`; the final synchronization integrates mainline `328e000` (typed readiness, roster/canary identity, and focused-window detection). The next implemented slice adds four measured Institute category controls at profile revision 2. Remaining F family evidence and live promotion gates are incomplete. This document does not authorize game mutations.
+Status (2026-09-12): implementation resumed. Published Institute increment `0cd24ad` builds on merge `5261b1d`; the final synchronization integrates mainline `e3a7b83` (typed readiness and popup lifecycle, roster/canary identity, and focused-window detection). The next implemented slice adds four measured Institute category controls at profile revision 2. Remaining F family evidence and live promotion gates are incomplete. This document does not authorize game mutations.
 
 ## Current follow-through
 
