@@ -8,6 +8,7 @@ import shutil
 import tempfile
 import unittest
 from dataclasses import dataclass, field, replace
+from functools import cache
 from pathlib import Path
 from unittest.mock import Mock
 

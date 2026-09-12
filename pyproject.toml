@@ -26,5 +26,5 @@ include-package-data = true
 include = ["pnc_automation*"]
 
 [tool.setuptools.package-data]
-"pnc_automation" = ["py.typed"]
+"pnc_automation" = ["py.typed", "templates/pnc/*.png"]
 "pnc_automation.app.pnc.vision" = ["data/*.yaml", "data/*.json", "data/screen_anchors/*.png", "data/control_anchors/*.png"]

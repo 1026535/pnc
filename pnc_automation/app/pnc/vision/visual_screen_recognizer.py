@@ -10,7 +10,9 @@ import string
 from PIL import Image
 
 from pnc_automation.app.pnc.domain.screen_decision import ScreenEvidence
+from pnc_automation.app.pnc.domain.observation import VisibleElement, VisibleElementSourceKind
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.core.vision.image.models import Bounds
 from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
 
@@ -34,6 +36,17 @@ class VisualScreenProfile:
     source: "VisualProfileSource"
     review: "VisualProfileReview"
     anchors: tuple[VisualAnchor, ...]
+    controls: tuple["VisualControl", ...] = ()
+    occludes: tuple[ScreenType, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class VisualControl:
+    """One measured control owned by a recognized visual profile."""
+
+    selector_id: UiElementId
+    anchor: VisualAnchor
+    dismisses_surface: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,6 +75,8 @@ class VisualRecognition:
 
     evidence: tuple[ScreenEvidence, ...] = ()
     profile_ids: tuple[str, ...] = ()
+    controls: tuple[VisibleElement, ...] = ()
+    dismiss_controls: tuple[VisibleElement, ...] = ()
 
     @property
     def ambiguous(self) -> bool:
@@ -95,6 +110,40 @@ class VisualScreenRecognizer:
                 for anchor in profile.anchors
             )
         )
+        occluded_screens = {
+            screen
+            for profile in matching
+            for screen in profile.occludes
+        }
+        if occluded_screens:
+            matching = tuple(
+                profile
+                for profile in matching
+                if profile.screen_type not in occluded_screens
+            )
+        controls: dict[UiElementId, VisibleElement] = {}
+        dismiss_ids: set[UiElementId] = set()
+        if len({profile.screen_type for profile in matching}) == 1:
+            for profile in matching:
+                for control in profile.controls:
+                    match = self.matcher.find_best_match(
+                        prepared_frame,
+                        control.anchor.path,
+                        threshold=control.anchor.threshold,
+                        search_region=control.anchor.search_region,
+                    )
+                    if match is None:
+                        continue
+                    element = VisibleElement(
+                        selector_id=control.selector_id,
+                        bounds=match.bounds,
+                        confidence=match.confidence,
+                        source_kind=VisibleElementSourceKind.TEMPLATE,
+                        action_point=match.bounds.center(),
+                    )
+                    controls[control.selector_id] = element
+                    if control.dismisses_surface:
+                        dismiss_ids.add(control.selector_id)
         return VisualRecognition(
             evidence=tuple(
                 ScreenEvidence(
@@ -106,6 +155,8 @@ class VisualScreenRecognizer:
                 for profile in matching
             ),
             profile_ids=tuple(profile.id for profile in matching),
+            controls=tuple(controls.values()),
+            dismiss_controls=tuple(controls[selector] for selector in sorted(dismiss_ids, key=lambda value: value.value)),
         )
 
 
@@ -130,8 +181,11 @@ def load_visual_screen_recognizer(
     profiles: list[VisualScreenProfile] = []
     ids: set[str] = set()
     for entry in entries:
-        if not isinstance(entry, dict) or set(entry) != {"id", "screen", "revision", "source", "review", "anchors"}:
-            raise ValueError("Each visual profile requires exactly id, screen, revision, source, review, and anchors.")
+        if not isinstance(entry, dict) or not {"id", "screen", "revision", "source", "review", "anchors"} <= set(entry):
+            raise ValueError("Each visual profile requires id, screen, revision, source, review, and anchors.")
+        unknown = set(entry) - {"id", "screen", "revision", "source", "review", "anchors", "controls", "occludes"}
+        if unknown:
+            raise ValueError(f"Visual profile has unknown fields: {sorted(unknown)}")
         identifier = entry["id"]
         if not isinstance(identifier, str) or not identifier or identifier in ids:
             raise ValueError("Visual profile IDs must be non-empty and unique.")
@@ -153,7 +207,35 @@ def load_visual_screen_recognizer(
         anchors = tuple(_load_anchor(item, root=path.parent, reference_size=tuple(size)) for item in raw_anchors)
         if len({anchor.path for anchor in anchors}) != len(anchors):
             raise ValueError(f"Visual profile {identifier} repeats an anchor asset.")
-        profiles.append(VisualScreenProfile(identifier, screen, revision, source, review, anchors))
+        raw_controls = entry.get("controls", [])
+        if not isinstance(raw_controls, list):
+            raise ValueError(f"Visual profile {identifier} controls must be a list.")
+        controls: list[VisualControl] = []
+        for raw_control in raw_controls:
+            if not isinstance(raw_control, dict) or set(raw_control) - {"selector", "anchor", "dismisses_surface"} or "selector" not in raw_control or "anchor" not in raw_control:
+                raise ValueError(f"Visual profile {identifier} has malformed controls.")
+            try:
+                selector = UiElementId(raw_control["selector"])
+            except (KeyError, TypeError, ValueError) as error:
+                raise ValueError(f"Visual profile {identifier} has an invalid control selector.") from error
+            dismisses = raw_control.get("dismisses_surface", False)
+            if type(dismisses) is not bool:
+                raise ValueError(f"Visual profile {identifier} control dismisses_surface must be boolean.")
+            controls.append(
+                VisualControl(
+                    selector_id=selector,
+                    anchor=_load_anchor(raw_control["anchor"], root=path.parent, reference_size=tuple(size)),
+                    dismisses_surface=dismisses,
+                )
+            )
+        raw_occludes = entry.get("occludes", [])
+        if not isinstance(raw_occludes, list):
+            raise ValueError(f"Visual profile {identifier} occludes must be a list.")
+        try:
+            occludes = tuple(ScreenType[value] for value in raw_occludes)
+        except (KeyError, TypeError) as error:
+            raise ValueError(f"Visual profile {identifier} has invalid occluded screen types.") from error
+        profiles.append(VisualScreenProfile(identifier, screen, revision, source, review, anchors, tuple(controls), occludes))
     return VisualScreenRecognizer(tuple(profiles), tuple(size), matcher or OpenCvTemplateMatcher())
 
 

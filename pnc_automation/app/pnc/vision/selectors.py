@@ -273,11 +273,30 @@ def build_default_selector_registry(
 ) -> SelectorRegistry:
     """Builds the static selector registry described by the implementation plan."""
 
+    if catalog_path is None and asset_root is None and validate_assets:
+        return _build_packaged_selector_registry()
     catalog = load_selector_catalog_document(
         catalog_path,
         asset_root=asset_root,
         validate_assets=validate_assets,
     )
+    resolved_asset_root = catalog.asset_root
+    if resolved_asset_root is None:
+        raise SelectorResolutionError("Selector catalog did not provide its canonical asset root.")
+    return SelectorRegistry(
+        selectors=tuple(
+            _create_selector_from_catalog_entry(selector=selector, asset_root=resolved_asset_root)
+            for selector in catalog.selectors
+        ),
+        surfaces=tuple(_create_surface_from_catalog_entry(surface=surface) for surface in catalog.surfaces),
+    )
+
+
+@cache
+def _build_packaged_selector_registry() -> SelectorRegistry:
+    """Builds the immutable packaged registry once per process."""
+
+    catalog = load_selector_catalog_document(None, asset_root=None, validate_assets=True)
     resolved_asset_root = catalog.asset_root
     if resolved_asset_root is None:
         raise SelectorResolutionError("Selector catalog did not provide its canonical asset root.")
