@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 import json
 from pathlib import Path
@@ -21,6 +21,8 @@ from pnc_automation.app.automation.engine.core_workflow import (
     WorkflowSpec,
 )
 from pnc_automation.app.pnc.domain.observation import DetectedListEntry, Observation, ListEntryKind
+from pnc_automation.app.pnc.domain.chat import ChatChannel
+from pnc_automation.app.pnc.domain.mail import MailboxAvailability, MailboxType
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.core.errors import TaskVerificationError
 from pnc_automation.core.vision.image.models import Bounds
@@ -89,6 +91,19 @@ class CoreWorkflowTests(unittest.TestCase):
         self.assertEqual([], runtime.navigation.targets)
         self.assertEqual(0, runtime.observation_count)
 
+    def test_nonspending_state_change_workflow_is_allowed(self) -> None:
+        """Allows local archive/read-state workflows while retaining the resource-changing gate."""
+
+        runtime = _FakeRuntime(_daily_observation(_entry("hero_arena")))
+
+        result = CoreWorkflowRunner(runtime).run(_NonspendingWorkflow())
+
+        self.assertTrue(result.succeeded)
+        self.assertEqual(
+            [ScreenType.PNC_HOME_CITY, ScreenType.PNC_QUEST_DAILY, ScreenType.PNC_HOME_CITY],
+            runtime.navigation.targets,
+        )
+
     def test_content_capture_rejects_stale_and_blocking_frames(self) -> None:
         """Requires a fresh non-blocking typed Daily frame after navigation."""
 
@@ -144,6 +159,95 @@ class CoreWorkflowTests(unittest.TestCase):
         self.assertEqual("daily_quest_status", document["workflow_name"])
         self.assertEqual("visible_viewport", document["value"]["coverage"])
 
+    def test_mail_context_delegates_once_and_does_not_replay_after_failure(self) -> None:
+        """Keeps mail-specific operations constrained to one core call each."""
+
+        runtime = Mock()
+        runtime.observation_count = 0
+        runtime.last_observation = None
+        runtime.navigation.open_mailbox.return_value = MailboxAvailability.UNAVAILABLE
+        context = WorkflowContext(runtime, last_observation=_home_observation(datetime.now(UTC)))
+
+        self.assertEqual(
+            context.open_mailbox(MailboxType.PLAYER),
+            MailboxAvailability.UNAVAILABLE,
+        )
+        runtime.navigation.open_mailbox.assert_called_once()
+        runtime.navigation.scroll_mailbox.side_effect = RuntimeError("scroll failed")
+        with self.assertRaisesRegex(RuntimeError, "scroll failed"):
+            context.scroll_mailbox()
+        runtime.navigation.scroll_mailbox.assert_called_once()
+
+    def test_chat_context_validates_type_and_synchronizes_fresh_content(self) -> None:
+        """Validates the typed channel and synchronizes after the core invokes its content callback."""
+
+        initial = _home_observation(datetime(2026, 9, 12, 12, 0, 0, tzinfo=UTC))
+        selected = Observation(
+            screen_type=ScreenType.PNC_CHAT,
+            visible_elements={},
+            active_chat_channel=ChatChannel.ALLIANCE,
+            captured_at=initial.captured_at + timedelta(seconds=1),
+        )
+        runtime = Mock()
+        runtime.observation_count = 0
+        runtime.last_observation = None
+
+        def observe(_label: str, *, include_content: bool = False) -> Observation:
+            self.assertTrue(include_content)
+            runtime.observation_count += 1
+            runtime.last_observation = selected
+            return selected
+
+        runtime.observe.side_effect = observe
+        runtime.navigation.select_chat_channel.side_effect = (
+            lambda _channel, observe_content: observe_content("chat_channel_source")
+        )
+        context = WorkflowContext(runtime, last_observation=initial)
+
+        with self.assertRaises(ValueError):
+            context.select_chat_channel("alliance")
+        self.assertEqual(0, runtime.navigation.select_chat_channel.call_count)
+
+        result = context.select_chat_channel(ChatChannel.ALLIANCE)
+
+        self.assertIs(selected, result)
+        runtime.navigation.select_chat_channel.assert_called_once()
+        self.assertEqual(ChatChannel.ALLIANCE, runtime.navigation.select_chat_channel.call_args.args[0])
+        self.assertEqual(1, context._last_navigation_count)
+        self.assertIs(selected, context._last_observation)
+
+    def test_chat_context_rejects_nonfresh_content_from_core_boundary(self) -> None:
+        """Rejects a Chat callback that does not produce a newer runtime observation."""
+
+        initial = _home_observation(datetime(2026, 9, 12, 12, 0, 0, tzinfo=UTC))
+        selected = Observation(
+            screen_type=ScreenType.PNC_CHAT,
+            visible_elements={},
+            active_chat_channel=ChatChannel.ALLIANCE,
+            captured_at=initial.captured_at + timedelta(seconds=1),
+        )
+        for mode in ("count", "timestamp"):
+            with self.subTest(mode=mode):
+                runtime = Mock()
+                runtime.observation_count = 0
+                runtime.last_observation = None
+
+                def observe(_label: str, *, include_content: bool = False) -> Observation:
+                    del include_content
+                    if mode == "count":
+                        return selected
+                    runtime.observation_count += 1
+                    return replace(selected, captured_at=initial.captured_at)
+
+                runtime.observe.side_effect = observe
+                runtime.navigation.select_chat_channel.side_effect = (
+                    lambda _channel, observe_content: observe_content("chat_channel_source")
+                )
+                context = WorkflowContext(runtime, last_observation=initial)
+
+                with self.assertRaisesRegex(RuntimeError, "not captured after|stale"):
+                    context.select_chat_channel(ChatChannel.ALLIANCE)
+
 
 class _ContentOnlyWorkflow:
     """Requests one fresh Daily content frame for freshness tests."""
@@ -173,6 +277,21 @@ class _ResourceChangingWorkflow:
     def execute(self, context: WorkflowContext) -> None:
         del context
         raise AssertionError("The mutation body must never execute.")
+
+
+class _NonspendingWorkflow:
+    """Represents a bounded state-change workflow permitted by the core runner."""
+
+    spec = WorkflowSpec(
+        name="nonspending",
+        entry_screen=ScreenType.PNC_HOME_CITY,
+        exit_screen=ScreenType.PNC_HOME_CITY,
+        effect=WorkflowEffect.NONSPENDING_STATE_CHANGE,
+    )
+
+    def execute(self, context: WorkflowContext) -> Observation:
+        context.navigate(ScreenType.PNC_QUEST_DAILY)
+        return context.observe_content(expected_screen=ScreenType.PNC_QUEST_DAILY)
 
 
 @dataclass(slots=True)

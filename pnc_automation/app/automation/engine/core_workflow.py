@@ -7,14 +7,17 @@ from enum import StrEnum
 from typing import Generic, Protocol, TypeVar
 
 from pnc_automation.app.automation.engine.core_runtime import CoreRuntime
+from pnc_automation.app.pnc.domain.chat import ChatChannel
 from pnc_automation.app.pnc.domain.observation import Observation
+from pnc_automation.app.pnc.domain.mail import MailboxAvailability, MailboxType
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 
 
 class WorkflowEffect(StrEnum):
-    """Declares whether a workflow is allowed through the read-only core runner."""
+    """Declares the bounded effect class permitted by the core runner."""
 
     READ_ONLY = "read_only"
+    NONSPENDING_STATE_CHANGE = "nonspending_state_change"
     RESOURCE_CHANGING = "resource_changing"
 
 
@@ -107,6 +110,82 @@ class WorkflowContext:
         self._last_observation = observation
         return observation
 
+    def open_mailbox(self, mailbox: MailboxType) -> MailboxAvailability:
+        """Inspect and, when available, open one reviewed mail category."""
+
+        if not isinstance(mailbox, MailboxType):
+            raise ValueError("Mailbox navigation requires a MailboxType value.")
+        try:
+            return self._runtime.navigation.open_mailbox(
+                mailbox,
+                observe_content=self._observe_mail_content,
+            )
+        finally:
+            self._sync_from_runtime()
+
+    def open_mail_thread(self, row_key: str) -> Observation:
+        """Open one exact observed mailbox thread row by its canonical key."""
+
+        try:
+            return self._runtime.navigation.open_mail_thread(
+                row_key,
+                observe_content=self._observe_mail_content,
+            )
+        finally:
+            self._sync_from_runtime()
+
+    def scroll_mailbox(self) -> Observation:
+        """Scroll one observed mailbox list once and prove a fresh list frame."""
+
+        try:
+            return self._runtime.navigation.scroll_mailbox(observe_content=self._observe_mail_content)
+        finally:
+            self._sync_from_runtime()
+
+    def select_chat_channel(self, channel: ChatChannel) -> Observation:
+        """Select one typed chat channel and require fresh content confirming it."""
+
+        if not isinstance(channel, ChatChannel):
+            raise ValueError("Chat channel selection requires a ChatChannel value.")
+        try:
+            return self._runtime.navigation.select_chat_channel(
+                channel,
+                observe_content=self._observe_chat_content,
+            )
+        finally:
+            self._sync_from_runtime()
+
+    def _observe_mail_content(self, label: str) -> Observation:
+        """Capture fresh mail content for one constrained operation."""
+
+        return self._observe_operation_content(label, operation="Mail")
+
+    def _observe_chat_content(self, label: str) -> Observation:
+        """Capture fresh chat content for one constrained channel operation."""
+
+        return self._observe_operation_content(label, operation="Chat")
+
+    def _observe_operation_content(self, label: str, *, operation: str) -> Observation:
+        """Capture fresh content while preserving shared workflow freshness checks."""
+
+        observation = self._runtime.observe(label, include_content=True)
+        if self._runtime.observation_count <= self._last_navigation_count:
+            raise RuntimeError(f"{operation} operation content was not captured after the previous workflow observation.")
+        if self._last_observation is not None and observation.captured_at <= self._last_observation.captured_at:
+            raise RuntimeError(f"{operation} operation content was stale relative to the previous workflow observation.")
+        if observation.blocking_popup:
+            raise RuntimeError(f"{operation} operation content encountered a blocking popup.")
+        self._last_navigation_count = self._runtime.observation_count
+        self._last_observation = observation
+        return observation
+
+    def _sync_from_runtime(self) -> None:
+        """Keep freshness bookkeeping aligned after core-owned completion polling."""
+
+        if self._runtime.last_observation is not None:
+            self._last_navigation_count = self._runtime.observation_count
+            self._last_observation = self._runtime.last_observation
+
 
 @dataclass(slots=True)
 class CoreWorkflowRunner(Generic[T]):
@@ -115,12 +194,12 @@ class CoreWorkflowRunner(Generic[T]):
     runtime: CoreRuntime
 
     def run(self, workflow: CoreWorkflow[T]) -> CoreWorkflowResult[T]:
-        """Runs one read-only workflow and returns only after confirmed exit."""
+        """Runs one read-only or non-spending state-change workflow after confirmed exit."""
 
         spec = workflow.spec
         if not isinstance(spec, WorkflowSpec):
             raise TypeError("Core workflows must expose a validated WorkflowSpec.")
-        if spec.effect != WorkflowEffect.READ_ONLY:
+        if spec.effect == WorkflowEffect.RESOURCE_CHANGING:
             self.runtime.record(
                 {
                     "event": "workflow_rejected",
@@ -128,7 +207,9 @@ class CoreWorkflowRunner(Generic[T]):
                     "effect": spec.effect.value if isinstance(spec.effect, WorkflowEffect) else "invalid",
                 }
             )
-            raise PermissionError("The replacement core runner permits read-only workflows only.")
+            raise PermissionError(
+                "The replacement core runner permits read-only and non-spending state-change workflows only."
+            )
         self.runtime.record({"event": "workflow_started", "workflow": spec.name, "effect": spec.effect.value})
         try:
             entry = self.runtime.navigation.navigate(spec.entry_screen)

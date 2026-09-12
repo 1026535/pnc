@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from datetime import UTC, datetime, timedelta
@@ -108,6 +109,71 @@ class ChatMonitorTests(unittest.TestCase):
             self.assertFalse(second.changed)
             self.assertIsNone(second.screenshot_path)
             self.assertEqual(first.transcript_path.read_text(encoding="utf-8").count("Enemy Bob"), 1)
+
+    def test_chat_archive_store_retains_player_baseline_across_empty_heartbeat(self) -> None:
+        """Does not erase overlap state when one heartbeat sees only announcements or no player rows."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            store = ChatArchiveStore(root=Path(temp_directory) / "chat")
+            player_entries = (
+                ObservedChatEntry(ChatEntryKind.PLAYER, "Enemy Bob", "Hello there", 0),
+                ObservedChatEntry(ChatEntryKind.PLAYER, "Cutie Voj", "Need help?", 1),
+            )
+            first_snapshot = store.build_snapshot(player_entries)
+            empty_snapshot = store.build_snapshot((
+                ObservedChatEntry(ChatEntryKind.ANNOUNCEMENT, None, "Castle battle begins", 0),
+            ))
+            first = store.persist_heartbeat(
+                account_id=self.account.id,
+                castle=self.target_castle,
+                channel=ChatChannel.WORLD,
+                captured_at=datetime(2026, 3, 23, 10, 15, 0, tzinfo=UTC),
+                snapshot=first_snapshot,
+                screenshot_payload=b"first_payload",
+            )
+            empty = store.persist_heartbeat(
+                account_id=self.account.id,
+                castle=self.target_castle,
+                channel=ChatChannel.WORLD,
+                captured_at=datetime(2026, 3, 23, 10, 20, 0, tzinfo=UTC),
+                snapshot=empty_snapshot,
+            )
+            empty_state = json.loads(empty.state_path.read_text(encoding="utf-8"))
+            repeated = store.persist_heartbeat(
+                account_id=self.account.id,
+                castle=self.target_castle,
+                channel=ChatChannel.WORLD,
+                captured_at=datetime(2026, 3, 23, 10, 25, 0, tzinfo=UTC),
+                snapshot=first_snapshot,
+            )
+
+            self.assertTrue(first.changed)
+            self.assertFalse(empty.changed)
+            self.assertEqual((), empty.snapshot.entries)
+            self.assertIsNone(empty.screenshot_path)
+            self.assertFalse(repeated.changed)
+            self.assertEqual((), repeated.appended_entries)
+            self.assertEqual(1, first.transcript_path.read_text(encoding="utf-8").count("Enemy Bob"))
+            self.assertEqual(2, len(empty_state["snapshot"]["entries"]))
+            self.assertEqual("2026-03-23T10:20:00+00:00", empty_state["last_captured_at"])
+
+    def test_chat_archive_store_accepts_initial_empty_snapshot(self) -> None:
+        """Persists an initial empty baseline without requiring a change screenshot."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            store = ChatArchiveStore(root=Path(temp_directory) / "chat")
+            update = store.persist_heartbeat(
+                account_id=self.account.id,
+                castle=self.target_castle,
+                channel=ChatChannel.WORLD,
+                captured_at=datetime(2026, 3, 23, 10, 15, 0, tzinfo=UTC),
+                snapshot=store.build_snapshot(()),
+            )
+
+            self.assertFalse(update.changed)
+            self.assertEqual((), update.snapshot.entries)
+            self.assertTrue(update.state_path.is_file())
+            self.assertIsNone(update.screenshot_path)
 
     def test_chat_archive_store_carries_previous_day_overlap_state_into_new_day(self) -> None:
         """Reuses the prior local-day state for overlap decisions when the new day has not written state yet."""
