@@ -159,10 +159,12 @@ class CoreRuntime:
         """Foregrounds Puzzles & Conquest and proves one stable in-game screen."""
 
         launch_started = self.runtime.session.ensure_app_foregrounded()
-        settled = self._settle_initial_screen(launch_started=launch_started is True)
-        if settled.screen_type == ScreenType.ANDROID_HOME:
-            raise RuntimeError("Preflight remained on Android Home; Puzzles & Conquest is not game-ready.")
-        return settled
+        return self._settle_initial_screen(launch_started=launch_started is True)
+
+    def recover_popup(self) -> Observation:
+        """Re-settle the current app after a popup interruption through the shared boundary."""
+
+        return self._settle_initial_screen()
 
     def _scan_active_castle_identity(self, observation: Observation) -> Observation:
         """Find the selected roster row with bounded swipes and no row taps."""
@@ -226,6 +228,8 @@ class CoreRuntime:
                 stable = 0
             elif observation.screen_type == ScreenType.UNKNOWN:
                 raise RuntimeError("Preflight encountered an unknown screen; no recovery action was sent.")
+            elif observation.screen_type == ScreenType.ANDROID_HOME:
+                raise RuntimeError("Preflight remained on Android Home; Puzzles & Conquest is not game-ready.")
             elif observation.screen_type == ScreenType.PNC_LOADING:
                 stable = 0
             else:

@@ -296,6 +296,19 @@ class TypedCoreDispatchTests(unittest.TestCase):
         with self.assertRaisesRegex(Exception, "does not accept"):
             definition.parse_params({"unexpected": True})
 
+    def test_default_registry_uses_typed_popup_recovery_definition(self) -> None:
+        """Registers popup recovery as a castle-independent parameterless lifecycle operation."""
+
+        definition = build_default_task_registry().require(TaskId.POPUP_RECOVERY)
+
+        self.assertIsInstance(definition, CoreWorkflowTaskDefinition)
+        self.assertEqual(definition.castle_target_policy, CastleTargetPolicy.DISALLOWED)
+        self.assertIsNone(definition.parse_params({}))
+        with self.assertRaisesRegex(Exception, "does not accept"):
+            definition.parse_params({"unexpected": True})
+        with self.assertRaises(AttributeError):
+            definition.id = TaskId.ENSURE_GAME_RUNNING  # type: ignore[misc]
+
     def test_dispatcher_lifecycle_step_proves_readiness_without_identity_or_store(self) -> None:
         """Runs lifecycle readiness on the shared core graph without castle preflight or archive access."""
 
@@ -348,6 +361,88 @@ class TypedCoreDispatchTests(unittest.TestCase):
         core_runtime.ensure_game_ready.assert_called_once_with()
         core_runtime.preflight_active_castle_identity.assert_not_called()
         core_runtime.close.assert_not_called()
+
+    def test_dispatcher_popup_recovery_uses_lifecycle_boundary_without_identity_or_store(self) -> None:
+        """Dispatches popup recovery directly through CoreRuntime without foreground or castle preflight."""
+
+        captured_at = datetime(2026, 9, 12, 5, 0, tzinfo=UTC)
+        observation = Observation(
+            screen_type=ScreenType.PNC_HOME_CITY,
+            visible_elements={},
+            captured_at=captured_at,
+            artifact_path=Path("recovered.png"),
+        )
+        core_runtime = Mock()
+        core_runtime.recover_popup.return_value = observation
+        core_runtime.trace_path = Path("trace.jsonl")
+        runtime_factory = Mock(return_value=core_runtime)
+        dispatcher = CoreScriptDispatcher(
+            account=_account(),
+            chat_archive_store=None,
+            core_runtime_factory=runtime_factory,
+        )
+
+        result = dispatcher.execute(step=_prepared_popup_step())
+
+        self.assertTrue(result.succeeded)
+        self.assertEqual(TaskId.POPUP_RECOVERY.value, result.workflow_name)
+        self.assertEqual(
+            GameReadyResult(ScreenType.PNC_HOME_CITY, captured_at, Path("recovered.png")),
+            result.value,
+        )
+        core_runtime.recover_popup.assert_called_once_with()
+        core_runtime.ensure_game_ready.assert_not_called()
+        core_runtime.preflight_active_castle_identity.assert_not_called()
+        core_runtime.close.assert_not_called()
+
+    def test_dispatcher_popup_failure_does_not_fallback_or_close_shared_runtime(self) -> None:
+        """Propagates popup recovery failure without invoking another lifecycle or legacy path."""
+
+        core_runtime = Mock()
+        core_runtime.recover_popup.side_effect = RuntimeError("popup recovery budget exhausted")
+        core_runtime.trace_path = Path("trace.jsonl")
+        dispatcher = CoreScriptDispatcher(
+            account=_account(),
+            chat_archive_store=None,
+            core_runtime_factory=Mock(return_value=core_runtime),
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "popup recovery budget exhausted"):
+            dispatcher.execute(step=_prepared_popup_step())
+
+        core_runtime.recover_popup.assert_called_once_with()
+        core_runtime.ensure_game_ready.assert_not_called()
+        core_runtime.preflight_active_castle_identity.assert_not_called()
+        core_runtime.close.assert_not_called()
+
+    def test_script_runner_rejects_popup_params_before_connection(self) -> None:
+        """Rejects authored popup parameters before constructing a connected runner."""
+
+        script_runner = _minimal_script_runner(archive_store=None)
+        with patch.object(ScriptRunner, "_build_runner") as build_runner:
+            with self.assertRaisesRegex(Exception, "does not accept"):
+                script_runner._run_script_for_account(
+                    account=_account(),
+                    script=_run_popup_script(params={"unexpected": True}),
+                )
+
+        build_runner.assert_not_called()
+
+    def test_script_runner_rejects_popup_castle_target_before_connection(self) -> None:
+        """Rejects a castle target on the castle-independent popup lifecycle step before connect."""
+
+        script_runner = _minimal_script_runner(archive_store=None)
+        with patch.object(ScriptRunner, "_build_runner") as build_runner:
+            with self.assertRaisesRegex(Exception, "does not accept"):
+                script_runner._run_script_for_account(
+                    account=_account(),
+                    script=_run_popup_script(
+                        params={},
+                        castle=CastleIdentity("K1", "Castle", 12),
+                    ),
+                )
+
+        build_runner.assert_not_called()
 
     def test_script_runner_accepts_lifecycle_step_without_archive_before_connection(self) -> None:
         """Validates parameterless lifecycle preparation without requiring a workflow store."""
@@ -908,6 +1003,16 @@ def _prepared_ensure_step(*, params: object | None = None) -> PreparedScriptStep
     )
 
 
+def _prepared_popup_step(*, params: object | None = None) -> PreparedScriptStep:
+    """Builds one already-prepared parameterless popup lifecycle step."""
+
+    return PreparedScriptStep(
+        script_step=ScriptStep(task=TaskId.POPUP_RECOVERY),
+        parsed_params=params,
+        castle_target_policy=CastleTargetPolicy.DISALLOWED,
+    )
+
+
 def _mail_params() -> CollectMailParams:
     """Builds one canonical typed mail payload for dispatcher tests."""
 
@@ -990,6 +1095,20 @@ def _run_ensure_script(*, params: dict[str, object]) -> RunScript:
         name="ensure",
         path=Path("ensure.yaml"),
         steps=(ScriptStep(task=TaskId.ENSURE_GAME_RUNNING, params=params),),
+    )
+
+
+def _run_popup_script(
+    *,
+    params: dict[str, object],
+    castle: CastleIdentity | None = None,
+) -> RunScript:
+    """Builds one authored popup recovery script for pre-connect validation tests."""
+
+    return RunScript(
+        name="popup",
+        path=Path("popup.yaml"),
+        steps=(ScriptStep(task=TaskId.POPUP_RECOVERY, params=params, castle=castle),),
     )
 
 

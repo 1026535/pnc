@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from functools import partial
 from pathlib import Path
 import unittest
 
@@ -10,8 +11,12 @@ from pnc_automation.app.automation.engine.observed_action_executor import Observ
 from pnc_automation.app.automation.engine.runner import AutomationRunner
 from pnc_automation.app.authoring.scripts.models import RunScript, ScriptStep
 from pnc_automation.app.authoring.scripts.registry import TaskRegistry
-from pnc_automation.app.automation.engine.task import TaskId
-from pnc_automation.app.automation.tasks.popup_recovery_task import PopupRecoveryTask
+from pnc_automation.app.automation.engine.task import (
+    CastleTargetPolicy,
+    CoreWorkflowTaskDefinition,
+    TaskId,
+    require_no_params,
+)
 from pnc_automation.app.automation.tasks.select_castle_task import SelectCastleTask
 from pnc_automation.app.pnc.domain.castles import CastleIdentity, PncAccountCastleRosterConfig
 from pnc_automation.app.pnc.domain.observation import ListEntryKind
@@ -33,10 +38,22 @@ from tests.support.entrypoints.castle_targeting.optional_castle_task import _Opt
 class RunnerCastleTargetingTests(RuntimeCastleTargetingFixtures, unittest.TestCase):
     """Proves runner castle targeting."""
 
+    @staticmethod
+    def _popup_recovery_definition() -> CoreWorkflowTaskDefinition:
+        """Provide the typed lifecycle metadata needed by this registry fixture."""
+
+        return CoreWorkflowTaskDefinition(
+            id=TaskId.POPUP_RECOVERY,
+            castle_target_policy=CastleTargetPolicy.DISALLOWED,
+            parameter_parser=partial(require_no_params, TaskId.POPUP_RECOVERY),
+        )
+
     def test_runner_auto_selects_explicit_castle_before_optional_task(self) -> None:
         """Runs the canonical select-castle pre-step before an optional castle-targeted task."""
 
-        registry = TaskRegistry(tasks=(PopupRecoveryTask(), SelectCastleTask(), _OptionalCastleTask()))
+        registry = TaskRegistry(
+            tasks=(self._popup_recovery_definition(), SelectCastleTask(), _OptionalCastleTask())
+        )
         fake_observer = FakeObservationService(
             observations=[
                 make_observation(
@@ -117,7 +134,9 @@ class RunnerCastleTargetingTests(RuntimeCastleTargetingFixtures, unittest.TestCa
     def test_runner_does_not_select_castle_when_optional_task_has_no_target(self) -> None:
         """Leaves optional tasks on current-castle semantics when the step omits `castle`."""
 
-        registry = TaskRegistry(tasks=(PopupRecoveryTask(), SelectCastleTask(), _OptionalCastleTask()))
+        registry = TaskRegistry(
+            tasks=(self._popup_recovery_definition(), SelectCastleTask(), _OptionalCastleTask())
+        )
         fake_observer = FakeObservationService(observations=[make_observation(ScreenType.PNC_HOME_CITY)])
         runner = AutomationRunner(
             defaults=self.defaults,
