@@ -22,8 +22,10 @@ from pnc_automation.app.pnc.domain.building_catalog import (
     primary_screen_type_for_home_city_object,
 )
 from pnc_automation.app.pnc.domain.observation import (
+    DetectedSpatialObject,
     ListEntryKind,
     Observation,
+    SpatialSurfaceType,
     VisibleElementSourceKind,
 )
 from pnc_automation.app.pnc.domain.chat import ChatChannel, chat_channel_selector_id
@@ -35,6 +37,10 @@ from pnc_automation.app.pnc.domain.mail import (
 )
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
+from pnc_automation.app.pnc.navigation.spatial_navigation import (
+    home_city_scan_step_budget,
+    home_city_scan_steps,
+)
 
 
 class NavigationActuator(Protocol):
@@ -110,25 +116,15 @@ class NavigationCore:
         self, target: HomeCityObjectId, *, observe_content: Callable[[str], Observation],
     ) -> Observation:
         """Open one observed city object without atlas estimates or camera prediction."""
-        destination = primary_screen_type_for_home_city_object(target)
-        if destination is None or not any(edge.source == destination for edge in self.edges):
-            raise ValueError("Building has no reviewed return route in this core.")
+        destination = _require_reviewed_building_route(target=target, edges=self.edges)
         self._sequence += 1
         label = f"core_{self._sequence}_building"
         before = observe_content(f"{label}_source")
-        if before.screen_type != ScreenType.PNC_HOME_CITY or before.blocking_popup or before.spatial_surface is None:
-            raise RuntimeError("Building navigation requires a freshly observed city surface.")
-        candidates = [
-            item for item in before.spatial_surface.objects
-            if home_city_object_id_from_metadata(item.metadata) == target
-        ]
-        if len(candidates) != 1 or candidates[0].action_point is None:
-            raise RuntimeError("Building is absent or ambiguous; no atlas tap or swipe was sent.")
-        point = candidates[0].action_point
-        if before.image_size is None:
-            raise RuntimeError("Building observation has no image dimensions.")
-        width, height = before.image_size
-        if not width * 0.1 <= point[0] <= width * 0.9 or not height * 0.18 <= point[1] <= height * 0.82:
+        resolved = _resolve_observed_building_target(before, target=target)
+        if resolved is None:
+            raise RuntimeError("Building is absent or ambiguous; no further gesture or building tap was sent.")
+        _observed_object, point = resolved
+        if not _is_hud_safe_building_point(point, image_size=before.image_size):
             raise RuntimeError("Observed building target overlaps the HUD; no tap sent.")
         self.record({"event": "pending_building", "target": target.value,
                      "artifact": str(before.artifact_path), "point": point})
@@ -144,8 +140,10 @@ class NavigationCore:
 
         The idle Research Queue Go control focuses Institute in the city. It
         does not prove the building opened or authorize a predicted camera tap.
-        Other buildings currently require an already visible object.
+        Other supported buildings use the bounded observed Home-city scan when
+        they are not visible in the current frame.
         """
+        _require_reviewed_building_route(target=target, edges=self.edges)
         if target == HomeCityObjectId.INSTITUTE:
             self.navigate(ScreenType.PNC_RESEARCH_QUEUE)
             focus = next((
@@ -156,7 +154,83 @@ class NavigationCore:
             if focus is None:
                 raise ValueError("Institute focus route is missing from the reviewed graph.")
             self.transition(focus)
-        return self.open_visible_building(target, observe_content=observe_content)
+            return self.open_visible_building(target, observe_content=observe_content)
+
+        self._sequence += 1
+        scan_label = f"core_{self._sequence}_building_scan_source"
+        current = observe_content(scan_label)
+        _require_home_city_surface(current)
+        return self._open_building_after_home_scan(
+            target=target,
+            current=current,
+            observe_content=observe_content,
+        )
+
+    def _open_building_after_home_scan(
+        self,
+        *,
+        target: HomeCityObjectId,
+        current: Observation,
+        observe_content: Callable[[str], Observation],
+    ) -> Observation:
+        """Searches the measured Home scan sequence, then reacquires the target before tapping."""
+
+        previous_captured_at = current.captured_at
+        scan_steps = home_city_scan_steps()
+        scan_budget = home_city_scan_step_budget()
+        for step_index in range(scan_budget + 1):
+            if step_index > 0 and current.captured_at <= previous_captured_at:
+                raise RuntimeError("Home-city scan received a stale capture; no further gesture was sent.")
+            resolved = _resolve_observed_building_target(current, target=target)
+            if resolved is not None and _is_hud_safe_building_point(
+                resolved[1], image_size=current.image_size
+            ):
+                return self._open_reacquired_building(
+                    target=target,
+                    source=current,
+                    observe_content=observe_content,
+                )
+
+            if step_index == scan_budget:
+                break
+            action = scan_steps[step_index % len(scan_steps)]
+            self.record(
+                {
+                    "event": "pending_building_scan",
+                    "target": target.value,
+                    "step": step_index + 1,
+                    "action": action.reason,
+                    "artifact": None if current.artifact_path is None else str(current.artifact_path),
+                }
+            )
+            after = self._execute_content_and_confirm(
+                action,
+                current,
+                frozenset({ScreenType.PNC_HOME_CITY}),
+                f"core_{self._sequence}_building_scan_{step_index + 1}",
+                _observe_home_city_scan_content(observe_content),
+                completion_predicate=lambda observation: observation.spatial_surface is not None,
+            )
+            previous_captured_at = current.captured_at
+            current = after
+        raise RuntimeError("Home-city scan exhausted its canonical gesture budget without finding a safe observed building target.")
+
+    def _open_reacquired_building(
+        self,
+        *,
+        target: HomeCityObjectId,
+        source: Observation,
+        observe_content: Callable[[str], Observation],
+    ) -> Observation:
+        """Reacquires one safe target frame before delegating the single visible-building tap."""
+
+        def observe_reacquired(label: str) -> Observation:
+            observation = observe_content(label)
+            if observation.captured_at <= source.captured_at:
+                raise RuntimeError("Building target reacquisition received a stale capture; no further tap was sent.")
+            return observation
+
+        return self.open_visible_building(target, observe_content=observe_reacquired)
 
     def open_mailbox(
         self, mailbox: MailboxType, *, observe_content: Callable[[str], Observation],
@@ -420,6 +494,111 @@ class NavigationCore:
                         visited.add(destination)
                         queue.append((destination, first or edge))
         raise RuntimeError(f"No reviewed route from {source.name} to {target.name}.")
+
+
+def _require_reviewed_building_route(
+    *,
+    target: HomeCityObjectId,
+    edges: tuple[NavigationEdge, ...],
+) -> ScreenType:
+    """Returns a modeled building endpoint after proving its reviewed return edge exists."""
+
+    destination = primary_screen_type_for_home_city_object(target)
+    if destination is None or not any(edge.source == destination for edge in edges):
+        raise ValueError("Building has no reviewed return route in this core.")
+    return destination
+
+
+def _require_home_city_surface(observation: Observation) -> None:
+    """Requires one fresh, unblocked Home observation with the canonical spatial surface."""
+
+    if (
+        observation.screen_type != ScreenType.PNC_HOME_CITY
+        or observation.blocking_popup
+        or observation.spatial_surface is None
+        or observation.spatial_surface.surface_type != SpatialSurfaceType.HOME_CITY_SURFACE
+    ):
+        raise RuntimeError("Building navigation requires a freshly observed, unblocked city surface.")
+
+
+def _resolve_observed_building_target(
+    observation: Observation,
+    *,
+    target: HomeCityObjectId,
+) -> tuple[DetectedSpatialObject, tuple[int, int]] | None:
+    """Finds one exact observed target and validates its point and image dimensions."""
+
+    _require_home_city_surface(observation)
+    candidates = [
+        item
+        for item in observation.spatial_surface.objects
+        if home_city_object_id_from_metadata(item.metadata) == target
+    ]
+    if len(candidates) > 1:
+        raise RuntimeError("Building is absent or ambiguous; no further gesture or building tap was sent.")
+    image_size = _require_building_image_size(observation)
+    if not candidates:
+        return None
+    candidate = candidates[0]
+    if candidate.action_point is None:
+        raise RuntimeError("Observed building target has no action point; no further gesture or building tap was sent.")
+    if (
+        not isinstance(candidate.action_point, tuple)
+        or len(candidate.action_point) != 2
+        or any(type(value) is not int for value in candidate.action_point)
+        or not (0 <= candidate.action_point[0] < image_size[0])
+        or not (0 <= candidate.action_point[1] < image_size[1])
+    ):
+        raise RuntimeError(
+            "Observed building target has a malformed or out-of-image action point; "
+            "no further gesture or building tap was sent."
+        )
+    return candidate, candidate.action_point
+
+
+def _require_building_image_size(observation: Observation) -> tuple[int, int]:
+    """Returns positive screenshot dimensions required for observed building validation."""
+
+    image_size = observation.image_size
+    if (
+        not isinstance(image_size, tuple)
+        or len(image_size) != 2
+        or any(type(value) is not int or value <= 0 for value in image_size)
+    ):
+        raise RuntimeError(
+            "Building observation has no valid image dimensions; "
+            "no further gesture or building tap was sent."
+        )
+    return image_size
+
+
+def _is_hud_safe_building_point(
+    point: tuple[int, int],
+    *,
+    image_size: tuple[int, int] | None,
+) -> bool:
+    """Returns whether one observed point stays inside the shared HUD-safe tap band."""
+
+    width, height = image_size if image_size is not None else (0, 0)
+    if width <= 0 or height <= 0:
+        raise RuntimeError("Building observation has no valid image dimensions; no building tap was sent.")
+    return (
+        width * 0.18 <= point[0] <= width * 0.82
+        and height * 0.18 <= point[1] <= height * 0.58
+    )
+
+
+def _observe_home_city_scan_content(
+    observe_content: Callable[[str], Observation],
+) -> Callable[[str], Observation]:
+    """Wraps scan follow-up capture with strict Home surface validation."""
+
+    def observe(label: str) -> Observation:
+        observation = observe_content(label)
+        _require_home_city_surface(observation)
+        return observation
+
+    return observe
 
 
 def reviewed_navigation_edges() -> tuple[NavigationEdge, ...]:

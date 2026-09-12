@@ -22,7 +22,10 @@ from pnc_automation.app.pnc.vision.observation_builder import (
 from pnc_automation.core.vision.ocr.ocr_service import UnavailableOcrService
 from pnc_automation.app.pnc.vision.pnc_observation_enricher import (
     PncObservationEnricher,
+    _bright_popup_close_pixels,
     _build_popup_additions,
+    _is_bright_popup_close_pixel,
+    _vertical_surface_edge_contrast,
 )
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
 from pnc_automation.app.pnc.vision.selectors import SelectorRegistry
@@ -37,6 +40,60 @@ from tests.support.pnc.capture_vision.ocr_line import _ocr_line
 
 class VisualPopupOwnershipTests(unittest.TestCase):
     """Proves visual popup ownership."""
+
+    def test_vectorized_bright_mask_preserves_predicate_and_global_coordinates(self) -> None:
+        """Keeps the bright white/gold predicate and maps cropped pixels globally."""
+
+        image = Image.new("RGB", (20, 20), (0, 0, 0))
+        pixels = {
+            (7, 8): (255, 255, 255),
+            (6, 9): (190, 160, 130),
+            (5, 7): (190, 160, 129),
+            (15, 15): (255, 255, 255),
+        }
+        for point, pixel in pixels.items():
+            image.putpixel(point, pixel)
+
+        expected = {
+            point
+            for point, pixel in pixels.items()
+            if 5 <= point[0] < 15 and 4 <= point[1] < 14 and _is_bright_popup_close_pixel(pixel)
+        }
+        self.assertEqual(
+            _bright_popup_close_pixels(rgb_image=image, left=5, top=4, right=15, bottom=14),
+            expected,
+        )
+
+    def test_vectorized_surface_edge_contrast_preserves_mean_difference(self) -> None:
+        """Preserves the RGB-sum edge arithmetic for both scan directions."""
+
+        image = Image.new("RGB", (20, 12), (0, 0, 0))
+        for y in range(2, 10):
+            image.putpixel((5, y), (10, 10, 10))
+            image.putpixel((8, y), (10, 10, 10))
+
+        self.assertEqual(
+            _vertical_surface_edge_contrast(
+                rgb_image=image,
+                start=5,
+                end=8,
+                top=2,
+                bottom=10,
+                direction=1,
+            ),
+            10.0,
+        )
+        self.assertEqual(
+            _vertical_surface_edge_contrast(
+                rgb_image=image,
+                start=8,
+                end=11,
+                top=2,
+                bottom=10,
+                direction=-1,
+            ),
+            10.0,
+        )
 
     def test_observation_builder_classifies_generic_upper_right_popup_x_without_popup_ocr(self) -> None:
         """Recognizes the shared bright popup X when the one global OCR pass has no popup lines."""

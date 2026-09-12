@@ -58,7 +58,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Per-test timing output (measure defaults to .local-data/reports/test_timings.csv)",
     )
     parser.add_argument("--results", type=Path, default=ROOT / ".test-impact/results.json")
-    parser.add_argument("--contexts", action="store_true", help="Use optional additive coverage seed; invalid seed runs full")
+    parser.add_argument(
+        "--contexts",
+        action="store_true",
+        help="Mode-dependent coverage context evidence: affected consumes a seed; measure produces one; ignored by full/group",
+    )
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args(argv)
     # Portable runs have no authority to activate opt-in runtime tests.
@@ -73,7 +77,9 @@ def main(argv: list[str] | None = None) -> int:
         tests = inventory(paths)
         if not tests:
             raise ValueError("No portable tests found under unit/contract/integration/architecture")
-        new = python_snapshot(ROOT, None)
+        new = None
+        if args.mode == "affected" or (args.mode == "measure" and args.contexts):
+            new = python_snapshot(ROOT, None)
         # Bind audit evidence to resources and configuration as well as Python.
         candidate_fingerprint = fingerprint({
             path: hashlib.sha256((ROOT / path).read_bytes()).hexdigest() for path in paths
@@ -112,8 +118,9 @@ def main(argv: list[str] | None = None) -> int:
         coverage = None
         if args.mode == "measure":
             from coverage import Coverage
-            # An interrupted measurement must not leave an apparently valid seed.
-            (ROOT / ".test-impact/contexts.json").unlink(missing_ok=True)
+            if args.contexts:
+                # An interrupted context-learning run must not leave an apparently valid seed.
+                (ROOT / ".test-impact/contexts.json").unlink(missing_ok=True)
             coverage = Coverage(branch=True, source=["pnc_automation"], config_file=False,
                                 data_file=str(ROOT / ".test-impact" / f"coverage-{uuid4().hex}"))
             coverage.start()
@@ -124,17 +131,26 @@ def main(argv: list[str] | None = None) -> int:
         if len(ids) != len(set(ids)) or not ids:
             raise ValueError("Selected inventory contains duplicate tests or is unexpectedly empty")
         runner = unittest.TextTestRunner(verbosity=2 if args.verbose else 1,
-            resultclass=lambda *a, **kw: TimingResult(*a, coverage=coverage, inventory=discovered, **kw))
+            resultclass=lambda *a, **kw: TimingResult(
+                *a,
+                coverage=coverage,
+                inventory=discovered,
+                switch_contexts=args.mode == "measure" and args.contexts,
+                **kw,
+            ))
         result = runner.run(selected)
         if coverage:
             coverage.stop()
             coverage.save()
             coverage.json_report(outfile=str(ROOT / ".test-impact/coverage.json"))
             coverage.report(skip_empty=True)
-            if result.wasSuccessful() and len(plan.reasons) == len(tests):
-                seed_contexts(ROOT / ".test-impact/contexts.json", coverage, ROOT, new, tests, head)
-            else:
-                (ROOT / ".test-impact/contexts.json").unlink(missing_ok=True)
+            if args.contexts:
+                if result.wasSuccessful() and len(plan.reasons) == len(tests):
+                    if new is None:
+                        raise ValueError("Context measurement requires a candidate Python snapshot")
+                    seed_contexts(ROOT / ".test-impact/contexts.json", coverage, ROOT, new, tests, head)
+                else:
+                    (ROOT / ".test-impact/contexts.json").unlink(missing_ok=True)
         elapsed = round(time.perf_counter() - started, 6)
         env = environment()
         metadata = {"schema_version": 1, "run_id": uuid4().hex, "commit_sha": head,
