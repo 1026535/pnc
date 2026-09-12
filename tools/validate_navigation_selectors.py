@@ -55,14 +55,21 @@ def main() -> int:
     )
     script_runner = application.script_runner
     account = script_runner.config.require_account(arguments.account)
-    runtime = script_runner.build_connected_runtime(
-        account=account,
-        required_role=LiveAutomationRole.LIVE_TESTING,
-    )
-    validator = _build_navigation_selector_validator(script_runner=script_runner, runtime=runtime)
-    report = validator.validate(
-        selector_ids=None if not arguments.selector else tuple(_require_ui_element_id(item) for item in arguments.selector)
-    )
+    account.require_live_role(LiveAutomationRole.LIVE_TESTING)
+    with application.reserve_accounts((account.id,)):
+        runtime = script_runner.build_connected_runtime(
+            account=account,
+            required_role=LiveAutomationRole.LIVE_TESTING,
+        )
+        try:
+            validator = _build_navigation_selector_validator(script_runner=script_runner, runtime=runtime)
+            report = validator.validate(
+                selector_ids=None
+                if not arguments.selector
+                else tuple(_require_ui_element_id(item) for item in arguments.selector)
+            )
+        finally:
+            runtime.close()
     report_path = _build_output_path(
         base_directory=Path(arguments.output_dir),
         account_id=arguments.account,

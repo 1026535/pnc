@@ -69,11 +69,11 @@ This guide describes the bounded path for moving one workflow onto the reviewed 
            )
    ```
 
-5. Integrate through `build_core_runtime` and the application runner. Factory construction connects the configured emulator and creates the artifact directory, but must not navigate or run a workflow. `CoreRuntime.preflight_active_castle_identity` explicitly foregrounds the configured app, passively settles loading within `NavigationPolicy`, navigates to Manage Characters, and requires fresh, unblocked content with exact `current_castle_evidence`. It never selects a castle. The current parser can verify only a visibly selected row in the captured viewport. If that row is outside the initial viewport, a separate bounded read-only roster setup may be needed before the status workflow; there is no automated roster search in this port. Return Home before running the workflow. Identity details are not written to the sanitized JSONL trace.
+5. Integrate through `build_core_runtime` and the application runner. Factory construction connects the configured emulator and creates the artifact directory, but must not navigate or run a workflow. `CoreRuntime.preflight_active_castle_identity` explicitly foregrounds the configured app, passively settles loading within `NavigationPolicy`, navigates to Manage Characters, and requires fresh, unblocked content with exact `current_castle_evidence`. When the selected row is outside the initial viewport, it rewinds toward the start and scans the roster with bounded swipes. Repeated viewport signatures stop each direction. It never taps or selects a castle row. Return Home before running the workflow. Identity details are not written to the sanitized JSONL trace.
 
 6. Add deterministic offline tests before a device run. Cover factory composition, typed content preservation, loading settle, unknown and popup stop, stale and late captures, parser failure artifact retention, mutation rejection before capture, workflow success and empty/unknown content, exit failure without replay, explicit recovery, CLI JSON, and application preflight ordering. Use typed observations and fake clocks; do not use BlueStacks, ADB, credentials, or private configuration in ordinary tests.
 
-7. Reserve exclusive use of the configured BlueStacks instance for the bounded proof, including other agents and tasks. Keep its currently active castle. If preflight cannot see the selected row, perform the bounded read-only roster setup through existing observed controls when needed; this is ordinary in-scope read-only setup and does not require duplicate permission. Leave the status workflow itself free of roster scrolling. Use the exact non-spending command with configured arguments:
+7. Reserve exclusive use of the configured BlueStacks instance for the bounded proof, including other agents and tasks. Keep its currently active castle. Let the shared preflight perform its bounded nonselecting roster scan when the selected row is outside the initial viewport. Leave each workflow body free of roster scrolling. Use the exact non-spending command with configured arguments:
 
    ```powershell
    py -m pnc_automation.app.entrypoints.cli daily-quest-status --config <config-path> --account <account-id>
@@ -89,7 +89,7 @@ This guide describes the bounded path for moving one workflow onto the reviewed 
 
 `DailyQuestStatusWorkflow` reports one `visible_viewport` from the fresh Daily screen. It does not scroll, claim, acknowledge, select a castle, infer unseen rows, or claim full-screen coverage. It fails when both recognized rows and unknown titles are absent. Known safe popup recovery belongs to the connected runtime and shared observed-action executor; the workflow has no generic popup dismissal policy. Navigation does not retry a tap, replay a failed workflow, or use the legacy observer as a fallback. A task-owned dialog or popup without an explicit safe selector still stops the route.
 
-Active-castle preflight currently sees only the selected row that is visible in the Manage Characters viewport. A separate read-only roster setup may prepare that viewport, but the replacement workflow does not automate roster search or scrolling yet.
+Active-castle preflight recognizes the selected row through exact Manage Characters evidence. It searches a long roster with bounded swipes in both directions and stops on repeated viewport signatures without tapping a castle row.
 
 ## Two remaining issues
 
@@ -122,7 +122,7 @@ Direct Python entry points for collect-mail route through `ApplicationRunner.run
 - [ ] `WorkflowSpec` has known entry/exit screens and the correct explicit effect.
 - [ ] Workflow code uses only `WorkflowContext`.
 - [ ] Factory construction performs no navigation and builds one connected runtime.
-- [ ] Active-castle preflight is explicit, exact-evidence, fresh, unblocked, and never switches castles; selected-row visibility limitations and any separate read-only setup are recorded.
+- [ ] Active-castle preflight is explicit, exact-evidence, fresh, unblocked, scans only through bounded roster swipes, and never switches castles.
 - [ ] Failure tests prove no replay, no action after unknown/popup, and no late success after a time budget.
 - [ ] CLI output is structured typed-result JSON with `visible_viewport` coverage where applicable.
 - [ ] Bounded proof is non-spending and ends with confirmed Home evidence.
