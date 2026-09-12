@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 import time
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from PIL import Image
 
@@ -16,7 +16,12 @@ from pnc_automation.app.automation.engine.navigation_core import (
     NavigationPolicy,
     reviewed_navigation_edges,
 )
-from pnc_automation.app.pnc.domain.action_requests import SelectChatChannelAction, SwipeAction, TapPointAction
+from pnc_automation.app.pnc.domain.action_requests import (
+    SelectChatChannelAction,
+    SwipeAction,
+    TapPointAction,
+    TapSpatialObjectAction,
+)
 from pnc_automation.app.pnc.domain.mail import (
     MailboxAvailability,
     MailboxType,
@@ -26,8 +31,14 @@ from pnc_automation.app.pnc.domain.chat import ChatChannel
 from pnc_automation.app.pnc.domain.observation import (
     Bounds,
     DetectedListEntry,
+    DetectedSpatialObject,
     ListEntryKind,
     Observation,
+    SpatialObjectKind,
+    SpatialSurfaceObservation,
+    SpatialSurfaceType,
+    SpatialViewport,
+    SpatialViewportAddressingKind,
     VisibleElement,
     VisibleElementSourceKind,
 )
@@ -35,6 +46,7 @@ from pnc_automation.app.pnc.domain.popup import decide_popup_recovery
 from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
+from pnc_automation.app.pnc.navigation.spatial_navigation import home_city_scan_step_budget, home_city_scan_steps
 from pnc_automation.app.pnc.vision.navigation_perception import NavigationPerception
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservationEnricher
@@ -128,6 +140,44 @@ def chat_frame(
         captured_at=captured_at or datetime.now(UTC),
         blocking_popup=blocked,
         active_chat_channel=active_channel,
+    )
+
+
+def home_building_object(
+    target: HomeCityObjectId,
+    *,
+    action_point: tuple[int, int] | None = (270, 520),
+) -> DetectedSpatialObject:
+    """Build one exact observed home-city building candidate for navigation tests."""
+
+    return DetectedSpatialObject(
+        kind=SpatialObjectKind.HOME_BUILDING,
+        bounds=Bounds(220, 470, 100, 100),
+        action_point=action_point,
+        metadata={"home_city_object_id": target.value},
+    )
+
+
+def home_building_frame(
+    objects: tuple[DetectedSpatialObject, ...] = (),
+    *,
+    captured_at: datetime | None = None,
+    image_size: tuple[int, int] | None = (540, 960),
+    blocked: bool = False,
+) -> Observation:
+    """Build one typed Home frame with a canonical camera-relative spatial surface."""
+
+    return Observation(
+        screen_type=ScreenType.PNC_HOME_CITY,
+        visible_elements={},
+        spatial_surface=SpatialSurfaceObservation(
+            surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+            viewport=SpatialViewport(addressing_kind=SpatialViewportAddressingKind.CAMERA_RELATIVE),
+            objects=objects,
+        ),
+        image_size=image_size,
+        captured_at=captured_at or datetime.now(UTC),
+        blocking_popup=blocked,
     )
 
 
@@ -504,7 +554,7 @@ class NavigationCoreTests(unittest.TestCase):
         image = Image.new('RGB', (540, 960))
         surface = build_home_city_spatial_surface(
             image=image, selector_registry=None,
-            lines=(OcrLine('Goddess Statue', Bounds(220, 650, 110, 20), 1.0),),
+            lines=(OcrLine('Goddess Statue', Bounds(220, 600, 110, 20), 1.0),),
         )
         home = replace(observation(ScreenType.PNC_HOME_CITY), spatial_surface=surface, image_size=image.size)
         core, actuator, _ = self.make_core([
@@ -512,13 +562,231 @@ class NavigationCoreTests(unittest.TestCase):
         ])
         core.open_visible_building(HomeCityObjectId.GODDESS_STATUE, observe_content=lambda _: home)
         self.assertEqual(len(actuator.actions), 1)
-        self.assertEqual(actuator.actions[0].target_point, (275, 574))
+        self.assertEqual(actuator.actions[0].target_point, (275, 524))
         for objects in ((), surface.objects * 2):
             core, actuator, _ = self.make_core([])
             candidate = replace(home, spatial_surface=replace(surface, objects=objects))
             with self.assertRaisesRegex(RuntimeError, 'absent or ambiguous'):
                 core.open_visible_building(HomeCityObjectId.GODDESS_STATUE, observe_content=lambda _: candidate)
             self.assertEqual(actuator.actions, [])
+
+    def test_public_home_scan_sequence_and_budget_match_canonical_navigator(self):
+        steps = home_city_scan_steps()
+
+        self.assertEqual(6, len(steps))
+        self.assertEqual(18, home_city_scan_step_budget())
+        self.assertEqual(
+            (0.45, 0.54, 0.45, 0.26),
+            (steps[-1].start_x_ratio, steps[-1].start_y_ratio, steps[-1].end_x_ratio, steps[-1].end_y_ratio),
+        )
+
+    def test_open_building_visible_target_uses_no_scan_gesture(self):
+        target = home_building_object(HomeCityObjectId.GODDESS_STATUE)
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+        content_frames = iter(
+            (
+                home_building_frame((target,), captured_at=now),
+                home_building_frame((target,), captured_at=now + timedelta(seconds=1)),
+            )
+        )
+        destination_frames = iter(
+            (
+                observation(ScreenType.PNC_GODDESS_STATUE),
+                observation(ScreenType.PNC_GODDESS_STATUE),
+            )
+        )
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator,
+            lambda _: next(destination_frames),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+
+        result = core.open_building(
+            HomeCityObjectId.GODDESS_STATUE,
+            observe_content=lambda _: next(content_frames),
+        )
+
+        self.assertEqual(ScreenType.PNC_GODDESS_STATUE, result.screen_type)
+        self.assertEqual(1, len(actuator.actions))
+        self.assertIsInstance(actuator.actions[0], TapSpatialObjectAction)
+        self.assertEqual((270, 520), actuator.actions[0].target_point)
+
+    def test_open_building_scans_home_then_reacquires_before_one_target_tap(self):
+        target = home_building_object(HomeCityObjectId.GODDESS_STATUE)
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+        content_frames = iter(
+            (
+                home_building_frame(captured_at=now),
+                home_building_frame((target,), captured_at=now + timedelta(seconds=1)),
+                home_building_frame((target,), captured_at=now + timedelta(seconds=2)),
+                home_building_frame((target,), captured_at=now + timedelta(seconds=3)),
+            )
+        )
+        destination_frames = iter(
+            (
+                observation(ScreenType.PNC_GODDESS_STATUE),
+                observation(ScreenType.PNC_GODDESS_STATUE),
+            )
+        )
+        records: list[dict[str, object]] = []
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator,
+            lambda _: next(destination_frames),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+            record=records.append,
+        )
+
+        result = core.open_building(
+            HomeCityObjectId.GODDESS_STATUE,
+            observe_content=lambda _: next(content_frames),
+        )
+
+        self.assertEqual(ScreenType.PNC_GODDESS_STATUE, result.screen_type)
+        self.assertEqual(2, len(actuator.actions))
+        self.assertIsInstance(actuator.actions[0], SwipeAction)
+        self.assertEqual(home_city_scan_steps()[0], actuator.actions[0])
+        self.assertIsInstance(actuator.actions[1], TapSpatialObjectAction)
+        self.assertEqual((270, 520), actuator.actions[1].target_point)
+        pending = [entry for entry in records if entry.get("event") == "pending_building_scan"]
+        self.assertEqual(1, len(pending))
+        self.assertEqual(HomeCityObjectId.GODDESS_STATUE.value, pending[0]["target"])
+        self.assertEqual(1, pending[0]["step"])
+
+    def test_open_building_rejects_target_loss_before_tap_after_scan(self):
+        target = home_building_object(HomeCityObjectId.GODDESS_STATUE)
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+        content_frames = iter(
+            (
+                home_building_frame(captured_at=now),
+                home_building_frame((target,), captured_at=now + timedelta(seconds=1)),
+                home_building_frame((target,), captured_at=now + timedelta(seconds=2)),
+                home_building_frame(captured_at=now + timedelta(seconds=3)),
+            )
+        )
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator,
+            lambda _: observation(ScreenType.PNC_GODDESS_STATUE),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "absent"):
+            core.open_building(
+                HomeCityObjectId.GODDESS_STATUE,
+                observe_content=lambda _: next(content_frames),
+            )
+
+        self.assertEqual(1, len(actuator.actions))
+        self.assertIsInstance(actuator.actions[0], SwipeAction)
+
+    def test_open_building_continues_scan_for_target_in_fixed_hud_region(self):
+        target = home_building_object(HomeCityObjectId.GODDESS_STATUE, action_point=(434, 654))
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+        content_frames = iter(
+            (
+                home_building_frame((target,), captured_at=now),
+                home_building_frame((target,), captured_at=now + timedelta(seconds=1)),
+                home_building_frame((target,), captured_at=now + timedelta(seconds=2)),
+            )
+        )
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator,
+            lambda _: observation(ScreenType.PNC_GODDESS_STATUE),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+
+        with patch(
+            "pnc_automation.app.automation.engine.navigation_core.home_city_scan_step_budget",
+            return_value=1,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "exhausted"):
+                core.open_building(
+                    HomeCityObjectId.GODDESS_STATUE,
+                    observe_content=lambda _: next(content_frames),
+                )
+
+        self.assertEqual(1, len(actuator.actions))
+        self.assertIsInstance(actuator.actions[0], SwipeAction)
+
+    def test_open_building_fails_closed_for_unsafe_scan_frames_without_swipe(self):
+        target = home_building_object(HomeCityObjectId.GODDESS_STATUE, action_point=(540, 520))
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+        cases = (
+            (home_building_frame(captured_at=now, image_size=None), "image dimensions"),
+            (home_building_frame((home_building_object(HomeCityObjectId.GODDESS_STATUE, action_point=None),), captured_at=now), "action point"),
+            (home_building_frame((target,), captured_at=now), "out-of-image"),
+            (home_building_frame((home_building_object(HomeCityObjectId.GODDESS_STATUE, action_point=("bad", 520)),), captured_at=now), "malformed"),  # type: ignore[arg-type]
+            (home_building_frame((target, home_building_object(HomeCityObjectId.GODDESS_STATUE)), captured_at=now), "ambiguous"),
+        )
+        for frame, message in cases:
+            with self.subTest(message=message):
+                actuator = Actuator()
+                core = NavigationCore(
+                    actuator,
+                    lambda _: observation(ScreenType.PNC_GODDESS_STATUE),
+                    reviewed_navigation_edges(),
+                    NavigationPolicy(max_observations=4),
+                    sleep=lambda _: None,
+                )
+                with self.assertRaisesRegex(RuntimeError, message):
+                    core.open_building(
+                        HomeCityObjectId.GODDESS_STATUE,
+                        observe_content=lambda _: frame,
+                    )
+                self.assertEqual([], actuator.actions)
+
+    def test_open_building_stops_scan_on_unknown_popup_or_stale_follow_up(self):
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+        initial = home_building_frame(captured_at=now)
+        for follow_up in (
+            Observation(screen_type=ScreenType.UNKNOWN, visible_elements={}, captured_at=now + timedelta(seconds=1)),
+            Observation(screen_type=ScreenType.PNC_BAG, visible_elements={}, captured_at=now + timedelta(seconds=1)),
+            home_building_frame(captured_at=now, blocked=False),
+            home_building_frame(captured_at=now + timedelta(seconds=1), blocked=True),
+        ):
+            with self.subTest(screen=follow_up.screen_type, blocked=follow_up.blocking_popup):
+                actuator = Actuator()
+                content_frames = iter((initial, follow_up))
+                core = NavigationCore(
+                    actuator,
+                    lambda _: observation(ScreenType.PNC_GODDESS_STATUE),
+                    reviewed_navigation_edges(),
+                    NavigationPolicy(max_observations=4),
+                    sleep=lambda _: None,
+                )
+                with self.assertRaises(RuntimeError):
+                    core.open_building(
+                        HomeCityObjectId.GODDESS_STATUE,
+                        observe_content=lambda _: next(content_frames),
+                    )
+                self.assertEqual(1, len(actuator.actions))
+                self.assertIsInstance(actuator.actions[0], SwipeAction)
+
+    def test_open_building_rejects_unsupported_route_before_observation(self):
+        observed = Mock()
+        core = NavigationCore(
+            Actuator(),
+            lambda _: observation(ScreenType.PNC_HOME_CITY),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+
+        with self.assertRaisesRegex(ValueError, "return route"):
+            core.open_building(HomeCityObjectId.CAMPAIGN, observe_content=observed)
+
+        observed.assert_not_called()
 
     def test_institute_focus_is_not_mistaken_for_opening_the_building(self):
         def control_frame(screen, selector):
