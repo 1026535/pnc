@@ -431,6 +431,7 @@ class RefreshCastleRosterApplicationTests(unittest.TestCase):
                 account,
                 "account",
                 required_role=LiveAutomationRole.LIVE_TESTING,
+                session_cleanup_policy=None,
             )
             runtime.preflight_active_castle_identity.assert_called_once_with()
             runtime.close.assert_called_once_with()
@@ -499,14 +500,20 @@ class RefreshCastleRosterApplicationTests(unittest.TestCase):
         api = AutomationApi(application=application)
 
         self.assertIs(result, api.refresh_castle_roster(account_id="account"))
-        application.run_refresh_castle_roster.assert_called_once_with(account_id="account")
+        application.run_refresh_castle_roster.assert_called_once_with(
+            account_id="account",
+            session_cleanup_policy=None,
+        )
         application.reserve_accounts.assert_called_once_with(("account",))
         application.reserve_accounts.return_value.close.assert_called_once_with()
 
         application.reset_mock()
         application.run_refresh_castle_roster.return_value = result
         self.assertIs(result, AutomationSession(api=api, account_id="account").refresh_castle_roster())
-        application.run_refresh_castle_roster.assert_called_once_with(account_id="account")
+        application.run_refresh_castle_roster.assert_called_once_with(
+            account_id="account",
+            session_cleanup_policy=None,
+        )
         application.reserve_accounts.assert_called_once_with(("account",))
 
         default_api = Mock()

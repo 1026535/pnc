@@ -174,6 +174,7 @@ class ApplicationRunner:
         account_id: str,
         params: Mapping[str, object],
         required_role: LiveAutomationRole = LiveAutomationRole.LIVE_TESTING,
+        session_cleanup_policy: BlueStacksSessionCleanupPolicy | None = None,
     ) -> CoreWorkflowResult[CollectMailResult]:
         """Runs the typed collect-mail workflow after validation and active-castle preflight."""
 
@@ -189,6 +190,7 @@ class ApplicationRunner:
             account,
             account.artifact_directory_name,
             required_role=required_role,
+            session_cleanup_policy=session_cleanup_policy,
         )
         try:
             active_castle = core_runtime.preflight_active_castle_identity()
@@ -199,15 +201,23 @@ class ApplicationRunner:
                 active_castle=active_castle.castle_name,
                 archive_store=archive_store,
             )
-            return CoreWorkflowRunner[CollectMailResult](core_runtime).run(workflow)
-        finally:
-            core_runtime.close()
+            result = CoreWorkflowRunner[CollectMailResult](core_runtime).run(workflow)
+        except BaseException as error:
+            close_preserving_error(
+                core_runtime.close,
+                error,
+                message="Collect-mail execution and BlueStacks phase cleanup both failed.",
+            )
+            raise
+        core_runtime.close()
+        return result
 
     def run_collect_kingdom_chat(
         self,
         *,
         account_id: str,
         required_role: LiveAutomationRole = LiveAutomationRole.LIVE_TESTING,
+        session_cleanup_policy: BlueStacksSessionCleanupPolicy | None = None,
     ) -> CoreWorkflowResult[CollectKingdomChatResult]:
         """Archives one typed Kingdom Chat viewport after exact active-castle preflight."""
 
@@ -222,6 +232,7 @@ class ApplicationRunner:
             account,
             account.artifact_directory_name,
             required_role=required_role,
+            session_cleanup_policy=session_cleanup_policy,
         )
         try:
             active_castle = core_runtime.preflight_active_castle_identity()
@@ -230,9 +241,16 @@ class ApplicationRunner:
                 active_castle=active_castle,
                 archive_store=archive_store,
             )
-            return CoreWorkflowRunner[CollectKingdomChatResult](core_runtime).run(workflow)
-        finally:
-            core_runtime.close()
+            result = CoreWorkflowRunner[CollectKingdomChatResult](core_runtime).run(workflow)
+        except BaseException as error:
+            close_preserving_error(
+                core_runtime.close,
+                error,
+                message="Kingdom Chat execution and BlueStacks phase cleanup both failed.",
+            )
+            raise
+        core_runtime.close()
+        return result
 
     def run_open_building(
         self,
@@ -240,6 +258,7 @@ class ApplicationRunner:
         account_id: str,
         building: str,
         required_role: LiveAutomationRole = LiveAutomationRole.LIVE_TESTING,
+        session_cleanup_policy: BlueStacksSessionCleanupPolicy | None = None,
     ) -> CoreWorkflowResult[OpenBuildingResult]:
         """Prevalidates and opens one modeled building through the replacement core."""
 
@@ -250,18 +269,27 @@ class ApplicationRunner:
             account,
             account.artifact_directory_name,
             required_role=required_role,
+            session_cleanup_policy=session_cleanup_policy,
         )
         try:
             core_runtime.preflight_active_castle_identity()
-            return CoreWorkflowRunner[OpenBuildingResult](core_runtime).run(workflow)
-        finally:
-            core_runtime.close()
+            result = CoreWorkflowRunner[OpenBuildingResult](core_runtime).run(workflow)
+        except BaseException as error:
+            close_preserving_error(
+                core_runtime.close,
+                error,
+                message="Open-building execution and BlueStacks phase cleanup both failed.",
+            )
+            raise
+        core_runtime.close()
+        return result
 
     def run_refresh_castle_roster(
         self,
         *,
         account_id: str,
         required_role: LiveAutomationRole = LiveAutomationRole.LIVE_TESTING,
+        session_cleanup_policy: BlueStacksSessionCleanupPolicy | None = None,
     ) -> CoreWorkflowResult[RefreshCastleRosterResult]:
         """Runs the typed full-roster scan after validating its store before connecting."""
 
@@ -276,6 +304,7 @@ class ApplicationRunner:
             account,
             account.artifact_directory_name,
             required_role=required_role,
+            session_cleanup_policy=session_cleanup_policy,
         )
         try:
             active_castle = core_runtime.preflight_active_castle_identity()
@@ -285,9 +314,16 @@ class ApplicationRunner:
                 active_castle=active_castle,
                 roster_store=roster_store,
             )
-            return CoreWorkflowRunner[RefreshCastleRosterResult](core_runtime).run(workflow)
-        finally:
-            core_runtime.close()
+            result = CoreWorkflowRunner[RefreshCastleRosterResult](core_runtime).run(workflow)
+        except BaseException as error:
+            close_preserving_error(
+                core_runtime.close,
+                error,
+                message="Castle-roster refresh execution and BlueStacks phase cleanup both failed.",
+            )
+            raise
+        core_runtime.close()
+        return result
 
 
 def build_application_runner(
