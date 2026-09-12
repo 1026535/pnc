@@ -11,6 +11,10 @@ from pnc_automation.app.automation.collect_kingdom_chat import (
     CollectKingdomChatWorkflow,
 )
 from pnc_automation.app.automation.collect_mail import CollectMailResult, CollectMailWorkflow
+from pnc_automation.app.automation.refresh_castle_roster import (
+    RefreshCastleRosterResult,
+    RefreshCastleRosterWorkflow,
+)
 from pnc_automation.app.automation.engine.core_runtime import CoreRuntime
 from pnc_automation.app.automation.engine.core_workflow import CoreWorkflowResult, CoreWorkflowRunner
 from pnc_automation.app.authoring.config.models import AccountConfig, LiveAutomationRole
@@ -22,6 +26,7 @@ from pnc_automation.app.pnc.domain.observation import (
     resolve_current_castle_match,
 )
 from pnc_automation.app.pnc.persistence.chat_archive_store import ChatArchiveStore
+from pnc_automation.app.pnc.persistence.castle_roster_store import CastleRosterStore
 from pnc_automation.app.pnc.persistence.mail_archive_store import MailArchiveStore
 from pnc_automation.app.automation.engine.task import TaskId
 
@@ -34,6 +39,7 @@ class CoreScriptDispatcher:
     chat_archive_store: ChatArchiveStore | None
     core_runtime_factory: Callable[[], CoreRuntime]
     mail_archive_store: MailArchiveStore | None = None
+    castle_roster_store: CastleRosterStore | None = None
     required_role: LiveAutomationRole = LiveAutomationRole.LIVE_TESTING
     _core_runtime: CoreRuntime | None = field(default=None, init=False, repr=False)
     _workflow_runner: CoreWorkflowRunner[Any] | None = field(default=None, init=False, repr=False)
@@ -42,7 +48,7 @@ class CoreScriptDispatcher:
         self,
         *,
         step: PreparedScriptStep,
-    ) -> CoreWorkflowResult[CollectKingdomChatResult | CollectMailResult]:
+    ) -> CoreWorkflowResult[CollectKingdomChatResult | CollectMailResult | RefreshCastleRosterResult]:
         """Runs one supported typed step without closing the shared connected runtime."""
 
         self._validate_step(step)
@@ -73,6 +79,13 @@ class CoreScriptDispatcher:
                 active_castle=active_castle.castle_name,
                 archive_store=cast(MailArchiveStore, self.mail_archive_store),
             )
+        elif step.task == TaskId.REFRESH_CASTLE_ROSTER:
+            workflow = RefreshCastleRosterWorkflow(
+                account_id=self.account.id,
+                pnc_account_id=self.account.pnc_account_id,
+                active_castle=active_castle,
+                roster_store=cast(CastleRosterStore, self.castle_roster_store),
+            )
         else:
             raise RuntimeError(f"No typed core dispatcher is registered for task '{step.task}'.")
         runner = self._workflow_runner
@@ -88,6 +101,7 @@ class CoreScriptDispatcher:
             step,
             chat_archive_store=self.chat_archive_store,
             mail_archive_store=self.mail_archive_store,
+            castle_roster_store=self.castle_roster_store,
         )
         if not isinstance(self.account, AccountConfig):
             raise TypeError("Typed core dispatch requires a configured AccountConfig binding.")
@@ -106,10 +120,15 @@ def validate_core_script_step(
     *,
     chat_archive_store: ChatArchiveStore | None,
     mail_archive_store: MailArchiveStore | None = None,
+    castle_roster_store: CastleRosterStore | None = None,
 ) -> None:
     """Validates one supported typed binding before connect and before navigation."""
 
-    if step.task not in {TaskId.COLLECT_KINGDOM_CHAT, TaskId.COLLECT_MAIL}:
+    if step.task not in {
+        TaskId.COLLECT_KINGDOM_CHAT,
+        TaskId.COLLECT_MAIL,
+        TaskId.REFRESH_CASTLE_ROSTER,
+    }:
         raise RuntimeError(f"No typed core dispatcher is registered for task '{step.task}'.")
     if step.task == TaskId.COLLECT_KINGDOM_CHAT:
         if step.parsed_params is not None:
@@ -119,9 +138,17 @@ def validate_core_script_step(
                 "Kingdom Chat typed dispatch requires a configured ChatArchiveStore before navigation."
             )
         return
-    if not isinstance(step.parsed_params, CollectMailParams):
-        raise RuntimeError("Typed Collect Mail dispatch requires parsed CollectMailParams.")
-    if not isinstance(mail_archive_store, MailArchiveStore):
+    if step.task == TaskId.COLLECT_MAIL:
+        if not isinstance(step.parsed_params, CollectMailParams):
+            raise RuntimeError("Typed Collect Mail dispatch requires parsed CollectMailParams.")
+        if not isinstance(mail_archive_store, MailArchiveStore):
+            raise RuntimeError(
+                "Collect Mail typed dispatch requires a configured MailArchiveStore before navigation."
+            )
+        return
+    if step.parsed_params is not None:
+        raise RuntimeError("Typed castle-roster refresh dispatch requires parameterless parsed parameters.")
+    if not isinstance(castle_roster_store, CastleRosterStore):
         raise RuntimeError(
-            "Collect Mail typed dispatch requires a configured MailArchiveStore before navigation."
+            "Castle roster typed dispatch requires a configured CastleRosterStore before navigation."
         )

@@ -19,6 +19,10 @@ from pnc_automation.app.automation.collect_mail import (
     CollectMailResult,
     CollectMailWorkflow,
 )
+from pnc_automation.app.automation.refresh_castle_roster import (
+    RefreshCastleRosterResult,
+    RefreshCastleRosterWorkflow,
+)
 from pnc_automation.app.automation.engine.runner import (
     AutomationRunner,
     CoreStepRunResult,
@@ -53,6 +57,7 @@ from pnc_automation.app.pnc.domain.mail import (
 )
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.persistence.chat_archive_store import ChatArchiveStore
+from pnc_automation.app.pnc.persistence.castle_roster_store import CastleRosterStore
 from pnc_automation.app.pnc.persistence.mail_archive_store import MailArchiveStore
 from pnc_automation.core.infra.emulator.bluestacks_instance import BlueStacksInstance
 from pnc_automation.core.infra.emulator.session import BlueStacksSessionCleanupPolicy
@@ -99,6 +104,36 @@ class TypedCoreDispatchTests(unittest.TestCase):
                 }
             ),
         )
+
+    def test_default_registry_uses_immutable_parameterless_roster_definition(self) -> None:
+        """Registers roster refresh as an untargeted typed core step."""
+
+        definition = build_default_task_registry().require(TaskId.REFRESH_CASTLE_ROSTER)
+
+        self.assertIsInstance(definition, CoreWorkflowTaskDefinition)
+        self.assertEqual(definition.castle_target_policy, CastleTargetPolicy.DISALLOWED)
+        self.assertIsNone(definition.parse_params({}))
+        with self.assertRaisesRegex(Exception, "does not accept"):
+            definition.parse_params({"unexpected": True})
+        with self.assertRaises(AttributeError):
+            definition.id = TaskId.COLLECT_MAIL  # type: ignore[misc]
+
+    def test_registry_rejects_roster_castle_target_before_dispatch(self) -> None:
+        """Rejects a forbidden explicit castle target while preparing the script."""
+
+        script = RunScript(
+            name="roster",
+            path=Path("roster.yaml"),
+            steps=(
+                ScriptStep(
+                    task=TaskId.REFRESH_CASTLE_ROSTER,
+                    castle=CastleIdentity("K1", "Castle", 12),
+                ),
+            ),
+        )
+
+        with self.assertRaisesRegex(Exception, "does not accept"):
+            build_default_task_registry().prepare_script(script)
 
     def test_current_castle_core_step_skips_legacy_observation_and_retains_typed_result(self) -> None:
         """Dispatches a current-castle Chat step directly through the typed executor."""
@@ -294,6 +329,103 @@ class TypedCoreDispatchTests(unittest.TestCase):
                 dispatcher.execute(step=_prepared_mail_step())
 
         runtime_factory.assert_not_called()
+
+    def test_dispatcher_rejects_missing_roster_store_before_composition(self) -> None:
+        """Fails before core assembly when an authored roster step lacks its store."""
+
+        runtime_factory = Mock()
+        dispatcher = CoreScriptDispatcher(
+            account=_account(),
+            chat_archive_store=None,
+            mail_archive_store=None,
+            castle_roster_store=None,
+            core_runtime_factory=runtime_factory,
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "CastleRosterStore"):
+            dispatcher.execute(step=_prepared_roster_step())
+
+        runtime_factory.assert_not_called()
+
+    def test_dispatcher_refresh_roster_uses_canonical_store_without_mail_or_chat(self) -> None:
+        """Preflights once and builds the existing typed roster workflow from its own store."""
+
+        active = CastleIdentity("K1", "Castle", 12)
+        core_runtime = Mock()
+        core_runtime.preflight_active_castle_identity.return_value = active
+        typed_result = CoreWorkflowResult(
+            workflow_name="refresh_castle_roster",
+            succeeded=True,
+            value=RefreshCastleRosterResult(
+                castles=(active,),
+                captured_at=datetime(2026, 9, 12, tzinfo=UTC),
+            ),
+            exit_screen=ScreenType.PNC_HOME_CITY,
+            trace_path="trace.jsonl",
+        )
+        workflow_runner = Mock()
+        workflow_runner.run.return_value = typed_result
+        runtime_factory = Mock(return_value=core_runtime)
+        runner_factory = Mock(return_value=workflow_runner)
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            roster_store = CastleRosterStore(Path(temporary_directory) / "castles.yaml")
+            dispatcher = CoreScriptDispatcher(
+                account=_account(),
+                chat_archive_store=None,
+                mail_archive_store=None,
+                castle_roster_store=roster_store,
+                core_runtime_factory=runtime_factory,
+            )
+            with patch(
+                "pnc_automation.app.automation.engine.core_script_dispatcher.CoreWorkflowRunner",
+                runner_factory,
+            ):
+                result = dispatcher.execute(step=_prepared_roster_step())
+
+        self.assertIs(typed_result, result)
+        workflow = workflow_runner.run.call_args.args[0]
+        self.assertIsInstance(workflow, RefreshCastleRosterWorkflow)
+        self.assertEqual("account", workflow.account_id)
+        self.assertEqual("pnc-account", workflow.pnc_account_id)
+        self.assertIs(active, workflow.active_castle)
+        self.assertIs(roster_store, workflow.roster_store)
+        runtime_factory.assert_called_once_with()
+        core_runtime.preflight_active_castle_identity.assert_called_once_with()
+        core_runtime.close.assert_not_called()
+
+    def test_script_runner_rejects_roster_without_store_before_connection(self) -> None:
+        """Validates roster persistence before constructing a connected runner."""
+
+        script_runner = _minimal_script_runner(archive_store=None, castle_roster_store=None)
+        with patch.object(ScriptRunner, "_build_runner") as build_runner:
+            with self.assertRaisesRegex(RuntimeError, "CastleRosterStore"):
+                script_runner._run_script_for_account(
+                    account=_account(),
+                    script=_run_roster_script(),
+                )
+
+        build_runner.assert_not_called()
+
+    def test_script_runner_builds_roster_dispatcher_without_mail_or_chat(self) -> None:
+        """Keeps roster dispatch independent from the mail and Chat archive stores."""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            roster_store = CastleRosterStore(Path(temporary_directory) / "castles.yaml")
+            script_runner = _minimal_script_runner(
+                archive_store=None,
+                mail_archive_store=None,
+                castle_roster_store=roster_store,
+            )
+            dispatcher = script_runner._build_core_step_executor(
+                account=_account(),
+                connected_runtime=SimpleNamespace(),
+                required_role=LiveAutomationRole.LIVE_TESTING,
+            )
+
+        self.assertIsInstance(dispatcher, CoreScriptDispatcher)
+        self.assertIs(roster_store, dispatcher.castle_roster_store)  # type: ignore[union-attr]
+        self.assertIsNone(dispatcher.chat_archive_store)  # type: ignore[union-attr]
+        self.assertIsNone(dispatcher.mail_archive_store)  # type: ignore[union-attr]
 
     def test_dispatcher_collect_mail_uses_mail_store_without_chat_store(self) -> None:
         """Builds the canonical typed mail workflow from the mail store alone."""
@@ -656,6 +788,17 @@ def _prepared_chat_step(*, castle: CastleIdentity | None = None) -> PreparedScri
     )
 
 
+def _prepared_roster_step() -> PreparedScriptStep:
+    """Builds one already-prepared parameterless typed roster step."""
+
+    return PreparedScriptStep(
+        script_step=ScriptStep(task=TaskId.REFRESH_CASTLE_ROSTER),
+        parsed_params=None,
+        castle_target_policy=CastleTargetPolicy.DISALLOWED,
+        resolved_castle=None,
+    )
+
+
 def _mail_params() -> CollectMailParams:
     """Builds one canonical typed mail payload for dispatcher tests."""
 
@@ -741,17 +884,28 @@ def _run_mail_script() -> RunScript:
     )
 
 
+def _run_roster_script() -> RunScript:
+    """Builds one authored parameterless roster script for pre-connect validation tests."""
+
+    return RunScript(
+        name="roster",
+        path=Path("roster.yaml"),
+        steps=(ScriptStep(task=TaskId.REFRESH_CASTLE_ROSTER),),
+    )
+
+
 def _minimal_script_runner(
     *,
     archive_store: ChatArchiveStore | None,
     mail_archive_store: MailArchiveStore | None = None,
+    castle_roster_store: CastleRosterStore | None = None,
 ) -> ScriptRunner:
     """Builds the smallest ScriptRunner object needed to test pre-connect validation."""
 
     runner = ScriptRunner.__new__(ScriptRunner)
     runner.config = SimpleNamespace(find_castle_targets=lambda _account_id: None)
     runner.task_registry = build_default_task_registry()
-    runner.castle_roster_store = None
+    runner.castle_roster_store = castle_roster_store
     runner.mail_archive_store = mail_archive_store
     runner.chat_archive_store = archive_store
     return runner
