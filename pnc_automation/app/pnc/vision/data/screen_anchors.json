@@ -1420,6 +1420,101 @@
       "layout_id": "research_tree_development"
     },
     {
+      "id": "research_tree_node_detail",
+      "screen": "PNC_RESEARCH_TREE",
+      "anchors": [
+        {
+          "image": "screen_anchors/research_node_detail_0.png",
+          "search_region": [
+            476,
+            272,
+            48,
+            49
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/research_node_detail_1.png",
+          "search_region": [
+            94,
+            519,
+            278,
+            42
+          ],
+          "threshold": 0.95
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_RESEARCH_START_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/research_node_detail_research_button.png",
+            "search_region": [
+              280,
+              420,
+              180,
+              110
+            ],
+            "threshold": 0.97
+          }
+        }
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "research_node_detail.png",
+        "decoded_sha256": "b3ac3a01f7d61286cefe067e0f2e02857d5766f5491b90cbb7abf324144df0db",
+        "capture_group": "2026-09-12/testing"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Reviewed Construction research detail chrome and the separate blue Research action; the gold Research Now control is excluded.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "layout_id": "research_tree_development"
+    },
+    {
+      "id": "research_tree_node_detail_active",
+      "screen": "PNC_RESEARCH_TREE",
+      "anchors": [
+        {
+          "image": "screen_anchors/research_node_detail_0.png",
+          "search_region": [
+            476,
+            248,
+            48,
+            49
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/research_node_detail_active_speedup.png",
+          "search_region": [
+            350,
+            410,
+            180,
+            85
+          ],
+          "threshold": 0.97
+        }
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "research_node_detail_active.png",
+        "decoded_sha256": "d528d880814f582794683b3a9a9e6633d2ac646ef6df131b13b94a80b5b21698",
+        "capture_group": "2026-09-12/testing"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Reviewed active Construction research detail with stable blue Speedup button chrome; mutable progress fill and timer text are excluded and no active controls are exposed.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "layout_id": "research_tree_development"
+    },
+    {
       "id": "settings_preferences",
       "screen": "PNC_SETTINGS_PREFERENCES",
       "anchors": [

@@ -2376,10 +2376,12 @@ selectors:
   screens:
   - PNC_RESEARCH_TREE
   status: planned
-  detection_kind: unsupported
+  detection_kind: semantic
+  interaction_kind: action
   materialize_relative_bounds: false
   notes:
-  - 'Proposed unsupported strategy: No research-start producer.'
+  - Produced only by the proved research detail visual profile for the blue Research button.
+  - The premium gold Research Now control is intentionally excluded.
 - id: PNC_GATHER_BUTTON
   screens:
   - PNC_GATHER_NODE

@@ -1,6 +1,6 @@
 # Integrate visual recognition, guarded controls, and targeted OCR
 
-Status (2026-09-12): the combined recognition improvements landed on `origin/main` at `2bb3c90`, including workflow safety through `e4eb8b5`. Work continues on `codex/non-yolo-recognition` in `artifacts/worktrees/non-yolo-integration-current`. Development Research Tree identity and safe graph entry/return are now implemented and live-confirmed; final offline validation is recorded in the implementation report. Remaining F family evidence and broader promotion gates are incomplete. This document does not authorize game mutations.
+Status (2026-09-12): work is paused at a durable checkpoint on `codex/non-yolo-recognition` in `artifacts/worktrees/non-yolo-integration-current`. Development Research Tree identity, node selection, the blue normal Research control, and active-detail reconciliation are implemented and live-confirmed on `testing`. One authorized Construction I research action spent exactly 16,400 food and 7,010 wood with zero premium currency; the active detail was closed and the instance was returned to Home before releasing its reservation. Remaining Gathering/March, Campaign, broader category, member-only, target, build, and locale gates are incomplete. Exact evidence and validation are recorded in the implementation report.
 
 ## Resumed gap: Development research-tree identity
 

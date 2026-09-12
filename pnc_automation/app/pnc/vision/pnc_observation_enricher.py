@@ -1855,14 +1855,15 @@ class PncObservationEnricher:
         )
         if modal_guard is not None:
             return modal_guard
-        popup = _build_popup_additions(image=image, lines=lines, anchors=anchors)
-        if popup is not None:
-            return replace(
-                popup,
-                guard_verdict=(GuardVerdict.UNRESOLVED if any(
-                    evidence.reason.startswith("weak_") for evidence in popup.screen_evidence
-                ) else GuardVerdict.BLOCKED),
-            )
+        if owned_navigation_screen != ScreenType.PNC_RESEARCH_TREE:
+            popup = _build_popup_additions(image=image, lines=lines, anchors=anchors)
+            if popup is not None:
+                return replace(
+                    popup,
+                    guard_verdict=(GuardVerdict.UNRESOLVED if any(
+                        evidence.reason.startswith("weak_") for evidence in popup.screen_evidence
+                    ) else GuardVerdict.BLOCKED),
+                )
         visual = _build_visual_popup_close_additions(
             image=image, excluded_bounds=owned_dismiss_bounds,
         )

@@ -16,7 +16,8 @@ from pnc_automation.app.automation.tasks.gathering_task import GatheringTask
 from pnc_automation.app.automation.tasks.research_task import ResearchTask
 from pnc_automation.app.automation.tasks.send_chat_message_task import SendAllianceChatMessageTask
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
-from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
+from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
+from pnc_automation.app.pnc.vision.selectors import DetectionKind, build_default_selector_registry
 from pnc_automation.core.errors import SelectorResolutionError, TaskVerificationError
 from tests.support.core.logging import build_logger
 from tests.support.pnc.observations import make_observation
@@ -57,7 +58,7 @@ class TaskRecognitionRequirementTests(unittest.TestCase):
             max_retries_per_step=1,
         )
 
-        for task in (ResearchTask(), GatheringTask(), CampaignTask()):
+        for task in (GatheringTask(), CampaignTask()):
             with self.subTest(task=task.id.value):
                 with self.assertRaises(TaskVerificationError) as raised:
                     task_executor.execute(task=task, context=Mock(), before=Mock())
@@ -70,6 +71,13 @@ class TaskRecognitionRequirementTests(unittest.TestCase):
                 action_executor.recover_interruption_if_required.assert_not_called()
                 action_executor.execute_actions.assert_not_called()
                 observation_service.observe.assert_not_called()
+
+    def test_research_requirement_is_supported_by_the_proved_detail_producer(self) -> None:
+        """Allows ResearchTask recognition support while the profile gates visibility to detail."""
+
+        registry = build_default_selector_registry()
+        selector = registry.require_supported(UiElementId.PNC_RESEARCH_START_BUTTON)
+        self.assertEqual(DetectionKind.SEMANTIC, selector.detection_kind)
 
     def test_default_task_requirement_is_empty(self) -> None:
         from pnc_automation.app.automation.engine.task import BaseAutomationTask
@@ -113,7 +121,7 @@ class TaskRecognitionRequirementTests(unittest.TestCase):
         account = AccountConfig(id="account", instance_id="instance", pnc_account_id="pnc")
         before = make_observation(ScreenType.PNC_MORE_MENU)
 
-        for task in (ResearchTask(), GatheringTask(), CampaignTask()):
+        for task in (GatheringTask(), CampaignTask()):
             with self.subTest(task=task.id.value):
                 action_executor = Mock()
                 action_executor.action_executor.selector_registry = build_default_selector_registry()
