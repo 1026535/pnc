@@ -26,6 +26,24 @@ from tests.support.pnc.world_search.search_request import _search_request
 class WorldCoordinateDomainTests(WorldMapSearchFixtures, unittest.TestCase):
     """Proves world coordinate domain."""
 
+    def test_corner_snapping_keeps_row_and_column_samples_inside_search_bounds(self) -> None:
+        """A parity correction near an edge cannot add an out-of-search row or column."""
+
+        domain = WorldMapCoordinateDomain.puzzles_and_conquest()
+        for bounds in (
+            WorldMapBounds(min_x=0, min_y=1, max_x=2, max_y=3),
+            WorldMapBounds(min_x=1, min_y=0, max_x=3, max_y=2),
+            WorldMapBounds(min_x=0, min_y=1, max_x=0, max_y=3),
+        ):
+            with self.subTest(bounds=bounds):
+                rows = domain.row_samples(bounds=bounds, spacing=2)
+                columns = domain.column_samples(bounds=bounds, spacing=2)
+                self.assertTrue(all(bounds.min_y <= y <= bounds.max_y for y in rows))
+                self.assertTrue(all(bounds.min_x <= x <= bounds.max_x for x in columns))
+                coordinates = domain.row_major_coordinates(bounds=bounds, spacing=2)
+                self.assertTrue(coordinates)
+                self.assertTrue(all(bounds.contains(point) and domain.is_addressable(point) for point in coordinates))
+
     def test_coordinate_domain_models_addressable_coordinate_pairs_not_axes(self) -> None:
         """Treats every integer axis value as usable while rejecting impossible x/y pair parity."""
 

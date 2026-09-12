@@ -94,6 +94,21 @@ class DailyClaimExecutorTests(unittest.TestCase):
         )
         self.assertEqual(MutationIntentState.RECONCILED, persisted.mutation_intents[0].state)
 
+    def test_unrecognized_action_does_not_prove_reward_claimed(self) -> None:
+        """Keeps a claim unresolved when OCR cannot read the post-action row control."""
+
+        session = _ClaimSession((_observation("claim"), _observation("unknown_action")))
+        action_executor = Mock()
+
+        checkpoint, outcome = self._executor(session, action_executor).claim(
+            row=self.row,
+            checkpoint=self.checkpoint,
+        )
+
+        self.assertEqual(DailyTargetOutcomeStatus.PENDING_CLARIFICATION, outcome.status)
+        self.assertEqual(MutationIntentState.RECONCILED, checkpoint.mutation_intents[0].state)
+        action_executor.execute_action.assert_called_once()
+
     def test_changed_fingerprint_fails_before_tap_and_leaves_dispatched_receipt(self) -> None:
         """Does not tap stale geometry after another frame changes the row fingerprint."""
 

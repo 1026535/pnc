@@ -142,6 +142,48 @@ class DailyMaintenanceCoordinatorTests(unittest.TestCase):
         self.assertEqual(DailyTargetOutcomeStatus.PENDING_CLARIFICATION, result.outcomes[0].status)
         self.assertEqual(1, session.home_count)
 
+    def test_collects_unknown_titles_from_final_scrolled_viewport(self) -> None:
+        """Reports unrecognized bottom rows even when they have no executable work."""
+
+        first = _observation(_entry(DailyQuestId.HERO_ARENA, "requirement"))
+        bottom = _observation(
+            replace(
+                _entry(DailyQuestId.HERO_ARENA, "requirement"),
+                title_text="New daily quest",
+                metadata={"bottom_marker": True},
+            )
+        )
+        session = _FakeSession(observations=[first, first, bottom, bottom])
+
+        result = self._coordinator(
+            session=session,
+            claim_executor=_FakeClaimExecutor([]),
+            capability_executor=_FakeCapabilityExecutor([]),
+        ).run(target=self.target, checkpoint=self.checkpoint)
+
+        self.assertEqual(("New daily quest",), result.unknown_titles)
+        self.assertEqual(2, result.scanned_viewports)
+
+    def test_viewport_budget_counts_each_scrolled_viewport_once(self) -> None:
+        """Allows a three-viewport list to reach its bottom with a budget of three."""
+
+        first = _observation(_entry(DailyQuestId.HERO_ARENA, "requirement"))
+        second = _observation(_entry(DailyQuestId.UPGRADE_BUILDING, "requirement"))
+        bottom = _observation(_entry(DailyQuestId.HERO_HALL, "requirement", bottom=True))
+        session = _ScrollDrivenSession(observations=[first, second, bottom])
+        coordinator = self._coordinator(
+            session=session,
+            claim_executor=_FakeClaimExecutor([]),
+            capability_executor=_FakeCapabilityExecutor([]),
+        )
+        coordinator.max_viewports = 3
+
+        result = coordinator.run(target=self.target, checkpoint=self.checkpoint)
+
+        self.assertEqual(3, result.scanned_viewports)
+        self.assertEqual([False, False], session.scroll_adjustments)
+        self.assertEqual(1, session.home_count)
+
     def test_read_only_survey_reports_claim_rows_without_mutating(self) -> None:
         """Traverses and reports a Claim row without invoking either mutation executor."""
 
@@ -258,6 +300,16 @@ class _FakeSession:
         """Records the final safe-root return."""
 
         self.home_count += 1
+
+
+class _ScrollDrivenSession(_FakeSession):
+    """Keeps each viewport stable until a scroll moves the list forward."""
+
+    def observe_daily_quest(self, label: str) -> Observation:
+        """Returns the current viewport for any number of stability observations."""
+
+        del label
+        return self.observations[len(self.scroll_adjustments)]
 
 
 @dataclass(slots=True)
