@@ -232,6 +232,34 @@
       "split": "reference",
       "group": "2026-09-12/serious_stuff",
       "sha256": "471f111a61509f7974e77a6037a7a617a079b39f90df83aa16f764b32e4fc3c8"
+    },
+    {
+      "image": "chat_home_alliance.png",
+      "screen": "PNC_HOME_CITY",
+      "split": "reference",
+      "group": "2026-09-12/serious_stuff",
+      "sha256": "758f63603ae5844ef836b9092efdf37ca4d05725eb99cc016c38b6da1d233dbb"
+    },
+    {
+      "image": "chat_home_kingdom.png",
+      "screen": "PNC_HOME_CITY",
+      "split": "reference",
+      "group": "2026-09-12/serious_stuff",
+      "sha256": "4aa27520aba3eb9f33209bcd07b06b178961a3678c59818be0e8a28be2254768"
+    },
+    {
+      "image": "chat_alliance.png",
+      "screen": "PNC_CHAT",
+      "split": "reference",
+      "group": "2026-09-12/serious_stuff",
+      "sha256": "123c71e7ae808a0e9c5fbaabcb616cedab6afa4ae3b039939df079e65471cb96"
+    },
+    {
+      "image": "chat_kingdom.png",
+      "screen": "PNC_CHAT",
+      "split": "reference",
+      "group": "2026-09-12/serious_stuff",
+      "sha256": "f2f19fea098da6b70a82092ff0e36f164e374661576b6c314455a0dfedf409d5"
     }
   ]
 }

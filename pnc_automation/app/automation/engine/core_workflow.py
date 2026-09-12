@@ -7,6 +7,7 @@ from enum import StrEnum
 from typing import Generic, Protocol, TypeVar
 
 from pnc_automation.app.automation.engine.core_runtime import CoreRuntime
+from pnc_automation.app.pnc.domain.chat import ChatChannel
 from pnc_automation.app.pnc.domain.observation import Observation
 from pnc_automation.app.pnc.domain.mail import MailboxAvailability, MailboxType
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
@@ -141,16 +142,39 @@ class WorkflowContext:
         finally:
             self._sync_from_runtime()
 
+    def select_chat_channel(self, channel: ChatChannel) -> Observation:
+        """Select one typed chat channel and require fresh content confirming it."""
+
+        if not isinstance(channel, ChatChannel):
+            raise ValueError("Chat channel selection requires a ChatChannel value.")
+        try:
+            return self._runtime.navigation.select_chat_channel(
+                channel,
+                observe_content=self._observe_chat_content,
+            )
+        finally:
+            self._sync_from_runtime()
+
     def _observe_mail_content(self, label: str) -> Observation:
         """Capture fresh mail content for one constrained operation."""
 
+        return self._observe_operation_content(label, operation="Mail")
+
+    def _observe_chat_content(self, label: str) -> Observation:
+        """Capture fresh chat content for one constrained channel operation."""
+
+        return self._observe_operation_content(label, operation="Chat")
+
+    def _observe_operation_content(self, label: str, *, operation: str) -> Observation:
+        """Capture fresh content while preserving shared workflow freshness checks."""
+
         observation = self._runtime.observe(label, include_content=True)
         if self._runtime.observation_count <= self._last_navigation_count:
-            raise RuntimeError("Mail operation content was not captured after the previous workflow observation.")
+            raise RuntimeError(f"{operation} operation content was not captured after the previous workflow observation.")
         if self._last_observation is not None and observation.captured_at <= self._last_observation.captured_at:
-            raise RuntimeError("Mail operation content was stale relative to the previous workflow observation.")
+            raise RuntimeError(f"{operation} operation content was stale relative to the previous workflow observation.")
         if observation.blocking_popup:
-            raise RuntimeError("Mail operation content encountered a blocking popup.")
+            raise RuntimeError(f"{operation} operation content encountered a blocking popup.")
         self._last_navigation_count = self._runtime.observation_count
         self._last_observation = observation
         return observation

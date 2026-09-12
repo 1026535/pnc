@@ -711,5 +711,69 @@
       100
     ],
     "notes": "Shared mail-thread pagination chrome; inferred mailbox-agnostic from the supplied System frame, pending positive Player/Alliance live evidence."
+  },
+  {
+    "asset": "screen_anchors/home_chat_shortcut_alliance.png",
+    "source": "artifacts/2026-09-12/serious_stuff/20260912T043707Z_chat_route_home_source.png",
+    "source_sha256": "758f63603ae5844ef836b9092efdf37ca4d05725eb99cc016c38b6da1d233dbb",
+    "reference_size": [540, 960],
+    "crop": [5, 805, 63, 875],
+    "notes": "Measured Home chat shortcut with the blue Alliance channel icon variant."
+  },
+  {
+    "asset": "screen_anchors/home_chat_shortcut_kingdom.png",
+    "source": "artifacts/2026-09-12/serious_stuff/20260912T044131Z_chat_route_v3_return_post_action_1.png",
+    "source_sha256": "4aa27520aba3eb9f33209bcd07b06b178961a3678c59818be0e8a28be2254768",
+    "reference_size": [540, 960],
+    "crop": [5, 805, 63, 875],
+    "notes": "Measured Home chat shortcut with the brown Kingdom channel icon variant."
+  },
+  {
+    "asset": "screen_anchors/chat_identity_header.png",
+    "source": "tests/data/screen_recognition/chat_alliance.png",
+    "source_sha256": "123c71e7ae808a0e9c5fbaabcb616cedab6afa4ae3b039939df079e65471cb96",
+    "reference_size": [540, 960],
+    "crop": [90, 0, 205, 50],
+    "notes": "Shared Chat title identity crop."
+  },
+  {
+    "asset": "screen_anchors/chat_back_button.png",
+    "source": "tests/data/screen_recognition/chat_alliance.png",
+    "source_sha256": "123c71e7ae808a0e9c5fbaabcb616cedab6afa4ae3b039939df079e65471cb96",
+    "reference_size": [540, 960],
+    "crop": [10, 5, 75, 50],
+    "notes": "Measured Chat header back arrow control."
+  },
+  {
+    "asset": "screen_anchors/chat_tab_kingdom_active.png",
+    "source": "tests/data/screen_recognition/chat_kingdom.png",
+    "source_sha256": "f2f19fea098da6b70a82092ff0e36f164e374661576b6c314455a0dfedf409d5",
+    "reference_size": [540, 960],
+    "crop": [0, 50, 156, 106],
+    "notes": "Measured active Kingdom tab control."
+  },
+  {
+    "asset": "screen_anchors/chat_tab_kingdom_inactive.png",
+    "source": "tests/data/screen_recognition/chat_alliance.png",
+    "source_sha256": "123c71e7ae808a0e9c5fbaabcb616cedab6afa4ae3b039939df079e65471cb96",
+    "reference_size": [540, 960],
+    "crop": [0, 50, 156, 106],
+    "notes": "Measured inactive Kingdom tab control."
+  },
+  {
+    "asset": "screen_anchors/chat_tab_alliance_active.png",
+    "source": "tests/data/screen_recognition/chat_alliance.png",
+    "source_sha256": "123c71e7ae808a0e9c5fbaabcb616cedab6afa4ae3b039939df079e65471cb96",
+    "reference_size": [540, 960],
+    "crop": [154, 50, 312, 106],
+    "notes": "Measured active Alliance tab control."
+  },
+  {
+    "asset": "screen_anchors/chat_tab_alliance_inactive.png",
+    "source": "tests/data/screen_recognition/chat_kingdom.png",
+    "source_sha256": "f2f19fea098da6b70a82092ff0e36f164e374661576b6c314455a0dfedf409d5",
+    "reference_size": [540, 960],
+    "crop": [154, 50, 312, 106],
+    "notes": "Measured inactive Alliance tab control."
   }
 ]

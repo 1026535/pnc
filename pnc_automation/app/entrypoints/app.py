@@ -20,6 +20,10 @@ from pnc_automation.app.automation.daily_maintenance.daily_quest_status import (
     DailyQuestStatusWorkflow,
 )
 from pnc_automation.app.automation.collect_mail import CollectMailResult, CollectMailWorkflow
+from pnc_automation.app.automation.collect_kingdom_chat import (
+    CollectKingdomChatResult,
+    CollectKingdomChatWorkflow,
+)
 from pnc_automation.app.authoring.scripts.registry import build_default_task_registry
 from pnc_automation.core.infra.storage.artifact_store import ArtifactStore
 from pnc_automation.app.pnc.persistence.chat_archive_store import ChatArchiveStore
@@ -170,6 +174,37 @@ class ApplicationRunner:
                 archive_store=archive_store,
             )
             return CoreWorkflowRunner[CollectMailResult](core_runtime).run(workflow)
+        finally:
+            core_runtime.close()
+
+    def run_collect_kingdom_chat(
+        self,
+        *,
+        account_id: str,
+        required_role: LiveAutomationRole = LiveAutomationRole.LIVE_TESTING,
+    ) -> CoreWorkflowResult[CollectKingdomChatResult]:
+        """Archives one typed Kingdom Chat viewport after exact active-castle preflight."""
+
+        account = self.script_runner.config.require_account(account_id)
+        archive_store = self.script_runner.chat_archive_store
+        if archive_store is None:
+            raise RuntimeError(
+                "Kingdom Chat replacement workflow requires a configured ChatArchiveStore before connecting."
+            )
+        core_runtime = build_core_runtime(
+            self.script_runner,
+            account,
+            account.artifact_directory_name,
+            required_role=required_role,
+        )
+        try:
+            active_castle = core_runtime.preflight_active_castle_identity()
+            workflow = CollectKingdomChatWorkflow(
+                account_id=account.id,
+                active_castle=active_castle,
+                archive_store=archive_store,
+            )
+            return CoreWorkflowRunner[CollectKingdomChatResult](core_runtime).run(workflow)
         finally:
             core_runtime.close()
 

@@ -12,6 +12,7 @@ from typing import Any, TypeVar
 from pnc_automation.app.runtime.observation_mode import ObservationMode
 from pnc_automation.app import ApplicationRunner, build_application_runner
 from pnc_automation.app.automation.collect_mail import CollectMailResult
+from pnc_automation.app.automation.collect_kingdom_chat import CollectKingdomChatResult
 from pnc_automation.app.automation.engine.core_workflow import CoreWorkflowResult
 from pnc_automation.app.automation.engine.runner import RunResult, StepRunResult
 from pnc_automation.app.automation.engine.script_runner import require_successful_preparation
@@ -269,8 +270,8 @@ class AutomationSession:
             only_new=only_new,
         )
 
-    def collect_kingdom_chat(self) -> StepRunResult:
-        """Runs one direct Kingdom Chat heartbeat poll against the prepared session."""
+    def collect_kingdom_chat(self) -> CoreWorkflowResult[CollectKingdomChatResult]:
+        """Runs one typed replacement-core Kingdom Chat poll against the prepared session."""
 
         return self.api.collect_kingdom_chat(account_id=self.account_id)
 
@@ -548,13 +549,17 @@ class AutomationApi:
             ),
         )
 
-    def collect_kingdom_chat(self, *, account_id: str | None = None) -> StepRunResult:
-        """Runs one direct collect_kingdom_chat task using current-castle semantics."""
+    def collect_kingdom_chat(
+        self,
+        *,
+        account_id: str | None = None,
+    ) -> CoreWorkflowResult[CollectKingdomChatResult]:
+        """Runs one typed replacement-core Kingdom Chat poll using current-castle semantics."""
 
-        return self.run_task(
-            account_id=self._resolve_account_id(account_id),
-            task_id=TaskId.COLLECT_KINGDOM_CHAT,
-            params={},
+        resolved_account_id = self._resolve_account_id(account_id)
+        return self._run_with_account_reservation(
+            resolved_account_id,
+            lambda: self.application.run_collect_kingdom_chat(account_id=resolved_account_id),
         )
 
     def run_mail_schedules(
@@ -797,8 +802,11 @@ def collect_mail(
     )
 
 
-def collect_kingdom_chat(*, account_id: str | None = None) -> StepRunResult:
-    """Runs one direct Kingdom Chat heartbeat poll through the default application facade."""
+def collect_kingdom_chat(
+    *,
+    account_id: str | None = None,
+) -> CoreWorkflowResult[CollectKingdomChatResult]:
+    """Runs one typed replacement-core Kingdom Chat poll through the default facade."""
 
     return _default_api().collect_kingdom_chat(account_id=account_id)
 
