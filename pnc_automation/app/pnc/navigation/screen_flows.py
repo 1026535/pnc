@@ -43,6 +43,7 @@ from pnc_automation.app.pnc.domain.observation import (
 )
 from pnc_automation.app.pnc.domain.popup import (
     PopupControlKind,
+    TASK_OWNED_POPUP_SCREEN_TYPES,
     decide_popup_recovery,
 )
 from pnc_automation.app.pnc.domain.screen_contracts import campaign_flow_screen_types
@@ -133,8 +134,11 @@ class ScreenFlowPlanner:
         if decision is None:
             return []
         if decision.blocked or decision.selector_id is None:
+            reason = decision.reason
+            if observation.popup_overlay is None and observation.screen_type in TASK_OWNED_POPUP_SCREEN_TYPES:
+                reason = "Task-owned popup has no typed safe close control."
             raise SelectorResolutionError(
-                decision.reason,
+                reason,
                 screen_type=observation.screen_type,
             )
         return [

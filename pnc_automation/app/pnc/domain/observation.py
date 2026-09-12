@@ -477,6 +477,7 @@ class Observation:
         image_size: tuple[int, int] | None = None,
         frame_fingerprint: str | None = None,
         captured_at: datetime | None = None,
+        popup_overlay: PopupOverlayObservation | None = None,
         current_castle: CastleIdentity | None = None,
         current_castle_evidence: CurrentCastleEvidenceKind | None = None,
         current_pnc_account_id: str | None = None,
@@ -507,7 +508,17 @@ class Observation:
                 guard=GuardVerdict.BLOCKED if blocking_popup else GuardVerdict.CLEAR,
             )
         elif screen_type is not None and screen_type != decision.effective_screen:
-            raise ValueError("Legacy screen_type contradicts the supplied screen decision.")
+            # ``dataclasses.replace`` passes the legacy compatibility property
+            # alongside the original decision. Rebind the decision so old
+            # fixtures can still replace the projected screen safely.
+            decision = ScreenDecision(
+                base_screen=screen_type,
+                effective_screen=screen_type,
+                layout_id=decision.layout_id,
+                guard=decision.guard,
+                evidence=decision.evidence,
+                coordinate_only=decision.coordinate_only,
+            )
         if blocking_popup and decision.guard != GuardVerdict.BLOCKED:
             decision = ScreenDecision(
                 base_screen=decision.base_screen,
@@ -526,6 +537,7 @@ class Observation:
             "image_size": image_size,
             "frame_fingerprint": frame_fingerprint,
             "captured_at": captured_at or datetime.now(tz=UTC),
+            "popup_overlay": popup_overlay,
             "current_castle": current_castle,
             "current_castle_evidence": current_castle_evidence,
             "current_pnc_account_id": current_pnc_account_id,

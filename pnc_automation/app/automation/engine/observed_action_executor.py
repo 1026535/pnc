@@ -883,6 +883,9 @@ class ObservedActionExecutor:
             ),
             extracted_text=candidate.extracted_text,
             action_point=candidate.action_point,
+            frame_ref=observation.frame_ref,
+            source_screen=observation.screen_type,
+            source_layout_id=observation.decision.layout_id,
         )
         return replace(observation, visible_elements=elements)
 

@@ -6,7 +6,7 @@ import logging
 import time
 from collections.abc import Callable, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from pnc_automation.core.infra.emulator.session import BlueStacksSession
 from pnc_automation.core.errors import FrameProvenanceError, SelectorResolutionError
@@ -43,7 +43,7 @@ from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
-from pnc_automation.app.pnc.vision.selectors import SelectorRegistry
+from pnc_automation.app.pnc.vision.selectors import SelectorRegistry, build_default_selector_registry
 
 
 @dataclass(slots=True)
@@ -51,12 +51,12 @@ class ActionExecutor:
     """Executes action requests against one emulator session."""
 
     session: BlueStacksSession
-    selector_registry: SelectorRegistry
     stable_click_delay_ms: int
     post_action_observe_delay_ms: int
     chat_stable_click_delay_ms: int
     chat_post_action_observe_delay_ms: int
     logger: logging.LoggerAdapter
+    selector_registry: SelectorRegistry = field(default_factory=build_default_selector_registry)
     world_map_movement_stable_click_delay_ms: int = 300
     world_map_movement_post_action_observe_delay_ms: int = 800
     sleep: Callable[[float], None] = time.sleep

@@ -2053,7 +2053,8 @@ selectors:
   screens:
   - PNC_POPUP
   status: screenshot_seeded
-  detection_kind: planned
+  detection_kind: semantic
+  materialize_relative_bounds: false
   interaction_kind: action
   notes:
   - OCR materializes Confirm only when the exact disconnect/reconnect message is present.

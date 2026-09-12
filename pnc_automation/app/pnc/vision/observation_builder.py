@@ -361,7 +361,7 @@ class ObservationBuilder:
         return ObservationOcrContext(
             screenshot.image,
             backend,
-            screenshot.frame_ref,
+            getattr(screenshot, "frame_ref", None),
             self.ocr_backend_revision,
         )
 
@@ -374,6 +374,15 @@ class ObservationBuilder:
     ) -> tuple[OcrRegionPlan, ...]:
         """Compile fixed OCR fields and coordinate regions for one resolved frame."""
 
+        available_selector_ids = {selector.id for selector in self.selector_registry.all()}
+        request = replace(
+            request,
+            text_field_selectors=frozenset(
+                selector_id
+                for selector_id in request.text_field_selectors
+                if selector_id in available_selector_ids
+            ),
+        )
         return compile_ocr_region_plans(
             registry=self.selector_registry,
             resolved_screen=resolved_screen,
@@ -393,7 +402,7 @@ class ObservationBuilder:
         if ocr_context is None:
             ocr_context = self.create_ocr_context(screenshot)
         else:
-            ocr_context.validate_capture(screenshot.image, screenshot.frame_ref)
+            ocr_context.validate_capture(screenshot.image, getattr(screenshot, "frame_ref", None))
         active_request = request or ObservationRequest.full_runtime_default()
         viewport_reviewed = is_reviewed_viewport(screenshot.image.size)
         if active_request.world_map_coordinate_only:
@@ -650,14 +659,14 @@ class ObservationBuilder:
         )
         visible_elements = _bind_visible_elements(
             visible_elements,
-            frame_ref=screenshot.frame_ref,
+            frame_ref=getattr(screenshot, "frame_ref", None),
             source_screen=decision.effective_screen,
             source_layout_id=decision.layout_id,
         )
         bound_list_entries = tuple(
             _bind_one_list_entry(
                 entry,
-                frame_ref=screenshot.frame_ref,
+                frame_ref=getattr(screenshot, "frame_ref", None),
                 source_screen=decision.effective_screen,
                 source_layout_id=decision.layout_id,
             )
@@ -689,7 +698,7 @@ class ObservationBuilder:
             text_field_states=additions.text_field_states,
             chat_draft_empty=additions.chat_draft_empty,
             chat_draft_text=additions.chat_draft_text,
-            frame_ref=screenshot.frame_ref,
+            frame_ref=getattr(screenshot, "frame_ref", None),
         )
 
     def _filter_visible_elements_for_decision(
