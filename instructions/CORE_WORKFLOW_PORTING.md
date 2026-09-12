@@ -120,6 +120,8 @@ Generated session preparation runs the typed readiness step before the existing 
 
 `BlueStacksSession.ensure_app_foregrounded` reports whether it launched the app. Foreground detection reads the exact component package in one Android `mCurrentFocus` field, ignoring background windows. Missing, ambiguous, or malformed focus evidence raises `GameLaunchError`; it does not guess from another window field. Live readiness passed both from an already-running Home screen and from the launcher with the game backgrounded. These proofs do not establish cold-start or credential-entry coverage; see the validation ledger for evidence and limits.
 
+An explicit `castle_ref` on a typed core step is a current-target assertion checked by the core dispatcher; it does not authorize legacy roster alignment or an implicit castle switch. Authored scripts that need a different castle must request a separate `SELECT_CASTLE` step until that workflow is ported.
+
 ## Typed chat sending
 
 `SendChatWorkflow` is the single canonical implementation for authored `SEND_WORLD_CHAT_MESSAGE` and `SEND_ALLIANCE_CHAT_MESSAGE`; its channel-specific workflow names remain `send_kingdom_chat` and `send_alliance_chat`. Each is a Home-to-Home `NONSPENDING_STATE_CHANGE` workflow using the shared `ChatMessageTaskParams` parser, exact active-castle preflight, and `WorkflowContext.send_chat_message`. It has no archive dependency or legacy fallback, and the context rejects sending from a read-only workflow.

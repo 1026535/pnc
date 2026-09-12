@@ -651,8 +651,8 @@ class TypedCoreDispatchTests(unittest.TestCase):
 
         build_runner.assert_not_called()
 
-    def test_explicit_castle_uses_existing_alignment_once_before_core_dispatch(self) -> None:
-        """Runs the established synthetic castle alignment once, then delegates the typed step."""
+    def test_explicit_castle_is_asserted_without_legacy_alignment_before_core_dispatch(self) -> None:
+        """Routes typed steps directly to the core executor without legacy observation or alignment."""
 
         executor = Mock()
         executor.execute.return_value = _workflow_result()
@@ -663,9 +663,80 @@ class TypedCoreDispatchTests(unittest.TestCase):
         with patch.object(AutomationRunner, "_align_step_castle_target", return_value=None) as align:
             runner.run(_account(), PreparedRunScript(name="chat", path=Path("chat.yaml"), steps=(step,)))
 
-        observation_service.observe.assert_called_once_with("collect_kingdom_chat_before")
-        align.assert_called_once()
+        observation_service.observe.assert_not_called()
+        align.assert_not_called()
         executor.execute.assert_called_once_with(step=step)
+
+    def test_real_dispatcher_rejects_typed_target_mismatch_without_legacy_actions(self) -> None:
+        """Lets the real dispatcher reject a typed target while the runner performs no legacy work."""
+
+        active = CastleIdentity("K1", "Active", 12)
+        requested = CastleIdentity("K2", "Requested", 12)
+        core_runtime = Mock()
+        core_runtime.preflight_active_castle_identity.return_value = active
+        runtime_factory = Mock(return_value=core_runtime)
+        dispatcher = CoreScriptDispatcher(
+            account=_account(),
+            chat_archive_store=None,
+            core_runtime_factory=runtime_factory,
+        )
+        observation_service = Mock()
+        runner = _make_runner(observation_service=observation_service, core_step_executor=dispatcher)
+        step = _prepared_alliance_chat_step(castle=requested)
+
+        with patch.object(AutomationRunner, "_align_step_castle_target") as align:
+            with self.assertRaisesRegex(RuntimeError, "requested castle target"):
+                runner.run(
+                    _account(),
+                    PreparedRunScript(name="chat", path=Path("chat.yaml"), steps=(step,)),
+                )
+
+        observation_service.observe.assert_not_called()
+        runner.action_executor.execute_actions.assert_not_called()
+        align.assert_not_called()
+        runtime_factory.assert_called_once_with()
+        core_runtime.preflight_active_castle_identity.assert_called_once_with()
+
+    def test_real_dispatcher_delegates_matching_typed_target_without_legacy_actions(self) -> None:
+        """Delegates a matching typed target to the real dispatcher after one exact preflight."""
+
+        active = CastleIdentity("K1", "Active", 12)
+        core_runtime = Mock()
+        core_runtime.preflight_active_castle_identity.return_value = active
+        runtime_factory = Mock(return_value=core_runtime)
+        workflow_runner = Mock()
+        workflow_runner.run.return_value = _workflow_result()
+        runner_factory = Mock(return_value=workflow_runner)
+        dispatcher = CoreScriptDispatcher(
+            account=_account(),
+            chat_archive_store=None,
+            core_runtime_factory=runtime_factory,
+        )
+        observation_service = Mock()
+        runner = _make_runner(observation_service=observation_service, core_step_executor=dispatcher)
+        step = _prepared_alliance_chat_step(castle=active)
+
+        with patch(
+            "pnc_automation.app.automation.engine.core_script_dispatcher.CoreWorkflowRunner",
+            runner_factory,
+        ):
+            with patch.object(AutomationRunner, "_align_step_castle_target") as align:
+                result = runner.run(
+                    _account(),
+                    PreparedRunScript(name="chat", path=Path("chat.yaml"), steps=(step,)),
+                )
+
+        observation_service.observe.assert_not_called()
+        runner.action_executor.execute_actions.assert_not_called()
+        align.assert_not_called()
+        runtime_factory.assert_called_once_with()
+        core_runtime.preflight_active_castle_identity.assert_called_once_with()
+        workflow_runner.run.assert_called_once()
+        workflow = workflow_runner.run.call_args.args[0]
+        self.assertIsInstance(workflow, SendChatWorkflow)
+        self.assertEqual(ChatChannel.ALLIANCE, workflow.channel)
+        self.assertEqual(TaskStatus.SUCCESS, result.steps[0].status)
+        self.assertEqual(active, result.steps[0].requested_castle)
 
     def test_dispatcher_rejects_missing_archive_before_composition(self) -> None:
         """Fails before core assembly when the canonical Chat archive dependency is absent."""
