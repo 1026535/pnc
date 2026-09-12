@@ -6,10 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import ClassVar, Literal
 
-from pnc_automation.app.pnc.domain.castles import (
-    CastleIdentity,
-    castle_identity_key,
-)
+from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.automation.engine.core_workflow import (
     CoreWorkflow,
     WorkflowContext,
@@ -18,6 +15,7 @@ from pnc_automation.app.automation.engine.core_workflow import (
 )
 from pnc_automation.app.pnc.domain.castle_roster_scan import (
     CastleRosterScanState,
+    castle_roster_scan_identity_key,
     castle_roster_window_castles,
     castle_roster_window_signature,
 )
@@ -61,7 +59,7 @@ class RefreshCastleRosterResult:
             raise ValueError("RefreshCastleRosterResult.castles must be a non-empty tuple.")
         if any(not isinstance(castle, CastleIdentity) for castle in self.castles):
             raise TypeError("RefreshCastleRosterResult.castles must contain CastleIdentity values.")
-        keys = tuple(castle_identity_key(castle) for castle in self.castles)
+        keys = tuple(castle_roster_scan_identity_key(castle) for castle in self.castles)
         if len(keys) != len(set(keys)):
             raise ValueError("RefreshCastleRosterResult.castles cannot contain duplicate identities.")
         if not isinstance(self.captured_at, datetime):
@@ -119,7 +117,10 @@ class RefreshCastleRosterWorkflow(CoreWorkflow[RefreshCastleRosterResult]):
         level_hints = (
             {}
             if cached_roster is None
-            else {castle_identity_key(castle): castle.castle_level for castle in cached_roster.castles}
+            else {
+                castle_roster_scan_identity_key(castle): castle.castle_level
+                for castle in cached_roster.castles
+            }
         )
         scan_state = CastleRosterScanState(level_hints=level_hints)
 
@@ -181,7 +182,7 @@ class RefreshCastleRosterWorkflow(CoreWorkflow[RefreshCastleRosterResult]):
             current_castles = next_castles
             current_signature = next_signature
 
-        active_key = castle_identity_key(self.active_castle)
+        active_key = castle_roster_scan_identity_key(self.active_castle)
         if active_key not in scan_state.ordered_indexes or not exact_active_evidence_seen:
             raise TaskVerificationError(
                 "Castle roster refresh did not encounter exact evidence for the preflight active castle; no cache write was attempted.",
@@ -245,7 +246,7 @@ class RefreshCastleRosterWorkflow(CoreWorkflow[RefreshCastleRosterResult]):
                 screen_type=observation.screen_type,
             )
         castles = castle_roster_window_castles(observation)
-        keys = tuple(castle_identity_key(castle) for castle in castles)
+        keys = tuple(castle_roster_scan_identity_key(castle) for castle in castles)
         if len(keys) != len(set(keys)):
             raise TaskVerificationError(
                 "Castle roster refresh found duplicate identities in one visible window; no cache write was attempted.",
@@ -256,18 +257,18 @@ class RefreshCastleRosterWorkflow(CoreWorkflow[RefreshCastleRosterResult]):
                 raise TaskVerificationError(
                     "Castle roster refresh received non-exact current-castle evidence; no cache write was attempted."
                 )
-            current_key = castle_identity_key(observation.current_castle)
+            current_key = castle_roster_scan_identity_key(observation.current_castle)
             if current_key not in keys:
                 raise TaskVerificationError(
                     "Castle roster refresh current-castle evidence was not present in the visible row window; no cache write was attempted.",
                     observed_castle=current_key,
                     window_signature=keys,
                 )
-            if current_key != castle_identity_key(self.active_castle):
+            if current_key != castle_roster_scan_identity_key(self.active_castle):
                 raise TaskVerificationError(
                     "Castle roster refresh current-castle evidence disagreed with preflight identity; no cache write was attempted.",
                     observed_castle=current_key,
-                    expected_castle=castle_identity_key(self.active_castle),
+                    expected_castle=castle_roster_scan_identity_key(self.active_castle),
                 )
         return castles
 
@@ -277,7 +278,8 @@ class RefreshCastleRosterWorkflow(CoreWorkflow[RefreshCastleRosterResult]):
         return (
             observation.current_castle is not None
             and observation.resolved_current_castle_evidence == CurrentCastleEvidenceKind.EXACT
-            and castle_identity_key(observation.current_castle) == castle_identity_key(self.active_castle)
+            and castle_roster_scan_identity_key(observation.current_castle)
+            == castle_roster_scan_identity_key(self.active_castle)
         )
 
     @staticmethod
@@ -289,8 +291,8 @@ class RefreshCastleRosterWorkflow(CoreWorkflow[RefreshCastleRosterResult]):
     ) -> None:
         """Requires a suffix/prefix overlap and rejects repeats beyond that advancing overlap."""
 
-        previous_keys = tuple(castle_identity_key(castle) for castle in previous)
-        current_keys = tuple(castle_identity_key(castle) for castle in current)
+        previous_keys = tuple(castle_roster_scan_identity_key(castle) for castle in previous)
+        current_keys = tuple(castle_roster_scan_identity_key(castle) for castle in current)
         overlap_length = 0
         for length in range(1, min(len(previous_keys), len(current_keys)) + 1):
             if previous_keys[-length:] == current_keys[:length]:

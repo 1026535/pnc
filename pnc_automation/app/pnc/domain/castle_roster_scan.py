@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from collections.abc import Mapping
+from dataclasses import dataclass, field
 
-from pnc_automation.app.pnc.domain.castles import CastleIdentity, castle_identity_key
+from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.domain.observation import (
     ListEntryKind,
     Observation,
     castle_identity_from_entry,
 )
 from pnc_automation.core.errors import TaskVerificationError
+from pnc_automation.core.text.normalization import normalize_ocr_text
 
 
 @dataclass(slots=True)
@@ -32,7 +33,7 @@ class CastleRosterScanState:
         """Merges one observed ordered window into the scan-local roster."""
 
         for castle in castles:
-            castle_key = castle_identity_key(castle)
+            castle_key = castle_roster_scan_identity_key(castle)
             existing_index = self.ordered_indexes.get(castle_key)
             if existing_index is None:
                 self.ordered_indexes[castle_key] = len(self.ordered_castles)
@@ -71,7 +72,16 @@ def castle_roster_window_castles(observation: Observation) -> tuple[CastleIdenti
 def castle_roster_window_signature(observation: Observation) -> tuple[tuple[str, str], ...]:
     """Returns stable kingdom/name identities for one visible roster window."""
 
-    return tuple(castle_identity_key(castle) for castle in castle_roster_window_castles(observation))
+    return tuple(
+        castle_roster_scan_identity_key(castle)
+        for castle in castle_roster_window_castles(observation)
+    )
+
+
+def castle_roster_scan_identity_key(castle: CastleIdentity) -> tuple[str, str]:
+    """Returns the exact kingdom and normalized OCR name used by scan matching."""
+
+    return (castle.kingdom, normalize_ocr_text(castle.castle_name))
 
 
 def merge_scanned_castle(
