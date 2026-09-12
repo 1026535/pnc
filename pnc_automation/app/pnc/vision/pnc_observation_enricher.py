@@ -2316,7 +2316,7 @@ class PncObservationEnricher:
     ) -> tuple[DetectedListEntry, ...]:
         """Extracts normalized chat rows using the trusted chat viewport and one canonical candidate pipeline."""
 
-        viewport = self._resolve_chat_transcript_viewport(image=image)
+        viewport = self._resolve_chat_transcript_viewport(image=image, lines=lines)
         candidate_lines = [line for line in lines if _is_chat_message_candidate_line(line=line, viewport=viewport)]
         grouped_rows: list[_ChatRowCandidate] = []
         for row_lines in _group_lines_by_vertical_gap(candidate_lines, gap=max(24, image.height // 36)):
@@ -2336,14 +2336,32 @@ class PncObservationEnricher:
             for visible_order, candidate in enumerate(candidate for candidate in normalized_rows if candidate.kind is not None)
         )
 
-    def _resolve_chat_transcript_viewport(self, *, image: Image.Image) -> _ChatTranscriptViewport:
-        """Returns the shared trusted transcript viewport bounded by the chat tabs and input field."""
+    def _resolve_chat_transcript_viewport(
+        self,
+        *,
+        image: Image.Image,
+        lines: tuple[OcrLine, ...] = (),
+    ) -> _ChatTranscriptViewport:
+        """Returns the trusted transcript viewport bounded by observed tabs and the input field."""
 
         input_region = self._require_chat_region(UiElementId.PNC_CHAT_INPUT_FIELD, image=image)
         kingdom_region = self._require_chat_region(UiElementId.PNC_CHAT_TAB_KINGDOM, image=image)
         alliance_region = self._require_chat_region(UiElementId.PNC_CHAT_TAB_ALLIANCE, image=image)
+        observed_tab_lines = [
+            line
+            for line in lines
+            if normalize_ocr_text(line.text) in {_CHAT_KINGDOM_TEXT, _CHAT_ALLIANCE_TEXT}
+            and line.bounds.y <= int(image.height * 0.14)
+        ]
+        observed_tab_bottoms = [line.bounds.y + line.bounds.height for line in observed_tab_lines]
+        observed_tab_texts = {normalize_ocr_text(line.text) for line in observed_tab_lines}
+        tab_bottom = (
+            max(observed_tab_bottoms)
+            if {_CHAT_KINGDOM_TEXT, _CHAT_ALLIANCE_TEXT}.issubset(observed_tab_texts)
+            else max(kingdom_region.y + kingdom_region.height, alliance_region.y + alliance_region.height)
+        )
         return _ChatTranscriptViewport(
-            top=max(int(image.height * 0.14), max(kingdom_region.y + kingdom_region.height, alliance_region.y + alliance_region.height) + 12),
+            top=tab_bottom + 12,
             bottom=max(1, input_region.y - 12),
             content_left=max(0, int(image.width * 0.14)),
             content_right=min(image.width, int(image.width * 0.78)),
@@ -4164,8 +4182,13 @@ def _looks_like_player_chat_sender_text(text: str) -> bool:
         return False
     if len(normalized_text) < 3 or len(normalized_text) > _CHAT_MAX_SENDER_LENGTH:
         return False
-    if len(re.findall(r"\S+", text.strip())) > 4:
-        return False
+    tokens = re.findall(r"\S+", text.strip())
+    if len(tokens) > 4:
+        bracketed_prefixes = re.findall(r"\[[^\]\r\n]{1,24}\]", text)
+        if len(bracketed_prefixes) < 2 or len(tokens) > 6:
+            return False
+        if re.match(r"^\s*(?:\[[^\]\r\n]{1,24}\]\s*){1,2}\S+(?:\s+\S+){0,3}\s*$", text) is None:
+            return False
     if ":" in text:
         return False
     letters = sum(character.isalpha() for character in normalized_text)
