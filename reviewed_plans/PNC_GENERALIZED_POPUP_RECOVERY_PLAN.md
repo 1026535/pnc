@@ -36,7 +36,7 @@ The implementation must generalize popup recovery without treating every `Confir
 ### Runtime ownership
 
 - `pnc_automation/app/automation/engine/observed_action_executor.py` owns preflight, navigation, and post-action interruption recovery.
-- Recovery currently considers `PNC_VIP_DAILY_RESET_CLOSE_BUTTON` and `PNC_POPUP_CLOSE_BUTTON` safe, refuses task-owned popup screens/selectors, uses a bounded distinct-fingerprint budget, and performs a full-runtime observation after each tap.
+- Recovery currently considers `PNC_VIP_DAILY_RESET_CLOSE_BUTTON` and `PNC_POPUP_CLOSE_BUTTON` safe, refuses task-owned popup screens/selectors, uses a bounded distinct-fingerprint budget, and performs a full-runtime observation after each tap. Typed popup overlays also require a stable semantic identity across animated captures; a repeated identity is passively settled and never tapped again.
 - `pnc_automation/app/pnc/navigation/screen_flows.py` no longer falls back to Android Back for an untyped popup.
 - Mandatory update recovery already uses the dedicated `PNC_UPDATE_CONFIRM_BUTTON` path and avoids blindly replaying an action that may already have been dispatched.
 
@@ -124,11 +124,12 @@ Treat each dismissal attempt as a one-frame transaction:
 - Dispatch exactly one tap at the candidate's captured action point.
 - Capture a new full-runtime screenshot before any further decision.
 - If the new frame has fingerprint `F`, fail as unchanged; do not try another candidate from `F`.
+- If the new frame has a typed popup overlay with the same semantic identity (screen/layout/reason plus ordered candidate control kind, evidence kind, and stable reason), use the bounded passive settle budget without dispatching another tap. Candidate geometry and OCR values locate the one authorized tap but do not distinguish animated frames. Fail closed with the current artifact and identity if that identity remains; a genuinely different typed identity may be handled as a stacked popup within the existing dismissal budget.
 - If a different blocking popup is present, select from only that new observation.
 - Retain the existing maximum distinct-popup budget and loading/unknown settle behavior.
 - Persist the before frame, selected candidate/evidence, action point, after frame, and result reason in normal runtime artifacts/logging.
 
-Fingerprint deduplication is a safety guard, not proof of freshness by itself. The observation callback must perform a real capture; cached observations cannot satisfy the post-tap recapture contract.
+Fingerprint deduplication is a safety guard, not proof of freshness by itself. Typed identity deduplication protects animated overlays whose raw pixels, candidate geometry, or OCR values change while the actionable popup remains the same. The observation callback must perform a real capture; cached observations cannot satisfy the post-tap recapture contract, and every passive settle capture must be strictly newer than its predecessor. Legacy popups without typed overlay evidence continue to use the existing fingerprint guard.
 
 ### 5. Compatibility and migration
 
@@ -269,7 +270,7 @@ Fingerprint deduplication is a safety guard, not proof of freshness by itself. T
 
 - Recognized controls outrank generic candidates on the same frame.
 - A second candidate from the original frame is never attempted.
-- Two distinct stacked popups may be dismissed only from two distinct captures/fingerprints.
+- Two distinct stacked popups may be dismissed only from two distinct captures/fingerprints and typed identities when overlay evidence is available.
 - No recovery path emits `KeyEventAction(KEYCODE_BACK)`.
 - Failures include screenshot path, fingerprint, candidate evidence, and abstention reason.
 
@@ -389,8 +390,8 @@ Run the narrow popup smoke first. Run `PNC_RUN_LIVE_SMOKE=1 py -m unittest tests
 - **Generic affirmative action causes spending/state mutation:** authorize only reviewed negative semantics; keep update/reconnect as exact typed exceptions.
 - **Recognized offer but wrong assumed close location:** remove synthesized coordinates; abstain without measured control evidence.
 - **Background control leaks through overlay:** suppress underlying actionable elements whenever the topmost modal is proven.
-- **Repeated tap on stale UI:** one tap per fingerprint plus mandatory real recapture; fail on unchanged frame.
-- **Stacked popups:** allow another dismissal only after a distinct new observation and within the bounded episode budget.
+- **Repeated tap on stale or animated UI:** one tap per legacy fingerprint or typed popup identity, followed by mandatory real recapture and bounded passive settling; fail on unchanged or persistent identity.
+- **Stacked popups:** allow another dismissal only after a distinct new observation and typed identity, within the bounded episode budget.
 - **Popup-local back confused with navigation back:** require real positive/negative evidence and modal attachment; never emit Android Back.
 - **OCR localization/language variation:** combine reviewed OCR with glyph/geometry evidence, normalize only a small reviewed negative vocabulary, and abstain on uncertainty.
 - **Dirty working tree overlap:** inspect each target diff against `origin/main`, preserve unrelated edits, and avoid bulk formatting or regeneration.

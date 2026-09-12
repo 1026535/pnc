@@ -9,6 +9,7 @@ import unittest
 from pnc_automation.app import build_application_runner
 from pnc_automation.app.automation.engine.core_runtime import build_core_runtime
 from pnc_automation.app.automation.engine.core_workflow import CoreWorkflowRunner
+from pnc_automation.app.authoring.config.models import LiveAutomationRole
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 
 
@@ -32,7 +33,7 @@ def _require_environment(name: str) -> str:
     "Set PNC_RUN_LIVE_SMOKE=1 to run the replacement-core recovery smoke.",
 )
 class LiveCoreWorkflowSmokeTests(unittest.TestCase):
-    """Confirms reviewed recovery reaches Home twice without popup dismissal or mutation."""
+    """Confirms the current ``SMOKE_TEST`` account reaches Home twice without mutation."""
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -46,7 +47,9 @@ class LiveCoreWorkflowSmokeTests(unittest.TestCase):
             application.script_runner,
             account,
             account.artifact_directory_name,
+            required_role=LiveAutomationRole.SMOKE_TEST,
         )
+        cls.addClassCleanup(core_runtime.close)
         cls.recovered = CoreWorkflowRunner(core_runtime).recover_to_home()
         cls.follow_up = core_runtime.observe("live_recovery_follow_up")
 

@@ -16,6 +16,7 @@ from pnc_automation.app.automation.tasks.select_castle_task import SelectCastleT
 from pnc_automation.app.authoring.config.models import CastleIdentity
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
 from pnc_automation.app.pnc.domain.action_requests import WaitAction
+from pnc_automation.app.pnc.domain.observation import Observation
 from pnc_automation.app.pnc.domain.popup import (
     PopupControlKind,
     PopupDismissCandidate,
@@ -157,6 +158,142 @@ class PopupRecoveryTests(unittest.TestCase):
 
         self.assertEqual(len(self.session.taps), 1)
         self.assertEqual(self.session.key_events, [])
+
+    def test_animated_typed_popup_identity_is_settled_without_a_second_tap(self) -> None:
+        popup = self._typed_popup("savannah_offer", "popup-before")
+        animated = self._typed_popup("savannah_offer", "popup-animated")
+        observer = FakeObservationService([animated, make_observation(ScreenType.PNC_HOME_CITY)])
+
+        recovered = self.executor.recover_interruption_if_required(
+            popup,
+            label_prefix="animated-typed",
+            observe=observer.observe,
+        )
+
+        self.assertEqual(ScreenType.PNC_HOME_CITY, recovered.screen_type)
+        self.assertEqual(1, len(self.session.taps))
+
+    def test_typed_popup_identity_ignores_jittered_geometry_and_ocr(self) -> None:
+        popup = self._typed_popup("savannah_offer", "popup-before")
+        animated = self._typed_popup("savannah_offer", "popup-animated", action_point=(120, 40))
+        assert animated.popup_overlay is not None
+        candidate = animated.popup_overlay.candidates[0]
+        jittered_candidate = replace(
+            candidate,
+            bounds=Bounds(90, 25, 40, 30),
+            action_point=(110, 40),
+            extracted_text="Animated offer text",
+        )
+        animated = replace(
+            animated,
+            popup_overlay=replace(animated.popup_overlay, candidates=(jittered_candidate,)),
+        )
+        observer = FakeObservationService([animated, make_observation(ScreenType.PNC_HOME_CITY)])
+
+        recovered = self.executor.recover_interruption_if_required(
+            popup,
+            label_prefix="jittered-typed",
+            observe=observer.observe,
+        )
+
+        self.assertEqual(ScreenType.PNC_HOME_CITY, recovered.screen_type)
+        self.assertEqual(1, len(self.session.taps))
+
+    def test_stale_typed_settle_observation_fails_closed_before_new_tap(self) -> None:
+        popup = self._typed_popup("savannah_offer", "popup-before")
+        base_time = popup.captured_at
+        popup = replace(popup, captured_at=base_time)
+        animated = replace(
+            self._typed_popup("savannah_offer", "popup-animated"),
+            captured_at=base_time + timedelta(seconds=1),
+        )
+        stale_stacked = replace(
+            self._typed_popup("vip_reset", "popup-stale", action_point=(120, 35)),
+            captured_at=base_time + timedelta(seconds=1),
+        )
+        home = replace(
+            make_observation(ScreenType.PNC_HOME_CITY),
+            captured_at=base_time + timedelta(seconds=2),
+        )
+        observer = FakeObservationService([animated, stale_stacked, home])
+
+        with self.assertRaisesRegex(SelectorResolutionError, "semantic settle received a stale observation"):
+            self.executor.recover_interruption_if_required(
+                popup,
+                label_prefix="stale-typed-settle",
+                observe=observer.observe,
+            )
+
+        self.assertEqual(1, len(self.session.taps))
+
+    def test_persistent_typed_popup_identity_fails_closed_after_one_tap(self) -> None:
+        popup = self._typed_popup("savannah_offer", "popup-before")
+        observer = FakeObservationService([
+            self._typed_popup("savannah_offer", "popup-animated-1"),
+            self._typed_popup("savannah_offer", "popup-animated-2"),
+            self._typed_popup("savannah_offer", "popup-animated-3"),
+            self._typed_popup("savannah_offer", "popup-animated-4"),
+        ])
+
+        with self.assertRaisesRegex(SelectorResolutionError, "same typed identity"):
+            self.executor.recover_interruption_if_required(
+                popup,
+                label_prefix="persistent-typed",
+                observe=observer.observe,
+            )
+
+        self.assertEqual(1, len(self.session.taps))
+
+    def test_distinct_typed_popup_identities_may_be_dismissed_as_stacked(self) -> None:
+        popup = self._typed_popup("savannah_offer", "popup-one")
+        stacked = self._typed_popup("vip_reset", "popup-two", action_point=(120, 35))
+        observer = FakeObservationService([stacked, make_observation(ScreenType.PNC_HOME_CITY)])
+
+        recovered = self.executor.recover_interruption_if_required(
+            popup,
+            label_prefix="stacked-typed",
+            observe=observer.observe,
+        )
+
+        self.assertEqual(ScreenType.PNC_HOME_CITY, recovered.screen_type)
+        self.assertEqual(2, len(self.session.taps))
+
+    def test_post_update_animated_typed_popup_identity_is_settled_without_a_second_tap(self) -> None:
+        update_candidate = PopupDismissCandidate(
+            control_kind=PopupControlKind.UPDATE_CONFIRM,
+            bounds=Bounds(70, 60, 50, 20),
+            action_point=(95, 70),
+            confidence=0.95,
+            evidence_kind=PopupEvidenceKind.OCR_TEXT,
+        )
+        update = make_observation(
+            ScreenType.PNC_POPUP,
+            visible_ids=(UiElementId.PNC_UPDATE_CONFIRM_BUTTON,),
+            blocking_popup=True,
+            frame_fingerprint="update-before",
+            popup_overlay=PopupOverlayObservation(
+                image_size=(200, 100),
+                layout_id="required_update",
+                candidates=(update_candidate,),
+            ),
+        )
+        animated = self._typed_popup("savannah_offer", "popup-after-update-1")
+        animated_later = self._typed_popup("savannah_offer", "popup-after-update-2")
+        home = make_observation(ScreenType.PNC_HOME_CITY)
+        base_time = update.captured_at
+        update = replace(update, captured_at=base_time)
+        animated = replace(animated, captured_at=base_time + timedelta(seconds=1))
+        animated_later = replace(animated_later, captured_at=base_time + timedelta(seconds=2))
+        home = replace(home, captured_at=base_time + timedelta(seconds=3))
+
+        recovered = self.executor.recover_interruption_if_required(
+            update,
+            label_prefix="post-update-animated",
+            observe=FakeObservationService([animated, animated_later, home]).observe,
+        )
+
+        self.assertEqual(ScreenType.PNC_HOME_CITY, recovered.screen_type)
+        self.assertEqual([(95, 70), (160, 35)], self.session.taps)
 
     def test_missing_safe_selector_fails_without_back(self) -> None:
         popup = make_observation(ScreenType.PNC_POPUP, blocking_popup=True)
@@ -435,6 +572,35 @@ class PopupRecoveryTests(unittest.TestCase):
 
         self.assertEqual(result.status.value, "replan")
         self.assertIn("returning to Home", result.message)
+
+    @staticmethod
+    def _typed_popup(
+        layout_id: str,
+        frame_fingerprint: str,
+        *,
+        action_point: tuple[int, int] = (160, 35),
+    ) -> Observation:
+        bounds = Bounds(action_point[0] - 10, action_point[1] - 10, 20, 20)
+        candidate = PopupDismissCandidate(
+            control_kind=PopupControlKind.CLOSE_X,
+            bounds=bounds,
+            action_point=action_point,
+            confidence=0.95,
+            evidence_kind=PopupEvidenceKind.GEOMETRY,
+            reason=layout_id,
+        )
+        return make_observation(
+            ScreenType.PNC_POPUP,
+            visible_ids=(UiElementId.PNC_POPUP_CLOSE_BUTTON,),
+            blocking_popup=True,
+            frame_fingerprint=frame_fingerprint,
+            popup_overlay=PopupOverlayObservation(
+                image_size=(200, 100),
+                layout_id=layout_id,
+                reason=layout_id,
+                candidates=(candidate,),
+            ),
+        )
 
 
 if __name__ == "__main__":

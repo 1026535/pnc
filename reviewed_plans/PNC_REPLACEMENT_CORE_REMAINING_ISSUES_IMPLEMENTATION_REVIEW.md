@@ -76,12 +76,13 @@ Evidence:
 | DQ-01 | Missing Go OCR can be recovered from clear blue button geometry | `repo_answered` | Passed | Daily fixture positive, negative, and OCR-precedence tests pass. |
 | POP-01 | City HUD sparkle no longer becomes a generic popup | `repo_answered` | Passed offline | Direct `NavigationPerception` City regression retains Home controls and remains unblocked. |
 | POP-02 | Two different real generic popup layouts retain measured Close controls | `repo_answered` | Passed only at helper boundary | Both sanitized fixtures pass `_build_visual_popup_close_additions`; no positive fixture traverses `NavigationPerception`. |
-| REC-01 | Known popups can be closed by the replacement runtime | `live_observed` | Contradicted | Live Savannah offer loses its safe selector before executor recovery; both bounded paths stop. |
+| REC-01 | Known popups can be closed by the replacement runtime | `mixed` | Addressed offline; live family not reobserved | The live Savannah selector-loss failure is preserved above; deterministic real-fixture and end-to-end recovery tests now carry the measured typed control, while the final live run did not reobserve Savannah. |
 | LIVE-01 | Daily status passes on the exact planned `serious_stuff` target | `live_required` | Blocked by role drift | Production path requires `daily_canary`; current target carries `live_testing`. |
-| LIVE-02 | Daily status passes on a current role-eligible free target | `live_observed` | Blocked | `mega_old_acc` reached a supported offer and stopped on REC-01 before Daily content. |
-| LIVE-03 | Explicit recovery yields two fresh unblocked Home frames | `live_observed` | Failed | Recovery stopped at the supported offer; no tap was sent and no Home frame was claimed. |
-| LIVE-04 | A stopped free instance can be launched and immediately reviewed | `live_observed` | Blocked on first attempt | First post-launch frames were black/UNKNOWN; a later bounded observation reached rendered game state. |
-| SAFE-01 | Live recovery smoke enforces authorized target ownership | `repo_answered` | Contradicted | The smoke supplies no `required_role` and does not close its runtime. |
+| LIVE-02 | Daily status passes on a current role-eligible free target | `live_observed` | Passed | Current `daily_canary` account `mega_old_acc` returned five `go` rows, zero unknown titles, and `PNC_HOME_CITY` under the exclusive canonical lease. |
+| LIVE-03 | Explicit recovery yields two fresh unblocked Home frames | `live_observed` | Passed | Current `SMOKE_TEST` account `testing` passed the bounded recovery smoke in one test and 14.994 seconds. |
+| LIVE-04 | A stopped free instance can be launched and immediately reviewed | `mixed` | Addressed offline; stopped-instance case not repeated | Near-black startup settling is deterministic offline. Final preparation verified game running and login before Daily completed, but it did not repeat the original stopped-instance condition. The controller's absent `RunResult.succeeded` read was reporting-only. |
+| SAFE-01 | Live recovery smoke enforces authorized target ownership | `repo_answered` | Passed | The smoke now requires `SMOKE_TEST` and registers runtime cleanup immediately after construction. |
+| LIVE-05 | Navigation selector validation passes on its required role | `live_observed` | Passed | The first `mega_old_acc` attempt correctly failed the `live_testing` role gate; rerun on current `live_testing` account `serious_stuff` passed 1/0/0. |
 
 ## Validation
 
@@ -93,6 +94,8 @@ Evidence:
 
 ## Verdict
 
+The following baseline verdict is retained as historical evidence from before the follow-up implementation and final role-selected proofs.
+
 `implementation_ready: false`
 
 The Daily visual fallback and popup-surface filter are credible in isolation, but the newly integrated popup recovery cannot receive the selector that perception already detected. The live smoke also bypasses required role ownership.
@@ -100,3 +103,25 @@ The Daily visual fallback and popup-surface filter are credible in isolation, bu
 `promotion_ready: false`
 
 Neither required live row passed. Promotion requires fixing REC-01 and the smoke role/lifecycle issue, reconciling the matrix target with current roles, then rerunning Daily status and explicit Home recovery under one exclusive lease with the required final artifacts.
+
+## Current verdict (2026-09-12)
+
+`implementation_ready: true`
+
+The implementation findings are addressed in the working tree: interruption-owned controls survive perception with scaled coordinates, cold-start black frames use the bounded loading settle, the preflight timer restarts only after successful interruption recovery, and typed popup recovery derives a geometry/OCR-independent identity with stale-settle rejection. Deterministic coverage includes the real sanitized popup path, animated and jittered typed overlays, persistent identity fail-closed behavior, stacked identities, post-update handling, and the late-capture guard.
+
+`promotion_ready: true`
+
+The required role-selected live rows now pass: Daily on the current `daily_canary` account `mega_old_acc`, and explicit recovery smoke on the current `SMOKE_TEST` account `testing`. Selector validation passed on the current `live_testing` account `serious_stuff` after its expected role-gate rejection on `mega_old_acc`; focused offline validation completed with 234 passing tests and 3 skips, and the full suite completed with 1,207 passing tests and 22 skips. The initial Savannah live failure and the deterministic semantic guard remain recorded, but Savannah did not reappear in the final live run, so this verdict does not claim live reappearance or live dismissal of that popup family.
+
+## Follow-up implementation status
+
+The follow-up implementation carries interruption-owned popup controls and their typed overlay evidence through `NavigationPerception` with capture-space scaling, requires `SMOKE_TEST` for the opt-in recovery smoke, and registers runtime cleanup immediately after construction. Canonical perception now classifies only an almost entirely black frame as `PNC_LOADING`, allowing the existing bounded passive settle path to handle cold-start black captures while preserving immediate failure for ordinary UNKNOWN frames. The remaining-issues plan now selects the Daily proof by `daily_canary` role and the recovery smoke by `smoke_test` role.
+
+Deterministic tests cover the real sanitized popup fixtures, selector/action-point scaling, interruption recovery wiring, black-frame loading classification, and preflight settling. These changes address the implementation findings above while preserving the historical evidence; the current readiness verdict below incorporates the final role-selected live evidence.
+
+A later bounded engineering run showed that two safe popup dismissals could consume the original preflight stability budget before a fresh Home frame was counted. CoreRuntime now restarts only its passive settle timer and stability state after a successful interruption-recovery result; ordinary late captures and unsupported interruptions retain their existing fail-closed behavior. At the time of that engineering entry no live success was claimed; the final role-selected evidence is recorded below.
+
+A subsequent bounded run exposed a second recovery-loop safety failure: two animated Savannah frames represented the same typed popup while their raw fingerprints differed, so the executor tapped the close control twice and the delayed second tap opened Cash Mall on the underlying Home screen. Typed popup recovery now derives a geometry/OCR-independent semantic identity from screen/layout/reason and ordered candidate control/evidence kinds plus stable reasons, passively settles a repeated identity without another tap, and fails closed with identity/artifact context if it persists or a settle capture is stale. The final role-selected evidence below supersedes the pending engineering status for the required rows; Savannah did not reappear in that run, so no live reappearance or live dismissal of that popup family is claimed.
+
+The final 2026-09-12 role-selected evidence is recorded in `PNC_CORE_PORTING_VALIDATION.md`: `mega_old_acc` passed the Daily proof as `daily_canary`, `testing` passed the one-test `SMOKE_TEST` recovery smoke, and `serious_stuff` passed selector validation as `live_testing` after the expected role-gate rejection on `mega_old_acc`. This supersedes the earlier pending status for those required rows. The Savannah family did not reappear during this bounded run, so the evidence does not claim live reappearance or live dismissal after the semantic guard.

@@ -347,6 +347,7 @@ class ObservedActionExecutor:
         poll_count = self.policy.update_max_wait_seconds // self.policy.update_poll_interval_seconds
         launched_from_android_home = False
         dismissed_popup_fingerprints: set[str] = set()
+        dismissed_popup_identities: set[tuple[object, ...]] = set()
         current = observation
         required_newer_than = observation.captured_at
         for index in range(poll_count):
@@ -375,6 +376,20 @@ class ObservedActionExecutor:
                     extra={"poll_count": index + 1},
                 )
                 return current
+            typed_identity = self._typed_popup_identity(current)
+            if typed_identity is not None and typed_identity in dismissed_popup_identities:
+                current = self._settle_same_typed_popup(
+                    current,
+                    typed_identity=typed_identity,
+                    label_prefix=f"{label_prefix}_popup_{index + 1}",
+                    observe=observe,
+                )
+                if current.screen_type == ScreenType.PNC_HOME_CITY and not current.blocking_popup:
+                    self.logger.info(
+                        "Required game update completed and typed Home was restored after popup settle.",
+                        extra={"poll_count": index + 1},
+                    )
+                    return current
             if self._has_typed_popup_control(current, PopupControlKind.UPDATE_CONFIRM):
                 continue
             popup_selector = self._transient_popup_selector(current)
@@ -400,6 +415,15 @@ class ObservedActionExecutor:
                         screen_type=current.screen_type,
                         artifact_path=None if current.artifact_path is None else str(current.artifact_path),
                     )
+                typed_identity = self._typed_popup_identity(current)
+                if typed_identity is not None and typed_identity in dismissed_popup_identities:
+                    current = self._settle_same_typed_popup(
+                        current,
+                        typed_identity=typed_identity,
+                        label_prefix=f"{label_prefix}_popup_settle_{index + 1}",
+                        observe=observe,
+                    )
+                    continue
                 try:
                     dispatch_observation = self._observation_bound_to_popup_candidate(current, popup_selector)
                     dispatched = self.action_executor.execute_action(
@@ -425,6 +449,8 @@ class ObservedActionExecutor:
                         artifact_path=None if current.artifact_path is None else str(current.artifact_path),
                     )
                 dismissed_popup_fingerprints.add(fingerprint)
+                if typed_identity is not None:
+                    dismissed_popup_identities.add(typed_identity)
                 required_newer_than = current.captured_at
                 continue
             if current.screen_type == ScreenType.ANDROID_HOME and not launched_from_android_home:
@@ -470,6 +496,7 @@ class ObservedActionExecutor:
 
         current = observation
         dismissed_fingerprints: set[str] = set()
+        dismissed_identities: set[tuple[object, ...]] = set()
         while self._is_popup_observation(current):
             decision = decide_popup_recovery(
                 screen_type=current.screen_type,
@@ -503,6 +530,14 @@ class ObservedActionExecutor:
                     current,
                     selector_id=selector,
                 )
+            typed_identity = self._typed_popup_identity(current)
+            if typed_identity is not None and typed_identity in dismissed_identities:
+                raise self._transient_recovery_error(
+                    "Transient popup typed identity was already consumed in this recovery episode.",
+                    current,
+                    selector_id=selector,
+                    popup_identity=typed_identity,
+                )
             if len(dismissed_fingerprints) >= self.policy.update_max_popup_dismissals:
                 raise self._transient_recovery_error(
                     "Transient popup recovery exhausted its bounded distinct-popup dismissal budget.",
@@ -533,6 +568,8 @@ class ObservedActionExecutor:
                     selector_id=selector,
                 )
             dismissed_fingerprints.add(fingerprint)
+            if typed_identity is not None:
+                dismissed_identities.add(typed_identity)
             current = observe(
                 f"{label_prefix}_popup_{len(dismissed_fingerprints)}",
                 request=ObservationRequest.full_runtime_default(),
@@ -552,11 +589,19 @@ class ObservedActionExecutor:
                     captured_at=current.captured_at.isoformat(),
                     required_newer_than=dispatch_observation.captured_at.isoformat(),
                 )
-            current = self._settle_popup_dismissal_observation(
-                current,
-                label_prefix=f"{label_prefix}_popup_{len(dismissed_fingerprints)}",
-                observe=observe,
-            )
+            if typed_identity is not None and self._typed_popup_identity(current) == typed_identity:
+                current = self._settle_same_typed_popup(
+                    current,
+                    typed_identity=typed_identity,
+                    label_prefix=f"{label_prefix}_popup_{len(dismissed_fingerprints)}",
+                    observe=observe,
+                )
+            else:
+                current = self._settle_popup_dismissal_observation(
+                    current,
+                    label_prefix=f"{label_prefix}_popup_{len(dismissed_fingerprints)}",
+                    observe=observe,
+                )
             if current.has(UiElementId.PNC_UPDATE_CONFIRM_BUTTON):
                 recovered = self._recover_required_update(
                     current,
@@ -567,6 +612,48 @@ class ObservedActionExecutor:
             if not self._is_popup_observation(current):
                 return _InterruptionRecoveryResult(current)
         return _InterruptionRecoveryResult(current)
+
+    def _settle_same_typed_popup(
+        self,
+        observation: Observation,
+        *,
+        typed_identity: tuple[object, ...],
+        label_prefix: str,
+        observe: ObservationCallback,
+    ) -> Observation:
+        """Waits for a typed popup to finish dismissing without dispatching a second tap."""
+
+        current = observation
+        for settle_index in range(self.policy.max_settle_observations):
+            if self._typed_popup_identity(current) != typed_identity:
+                if is_transitional_observation(current):
+                    return self._settle_popup_dismissal_observation(
+                        current,
+                        label_prefix=label_prefix,
+                        observe=observe,
+                    )
+                return current
+            self._sleep_for_observe()
+            next_observation = observe(
+                f"{label_prefix}_typed_settle_{settle_index + 1}",
+                request=ObservationRequest.full_runtime_default(),
+            )
+            if next_observation.captured_at <= current.captured_at:
+                raise self._transient_recovery_error(
+                    "Transient popup semantic settle received a stale observation; refusing another candidate.",
+                    next_observation,
+                    popup_identity=typed_identity,
+                    captured_at=next_observation.captured_at.isoformat(),
+                    required_newer_than=current.captured_at.isoformat(),
+                )
+            current = next_observation
+        if self._typed_popup_identity(current) == typed_identity:
+            raise self._transient_recovery_error(
+                "Transient popup remained after its one safe dismissal attempt with the same typed identity.",
+                current,
+                popup_identity=typed_identity,
+            )
+        return current
 
     def _settle_popup_dismissal_observation(
         self,
@@ -587,10 +674,18 @@ class ObservedActionExecutor:
             if not is_transitional_observation(current):
                 return current
             self._sleep_for_observe()
-            current = observe(
+            next_observation = observe(
                 f"{label_prefix}_settle_{settle_index + 1}",
                 request=ObservationRequest.full_runtime_default(),
             )
+            if next_observation.captured_at <= current.captured_at:
+                raise self._transient_recovery_error(
+                    "Transient popup dismissal settle received a stale observation.",
+                    next_observation,
+                    captured_at=next_observation.captured_at.isoformat(),
+                    required_newer_than=current.captured_at.isoformat(),
+                )
+            current = next_observation
         return current
 
     @staticmethod
@@ -610,6 +705,29 @@ class ObservedActionExecutor:
         """Require exact typed evidence before authorizing affirmative popup controls."""
 
         return observation.popup_overlay is not None and observation.popup_overlay.candidate(kind) is not None
+
+    @staticmethod
+    def _typed_popup_identity(observation: Observation) -> tuple[object, ...] | None:
+        """Return semantic popup evidence stable across animated frame pixels."""
+
+        overlay = observation.popup_overlay
+        if overlay is None:
+            return None
+        candidates = tuple(
+            (
+                candidate.control_kind,
+                candidate.evidence_kind,
+                candidate.reason,
+            )
+            for candidate in overlay.candidates
+        )
+        return (
+            observation.screen_type,
+            overlay.layout_id,
+            overlay.evidence_kind,
+            overlay.reason,
+            candidates,
+        )
 
     @staticmethod
     def _transient_popup_selector(observation: Observation) -> UiElementId | None:

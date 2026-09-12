@@ -11,6 +11,7 @@ from PIL import Image
 
 from pnc_automation.app.automation.engine.navigation_core import NavigationCore, NavigationPolicy, reviewed_navigation_edges
 from pnc_automation.app.pnc.domain.observation import Bounds, Observation, VisibleElement, VisibleElementSourceKind
+from pnc_automation.app.pnc.domain.popup import decide_popup_recovery
 from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
@@ -258,6 +259,96 @@ class NavigationPerceptionTests(unittest.TestCase):
         self.assertTrue(result.blocking_popup)
         self.assertEqual(result.visible_elements, {})
 
+    def test_real_visual_popup_fixtures_preserve_scaled_close_evidence(self):
+        """Carries measured generic-popup close evidence through navigation perception."""
+
+        ocr = Mock(spec=OcrService)
+        ocr.read_result.return_value = OcrResult(lines=(), words=())
+        perception = NavigationPerception(
+            load_visual_screen_recognizer(),
+            PncObservationEnricher(ocr),
+        )
+        for fixture_name in (
+            'generic_popup_quit_real_sanitized.png',
+            'generic_popup_offer_real_sanitized.png',
+        ):
+            with self.subTest(fixture=fixture_name):
+                capture = self.capture(fixture_name)
+                capture = replace(capture, image=capture.image.resize((900, 1600)))
+                result = perception.build(capture)
+                base = perception.build(self.capture(fixture_name))
+
+                self.assertEqual(ScreenType.PNC_POPUP, result.screen_type)
+                self.assertTrue(result.blocking_popup)
+                self.assertEqual((900, 1600), result.popup_overlay.image_size)
+                candidate = result.popup_overlay.candidates[0]
+                close_button = result.require(UiElementId.PNC_POPUP_CLOSE_BUTTON)
+                self.assertEqual(candidate.action_point, close_button.action_point)
+                self.assertEqual(
+                    (
+                        round(base.popup_overlay.candidates[0].action_point[0] * 900 / 540),
+                        round(base.popup_overlay.candidates[0].action_point[1] * 1600 / 960),
+                    ),
+                    candidate.action_point,
+                )
+                self.assertEqual(VisibleElementSourceKind.GEOMETRY, close_button.source_kind)
+
+    def test_near_black_frame_is_loading_but_ordinary_dark_unknown_stays_unknown(self):
+        perception = NavigationPerception(load_visual_screen_recognizer(), Guard())
+        for color, expected in (((5, 5, 5), ScreenType.PNC_LOADING), ((24, 24, 24), ScreenType.UNKNOWN)):
+            with self.subTest(color=color):
+                image = Image.new('RGB', (540, 960), color)
+                result = perception.build(
+                    CapturedScreenshot(None, image, 'PNG', ephemeral_captured_at=datetime.now(UTC))
+                )
+                self.assertEqual(expected, result.screen_type)
+                self.assertFalse(result.blocking_popup)
+                self.assertEqual({}, result.visible_elements)
+
+    def test_sparse_bright_region_keeps_black_frame_unknown(self):
+        perception = NavigationPerception(load_visual_screen_recognizer(), Guard())
+        image = Image.new('RGB', (540, 960), (0, 0, 0))
+        image.paste((255, 255, 255), (10, 10, 14, 14))
+
+        result = perception.build(
+            CapturedScreenshot(None, image, 'PNG', ephemeral_captured_at=datetime.now(UTC))
+        )
+
+        self.assertEqual(ScreenType.UNKNOWN, result.screen_type)
+        self.assertFalse(result.blocking_popup)
+        self.assertEqual({}, result.visible_elements)
+
+    def test_task_owned_interruption_control_survives_perception_but_stays_blocked(self):
+        """Perception reports task-owned evidence while recovery authorization rejects it."""
+
+        class _TaskOwnedGuard(Guard):
+            def detect_interruption(self, image, *, owned_dismiss_bounds=()):
+                del image, owned_dismiss_bounds
+                selector = UiElementId.PNC_BUILDING_UPGRADE_WARNING_CONFIRM_BUTTON
+                return ObservationAdditions(
+                    visible_elements={selector: VisibleElement(
+                        selector,
+                        Bounds(20, 30, 40, 20),
+                        1.0,
+                    )},
+                    screen_evidence=(ScreenEvidence(ScreenType.PNC_POPUP, 'task_owned'),),
+                )
+
+        result = NavigationPerception(load_visual_screen_recognizer(), _TaskOwnedGuard()).build(
+            self.capture('home_city_core.png')
+        )
+        decision = decide_popup_recovery(
+            screen_type=result.screen_type,
+            blocking_popup=result.blocking_popup,
+            visible_selector_ids=frozenset(result.visible_elements),
+            popup_overlay=result.popup_overlay,
+        )
+
+        self.assertTrue(result.has(UiElementId.PNC_BUILDING_UPGRADE_WARNING_CONFIRM_BUTTON))
+        self.assertIsNotNone(decision)
+        self.assertTrue(decision.blocked)
+        self.assertIsNone(decision.selector_id)
+
     def test_more_overlay_owns_visible_root_and_unknown_has_no_controls(self):
         perception = NavigationPerception(load_visual_screen_recognizer(), Guard())
         self.assertEqual(perception.build(self.capture('more_overlay.png')).screen_type, ScreenType.PNC_MORE_MENU)
@@ -293,7 +384,8 @@ class NavigationPerceptionTests(unittest.TestCase):
         ), words=())
         result = perception.build(capture)
         self.assertTrue(result.blocking_popup)
-        self.assertEqual(result.visible_elements, {})
+        self.assertTrue(result.has(UiElementId.PNC_UPDATE_CONFIRM_BUTTON))
+        self.assertFalse(result.has(UiElementId.PNC_POPUP_CLOSE_BUTTON))
 
     def test_content_parser_cannot_change_screen_or_invent_navigation_control(self):
         guard = Guard()

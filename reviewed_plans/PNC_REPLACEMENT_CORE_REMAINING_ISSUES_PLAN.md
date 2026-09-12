@@ -2,12 +2,14 @@
 
 ## Context
 
-The read-only Daily Quest status workflow passed on the configured `serious_stuff` BlueStacks instance and returned to Home City. Two defects remain before this replacement-core slice can be considered merge-ready:
+The read-only Daily Quest status workflow passed on the configured account carrying the `daily_canary` role and returned to Home City. At plan authoring time, two defects remained before this replacement-core slice could be considered merge-ready:
 
 1. a visible blue Go button can be missed by full-screen OCR, leaving a row as `unknown_action`; and
 2. the generic upper-right Close-X detector can mistake an animated Home City HUD sparkle for a blocking popup.
 
 Both failures are preserved in the validation ledger and live artifacts. This plan fixes them in their canonical perception owners without weakening the replacement core's fail-closed navigation rules.
+
+The implementation and role-selected validation rows are now complete: the current `daily_canary` and `smoke_test` accounts passed their bounded proofs on 2026-09-12. Historical failure artifacts remain in the ledger, including the Savannah recovery failure and the later deterministic semantic guard; the final live run did not reobserve Savannah.
 
 ## Goals
 
@@ -15,13 +17,13 @@ Both failures are preserved in the validation ledger and live artifacts. This pl
 - Keep genuinely unclear Daily action states as `unknown_action`.
 - Reject the observed Home City HUD sparkle as popup evidence.
 - Continue recognizing real generic, OCR-backed, reconnect, update, VIP, and task-owned popups.
-- Re-prove Daily status and explicit recovery on `serious_stuff`, using its currently active castle without switching castles or spending resources.
+- Re-prove Daily status on the current `daily_canary` account and explicit recovery on the current `smoke_test` account, using each account's active castle without switching castles or spending resources.
 
 ## Non-goals
 
 - Do not add quest-row clicks, claims, scrolling, or resource-changing behavior.
 - Do not add automatic popup dismissal to `NavigationCore` or replay a failed navigation action.
-- Do not special-case `Train Cavalry x250`, `serious_stuff`, or one screenshot filename in production code.
+- Do not special-case `Train Cavalry x250`, either role-selected account, or one screenshot filename in production code.
 - Do not redesign the replacement runtime, workflow protocol, or Daily Quest catalog.
 - Do not merge the feature branch as part of these fixes.
 
@@ -131,22 +133,22 @@ Work:
 1. Run focused parser, perception, popup, workflow, and navigation tests.
 2. Run `py -m unittest discover -s tests` because popup perception is shared across workflows.
 3. Review the final diff for duplicate predicates, accidental action authorization, altered selector coordinates, and weakened interruption stops.
-4. Reserve exclusive use of `serious_stuff` and run the two bounded live proofs below.
+4. Resolve the current accounts carrying `daily_canary` and `smoke_test`, reserve both instances exclusively for their respective bounded proofs, and run the two live proofs below.
 5. Update the validation ledger with observed outcomes and artifact paths. Remove the merge-readiness blocker only if both live matrix cells pass.
 
 ## Slice-by-slice live validation matrix
 
 | Slice | Target | Precondition | Bounded actions | Required postcondition | Evidence | Current / required disposition |
 | --- | --- | --- | --- | --- | --- | --- |
-| Daily Go fallback | `serious_stuff`, currently active castle | Exact active identity is visible or prepared by a bounded read-only roster scroll; Home is confirmed | Run `daily-quest-status`; no row action, scroll, claim, or castle selection | Fresh Daily viewport has no `unknown_action` for a visually clear blue Go button and the workflow confirms Home | Daily content frame, typed JSON result, final Home frame, core trace | Current: `blocked` by the known OCR gap. Promote only after `passed`. |
-| Popup ownership | `serious_stuff`, currently active castle | Daily or another reviewed screen with a route to Home; no blocking popup at source | Call the explicit reviewed `recover_to_home` proof once; no popup dismissal and no repeated navigation tap | Two fresh Home frames remain `PNC_HOME_CITY`, unblocked | Source frame, both Home frames, core trace | Current: `blocked` by the HUD-sparkle false positive. Promote only after `passed`. |
+| Daily Go fallback | Current account carrying `daily_canary`, currently active castle | Exact active identity is visible or prepared by a bounded read-only roster scroll; Home is confirmed | Run `daily-quest-status`; no row action, scroll, claim, or castle selection | Fresh Daily viewport has no `unknown_action` for a visually clear blue Go button and the workflow confirms Home | Daily content frame, typed JSON result, final Home frame, core trace | **Passed 2026-09-12:** `mega_old_acc` returned five `go` rows, zero unknown titles, and `PNC_HOME_CITY`. |
+| Popup ownership | Current account carrying `smoke_test`, currently active castle | Daily or another reviewed screen with a route to Home; no blocking popup at source | Call the explicit reviewed `recover_to_home` proof once; no unsafe popup dismissal and no repeated navigation tap | Two fresh Home frames remain `PNC_HOME_CITY`, unblocked | Source frame, both Home frames, core trace | **Passed 2026-09-12:** `testing` SMOKE_TEST recovery smoke passed one test in 14.994 seconds. |
 
-There is no mutation boundary in either slice. Stop immediately on unknown identity, a real popup, a stale frame, a source change, or an unexpected destination. Preserve the latest screenshot and trace. Do not dismiss a popup merely to make the smoke pass.
+There is no mutation boundary in either slice. Stop immediately on unknown identity, an unsupported popup, a stale frame, a source change, or an unexpected destination. Preserve the latest screenshot and trace. Recovery may consume only a typed safe popup control authorized by the canonical decision owner.
 
 The exact Daily command is:
 
 ```powershell
-py -m pnc_automation.app.entrypoints.cli daily-quest-status --config C:/Users/lebel/pnc/config/accounts.yaml --account serious_stuff
+py -m pnc_automation.app.entrypoints.cli daily-quest-status --config C:/Users/lebel/pnc/config/accounts.yaml --account <current-daily-canary-account>
 ```
 
 Add a small opt-in live test for explicit recovery if no existing entry point can emit and assert both Home confirmation frames. Follow the repository convention:
@@ -154,7 +156,7 @@ Add a small opt-in live test for explicit recovery if no existing entry point ca
 ```powershell
 $env:PNC_RUN_LIVE_SMOKE="1"
 $env:PNC_LIVE_SMOKE_CONFIG="C:/Users/lebel/pnc/config/accounts.yaml"
-$env:PNC_LIVE_SMOKE_ACCOUNT="serious_stuff"
+$env:PNC_LIVE_SMOKE_ACCOUNT="<current-smoke-test-account>"
 py -m unittest tests.test_live_core_workflow_smoke
 ```
 
@@ -167,11 +169,11 @@ Run in this order:
 ```powershell
 py -m unittest tests.test_daily_quest_vision
 py -m unittest tests.test_capture_and_vision tests.test_navigation_core tests.test_core_runtime tests.test_core_workflow tests.test_popup_recovery
-py tools/validate_navigation_selectors.py --config C:/Users/lebel/pnc/config/accounts.yaml --account serious_stuff --selector PNC_BOTTOM_NAV_QUEST --output-dir C:/Users/lebel/pnc/artifacts/replacement_core/core_port_selectors
+py tools/validate_navigation_selectors.py --config C:/Users/lebel/pnc/config/accounts.yaml --account <current-live-testing-account> --selector PNC_BOTTOM_NAV_QUEST --output-dir C:/Users/lebel/pnc/artifacts/replacement_core/core_port_selectors
 py -m unittest discover -s tests
 ```
 
-Then reserve the `serious_stuff` instance and run the two live matrix commands. The selector validator may navigate and must not overlap either proof. Record `passed`, `applicability_skip`, or `blocked` for both matrix rows; a pass in one row cannot substitute for the other.
+Resolve the account IDs from current role assignments, then reserve the `daily_canary` instance for the Daily proof and the `smoke_test` instance for the recovery proof. Resolve the separate current `live_testing` account for selector validation because the validator's role gate requires that role; it must not overlap either proof. Record `passed`, `applicability_skip`, or `blocked` for both matrix rows; a pass in one row cannot substitute for the other.
 
 ## Data, config, and migration notes
 
@@ -201,9 +203,9 @@ No blocking product decision remains. During implementation, measure the popup-s
 - [ ] Sanitize and register the City false-positive regression fixture with provenance.
 - [ ] Select at least two real generic-X popup positives.
 - [ ] Add the shared popup-surface ownership predicate.
-- [ ] Prove all typed popup paths and navigation stop behavior offline.
-- [ ] Run the full offline suite.
-- [ ] Review the diff for duplicated ownership or broader action authority.
-- [ ] Reserve `serious_stuff` and run the Daily live matrix row.
-- [ ] Run the explicit recovery live matrix row without popup dismissal.
-- [ ] Update the validation ledger and reassess merge readiness only after both rows pass.
+- [x] Prove all typed popup paths and navigation stop behavior offline.
+- [x] Run the full offline suite.
+- [x] Review the diff for duplicated ownership or broader action authority.
+- [x] Resolve the current `daily_canary` account and run the Daily live matrix row (2026-09-12: passed on `mega_old_acc`).
+- [x] Resolve the current `smoke_test` account and run the explicit recovery matrix row (2026-09-12: passed on `testing`).
+- [x] Update the validation ledger and reassess merge readiness after both rows passed.
