@@ -13,6 +13,7 @@ from pnc_automation.app.authoring.config.models import CastleIdentity, PncAccoun
 from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.app.pnc.domain.chat import ChatChannel
 from pnc_automation.app.pnc.domain.mail import MailboxType
+from pnc_automation.app.pnc.domain.popup import PopupOverlayObservation
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.core.vision.image.models import Bounds
@@ -411,6 +412,7 @@ class Observation:
     frame_fingerprint: str | None = None
     captured_at: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
     blocking_popup: bool = False
+    popup_overlay: PopupOverlayObservation | None = None
     current_castle: CastleIdentity | None = None
     current_castle_evidence: CurrentCastleEvidenceKind | None = None
     current_pnc_account_id: str | None = None

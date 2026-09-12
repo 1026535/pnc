@@ -562,7 +562,7 @@ class AutomationFrameworkTests(unittest.TestCase):
             logger=build_logger(),
         )
 
-        with self.assertRaisesRegex(SelectorResolutionError, "already consumed"):
+        with self.assertRaisesRegex(SelectorResolutionError, "(?:already consumed|unchanged visual fingerprint)"):
             runner.run(self.account, script)
 
         self.assertEqual(fake_session.taps, [(5, 5)])

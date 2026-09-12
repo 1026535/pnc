@@ -109,14 +109,15 @@ Before and during a live run:
 
 Read the applicable `SKILL.md` completely before taking the actions it governs.
 
-- `.agents/skills/create-plan`: substantial plans and roadmaps.
+- `.agents/skills/create-plan`: regular repository-grounded plans and roadmaps.
+- `.agents/skills/create-plan-with-chatgpt-pro`: plans requiring a ChatGPT Pro second opinion and Codex review.
 - `.agents/skills/review-plan-live`: plan audits that require repository and bounded live evidence.
 - `.agents/skills/write-code`: production implementation, fixes, refactors, tests, and scripts.
 - `.agents/skills/review-code`: code, diff, commit, branch, or implementation reviews.
 - `.agents/skills/test-bluestacks-live`: live emulator validation and diagnosis.
 - `.agents/skills/write-code-live`: implementation with bounded in-game resource spending authorized by the current request or a user-approved execution plan.
 - `.agents/skills/control-in-app-browser`: browser automation through the selected browser surface.
-- `.agents/skills/consult-chatgpt-pro`: explicit or planning-required, repository-grounded consultation with ChatGPT Pro.
+- `.agents/skills/consult-chatgpt-pro`: explicit or create-plan-with-chatgpt-pro-required, repository-grounded consultation with ChatGPT Pro.
 - `.agents/skills/implement-with-luna-global`: explicit delegation of substantial implementation to Luna workers.
 - `.agents/skills/manage-source-control`: feature branches, worktrees, rebases, merges, conflict resolution, pushes, and branch cleanup.
 

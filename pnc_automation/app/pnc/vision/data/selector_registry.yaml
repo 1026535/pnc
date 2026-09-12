@@ -1783,6 +1783,14 @@ selectors:
   - PNC_LOADING
   status: planned
   detection_kind: planned
+- id: PNC_RECONNECT_CONFIRM_BUTTON
+  screens:
+  - PNC_POPUP
+  status: screenshot_seeded
+  detection_kind: planned
+  interaction_kind: action
+  notes:
+  - OCR materializes Confirm only when the exact disconnect/reconnect message is present.
 - id: PNC_CASTLE_LIST_ENTRY
   screens:
   - PNC_CASTLE_SELECTION

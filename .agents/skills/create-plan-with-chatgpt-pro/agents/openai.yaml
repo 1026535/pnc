@@ -1,0 +1,4 @@
+interface:
+  display_name: "Create Plan With ChatGPT Pro"
+  short_description: "Plan with Pro consultation and Codex review"
+  default_prompt: "Use $create-plan-with-chatgpt-pro to create a plan with ChatGPT Pro input and Codex review."

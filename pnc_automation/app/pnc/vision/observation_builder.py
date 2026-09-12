@@ -31,6 +31,7 @@ from pnc_automation.app.pnc.domain.observation import (
     ListEntryKind,
     Observation,
     ObservedTextFieldState,
+    PopupOverlayObservation,
     SpatialSurfaceObservation,
     VisibleElement,
     VisibleElementSourceKind,
@@ -71,6 +72,7 @@ class ObservationAdditions:
     list_entries: tuple[DetectedListEntry, ...] = ()
     spatial_surface: SpatialSurfaceObservation | None = None
     screen_evidence: tuple[ScreenEvidence, ...] = ()
+    popup_overlay: PopupOverlayObservation | None = None
     current_castle: CastleIdentity | None = None
     current_castle_evidence: CurrentCastleEvidenceKind | None = None
     current_pnc_account_id: str | None = None
@@ -297,10 +299,11 @@ class ObservationBuilder:
         overlay_screens = {ScreenType.PNC_POPUP, ScreenType.PNC_VIP_DAILY_RESET, ScreenType.PNC_BUILDING_UPGRADE_WARNING}
         overlay_evidence = tuple(item for item in additions.screen_evidence if item.screen_type in overlay_screens)
         combined_evidence = (*additions.screen_evidence, *visual.evidence)
-        if overlay_evidence:
+        if additions.popup_overlay is not None or overlay_evidence:
             # Only the topmost blocking surface owns actionable controls.
             visible_elements = {}
-            combined_evidence = overlay_evidence
+            if overlay_evidence:
+                combined_evidence = overlay_evidence
         elif any(item.screen_type in overlay_screens for item in visual.evidence):
             visible_elements = {}
             additions = ObservationAdditions()
@@ -338,9 +341,11 @@ class ObservationBuilder:
                 else screenshot.image.tobytes()
             ).hexdigest(),
             captured_at=_screenshot_captured_at(screenshot),
-            blocking_popup=screen_type in {ScreenType.PNC_POPUP, ScreenType.PNC_VIP_DAILY_RESET}
+            blocking_popup=additions.popup_overlay is not None
+            or screen_type in {ScreenType.PNC_POPUP, ScreenType.PNC_VIP_DAILY_RESET}
             or UiElementId.PNC_POPUP_CLOSE_BUTTON in visible_elements
             or UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON in visible_elements,
+            popup_overlay=additions.popup_overlay,
             current_castle=additions.current_castle,
             current_castle_evidence=additions.current_castle_evidence,
             current_pnc_account_id=additions.current_pnc_account_id,

@@ -35,6 +35,14 @@ from pnc_automation.app.pnc.navigation.world_map_coordinate_domain import WorldM
 from pnc_automation.app.pnc.navigation.world_map_overview_projection import (
     project_world_coordinate_to_overview_point,
 )
+from pnc_automation.app.pnc.domain.popup import (
+    PopupControlKind,
+    PopupDismissCandidate,
+    PopupEvidenceKind,
+    PopupOverlayObservation,
+    TASK_OWNED_POPUP_SELECTOR_IDS,
+    TASK_OWNED_POPUP_SCREEN_TYPES,
+)
 from pnc_automation.core.text.normalization import normalize_ocr_text
 from pnc_automation.app.pnc.vision.observation_builder import ObservationAdditions
 from pnc_automation.app.pnc.vision.daily_quest_rows import parse_daily_quest_screen
@@ -199,6 +207,16 @@ _POPUP_PRIMARY_ACTION_ANCHOR_IDS = frozenset(
         TextAnchorId.LABEL_NEXT,
     }
 )
+_GENERIC_POPUP_NEGATIVE_TEXT_KINDS = {
+    "CANCEL": PopupControlKind.CANCEL,
+    "CLOSE": PopupControlKind.CLOSE_TEXT,
+    "NOTNOW": PopupControlKind.NEGATIVE_ACTION,
+    "LATER": PopupControlKind.NEGATIVE_ACTION,
+    "NO": PopupControlKind.NEGATIVE_ACTION,
+}
+_GENERIC_POPUP_PRIMARY_TEXTS = frozenset({"CONFIRM", "OK", "JOIN", "APPLY", "CLAIM", "BUY", "UPGRADE", "NEXT"})
+_ALLIANCE_INVITATION_BODY_TOKENS = frozenset({"JOIN", "ALLIANCE", "STRONG", "TOGETHER"})
+_ALLIANCE_INVITATION_TITLE_TEXTS = frozenset({"ALLIANCEINVITATION", "ALLIANCEINVITE", "JOINOURALLIANCE"})
 _BUILDING_DETAIL_CONFLICT_ANCHOR_IDS = frozenset(
     {
         TextAnchorId.LABEL_ENHANCE,
@@ -1763,16 +1781,16 @@ class PncObservationEnricher:
     def detect_interruption(
         self, image: Image.Image, *, owned_dismiss_bounds: tuple[Bounds, ...] = (),
     ) -> ObservationAdditions:
-        """Run global guards without using OCR to select a content screen.
-
-        A visually recognized modal owns its measured close control. Excluding
-        that exact X from the generic-X heuristic never suppresses text guards
-        for updates, disconnects, or another popup layered above that modal.
-        """
+        """Run global interruption guards without selecting content."""
         result = self.ocr_service.read_result(image)
         lines = tuple(sorted(result.lines, key=lambda line: (line.bounds.y, line.bounds.x)))
         anchors = self.text_anchor_detector.detect(result)
-        popup = _build_popup_additions(image=image, lines=lines, anchors=anchors)
+        popup = _build_popup_additions(
+            image=image,
+            lines=lines,
+            anchors=anchors,
+            excluded_close_bounds=owned_dismiss_bounds,
+        )
         if popup is not None:
             return popup
         visual = _build_visual_popup_close_additions(image=image)
@@ -1843,7 +1861,15 @@ class PncObservationEnricher:
             request=request,
         )
         if request.include_popup_guard:
-            popup = _build_popup_additions(image=image, lines=lines, anchors=anchors)
+            popup = _build_popup_additions(
+                image=image,
+                lines=lines,
+                anchors=anchors,
+                task_owned=(
+                    screen_type in TASK_OWNED_POPUP_SCREEN_TYPES
+                    or bool(TASK_OWNED_POPUP_SELECTOR_IDS.intersection(visible_elements))
+                ),
+            )
             if popup is not None:
                 return popup
             visual_popup = _build_visual_popup_close_additions(image=image)
@@ -4487,14 +4513,58 @@ def _is_chat_message_candidate_line(*, line: OcrLine, viewport: _ChatTranscriptV
     return True
 
 
+def _popup_overlay_from_elements(
+    *,
+    image: Image.Image,
+    elements: tuple[tuple[PopupControlKind, VisibleElement], ...],
+    layout_id: str,
+    evidence_kind: PopupEvidenceKind,
+    reason: str,
+    modal_bounds: Bounds | None = None,
+) -> PopupOverlayObservation:
+    """Converts measured visible elements into descriptive popup evidence."""
+
+    candidates = tuple(
+        PopupDismissCandidate(
+            control_kind=control_kind,
+            bounds=element.bounds,
+            action_point=element.action_point or element.bounds.center(),
+            confidence=element.confidence,
+            evidence_kind=(
+                PopupEvidenceKind.TEMPLATE
+                if element.source_kind == VisibleElementSourceKind.TEMPLATE
+                else PopupEvidenceKind.GEOMETRY
+                if element.source_kind == VisibleElementSourceKind.GEOMETRY
+                else PopupEvidenceKind.OCR_TEXT
+            ),
+            extracted_text=element.extracted_text,
+            reason=reason,
+        )
+        for control_kind, element in elements
+    )
+    return PopupOverlayObservation(
+        image_size=image.size,
+        modal_bounds=modal_bounds,
+        layout_id=layout_id,
+        candidates=candidates,
+        confidence=max((candidate.confidence for candidate in candidates), default=0.0),
+        evidence_kind=evidence_kind,
+        reason=reason,
+    )
+
+
 def _build_popup_additions(
     *,
     image: Image.Image,
     lines: tuple[OcrLine, ...],
     anchors: tuple[DetectedTextAnchor, ...],
+    excluded_close_bounds: tuple[Bounds, ...] = (),
+    task_owned: bool = False,
 ) -> ObservationAdditions | None:
     """Returns popup dismissal controls when OCR matches a blocking modal footer."""
 
+    if task_owned:
+        return None
     vip_daily_reset = _build_vip_daily_reset_popup_additions(image=image, lines=lines)
     if vip_daily_reset is not None:
         return vip_daily_reset
@@ -4507,18 +4577,221 @@ def _build_popup_additions(
     valiant_conquest = _build_valiant_conquest_popup_additions(image=image, lines=lines)
     if valiant_conquest is not None:
         return valiant_conquest
-    dismiss_anchor = _find_popup_dismiss_anchor(image=image, anchors=anchors)
+    promotional_popup = _build_promotional_popup_additions(image=image, lines=lines)
+    if promotional_popup is not None:
+        return promotional_popup
+    dismiss_anchor = _find_popup_dismiss_anchor(image=image, lines=lines, anchors=anchors)
     if dismiss_anchor is not None:
-        return ObservationAdditions(
-            visible_elements={
-                UiElementId.PNC_POPUP_CLOSE_BUTTON: _make_visible_from_anchor(
-                    selector_id=UiElementId.PNC_POPUP_CLOSE_BUTTON,
-                    anchor=dismiss_anchor,
-                )
-            },
-            screen_evidence=(ScreenEvidence(ScreenType.PNC_POPUP, "ocr_popup_cancel_button"),),
+        close_element = _make_visible_from_anchor(
+            selector_id=UiElementId.PNC_POPUP_CLOSE_BUTTON,
+            anchor=dismiss_anchor,
         )
-    return _build_promotional_popup_additions(image=image, lines=lines)
+        return ObservationAdditions(
+            visible_elements={UiElementId.PNC_POPUP_CLOSE_BUTTON: close_element},
+            screen_evidence=(ScreenEvidence(ScreenType.PNC_POPUP, "ocr_popup_cancel_button"),),
+            popup_overlay=_popup_overlay_from_elements(
+                image=image,
+                elements=((PopupControlKind.CANCEL, close_element),),
+                layout_id="alliance_invitation_footer",
+                evidence_kind=PopupEvidenceKind.OCR_TEXT,
+                reason="ocr_popup_cancel_button",
+            ),
+        )
+    generic_negative = _build_generic_popup_negative_additions(image=image, lines=lines)
+    if generic_negative is not None:
+        return generic_negative
+    return _build_generic_popup_x_additions(
+        image=image,
+        lines=lines,
+        excluded_close_bounds=excluded_close_bounds,
+    )
+
+
+def _build_generic_popup_x_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+    excluded_close_bounds: tuple[Bounds, ...],
+) -> ObservationAdditions | None:
+    """Localize an X only after a compact message/action cluster proves its modal."""
+
+    primaries = tuple(
+        line
+        for line in lines
+        if normalize_ocr_text(line.text) in _GENERIC_POPUP_PRIMARY_TEXTS
+        and int(image.height * 0.35) <= line.bounds.y <= int(image.height * 0.9)
+    )
+    for primary in primaries:
+        primary_center_x = primary.bounds.x + primary.bounds.width // 2
+        support_lines = tuple(
+            line
+            for line in lines
+            if line is not primary
+            and line.bounds.y + line.bounds.height < primary.bounds.y
+            and primary.bounds.y - (line.bounds.y + line.bounds.height) <= int(image.height * 0.38)
+            and line.bounds.y >= int(image.height * 0.12)
+            and abs((line.bounds.x + line.bounds.width // 2) - primary_center_x) <= int(image.width * 0.38)
+            and normalize_ocr_text(line.text) != ""
+        )
+        if not support_lines:
+            continue
+        modal = _generic_popup_modal_bounds_for_action_row(
+            image=image,
+            lines=lines,
+            negative=primary,
+            primary=primary,
+            support_lines=support_lines,
+        )
+        if modal is None:
+            continue
+        close_bounds = _find_visual_popup_close_bounds(image=image, modal_bounds=modal)
+        if close_bounds is None:
+            continue
+        close_x, close_y = close_bounds.center()
+        if any(
+            bounds.x <= close_x < bounds.x + bounds.width
+            and bounds.y <= close_y < bounds.y + bounds.height
+            for bounds in excluded_close_bounds
+        ):
+            continue
+        if not (
+            close_x >= modal.x + int(modal.width * 0.55)
+            and close_y <= modal.y + int(modal.height * 0.35)
+        ):
+            continue
+        close_element = _make_visible(
+            selector_id=UiElementId.PNC_POPUP_CLOSE_BUTTON,
+            x=close_bounds.x,
+            y=close_bounds.y,
+            width=close_bounds.width,
+            height=close_bounds.height,
+            action_point=close_bounds.center(),
+            source_kind=VisibleElementSourceKind.GEOMETRY,
+        )
+        return ObservationAdditions(
+            visible_elements={UiElementId.PNC_POPUP_CLOSE_BUTTON: close_element},
+            screen_evidence=(ScreenEvidence(ScreenType.PNC_POPUP, "generic_modal_measured_close_x"),),
+            popup_overlay=_popup_overlay_from_elements(
+                image=image,
+                elements=((PopupControlKind.CLOSE_X, close_element),),
+                layout_id="generic_modal_close_x",
+                evidence_kind=PopupEvidenceKind.GEOMETRY,
+                reason="generic_modal_measured_close_x",
+                modal_bounds=modal,
+            ),
+        )
+    return None
+
+
+def _build_generic_popup_negative_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Find a reviewed negative label only when a nearby primary action proves a modal row."""
+
+    negatives = [
+        line
+        for line in lines
+        if normalize_ocr_text(line.text) in _GENERIC_POPUP_NEGATIVE_TEXT_KINDS
+        and int(image.height * 0.25) <= line.bounds.y <= int(image.height * 0.97)
+    ]
+    if not negatives:
+        return None
+    for negative in sorted(negatives, key=lambda line: (line.bounds.y, line.bounds.x)):
+        row_tolerance = max(28, negative.bounds.height * 2)
+        primary = next(
+            (
+                line
+                for line in lines
+                if normalize_ocr_text(line.text) in _GENERIC_POPUP_PRIMARY_TEXTS
+                and abs(line.bounds.y - negative.bounds.y) <= row_tolerance
+                and abs(line.bounds.x - negative.bounds.x) >= max(40, int(image.width * 0.08))
+            ),
+            None,
+        )
+        if primary is None:
+            continue
+        modal_bounds = _generic_popup_modal_bounds_for_action_row(
+            image=image,
+            lines=lines,
+            negative=negative,
+            primary=primary,
+        )
+        if modal_bounds is None:
+            continue
+        element = _make_visible_from_line(
+            selector_id=UiElementId.PNC_POPUP_CLOSE_BUTTON,
+            line=negative,
+        )
+        normalized = normalize_ocr_text(negative.text)
+        return ObservationAdditions(
+            visible_elements={UiElementId.PNC_POPUP_CLOSE_BUTTON: element},
+            screen_evidence=(ScreenEvidence(ScreenType.PNC_POPUP, "ocr_generic_popup_negative"),),
+            popup_overlay=_popup_overlay_from_elements(
+                image=image,
+                elements=((_GENERIC_POPUP_NEGATIVE_TEXT_KINDS[normalized], element),),
+                layout_id="generic_modal_negative",
+                evidence_kind=PopupEvidenceKind.OCR_TEXT,
+                reason="ocr_generic_popup_negative",
+                modal_bounds=modal_bounds,
+            ),
+        )
+    return None
+
+
+def _generic_popup_modal_bounds_for_action_row(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+    negative: OcrLine,
+    primary: OcrLine,
+    support_lines: tuple[OcrLine, ...] | None = None,
+) -> Bounds | None:
+    """Prove a compact modal text cluster above one paired footer action row."""
+
+    row_top = min(negative.bounds.y, primary.bounds.y)
+    row_left = min(negative.bounds.x, primary.bounds.x)
+    row_right = max(
+        negative.bounds.x + negative.bounds.width,
+        primary.bounds.x + primary.bounds.width,
+    )
+    horizontal_margin = int(image.width * 0.16)
+    if support_lines is None:
+        support_lines = tuple(
+            line
+            for line in lines
+            if line is not negative
+            and line is not primary
+            and line.bounds.y + line.bounds.height < row_top
+            and row_top - (line.bounds.y + line.bounds.height) <= int(image.height * 0.34)
+            and line.bounds.y >= int(image.height * 0.12)
+            and line.bounds.x + line.bounds.width >= row_left - horizontal_margin
+            and line.bounds.x <= row_right + horizontal_margin
+            and normalize_ocr_text(line.text) != ""
+        )
+    if not support_lines:
+        return None
+    cluster = (*support_lines, negative, primary)
+    left = min(line.bounds.x for line in cluster)
+    top = min(line.bounds.y for line in cluster)
+    right = max(line.bounds.x + line.bounds.width for line in cluster)
+    bottom = max(line.bounds.y + line.bounds.height for line in cluster)
+    horizontal = max(24, int(image.width * 0.08))
+    vertical = max(24, int(image.height * 0.03))
+    left = max(0, left - horizontal)
+    # Reserve the modal header/corner band before looking for an X.  The
+    # extension is derived from the OCR-owned content cluster, not from a
+    # screen-coordinate close band.
+    top = max(0, top - max(vertical, int(image.height * 0.09)))
+    right = min(image.width, right + horizontal)
+    bottom = min(image.height, bottom + vertical)
+    bounds = Bounds(x=left, y=top, width=max(1, right - left), height=max(1, bottom - top))
+    if bounds.width < int(image.width * 0.25):
+        return None
+    if not int(image.height * 0.08) <= bounds.height <= int(image.height * 0.55):
+        return None
+    return bounds
 
 
 def _build_update_required_popup_additions(
@@ -4543,29 +4816,39 @@ def _build_update_required_popup_additions(
         min_y=int(image.height * 0.45),
         max_y=int(image.height * 0.75),
     )
-    if update_line is None or confirm_line is None:
+    if update_line is None or confirm_line is None or not _popup_text_lines_are_grouped(
+        image=image,
+        first=update_line,
+        second=confirm_line,
+    ):
         return None
     horizontal_padding = max(28, confirm_line.bounds.width // 2)
     vertical_padding = max(16, confirm_line.bounds.height)
+    confirm_element = _make_visible(
+        selector_id=UiElementId.PNC_UPDATE_CONFIRM_BUTTON,
+        x=max(0, confirm_line.bounds.x - horizontal_padding),
+        y=max(0, confirm_line.bounds.y - vertical_padding),
+        width=min(
+            image.width - max(0, confirm_line.bounds.x - horizontal_padding),
+            confirm_line.bounds.width + (horizontal_padding * 2),
+        ),
+        height=min(
+            image.height - max(0, confirm_line.bounds.y - vertical_padding),
+            confirm_line.bounds.height + (vertical_padding * 2),
+        ),
+        action_point=confirm_line.bounds.center(),
+        extracted_text=confirm_line.text,
+    )
     return ObservationAdditions(
-        visible_elements={
-            UiElementId.PNC_UPDATE_CONFIRM_BUTTON: _make_visible(
-                selector_id=UiElementId.PNC_UPDATE_CONFIRM_BUTTON,
-                x=max(0, confirm_line.bounds.x - horizontal_padding),
-                y=max(0, confirm_line.bounds.y - vertical_padding),
-                width=min(
-                    image.width - max(0, confirm_line.bounds.x - horizontal_padding),
-                    confirm_line.bounds.width + (horizontal_padding * 2),
-                ),
-                height=min(
-                    image.height - max(0, confirm_line.bounds.y - vertical_padding),
-                    confirm_line.bounds.height + (vertical_padding * 2),
-                ),
-                action_point=confirm_line.bounds.center(),
-                extracted_text=confirm_line.text,
-            ),
-        },
+        visible_elements={UiElementId.PNC_UPDATE_CONFIRM_BUTTON: confirm_element},
         screen_evidence=(ScreenEvidence(ScreenType.PNC_POPUP, "ocr_update_required_popup"),),
+        popup_overlay=_popup_overlay_from_elements(
+            image=image,
+            elements=((PopupControlKind.UPDATE_CONFIRM, confirm_element),),
+            layout_id="required_game_update",
+            evidence_kind=PopupEvidenceKind.OCR_TEXT,
+            reason="ocr_update_required_popup",
+        ),
     )
 
 
@@ -4575,19 +4858,25 @@ def _build_visual_popup_close_additions(*, image: Image.Image) -> ObservationAdd
     close_bounds = _find_visual_popup_close_bounds(image=image)
     if close_bounds is None or not _has_visual_popup_surface(image=image, close_bounds=close_bounds):
         return None
+    close_element = _make_visible(
+        selector_id=UiElementId.PNC_POPUP_CLOSE_BUTTON,
+        x=close_bounds.x,
+        y=close_bounds.y,
+        width=close_bounds.width,
+        height=close_bounds.height,
+        action_point=close_bounds.center(),
+        source_kind=VisibleElementSourceKind.GEOMETRY,
+    )
     return ObservationAdditions(
-        visible_elements={
-            UiElementId.PNC_POPUP_CLOSE_BUTTON: _make_visible(
-                selector_id=UiElementId.PNC_POPUP_CLOSE_BUTTON,
-                x=close_bounds.x,
-                y=close_bounds.y,
-                width=close_bounds.width,
-                height=close_bounds.height,
-                action_point=close_bounds.center(),
-                source_kind=VisibleElementSourceKind.GEOMETRY,
-            )
-        },
+        visible_elements={UiElementId.PNC_POPUP_CLOSE_BUTTON: close_element},
         screen_evidence=(ScreenEvidence(ScreenType.PNC_POPUP, "visual_upper_right_close_x"),),
+        popup_overlay=_popup_overlay_from_elements(
+            image=image,
+            elements=((PopupControlKind.CLOSE_X, close_element),),
+            layout_id="visual_modal_close_x",
+            evidence_kind=PopupEvidenceKind.GEOMETRY,
+            reason="visual_upper_right_close_x",
+        ),
     )
 
 
@@ -4660,7 +4949,13 @@ def _vertical_surface_edge_contrast(
 def _build_visual_building_upgrade_warning_additions(*, image: Image.Image) -> ObservationAdditions | None:
     """Returns the task-owned Confirm control when the post-upgrade warning X is visually present."""
 
-    close_bounds = _find_visual_popup_close_bounds(image=image)
+    warning_modal = Bounds(
+        x=int(image.width * 0.10),
+        y=int(image.height * 0.20),
+        width=int(image.width * 0.85),
+        height=int(image.height * 0.55),
+    )
+    close_bounds = _find_visual_popup_close_bounds(image=image, modal_bounds=warning_modal)
     if close_bounds is None:
         return None
     close_center_y_ratio = close_bounds.center()[1] / image.height
@@ -4688,14 +4983,24 @@ def _build_visual_building_upgrade_warning_additions(*, image: Image.Image) -> O
     )
 
 
-def _find_visual_popup_close_bounds(*, image: Image.Image) -> Bounds | None:
-    """Finds a square two-diagonal bright component in the normalized popup-close search area."""
+def _find_visual_popup_close_bounds(*, image: Image.Image, modal_bounds: Bounds | None = None) -> Bounds | None:
+    """Find a bright X relative to a previously established modal boundary."""
 
     rgb_image = image.convert("RGB")
-    search_left = int(image.width * 0.72)
-    search_right = int(image.width * 0.99)
-    search_top = int(image.height * 0.02)
-    search_bottom = int(image.height * 0.40)
+    if modal_bounds is None:
+        search_left = int(image.width * 0.72)
+        search_right = int(image.width * 0.99)
+        search_top = int(image.height * 0.02)
+        search_bottom = int(image.height * 0.40)
+    else:
+        search_left = modal_bounds.x + int(modal_bounds.width * 0.5)
+        search_right = min(image.width, modal_bounds.x + modal_bounds.width + int(modal_bounds.width * 0.06))
+        search_top = modal_bounds.y
+        search_bottom = min(image.height, modal_bounds.y + int(modal_bounds.height * 0.4))
+        search_left = max(0, search_left)
+        search_right = min(image.width, max(search_left + 1, search_right))
+        search_top = max(0, search_top)
+        search_bottom = min(image.height, max(search_top + 1, search_bottom))
     bright_pixels = {
         (x, y)
         for y in range(search_top, search_bottom)
@@ -4723,11 +5028,33 @@ def _find_visual_popup_close_bounds(*, image: Image.Image) -> Bounds | None:
                 pending.append(neighbor)
                 component.append(neighbor)
         bounds = _visual_close_component_bounds(image=image, component=component)
-        if bounds is not None:
-            candidates.append(bounds)
+        if bounds is None:
+            continue
+        if modal_bounds is not None and not _is_modal_close_candidate(
+            bounds=bounds,
+            modal_bounds=modal_bounds,
+        ):
+            continue
+        candidates.append(bounds)
     if not candidates:
         return None
     return max(candidates, key=lambda bounds: bounds.center()[0])
+
+
+def _is_modal_close_candidate(*, bounds: Bounds, modal_bounds: Bounds) -> bool:
+    """Require the measured glyph to occupy the modal's upper-right edge band."""
+
+    center_x, center_y = bounds.center()
+    relative_x = (center_x - modal_bounds.x) / modal_bounds.width
+    relative_y = (center_y - modal_bounds.y) / modal_bounds.height
+    right_gap = modal_bounds.x + modal_bounds.width - center_x
+    top_gap = center_y - modal_bounds.y
+    return (
+        0.68 <= relative_x <= 1.0
+        and 0.0 <= relative_y <= 0.38
+        and right_gap <= max(modal_bounds.width * 0.28, bounds.width * 4)
+        and top_gap >= -max(bounds.height, modal_bounds.height * 0.05)
+    )
 
 
 def _is_bright_popup_close_pixel(pixel: tuple[int, int, int]) -> bool:
@@ -4757,9 +5084,6 @@ def _visual_close_component_bounds(
     top = min(y_values)
     width = max(x_values) - left + 1
     height = max(y_values) - top + 1
-    center_x = left + (width / 2)
-    if center_x < image.width * 0.86:
-        return None
     if not int(image.width * 0.02) <= width <= int(image.width * 0.10):
         return None
     if not int(image.height * 0.01) <= height <= int(image.height * 0.07):
@@ -4793,7 +5117,7 @@ def _build_reconnect_popup_additions(
         lines=lines,
         predicate=lambda line: (
             "DISCONNECTED" in normalize_ocr_text(line.text)
-            or ("RECONNECT" in normalize_ocr_text(line.text) and "NOW" in normalize_ocr_text(line.text))
+            and "RECONNECTNOW" in normalize_ocr_text(line.text)
         ),
         min_y=int(image.height * 0.25),
         max_y=int(image.height * 0.6),
@@ -4804,7 +5128,11 @@ def _build_reconnect_popup_additions(
         min_y=int(image.height * 0.45),
         max_y=int(image.height * 0.8),
     )
-    if message_line is None or confirm_line is None:
+    if message_line is None or confirm_line is None or not _popup_text_lines_are_grouped(
+        image=image,
+        first=message_line,
+        second=confirm_line,
+    ):
         return None
 
     horizontal_padding = max(28, confirm_line.bounds.width // 2)
@@ -4813,23 +5141,39 @@ def _build_reconnect_popup_additions(
     top = max(0, confirm_line.bounds.y - vertical_padding)
     width = min(image.width - left, confirm_line.bounds.width + (horizontal_padding * 2))
     height = min(image.height - top, confirm_line.bounds.height + (vertical_padding * 2))
-    return ObservationAdditions(
-        visible_elements={
-            UiElementId.PNC_POPUP_CLOSE_BUTTON: _make_visible(
-                selector_id=UiElementId.PNC_POPUP_CLOSE_BUTTON,
-                x=left,
-                y=top,
-                width=width,
-                height=height,
-                action_point=(
-                    confirm_line.bounds.x + (confirm_line.bounds.width // 2),
-                    confirm_line.bounds.y + (confirm_line.bounds.height // 2),
-                ),
-                extracted_text=confirm_line.text,
-            )
-        },
-        screen_evidence=(ScreenEvidence(ScreenType.PNC_POPUP, "ocr_reconnect_popup"),),
+    confirm_element = _make_visible(
+        selector_id=UiElementId.PNC_RECONNECT_CONFIRM_BUTTON,
+        x=left,
+        y=top,
+        width=width,
+        height=height,
+        action_point=confirm_line.bounds.center(),
+        extracted_text=confirm_line.text,
     )
+    return ObservationAdditions(
+        visible_elements={UiElementId.PNC_RECONNECT_CONFIRM_BUTTON: confirm_element},
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_POPUP, "ocr_reconnect_popup"),),
+        popup_overlay=_popup_overlay_from_elements(
+            image=image,
+            elements=((
+                PopupControlKind.RECONNECT_CONFIRM,
+                confirm_element,
+            ),),
+            layout_id="disconnect_reconnect",
+            evidence_kind=PopupEvidenceKind.OCR_TEXT,
+            reason="ocr_reconnect_popup",
+        ),
+    )
+
+
+def _popup_text_lines_are_grouped(*, image: Image.Image, first: OcrLine, second: OcrLine) -> bool:
+    """Require modal-like proximity before pairing a message with an affirmative control."""
+
+    if abs(first.bounds.y - second.bounds.y) > int(image.height * 0.28):
+        return False
+    first_center_x = first.bounds.x + first.bounds.width // 2
+    second_center_x = second.bounds.x + second.bounds.width // 2
+    return abs(first_center_x - second_center_x) <= int(image.width * 0.45)
 
 
 def _build_valiant_conquest_popup_additions(
@@ -4930,13 +5274,11 @@ def _build_vip_daily_reset_popup_additions(
     close_top = max(0, close_line.bounds.y - close_height_padding)
     close_width = min(image.width - close_left, close_line.bounds.width + (close_width_padding * 2))
     close_height = min(image.height - close_top, close_line.bounds.height + (close_height_padding * 2))
-    return ObservationAdditions(
-        visible_elements={
-            UiElementId.PNC_VIP_DAILY_RESET_HEADER: _make_visible_from_line(
+    header_element = _make_visible_from_line(
                 selector_id=UiElementId.PNC_VIP_DAILY_RESET_HEADER,
                 line=vip_line,
-            ),
-            UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON: _make_visible(
+            )
+    close_element = _make_visible(
                 selector_id=UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON,
                 x=close_left,
                 y=close_top,
@@ -4944,9 +5286,20 @@ def _build_vip_daily_reset_popup_additions(
                 height=close_height,
                 action_point=(close_line.bounds.x + (close_line.bounds.width // 2), close_line.bounds.y + (close_line.bounds.height // 2)),
                 extracted_text=close_line.text,
-            ),
+            )
+    return ObservationAdditions(
+        visible_elements={
+            UiElementId.PNC_VIP_DAILY_RESET_HEADER: header_element,
+            UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON: close_element,
         },
         screen_evidence=(ScreenEvidence(ScreenType.PNC_VIP_DAILY_RESET, "ocr_vip_daily_reset_popup"),),
+        popup_overlay=_popup_overlay_from_elements(
+            image=image,
+            elements=((PopupControlKind.CLOSE_TEXT, close_element),),
+            layout_id="vip_daily_reset",
+            evidence_kind=PopupEvidenceKind.OCR_TEXT,
+            reason="ocr_vip_daily_reset_popup",
+        ),
     )
 
 
@@ -4990,40 +5343,99 @@ def _build_promotional_popup_additions(
         )
         if top_up_button_line is None or (obtain_now_line is None and claim_next_day_line is None):
             return None
-        return _build_top_right_popup_close_additions(image=image, reason="ocr_top_up_offer_popup")
+        return _build_top_right_popup_close_additions(
+            image=image,
+            lines=lines,
+            reason="ocr_top_up_offer_popup",
+        )
 
-    return _build_top_right_popup_close_additions(image=image, reason="ocr_promotional_offer_popup")
-
-
-def _build_top_right_popup_close_additions(*, image: Image.Image, reason: str) -> ObservationAdditions:
-    """Builds the canonical close target for offer popups that dismiss from the top-right corner."""
-
-    close_width = max(32, int(image.width * 0.12))
-    close_height = max(32, int(image.height * 0.12))
-    close_left = max(0, image.width - close_width - int(image.width * 0.05))
-    close_top = max(0, int(image.height * 0.02))
-    return ObservationAdditions(
-        visible_elements={
-            UiElementId.PNC_POPUP_CLOSE_BUTTON: _make_visible(
-                selector_id=UiElementId.PNC_POPUP_CLOSE_BUTTON,
-                x=close_left,
-                y=close_top,
-                width=close_width,
-                height=close_height,
-                action_point=(close_left + (close_width // 2), close_top + (close_height // 2)),
-            )
-        },
-        screen_evidence=(ScreenEvidence(ScreenType.PNC_POPUP, reason),),
+    return _build_top_right_popup_close_additions(
+        image=image,
+        lines=lines,
+        reason="ocr_promotional_offer_popup",
     )
+
+
+def _build_top_right_popup_close_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+    reason: str,
+) -> ObservationAdditions:
+    """Build an offer close target only after OCR establishes modal ownership."""
+
+    modal_bounds = _recognized_popup_modal_bounds(image=image, lines=lines)
+    close_bounds = (
+        None
+        if modal_bounds is None
+        else _find_visual_popup_close_bounds(image=image, modal_bounds=modal_bounds)
+    )
+    if close_bounds is None:
+        return ObservationAdditions(
+            screen_evidence=(ScreenEvidence(ScreenType.PNC_POPUP, reason),),
+            popup_overlay=PopupOverlayObservation(
+                image_size=image.size,
+                modal_bounds=modal_bounds,
+                layout_id="recognized_offer_without_measured_close",
+                evidence_kind=PopupEvidenceKind.KNOWN_LAYOUT,
+                confidence=0.9,
+                reason=reason,
+            ),
+        )
+    close_element = _make_visible(
+        selector_id=UiElementId.PNC_POPUP_CLOSE_BUTTON,
+        x=close_bounds.x,
+        y=close_bounds.y,
+        width=close_bounds.width,
+        height=close_bounds.height,
+        action_point=close_bounds.center(),
+        source_kind=VisibleElementSourceKind.GEOMETRY,
+    )
+    return ObservationAdditions(
+        visible_elements={UiElementId.PNC_POPUP_CLOSE_BUTTON: close_element},
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_POPUP, reason),),
+        popup_overlay=_popup_overlay_from_elements(
+            image=image,
+            elements=((PopupControlKind.CLOSE_X, close_element),),
+            layout_id="recognized_offer",
+            evidence_kind=PopupEvidenceKind.GEOMETRY,
+            reason=reason,
+            modal_bounds=modal_bounds,
+        ),
+    )
+
+
+def _recognized_popup_modal_bounds(*, image: Image.Image, lines: tuple[OcrLine, ...]) -> Bounds | None:
+    """Expand recognized offer OCR into an eligible modal ownership region."""
+
+    content = tuple(line for line in lines if normalize_ocr_text(line.text) != "")
+    if len(content) < 2:
+        return None
+    left = min(line.bounds.x for line in content)
+    right = max(line.bounds.x + line.bounds.width for line in content)
+    top = min(line.bounds.y for line in content)
+    bottom = max(line.bounds.y + line.bounds.height for line in content)
+    horizontal = max(24, int(image.width * 0.08))
+    left = max(0, left - horizontal)
+    right = min(image.width, right + horizontal)
+    top = max(0, top - max(24, int(image.height * 0.09)))
+    bottom = min(image.height, bottom + max(24, int(image.height * 0.03)))
+    bounds = Bounds(x=left, y=top, width=max(1, right - left), height=max(1, bottom - top))
+    if bounds.height < int(image.height * 0.12):
+        return None
+    return bounds
 
 
 def _find_popup_dismiss_anchor(
     *,
     image: Image.Image,
+    lines: tuple[OcrLine, ...],
     anchors: tuple[DetectedTextAnchor, ...],
 ) -> DetectedTextAnchor | None:
-    """Returns the modal dismiss anchor when a popup action row is present."""
+    """Returns Cancel only for the reviewed alliance-invitation layout."""
 
+    if not _has_alliance_invitation_evidence(lines):
+        return None
     for anchor in anchors:
         if anchor.id != TextAnchorId.LABEL_CANCEL:
             continue
@@ -6045,6 +6457,19 @@ def _find_world_map_root_coordinate_line(
         if world_coordinate_text_matches(line.text):
             return line
     return None
+
+
+def _has_alliance_invitation_evidence(lines: tuple[OcrLine, ...]) -> bool:
+    """Require alliance-specific body/title OCR before recognizing its Cancel."""
+
+    for line in lines:
+        normalized = normalize_ocr_text(line.text)
+        if normalized in _ALLIANCE_INVITATION_TITLE_TEXTS:
+            return True
+        tokens = {token for token in _ALLIANCE_INVITATION_BODY_TOKENS if token in normalized}
+        if {"JOIN", "ALLIANCE"}.issubset(tokens) and ({"STRONG", "TOGETHER"} & tokens):
+            return True
+    return False
 
 
 def _find_world_map_root_label_line(
