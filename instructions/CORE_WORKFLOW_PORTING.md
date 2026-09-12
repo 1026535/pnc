@@ -1,6 +1,6 @@
 # Porting a workflow to the replacement core
 
-This guide describes the bounded path for moving one workflow onto the reviewed navigation core. It applies to the shared runtime in `pnc_automation/app/automation/engine/`, the typed PNC observations, and the application and CLI entrypoints. The current implementation is a read-only boundary. A workflow that can change resources is rejected before it observes the device.
+This guide describes the bounded path for moving one workflow onto the reviewed navigation core. It applies to the shared runtime in `pnc_automation/app/automation/engine/`, the typed PNC observations, and the application and CLI entrypoints. The core permits read-only and non-spending state-change workflows; resource-changing workflows are rejected before they observe the device.
 
 ## Canonical owners
 
@@ -10,15 +10,15 @@ This guide describes the bounded path for moving one workflow onto the reviewed 
 | Connected runtime composition | `build_core_runtime` | Builds exactly one `ConnectedAccountRuntime`, uses its existing screenshot service and observed action executor, and does not navigate while constructing the graph. |
 | Reviewed routing and completion | `pnc_automation/app/automation/engine/navigation_core.py:NavigationCore` and `reviewed_navigation_edges` | Current-frame visual evidence authorizes a single action. Completion requires fresh observed destination frames. Unknown screens, unresolved popups, stale frames, and unexpected destinations stop the route. The connected `ObservedActionExecutor` may clear each newly observed safe popup through its explicit selector before routing continues. |
 | Known popup recovery | `CoreRuntime.observe` and `ObservedActionExecutor.recover_interruption_if_required` | Core observations pass through the canonical bounded recovery path. OCR-owned reconnect and Valiant Conquest modals, VIP reset, and generic X popups with an explicit safe selector may be dismissed once per visual fingerprint. Task-owned dialogs, unknown screens, missing selectors, and repeated fingerprints remain fail-closed; Android Back is never inferred. |
-| Workflow effect and lifecycle | `pnc_automation/app/automation/engine/core_workflow.py` | `WorkflowSpec` validates known entry/exit screens and a `WorkflowEffect`. `CoreWorkflowRunner` allows `READ_ONLY`, owns entry, execution, and exit, and reports success only after exit is confirmed. |
+| Workflow effect and lifecycle | `pnc_automation/app/automation/engine/core_workflow.py` | `WorkflowSpec` validates known entry/exit screens and a `WorkflowEffect`. `CoreWorkflowRunner` allows `READ_ONLY` and `NONSPENDING_STATE_CHANGE`, owns entry, execution, and exit, and reports success only after exit is confirmed. |
 | Workflow access | `WorkflowContext` | Exposes only reviewed `navigate` and fresh expected-screen `observe_content`. It has no raw executor, claim, swipe, selector-tap, or transition API. |
 | Typed Daily Quest conversion | `pnc_automation/app/automation/daily_maintenance/coordinator.py:daily_viewport_from_observation` | Converts the canonical typed observation. Do not reimplement row parsing or claim semantics in a replacement workflow. |
-| Application and CLI wiring | `ApplicationRunner.run_daily_quest_status` and `pnc_automation.app.entrypoints.cli` | The application performs explicit active-castle identity preflight before constructing workflow execution. The `daily-quest-status` command emits the typed result as structured JSON. |
+| Application and direct API wiring | `ApplicationRunner.run_daily_quest_status`, `ApplicationRunner.run_collect_mail`, and `pnc_automation.app.entrypoints.api` | Direct application and Python API calls parse and validate before connection, perform explicit active-castle identity preflight, and return typed core results. The `daily-quest-status` CLI remains the structured JSON example; collect-mail has no CLI command. |
 | Mutation authorization | `daily_maintenance/authorization.py:DailyMutationAuthorizer`, `daily_maintenance/coordinator.py:ForbiddenDailyMutationExecutor`, `pnc_automation/app/pnc/persistence/daily_run_journal_store.py:DailyRunJournalStore` | These are the existing approval, executor, and journal owners for future resource-changing work. Do not add a second approval flag or a parallel journal. |
 
 ## Porting sequence
 
-1. Inventory the existing workflow’s canonical parser, typed result, screen controls, navigation edges, tests, authorizer, executor, and journal. Record whether every step is read-only or resource-changing. Reuse the existing parser and result model where they exist.
+1. Inventory the existing workflow’s canonical parser, typed result, screen controls, navigation edges, tests, authorizer, executor, and journal. Record whether every step is read-only, a non-spending state change, or resource-changing. Reuse the existing parser and result model where they exist.
 
 2. Gather game-first route evidence when a required edge is absent or its return screen is conditional. Evidence must show the visible source control, one reviewed action, fresh completion frames, and the actual return destination. Do not infer a route from a coordinate, a remembered camera position, or a legacy fallback.
 
@@ -33,7 +33,7 @@ This guide describes the bounded path for moving one workflow onto the reviewed 
    )
    ```
 
-   A resource-changing spec is intentionally rejected by `CoreWorkflowRunner` before navigation or capture. A future mutation port must first define how the existing exact-budget authorizer, mutation executor, and journal are bridged into the constrained lifecycle.
+   A resource-changing spec is intentionally rejected by `CoreWorkflowRunner` before navigation or capture. A non-spending state change may use `WorkflowEffect.NONSPENDING_STATE_CHANGE`; resource-changing work must first define how the existing exact-budget authorizer, mutation executor, and journal are bridged into the constrained lifecycle.
 
 4. Implement the workflow body through `WorkflowContext`. Navigate to the content screen, call `observe_content(expected_screen=...)` once the destination is confirmed, and pass that observation to the canonical typed converter. The context requires a fresh capture newer than the last navigation observation and rejects an unresolved blocking popup. Known safe popups are handled at the connected runtime observation boundary before the workflow sees them. Do not expose the raw runtime or actuator to the workflow.
 
@@ -111,7 +111,9 @@ Fix this in the canonical popup detector by requiring stronger popup ownership t
 
 Until both issues are fixed, report the Daily result with its `unknown_action` value and do not describe the replacement boundary as merge-ready.
 
-The replacement runner currently supports only `WorkflowEffect.READ_ONLY`. Resource-changing work remains behind the existing Daily authorizer, executor, and journal contracts. Adding a boolean acknowledgement, direct executor access, or a second journal would bypass the intended boundary and is not a valid port.
+The replacement runner supports `WorkflowEffect.READ_ONLY` and `WorkflowEffect.NONSPENDING_STATE_CHANGE`. Collect-mail uses the latter because opening unread mail may update read state and archive persistence writes local files, while it spends no in-game resources. Resource-changing work remains behind the existing Daily authorizer, executor, and journal contracts. Adding a boolean acknowledgement, direct executor access, or a second journal would bypass the intended boundary and is not a valid port.
+
+Direct Python entry points for collect-mail route through `ApplicationRunner.run_collect_mail` and return its typed core result. Authored `TaskId.COLLECT_MAIL` script steps remain on the legacy `ScriptRunner` dispatch path until typed script dispatch is implemented; do not add an adapter that routes those steps through `CoreWorkflowRunner`.
 
 ## Acceptance checklist
 

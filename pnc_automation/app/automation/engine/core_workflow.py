@@ -13,9 +13,10 @@ from pnc_automation.app.pnc.enums.screen_type import ScreenType
 
 
 class WorkflowEffect(StrEnum):
-    """Declares whether a workflow is allowed through the read-only core runner."""
+    """Declares the bounded effect class permitted by the core runner."""
 
     READ_ONLY = "read_only"
+    NONSPENDING_STATE_CHANGE = "nonspending_state_change"
     RESOURCE_CHANGING = "resource_changing"
 
 
@@ -169,12 +170,12 @@ class CoreWorkflowRunner(Generic[T]):
     runtime: CoreRuntime
 
     def run(self, workflow: CoreWorkflow[T]) -> CoreWorkflowResult[T]:
-        """Runs one read-only workflow and returns only after confirmed exit."""
+        """Runs one read-only or non-spending state-change workflow after confirmed exit."""
 
         spec = workflow.spec
         if not isinstance(spec, WorkflowSpec):
             raise TypeError("Core workflows must expose a validated WorkflowSpec.")
-        if spec.effect != WorkflowEffect.READ_ONLY:
+        if spec.effect == WorkflowEffect.RESOURCE_CHANGING:
             self.runtime.record(
                 {
                     "event": "workflow_rejected",
@@ -182,7 +183,9 @@ class CoreWorkflowRunner(Generic[T]):
                     "effect": spec.effect.value if isinstance(spec.effect, WorkflowEffect) else "invalid",
                 }
             )
-            raise PermissionError("The replacement core runner permits read-only workflows only.")
+            raise PermissionError(
+                "The replacement core runner permits read-only and non-spending state-change workflows only."
+            )
         self.runtime.record({"event": "workflow_started", "workflow": spec.name, "effect": spec.effect.value})
         try:
             entry = self.runtime.navigation.navigate(spec.entry_screen)

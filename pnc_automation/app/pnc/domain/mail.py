@@ -281,13 +281,14 @@ def mail_thread_row_key(entry: "DetectedListEntry") -> str:
 
     date_text = entry.metadata.get("date_text")
     normalized_date = normalize_mail_text(date_text) if isinstance(date_text, str) else ""
-    return "|".join(
-        (
-            normalize_mail_text(entry.title_text or ""),
-            normalize_mail_text(entry.subtitle_text or ""),
-            normalized_date,
-        )
+    parts = (
+        normalize_mail_text(entry.title_text or ""),
+        normalize_mail_text(entry.subtitle_text or ""),
+        normalized_date,
     )
+    if not any(parts):
+        return ""
+    return "|".join(parts)
 
 
 def thread_partner_directory_name(sender_name: str) -> str:

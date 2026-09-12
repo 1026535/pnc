@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -18,6 +19,7 @@ from pnc_automation.app.automation.daily_maintenance.daily_quest_status import (
     DailyQuestStatusResult,
     DailyQuestStatusWorkflow,
 )
+from pnc_automation.app.automation.collect_mail import CollectMailResult, CollectMailWorkflow
 from pnc_automation.app.authoring.scripts.registry import build_default_task_registry
 from pnc_automation.core.infra.storage.artifact_store import ArtifactStore
 from pnc_automation.app.pnc.persistence.chat_archive_store import ChatArchiveStore
@@ -26,6 +28,7 @@ from pnc_automation.core.infra.capture.screenshot_service import ScreenshotServi
 from pnc_automation.app.pnc.persistence.castle_roster_store import CastleRosterStore
 from pnc_automation.app.authoring.config.loader import load_app_config
 from pnc_automation.app.authoring.config.models import AppConfig, CastleIdentity, LiveAutomationRole
+from pnc_automation.app.pnc.domain.mail import parse_collect_mail_params
 from pnc_automation.core.infra.diagnostics.logging_setup import configure_logging
 from pnc_automation.core.infra.emulator.bluestacks_instance_resolver import BlueStacksInstanceResolver
 from pnc_automation.app.pnc.vision.observation_builder import (
@@ -132,6 +135,41 @@ class ApplicationRunner:
         try:
             core_runtime.preflight_active_castle_identity()
             return CoreWorkflowRunner[DailyQuestStatusResult](core_runtime).run(DailyQuestStatusWorkflow())
+        finally:
+            core_runtime.close()
+
+    def run_collect_mail(
+        self,
+        *,
+        account_id: str,
+        params: Mapping[str, object],
+        required_role: LiveAutomationRole = LiveAutomationRole.LIVE_TESTING,
+    ) -> CoreWorkflowResult[CollectMailResult]:
+        """Runs the typed collect-mail workflow after validation and active-castle preflight."""
+
+        account = self.script_runner.config.require_account(account_id)
+        parsed_params = parse_collect_mail_params(task_label=TaskId.COLLECT_MAIL, params=params)
+        archive_store = self.script_runner.mail_archive_store
+        if archive_store is None:
+            raise RuntimeError(
+                "Collect-mail replacement workflow requires a configured MailArchiveStore before connecting."
+            )
+        core_runtime = build_core_runtime(
+            self.script_runner,
+            account,
+            account.artifact_directory_name,
+            required_role=required_role,
+        )
+        try:
+            active_castle = core_runtime.preflight_active_castle_identity()
+            workflow = CollectMailWorkflow(
+                params=parsed_params,
+                account_id=account.id,
+                pnc_account_id=account.pnc_account_id,
+                active_castle=active_castle.castle_name,
+                archive_store=archive_store,
+            )
+            return CoreWorkflowRunner[CollectMailResult](core_runtime).run(workflow)
         finally:
             core_runtime.close()
 
