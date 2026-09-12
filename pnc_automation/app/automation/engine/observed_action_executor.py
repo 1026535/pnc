@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Protocol
 
@@ -13,6 +13,11 @@ from pnc_automation.app.automation.engine.action_executor import ActionExecutor
 from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.app.pnc.domain.action_requests import ActionRequest, LaunchAppAction, TapAction
 from pnc_automation.app.pnc.domain.observation import Observation, VisibleElement, VisibleElementSourceKind
+from pnc_automation.app.pnc.domain.popup import (
+    PopupControlKind,
+    TASK_OWNED_POPUP_SCREEN_TYPES,
+    decide_popup_recovery,
+)
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
@@ -30,35 +35,6 @@ _SAFE_TRANSIENT_POPUP_SELECTORS: tuple[UiElementId, ...] = (
     UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON,
     UiElementId.PNC_POPUP_CLOSE_BUTTON,
 )
-
-_TASK_OWNED_POPUP_SCREENS = frozenset(
-    {
-        ScreenType.PNC_BUILDING_UPGRADE_WARNING,
-        ScreenType.PNC_BUILD_SPEEDUP_CONFIRM,
-        ScreenType.PNC_MARCH_CONFIRM,
-        ScreenType.PNC_MAIL_COMPOSE_POPUP,
-        ScreenType.PNC_CHAT_PLAYER_ACTION_POPUP,
-        ScreenType.PNC_ALLIANCE_MEMBER_MANAGE_POPUP,
-        ScreenType.PNC_WORLD_COORDINATE_DIALOG,
-    }
-)
-
-# These controls are explicitly action-owned.  Recovery must never infer ownership
-# from selector names: a generic PNC_POPUP may expose one of these alongside its X.
-_TASK_OWNED_POPUP_SELECTORS = frozenset(
-    {
-        UiElementId.PNC_UPDATE_CONFIRM_BUTTON,
-        UiElementId.PNC_BUILDING_UPGRADE_CONFIRM_BUTTON,
-        UiElementId.PNC_BUILDING_UPGRADE_WARNING_CONFIRM_BUTTON,
-        UiElementId.PNC_BUILD_SPEEDUP_CONFIRM_BUTTON,
-        UiElementId.PNC_MARCH_CONFIRM_BUTTON,
-        UiElementId.PNC_MAIL_COMPOSE_SEND_BUTTON,
-        UiElementId.PNC_CHAT_SEND_BUTTON,
-        UiElementId.PNC_ALLIANCE_MEMBER_MANAGE_PERSONAL_INFO_BUTTON,
-        UiElementId.PNC_CHAT_PLAYER_ACTION_PROFILE_BUTTON,
-    }
-)
-
 
 class ObservationCallback(Protocol):
     """Captures a fresh observation for one action label and request."""
@@ -279,7 +255,13 @@ class ObservedActionExecutor:
         transient popup handling must use ``recover_interruption_if_required``.
         """
 
-        if not observation.has(UiElementId.PNC_UPDATE_CONFIRM_BUTTON):
+        decision = decide_popup_recovery(
+            screen_type=observation.screen_type,
+            blocking_popup=observation.blocking_popup,
+            visible_selector_ids=frozenset(observation.visible_elements),
+            popup_overlay=observation.popup_overlay,
+        )
+        if decision is None or decision.control_kind != PopupControlKind.UPDATE_CONFIRM:
             return None
         return self._recover_required_update(
             observation,
@@ -296,7 +278,13 @@ class ObservedActionExecutor:
     ) -> _InterruptionRecoveryResult:
         """Returns an executor-owned interruption result for internal action-loop use."""
 
-        if not observation.has(UiElementId.PNC_UPDATE_CONFIRM_BUTTON):
+        decision = decide_popup_recovery(
+            screen_type=observation.screen_type,
+            blocking_popup=observation.blocking_popup,
+            visible_selector_ids=frozenset(observation.visible_elements),
+            popup_overlay=observation.popup_overlay,
+        )
+        if decision is None or decision.control_kind != PopupControlKind.UPDATE_CONFIRM:
             if not self._is_popup_observation(observation):
                 return _InterruptionRecoveryResult(None)
             return self._recover_transient_popups(
@@ -320,17 +308,27 @@ class ObservedActionExecutor:
     ) -> Observation:
         """Confirms one detected game update and polls until typed Home is restored."""
 
+        if not self._has_typed_popup_control(observation, PopupControlKind.UPDATE_CONFIRM):
+            raise self._transient_recovery_error(
+                "Required game update confirmation lacks exact typed popup evidence.",
+                observation,
+                selector_id=UiElementId.PNC_UPDATE_CONFIRM_BUTTON,
+            )
         self.logger.info(
             "Confirming required game update and entering bounded Home recovery.",
             extra={"screen_type": observation.screen_type},
         )
         try:
+            dispatch_observation = self._observation_bound_to_popup_candidate(
+                observation,
+                UiElementId.PNC_UPDATE_CONFIRM_BUTTON,
+            )
             confirmed = self.action_executor.execute_action(
                 TapAction(
                     selector_id=UiElementId.PNC_UPDATE_CONFIRM_BUTTON,
                     reason="confirm_required_game_update",
                 ),
-                observation,
+                dispatch_observation,
             )
         except Exception as error:
             raise SelectorResolutionError(
@@ -349,20 +347,50 @@ class ObservedActionExecutor:
         poll_count = self.policy.update_max_wait_seconds // self.policy.update_poll_interval_seconds
         launched_from_android_home = False
         dismissed_popup_fingerprints: set[str] = set()
+        dismissed_popup_identities: set[tuple[object, ...]] = set()
         current = observation
+        required_newer_than = observation.captured_at
         for index in range(poll_count):
             self.sleep(float(self.policy.update_poll_interval_seconds))
             current = observe(
                 f"{label_prefix}_wait_{index + 1}",
                 request=ObservationRequest.full_runtime_default(),
             )
+            if current.frame_fingerprint in dismissed_popup_fingerprints:
+                raise self._transient_recovery_error(
+                    "Post-update popup remained after its one safe dismissal attempt; its visual fingerprint was already consumed.",
+                    current,
+                    fingerprint=current.frame_fingerprint,
+                )
+            if required_newer_than is not None and current.captured_at <= required_newer_than:
+                raise self._transient_recovery_error(
+                    "Required game update recovery received a stale post-dispatch observation.",
+                    current,
+                    captured_at=current.captured_at.isoformat(),
+                    required_newer_than=required_newer_than.isoformat(),
+                )
+            required_newer_than = None
             if current.screen_type == ScreenType.PNC_HOME_CITY and not current.blocking_popup:
                 self.logger.info(
                     "Required game update completed and typed Home was restored.",
                     extra={"poll_count": index + 1},
                 )
                 return current
-            if current.has(UiElementId.PNC_UPDATE_CONFIRM_BUTTON):
+            typed_identity = self._typed_popup_identity(current)
+            if typed_identity is not None and typed_identity in dismissed_popup_identities:
+                current = self._settle_same_typed_popup(
+                    current,
+                    typed_identity=typed_identity,
+                    label_prefix=f"{label_prefix}_popup_{index + 1}",
+                    observe=observe,
+                )
+                if current.screen_type == ScreenType.PNC_HOME_CITY and not current.blocking_popup:
+                    self.logger.info(
+                        "Required game update completed and typed Home was restored after popup settle.",
+                        extra={"poll_count": index + 1},
+                    )
+                    return current
+            if self._has_typed_popup_control(current, PopupControlKind.UPDATE_CONFIRM):
                 continue
             popup_selector = self._transient_popup_selector(current)
             if popup_selector is not None:
@@ -387,13 +415,23 @@ class ObservedActionExecutor:
                         screen_type=current.screen_type,
                         artifact_path=None if current.artifact_path is None else str(current.artifact_path),
                     )
+                typed_identity = self._typed_popup_identity(current)
+                if typed_identity is not None and typed_identity in dismissed_popup_identities:
+                    current = self._settle_same_typed_popup(
+                        current,
+                        typed_identity=typed_identity,
+                        label_prefix=f"{label_prefix}_popup_settle_{index + 1}",
+                        observe=observe,
+                    )
+                    continue
                 try:
+                    dispatch_observation = self._observation_bound_to_popup_candidate(current, popup_selector)
                     dispatched = self.action_executor.execute_action(
                         TapAction(
                             selector_id=popup_selector,
                             reason="dismiss_post_update_popup",
                         ),
-                        current,
+                        dispatch_observation,
                     )
                 except Exception as error:
                     raise SelectorResolutionError(
@@ -411,6 +449,9 @@ class ObservedActionExecutor:
                         artifact_path=None if current.artifact_path is None else str(current.artifact_path),
                     )
                 dismissed_popup_fingerprints.add(fingerprint)
+                if typed_identity is not None:
+                    dismissed_popup_identities.add(typed_identity)
+                required_newer_than = current.captured_at
                 continue
             if current.screen_type == ScreenType.ANDROID_HOME and not launched_from_android_home:
                 launched = self.action_executor.execute_action(
@@ -424,6 +465,7 @@ class ObservedActionExecutor:
                         artifact_path=None if current.artifact_path is None else str(current.artifact_path),
                     )
                 launched_from_android_home = True
+                required_newer_than = current.captured_at
                 continue
             if current.screen_type in {
                 ScreenType.ANDROID_HOME,
@@ -454,8 +496,15 @@ class ObservedActionExecutor:
 
         current = observation
         dismissed_fingerprints: set[str] = set()
+        dismissed_identities: set[tuple[object, ...]] = set()
         while self._is_popup_observation(current):
-            if current.has(UiElementId.PNC_UPDATE_CONFIRM_BUTTON):
+            decision = decide_popup_recovery(
+                screen_type=current.screen_type,
+                blocking_popup=current.blocking_popup,
+                visible_selector_ids=frozenset(current.visible_elements),
+                popup_overlay=current.popup_overlay,
+            )
+            if decision is not None and decision.control_kind == PopupControlKind.UPDATE_CONFIRM:
                 recovered = self._recover_required_update(
                     current,
                     label_prefix=f"{label_prefix}_update",
@@ -481,6 +530,14 @@ class ObservedActionExecutor:
                     current,
                     selector_id=selector,
                 )
+            typed_identity = self._typed_popup_identity(current)
+            if typed_identity is not None and typed_identity in dismissed_identities:
+                raise self._transient_recovery_error(
+                    "Transient popup typed identity was already consumed in this recovery episode.",
+                    current,
+                    selector_id=selector,
+                    popup_identity=typed_identity,
+                )
             if len(dismissed_fingerprints) >= self.policy.update_max_popup_dismissals:
                 raise self._transient_recovery_error(
                     "Transient popup recovery exhausted its bounded distinct-popup dismissal budget.",
@@ -488,13 +545,14 @@ class ObservedActionExecutor:
                     selector_id=selector,
                     dismissed_count=len(dismissed_fingerprints),
                 )
+            dispatch_observation = self._observation_bound_to_popup_candidate(current, selector)
             try:
                 dispatched = self.action_executor.execute_action(
                     TapAction(
                         selector_id=selector,
                         reason="dismiss_transient_popup",
                     ),
-                    current,
+                    dispatch_observation,
                 )
             except Exception as error:
                 raise self._transient_recovery_error(
@@ -510,15 +568,40 @@ class ObservedActionExecutor:
                     selector_id=selector,
                 )
             dismissed_fingerprints.add(fingerprint)
+            if typed_identity is not None:
+                dismissed_identities.add(typed_identity)
             current = observe(
                 f"{label_prefix}_popup_{len(dismissed_fingerprints)}",
                 request=ObservationRequest.full_runtime_default(),
             )
-            current = self._settle_popup_dismissal_observation(
-                current,
-                label_prefix=f"{label_prefix}_popup_{len(dismissed_fingerprints)}",
-                observe=observe,
-            )
+            if current.frame_fingerprint == fingerprint:
+                raise self._transient_recovery_error(
+                    "Transient popup dismissal produced an unchanged visual fingerprint; refusing a second candidate from the stale frame.",
+                    current,
+                    selector_id=selector,
+                    fingerprint=fingerprint,
+                )
+            if current.captured_at <= dispatch_observation.captured_at:
+                raise self._transient_recovery_error(
+                    "Transient popup dismissal received a stale post-dispatch observation.",
+                    current,
+                    selector_id=selector,
+                    captured_at=current.captured_at.isoformat(),
+                    required_newer_than=dispatch_observation.captured_at.isoformat(),
+                )
+            if typed_identity is not None and self._typed_popup_identity(current) == typed_identity:
+                current = self._settle_same_typed_popup(
+                    current,
+                    typed_identity=typed_identity,
+                    label_prefix=f"{label_prefix}_popup_{len(dismissed_fingerprints)}",
+                    observe=observe,
+                )
+            else:
+                current = self._settle_popup_dismissal_observation(
+                    current,
+                    label_prefix=f"{label_prefix}_popup_{len(dismissed_fingerprints)}",
+                    observe=observe,
+                )
             if current.has(UiElementId.PNC_UPDATE_CONFIRM_BUTTON):
                 recovered = self._recover_required_update(
                     current,
@@ -529,6 +612,48 @@ class ObservedActionExecutor:
             if not self._is_popup_observation(current):
                 return _InterruptionRecoveryResult(current)
         return _InterruptionRecoveryResult(current)
+
+    def _settle_same_typed_popup(
+        self,
+        observation: Observation,
+        *,
+        typed_identity: tuple[object, ...],
+        label_prefix: str,
+        observe: ObservationCallback,
+    ) -> Observation:
+        """Waits for a typed popup to finish dismissing without dispatching a second tap."""
+
+        current = observation
+        for settle_index in range(self.policy.max_settle_observations):
+            if self._typed_popup_identity(current) != typed_identity:
+                if is_transitional_observation(current):
+                    return self._settle_popup_dismissal_observation(
+                        current,
+                        label_prefix=label_prefix,
+                        observe=observe,
+                    )
+                return current
+            self._sleep_for_observe()
+            next_observation = observe(
+                f"{label_prefix}_typed_settle_{settle_index + 1}",
+                request=ObservationRequest.full_runtime_default(),
+            )
+            if next_observation.captured_at <= current.captured_at:
+                raise self._transient_recovery_error(
+                    "Transient popup semantic settle received a stale observation; refusing another candidate.",
+                    next_observation,
+                    popup_identity=typed_identity,
+                    captured_at=next_observation.captured_at.isoformat(),
+                    required_newer_than=current.captured_at.isoformat(),
+                )
+            current = next_observation
+        if self._typed_popup_identity(current) == typed_identity:
+            raise self._transient_recovery_error(
+                "Transient popup remained after its one safe dismissal attempt with the same typed identity.",
+                current,
+                popup_identity=typed_identity,
+            )
+        return current
 
     def _settle_popup_dismissal_observation(
         self,
@@ -549,17 +674,25 @@ class ObservedActionExecutor:
             if not is_transitional_observation(current):
                 return current
             self._sleep_for_observe()
-            current = observe(
+            next_observation = observe(
                 f"{label_prefix}_settle_{settle_index + 1}",
                 request=ObservationRequest.full_runtime_default(),
             )
+            if next_observation.captured_at <= current.captured_at:
+                raise self._transient_recovery_error(
+                    "Transient popup dismissal settle received a stale observation.",
+                    next_observation,
+                    captured_at=next_observation.captured_at.isoformat(),
+                    required_newer_than=current.captured_at.isoformat(),
+                )
+            current = next_observation
         return current
 
     @staticmethod
     def _is_popup_observation(observation: Observation) -> bool:
         """Returns whether the observation is a blocking popup state covered by recovery."""
 
-        if observation.screen_type in _TASK_OWNED_POPUP_SCREENS:
+        if observation.screen_type in TASK_OWNED_POPUP_SCREEN_TYPES:
             return False
         return (
             observation.screen_type in {ScreenType.PNC_POPUP, ScreenType.PNC_VIP_DAILY_RESET}
@@ -568,17 +701,81 @@ class ObservedActionExecutor:
         )
 
     @staticmethod
+    def _has_typed_popup_control(observation: Observation, kind: PopupControlKind) -> bool:
+        """Require exact typed evidence before authorizing affirmative popup controls."""
+
+        return observation.popup_overlay is not None and observation.popup_overlay.candidate(kind) is not None
+
+    @staticmethod
+    def _typed_popup_identity(observation: Observation) -> tuple[object, ...] | None:
+        """Return semantic popup evidence stable across animated frame pixels."""
+
+        overlay = observation.popup_overlay
+        if overlay is None:
+            return None
+        candidates = tuple(
+            (
+                candidate.control_kind,
+                candidate.evidence_kind,
+                candidate.reason,
+            )
+            for candidate in overlay.candidates
+        )
+        return (
+            observation.screen_type,
+            overlay.layout_id,
+            overlay.evidence_kind,
+            overlay.reason,
+            candidates,
+        )
+
+    @staticmethod
     def _transient_popup_selector(observation: Observation) -> UiElementId | None:
         """Returns the sole explicit safe selector allowed for a transient popup."""
 
-        if observation.screen_type in _TASK_OWNED_POPUP_SCREENS:
-            return None
-        if any(selector_id in _TASK_OWNED_POPUP_SELECTORS for selector_id in observation.visible_elements):
-            return None
-        for selector_id in _SAFE_TRANSIENT_POPUP_SELECTORS:
-            if observation.has(selector_id):
-                return selector_id
-        return None
+        decision = decide_popup_recovery(
+            screen_type=observation.screen_type,
+            blocking_popup=observation.blocking_popup,
+            visible_selector_ids=frozenset(observation.visible_elements),
+            popup_overlay=observation.popup_overlay,
+        )
+        return None if decision is None else decision.selector_id
+
+    @staticmethod
+    def _observation_bound_to_popup_candidate(observation: Observation, selector: UiElementId) -> Observation:
+        """Dispatch the measured candidate selected from this exact observation frame."""
+
+        overlay = observation.popup_overlay
+        if overlay is None:
+            return observation
+        if selector == UiElementId.PNC_UPDATE_CONFIRM_BUTTON:
+            candidate = overlay.candidate(PopupControlKind.UPDATE_CONFIRM)
+        else:
+            decision = decide_popup_recovery(
+                screen_type=observation.screen_type,
+                blocking_popup=observation.blocking_popup,
+                visible_selector_ids=frozenset(observation.visible_elements),
+                popup_overlay=overlay,
+            )
+            candidate = None if decision is None or decision.control_kind is None else overlay.candidate(decision.control_kind)
+        if candidate is None:
+            return observation
+        elements = dict(observation.visible_elements)
+        elements[selector] = VisibleElement(
+            selector_id=selector,
+            bounds=candidate.bounds,
+            confidence=candidate.confidence,
+            source_kind=(
+                VisibleElementSourceKind.TEMPLATE
+                if candidate.evidence_kind.value == "template"
+                else VisibleElementSourceKind.GEOMETRY
+                if candidate.evidence_kind.value == "geometry"
+                else VisibleElementSourceKind.OCR
+            ),
+            extracted_text=candidate.extracted_text,
+            action_point=candidate.action_point,
+        )
+        return replace(observation, visible_elements=elements)
 
     @staticmethod
     def _transient_recovery_error(
@@ -590,6 +787,27 @@ class ObservedActionExecutor:
 
         if observation.artifact_path is not None:
             details.setdefault("artifact_path", str(observation.artifact_path))
+        overlay = observation.popup_overlay
+        if overlay is not None:
+            details.setdefault("popup_layout", overlay.layout_id)
+            candidate = overlay.candidate(PopupControlKind.UPDATE_CONFIRM)
+            if candidate is None:
+                decision = decide_popup_recovery(
+                    screen_type=observation.screen_type,
+                    blocking_popup=observation.blocking_popup,
+                    visible_selector_ids=frozenset(observation.visible_elements),
+                    popup_overlay=overlay,
+                )
+                candidate = (
+                    None
+                    if decision is None or decision.control_kind is None
+                    else overlay.candidate(decision.control_kind)
+                )
+            if candidate is not None:
+                details.setdefault("popup_control_kind", candidate.control_kind)
+                details.setdefault("popup_action_point", candidate.action_point)
+                details.setdefault("popup_evidence_kind", candidate.evidence_kind)
+                details.setdefault("popup_confidence", candidate.confidence)
         details.setdefault("screen_type", observation.screen_type)
         return SelectorResolutionError(message, **details)
 

@@ -35,6 +35,7 @@ from pnc_automation.app.runtime.observation_mode import ObservationMode
 ALLOWED_TAPS = frozenset({
     UiElementId.PNC_POPUP_CLOSE_BUTTON,
     UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON,
+    UiElementId.PNC_RECONNECT_CONFIRM_BUTTON,
     UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
     UiElementId.PNC_BOTTOM_NAV_MORE,
     UiElementId.PNC_MORE_SETTINGS,

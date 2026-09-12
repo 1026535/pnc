@@ -1,6 +1,6 @@
 ---
 name: create-plan
-description: Create or improve repository-grounded implementation, architecture, migration, and execution plans. Use for plans, roadmaps, phased strategies, or saved planning documents; in PNC, obtain required bounded live evidence and a ChatGPT Pro second opinion before Codex final review.
+description: Create or improve repository-grounded implementation, architecture, migration, and execution plans. Use for plans, roadmaps, phased strategies, or saved planning documents when no ChatGPT Pro consultation is requested; use create-plan-with-chatgpt-pro when the user requests Pro input. In PNC, gather required bounded live evidence when material runtime evidence is unavailable.
 ---
 
 # Create Plan
@@ -8,18 +8,6 @@ description: Create or improve repository-grounded implementation, architecture,
 ## Overview
 
 Create plans that are specific enough to execute, review, and verify. Favor deep context gathering, one canonical design per concept, explicit tradeoffs, clear work breakdown, and concrete validation over generic task lists.
-
-## ChatGPT Pro Consultation And Codex Review
-
-This is a required part of every planning task handled by this skill. The consultation sends selected repository context to an external ChatGPT session and consumes the user's Pro usage. Do not silently skip it because the plan seems small or because local reasoning appears sufficient.
-
-1. Complete the local context-gathering and live-evidence gates before consulting Pro. Establish the repository state, identify the smallest authoritative context, and record the evidence questions that could change the plan.
-2. Invoke [consult-chatgpt-pro](../consult-chatgpt-pro/SKILL.md) with the exact planning objective, verified repository baseline, relevant paths or symbols, known constraints, and decision-oriented questions. The consultation must stay in Chat mode and explicitly use GPT-6 Pro; never use ChatGPT Work, Work cloud, Codex mode, or a fallback model.
-3. Treat the Pro response as advisory input rather than authority. The active Codex task must review every material recommendation against the current repository, applicable `AGENTS.md` files, tests, authored plans, and live evidence. Label agreements, corrections, unsupported claims, and unresolved unknowns.
-4. Incorporate only conclusions that survive the Codex review. Preserve productive disagreement and do not present a Pro claim as repository fact unless the local evidence or the verified GitHub baseline supports it.
-5. Finish the normal workflow and quality gate below. For plans that require a formal live-plan audit, use [review-plan-live](../review-plan-live/SKILL.md) after the draft is assembled; that review and the active Codex audit are authoritative over the external consultation.
-
-If the exact GitHub baseline, Chat mode, or GPT-6 Pro selection is unavailable, or the consultation returns `CONTEXT_BLOCKED` without a recoverable path, stop and report the blocker instead of finalizing an unreviewed plan. Proceed without Pro only if the user explicitly changes this requirement in the current planning task.
 
 ## Workflow
 
@@ -36,17 +24,11 @@ If the exact GitHub baseline, Chat mode, or GPT-6 Pro selection is unavailable, 
 
 ## Live Evidence For Planning
 
-Treat live evidence as a planning input, not merely an implementation-phase recommendation. Before drafting the target design, write down the specific evidence questions whose answers could change selectors, state transitions, architecture, or validation. If any question is material and repository evidence cannot answer it, perform the bounded live workflow now.
+Treat live evidence as a planning input. Before drafting the target design, identify the current-runtime questions whose answers could change selectors, state transitions, architecture, or validation.
 
-The fact that the final behavior is state-changing does not justify skipping all live inspection. Navigate safely up to the last read-only screen, capture the available controls and classifications, then stop before the mutating action. Mark the unobserved transition `unknown` and name the authorization needed to cross it. Skip the whole live workflow only when adequate current artifacts already answer the evidence questions or a precondition/stop condition prevents a safe attempt.
+When a material question is not answered by current repository artifacts, read and follow [references/live-evidence.md](references/live-evidence.md) completely and use the `test-bluestacks-live` workflow. That reference is the canonical owner of target resolution, observation budgets, allowed actions, stop conditions, evidence classifications, and reporting requirements.
 
-When live evidence is needed, use the `test-bluestacks-live` workflow and the repository's canonical runtime abstractions. Resolve the requested account and BlueStacks display name from configuration; if the user gives no live target, use whichever castle is currently active on the configured `testing` instance, verify its identity through observation, and do not select or switch castles. If the user explicitly names a castle, resolve and verify it before any castle navigation. If the configured instance is closed, allow `BlueStacksInstanceResolver` to launch it and wait for the configured ADB endpoint. Do not hard-code an emulator port, device ID, or executable path.
-
-Gather evidence in bounded, reversible increments. Capture a baseline observation, perform at most one existing navigation action, capture the post-action observation and artifacts, and decide whether the evidence is sufficient before continuing. Prefer `ScreenFlowPlanner`, selector-based `ActionRequest` objects, `ObservationService`, and existing live smoke/discovery tools over raw coordinate clicks or ad hoc ADB commands. Read [references/live-evidence.md](references/live-evidence.md) for the safety budget, allowed actions, stop conditions, and evidence reporting contract.
-
-Never perform a state-changing game action solely to obtain planning evidence. Without explicit user authorization, do not build, research, collect, claim, send mail or chat, march, gather, attack, purchase, spend resources, switch accounts, log out, or change authored configuration. If the requested evidence requires one of those actions, stop and record the exact unknown or ask for authorization rather than guessing.
-
-If live evidence was required but could not be gathered, include the attempted target, command or canonical entry point, reached state, artifact paths if any, exact stop condition, and the design decisions that remain provisional. A plan that only says "gather live evidence later" without an attempted bounded run fails this skill.
+A planning request authorizes bounded read-only observation within scope, but never a state-changing game action solely to obtain evidence. Gather evidence up to the mutation boundary and report the remaining unknown instead of guessing. A plan that merely postpones required evidence without the bounded attempt and disposition required by the reference fails this skill.
 
 ## Planning Principles
 

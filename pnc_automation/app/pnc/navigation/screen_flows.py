@@ -41,6 +41,10 @@ from pnc_automation.app.pnc.domain.observation import (
     castle_entry_identity_matches,
     castle_identities_match,
 )
+from pnc_automation.app.pnc.domain.popup import (
+    PopupControlKind,
+    decide_popup_recovery,
+)
 from pnc_automation.app.pnc.domain.screen_contracts import campaign_flow_screen_types
 from pnc_automation.app.pnc.domain.building_catalog import HomeCityMapCoordinate, HomeCityObjectId
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
@@ -113,34 +117,31 @@ class ScreenFlowPlanner:
     def close_blocking_popup(self, observation: Observation) -> list[ActionRequest]:
         """Plans one popup dismissal action."""
 
-        if not observation.blocking_popup and observation.screen_type not in {
-            ScreenType.PNC_POPUP,
-            ScreenType.PNC_VIP_DAILY_RESET,
-        }:
-            return []
-        if observation.has(UiElementId.PNC_UPDATE_CONFIRM_BUTTON):
-            return [
-                TapAction(
-                    selector_id=UiElementId.PNC_UPDATE_CONFIRM_BUTTON,
-                    reason="confirm_required_game_update",
-                    observe_after=True,
-                    follow_up_request=ObservationRequest.full_runtime_default(),
-                )
-            ]
-        if observation.has(UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON):
-            return [
-                TapAction(
-                    selector_id=UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON,
-                    reason="close_vip_daily_reset",
-                    observe_after=True,
-                )
-            ]
-        if observation.has(UiElementId.PNC_POPUP_CLOSE_BUTTON):
-            return [TapAction(selector_id=UiElementId.PNC_POPUP_CLOSE_BUTTON, reason="close_popup", observe_after=True)]
-        raise SelectorResolutionError(
-            "Blocking popup has no typed safe close or update action; Android Back is forbidden.",
+        decision = decide_popup_recovery(
             screen_type=observation.screen_type,
+            blocking_popup=observation.blocking_popup,
+            visible_selector_ids=frozenset(observation.visible_elements),
+            popup_overlay=observation.popup_overlay,
         )
+        if decision is None:
+            return []
+        if decision.blocked or decision.selector_id is None:
+            raise SelectorResolutionError(
+                decision.reason,
+                screen_type=observation.screen_type,
+            )
+        return [
+            TapAction(
+                selector_id=decision.selector_id,
+                reason=decision.reason,
+                observe_after=True,
+                follow_up_request=(
+                    ObservationRequest.full_runtime_default()
+                    if decision.control_kind == PopupControlKind.UPDATE_CONFIRM
+                    else None
+                ),
+            )
+        ]
 
     def _return_to_world_map(self, observation: Observation) -> list[ActionRequest] | None:
         """Returns one canonical unwind step for transient world-map overlays, or `None` when the current screen is not world-map-adjacent."""

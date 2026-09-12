@@ -34,6 +34,12 @@ from pnc_automation.app.pnc.domain.observation import (
     VisibleElement,
     VisibleElementSourceKind,
 )
+from pnc_automation.app.pnc.domain.popup import (
+    PopupControlKind,
+    PopupDismissCandidate,
+    PopupEvidenceKind,
+    PopupOverlayObservation,
+)
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
@@ -189,6 +195,7 @@ def make_observation(
     artifact_path: Path | None = None,
     image_size: tuple[int, int] = (200, 100),
     frame_fingerprint: str | None = None,
+    popup_overlay: PopupOverlayObservation | None = None,
 ) -> Observation:
     """Builds a typed observation with synthetic visible elements."""
 
@@ -202,12 +209,29 @@ def make_observation(
         )
         for index, selector_id in enumerate(visible_ids)
     }
+    if popup_overlay is None and UiElementId.PNC_UPDATE_CONFIRM_BUTTON in visible_elements:
+        update_element = visible_elements[UiElementId.PNC_UPDATE_CONFIRM_BUTTON]
+        popup_overlay = PopupOverlayObservation(
+            image_size=image_size,
+            layout_id="synthetic_required_update",
+            candidates=(
+                PopupDismissCandidate(
+                    control_kind=PopupControlKind.UPDATE_CONFIRM,
+                    bounds=update_element.bounds,
+                    action_point=update_element.action_point or update_element.bounds.center(),
+                    confidence=update_element.confidence,
+                    evidence_kind=PopupEvidenceKind.OCR_TEXT,
+                    extracted_text=update_element.extracted_text,
+                ),
+            ),
+        )
     return Observation(
         screen_type=screen_type,
         visible_elements=visible_elements,
         list_entries=list_entries,
         spatial_surface=spatial_surface,
         blocking_popup=blocking_popup,
+        popup_overlay=popup_overlay,
         current_castle=current_castle or _make_current_castle(current_castle_name),
         current_castle_evidence=_resolve_current_castle_evidence(
             current_castle=current_castle,
