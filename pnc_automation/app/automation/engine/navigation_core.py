@@ -438,7 +438,11 @@ def reviewed_navigation_edges() -> tuple[NavigationEdge, ...]:
         NavigationEdge(screen.PNC_HOME_CITY, selector.PNC_BOTTOM_NAV_BAG, frozenset({screen.PNC_BAG})),
         NavigationEdge(screen.PNC_HOME_CITY, selector.PNC_BOTTOM_NAV_MAIL, frozenset({screen.PNC_MAIL_HUB})),
         NavigationEdge(screen.PNC_HOME_CITY, selector.PNC_CHAT_SHORTCUT, frozenset({screen.PNC_CHAT})),
-        NavigationEdge(screen.PNC_CHAT, selector.PNC_BACK_BUTTON_TOP_LEFT, frozenset({screen.PNC_HOME_CITY})),
+        NavigationEdge(
+            screen.PNC_CHAT,
+            selector.PNC_BACK_BUTTON_TOP_LEFT,
+            frozenset({screen.PNC_HOME_CITY, screen.PNC_WORLD_MAP}),
+        ),
         NavigationEdge(screen.PNC_MAIL_HUB, selector.PNC_BACK_BUTTON_TOP_LEFT, frozenset({screen.PNC_HOME_CITY})),
         NavigationEdge(screen.PNC_MAIL_HUB, selector.PNC_MAIL_ROW_PLAYER_MAIL, frozenset({screen.PNC_MAILBOX_LIST})),
         NavigationEdge(screen.PNC_MAIL_HUB, selector.PNC_MAIL_ROW_ALLIANCE_MAIL, frozenset({screen.PNC_MAILBOX_LIST})),

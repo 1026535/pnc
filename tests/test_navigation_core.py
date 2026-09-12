@@ -10,7 +10,12 @@ from unittest.mock import Mock
 
 from PIL import Image
 
-from pnc_automation.app.automation.engine.navigation_core import NavigationCore, NavigationPolicy, reviewed_navigation_edges
+from pnc_automation.app.automation.engine.navigation_core import (
+    NavigationCore,
+    NavigationEdge,
+    NavigationPolicy,
+    reviewed_navigation_edges,
+)
 from pnc_automation.app.pnc.domain.action_requests import SelectChatChannelAction, SwipeAction, TapPointAction
 from pnc_automation.app.pnc.domain.mail import (
     MailboxAvailability,
@@ -168,9 +173,82 @@ class NavigationCoreTests(unittest.TestCase):
             {(edge.source, edge.selector, edge.destinations) for edge in edges},
         )
         self.assertIn(
-            (ScreenType.PNC_CHAT, UiElementId.PNC_BACK_BUTTON_TOP_LEFT, frozenset({ScreenType.PNC_HOME_CITY})),
+            (
+                ScreenType.PNC_CHAT,
+                UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+                frozenset({ScreenType.PNC_HOME_CITY, ScreenType.PNC_WORLD_MAP}),
+            ),
             {(edge.source, edge.selector, edge.destinations) for edge in edges},
         )
+
+    def test_chat_back_replans_from_world_parent_and_returns_home_once(self):
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+
+        def frame(screen, selector, captured_at):
+            return Observation(
+                screen_type=screen,
+                visible_elements={
+                    selector: VisibleElement(
+                        selector,
+                        Bounds(10, 20, 40, 40),
+                        1.0,
+                        source_kind=VisibleElementSourceKind.TEMPLATE,
+                    ),
+                },
+                image_size=(540, 960),
+                captured_at=captured_at,
+            )
+
+        frames = iter(
+            (
+                frame(ScreenType.PNC_CHAT, UiElementId.PNC_BACK_BUTTON_TOP_LEFT, now),
+                frame(ScreenType.PNC_CHAT, UiElementId.PNC_BACK_BUTTON_TOP_LEFT, now + timedelta(seconds=1)),
+                frame(ScreenType.PNC_WORLD_MAP, UiElementId.PNC_WORLD_HOME_NAV, now + timedelta(seconds=2)),
+                frame(ScreenType.PNC_WORLD_MAP, UiElementId.PNC_WORLD_HOME_NAV, now + timedelta(seconds=3)),
+                frame(ScreenType.PNC_WORLD_MAP, UiElementId.PNC_WORLD_HOME_NAV, now + timedelta(seconds=4)),
+                frame(ScreenType.PNC_HOME_CITY, UiElementId.PNC_HOME_WORLD_SWITCH, now + timedelta(seconds=5)),
+                frame(ScreenType.PNC_HOME_CITY, UiElementId.PNC_HOME_WORLD_SWITCH, now + timedelta(seconds=6)),
+            )
+        )
+        observed_labels = []
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator,
+            lambda label: (observed_labels.append(label) or next(frames)),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+
+        result = core.navigate(ScreenType.PNC_HOME_CITY)
+
+        self.assertEqual(ScreenType.PNC_HOME_CITY, result.screen_type)
+        self.assertEqual(
+            [UiElementId.PNC_BACK_BUTTON_TOP_LEFT, UiElementId.PNC_WORLD_HOME_NAV],
+            [action.selector_id for action in actuator.actions],
+        )
+        self.assertEqual(1, sum(action.selector_id == UiElementId.PNC_BACK_BUTTON_TOP_LEFT for action in actuator.actions))
+        self.assertEqual(2, len(actuator.actions))
+        self.assertEqual(
+            [
+                "core_route_source",
+                "core_1_source",
+                "core_1_after_0",
+                "core_1_after_1",
+                "core_2_source",
+                "core_2_after_0",
+                "core_2_after_1",
+            ],
+            observed_labels,
+        )
+
+    def test_navigation_edge_rejects_unknown_destination(self):
+        with self.assertRaises(ValueError):
+            NavigationEdge(
+                ScreenType.PNC_CHAT,
+                UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+                frozenset({ScreenType.UNKNOWN}),
+            )
 
     def test_select_chat_channel_returns_without_tap_when_requested_channel_is_active(self):
         now = datetime(2026, 9, 12, tzinfo=UTC)
