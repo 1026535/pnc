@@ -8,6 +8,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 
+import numpy as np
 from PIL import Image
 
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
@@ -5334,12 +5335,9 @@ def _has_visual_popup_surface(*, image: Image.Image, close_bounds: Bounds) -> bo
     if right <= left or bottom <= top:
         return False
 
-    luminances: list[float] = []
-    for y in range(top, bottom):
-        for x in range(left, right):
-            red, green, blue = rgb_image.getpixel((x, y))
-            luminances.append((red + green + blue) / 3)
-    mean = sum(luminances) / len(luminances)
+    rgb_values = np.asarray(rgb_image.crop((left, top, right, bottom)), dtype=np.uint8)
+    channel_sums = rgb_values.astype(np.int32).sum(axis=2, dtype=np.int32)
+    mean = float(channel_sums.mean(dtype=np.float64) / 3.0)
     if mean > 105:
         return False
 
@@ -5375,18 +5373,17 @@ def _vertical_surface_edge_contrast(
 ) -> float:
     """Returns the strongest mean luminance edge in one candidate panel band."""
 
-    strongest = 0.0
-    for x in range(start, end):
-        neighbor = x - 5 if direction > 0 else x + 5
-        differences = []
-        for y in range(top, bottom):
-            red, green, blue = rgb_image.getpixel((x, y))
-            neighbor_red, neighbor_green, neighbor_blue = rgb_image.getpixel((neighbor, y))
-            differences.append(
-                abs((red + green + blue) - (neighbor_red + neighbor_green + neighbor_blue)) / 3
-            )
-        strongest = max(strongest, sum(differences) / len(differences))
-    return strongest
+    if start >= end or top >= bottom:
+        return 0.0
+    rgb_values = np.asarray(rgb_image, dtype=np.uint8)
+    channel_sums = rgb_values.astype(np.int32).sum(axis=2, dtype=np.int32)
+    columns = np.arange(start, end)
+    neighbor_columns = columns - 5 if direction > 0 else columns + 5
+    differences = np.abs(
+        channel_sums[top:bottom, columns].astype(np.int32)
+        - channel_sums[top:bottom, neighbor_columns].astype(np.int32)
+    ) / 3.0
+    return float(np.max(np.mean(differences, axis=0)))
 
 
 def _build_visual_building_upgrade_warning_additions(*, image: Image.Image) -> ObservationAdditions | None:
@@ -5449,12 +5446,13 @@ def _find_visual_popup_close_bounds(
         search_right = min(image.width, max(search_left + 1, search_right))
         search_top = max(0, search_top)
         search_bottom = min(image.height, max(search_top + 1, search_bottom))
-    bright_pixels = {
-        (x, y)
-        for y in range(search_top, search_bottom)
-        for x in range(search_left, search_right)
-        if _is_bright_popup_close_pixel(rgb_image.getpixel((x, y)))
-    }
+    bright_pixels = _bright_popup_close_pixels(
+        rgb_image=rgb_image,
+        left=search_left,
+        top=search_top,
+        right=search_right,
+        bottom=search_bottom,
+    )
     candidates: list[Bounds] = []
     neighbor_offsets = tuple(
         (x_offset, y_offset)
@@ -5511,15 +5509,51 @@ def _is_modal_close_candidate(*, bounds: Bounds, modal_bounds: Bounds) -> bool:
     )
 
 
+_BRIGHT_POPUP_CLOSE_MIN_CHANNEL = 200
+_BRIGHT_POPUP_CLOSE_GOLD_RED = 190
+_BRIGHT_POPUP_CLOSE_GOLD_GREEN = 160
+_BRIGHT_POPUP_CLOSE_GOLD_BLUE = 55
+_BRIGHT_POPUP_CLOSE_GOLD_SUM = 480
+
+
+def _bright_popup_close_pixels(
+    *,
+    rgb_image: Image.Image,
+    left: int,
+    top: int,
+    right: int,
+    bottom: int,
+) -> set[tuple[int, int]]:
+    """Returns bright popup-close pixels with coordinates relative to the full image."""
+
+    rgb_values = np.asarray(rgb_image.crop((left, top, right, bottom)), dtype=np.uint8)
+    channel_values = rgb_values.astype(np.uint16)
+    channel_sum = channel_values.sum(axis=2, dtype=np.uint16)
+    bright_mask = (
+        (channel_values.min(axis=2) >= _BRIGHT_POPUP_CLOSE_MIN_CHANNEL)
+        | (
+            (channel_values[..., 0] >= _BRIGHT_POPUP_CLOSE_GOLD_RED)
+            & (channel_values[..., 1] >= _BRIGHT_POPUP_CLOSE_GOLD_GREEN)
+            & (channel_values[..., 2] >= _BRIGHT_POPUP_CLOSE_GOLD_BLUE)
+            & (channel_sum >= _BRIGHT_POPUP_CLOSE_GOLD_SUM)
+        )
+    )
+    relative_y, relative_x = np.nonzero(bright_mask)
+    return {
+        (int(x) + left, int(y) + top)
+        for x, y in zip(relative_x, relative_y, strict=True)
+    }
+
+
 def _is_bright_popup_close_pixel(pixel: tuple[int, int, int]) -> bool:
     """Accepts the white or gold luminous pixels used by P&C popup close glyphs."""
 
     red, green, blue = pixel
-    return min(pixel) >= 200 or (
-        red >= 190
-        and green >= 160
-        and blue >= 55
-        and red + green + blue >= 480
+    return min(pixel) >= _BRIGHT_POPUP_CLOSE_MIN_CHANNEL or (
+        red >= _BRIGHT_POPUP_CLOSE_GOLD_RED
+        and green >= _BRIGHT_POPUP_CLOSE_GOLD_GREEN
+        and blue >= _BRIGHT_POPUP_CLOSE_GOLD_BLUE
+        and red + green + blue >= _BRIGHT_POPUP_CLOSE_GOLD_SUM
     )
 
 

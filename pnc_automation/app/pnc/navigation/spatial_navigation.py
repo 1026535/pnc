@@ -1210,7 +1210,7 @@ class HomeCityNavigator(SpatialSurfaceNavigator):
     def focus_step_budget(self) -> int:
         """Returns the bounded number of canonical fixed-map tour steps available for one home-city search."""
 
-        return len(_home_city_scan_steps()) * _HOME_CITY_FIXED_MAP_TOUR_PASSES
+        return home_city_scan_step_budget()
 
     def estimate_viewport_center(self, observation: Observation) -> HomeCityMapCoordinate | None:
         """Returns the inferred home-city atlas center from the currently visible anchor buildings when possible."""
@@ -1286,7 +1286,7 @@ class HomeCityNavigator(SpatialSurfaceNavigator):
             if focus_actions:
                 return focus_actions
         step_index = int(state.get("step_index", 0))
-        scan_steps = _home_city_scan_steps()
+        scan_steps = home_city_scan_steps()
         if step_index >= self.focus_step_budget():
             raise SelectorResolutionError(
                 "Home-city navigation exhausted its canonical fixed-map tour without finding the target object.",
@@ -2188,8 +2188,8 @@ def _remember_guided_view_attempt(
     return True
 
 
-def _home_city_scan_steps() -> tuple[SwipeAction, ...]:
-    """Returns the canonical fixed-map tour: upper sweep right-to-left, lower shift, lower sweep left-to-right, then reset."""
+def home_city_scan_steps() -> tuple[SwipeAction, ...]:
+    """Returns the canonical bounded home-city scan gesture sequence."""
 
     return (
         SwipeAction(
@@ -2259,12 +2259,18 @@ def _home_city_scan_steps() -> tuple[SwipeAction, ...]:
             reason="scan_home_city_reset_to_upper_view",
             observe_after=True,
             follow_up_request=ObservationRequest.source_screen_retry(ScreenType.PNC_HOME_CITY),
-            start_x_ratio=0.55,
-            start_y_ratio=0.72,
-            end_x_ratio=0.55,
-            end_y_ratio=0.28,
+            start_x_ratio=0.45,
+            start_y_ratio=0.54,
+            end_x_ratio=0.45,
+            end_y_ratio=0.26,
         ),
     )
+
+
+def home_city_scan_step_budget() -> int:
+    """Returns the canonical bounded number of home-city scan gestures."""
+
+    return len(home_city_scan_steps()) * _HOME_CITY_FIXED_MAP_TOUR_PASSES
 
 
 def _resolve_target_point(*, target: DetectedSpatialObject, use_action_point: bool) -> tuple[int, int]:

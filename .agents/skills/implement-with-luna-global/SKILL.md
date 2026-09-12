@@ -5,7 +5,7 @@ description: Orchestrate substantial repository implementation through GPT-5.6 L
 
 # Implement With Luna Global
 
-Use Luna for substantial implementation while the invoking agent (the **root**) remains responsible for intent, architecture, coordination, review, and the user conversation. Follow the active repository's instructions and established workflows; this skill does not replace them.
+Use Luna for substantial implementation while the invoking agent (the **root**) remains responsible for requirements, architecture, coordination, integration, formal review, acceptance, and user communication. The root is the sole architecture and formal acceptance authority. Each Luna implementer must self-review its complete implementation before handoff, but that self-review is an implementation quality gate, not independent or formal acceptance. Follow the active repository's instructions and established workflows; this skill does not replace them.
 
 ## Configure Delegation
 
@@ -22,11 +22,11 @@ The root owns:
 
 - unresolved requirements and user choices;
 - design, architecture, canonical ownership, public contracts, and task decomposition;
-- worker assignment, steering, integration decisions, formal review, and the final answer.
+- worker assignment, steering, integration decisions, formal review, acceptance, and the final answer.
 
-Luna owns only substantial concrete implementation within approved intent, including the code changes and narrowly necessary test, documentation, or cleanup edits that are part of implementing that intent. Luna may make ordinary low-level choices that preserve the approved design and repository rules, but must not own requirements interpretation, architecture changes, integration decisions, acceptance, formal review, or review findings.
+Luna owns only substantial concrete implementation within approved intent, including the code changes and narrowly necessary test, documentation, or cleanup edits that are part of implementing that intent. Before handoff, Luna must inspect the whole consolidated diff against the task, repository rules, and approved design, run proportionate validation, fix the issues it finds, and report the final reviewed result. This self-review is an implementation quality gate; Luna must not own requirements interpretation, architecture changes, integration decisions, formal review, or acceptance. If self-review exposes a requirements or architecture blocker, Luna must escalate it instead of silently changing scope.
 
-The root may make a small mechanical integration or contained correction when another handoff would cost more than the work. Do not edit the same worktree while a worker is writing. Return substantial work or architectural decisions to Luna only after the root resolves the intended design.
+Do not edit the same worktree while a worker is writing. Return substantial implementation corrections to the same Luna implementer after the root resolves the intended design or formal-review finding.
 
 ## Establish readiness
 
@@ -42,10 +42,10 @@ Give each worker only information that changes implementation decisions:
 - its exact scope, working directory or branch, and pre-existing changes to preserve;
 - applicable repository instructions and canonical owners to inspect;
 - required behavior, constraints, non-goals, migration, cleanup, and documentation impact;
-- acceptance evidence and proportionate validation commands;
+- required evidence and proportionate validation commands;
 - PNC-specific validation expectations: targeted `unittest` coverage followed by the full offline suite when the change is cross-cutting, plus the smallest relevant opt-in BlueStacks smoke path for live behavior;
 - escalation conditions for changes to ownership, public API, invariant, architecture, scope, or validation intent;
-- the completion contract: changed files, implementation status, commands run if any, commit or diff state, divergences, and unresolved implementation issues. Do not request a review verdict from Luna.
+- the completion contract: before handoff, Luna must self-review the complete consolidated result, correct its findings, and report changed files, implementation status, validation commands and results, self-review findings and corrections, commit or diff state, divergences, and unresolved implementation issues. Do not request a formal review or acceptance verdict from Luna.
 
 Link authoritative local material instead of copying it. Do not ask Luna to redesign settled architecture or repeat research already completed by the root.
 
@@ -80,14 +80,14 @@ When a worker struggles or diverges, identify whether the cause is:
 
 Do not take over substantial implementation merely because the first attempt failed, and do not preserve a flawed direction merely to keep a worker running.
 
-## Complete, review, and correct
+## Self-review, review, and correct
 
-1. Have Luna return the implementation diff, changed files, commands it ran, divergences, and unresolved implementation issues. Treat any Luna self-assessment as implementation context, not as review or acceptance.
-2. The root verifies that one authoritative branch, commit, or diff contains the complete integrated result and runs the proportionate validation required by the governing repository instructions.
-3. The root formally reviews that result against the approved intent and repository rules using [review-code](../review-code/SKILL.md). The root owns the review verdict and all acceptance decisions.
-4. Send precise, bounded correction instructions back to the persistent Luna implementer when findings require implementation changes. Luna implements those corrections only; it does not decide whether the finding is valid or whether the result is accepted.
-5. The root re-reviews the corrected authoritative result and repeats the implementation/review loop only while concrete findings remain.
-6. Finish when the root's review has no actionable findings, required validation is satisfactory, and the result is on the intended branch or worktree.
+1. Have Luna implement the approved intent, then inspect the whole final consolidated diff against the task and repository rules, run proportionate validation, and correct every implementation issue it finds before handoff. Luna must report the changed files, validation and results, self-review findings and corrections, divergences, and unresolved issues. Treat this self-review as implementation context and a quality gate, never as formal review or acceptance.
+2. The root receives and reviews only Luna's final consolidated work, except for read-only progress inspection or a real requirements/architecture blocker that Luna escalates. The root verifies that one authoritative branch, commit, or diff contains the complete integrated result and runs the proportionate validation required by the governing repository instructions.
+3. The root formally reviews that final result against the approved intent and repository rules using [review-code](../review-code/SKILL.md). The root remains the sole formal review and acceptance authority.
+4. If the root's final review finds an issue, send precise, bounded correction instructions to the same persistent Luna implementer. Luna corrects only within the approved intent, then self-reviews the new complete consolidated result, reruns proportionate validation, and reports the updated findings, corrections, and status before handing it back.
+5. The root re-reviews that corrected consolidated result and repeats the implementation/self-review/formal-review loop only while concrete findings remain.
+6. Finish when the root's formal review has no actionable findings, required validation is satisfactory, and the result is on the intended branch or worktree.
 
 Ask the user only for a material unresolved choice, new authority, or genuine external blocker. Never push, publish, deploy, or perform another externally consequential action unless the user or governing repository workflow explicitly authorizes it.
 
