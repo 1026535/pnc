@@ -7,7 +7,7 @@ import os
 import re
 import uuid
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable
 
@@ -33,6 +33,7 @@ from pnc_automation.app.pnc.persistence.chat_archive_state import (
     decode_state_document,
     state_document,
     state_bytes,
+    validate_snapshot,
 )
 from pnc_automation.app.pnc.persistence.chat_archive_transaction import (
     ChatArchiveConsistencyError,
@@ -126,8 +127,17 @@ class ChatArchiveStore:
         """Recovers prior work and persists one current heartbeat under one stream lock."""
 
         _validate_captured_at(captured_at)
-        archive_day = captured_at.date().isoformat()
-        directory = self._build_directory(account_id=account_id, castle=castle, channel=channel, captured_at=captured_at)
+        try:
+            snapshot = validate_snapshot(snapshot)
+        except ChatArchiveSchemaError as error:
+            raise ChatArchiveConsistencyError("Chat snapshot is malformed.") from error
+        archive_day = captured_at.astimezone().date().isoformat()
+        directory = self._build_directory_for_local_day(
+            account_id=account_id,
+            castle=castle,
+            channel=channel,
+            local_day=archive_day,
+        )
         state_path = directory / "state.json"
         transcript_path = directory / "transcript.log"
         scope = chat_archive_scope(
@@ -154,7 +164,7 @@ class ChatArchiveStore:
             )
             previous_state = current_state
             if previous_state is None:
-                previous_day = (captured_at.date() - timedelta(days=1)).isoformat()
+                previous_day = (date.fromisoformat(archive_day) - timedelta(days=1)).isoformat()
                 previous_directory = self._build_directory_for_local_day(
                     account_id=account_id,
                     castle=castle,
@@ -423,7 +433,7 @@ class ChatArchiveStore:
             account_id=account_id,
             castle=castle,
             channel=channel,
-            local_day=captured_at.date().isoformat(),
+            local_day=captured_at.astimezone().date().isoformat(),
         )
 
     def _build_directory_for_local_day(self, *, account_id: str, castle: CastleIdentity, channel: ChatChannel, local_day: str) -> Path:
