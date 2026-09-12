@@ -99,20 +99,34 @@ mutation boundary. A owns workflow postcondition decisions; B owns the reusable 
 supporting them. Retain `DailyMutationAuthorizer`, `JournaledMutationDispatcher`,
 `DailyRunJournalStore`, the observed executor and canonical lifecycle/leases.
 
-Default edit ownership: A owns engine/workflow/entrypoint code, navigation graph and
-operations, workflow policies and caller migration; B owns vision/classifier/catalog/
-selector producer code and assets, observation requests/provenance, OCR and benchmark
-tooling. Existing storage/lease internals are reused, not redesigned. Domain observation
-models, selector IDs/registry and mixed integration tests are shared files: before either
-worker edits a shared file, supervisors agree the exact symbols and assign one writer
-for that slice. B writes producer/selector declarations; A writes action/route consumers.
+Fixed edit ownership: A owns engine/workflow/entrypoint code, runtime composition,
+navigation graph and operations, action requests/effects, workflow policies, caller
+migration and combined integration tests. B owns domain observation models and facts,
+screen/control identifiers and selector declarations/registry, vision/classifier/catalog
+code and assets, observation producers/requests/provenance, OCR, producer tests and
+benchmark tooling. Existing storage/lease internals are reused, not redesigned. In mixed
+files these symbol responsibilities still apply; an inseparable change is assembled by
+A during integration from B's reviewed producer changes. Do not edit a peer's worktree.
 
-For each dependency, record a short contract in the relevant task plan: producer symbol,
-consumer operation, required facts, unknown/blocked behavior, fixture and acceptance test.
-The proposing supervisor settles the contract with the other before parallel coding of
-dependent halves. No giant up-front schema or duplicate contract copied into both plans.
-Supervisors may exchange concise interface/blocker/commit messages between A and B under
-this handoff; those messages must not authorize live actions or expand scope.
+B decides and publishes observation interfaces through the existing canonical models;
+A consumes published facts. Preserve existing consumer semantics. Record each coherent
+producer batch's public symbols, unknown/blocked behavior, fixtures and acceptance evidence
+once in B's plan/report, then send A one ready-to-integrate notice with its commit.
+Consumer approval before each producer slice is not required. A integrates at its next
+useful dependency boundary, without waiting for B's whole backlog.
+
+A records missing facts once in its dependency list and continues unblocked work. Send
+one consolidated request when a missing contract materially blocks progress or changes
+the critical path; do not repeat already recorded requests. Actual breaking changes,
+unresolvable integration conflicts and safety issues warrant a concrete escalation.
+Routine startup/status/acknowledgement exchanges, peer polling and per-slice ownership
+negotiation are unnecessary. User-facing progress updates remain separate. These process
+rules do not authorize live actions or expand implementation scope.
+
+This September 12 correction applies forward: retain contracts already settled and work
+already underway. Do not restart the inventory or renegotiate Login/Gathering evidence
+gaps merely to adopt it. Missing visual evidence remains a real dependency, not a reason
+to invent a control, weaken a receipt or negotiate repeatedly.
 
 ## Execution and usage discipline
 
@@ -122,17 +136,18 @@ bounded slices; do not create a new user-visible task for each slice or a review
 For grunt work, offload long-running, repetitive, specific or concrete work that consumes
 many tokens but does not require complex reasoning to that Luna xhigh agent. The supervisor
 remains in charge of complex or uncertain work, analysis, reasoning and orchestration.
-Settle the contract and acceptance checks before delegating; review the worker's diff
+The responsible supervisor defines its contract and acceptance checks before delegating;
+this does not require a peer approval round. Review the worker's diff
 and evidence rather than treating its completion message as acceptance. Luna implements
 concrete code/tests in the supervisor's assigned isolated worktree. Do not delegate an
 unresolved architecture decision merely because its implementation will be lengthy.
 Luna does not perform live actions, publish main or modify another owner's worktree.
 
-A first establishes X01's concrete contract while its worker inventories/ports the
-independent Login slice where existing evidence suffices. B first refreshes B01 once,
-then assigns a bounded Gathering/March producer slice, prioritizing specific A requests
-for login/mail facts when they unblock work. Reorder remaining independent rows by actual
-dependency and evidence availability, without restarting completed rows.
+A owns X01 and evidence-supported consumer migrations; if Login lacks controls, continue
+the existing Daily adapter or another unblocked port. B owns the once-only B01 inventory
+and coherent producer-family batches, starting with evidence-supported Gathering/March
+controls and the recorded login/mail dependencies. Reorder remaining independent rows by
+actual dependency and evidence availability, without restarting completed or active work.
 
 Work in workflow-named `codex/` feature branches for A and a recognition continuation
 branch for B. Start from the published coordinated plan commit (or a descendant containing
