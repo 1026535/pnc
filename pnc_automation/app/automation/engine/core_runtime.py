@@ -25,6 +25,8 @@ from pnc_automation.app.automation.engine.navigation_core import (
 )
 from pnc_automation.app.automation.engine.script_runner import ConnectedAccountRuntime, ScriptRunner
 from pnc_automation.core.infra.storage.path_segments import sanitize_artifact_segment
+from pnc_automation.core.infra.emulator.session import BlueStacksSessionCleanupPolicy
+from pnc_automation.core.lifecycle import close_preserving_error
 
 
 @dataclass(slots=True)
@@ -55,7 +57,12 @@ class CoreRuntime:
     def __exit__(self, _exception_type: object, _exception: object, _traceback: object) -> None:
         """Releases the replacement-core runtime on exit."""
 
-        self.close()
+        active_error = _exception if isinstance(_exception, BaseException) else None
+        close_preserving_error(
+            self.close,
+            active_error,
+            message="Core runtime operation and BlueStacks phase cleanup both failed.",
+        )
 
     @property
     def observation_count(self) -> int:
@@ -227,6 +234,7 @@ def build_core_runtime(
     *,
     trace_path: Path | None = None,
     required_role: LiveAutomationRole | None = None,
+    session_cleanup_policy: BlueStacksSessionCleanupPolicy | None = None,
 ) -> CoreRuntime:
     """Builds exactly one connected runtime graph for replacement-core work."""
 
@@ -235,6 +243,7 @@ def build_core_runtime(
     connected_runtime = script_runner.build_connected_runtime(
         account=account,
         required_role=required_role,
+        session_cleanup_policy=session_cleanup_policy,
     )
     try:
         return _assemble_core_runtime(
@@ -245,8 +254,12 @@ def build_core_runtime(
             policy=policy,
             trace_path=trace_path,
         )
-    except BaseException:
-        connected_runtime.close()
+    except BaseException as error:
+        close_preserving_error(
+            connected_runtime.close,
+            error,
+            message="Core runtime construction and BlueStacks phase cleanup both failed.",
+        )
         raise
 
 

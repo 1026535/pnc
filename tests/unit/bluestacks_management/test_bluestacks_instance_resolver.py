@@ -126,6 +126,9 @@ class BlueStacksInstanceResolverTests(unittest.TestCase):
             self.assertEqual(instance.display_name, "serious_stuff")
             self.assertEqual(instance.device_id, "127.0.0.1:5555")
             self.assertEqual(instance.app_package, "com.global.tmslg")
+            self.assertEqual(instance.host_instance_key, "Nougat32")
+            self.assertEqual(instance.process_id, 101)
+            self.assertFalse(instance.started_by_resolver)
 
     def test_resolve_rejects_missing_host_config_file(self) -> None:
         """Fails fast when the configured BlueStacks host metadata file does not exist."""
@@ -253,6 +256,9 @@ class BlueStacksInstanceResolverTests(unittest.TestCase):
             self.assertEqual(instance.device_id, "127.0.0.1:5555")
             self.assertEqual(launcher.launched_instance_keys, ["Nougat32"])
             self.assertEqual(running_source.calls, 2)
+            self.assertEqual(instance.host_instance_key, "Nougat32")
+            self.assertEqual(instance.process_id, 102)
+            self.assertTrue(instance.started_by_resolver)
 
     def test_resolve_allow_launch_false_rejects_stopped_instance_without_launching(self) -> None:
         """Enforces the caller's read-only capability before any BlueStacks launch request."""

@@ -11,6 +11,7 @@ from pnc_automation.app.automation.engine.core_runtime import build_core_runtime
 from pnc_automation.app.automation.engine.core_workflow import CoreWorkflowRunner
 from pnc_automation.app.authoring.config.models import LiveAutomationRole
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from tests.live_smoke_support import live_session_cleanup_policy_from_environment
 
 
 def _live_smoke_enabled() -> bool:
@@ -48,6 +49,7 @@ class LiveCoreWorkflowSmokeTests(unittest.TestCase):
             account,
             account.artifact_directory_name,
             required_role=LiveAutomationRole.SMOKE_TEST,
+            session_cleanup_policy=live_session_cleanup_policy_from_environment(),
         )
         cls.addClassCleanup(core_runtime.close)
         cls.recovered = CoreWorkflowRunner(core_runtime).recover_to_home()

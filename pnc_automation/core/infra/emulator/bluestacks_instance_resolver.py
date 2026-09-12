@@ -323,8 +323,10 @@ class BlueStacksInstanceResolver:
             return BlueStacksInstance.from_config(
                 config,
                 device_id=match.require_device_id(config_path=self.config_path, adb_host=self.adb_host),
+                host_instance_key=match.instance_key,
             )
         running_instance_keys = catalog.running_instance_keys()
+        started_by_resolver = False
         if match.instance_key not in running_instance_keys:
             if not allow_launch:
                 raise ConfigurationError(
@@ -354,6 +356,7 @@ class BlueStacksInstanceResolver:
                     bluestacks_config_path=str(self.config_path),
                 )
             match = refreshed_matches[0]
+            started_by_resolver = True
         matched_port = match.require_adb_port(config_path=self.config_path)
         matching_running_port_claims = tuple(
             record
@@ -371,9 +374,16 @@ class BlueStacksInstanceResolver:
                 bluestacks_config_path=str(self.config_path),
             )
 
+        matching_processes = tuple(
+            item for item in catalog.running_instances if item.instance_key == match.instance_key
+        )
+        process_id = matching_processes[0].process_id if len(matching_processes) == 1 else None
         return BlueStacksInstance.from_config(
             config,
             device_id=match.require_device_id(config_path=self.config_path, adb_host=self.adb_host),
+            host_instance_key=match.instance_key,
+            process_id=process_id,
+            started_by_resolver=started_by_resolver,
         )
 
     def _launch_and_wait_for_instance(
