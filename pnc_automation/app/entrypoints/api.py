@@ -144,6 +144,8 @@ class AutomationSession:
     def __enter__(self) -> "AutomationSession":
         """Prepares the account session and exposes it as the active direct-call scope."""
 
+        if self._reservation is not None:
+            raise RuntimeError("An automation session cannot be entered twice without being closed.")
         reservation = self.api.reserve_accounts(
             (self.account_id,),
             session_cleanup_policy=self.session_cleanup_policy,
@@ -705,6 +707,10 @@ class AutomationApi:
 
         active_reservation = _ACTIVE_RESERVATION.get()
         if active_reservation is not None:
+            if active_reservation.api is not self:
+                raise RuntimeError(
+                    "Live calls cannot switch AutomationApi instances while a workflow reservation is active."
+                )
             if account_id is not None:
                 self._require_account_in_active_reservation(account_id)
                 return account_id

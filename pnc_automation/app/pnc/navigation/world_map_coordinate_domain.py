@@ -180,15 +180,7 @@ class WorldMapCoordinateDomain:
         for y in self.row_samples(bounds=bounds, spacing=spacing):
             for coordinate in self.addressable_coordinates_on_row(bounds=bounds, y=y, spacing=spacing):
                 coordinates.add(coordinate)
-        for corner in (
-            (bounds.min_x, bounds.min_y),
-            (bounds.max_x, bounds.min_y),
-            (bounds.min_x, bounds.max_y),
-            (bounds.max_x, bounds.max_y),
-        ):
-            addressable_corner = self.nearest_addressable_in_bounds(corner)
-            if bounds.contains(addressable_corner):
-                coordinates.add(addressable_corner)
+        coordinates.update(self._addressable_corners_in_bounds(bounds))
         if not coordinates:
             raise SelectorResolutionError(
                 "World-map search bounds do not contain any addressable coordinate pair.",
@@ -233,16 +225,7 @@ class WorldMapCoordinateDomain:
 
         self.require_bounds_inside(bounds)
         values = set(_axis_samples(bounds.min_y, bounds.max_y, self._require_positive_spacing(spacing)))
-        values.update(
-            self.nearest_addressable_in_bounds(corner)[1]
-            for corner in (
-                (bounds.min_x, bounds.min_y),
-                (bounds.max_x, bounds.min_y),
-                (bounds.min_x, bounds.max_y),
-                (bounds.max_x, bounds.max_y),
-            )
-            if bounds.contains(corner)
-        )
+        values.update(corner[1] for corner in self._addressable_corners_in_bounds(bounds))
         return tuple(sorted(values))
 
     def column_samples(self, *, bounds: WorldMapBounds, spacing: int) -> tuple[int, ...]:
@@ -250,17 +233,22 @@ class WorldMapCoordinateDomain:
 
         self.require_bounds_inside(bounds)
         values = set(_axis_samples(bounds.min_x, bounds.max_x, self._require_positive_spacing(spacing)))
-        values.update(
-            self.nearest_addressable_in_bounds(corner)[0]
+        values.update(corner[0] for corner in self._addressable_corners_in_bounds(bounds))
+        return tuple(sorted(values))
+
+    def _addressable_corners_in_bounds(self, bounds: WorldMapBounds) -> tuple[tuple[int, int], ...]:
+        """Keeps snapped corners only when correction stays inside the search area."""
+
+        snapped_corners = (
+            self.nearest_addressable_in_bounds(corner)
             for corner in (
                 (bounds.min_x, bounds.min_y),
                 (bounds.max_x, bounds.min_y),
                 (bounds.min_x, bounds.max_y),
                 (bounds.max_x, bounds.max_y),
             )
-            if bounds.contains(corner)
         )
-        return tuple(sorted(values))
+        return tuple(corner for corner in snapped_corners if bounds.contains(corner))
 
     def addressable_coordinates_on_row(
         self,

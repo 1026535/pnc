@@ -10,6 +10,14 @@ The isolated worktree preserves the relevant recognition/journal baseline record
 reserved for the user's other task. No configuration changes, castle switches,
 resource actions, messages, YOLO, or trained detectors were introduced.
 
+## Authorized main landing gate (2026-09-12)
+
+The user authorized landing the feature to main and continuing on `codex/non-yolo-recognition`. Fresh main `e4eb8b5` adds workflow reservation isolation, strict claim reconciliation, complete Daily viewport processing, bounded coordinate samples, and portable shutdown-test discovery. The Daily coordinator merge removes the now-unused `_has_pending_rows` helper while retaining `RowRecognitionStatus.COMPLETE` in both active claim and action selection. No resource-changing behavior was exercised live.
+
+Validation passed: 31 targeted API/Daily/coordinate tests and full portable suite, 1,744 tests with five optional local screenshot skips (167.934 test seconds; 174.586 total). The initial targeted command used the wrong API module path and failed import; the corrected `tests.integration.entrypoints.test_automation_api_runner` command passed. Full command: `tools/run_tests.py full --json .local-data/reports/non_yolo_gap_20260912/landing_selection.json --results .local-data/reports/non_yolo_gap_20260912/landing_results.json`. Tested source fingerprint `f10907cbdd677a20b2b59e675bbefdcd9fe93f5dcb9c52441d18c30527520e39` matched the combined code before this documentation update.
+
+The combined runtime passed a scoped testing-instance proof: exact current-castle preflight, six complete Bag entries, and final Home with seven inputs/31 observations in 214.297 seconds. No Use taps, spending, messages or castle switches. The instance pre-existed and remains at Home. Bag artifact: `artifacts/2026-09-12/testing/20260912T174339Z_core_20260912T174056Z_11c1f869_0026_bag_content_proof.png`; Home: `artifacts/2026-09-12/testing/20260912T174419Z_core_20260912T174056Z_11c1f869_0031_core_route_source.png`. The prior publication's exclusion of workflow-safety commits is superseded by this integration. Remaining F producer/evidence gaps are unchanged and will be resumed after landing.
+
 ## 2026-09-12 publication: navigation gaps, startup, and Bag confirmation
 
 Authoritative worktree: `artifacts/worktrees/non-yolo-integration-current`, published to `origin/codex/non-yolo-recognition`. This increment integrates main through `87e6151` (building focus, popup vectorization, offline-test improvements, and Castle endpoint). Main subsequently advanced independently to `4b63bd9` with workflow safety; that later change is not included or claimed validated here. This is feature publication, not landing to main.
