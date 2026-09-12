@@ -6,7 +6,8 @@ from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 from pnc_automation.app.runtime.observation_mode import ObservationMode
 from pnc_automation.app import ApplicationRunner, build_application_runner
@@ -25,6 +26,7 @@ _ACTIVE_RESERVATION: ContextVar["_ActiveReservation | None"] = ContextVar(
     default=None,
 )
 _DEFAULT_API: "AutomationApi | None" = None
+TResult = TypeVar("TResult")
 
 
 @dataclass(frozen=True, slots=True)
@@ -532,14 +534,18 @@ class AutomationApi:
     ) -> CoreWorkflowResult[CollectMailResult]:
         """Runs one typed replacement-core collect_mail workflow using current-castle semantics."""
 
-        return self.application.run_collect_mail(
-            account_id=self._resolve_account_id(account_id),
-            params={
-                "mailboxes": list(mailboxes),
-                "archive_mode": archive_mode,
-                "limit_per_mailbox": limit_per_mailbox,
-                "only_new": only_new,
-            },
+        resolved_account_id = self._resolve_account_id(account_id)
+        return self._run_with_account_reservation(
+            resolved_account_id,
+            lambda: self.application.run_collect_mail(
+                account_id=resolved_account_id,
+                params={
+                    "mailboxes": list(mailboxes),
+                    "archive_mode": archive_mode,
+                    "limit_per_mailbox": limit_per_mailbox,
+                    "only_new": only_new,
+                },
+            ),
         )
 
     def collect_kingdom_chat(self, *, account_id: str | None = None) -> StepRunResult:
@@ -606,6 +612,23 @@ class AutomationApi:
                 f"Account '{account_id}' is outside the active workflow reservation. "
                 f"Declare its complete account bundle before entering the workflow."
             )
+
+    def _run_with_account_reservation(
+        self,
+        account_id: str,
+        operation: Callable[[], TResult],
+    ) -> TResult:
+        """Runs one live call under its active bundle or a temporary account lease."""
+
+        active_reservation = _ACTIVE_RESERVATION.get()
+        if active_reservation is not None:
+            self._require_account_in_active_reservation(account_id)
+            return operation()
+        reservation = self.application.reserve_accounts((account_id,))
+        try:
+            return operation()
+        finally:
+            reservation.close()
 
 
 def build_api(

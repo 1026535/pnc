@@ -168,6 +168,8 @@ class CollectMailApplicationTests(unittest.TestCase):
                 "only_new": True,
             },
         )
+        application.reserve_accounts.assert_called_once_with(("account",))
+        application.reserve_accounts.return_value.close.assert_called_once_with()
 
         application.reset_mock()
         session = AutomationSession(api=api, account_id="account")
@@ -181,6 +183,8 @@ class CollectMailApplicationTests(unittest.TestCase):
                 "only_new": True,
             },
         )
+        application.reserve_accounts.assert_called_once_with(("account",))
+        application.reserve_accounts.return_value.close.assert_called_once_with()
 
     def test_legacy_task_id_dispatch_remains_available(self) -> None:
         """Authored TaskId callers retain the legacy ScriptRunner dispatch boundary."""
@@ -193,6 +197,31 @@ class CollectMailApplicationTests(unittest.TestCase):
             task_id=TaskId.COLLECT_MAIL,
             params={"mailboxes": ["player"]},
         )
+
+    def test_python_api_reuses_an_active_reservation_for_collect_mail(self) -> None:
+        """Keeps one lease across a caller-owned replacement workflow scope."""
+
+        application = Mock()
+        api = AutomationApi(application=application)
+
+        with api.reserve_accounts(("account",)):
+            api.collect_mail(account_id="account", mailboxes=["player"])
+
+        application.reserve_accounts.assert_called_once_with(("account",))
+        application.reserve_accounts.return_value.close.assert_called_once_with()
+        application.run_collect_mail.assert_called_once()
+
+    def test_python_api_releases_temporary_collect_mail_reservation_on_failure(self) -> None:
+        """Releases a direct-call lease when the replacement workflow raises."""
+
+        application = Mock()
+        application.run_collect_mail.side_effect = RuntimeError("failed")
+        api = AutomationApi(application=application)
+
+        with self.assertRaisesRegex(RuntimeError, "failed"):
+            api.collect_mail(account_id="account", mailboxes=["player"])
+
+        application.reserve_accounts.return_value.close.assert_called_once_with()
 
     def test_module_collect_mail_helper_uses_typed_application_path(self) -> None:
         """The module-level convenience helper remains a thin typed API wrapper."""
