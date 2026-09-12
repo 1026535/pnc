@@ -621,6 +621,48 @@ selectors:
     action_x_ratio: 0.41
     action_y_ratio: 0.96
   materialize_relative_bounds: true
+- id: PNC_CHAT_FOCUSED_EMPTY_INPUT
+  screens:
+  - PNC_CHAT
+  status: screenshot_seeded
+  detection_kind: template
+  interaction_kind: label
+  materialize_relative_bounds: false
+  template_asset:
+    path: screen_anchors/chat_focused_empty_input.png
+    reference_size:
+    - 540
+    - 960
+    search_region:
+      x: 80
+      y: 914
+      width: 220
+      height: 28
+    threshold: 0.95
+    mask: embedded_alpha
+  notes:
+  - 'Positive focused-empty composer evidence; this label must never be used as a click target.'
+- id: PNC_CHAT_FOCUSED_SEND_BUTTON
+  screens:
+  - PNC_CHAT
+  status: interaction_validated
+  detection_kind: template
+  interaction_kind: action
+  materialize_relative_bounds: false
+  template_asset:
+    path: screen_anchors/chat_focused_send_button.png
+    reference_size:
+    - 540
+    - 960
+    search_region:
+      x: 448
+      y: 906
+      width: 82
+      height: 37
+    threshold: 0.95
+    mask: embedded_alpha
+  notes:
+  - 'Measured gold return control for the reviewed focused composer; use only when current-frame template evidence is present.'
 - id: PNC_CHAT_SEND_BUTTON
   screens:
   - PNC_CHAT

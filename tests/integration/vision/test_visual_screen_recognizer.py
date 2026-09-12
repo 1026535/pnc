@@ -113,11 +113,13 @@ class VisualScreenRecognizerTests(unittest.TestCase):
                 UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
                 UiElementId.PNC_CHAT_TAB_KINGDOM,
                 UiElementId.PNC_CHAT_TAB_ALLIANCE,
+                UiElementId.PNC_CHAT_INPUT_FIELD,
             },
             "chat_kingdom.png": {
                 UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
                 UiElementId.PNC_CHAT_TAB_KINGDOM,
                 UiElementId.PNC_CHAT_TAB_ALLIANCE,
+                UiElementId.PNC_CHAT_INPUT_FIELD,
             },
         }
         recognizer = load_visual_screen_recognizer()
