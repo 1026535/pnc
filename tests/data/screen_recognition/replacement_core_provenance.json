@@ -791,5 +791,21 @@
     "reference_size": [540, 960],
     "crop": [154, 50, 312, 106],
     "notes": "Measured inactive Alliance tab control."
+  },
+  {
+    "asset": "screen_anchors/castle_0.png",
+    "source": "artifacts/2026-09-12/serious_stuff/20260912T165514Z_core_20260912T165456Z_fbd49a64_0003_castle_endpoint_after_1.png",
+    "source_sha256": "c7848e52fa8aa15aaf65da3970dcc62ed655a654caafb06f004b7a0e24a3d4fc",
+    "reference_size": [540, 960],
+    "crop": [106, 9, 198, 43],
+    "notes": "Measured Castle title anchor; positive endpoint frame was redacted only in the account/avatar band for the portable fixture."
+  },
+  {
+    "asset": "screen_anchors/castle_1.png",
+    "source": "artifacts/2026-09-12/serious_stuff/20260912T165514Z_core_20260912T165456Z_fbd49a64_0003_castle_endpoint_after_1.png",
+    "source_sha256": "c7848e52fa8aa15aaf65da3970dcc62ed655a654caafb06f004b7a0e24a3d4fc",
+    "reference_size": [540, 960],
+    "crop": [278, 142, 518, 182],
+    "notes": "Measured independent Castle body description anchor; positive endpoint frame was redacted only in the account/avatar band for the portable fixture."
   }
 ]

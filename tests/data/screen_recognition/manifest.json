@@ -215,6 +215,16 @@
       ]
     },
     {
+      "image": "castle_audit.png",
+      "screen": "PNC_CASTLE",
+      "split": "reference",
+      "group": "2026-09-12/serious_stuff",
+      "sha256": "fb8c70a6b08efabf969177474422e9c8b204046835ef313396a2d0a932dd1ca4",
+      "expected_visual_screens": [
+        "PNC_CASTLE"
+      ]
+    },
+    {
       "image": "collect_mail_home.png",
       "screen": "PNC_HOME_CITY",
       "split": "reference",
@@ -346,7 +356,9 @@
       "split": "validation",
       "group": "2026-08-25/testing",
       "sha256": "15df16a6d5aca4a99cbcfd40d0a3ca2c5c4b1ab1c2df397acf97a886fd70db85",
-      "expected_visual_screens": []
+      "expected_visual_screens": [
+        "PNC_CASTLE"
+      ]
     }
   ]
 }
