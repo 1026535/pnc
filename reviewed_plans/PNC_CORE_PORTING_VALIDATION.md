@@ -26,6 +26,8 @@ A bounded live check of the integrated detector then confirmed stable Home plus 
 
 The final combined `tools/run_tests.py full` gate passed 1,524 total: 1,519 passed and five optional-local-fixture skips in 88.250 seconds. Results are in this feature worktree's `.test-impact/results.json`. The second full run was required because main changed the runtime detector and test infrastructure after the first candidate had passed. Root review found no remaining actionable integration issues; `git diff --check` passed.
 
+A subsequent main change, `32abb22`, updated only the Luna self-review skill. The feature rebased cleanly again; `git diff --exit-code 034a5d5 HEAD -- pnc_automation tests tools .github` confirmed the tested runtime, tests, and infrastructure were unchanged, so the full suite was not repeated. Luna self-reviewed the consolidated `32abb22..ad14dcc` implementation with no findings or corrections. Root retained formal acceptance and found no further issues.
+
 ## Authored popup recovery port — September 12, 2026
 
 `TaskId.POPUP_RECOVERY` now uses typed lifecycle dispatch and `CoreRuntime.recover_popup()`; the legacy task is removed. It borrows the caller's connected runtime and reuses passive settling plus the canonical observation/executor safe-popup recovery. It does not foreground the app, scan identity, navigate, close the caller's runtime, or introduce a second dismissal policy. Parameters and castle targets are rejected before connection. UNKNOWN, Android Home, unresolved popups, stale captures, and exhausted budgets stop the operation. Readiness retains its distinct actual-launch allowance through the same settle owner.
