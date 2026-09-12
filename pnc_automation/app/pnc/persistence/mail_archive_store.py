@@ -12,7 +12,13 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from pnc_automation.app.pnc.domain.mail import MailArchiveMode, MailArchiveRecord, thread_partner_directory_name
+from pnc_automation.app.pnc.domain.mail import (
+    MailArchiveMode,
+    MailArchiveRecord,
+    MailThreadFingerprint,
+    thread_partner_directory_name,
+)
+from pnc_automation.app.pnc.enums.mail import MailboxType
 from pnc_automation.app.pnc.persistence.archive_ownership import (
     ArchiveOwnershipError,
     mail_archive_scope,
@@ -105,6 +111,7 @@ class MailArchiveStore:
 
         if not isinstance(archive_mode, MailArchiveMode):
             raise TypeError("MailArchiveStore.archive_mode must be a MailArchiveMode.")
+        _validate_record_for_persistence(record)
         requires_screenshot = archive_mode in {MailArchiveMode.SCREENSHOT, MailArchiveMode.BOTH}
         scope = mail_archive_scope(
             self.root,
@@ -354,8 +361,8 @@ def _classify_versioned_candidate(
         return MailArchiveCandidateStatus.CORRUPT
     if not all(
         isinstance(metadata.get(field), str) and bool(metadata[field].strip())
-        for field in ("account_id", "pnc_account_id", "active_castle", "mailbox_type", "sender_name", "fingerprint", "captured_at", "normalized_thread_text")
-    ):
+        for field in ("account_id", "pnc_account_id", "active_castle", "mailbox_type", "sender_name", "fingerprint", "captured_at")
+    ) or not isinstance(metadata.get("normalized_thread_text"), str):
         return MailArchiveCandidateStatus.CORRUPT
     if not _valid_fingerprint(metadata["fingerprint"]):
         return MailArchiveCandidateStatus.CORRUPT
@@ -465,6 +472,31 @@ def _valid_sha(value: object) -> bool:
 
 def _valid_fingerprint(value: object) -> bool:
     return isinstance(value, str) and re.fullmatch(r"[0-9a-f]{8}", value) is not None
+
+
+def _validate_record_for_persistence(record: object) -> None:
+    """Validates record identity before control paths, allocation, or payload reads are touched."""
+
+    if not isinstance(record, MailArchiveRecord):
+        raise MailArchiveStorageError("Mail archive record must be a MailArchiveRecord.")
+    for field_name in ("account_id", "pnc_account_id", "active_castle", "sender_name"):
+        value = getattr(record, field_name)
+        if not isinstance(value, str) or not value.strip():
+            raise MailArchiveStorageError(f"Mail archive record field '{field_name}' must be a non-empty string.")
+    if not isinstance(record.mailbox_type, MailboxType):
+        raise MailArchiveStorageError("Mail archive record mailbox_type is invalid.")
+    if not isinstance(record.fingerprint, MailThreadFingerprint) or not _valid_fingerprint(record.fingerprint.value):
+        raise MailArchiveStorageError("Mail archive record fingerprint must be eight lowercase hexadecimal characters.")
+    if not isinstance(record.captured_at, datetime) or record.captured_at.tzinfo is None or record.captured_at.utcoffset() is None:
+        raise MailArchiveStorageError("Mail archive record captured_at must be an aware datetime.")
+    if record.thread_timestamp_text is not None and not isinstance(record.thread_timestamp_text, str):
+        raise MailArchiveStorageError("Mail archive record thread_timestamp_text must be text or None.")
+    if not isinstance(record.normalized_thread_text, str):
+        raise MailArchiveStorageError("Mail archive record normalized_thread_text must be text.")
+    if not isinstance(record.source_artifact_paths, tuple) or not all(
+        isinstance(path, Path) for path in record.source_artifact_paths
+    ):
+        raise MailArchiveStorageError("Mail archive record source_artifact_paths must be Path values.")
 
 
 def _sha256_file(path: Path) -> str:

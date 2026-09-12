@@ -169,24 +169,6 @@ def match_chat_transcript_cleanup_pattern(
     return None
 
 
-def persist_cleaned_chat_transcript(path: Path, cleaned_text: str) -> None:
-    """Publishes an intentional cleanup edit under the chat stream ownership boundary."""
-
-    try:
-        scope = chat_scope_from_transcript_path(path)
-    except ArchiveOwnershipError as error:
-        raise ValueError(str(error)) from error
-    with scope.lock():
-        if scope.pending_path.exists():
-            raise RuntimeError("Chat transcript cleanup is blocked while pending archive recovery exists.")
-        if not path.is_file():
-            raise ValueError(f"Chat transcript cleanup target is not a regular file: {path}")
-        original_bytes = path.read_bytes()
-        _validate_state_against_transcript(scope.root, path, original_bytes)
-        atomic_write_bytes(path.absolute(), cleaned_text.encode("utf-8"), prefix="cleanup-", suffix=".tmp")
-        _update_state_transcript_evidence(scope.root, path, cleaned_text.encode("utf-8"))
-
-
 def clean_and_persist_chat_transcript(
     path: Path,
     *,

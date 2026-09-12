@@ -12,8 +12,12 @@ Each chat stream is locked independently of the local day. Its stream identity i
 the canonical account/castle/channel path, so a midnight rollover cannot bypass a
 pending transaction. The private control data is under
 `<chat-root>/.archive-control/`; `pending.json` is a version-one record containing
-the original local day, capture timestamp, transcript byte offset and prefix
+the resolved archive day, capture timestamp, transcript byte offset and prefix
 digest, exact UTF-8 append bytes, next state, and screenshot length/digest.
+The stored day is an exact, validated `YYYY-MM-DD` calendar owner; it is not
+recomputed by converting the persisted timestamp through the current host
+timezone. State validation likewise trusts the physical day owner, preserving
+legacy local-day paths without deriving a new day from a timestamp.
 
 For a non-empty change, the store:
 
@@ -24,7 +28,8 @@ For a non-empty change, the store:
 5. retires the pending record only after both payloads are complete.
 
 Recovery validates the whole pending record, screenshot, transcript prefix and
-tail, and old/new state classification before writing. It appends only the
+tail, the complete prefix-plus-append bytes, and the next state's length/full
+SHA-256 evidence before writing. It appends only the
 missing suffix of the recorded bytes. It never regenerates rows, truncates an
 unexpected tail, rolls state backward, or treats a short fingerprint as message
 equality. An unresolved or malformed record is preserved and reported as a
@@ -68,7 +73,10 @@ path component is checked before mutation: symlinks, Windows junctions/reparse
 points, root escapes, non-regular targets, and unexpected layouts are rejected.
 The transcript cleanup tool's `--write` path holds the same stream lock across
 read, parse, replacement, and state-evidence update; it refuses pending recovery.
-Dry-run parsing does not mutate archives.
+There is one production cleanup mutation path, so caller-computed stale text
+cannot replace rows added before lock acquisition. Dry-run parsing does not
+mutate archives. Chat screenshot extensions and fingerprint-derived names are
+validated as safe filename segments before the screenshot directory is created.
 
 Recovery returns the original pending capture timestamp to the store. A current
 observation older than recovered work, including work in a skipped or future
