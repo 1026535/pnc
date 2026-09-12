@@ -108,7 +108,14 @@ class _NativeInstanceLease:
 
         try:
             _unlock_file(self.handle)
-        finally:
+        except BaseException as error:
+            close_preserving_error(
+                self.handle.close,
+                error,
+                message="BlueStacks lease release and handle cleanup both failed.",
+            )
+            raise
+        else:
             self.handle.close()
 
 
