@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from pnc_automation.app.pnc.domain.observation import Observation
+from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict, ScreenDecision, ScreenEvidence
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 
 from tests.support.pnc.observations import make_visible
+from tests.support.pnc.capture_vision.fake_screenshot_session import make_captured_frame
 
 
 

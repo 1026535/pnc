@@ -26,6 +26,10 @@ from pnc_automation.bluestacks_management.fleet_restart import (
 from pnc_automation.bluestacks_management.instance_lease import DEFAULT_INSTANCE_LEASE_ROOT
 from pnc_automation.bluestacks_management.instance_memory_monitor import BlueStacksInstanceMemoryMonitor
 from pnc_automation.bluestacks_management.instance_memory_monitor import MemoryMonitorDisposition
+from pnc_automation.bluestacks_management.instance_shutdown import (
+    BlueStacksStaleInstanceShutdownReconciler,
+    StaleShutdownDisposition,
+)
 from pnc_automation.core.infra.emulator.bluestacks_instance_resolver import BlueStacksInstanceResolver
 from pnc_automation.core.infra.diagnostics.logging_setup import configure_logging
 
@@ -34,6 +38,8 @@ _PER_INSTANCE_FAILURE_DISPOSITIONS = frozenset(
         MemoryMonitorDisposition.RESTART_FAILED,
         MemoryMonitorDisposition.RECOVERY_BLOCKED,
         MemoryMonitorDisposition.RECOVERY_EXHAUSTED,
+        StaleShutdownDisposition.BLOCKED,
+        StaleShutdownDisposition.FAILED,
     }
 )
 
@@ -102,12 +108,20 @@ def _run_monitor(arguments: argparse.Namespace) -> int:
                 error_type="MemoryMonitorDisabled",
             )
             return 1
+        resolver = BlueStacksInstanceResolver(config_path=config.metadata_path)
         monitor = BlueStacksInstanceMemoryMonitor(
             config_provider=load_current_config,
-            resolver=BlueStacksInstanceResolver(config_path=config.metadata_path),
+            resolver=resolver,
+        )
+        stale_shutdown_reconciler = BlueStacksStaleInstanceShutdownReconciler(
+            config_provider=load_current_config,
+            resolver=resolver,
         )
         while True:
-            results = monitor.sample_once()
+            results = (
+                *stale_shutdown_reconciler.reconcile_all(),
+                *monitor.sample_once(),
+            )
             print(json.dumps([asdict(result) for result in results], default=str), flush=True)
             failed_results = tuple(
                 result for result in results if result.disposition in _PER_INSTANCE_FAILURE_DISPOSITIONS

@@ -101,11 +101,11 @@ not combine competing reports.
 
 Default selection and result paths are `.test-impact/selection.json` and
 `.test-impact/results.json`. `--json`, `--results`, and `--csv` override those
-outputs. `measure` defaults its timing CSV to `test_timings.csv` and writes
-coverage evidence under `.test-impact/`. Generated evidence is ignored by Git.
-The existing root `test_timings.csv` is a tracked historical baseline; ignore
-rules do not untrack it. Use a `.test-impact/` CSV path for routine measurement
-unless deliberately replacing that baseline.
+outputs. `measure` defaults its timing CSV to
+`.local-data/reports/test_timings.csv` and writes coverage evidence under
+`.test-impact/`. Generated evidence is local and ignored by Git. Use
+`.local-data/reports/` for routine reports, timing CSVs, and similar outputs;
+use `.test-impact/` for test-selection scratch evidence.
 
 Results retain the complete portable module inventory, discovered test IDs and
 their module/class identities, outcomes, skip reasons, and setup-through-cleanup

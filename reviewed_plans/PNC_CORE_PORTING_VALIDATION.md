@@ -1,5 +1,44 @@
 # Replacement core porting validation ledger
 
+## Recovery checkpoint — September 12, 2026
+
+This checkpoint was reconstructed from fetched `origin/main` at `76c486f`, the current task registry, application entrypoints, branch ancestry, and preserved worktree diffs after a reported loss of conversation context. Earlier sections below are chronological evidence; their old blockers and limitations are superseded where this checkpoint or the final role-selected evidence says otherwise.
+
+### Already merged: reuse these implementations
+
+| Capability | Canonical code and status |
+| --- | --- |
+| Shared replacement core | `core_runtime.py`, `navigation_core.py`, `core_workflow.py`, and `NavigationPerception` are on main. Active-castle preflight now includes a bounded nonselecting roster search; the older limitation requiring manual roster positioning no longer describes the code. |
+| Daily Quest status | `DailyQuestStatusWorkflow` and its application/CLI entrypoint are on main. This reads status; it does not port Daily maintenance execution. |
+| Collect-mail | `CollectMailWorkflow` and the direct Python API are on main. |
+| Kingdom Chat collection | `CollectKingdomChatWorkflow` and the direct Python API are on main. |
+| Open-building | `OpenBuildingWorkflow`, direct Python API, and dedicated CLI are on main. |
+| Instance ownership | Canonical process leases, scoped account reservations, and the later quiescent-shutdown change `76c486f` are on main. Preserve the outer phase's cleanup policy when integrating subsequent ports. |
+
+Git ancestry confirms that the tips of `codex/pnc-replacement-core`, `codex/pnc-replacement-core-remaining-issues`, `codex/collect-mail-core-port`, `codex/collect-kingdom-chat-core-port`, and `codex/open-building-core-port` are contained in main. Their retained worktrees are not evidence of unmerged work. The direct ports were integrated through `3a251ca`, `dcd4a07`, and `68e7349`; their final combined evidence is recorded in `instructions/CORE_WORKFLOW_PORTING.md`.
+
+### Work in progress: preserve before resuming
+
+| Branch and worktree under `artifacts/replacement_core/ports/` | Verified state |
+| --- | --- |
+| `codex/refresh-castle-roster-core-port` / `refresh_castle_roster` | Two local commits through `f6bf51a` implement typed roster refresh and migrate its tests. An uncommitted correction normalizes OCR spelling only for scan identity, with exact kingdom matching. The first live scan rejected a false gap caused by whitespace variation and wrote no roster. This port is not on main and is not live-complete. |
+| `codex/kingdom-chat-heartbeat-core-port` / `kingdom_chat_heartbeat` | Uncommitted typed script-dispatch work builds on the existing direct Chat workflow. It is a caller migration, not a second Chat workflow. The work includes registry metadata, a dispatcher over the existing connected runtime, and legacy task removal. Tests and integration review remain unfinished. |
+| `codex/campaign-core-port` / `campaign` | Branch tip is an existing main ancestor and contains no unique port commit. The branch name does not prove implementation. |
+
+Both active port worktrees were based on `68e7349` when this checkpoint was taken and must incorporate `76c486f` before landing. That change overlaps the core runtime, script runner, application/API facade, lease finalization, and cleanup ownership. Do not overwrite it with an older port version or hot-reload an obsolete native lease manager into current runtime code.
+
+The current default task registry on main still registers all 16 legacy task classes. In particular, authored `TaskId.COLLECT_MAIL`, `COLLECT_KINGDOM_CHAT`, and `OPEN_BUILDING` steps still use the legacy script runner despite their direct APIs being ported. Login, castle selection, roster refresh, sending, construction, upgrade, research, gathering, and campaign have not acquired typed production script dispatch on main. Bootstrap and popup recovery already have shared owners; do not manufacture empty ports for catalog entries or duplicate those owners.
+
+### Live ownership and validation state
+
+The user-selected target remains `serious_stuff`, with no castle switching or resource spending. Coding workers remain offline. Hold one canonical lease across preparation, all dependent operations, and cleanup; an idle coding worker must not independently manipulate the screen.
+
+The failed roster trace is `artifacts/2026-09-12/serious_stuff/20260912T062708Z_ac521393_core_trace.jsonl`. The source window `20260912T062946Z_core_20260912T062708Z_ac521393_0050_core_14_castle_roster_scroll_after_1.png` and next window `20260912T063007Z_core_20260912T062708Z_ac521393_0053_core_15_castle_roster_scroll_after_1.png` visibly overlap. Offline parsing reproduced `gimme cookies` versus `gimmecookies`. The correction must reuse `normalize_ocr_text`, retain the overlap/cycle guards, and rerun the bounded proof before any full-scan result is accepted. The proof directs `CastleRosterStore` to an artifact file; actual `config/castles.yaml` is protected.
+
+An explicit recovery confirmed Home at `20260912T063348Z_core_20260912T063329Z_a6d9b70b_0007_core_2_after_1.png`. The prior lease process subsequently ended. A new process acquired the canonical lease, but its read-only baseline at `20260912T064259Z_core_20260912T064259Z_90f747a8_0001_new_series_baseline.png` showed a black Android frame and was classified UNKNOWN. No navigation followed that observation. Recheck runtime and foreground state under the held lease before resuming; do not assume the older Home frame is still current. Process and terminal IDs are ephemeral and must be verified from the active session.
+
+Use focused tests or `py tools/run_tests.py affected --base origin/main --explain` during corrections. The earlier roster full run had 1,454 total tests: 1,450 passed and four skipped, but preceded the live OCR finding. It does not validate the uncommitted correction. Run the required final full suite only after live feedback is resolved and the candidate is synchronized and reviewed for merging. Documentation-only checkpoint edits require `git diff --check`, not another test run.
+
 This ledger records the bounded evidence for the shared replacement workflow boundary. The authorized `serious_stuff` run below is the final successful Daily Quest status proof; earlier `testing` interruptions remain preserved as superseded safety evidence.
 
 ## Contract evidence

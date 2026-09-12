@@ -25,6 +25,7 @@ Run live emulator validation only when the fidelity is worth the cost. Use offli
 12. For multi-step Python live workflows, use one `with api.use_account(...)` or `with api.reserve_accounts((...))` scope for the complete sequence. Do not make separate one-shot calls for dependent steps, because another process may acquire the instance after an isolated call releases its lease. The active scope rejects accounts that were not declared in its bundle.
 13. Keep the configured BlueStacks working-set monitor running as a supervised host task. Watch mode continues monitoring other instances after a per-instance recovery failure and persists structured evidence; one-shot and fatal host/configuration errors are nonzero. Emit failures through the bounded rotating state log without raw secrets.
 14. The separately scheduled 01:55 America/Toronto fleet-maintenance boundary snapshots configured instances that are open, acquires their complete bundle, and restarts only that snapshot. It must not launch instances that were closed; use `restart-open --require-maintenance-window --include-read-only` for that explicit boundary.
+15. Choose the BlueStacks session cleanup policy at the outer live-testing phase boundary. Use `BlueStacksSessionCleanupPolicy.keep_warm()` for short probes or when another live operation will follow. Use `BlueStacksSessionCleanupPolicy.close_at_phase_end()` for instances launched by the phase; pass `close_preexisting_instance=True` only when the agent explicitly decides that the selected managed target should close even though it was already open. A shutdown request is deferred until the last same-process lease reference is released. The default two-minute quiescence window then runs without holding the old lease, so newly queued work can claim the instance and cancel or replace the pending shutdown. Cancellation is observed within a short polling interval rather than making the completed task wait for the full window. Cleanup must re-acquire the lease and revalidate the exact intent, instance key, and PID before stopping anything.
 
 ## Workflow
 
@@ -37,9 +38,62 @@ Run live emulator validation only when the fidelity is worth the cost. Use offli
    - `PNC_RUN_LIVE_WORLD_MAP_MOVEMENT_CALIBRATION=1` for movement calibration.
 3. Acceptance smoke suites must use a configured account carrying the requested `smoke_test` role (currently `testing`) and whichever castle is currently active when no castle target is specified. General live investigations may use an account carrying `live_testing`, but must not silently substitute one into a smoke acceptance matrix. Verify the active identity and do not select or switch castles unless the user explicitly names and authorizes one.
 4. Run through the existing live helpers and smoke modules. Reuse `ScriptRunner`, `BlueStacksInstanceResolver`, `BlueStacksSession`, observation services, selector tools, and artifacts.
-5. Use observation-based waits and bounded retries. Avoid blind sleeps except for short, justified settle windows already modeled by the runner.
-6. On failure, inspect generated screenshots, OCR JSON, logs, and observation artifacts under `artifacts/` before changing code.
-7. Preserve evidence paths in the final report, including the live flag, account, smoke module/tool, and artifact labels.
+5. Keep one connected runtime and its lease across dependent operations in the same live-testing phase. Pass the chosen cleanup policy when building the runtime or calling `ApplicationRunner.run`; do not close and reopen between short substeps merely to perform cleanup.
+6. Use observation-based waits and bounded retries. Avoid blind sleeps except for short, justified settle windows already modeled by the runner.
+7. On failure, inspect generated screenshots, OCR JSON, logs, and observation artifacts under `artifacts/` before changing code.
+8. Preserve evidence paths in the final report, including the live flag, account, smoke module/tool, cleanup decision, and artifact labels.
+
+For example, an agent-controlled phase can select the policy explicitly:
+
+```python
+from pnc_automation.core.infra.emulator.session import BlueStacksSessionCleanupPolicy
+
+cleanup_policy = (
+    BlueStacksSessionCleanupPolicy.close_at_phase_end(
+        close_preexisting_instance=True,
+    )
+    if live_phase_is_complete_and_long
+    else BlueStacksSessionCleanupPolicy.keep_warm()
+)
+runtime = script_runner.build_connected_runtime(
+    account=account,
+    required_role=LiveAutomationRole.SMOKE_TEST,
+    session_cleanup_policy=cleanup_policy,
+)
+```
+
+For the recommended multi-call Python API, put the policy on the outer scope so
+preparation and every dependent task inherit one decision:
+
+```python
+with api.use_account(
+    "testing",
+    session_cleanup_policy=cleanup_policy,
+) as session:
+    session.collect_kingdom_chat()
+    session.open_building(building="farm")
+```
+
+The expression `live_phase_is_complete_and_long` is an agent/task decision, not a
+timer or an emulator heuristic. The safe default preserves an instance that was
+already open before the phase. Use `close_preexisting_instance=True` only when
+that managed target should be reclaimed after the phase; never infer this for a
+manually used or read-only instance.
+
+The shared smoke helpers also accept the agent-selected environment value
+`PNC_LIVE_SESSION_CLEANUP=keep_warm` (the default) or
+`PNC_LIVE_SESSION_CLEANUP=close_at_phase_end`. The latter is an explicit decision
+to close the selected managed smoke target, including when it was already open.
+Set it on the command that owns the complete outer reservation for a longer
+live-testing phase, never on an unreserved intermediate command.
+
+Phase-end intent is persisted with the exact instance key and PID before live
+work starts. The supervised `pnc_automation.bluestacks_management monitor`
+reconciles an intent left by an abruptly terminated agent only after acquiring
+the now-idle lease. It starts the same quiescence window when the crashed owner
+could not do so, then reloads role authority and rejects changed identities.
+Never implement the grace period by sleeping while retaining the prior lease;
+that would prevent the follow-up task the window is intended to detect.
 
 ## Reliability Rules
 

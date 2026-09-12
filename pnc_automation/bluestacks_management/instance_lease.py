@@ -9,13 +9,14 @@ import os
 import tempfile
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import BinaryIO
 
 from pnc_automation.core.errors import InstanceBusyError
+from pnc_automation.core.lifecycle import close_preserving_error
 
 DEFAULT_INSTANCE_LEASE_ROOT = Path(tempfile.gettempdir()) / "pnc-automation-instance-leases"
 
@@ -30,13 +31,13 @@ class ProcessInstanceLease:
     _lease_key: str
     _released: bool = field(default=False, init=False, repr=False)
 
-    def release(self) -> None:
-        """Releases this operation reference and the native lock when no references remain."""
+    def release(self, *, finalizer: Callable[[], None] | None = None) -> None:
+        """Releases this reference and runs a requested finalizer at process-idle."""
 
         if self._released:
             return
         self._released = True
-        self._registry._release_reference(self._lease_key)
+        self._registry._release_reference(self._lease_key, finalizer=finalizer)
 
 
 @dataclass(slots=True)
@@ -67,8 +68,13 @@ class InstanceLeaseBundle:
         if self._closed:
             return
         self._closed = True
+        errors: list[BaseException] = []
         for lease in self.leases:
-            lease.release()
+            try:
+                lease.release()
+            except BaseException as error:
+                errors.append(error)
+        _raise_release_errors(errors)
 
     release = close
 
@@ -80,7 +86,12 @@ class InstanceLeaseBundle:
     def __exit__(self, _exception_type: object, _exception: object, _traceback: object) -> None:
         """Releases the operation bundle on normal or exceptional exit."""
 
-        self.close()
+        active_error = _exception if isinstance(_exception, BaseException) else None
+        close_preserving_error(
+            self.close,
+            active_error,
+            message="Reserved workflow and BlueStacks phase cleanup both failed.",
+        )
 
 
 @dataclass(slots=True)
@@ -109,6 +120,7 @@ class InstanceLeaseRegistry:
     poll_interval_seconds: float = 0.25
     _leases: dict[str, _NativeInstanceLease] = field(default_factory=dict, init=False, repr=False)
     _reference_counts: dict[str, int] = field(default_factory=dict, init=False, repr=False)
+    _finalizers: dict[str, Callable[[], None]] = field(default_factory=dict, init=False, repr=False)
     _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
 
     def acquire(
@@ -218,31 +230,75 @@ class InstanceLeaseRegistry:
         _write_owner(handle, display_name=display_name)
         return _NativeInstanceLease(display_name=display_name, path=path, handle=handle)
 
-    def _release_reference(self, lease_key: str) -> None:
-        """Drops one operation reference and closes the native lock at zero."""
+    def _release_reference(
+        self,
+        lease_key: str,
+        *,
+        finalizer: Callable[[], None] | None = None,
+    ) -> None:
+        """Drops one reference, then finalizes after making the instance claimable."""
 
         native: _NativeInstanceLease | None = None
+        pending_finalizer: Callable[[], None] | None = None
         with self._lock:
             count = self._reference_counts.get(lease_key, 0)
             if count <= 0:
                 return
+            if finalizer is not None:
+                # The latest exact-process snapshot is the safest one to revalidate
+                # when several child sessions request the same phase-end shutdown.
+                self._finalizers[lease_key] = finalizer
             if count == 1:
+                pending_finalizer = self._finalizers.get(lease_key)
                 self._reference_counts.pop(lease_key, None)
                 native = self._leases.pop(lease_key, None)
+                self._finalizers.pop(lease_key, None)
             else:
                 self._reference_counts[lease_key] = count - 1
         if native is not None:
             native.release()
+        if pending_finalizer is not None:
+            # A phase-end finalizer owns its own bounded re-acquisition. Running
+            # it after release lets newly queued work claim or cancel shutdown.
+            pending_finalizer()
 
     def release_all(self) -> None:
         """Releases every process-owned lease, primarily for clean shutdown and tests."""
 
+        errors: list[BaseException] = []
         with self._lock:
-            leases = tuple(self._leases.values())
+            leased_items = tuple(self._leases.items())
+            finalizers = tuple(
+                self._finalizers[lease_key]
+                for lease_key, _lease in leased_items
+                if lease_key in self._finalizers
+            )
             self._leases.clear()
             self._reference_counts.clear()
-        for lease in leases:
-            lease.release()
+            self._finalizers.clear()
+        for _lease_key, lease in leased_items:
+            try:
+                lease.release()
+            except BaseException as error:
+                errors.append(error)
+        for finalizer in finalizers:
+            try:
+                # Release the whole declared bundle before any delayed cleanup
+                # tries to re-acquire an individual instance.
+                finalizer()
+            except BaseException as error:
+                errors.append(error)
+        _raise_release_errors(errors)
+
+
+def _raise_release_errors(errors: list[BaseException]) -> None:
+    """Raises every finalizer failure after all native locks have been released."""
+
+    if not errors:
+        return
+    if len(errors) == 1:
+        raise errors[0]
+    raise BaseExceptionGroup("Multiple BlueStacks lease finalizers failed.", errors)
 
 
 def _normalize_display_names(display_names: tuple[str, ...]) -> tuple[tuple[str, str], ...]:

@@ -68,7 +68,7 @@ def main() -> int:
         action="append",
         help="Reviewed source ScreenType name or value; omit to run every declared source independently.",
     )
-    parser.add_argument("--output-dir", default=str(root / "artifacts" / "screen_recognition" / "navigation"))
+    parser.add_argument("--output-dir", default=str(root / ".local-data" / "reports" / "navigation_selector_validation"))
     arguments = parser.parse_args()
 
     catalog_path = Path(arguments.catalog)

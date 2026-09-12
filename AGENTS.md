@@ -44,11 +44,24 @@
 - Authored automation YAML: `scripts/`
 - Script authoring guide: `scripts/README.md`
 - Config templates: `config/*.example.yaml`
-- Runtime evidence: `artifacts/`
+- Runtime evidence: `.local-data/artifacts/` (local and ignored)
 - Reviewed plans and implementation reviews: `reviewed_plans/`
 - Local workflow skills: `.agents/skills/`
 - Shared browser/session instructions: `instructions/`
 - Legacy prompt references: `prompts/`
+
+## Generated Local Data
+
+- Use the repository-root `.local-data/` directory for generated local data. It
+  is ignored by Git and is created on demand. Standard locations are
+  `.local-data/artifacts/` for runtime evidence, `.local-data/archives/` for
+  chat/mail archives, and `.local-data/reports/` for reports, timing CSVs,
+  selector discovery output, and similar run products.
+- `.test-impact/` remains the ignored test-selection scratch and CI evidence
+  directory. Do not commit either local-data tree.
+- Keep authored fixtures and runtime assets tracked: `tests/data/`,
+  `pnc_automation/**/data/`, example configuration, reviewed plans, and
+  selector catalogs are not generated local data.
 - Package metadata and Python requirement: `pyproject.toml`
 
 ## Config And Secrets
@@ -96,15 +109,16 @@ Before and during a live run:
 - If no live target is named, use the currently active castle on the configured `testing` instance. Do not select or switch castles unless the user names a castle and authorizes that navigation.
 - Preserve castle inventories for every configured account independently of live execution eligibility. `accounts[].live_roles` is the authority and assignments may be reassigned; names such as `testing`/`smoke_test`, `serious_stuff`/`live_testing`, `mega_old_acc`/`daily_canary`, and `main`/`read_only` describe the current roster examples, not immutable workflow rules. Validate the intended role before constructing a live runtime.
 - Every PNC process must acquire the canonical process-scoped lease for each BlueStacks display name before connecting through ADB. Keep the reservation across preparation, all dependent work, and cleanup. Acquisition waits are bounded. Multi-instance work must declare the complete bundle up front so the lease manager can acquire it in canonical order without hold-and-wait deadlocks.
+- Live-testing cleanup is owned by the outer task-series reservation: keep a selected instance warm for short probes and dependent substeps, then close it only when the active agent explicitly ends a longer live-testing phase. Child-session shutdown requests are deferred until the last same-process lease reference. At phase end, release the old lease, allow the configured quiescence window for newly queued work to claim and cancel or replace shutdown, then re-acquire the lease and revalidate the exact intent, instance key, and PID before stopping. Preserve pre-existing instances by default; closing one requires an explicit phase decision.
 - Multi-step live workflows must use one scoped reservation for their entire sequence: `with api.use_account(...)` for one prepared account, or `with api.reserve_accounts((...))` when several accounts/instances are involved. One-shot direct calls may use an isolated lease, but do not release and reacquire between dependent steps. The active API scope rejects calls for accounts outside its declared bundle.
 - The host-management CLI reads only host bindings, roles, metadata, and memory policy; it must remain usable without credentials or castle files. It reloads valid host authority on every monitor sample and again under lease before destructive mutation. Pending recovery intent and cooldown are durable, with at most 3 launch attempts per pass and 9 persisted attempts total; role or identity revocation blocks pending launches.
-- Run `py -m pnc_automation.bluestacks_management monitor --watch` under host supervision when automatic leak recovery is desired. It uses working set, repeated samples, durable intent, and a cooldown; it may restart only an idle instance after acquiring its canonical lease. It skips busy instances and must never auto-restart an account carrying `read_only`. Watch mode continues monitoring peers after per-instance failures, while fatal host/configuration failures exit nonzero and are emitted through the bounded rotating state log without raw secrets.
+- Run `py -m pnc_automation.bluestacks_management monitor --watch` under host supervision when automatic leak recovery is desired. It uses working set, repeated samples, durable intent, and a cooldown; it may restart only an idle instance after acquiring its canonical lease. The same loop reconciles exact-PID phase-close intent abandoned by a terminated agent, but only after obtaining the idle lease, reloading role and metadata authority, and rejecting replacement processes or read-only instances. It skips busy instances and must never auto-restart or stale-close an account carrying `read_only`. Watch mode continues monitoring peers after per-instance failures, while fatal host/configuration failures exit nonzero and are emitted through the bounded rotating state log without raw secrets.
 - Register the Windows supervisor with `tools/register_bluestacks_memory_monitor_task.ps1`. Its action must run the resolved windowless Python interpreter directly, not a PowerShell or `py` launcher wrapper: stopping a wrapper task can leave the actual monitor orphaned.
 - Run `py -m pnc_automation.bluestacks_management restart-open --require-maintenance-window --include-read-only` only for the explicit 01:55 America/Toronto open-instance maintenance boundary. The legacy Python tool paths remain compatibility shims.
 - The daily 01:55 America/Toronto maintenance boundary may restart every configured instance that is open at its initial snapshot, including an open `main`. It must acquire that complete open-instance bundle before stopping anything and must leave configured closed instances closed.
 - Default to read-only or non-spending proof. Any live validation that can spend in-game resources requires the exact action, target, and budget from the current request or a user-approved execution plan and must use `.agents/skills/write-code-live`. Do not request duplicate confirmation when those details are complete.
 - Start with the smallest smoke path that proves the risky boundary. Use observation-based waits and existing runner/navigation abstractions.
-- On failure, inspect screenshots, OCR JSON, logs, and observation artifacts under `artifacts/` before changing code. Preserve relevant artifact paths in the final response.
+- On failure, inspect screenshots, OCR JSON, logs, and observation artifacts under `.local-data/artifacts/` before changing code. Preserve relevant artifact paths in the final response.
 
 ## Local Skills
 
@@ -142,6 +156,23 @@ Use `.agents/skills/manage-source-control` for new feature branches, branch sync
 - Before integrating, inspect the merge base and commits and diffs unique to both the feature and target branches. Resolve overlaps according to the intent, tests, and canonical ownership of both changesets; never select one side wholesale merely to clear conflicts.
 - Prefer rebasing a local or private feature branch onto the latest target. Do not rewrite a published or shared branch without explicit authorization; merge the target into it when shared history must be preserved.
 - Review and validate the combined result, fetch the target again immediately before landing, and repeat synchronization if it moved. Never force-push the default or a protected branch.
+
+## Generated Output During Git Work
+
+- Before staging, classify every new or changed path as authored source/config,
+  a fixture/plan, or generated local output. Generated reports, CSVs, logs,
+  screenshots, archives, state, coverage, and selector-validation products
+  belong under `.local-data/`; test-selection evidence belongs under
+  `.test-impact/`.
+- Check `git status --short --ignored` and use `git check-ignore -v <path>`
+  when output appears in the worktree. Do not use a broad `*.csv` rule because
+  an authored CSV fixture may be a real repository input.
+- If an old generated path is tracked, preserve its bytes by moving it into
+  the matching `.local-data/` subdirectory, stage the old path's removal, and
+  update the producer's default. Do not commit a generated copy or delete it
+  merely to make status clean.
+- Do not move `tests/data/`, package data, example configuration, or reviewed
+  plans into `.local-data/`; their contents are authored contracts.
 
 ## Working Tree Safety
 

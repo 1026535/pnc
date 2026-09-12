@@ -25,6 +25,9 @@ from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateM
 from tests.support.pnc.capture_vision.coordinate_bar_filtering_ocr_service import (
     _CoordinateBarFilteringOcrService,
 )
+from tests.support.pnc.capture_vision.coordinate_bar_filtering_full_ocr_service import (
+    _CoordinateBarFilteringFullOcrService,
+)
 from tests.support.pnc.capture_vision.fake_ocr_service import _FakeOcrService
 from tests.support.pnc.capture_vision.ocr_line import _ocr_line
 

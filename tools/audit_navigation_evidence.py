@@ -83,7 +83,15 @@ def build_audit(root: Path, output: Path) -> dict[str, object]:
     transitions = []
     errors = []
     extensions = Counter()
-    roots = ("artifacts", "archives", "selector_discovery_output", "navigation_selector_validation_output", "reviewed_plans", "tests/data")
+    roots = (
+        ".local-data",
+        "artifacts",
+        "archives",
+        "selector_discovery_output",
+        "navigation_selector_validation_output",
+        "reviewed_plans",
+        "tests/data",
+    )
     for directory in roots:
         for path in sorted((root / directory).rglob("*")):
             if not path.is_file() or path.resolve().is_relative_to(output.resolve()):
@@ -183,7 +191,7 @@ def build_audit(root: Path, output: Path) -> dict[str, object]:
 def main() -> int:
     """Write a reproducible coverage index; malformed evidence yields a failing exit."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output-dir", type=Path, default=ROOT / "artifacts/navigation_audit/index")
+    parser.add_argument("--output-dir", type=Path, default=ROOT / ".local-data/artifacts/navigation_audit/index")
     arguments = parser.parse_args()
     result = build_audit(ROOT, arguments.output_dir)
     print(json.dumps({key: result[key] for key in ("file_count", "extensions", "parse_errors")}, indent=2))

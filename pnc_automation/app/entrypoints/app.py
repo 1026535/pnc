@@ -14,6 +14,8 @@ from pnc_automation.app.automation.engine.runner import RunResult, StepRunResult
 from pnc_automation.app.automation.engine.core_runtime import build_core_runtime
 from pnc_automation.app.automation.engine.core_workflow import CoreWorkflowResult, CoreWorkflowRunner
 from pnc_automation.app.automation.engine.script_runner import ScriptRunner
+from pnc_automation.core.infra.emulator.session import BlueStacksSessionCleanupPolicy
+from pnc_automation.core.lifecycle import close_preserving_error
 from pnc_automation.app.automation.engine.task import TaskId
 from pnc_automation.app.automation.open_building import OpenBuildingResult, build_open_building_workflow
 from pnc_automation.app.automation.daily_maintenance.daily_quest_status import (
@@ -69,6 +71,7 @@ class ApplicationRunner:
         script_path: str,
         castle_refs: list[str] | None = None,
         required_role: LiveAutomationRole | None = None,
+        session_cleanup_policy: BlueStacksSessionCleanupPolicy | None = None,
     ) -> RunResult:
         """Executes one script for an account and optional ordered castle aliases."""
 
@@ -77,6 +80,7 @@ class ApplicationRunner:
             script_path=script_path,
             castle_refs=castle_refs,
             required_role=required_role,
+            session_cleanup_policy=session_cleanup_policy,
         )
 
     def prepare_account_session(
@@ -85,6 +89,7 @@ class ApplicationRunner:
         account_id: str,
         castle: CastleIdentity | None = None,
         required_role: LiveAutomationRole | None = None,
+        session_cleanup_policy: BlueStacksSessionCleanupPolicy | None = None,
     ) -> RunResult:
         """Runs the canonical login-and-optional-castle-alignment preparation path."""
 
@@ -92,6 +97,7 @@ class ApplicationRunner:
             account_id=account_id,
             castle=castle,
             required_role=required_role,
+            session_cleanup_policy=session_cleanup_policy,
         )
 
     def run_task(
@@ -101,6 +107,7 @@ class ApplicationRunner:
         task_id: TaskId,
         params: dict[str, object] | None = None,
         required_role: LiveAutomationRole | None = None,
+        session_cleanup_policy: BlueStacksSessionCleanupPolicy | None = None,
     ) -> StepRunResult:
         """Runs one direct task call against the current live session state."""
 
@@ -109,6 +116,7 @@ class ApplicationRunner:
             task_id=task_id,
             params=params,
             required_role=required_role,
+            session_cleanup_policy=session_cleanup_policy,
         )
 
     def run_mail_schedules(
@@ -118,6 +126,7 @@ class ApplicationRunner:
         schedule_ids: list[str] | None = None,
         scheduled_for_utc: datetime | None = None,
         required_role: LiveAutomationRole | None = None,
+        session_cleanup_policy: BlueStacksSessionCleanupPolicy | None = None,
     ) -> RunResult:
         """Runs the authored scheduled-mail expansion path for one account."""
 
@@ -126,9 +135,15 @@ class ApplicationRunner:
             schedule_ids=schedule_ids,
             scheduled_for_utc=scheduled_for_utc,
             required_role=required_role,
+            session_cleanup_policy=session_cleanup_policy,
         )
 
-    def run_daily_quest_status(self, *, account_id: str) -> CoreWorkflowResult[DailyQuestStatusResult]:
+    def run_daily_quest_status(
+        self,
+        *,
+        account_id: str,
+        session_cleanup_policy: BlueStacksSessionCleanupPolicy | None = None,
+    ) -> CoreWorkflowResult[DailyQuestStatusResult]:
         """Preflights the active castle and reports one visible Daily Quest viewport."""
 
         account = self.script_runner.config.require_account(account_id)
@@ -137,12 +152,20 @@ class ApplicationRunner:
             account,
             account.artifact_directory_name,
             required_role=LiveAutomationRole.DAILY_CANARY,
+            session_cleanup_policy=session_cleanup_policy,
         )
         try:
             core_runtime.preflight_active_castle_identity()
-            return CoreWorkflowRunner[DailyQuestStatusResult](core_runtime).run(DailyQuestStatusWorkflow())
-        finally:
-            core_runtime.close()
+            result = CoreWorkflowRunner[DailyQuestStatusResult](core_runtime).run(DailyQuestStatusWorkflow())
+        except BaseException as error:
+            close_preserving_error(
+                core_runtime.close,
+                error,
+                message="Daily canary execution and BlueStacks phase cleanup both failed.",
+            )
+            raise
+        core_runtime.close()
+        return result
 
     def run_collect_mail(
         self,

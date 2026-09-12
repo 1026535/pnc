@@ -17,6 +17,10 @@ from pnc_automation.bluestacks_management.instance_memory_monitor import (
     MemoryMonitorDisposition,
     MemoryMonitorResult,
 )
+from pnc_automation.bluestacks_management.instance_shutdown import (
+    StaleShutdownDisposition,
+    StaleShutdownResult,
+)
 
 
 class BlueStacksManagementCliTests(unittest.TestCase):
@@ -100,6 +104,10 @@ class BlueStacksManagementCliTests(unittest.TestCase):
             patch("pnc_automation.bluestacks_management.__main__.load_bluestacks_host_config", return_value=config),
             patch("pnc_automation.bluestacks_management.__main__.BlueStacksInstanceResolver"),
             patch("pnc_automation.bluestacks_management.__main__.BlueStacksInstanceMemoryMonitor", return_value=monitor),
+            patch(
+                "pnc_automation.bluestacks_management.__main__.BlueStacksStaleInstanceShutdownReconciler",
+                return_value=SimpleNamespace(reconcile_all=lambda: ()),
+            ),
         ):
             self.assertEqual(_run_monitor(Namespace(config="config/accounts.yaml", watch=False)), 1)
 
@@ -146,6 +154,47 @@ class BlueStacksManagementCliTests(unittest.TestCase):
             self.assertEqual(_run_monitor(Namespace(config="config/accounts.yaml", watch=True)), 0)
 
         self.assertEqual(monitor.sample_once.call_count, 2)
+
+    def test_monitor_reconciles_abandoned_phase_cleanup_before_memory_sampling(self) -> None:
+        """Runs durable stale-instance cleanup from the existing supervised host loop."""
+
+        config = BlueStacksHostConfig(
+            config_path=Path("accounts.yaml"),
+            metadata_path=Path("bluestacks.conf"),
+            instances=(),
+            accounts=(),
+            memory_policy=BlueStacksMemoryPolicy(enabled=True, restart_roles=frozenset()),
+        )
+        stale_result = StaleShutdownResult(
+            display_name="testing",
+            disposition=StaleShutdownDisposition.CLOSED,
+        )
+        reconciler = SimpleNamespace(reconcile_all=Mock(return_value=(stale_result,)))
+        monitor = SimpleNamespace(sample_once=Mock(return_value=()))
+        stdout = StringIO()
+        with (
+            patch(
+                "pnc_automation.bluestacks_management.__main__.configure_logging",
+                return_value=SimpleNamespace(error=lambda *args, **kwargs: None),
+            ),
+            patch("pnc_automation.bluestacks_management.__main__.load_bluestacks_host_config", return_value=config),
+            patch("pnc_automation.bluestacks_management.__main__.BlueStacksInstanceResolver"),
+            patch("pnc_automation.bluestacks_management.__main__.BlueStacksInstanceMemoryMonitor", return_value=monitor),
+            patch(
+                "pnc_automation.bluestacks_management.__main__.BlueStacksStaleInstanceShutdownReconciler",
+                return_value=SimpleNamespace(reconcile_all=lambda: ()),
+            ),
+            patch(
+                "pnc_automation.bluestacks_management.__main__.BlueStacksStaleInstanceShutdownReconciler",
+                return_value=reconciler,
+            ),
+            redirect_stdout(stdout),
+        ):
+            self.assertEqual(_run_monitor(Namespace(config="config/accounts.yaml", watch=False)), 0)
+
+        reconciler.reconcile_all.assert_called_once_with()
+        monitor.sample_once.assert_called_once_with()
+        self.assertIn("stale_shutdown_closed", stdout.getvalue())
 
     def test_malformed_monitor_config_is_reported_without_exception_text(self) -> None:
         """The host CLI returns a sanitized error instead of echoing malformed YAML details."""
