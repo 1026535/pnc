@@ -14,6 +14,7 @@ from pnc_automation.app.pnc.domain.action_requests import (
     SelectChatChannelAction,
     SwipeAction,
     TapAction,
+    TapListEntryAction,
     TapPointAction,
     TapSpatialObjectAction,
 )
@@ -22,12 +23,16 @@ from pnc_automation.app.pnc.domain.building_catalog import (
     home_city_object_id_from_metadata,
     primary_screen_type_for_home_city_object,
 )
+from pnc_automation.app.pnc.domain.castle_roster_scan import castle_roster_window_signature
 from pnc_automation.app.pnc.domain.observation import (
+    DetectedListEntry,
     DetectedSpatialObject,
     ListEntryKind,
     Observation,
     SpatialSurfaceType,
     VisibleElementSourceKind,
+    castle_entry_matches,
+    castle_entry_identity_matches,
 )
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.domain.chat import (
@@ -48,6 +53,8 @@ from pnc_automation.app.pnc.navigation.spatial_navigation import (
     home_city_scan_step_budget,
     home_city_scan_steps,
 )
+
+_MAX_CASTLE_ROSTER_SWIPES = 6
 
 
 class NavigationActuator(Protocol):
@@ -478,6 +485,144 @@ class NavigationCore:
             observe_content,
         )
 
+    def select_castle(
+        self,
+        target: CastleIdentity,
+        *,
+        observe_content: Callable[[str], Observation],
+    ) -> Observation:
+        """Select one exact observed Manage Characters row with bounded live scanning."""
+
+        if not isinstance(target, CastleIdentity):
+            raise ValueError("Castle selection requires a CastleIdentity target.")
+        self._sequence += 1
+        label = f"core_{self._sequence}_castle_select"
+        current = observe_content(f"{label}_source")
+        for direction in ("down", "up"):
+            seen_windows: set[tuple[tuple[str, str], ...]] = set()
+            for step_index in range(_MAX_CASTLE_ROSTER_SWIPES + 1):
+                self._require_castle_selection_source(current)
+                signature = castle_roster_window_signature(current)
+                if signature in seen_windows:
+                    break
+                seen_windows.add(signature)
+                candidates = _matching_castle_entries(current, target)
+                if len(candidates) > 1:
+                    raise RuntimeError(
+                        "Requested castle row is ambiguous; no further gesture or building tap was sent."
+                    )
+                if candidates:
+                    if not castle_entry_matches(candidates[0], target):
+                        raise RuntimeError(
+                            "Requested castle row has a mismatched level; no further gesture or building tap was sent."
+                        )
+                    if candidates[0].selected:
+                        self.record(
+                            {
+                                "event": "castle_already_selected",
+                                "target": target.castle_name,
+                                "kingdom": target.kingdom,
+                                "artifact": None if current.artifact_path is None else str(current.artifact_path),
+                            }
+                        )
+                        return current
+                    return self._select_visible_castle(
+                        target=target,
+                        source=current,
+                        label=label,
+                        observe_content=observe_content,
+                    )
+                if step_index == _MAX_CASTLE_ROSTER_SWIPES:
+                    break
+                current = self.scroll_castle_roster(direction, observe_content=observe_content)
+        raise RuntimeError(
+            "Requested castle row was not found within the bounded roster scan; no further gesture or building tap was sent."
+        )
+
+    @staticmethod
+    def _require_castle_selection_source(observation: Observation) -> None:
+        """Reject an interrupted or unexpected roster frame before scanning it."""
+
+        if observation.blocking_popup or observation.screen_type != ScreenType.PNC_CASTLE_SELECTION:
+            raise RuntimeError(
+                "Castle selection requires a freshly observed, unblocked Manage Characters screen."
+            )
+
+    def _select_visible_castle(
+        self,
+        *,
+        target: CastleIdentity,
+        source: Observation,
+        label: str,
+        observe_content: Callable[[str], Observation],
+    ) -> Observation:
+        """Reacquire one target row, then tap its current observed action point once."""
+
+        reacquired = observe_content(f"{label}_reacquire")
+        if reacquired.captured_at <= source.captured_at:
+            raise RuntimeError("Castle selection reacquired a stale roster frame; no castle selection tap was sent.")
+        self._require_castle_selection_source(reacquired)
+        candidates = _matching_castle_entries(reacquired, target)
+        if len(candidates) != 1:
+            raise RuntimeError(
+                "Requested castle row changed or became ambiguous; no castle selection tap was sent."
+            )
+        entry = candidates[0]
+        if not castle_entry_matches(entry, target):
+            raise RuntimeError(
+                "Requested castle row changed to a mismatched level; no castle selection tap was sent."
+            )
+        if entry.selected:
+            self.record(
+                {
+                    "event": "castle_already_selected",
+                    "target": target.castle_name,
+                    "kingdom": target.kingdom,
+                    "artifact": None if reacquired.artifact_path is None else str(reacquired.artifact_path),
+                }
+            )
+            return reacquired
+        if entry.action_point is None:
+            raise RuntimeError(
+                "Requested castle row has no observed action point; no castle selection tap was sent."
+            )
+        if (
+            not isinstance(entry.action_point, tuple)
+            or len(entry.action_point) != 2
+            or any(type(value) is not int for value in entry.action_point)
+            or not entry.bounds.contains_point(entry.action_point)
+        ):
+            raise RuntimeError(
+                "Requested castle row has a malformed action point; no castle selection tap was sent."
+            )
+        self.record(
+            {
+                "event": "pending_castle_select",
+                "target": target.castle_name,
+                "kingdom": target.kingdom,
+                "artifact": None if reacquired.artifact_path is None else str(reacquired.artifact_path),
+            }
+        )
+        return self._execute_content_and_confirm(
+            TapListEntryAction(
+                entry_kind=ListEntryKind.CASTLE,
+                title_text=entry.title_text,
+                metadata_key="kingdom",
+                metadata_value=target.kingdom,
+                selected=False,
+                use_action_point=True,
+                reason="replacement_select_castle",
+            ),
+            reacquired,
+            frozenset({ScreenType.PNC_CASTLE_SELECTION, ScreenType.PNC_HOME_CITY}),
+            label,
+            observe_content,
+            completion_predicate=lambda observation: (
+                observation.screen_type == ScreenType.PNC_HOME_CITY
+                or _selected_castle_observed(observation, target=target)
+            ),
+        )
+
     def _execute_content_and_confirm(
         self,
         action: ActionRequest,
@@ -619,6 +764,28 @@ def _require_home_city_surface(observation: Observation) -> None:
         or observation.spatial_surface.surface_type != SpatialSurfaceType.HOME_CITY_SURFACE
     ):
         raise RuntimeError("Building navigation requires a freshly observed, unblocked city surface.")
+
+
+def _selected_castle_observed(observation: Observation, *, target: CastleIdentity) -> bool:
+    """Returns whether exactly one observed target row is marked selected."""
+
+    if observation.blocking_popup or observation.screen_type != ScreenType.PNC_CASTLE_SELECTION:
+        return False
+    matches = _matching_castle_entries(observation, target)
+    return len(matches) == 1 and matches[0].selected and castle_entry_matches(matches[0], target)
+
+
+def _matching_castle_entries(
+    observation: Observation,
+    target: CastleIdentity,
+) -> tuple[DetectedListEntry, ...]:
+    """Returns all observed castle rows with the exact kingdom/name identity."""
+
+    return tuple(
+        entry
+        for entry in observation.entries(ListEntryKind.CASTLE)
+        if entry.title_text is not None and castle_entry_identity_matches(entry, target)
+    )
 
 
 def _resolve_observed_building_target(
@@ -834,6 +1001,9 @@ def reviewed_navigation_edges() -> tuple[NavigationEdge, ...]:
     edges = [
         NavigationEdge(screen.PNC_HOME_CITY, selector.PNC_HOME_WORLD_SWITCH, frozenset({screen.PNC_WORLD_MAP})),
         NavigationEdge(screen.PNC_WORLD_MAP, selector.PNC_WORLD_HOME_NAV, frozenset({screen.PNC_HOME_CITY})),
+        NavigationEdge(screen.PNC_CAMPAIGN_MAP, selector.PNC_CAMPAIGN_HOME_PORTAL, frozenset({screen.PNC_HOME_CITY})),
+        NavigationEdge(screen.PNC_CAMPAIGN_CHAPTER, selector.PNC_CAMPAIGN_BACK_BUTTON, frozenset({screen.PNC_CAMPAIGN_MAP})),
+        NavigationEdge(screen.PNC_CAMPAIGN_STAGE, selector.PNC_CAMPAIGN_CLOSE_BUTTON, frozenset({screen.PNC_CAMPAIGN_CHAPTER})),
         NavigationEdge(screen.PNC_HOME_CITY, selector.PNC_BOTTOM_NAV_QUEST, quest),
         NavigationEdge(screen.PNC_HOME_CITY, selector.PNC_BOTTOM_NAV_BAG, frozenset({screen.PNC_BAG})),
         NavigationEdge(screen.PNC_HOME_CITY, selector.PNC_BOTTOM_NAV_MAIL, frozenset({screen.PNC_MAIL_HUB})),

@@ -939,5 +939,119 @@
     "redacted_region": [0, 110, 540, 885],
     "redaction_fill_rgb": [15, 28, 68],
     "notes": "Portable sanitized validation fixture: header rows 0-108 and composer rows 885-959 retained; transcript rows 110-884 replaced with flat background; authorized hello draft retained."
+  },
+  {
+    "asset": "screen_anchors/campaign_map_scene.png",
+    "source": ".local-data/artifacts/2026-09-12/serious_stuff/20260912T195710Z_core_20260912T195338Z_6a8f4869_0013_campaign_entry_settled.png",
+    "source_sha256": "97a15f36f9d7c1ac56ca7f8ba3903c329a04c3179323d94eb98e2d4ffdca91c1",
+    "reference_size": [540, 960],
+    "crop": [180, 220, 350, 350],
+    "capture_group": "2026-09-12/serious_stuff/campaign_navigation",
+    "notes": "Bounded Campaign map terrain identity crop; private top and side HUD are excluded from the portable fixture."
+  },
+  {
+    "asset": "screen_anchors/campaign_map_nodes.png",
+    "source": ".local-data/artifacts/2026-09-12/serious_stuff/20260912T195710Z_core_20260912T195338Z_6a8f4869_0013_campaign_entry_settled.png",
+    "source_sha256": "97a15f36f9d7c1ac56ca7f8ba3903c329a04c3179323d94eb98e2d4ffdca91c1",
+    "reference_size": [540, 960],
+    "crop": [175, 445, 335, 560],
+    "capture_group": "2026-09-12/serious_stuff/campaign_navigation",
+    "notes": "Independent Campaign map node and terrain crop."
+  },
+  {
+    "asset": "screen_anchors/campaign_chapter_title.png",
+    "source": ".local-data/artifacts/2026-09-12/serious_stuff/20260912T195809Z_core_20260912T195338Z_6a8f4869_0015_campaign_chapter_10_settled.png",
+    "source_sha256": "738f8218eb53c6e802f55f5d1056f35fd907e907c62c800605ade61d63314d56",
+    "reference_size": [540, 960],
+    "crop": [205, 38, 530, 98],
+    "capture_group": "2026-09-12/serious_stuff/campaign_navigation",
+    "notes": "Observed Chapter 10 title identity crop; this profile is reference-bound to the supplied chapter layout."
+  },
+  {
+    "asset": "screen_anchors/campaign_chapter_path.png",
+    "source": ".local-data/artifacts/2026-09-12/serious_stuff/20260912T195809Z_core_20260912T195338Z_6a8f4869_0015_campaign_chapter_10_settled.png",
+    "source_sha256": "738f8218eb53c6e802f55f5d1056f35fd907e907c62c800605ade61d63314d56",
+    "reference_size": [540, 960],
+    "crop": [105, 500, 320, 675],
+    "capture_group": "2026-09-12/serious_stuff/campaign_navigation",
+    "notes": "Independent observed chapter-node path crop."
+  },
+  {
+    "asset": "screen_anchors/campaign_stage_title.png",
+    "source": ".local-data/artifacts/2026-09-12/serious_stuff/20260912T195913Z_core_20260912T195338Z_6a8f4869_0017_campaign_stage_10_3_settled.png",
+    "source_sha256": "0a3f70a93cba682c50afeca8e432faaf401e75138d255195f6356e32a37bde70",
+    "reference_size": [540, 960],
+    "crop": [120, 201, 420, 250],
+    "capture_group": "2026-09-12/serious_stuff/campaign_navigation",
+    "notes": "Bounded Campaign stage detail title-bar identity crop."
+  },
+  {
+    "asset": "screen_anchors/campaign_stage_enemy_lineup.png",
+    "source": ".local-data/artifacts/2026-09-12/serious_stuff/20260912T195913Z_core_20260912T195338Z_6a8f4869_0017_campaign_stage_10_3_settled.png",
+    "source_sha256": "0a3f70a93cba682c50afeca8e432faaf401e75138d255195f6356e32a37bde70",
+    "reference_size": [540, 960],
+    "crop": [190, 260, 450, 310],
+    "capture_group": "2026-09-12/serious_stuff/campaign_navigation",
+    "notes": "Independent stage detail enemy-lineup label crop; no Challenge control is represented."
+  },
+  {
+    "asset": "screen_anchors/campaign_home_portal.png",
+    "source": ".local-data/artifacts/2026-09-12/serious_stuff/20260912T195710Z_core_20260912T195338Z_6a8f4869_0013_campaign_entry_settled.png",
+    "source_sha256": "97a15f36f9d7c1ac56ca7f8ba3903c329a04c3179323d94eb98e2d4ffdca91c1",
+    "reference_size": [540, 960],
+    "crop": [466, 775, 521, 820],
+    "capture_group": "2026-09-12/serious_stuff/campaign_navigation",
+    "notes": "Measured lower-right blue Campaign Home portal; the tutorial arrow is excluded from the template crop."
+  },
+  {
+    "asset": "screen_anchors/campaign_back_button.png",
+    "source": ".local-data/artifacts/2026-09-12/serious_stuff/20260912T195809Z_core_20260912T195338Z_6a8f4869_0015_campaign_chapter_10_settled.png",
+    "source_sha256": "738f8218eb53c6e802f55f5d1056f35fd907e907c62c800605ade61d63314d56",
+    "reference_size": [540, 960],
+    "crop": [450, 760, 535, 830],
+    "capture_group": "2026-09-12/serious_stuff/campaign_navigation",
+    "notes": "Measured Chapter gold Back control crop; return destination is reviewed separately by navigation ownership."
+  },
+  {
+    "asset": "screen_anchors/campaign_close_button.png",
+    "source": ".local-data/artifacts/2026-09-12/serious_stuff/20260912T195913Z_core_20260912T195338Z_6a8f4869_0017_campaign_stage_10_3_settled.png",
+    "source_sha256": "0a3f70a93cba682c50afeca8e432faaf401e75138d255195f6356e32a37bde70",
+    "reference_size": [540, 960],
+    "crop": [466, 200, 512, 248],
+    "capture_group": "2026-09-12/serious_stuff/campaign_navigation",
+    "notes": "Measured stage detail owned Close control crop; profile marks it as surface dismissal evidence."
+  },
+  {
+    "asset": "tests/data/screen_recognition/campaign_map.png",
+    "source": ".local-data/artifacts/2026-09-12/serious_stuff/20260912T195710Z_core_20260912T195338Z_6a8f4869_0013_campaign_entry_settled.png",
+    "source_sha256": "97a15f36f9d7c1ac56ca7f8ba3903c329a04c3179323d94eb98e2d4ffdca91c1",
+    "reference_size": [540, 960],
+    "capture_group": "2026-09-12/serious_stuff/campaign_navigation",
+    "preserved_regions": [[82, 160, 390, 650], [466, 760, 535, 835], [0, 885, 540, 960]],
+    "redacted_regions": [[0, 0, 540, 160], [0, 160, 82, 300], [390, 160, 540, 820], [0, 650, 450, 820], [0, 820, 540, 885]],
+    "redaction_fill_rgb": [14, 34, 55],
+    "notes": "Portable sanitized Campaign map fixture; account/HUD rails, task and chat rows are removed while map terrain, nodes, and bottom navigation remain."
+  },
+  {
+    "asset": "tests/data/screen_recognition/campaign_chapter_10.png",
+    "source": ".local-data/artifacts/2026-09-12/serious_stuff/20260912T195809Z_core_20260912T195338Z_6a8f4869_0015_campaign_chapter_10_settled.png",
+    "source_sha256": "738f8218eb53c6e802f55f5d1056f35fd907e907c62c800605ade61d63314d56",
+    "reference_size": [540, 960],
+    "capture_group": "2026-09-12/serious_stuff/campaign_navigation",
+    "preserved_regions": [[82, 160, 430, 650], [205, 38, 530, 98], [450, 760, 535, 830], [0, 885, 540, 960]],
+    "redacted_regions": [[0, 0, 540, 160], [0, 160, 82, 300], [430, 120, 540, 820], [0, 650, 450, 820], [0, 820, 540, 885]],
+    "redaction_fill_rgb": [20, 39, 55],
+    "notes": "Portable sanitized Chapter 10 fixture; only title, chapter path, reviewed Back, and bottom navigation remain from the private-HUD frame."
+  },
+  {
+    "asset": "tests/data/screen_recognition/campaign_stage_10_3.png",
+    "source": ".local-data/artifacts/2026-09-12/serious_stuff/20260912T195913Z_core_20260912T195338Z_6a8f4869_0017_campaign_stage_10_3_settled.png",
+    "source_sha256": "0a3f70a93cba682c50afeca8e432faaf401e75138d255195f6356e32a37bde70",
+    "reference_size": [540, 960],
+    "capture_group": "2026-09-12/serious_stuff/campaign_navigation",
+    "preserved_regions": [[16, 201, 522, 741]],
+    "redacted_regions": [[0, 0, 540, 201], [0, 741, 540, 960]],
+    "redaction_fill_rgb": [16, 28, 49],
+    "notes": "Portable sanitized stage-detail fixture; the owned detail panel and Close remain, with private blurred HUD/chat surroundings removed and Challenge unregistered."
   }
 ]
