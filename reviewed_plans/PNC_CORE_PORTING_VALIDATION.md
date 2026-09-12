@@ -1,5 +1,21 @@
 # Replacement core porting validation ledger
 
+## Castle endpoint visual profile — September 12, 2026
+
+Fresh game exploration captured the Castle endpoint on `serious_stuff` with the measured `Castle` title, independent body description, and shared top-left Back control. The endpoint source and stable detail frame are recorded in `.local-data/artifacts/replacement_core/castle_endpoint_evidence.json`; the observed screenshot is `artifacts/2026-09-12/serious_stuff/20260912T165514Z_core_20260912T165456Z_fbd49a64_0003_castle_endpoint_after_1.png`. A subsequent Back action produced two confirmed Home frames, recorded in `.local-data/artifacts/replacement_core/castle_return_evidence.json`, with final frame `artifacts/2026-09-12/serious_stuff/20260912T165841Z_core_20260912T165825Z_779cdd29_0003_castle_return_after_1.png`.
+
+The portable fixture `tests/data/screen_recognition/castle_audit.png` masks the account/avatar band at y=310..415 while preserving the measured visual anchors. The independent profile requires both title and body anchors and exposes only template-backed Back. Authored `OPEN_BUILDING` dispatch remains legacy.
+
+Luna completed implementation and consolidated self-review; root formally reviewed the full diff with no actionable findings. The feature `codex/open-building-castle-core-port` began from freshly fetched `origin/main` at `39ce6fc5e0710a6e2bee9637b82b2e3fe69dfb32`. Commands used `C:/Users/lebel/AppData/Local/Programs/Python/Python313/python.exe`:
+
+- `-m unittest -q tests.unit.app.pnc.navigation.test_navigation_core tests.integration.vision.test_visual_screen_recognizer`: passed, 69 tests.
+- `tools/run_tests.py full`: passed, 1,526 total, 1,521 passed and five optional local screenshot skips; 118.401 seconds, 127.120 including selection and reporting.
+- `git diff --check`: passed.
+
+Root ran `.local-data/artifacts/replacement_core/open_building_castle_live.py:run_open_building_castle_proof()` inside the retained exclusive `serious_stuff` lease. Exact active-castle preflight, `OpenBuildingWorkflow(CASTLE)`, and explicit runner recovery all passed. Result: `.local-data/artifacts/replacement_core/open_building_castle_result.json`; trace: `artifacts/2026-09-12/serious_stuff/20260912T170849Z_dd84749a_core_trace.jsonl`. Root inspected Castle frame `20260912T171106Z_core_20260912T170849Z_dd84749a_0032_core_9_building_after_1.png` and final Home `20260912T171116Z_core_20260912T170849Z_dd84749a_0037_core_10_after_1.png` in that directory. No castle selection, message, claim, upgrade or resource spending occurred.
+
+The required narrow selector validator also passed: `tools/validate_navigation_selectors.py --config C:/Users/lebel/pnc/config/accounts.yaml --account serious_stuff --selector PNC_HOME_WORLD_SWITCH --selector PNC_WORLD_HOME_NAV --output-dir C:/Users/lebel/pnc/.local-data/artifacts/replacement_core/open_building_castle_selectors`. Its report is `20260912T171244Z_serious_stuff_navigation_validation.yaml` in that output directory: two passed, zero failed or skipped. This validates the shared Home/World selectors; the separate core workflow above proves the new Castle edge. All dependent calls reused the same outer process lease and kept the instance warm.
+
 ## Offscreen building focus — September 12, 2026
 
 The feature `codex/open-building-core-focus` began from freshly fetched main `e3a7b839f3a0ec8379c6c9703bdc6a099df39516`. It extends the existing direct core building workflow with a bounded observed camera search. Authored `OPEN_BUILDING` remains legacy: unmodeled endpoints, missing return routes, and unbuilt menus still need evidence before that binding can migrate.

@@ -481,6 +481,47 @@
       ]
     },
     {
+      "id": "castle",
+      "screen": "PNC_CASTLE",
+      "anchors": [
+        {
+          "image": "screen_anchors/castle_0.png",
+          "search_region": [
+            98,
+            3,
+            199,
+            43
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/castle_1.png",
+          "search_region": [
+            278,
+            142,
+            240,
+            40
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/core_institute_pnc_back_button_top_left.png",
+            "search_region": [
+              22,
+              8,
+              58,
+              38
+            ],
+            "threshold": 0.93
+          }
+        }
+      ]
+    },
+    {
       "id": "goddess_statue",
       "screen": "PNC_GODDESS_STATUE",
       "anchors": [
