@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from pnc_automation.app.authoring.config.models import AccountConfig, LiveAutomationRole
@@ -23,10 +24,12 @@ from pnc_automation.app.automation.engine.navigation_core import (
     NavigationPolicy,
     reviewed_navigation_edges,
 )
-from pnc_automation.app.automation.engine.script_runner import ConnectedAccountRuntime, ScriptRunner
 from pnc_automation.core.infra.storage.path_segments import sanitize_artifact_segment
 from pnc_automation.core.infra.emulator.session import BlueStacksSessionCleanupPolicy
 from pnc_automation.core.lifecycle import close_preserving_error
+
+if TYPE_CHECKING:
+    from pnc_automation.app.automation.engine.script_runner import ConnectedAccountRuntime, ScriptRunner
 
 
 @dataclass(slots=True)
@@ -246,7 +249,7 @@ def build_core_runtime(
         session_cleanup_policy=session_cleanup_policy,
     )
     try:
-        return _assemble_core_runtime(
+        return assemble_core_runtime(
             script_runner=script_runner,
             connected_runtime=connected_runtime,
             account=account,
@@ -263,7 +266,7 @@ def build_core_runtime(
         raise
 
 
-def _assemble_core_runtime(
+def assemble_core_runtime(
     *,
     script_runner: ScriptRunner,
     connected_runtime: ConnectedAccountRuntime,
