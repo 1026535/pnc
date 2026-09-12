@@ -1,6 +1,8 @@
 # Synthetic pytest/testmon experiment
 
-This is an isolated synthetic fault experiment, not an audit of historical PNC changes. The adoption gate is **not established**. Whole-PNC parity, historical recall, and meaningful iteration-time savings require separate evidence.
+This is an isolated synthetic fault experiment, not an audit of historical PNC changes. **Decision: do not adopt testmon in this implementation.** The tested raw/guarded approaches miss known failures, and a safe accelerator with the required performance benefit has not been established. Keep native groups/affected selection and independent full unittest validation. pytest/testmon were not added to project or CI dependencies.
+
+A separate full portable run subsequently established exact unittest/pytest inventory and outcome parity for all 1,363 PNC tests (1,359 passes, four skips), with testmon disabled. See `PNC_TEST_MODULARITY_IMPLEMENTATION.md`. This does not prove testmon selection recall. Whole-PNC testmon seeding and performance promotion were not pursued after the fault experiment rejected the proposed adoption approach; historical recall and a safely guarded accelerator remain future work.
 
 Completed **34** independent mutations. Versions: pytest 9.0.2, coverage 7.10.7, pytest-testmon 2.2.0.
 
