@@ -1,16 +1,77 @@
 # Non-YOLO recognition implementation
 
-Feature branch: `codex/non-yolo-recognition` in `artifacts/worktrees/non-yolo`.
-Base: `b6c1a0176bd80423ba33015440ebac6b620fe001`.
+Feature branch: `codex/non-yolo-recognition` in `artifacts/worktrees/non-yolo-integration-current`.
+Current landed baseline: `2bb3c9074d99a532018e071ed121d12e6d75cd8f` on `origin/main` (2026-09-12).
 Status: implemented recognition foundation validated; remaining F integrations
 and broader promotion remain blocked as itemized below. No blanket rollout approval.
+
+## Paused checkpoint: Development research action and reconciliation (2026-09-12)
+
+The current continuation closes the bounded Development Research action gap on the
+configured `testing` target. The canonical OCR row producer identifies complete
+Development nodes and derives each action point from the measured node icon rather
+than its label. A reviewed detail profile exposes only the blue normal Research
+button; the adjacent gold Research Now option is excluded. A separate active-detail
+profile uses stable Speedup-button chrome while excluding the changing progress fill
+and timer, and exposes no Speedup or cancel action.
+
+Root first observed that a label-center tap produced no transition, then required
+icon-derived action geometry. The corrected node action opened Construction I
+(2/5). The normal Research action was dispatched once through the observed executor
+with an exact budget of 16,400 food, 7,010 wood, and zero premium currency. The
+postcondition showed both exact resource deltas, a running timer, and no Start
+control. `ResearchTask.verify` now requires clear
+`visual_anchor:research_tree_node_detail_active` evidence; an ordinary tree or
+unrecognized same-screen frame cannot confirm the mutation.
+
+Live source and postcondition evidence:
+
+- Detail before dispatch: `artifacts/2026-09-12/testing/20260912T192049Z_core_20260912T183757Z_5d65bcbf_0046_research_node_detail.png`.
+- Immediate active detail: `artifacts/2026-09-12/testing/20260912T201102Z_core_20260912T183757Z_5d65bcbf_0051_research_start_postcondition.png`.
+- Elapsed-time regression source: `artifacts/2026-09-12/testing/20260912T202536Z_core_20260912T183757Z_5d65bcbf_0052_research_detail_reloaded.png`.
+- Final active-detail proof: `artifacts/2026-09-12/testing/20260912T204123Z_core_20260912T183757Z_5d65bcbf_0056_research_detail_reloaded.png`.
+- Final Home: `artifacts/2026-09-12/testing/20260912T204305Z_core_20260912T183757Z_5d65bcbf_0066_core_route_source.png`.
+
+The active-detail profile matched both active frames despite the elapsed timer. A
+single reviewed Android Back closed that proved detail, and canonical navigation
+returned to clear Home. The continuous reservation completed with 15 input attempts
+and 66 observations; the pre-existing instance was preserved and the lease released.
+The focused root suite passed 60 tests. Gathering/March, Campaign, broader category
+coverage, member-only applicability, and target/build/locale promotion remain open.
+Implementation is paused at this durable checkpoint at the user's request.
 
 The isolated worktree preserves the relevant recognition/journal baseline recorded in
 `artifacts/non_yolo_recognition/isolated_baseline.json`. The original checkout is
 reserved for the user's other task. No configuration changes, castle switches,
 resource actions, messages, YOLO, or trained detectors were introduced.
 
+## Development Research Tree continuation (2026-09-12)
+
+The resumed F slice adds the first real Research Tree reference and visual producer. The Development title and independent fixed Master Researcher icon must both match; scrollable research nodes are not identity anchors. The profile exposes only the independently matched top-left Back control, reusing the measured Institute arrow. Catalog v3 provenance and manifest v2 retain `guarded_reference_only` qualification. The three live source frames are correlated evidence, not independent accuracy measurements or qualification of other categories, builds, locales, or accounts.
+
+Live exploration first reproduced `UNKNOWN` on three Development frames. Root reviewed the source screenshot and crops; replay then matched all three native 900x1600 frames and abstained when either identity anchor was removed. A fresh production observation identified Research Tree and exposed only Back. One canonical Back tap returned to unblocked Institute in two captures, establishing the two added graph edges: Institute Development to Research Tree, then Research Tree Back to Institute. The graph replay confirmed Development entry and return through Institute to Home. No category other than Development was entered, and no node, Research Start, resource action, message, or castle switch was attempted.
+
+The complete scoped testing phase passed with exact current-castle preflight, 13 inputs and 49 observations in 965.224 seconds, within the 24-input/1,200-second budget. Elapsed time includes waiting under the same lease for implementation and review. The configured smoke-test target pre-existed, its lease was released, and it was preserved at visually inspected Home. Command: direct Python 3.13 `-u .local-data/reports/non_yolo_research_tree_20260912/probe.py`, with reviewed `qualify_return` and `verify_graph` commands inside the existing reservation. Summary and trace remain beside the probe.
+
+- Source tree: `artifacts/2026-09-12/testing/20260912T180007Z_core_20260912T175539Z_09c5f27b_0034_development_evidence_1.png`.
+- Qualified tree: `artifacts/2026-09-12/testing/20260912T180840Z_core_20260912T175539Z_09c5f27b_0036_qualified_development_tree.png`.
+- Confirmed parent: `artifacts/2026-09-12/testing/20260912T180851Z_core_20260912T175539Z_09c5f27b_0038_tree_return_1.png`.
+- Graph entry: `artifacts/2026-09-12/testing/20260912T181113Z_core_20260912T175539Z_09c5f27b_0042_core_9_after_1.png`.
+- Final Home: `artifacts/2026-09-12/testing/20260912T181142Z_core_20260912T175539Z_09c5f27b_0049_core_11_after_1.png`.
+
+Research rows, eligibility, Start, and mutation reconciliation remain unsupported and unproved. Gathering/March, Campaign, member-only applicability, independent corpus coverage, and target/build/locale promotion remain open plan gates. This increment closes Development identity and safe navigation only.
+
+Bounded checks passed: 65 navigation/registry tests, then 10 Development visual-control/metadata tests. The latter cover reviewed scales, missing identity/control anchors, the Institute negative, blocking-update ownership, current/foreign frame dispatch, and unsupported Start. `tools/validate_navigation_selectors.py --config C:/Users/lebel/pnc/config/accounts.yaml --account testing --selector PNC_INSTITUTE_DEVELOPMENT_BUTTON --source-screen PNC_INSTITUTE --output-dir .local-data/reports/non_yolo_research_tree_20260912/selector_canary` failed before connection because the older canary allowlist does not include this core route. Its gate was preserved; the successful canonical core graph probe above is the relevant live validation.
+
+The increment was committed as `a557ae9`, then synchronized with freshly fetched main `69ae648` by merge `e376fed`, preserving shared history. Main's authored Open Building port uses the existing strict core endpoint contract; its host-safety update centralizes host binding validation, hardens lease cleanup, rejects identity replacement during startup, and prevents capture-file collisions. There were no overlapping recognition edits or merge conflicts. The combined catalog retains 32 profiles/27 screen types and the graph has 48 edges. The final 32 recognizer/benchmark tests passed; Luna also passed the added graph contract and focused Research/metadata tests.
+
+Combined live boundary proof passed: `-u .local-data/reports/non_yolo_research_tree_20260912/combined_readiness.py` acquired the configured testing reservation and produced two clear Home captures with zero inputs in 20.375 seconds. The pre-existing instance was preserved. Final capture: `artifacts/2026-09-12/testing/20260912T181849Z_core_20260912T181839Z_f816a640_0002_combined_home_1.png`; `combined_readiness_summary.json` and trace are beside the probe. This checks the merged lease/artifact/perception boundary; it does not claim an additional Research route replay.
+
+Final combined validation passed: direct Python 3.13 `-u tools/run_tests.py full --json .local-data/reports/non_yolo_research_tree_20260912/full_selection.json --results .local-data/reports/non_yolo_research_tree_20260912/full_results.json`, **1,763 tests with five optional local-screenshot skips**, 141.051 test seconds/147.261 total. Tested commit `e376fed`; source fingerprint `58304461dca1860f8090dd7c5aeadd8f27df3387810712e5a81a9444b1e39c91`. Only this plan/report ledger changed after that run. `git diff --check` passed. Root reviewed Luna's profile, crops, graph, provenance and regressions; no actionable finding remains in this bounded increment. The older canary limitation and broader plan gates above remain explicit.
+
 ## Authorized main landing gate (2026-09-12)
+
+Landing completed: the combined candidate was fast-forwarded from freshly fetched main `e4eb8b5` in a clean detached landing worktree, pushed without rewriting history, and verified on `origin/main` at `2bb3c90`. The current feature worktree is now checked out on `codex/non-yolo-recognition`, with the same commit published to its remote. The historical dirty worktree remains untouched on `codex/non-yolo-recognition-preserved-20260912`; the root checkout's unrelated local commit was preserved. Subsequent mainline work is independent of this completed landing.
 
 The user authorized landing the feature to main and continuing on `codex/non-yolo-recognition`. Fresh main `e4eb8b5` adds workflow reservation isolation, strict claim reconciliation, complete Daily viewport processing, bounded coordinate samples, and portable shutdown-test discovery. The Daily coordinator merge removes the now-unused `_has_pending_rows` helper while retaining `RowRecognitionStatus.COMPLETE` in both active claim and action selection. No resource-changing behavior was exercised live.
 

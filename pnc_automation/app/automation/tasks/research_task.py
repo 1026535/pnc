@@ -18,6 +18,7 @@ from pnc_automation.core.errors import TaskVerificationError
 from pnc_automation.app.pnc.domain.action_requests import ActionRequest, TapAction, TapListEntryAction
 from pnc_automation.app.pnc.domain.observation import ListEntryKind, Observation
 from pnc_automation.app.pnc.domain.policy_models import ResearchCategory, ResearchPolicy
+from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 
@@ -104,10 +105,9 @@ class ResearchTask(BaseAutomationTask):
                 return TaskResult.replan("Opened the research tree.")
         if before.screen_type == ScreenType.PNC_RESEARCH_TREE and not before.entries(ListEntryKind.RESEARCH):
             return TaskResult.skipped("No eligible research items were visible.")
-        if after.screen_type == ScreenType.PNC_RESEARCH_TREE and not after.has(UiElementId.PNC_RESEARCH_START_BUTTON):
-            return TaskResult.success("Research started and the start button is no longer visible.")
-        if after.screen_type == ScreenType.PNC_RESEARCH_TREE and len(after.entries(ListEntryKind.RESEARCH)) < len(before.entries(ListEntryKind.RESEARCH)):
-            return TaskResult.success("Research started and one visible candidate disappeared.")
+        if _is_active_research_detail(after):
+            if not after.has(UiElementId.PNC_RESEARCH_START_BUTTON):
+                return TaskResult.success("Research started and the active detail has no start button.")
         return TaskResult.failure("Research did not produce a verified state change.", retryable=True)
 
 
@@ -122,6 +122,20 @@ def _tap_entry(entry: object, *, kind: ListEntryKind, reason: str) -> TapListEnt
         use_action_point=True,
         reason=reason,
         observe_after=True,
+    )
+
+
+def _is_active_research_detail(observation: Observation) -> bool:
+    """Return whether the postcondition proves the guarded active research detail."""
+
+    return (
+        observation.screen_type == ScreenType.PNC_RESEARCH_TREE
+        and observation.decision.guard == GuardVerdict.CLEAR
+        and any(
+            evidence.screen_type == ScreenType.PNC_RESEARCH_TREE
+            and evidence.reason == "visual_anchor:research_tree_node_detail_active"
+            for evidence in observation.decision.evidence
+        )
     )
 
 

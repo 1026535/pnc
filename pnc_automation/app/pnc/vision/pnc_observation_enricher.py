@@ -25,6 +25,7 @@ from pnc_automation.app.pnc.domain.observation import (
     CurrentCastleEvidenceKind,
     DetectedListEntry,
     ListEntryKind,
+    RowRecognitionStatus,
     ObservedTextFieldState,
     VisibleElement,
     VisibleElementSourceKind,
@@ -410,6 +411,35 @@ _RESEARCH_TREE_SUPPORT_TOKENS = frozenset(
         "TROOPSIZE",
     }
 )
+_RESEARCH_DEVELOPMENT_NODE_LABELS = {
+    # Live OCR may omit the tier numeral; the visible blue tile must still
+    # provide the geometry before this bounded variant can become actionable.
+    "CONSTRUCTION": ("Construction I", False),
+    "CONSTRUCTIONI": ("Construction I", False),
+    "CONSTRUCTIONL": ("Construction I", False),
+    "RESEARCHSPEEDI": ("Research Speed I", False),
+    "RESEARCHSPEEDL": ("Research Speed I", False),
+    "TROOPLOADI": ("Troop Load I", False),
+    "TROOPLOADL": ("Troop Load I", False),
+    "STORAGEI": ("Storage I", False),
+    "STORAGEL": ("Storage I", False),
+    "INFIRMARYCAPI": ("Infirmary Cap I", False),
+    # RapidOCR can omit the final roman numeral on this label.  The label is
+    # still complete when its measured blue tile is fully visible.
+    "INFIRMARYCAP": ("Infirmary Cap I", False),
+    "MIRACULOUSSURVIVAL": ("Miraculous Survival", True),
+    # Only the first fragment is visible in the reviewed fixture.  Keep it as
+    # clipped evidence, never as a complete node-selection target.
+    "MIRACULOUS": ("Miraculous Survival", True),
+}
+_RESEARCH_LABEL_BLUE_MIN_RED_DELTA = 25
+_RESEARCH_LABEL_BLUE_MIN_GREEN_DELTA = 15
+_RESEARCH_LABEL_BLUE_MIN_BLUE = 70
+_RESEARCH_LABEL_MIN_HEIGHT_RATIO = 0.025
+_RESEARCH_LABEL_SCAN_MARGIN_RATIO = 0.05
+_RESEARCH_OCR_BOTTOM_MARGIN_RATIO = 0.04
+_RESEARCH_ICON_WIDTH_RATIO = 0.82
+_RESEARCH_ICON_HEIGHT_RATIO = 1.72
 _PROGRESS_COUNTER_PATTERN = re.compile(r"^\d+/\d+$")
 _PERCENT_PROGRESS_PATTERN = re.compile(r"^\d{1,3}%$")
 _ACCOUNT_IDENTIFIER_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -522,6 +552,15 @@ class _WarmPixelCluster:
         """Returns the integer center point of the cluster bounds."""
 
         return self.bounds.center()
+
+
+@dataclass(frozen=True, slots=True)
+class _ResearchNodeCandidate:
+    """Represents one recognized Development-tree label before geometry checks."""
+
+    line: OcrLine
+    title_text: str
+    partial_label: bool = False
 
 
 _TEXT_SCREEN_DEFINITIONS = (
@@ -1816,14 +1855,15 @@ class PncObservationEnricher:
         )
         if modal_guard is not None:
             return modal_guard
-        popup = _build_popup_additions(image=image, lines=lines, anchors=anchors)
-        if popup is not None:
-            return replace(
-                popup,
-                guard_verdict=(GuardVerdict.UNRESOLVED if any(
-                    evidence.reason.startswith("weak_") for evidence in popup.screen_evidence
-                ) else GuardVerdict.BLOCKED),
-            )
+        if owned_navigation_screen != ScreenType.PNC_RESEARCH_TREE:
+            popup = _build_popup_additions(image=image, lines=lines, anchors=anchors)
+            if popup is not None:
+                return replace(
+                    popup,
+                    guard_verdict=(GuardVerdict.UNRESOLVED if any(
+                        evidence.reason.startswith("weak_") for evidence in popup.screen_evidence
+                    ) else GuardVerdict.BLOCKED),
+                )
         visual = _build_visual_popup_close_additions(
             image=image, excluded_bounds=owned_dismiss_bounds,
         )
@@ -2355,7 +2395,15 @@ class PncObservationEnricher:
             request_screen=ScreenType.PNC_RESEARCH_TREE,
             observed_screen=screen_type,
         ):
-            research_tree = _build_research_tree_additions(image=image, lines=lines)
+            research_tree = _build_research_tree_additions(
+                image=image,
+                lines=lines,
+                proved_screen=(
+                    screen_type
+                    if screen_type == ScreenType.PNC_RESEARCH_TREE
+                    else None
+                ),
+            )
             if research_tree is not None:
                 return research_tree
         if not request.allows_screen(ScreenType.PNC_CASTLE_SELECTION) or not can_attempt_screen_family_ocr(
@@ -7220,22 +7268,262 @@ def _build_research_tree_additions(
     *,
     image: Image.Image,
     lines: tuple[OcrLine, ...],
+    proved_screen: ScreenType | None = None,
 ) -> ObservationAdditions | None:
-    """Returns the research-tree screen when OCR matches a live research grid."""
+    """Returns Development-tree rows when OCR and visible label geometry agree.
+
+    A visual profile may prove the tree identity before this content parser is
+    called. In that path OCR supplies node labels and the measured label
+    rectangle supplies the safe selection point; it never establishes screen
+    identity or any research eligibility state.
+    """
 
     header = _find_line_matching(
         lines=lines,
         predicate=lambda line: normalize_ocr_text(line.text) in _RESEARCH_TREE_HEADER_TEXTS,
         max_y=int(image.height * 0.12),
     )
-    if header is None:
+    if proved_screen is not None and proved_screen != ScreenType.PNC_RESEARCH_TREE:
         return None
-    support_count = sum(1 for line in lines if _is_research_tree_support_line(line))
-    if support_count < 3:
-        return None
-    return ObservationAdditions(
-        screen_evidence=(ScreenEvidence(ScreenType.PNC_RESEARCH_TREE, "ocr_research_tree"),),
+    if proved_screen is None:
+        if header is None:
+            return None
+        support_count = sum(1 for line in lines if _is_research_tree_support_line(line))
+        if support_count < 3:
+            return None
+    body_top = header.bounds.y + header.bounds.height if header is not None else int(image.height * 0.12)
+    body_lines = tuple(
+        sorted(
+            (line for line in lines if line.bounds.y >= body_top),
+            key=lambda line: (line.bounds.y, line.bounds.x),
+        )
     )
+    candidates = _research_node_candidates(body_lines)
+    entries = tuple(_research_node_entry(image=image, candidate=candidate) for candidate in candidates)
+    duplicate_titles = {
+        title
+        for title in (entry.title_text for entry in entries)
+        if title is not None and sum(other.title_text == title for other in entries) > 1
+    }
+    if duplicate_titles:
+        entries = tuple(
+            replace(
+                entry,
+                action_point=None,
+                action_bounds=None,
+                row_status=RowRecognitionStatus.AMBIGUOUS,
+                metadata={**entry.metadata, "unresolved_reason": "duplicate_node_label"},
+            )
+            if entry.title_text in duplicate_titles
+            else entry
+            for entry in entries
+        )
+    return ObservationAdditions(
+        list_entries=entries,
+        screen_evidence=(
+            ()
+            if proved_screen is not None
+            else (ScreenEvidence(ScreenType.PNC_RESEARCH_TREE, "ocr_research_tree"),)
+        ),
+    )
+
+
+def _research_node_candidates(lines: tuple[OcrLine, ...]) -> tuple[_ResearchNodeCandidate, ...]:
+    """Extract one candidate per direct or vertically split Development label."""
+
+    candidates: list[_ResearchNodeCandidate] = []
+    for line in lines:
+        matched = _match_research_development_label(line.text)
+        if matched is not None:
+            candidates.append(_ResearchNodeCandidate(line, matched[0], matched[1]))
+    for index in range(len(lines) - 1):
+        merged_line = _merge_text_screen_control_candidate(candidate_lines=lines, index=index)
+        if merged_line is None:
+            continue
+        matched = _match_research_development_label(merged_line.text)
+        if matched is None:
+            continue
+        candidates.append(_ResearchNodeCandidate(merged_line, matched[0], matched[1]))
+    # Exact geometry removes a direct/merged duplicate, while distinct repeated
+    # labels remain visible and are marked ambiguous by the caller.
+    unique: dict[tuple[str, Bounds], _ResearchNodeCandidate] = {}
+    for candidate in candidates:
+        unique.setdefault((candidate.title_text, candidate.line.bounds), candidate)
+    return tuple(sorted(unique.values(), key=lambda item: (item.line.bounds.y, item.line.bounds.x)))
+
+
+def _match_research_development_label(text: str) -> tuple[str, bool] | None:
+    """Resolve only reviewed Development labels and bounded OCR variants."""
+
+    return _RESEARCH_DEVELOPMENT_NODE_LABELS.get(normalize_ocr_text(text))
+
+
+def _research_node_entry(*, image: Image.Image, candidate: _ResearchNodeCandidate) -> DetectedListEntry:
+    """Build one conservative research row from its OCR label and blue tile."""
+
+    label_bounds = _detect_research_label_bounds(image=image, line=candidate.line)
+    if label_bounds is None:
+        return DetectedListEntry(
+            kind=ListEntryKind.RESEARCH,
+            bounds=candidate.line.bounds,
+            title_text=candidate.title_text,
+            row_status=RowRecognitionStatus.UNREADABLE,
+            metadata={
+                "category": "development",
+                "coordinate_provenance": "ocr_label_unresolved",
+                "unresolved_reason": "missing_visible_node_geometry",
+            },
+        )
+    action_bounds = _research_icon_bounds_from_label(label_bounds, image=image)
+    if action_bounds is None:
+        return DetectedListEntry(
+            kind=ListEntryKind.RESEARCH,
+            bounds=label_bounds,
+            title_text=candidate.title_text,
+            row_status=RowRecognitionStatus.UNREADABLE,
+            metadata={
+                "category": "development",
+                "coordinate_provenance": "ocr_node_icon_unresolved",
+                "unresolved_reason": "invalid_node_icon_geometry",
+            },
+        )
+    image_bounds = Bounds(0, 0, image.width, image.height)
+    clipped = (
+        candidate.partial_label
+        or not image_bounds.contains_bounds(action_bounds)
+        or (
+            _research_label_touches_viewport_edge(label_bounds, image=image)
+        )
+        or _research_ocr_label_near_viewport_edge(candidate.line, image=image)
+        or _research_label_is_too_short(label_bounds, image=image)
+    )
+    metadata: dict[str, str] = {
+        "category": "development",
+        "coordinate_provenance": "ocr_node_icon",
+    }
+    if clipped:
+        metadata["unresolved_reason"] = "clipped_or_partial_node_label"
+    return DetectedListEntry(
+        kind=ListEntryKind.RESEARCH,
+        bounds=_union_bounds(action_bounds, label_bounds),
+        title_text=candidate.title_text,
+        action_point=None if clipped else action_bounds.center(),
+        action_bounds=None if clipped else action_bounds,
+        row_status=RowRecognitionStatus.CLIPPED if clipped else RowRecognitionStatus.COMPLETE,
+        metadata=metadata,
+    )
+
+
+def _research_icon_bounds_from_label(label_bounds: Bounds, *, image: Image.Image) -> Bounds | None:
+    """Derive and validate the selectable icon rectangle above a node label."""
+
+    image_bounds = Bounds(0, 0, image.width, image.height)
+    if not image_bounds.contains_bounds(label_bounds):
+        return None
+    icon_width = max(1, round(label_bounds.width * _RESEARCH_ICON_WIDTH_RATIO))
+    icon_height = max(1, round(label_bounds.height * _RESEARCH_ICON_HEIGHT_RATIO))
+    icon_x = label_bounds.x + (label_bounds.width - icon_width) // 2
+    icon_bounds = Bounds(
+        x=icon_x,
+        y=label_bounds.y - icon_height,
+        width=icon_width,
+        height=icon_height,
+    )
+    if not image_bounds.contains_bounds(icon_bounds):
+        return None
+    return icon_bounds
+
+
+def _detect_research_label_bounds(*, image: Image.Image, line: OcrLine) -> Bounds | None:
+    """Find the blue label rectangle surrounding an OCR node label, if visible."""
+
+    rgb_image = image.convert("RGB")
+    center_x = line.bounds.x + line.bounds.width // 2
+    scan_margin = max(8, int(image.height * _RESEARCH_LABEL_SCAN_MARGIN_RATIO))
+    start_y = max(0, line.bounds.y - scan_margin)
+    end_y = min(image.height, line.bounds.y + line.bounds.height + scan_margin)
+    minimum_run_width = max(int(line.bounds.width * 0.65), int(image.width * 0.08))
+    valid_rows: list[tuple[int, int, int]] = []
+    for y in range(start_y, end_y):
+        runs = _research_blue_runs(image=rgb_image, y=y)
+        overlapping = tuple(
+            (left, right)
+            for left, right in runs
+            if right - left >= minimum_run_width and left <= center_x < right
+        )
+        if overlapping:
+            left, right = max(overlapping, key=lambda run: run[1] - run[0])
+            valid_rows.append((y, left, right))
+    if not valid_rows:
+        return None
+    # White OCR glyphs interrupt the blue fill for several rows.  The line
+    # height is a bounded bridge across those holes while the scan window keeps
+    # unrelated tiles out of the candidate.
+    max_gap = max(4, line.bounds.height)
+    groups: list[list[tuple[int, int, int]]] = []
+    for row in valid_rows:
+        if not groups or row[0] - groups[-1][-1][0] > max_gap + 1:
+            groups.append([row])
+        else:
+            groups[-1].append(row)
+    line_center_y = line.bounds.y + line.bounds.height // 2
+    group = min(
+        groups,
+        key=lambda rows: (
+            0 if rows[0][0] <= line_center_y <= rows[-1][0] else 1,
+            abs(((rows[0][0] + rows[-1][0]) // 2) - line_center_y),
+        ),
+    )
+    left = min(row[1] for row in group)
+    right = max(row[2] for row in group)
+    return Bounds(left, group[0][0], right - left, group[-1][0] - group[0][0] + 1)
+
+
+def _research_blue_runs(*, image: Image.Image, y: int) -> tuple[tuple[int, int], ...]:
+    """Return sufficiently blue runs from an already RGB-normalized image."""
+
+    runs: list[tuple[int, int]] = []
+    start: int | None = None
+    for x in range(image.width):
+        red, green, blue = image.getpixel((x, y))
+        is_blue = (
+            blue >= _RESEARCH_LABEL_BLUE_MIN_BLUE
+            and blue >= red + _RESEARCH_LABEL_BLUE_MIN_RED_DELTA
+            and blue >= green + _RESEARCH_LABEL_BLUE_MIN_GREEN_DELTA
+        )
+        if is_blue and start is None:
+            start = x
+        elif not is_blue and start is not None:
+            runs.append((start, x))
+            start = None
+    if start is not None:
+        runs.append((start, image.width))
+    return tuple(runs)
+
+
+def _research_label_touches_viewport_edge(bounds: Bounds, *, image: Image.Image) -> bool:
+    """Reject labels touching any screenshot edge as incomplete node evidence."""
+
+    return (
+        bounds.x <= 0
+        or bounds.y <= 0
+        or bounds.x + bounds.width >= image.width
+        or bounds.y + bounds.height >= image.height
+    )
+
+
+def _research_ocr_label_near_viewport_edge(line: OcrLine, *, image: Image.Image) -> bool:
+    """Reject OCR fragments in the final viewport margin when tile geometry is absent."""
+
+    return line.bounds.y + line.bounds.height >= image.height * (1 - _RESEARCH_OCR_BOTTOM_MARGIN_RATIO)
+
+
+def _research_label_is_too_short(bounds: Bounds, *, image: Image.Image) -> bool:
+    """Reject a partially visible blue label whose height cannot be a full tile label."""
+
+    return bounds.height < max(20, int(image.height * _RESEARCH_LABEL_MIN_HEIGHT_RATIO))
+
+
 def _has_loading_support(lines: tuple[OcrLine, ...]) -> bool:
     """Returns whether OCR around a reconnect button also contains loading-related language."""
 

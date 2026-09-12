@@ -19,7 +19,10 @@ from pnc_automation.app.pnc.vision.observation_builder import (
 from pnc_automation.app.pnc.vision.observation_provenance import bind_list_entry, bind_visible_elements
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
-from pnc_automation.app.pnc.vision.visual_screen_recognizer import VisualScreenRecognizer
+from pnc_automation.app.pnc.vision.visual_screen_recognizer import (
+    VisualScreenRecognizer,
+    visual_controls_for_decision,
+)
 from pnc_automation.core.infra.capture.screenshot_service import CapturedScreenshot
 from pnc_automation.core.vision.ocr.ocr_service import ObservationOcrContext
 
@@ -56,16 +59,42 @@ class NavigationPerception:
         visual = self.recognizer.recognize(image)
         ocr_context = self.create_ocr_context(screenshot)
         ocr_context.validate_capture(image, screenshot.frame_ref)
+        matched_profiles = set(visual.profile_ids)
+        matched_screens = {item.screen_type for item in visual.evidence}
+        research_detail_owned = (
+            matched_profiles == {"research_tree_node_detail"}
+            and matched_screens == {ScreenType.PNC_RESEARCH_TREE}
+            and any(
+                control.selector_id == UiElementId.PNC_RESEARCH_START_BUTTON
+                for control in visual.controls
+            )
+        )
+        research_detail_active_owned = (
+            "research_tree_node_detail_active" in matched_profiles
+            and matched_profiles <= {
+                "research_tree_node_detail",
+                "research_tree_node_detail_active",
+            }
+            and matched_screens == {ScreenType.PNC_RESEARCH_TREE}
+            and not any(
+                control.selector_id == UiElementId.PNC_RESEARCH_START_BUTTON
+                for control in visual.controls
+            )
+        )
+        research_queue_owned = (
+            matched_screens == {ScreenType.PNC_RESEARCH_QUEUE}
+            and any(
+                control.selector_id == UiElementId.PNC_RESEARCH_QUEUE_CLOSE
+                for control in visual.dismiss_controls
+            )
+        )
         interruption = self.guard.detect_interruption(
             image, ocr_context=ocr_context,
             owned_dismiss_bounds=tuple(control.bounds for control in visual.dismiss_controls),
             owned_navigation_screen=(
-                ScreenType.PNC_RESEARCH_QUEUE
-                if {item.screen_type for item in visual.evidence} == {ScreenType.PNC_RESEARCH_QUEUE}
-                and any(
-                    control.selector_id == UiElementId.PNC_RESEARCH_QUEUE_CLOSE
-                    for control in visual.dismiss_controls
-                )
+                ScreenType.PNC_RESEARCH_TREE
+                if research_detail_owned or research_detail_active_owned
+                else ScreenType.PNC_RESEARCH_QUEUE if research_queue_owned
                 else None
             ),
         )
@@ -96,7 +125,7 @@ class NavigationPerception:
                     )
                 })
         else:
-            controls = {item.selector_id: item for item in visual.controls}
+            controls = visual_controls_for_decision(visual, decision)
         controls = bind_visible_elements(
             controls, frame_ref=screenshot.frame_ref, source_screen=screen,
             source_layout_id=decision.layout_id,
