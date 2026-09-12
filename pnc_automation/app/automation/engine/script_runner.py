@@ -272,7 +272,11 @@ class ScriptRunner:
         from pnc_automation.app.automation.engine.core_script_dispatcher import validate_core_script_step
 
         for prepared_step in core_steps:
-            validate_core_script_step(prepared_step, chat_archive_store=self.chat_archive_store)
+            validate_core_script_step(
+                prepared_step,
+                chat_archive_store=self.chat_archive_store,
+                mail_archive_store=self.mail_archive_store,
+            )
 
     def prepare_account_session(
         self,
@@ -571,8 +575,6 @@ class ScriptRunner:
     ) -> CoreStepExecutor | None:
         """Builds the typed dispatcher lazily over this runner's existing connected services."""
 
-        if self.chat_archive_store is None:
-            return None
         from pnc_automation.app.automation.engine.core_script_dispatcher import CoreScriptDispatcher
         from pnc_automation.app.automation.engine.core_runtime import assemble_core_runtime
 
@@ -588,6 +590,7 @@ class ScriptRunner:
                 trace_path=None,
             ),
             required_role=required_role,
+            mail_archive_store=self.mail_archive_store,
         )
 
     def build_connected_session(

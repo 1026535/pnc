@@ -10,16 +10,19 @@ from pnc_automation.app.automation.collect_kingdom_chat import (
     CollectKingdomChatResult,
     CollectKingdomChatWorkflow,
 )
+from pnc_automation.app.automation.collect_mail import CollectMailResult, CollectMailWorkflow
 from pnc_automation.app.automation.engine.core_runtime import CoreRuntime
 from pnc_automation.app.automation.engine.core_workflow import CoreWorkflowResult, CoreWorkflowRunner
 from pnc_automation.app.authoring.config.models import AccountConfig, LiveAutomationRole
 from pnc_automation.app.authoring.scripts.models import PreparedScriptStep
+from pnc_automation.app.pnc.domain.mail import CollectMailParams
 from pnc_automation.app.pnc.domain.observation import (
     CurrentCastleEvidenceKind,
     CurrentCastleMatchStatus,
     resolve_current_castle_match,
 )
 from pnc_automation.app.pnc.persistence.chat_archive_store import ChatArchiveStore
+from pnc_automation.app.pnc.persistence.mail_archive_store import MailArchiveStore
 from pnc_automation.app.automation.engine.task import TaskId
 
 
@@ -30,15 +33,19 @@ class CoreScriptDispatcher:
     account: AccountConfig
     chat_archive_store: ChatArchiveStore | None
     core_runtime_factory: Callable[[], CoreRuntime]
+    mail_archive_store: MailArchiveStore | None = None
     required_role: LiveAutomationRole = LiveAutomationRole.LIVE_TESTING
     _core_runtime: CoreRuntime | None = field(default=None, init=False, repr=False)
     _workflow_runner: CoreWorkflowRunner[Any] | None = field(default=None, init=False, repr=False)
 
-    def execute(self, *, step: PreparedScriptStep) -> CoreWorkflowResult[CollectKingdomChatResult]:
+    def execute(
+        self,
+        *,
+        step: PreparedScriptStep,
+    ) -> CoreWorkflowResult[CollectKingdomChatResult | CollectMailResult]:
         """Runs one supported typed step without closing the shared connected runtime."""
 
         self._validate_step(step)
-        archive_store = cast(ChatArchiveStore, self.chat_archive_store)
         core_runtime = self._require_core_runtime()
         active_castle = core_runtime.preflight_active_castle_identity()
         if step.castle is not None:
@@ -50,13 +57,24 @@ class CoreScriptDispatcher:
             )
             if match.status != CurrentCastleMatchStatus.MATCH:
                 raise RuntimeError(
-                    "Typed Kingdom Chat dispatch preflight did not confirm the requested castle target."
+                    f"Typed '{step.task}' dispatch preflight did not confirm the requested castle target."
                 )
-        workflow = CollectKingdomChatWorkflow(
-            account_id=self.account.id,
-            active_castle=active_castle,
-            archive_store=archive_store,
-        )
+        if step.task == TaskId.COLLECT_KINGDOM_CHAT:
+            workflow = CollectKingdomChatWorkflow(
+                account_id=self.account.id,
+                active_castle=active_castle,
+                archive_store=cast(ChatArchiveStore, self.chat_archive_store),
+            )
+        elif step.task == TaskId.COLLECT_MAIL:
+            workflow = CollectMailWorkflow(
+                params=cast(CollectMailParams, step.parsed_params),
+                account_id=self.account.id,
+                pnc_account_id=self.account.pnc_account_id,
+                active_castle=active_castle.castle_name,
+                archive_store=cast(MailArchiveStore, self.mail_archive_store),
+            )
+        else:
+            raise RuntimeError(f"No typed core dispatcher is registered for task '{step.task}'.")
         runner = self._workflow_runner
         if runner is None:
             runner = CoreWorkflowRunner(core_runtime)
@@ -66,7 +84,11 @@ class CoreScriptDispatcher:
     def _validate_step(self, step: PreparedScriptStep) -> None:
         """Rejects unsupported definitions and malformed parsed parameters before navigation."""
 
-        validate_core_script_step(step, chat_archive_store=self.chat_archive_store)
+        validate_core_script_step(
+            step,
+            chat_archive_store=self.chat_archive_store,
+            mail_archive_store=self.mail_archive_store,
+        )
         if not isinstance(self.account, AccountConfig):
             raise TypeError("Typed core dispatch requires a configured AccountConfig binding.")
         self.account.require_live_role(self.required_role)
@@ -83,14 +105,23 @@ def validate_core_script_step(
     step: PreparedScriptStep,
     *,
     chat_archive_store: ChatArchiveStore | None,
+    mail_archive_store: MailArchiveStore | None = None,
 ) -> None:
-    """Validates the supported typed Chat binding before connect and before navigation."""
+    """Validates one supported typed binding before connect and before navigation."""
 
-    if step.task != TaskId.COLLECT_KINGDOM_CHAT:
+    if step.task not in {TaskId.COLLECT_KINGDOM_CHAT, TaskId.COLLECT_MAIL}:
         raise RuntimeError(f"No typed core dispatcher is registered for task '{step.task}'.")
-    if step.parsed_params is not None:
-        raise RuntimeError("Typed Kingdom Chat dispatch requires parameterless parsed parameters.")
-    if not isinstance(chat_archive_store, ChatArchiveStore):
+    if step.task == TaskId.COLLECT_KINGDOM_CHAT:
+        if step.parsed_params is not None:
+            raise RuntimeError("Typed Kingdom Chat dispatch requires parameterless parsed parameters.")
+        if not isinstance(chat_archive_store, ChatArchiveStore):
+            raise RuntimeError(
+                "Kingdom Chat typed dispatch requires a configured ChatArchiveStore before navigation."
+            )
+        return
+    if not isinstance(step.parsed_params, CollectMailParams):
+        raise RuntimeError("Typed Collect Mail dispatch requires parsed CollectMailParams.")
+    if not isinstance(mail_archive_store, MailArchiveStore):
         raise RuntimeError(
-            "Kingdom Chat typed dispatch requires a configured ChatArchiveStore before navigation."
+            "Collect Mail typed dispatch requires a configured MailArchiveStore before navigation."
         )

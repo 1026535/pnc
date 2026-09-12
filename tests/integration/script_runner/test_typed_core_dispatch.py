@@ -1,4 +1,4 @@
-"""Deterministic authored Kingdom Chat dispatch coverage."""
+"""Deterministic authored typed core dispatch coverage."""
 
 from __future__ import annotations
 
@@ -14,6 +14,11 @@ from unittest.mock import Mock, patch
 from pnc_automation.app.automation.engine.core_runtime import build_core_runtime
 from pnc_automation.app.automation.engine.core_script_dispatcher import CoreScriptDispatcher
 from pnc_automation.app.automation.engine.core_workflow import CoreWorkflowResult
+from pnc_automation.app.automation.collect_mail import (
+    CollectMailMailboxResult,
+    CollectMailResult,
+    CollectMailWorkflow,
+)
 from pnc_automation.app.automation.engine.runner import (
     AutomationRunner,
     CoreStepRunResult,
@@ -40,8 +45,15 @@ from pnc_automation.app.authoring.scripts.registry import TaskRegistry
 from pnc_automation.app.entrypoints.task_registry import build_default_task_registry
 from pnc_automation.app.entrypoints.cli import _serialize_run_result
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
+from pnc_automation.app.pnc.domain.mail import (
+    CollectMailParams,
+    MailArchiveMode,
+    MailboxAvailability,
+    MailboxType,
+)
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.persistence.chat_archive_store import ChatArchiveStore
+from pnc_automation.app.pnc.persistence.mail_archive_store import MailArchiveStore
 from pnc_automation.core.infra.emulator.bluestacks_instance import BlueStacksInstance
 from pnc_automation.core.infra.emulator.session import BlueStacksSessionCleanupPolicy
 
@@ -63,6 +75,30 @@ class TypedCoreDispatchTests(unittest.TestCase):
             definition.parse_params({"unexpected": True})
         with self.assertRaises(AttributeError):
             definition.id = TaskId.COLLECT_MAIL  # type: ignore[misc]
+
+    def test_default_registry_uses_canonical_mail_parser(self) -> None:
+        """Registers authored mail as an optional typed step with the shared domain parser."""
+
+        definition = build_default_task_registry().require(TaskId.COLLECT_MAIL)
+
+        self.assertIsInstance(definition, CoreWorkflowTaskDefinition)
+        self.assertEqual(definition.castle_target_policy, CastleTargetPolicy.OPTIONAL)
+        self.assertEqual(
+            CollectMailParams(
+                mailboxes=(MailboxType.PLAYER, MailboxType.ALLIANCE),
+                archive_mode=MailArchiveMode.TEXT,
+                limit_per_mailbox=2,
+                only_new=False,
+            ),
+            definition.parse_params(
+                {
+                    "mailboxes": ["player", "alliance", "player"],
+                    "archive_mode": "text",
+                    "limit_per_mailbox": 2,
+                    "only_new": False,
+                }
+            ),
+        )
 
     def test_current_castle_core_step_skips_legacy_observation_and_retains_typed_result(self) -> None:
         """Dispatches a current-castle Chat step directly through the typed executor."""
@@ -242,6 +278,108 @@ class TypedCoreDispatchTests(unittest.TestCase):
 
         dispatcher.core_runtime_factory.assert_not_called()  # type: ignore[attr-defined]
 
+    def test_dispatcher_rejects_missing_mail_archive_before_composition(self) -> None:
+        """Rejects typed mail before core assembly when only the Chat archive exists."""
+
+        runtime_factory = Mock()
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            dispatcher = CoreScriptDispatcher(
+                account=_account(),
+                chat_archive_store=ChatArchiveStore(Path(temporary_directory) / "chat"),
+                mail_archive_store=None,
+                core_runtime_factory=runtime_factory,
+            )
+
+            with self.assertRaisesRegex(RuntimeError, "MailArchiveStore"):
+                dispatcher.execute(step=_prepared_mail_step())
+
+        runtime_factory.assert_not_called()
+
+    def test_dispatcher_collect_mail_uses_mail_store_without_chat_store(self) -> None:
+        """Builds the canonical typed mail workflow from the mail store alone."""
+
+        active = CastleIdentity("K1", "Castle", 12)
+        core_runtime = Mock()
+        core_runtime.preflight_active_castle_identity.return_value = active
+        typed_result = CoreWorkflowResult(
+            workflow_name="collect_mail",
+            succeeded=True,
+            value=CollectMailResult(
+                mailboxes=(
+                    _mailbox_result(MailboxType.PLAYER),
+                )
+            ),
+            exit_screen=ScreenType.PNC_HOME_CITY,
+            trace_path="trace.jsonl",
+        )
+        workflow_runner = Mock()
+        workflow_runner.run.return_value = typed_result
+        runtime_factory = Mock(return_value=core_runtime)
+        runner_factory = Mock(return_value=workflow_runner)
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            mail_store = MailArchiveStore(Path(temporary_directory) / "mail")
+            dispatcher = CoreScriptDispatcher(
+                account=_account(),
+                chat_archive_store=None,
+                mail_archive_store=mail_store,
+                core_runtime_factory=runtime_factory,
+            )
+            with patch(
+                "pnc_automation.app.automation.engine.core_script_dispatcher.CoreWorkflowRunner",
+                runner_factory,
+            ):
+                result = dispatcher.execute(step=_prepared_mail_step())
+
+        self.assertIs(typed_result, result)
+        workflow = workflow_runner.run.call_args.args[0]
+        self.assertIsInstance(workflow, CollectMailWorkflow)
+        self.assertEqual(_mail_params(), workflow.params)
+        self.assertEqual("Castle", workflow.active_castle)
+        self.assertIs(mail_store, workflow.archive_store)
+        runtime_factory.assert_called_once_with()
+        core_runtime.close.assert_not_called()
+
+    def test_dispatcher_collect_mail_requires_active_castle_before_workflow(self) -> None:
+        """Fails before workflow construction when typed mail cannot prove active identity."""
+
+        core_runtime = Mock()
+        core_runtime.preflight_active_castle_identity.side_effect = RuntimeError("identity absent")
+        runtime_factory = Mock(return_value=core_runtime)
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            dispatcher = CoreScriptDispatcher(
+                account=_account(),
+                chat_archive_store=None,
+                mail_archive_store=MailArchiveStore(Path(temporary_directory) / "mail"),
+                core_runtime_factory=runtime_factory,
+            )
+            with patch(
+                "pnc_automation.app.automation.engine.core_script_dispatcher.CoreWorkflowRunner",
+            ) as runner_factory:
+                with self.assertRaisesRegex(RuntimeError, "identity absent"):
+                    dispatcher.execute(step=_prepared_mail_step())
+
+        runner_factory.assert_not_called()
+        core_runtime.close.assert_not_called()
+
+    def test_script_runner_builds_mail_dispatcher_when_chat_store_is_absent(self) -> None:
+        """Keeps the typed dispatcher available for mail-only configurations."""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            mail_store = MailArchiveStore(Path(temporary_directory) / "mail")
+            script_runner = _minimal_script_runner(
+                archive_store=None,
+                mail_archive_store=mail_store,
+            )
+            dispatcher = script_runner._build_core_step_executor(
+                account=_account(),
+                connected_runtime=SimpleNamespace(),
+                required_role=LiveAutomationRole.LIVE_TESTING,
+            )
+
+        self.assertIsInstance(dispatcher, CoreScriptDispatcher)
+        self.assertIs(mail_store, dispatcher.mail_archive_store)  # type: ignore[union-attr]
+        self.assertIsNone(dispatcher.chat_archive_store)  # type: ignore[union-attr]
+
     def test_dispatcher_rejects_unsupported_task_before_composition(self) -> None:
         """Fails closed for a task without a typed dispatcher before assembling core services."""
 
@@ -253,7 +391,7 @@ class TypedCoreDispatchTests(unittest.TestCase):
                 core_runtime_factory=runtime_factory,
             )
             unsupported = PreparedScriptStep(
-                script_step=ScriptStep(task=TaskId.COLLECT_MAIL),
+                script_step=ScriptStep(task=TaskId.SEND_MAIL),
                 parsed_params=None,
                 castle_target_policy=CastleTargetPolicy.OPTIONAL,
             )
@@ -378,9 +516,26 @@ class TypedCoreDispatchTests(unittest.TestCase):
             invalid = _minimal_script_runner(
                 archive_store=ChatArchiveStore(Path(temporary_directory) / "invalid-chat"),
             )
+        with patch.object(ScriptRunner, "_build_runner") as build_runner:
+            with self.assertRaisesRegex(Exception, "does not accept"):
+                invalid._run_script_for_account(account=account, script=_run_script(params={"unexpected": True}))
+            build_runner.assert_not_called()
+
+    def test_script_runner_rejects_mail_without_archive_before_connection(self) -> None:
+        """Validates authored mail dependencies before constructing a connected runner."""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            script_runner = _minimal_script_runner(
+                archive_store=ChatArchiveStore(Path(temporary_directory) / "chat"),
+                mail_archive_store=None,
+            )
             with patch.object(ScriptRunner, "_build_runner") as build_runner:
-                with self.assertRaisesRegex(Exception, "does not accept"):
-                    invalid._run_script_for_account(account=account, script=_run_script(params={"unexpected": True}))
+                with self.assertRaisesRegex(RuntimeError, "MailArchiveStore"):
+                    script_runner._run_script_for_account(
+                        account=_account(),
+                        script=_run_mail_script(),
+                    )
+
             build_runner.assert_not_called()
 
     def test_script_runner_closes_runner_when_core_execution_fails(self) -> None:
@@ -501,6 +656,45 @@ def _prepared_chat_step(*, castle: CastleIdentity | None = None) -> PreparedScri
     )
 
 
+def _mail_params() -> CollectMailParams:
+    """Builds one canonical typed mail payload for dispatcher tests."""
+
+    return CollectMailParams(
+        mailboxes=(MailboxType.PLAYER,),
+        archive_mode=MailArchiveMode.TEXT,
+        limit_per_mailbox=2,
+        only_new=False,
+    )
+
+
+def _mailbox_result(mailbox: MailboxType) -> CollectMailMailboxResult:
+    """Builds one zero-count mailbox result for typed dispatcher return coverage."""
+
+    return CollectMailMailboxResult(
+        mailbox=mailbox,
+        availability=MailboxAvailability.UNAVAILABLE,
+        processed_count=0,
+        archived_count=0,
+        skipped_existing_count=0,
+        scroll_count=0,
+    )
+
+
+def _prepared_mail_step(
+    *,
+    castle: CastleIdentity | None = None,
+    params: CollectMailParams | None = None,
+) -> PreparedScriptStep:
+    """Builds one already-prepared typed mail step."""
+
+    return PreparedScriptStep(
+        script_step=ScriptStep(task=TaskId.COLLECT_MAIL, castle=castle),
+        parsed_params=_mail_params() if params is None else params,
+        castle_target_policy=CastleTargetPolicy.OPTIONAL,
+        resolved_castle=castle,
+    )
+
+
 def _workflow_result() -> CoreWorkflowResult[object]:
     """Builds a minimal successful typed result for runner routing tests."""
 
@@ -537,14 +731,28 @@ def _run_script(*, params: dict[str, object]) -> RunScript:
     )
 
 
-def _minimal_script_runner(*, archive_store: ChatArchiveStore | None) -> ScriptRunner:
+def _run_mail_script() -> RunScript:
+    """Builds one authored mail script for ScriptRunner preflight tests."""
+
+    return RunScript(
+        name="mail",
+        path=Path("mail.yaml"),
+        steps=(ScriptStep(task=TaskId.COLLECT_MAIL, params={"mailboxes": ["player"]}),),
+    )
+
+
+def _minimal_script_runner(
+    *,
+    archive_store: ChatArchiveStore | None,
+    mail_archive_store: MailArchiveStore | None = None,
+) -> ScriptRunner:
     """Builds the smallest ScriptRunner object needed to test pre-connect validation."""
 
     runner = ScriptRunner.__new__(ScriptRunner)
     runner.config = SimpleNamespace(find_castle_targets=lambda _account_id: None)
     runner.task_registry = build_default_task_registry()
     runner.castle_roster_store = None
-    runner.mail_archive_store = None
+    runner.mail_archive_store = mail_archive_store
     runner.chat_archive_store = archive_store
     return runner
 
