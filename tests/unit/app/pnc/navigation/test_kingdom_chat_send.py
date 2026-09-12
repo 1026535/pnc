@@ -433,14 +433,37 @@ class KingdomChatSendNavigationTests(unittest.TestCase):
 
     def test_send_old_identical_receipt_after_submit_does_not_succeed_or_replay(self) -> None:
         start = datetime(2026, 9, 12, tzinfo=UTC)
-        old_receipt = (_entry(),)
-        source = _chat_frame(start, focused_empty=True, focused_send=True, entries=old_receipt)
+        old_receipt = (_entry(message="testfrom bot"),)
+        source = _chat_frame(
+            start,
+            focused_empty=True,
+            focused_send=True,
+            entries=old_receipt,
+            channel=ChatChannel.ALLIANCE,
+        )
         typed = (
-            _chat_frame(start + timedelta(seconds=1), focused_send=True, draft_empty=False, draft_text="hello"),
-            _chat_frame(start + timedelta(seconds=2), focused_send=True, draft_empty=False, draft_text="hello"),
+            _chat_frame(
+                start + timedelta(seconds=1),
+                focused_send=True,
+                draft_empty=False,
+                draft_text="test from bot",
+                channel=ChatChannel.ALLIANCE,
+            ),
+            _chat_frame(
+                start + timedelta(seconds=2),
+                focused_send=True,
+                draft_empty=False,
+                draft_text="test from bot",
+                channel=ChatChannel.ALLIANCE,
+            ),
         )
         after_submit = tuple(
-            _chat_frame(start + timedelta(seconds=index), focused_send=True, entries=old_receipt)
+            _chat_frame(
+                start + timedelta(seconds=index),
+                focused_send=True,
+                entries=old_receipt,
+                channel=ChatChannel.ALLIANCE,
+            )
             for index in range(3, 7)
         )
         actuator = _Actuator()
@@ -448,8 +471,8 @@ class KingdomChatSendNavigationTests(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "budget exhausted"):
             core.send_chat_message(
-                ChatChannel.WORLD,
-                "hello",
+                ChatChannel.ALLIANCE,
+                "test from bot",
                 CastleIdentity("K1", "free cookies"),
                 observe_content=core.observe,
             )

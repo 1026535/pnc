@@ -178,16 +178,21 @@ def matching_player_chat_entries(
     message: str,
     castle: CastleIdentity,
 ) -> tuple[ObservedChatEntry, ...]:
-    """Return visible player rows whose sender and message identify the active castle's receipt."""
+    """Return visible player rows whose sender and OCR-normalized message identify a receipt.
 
-    normalized_message = normalize_chat_text(message)
+    Receipt matching removes OCR whitespace while preserving every non-whitespace
+    character, so punctuation and case remain significant. Archive overlap and
+    fingerprint callers continue to use :func:`normalize_chat_text` instead.
+    """
+
+    normalized_message = _normalize_chat_receipt_text(message)
     normalized_castle = normalize_castle_display_name(castle.castle_name)
     return tuple(
         entry
         for entry in visible_player_chat_entries(entries)
         if entry.sender_name is not None
         and castle_names_match(normalize_castle_display_name(entry.sender_name), normalized_castle)
-        and normalize_chat_text(entry.message_text) == normalized_message
+        and _normalize_chat_receipt_text(entry.message_text) == normalized_message
     )
 
 
@@ -197,9 +202,15 @@ def count_matching_player_chat_entries(
     message: str,
     castle: CastleIdentity,
 ) -> int:
-    """Count exact visible player receipts without guessing aliases or substrings."""
+    """Count visible player receipts after removing OCR whitespace only."""
 
     return len(matching_player_chat_entries(entries, message=message, castle=castle))
+
+
+def _normalize_chat_receipt_text(value: str) -> str:
+    """Removes OCR whitespace from receipt text while preserving all other characters."""
+
+    return re.sub(r"\s+", "", value)
 
 
 def normalize_chat_text(value: str) -> str:
