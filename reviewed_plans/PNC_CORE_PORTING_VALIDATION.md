@@ -16,6 +16,10 @@ Root ran `.local-data/artifacts/replacement_core/open_building_castle_live.py:ru
 
 The required narrow selector validator also passed: `tools/validate_navigation_selectors.py --config C:/Users/lebel/pnc/config/accounts.yaml --account serious_stuff --selector PNC_HOME_WORLD_SWITCH --selector PNC_WORLD_HOME_NAV --output-dir C:/Users/lebel/pnc/.local-data/artifacts/replacement_core/open_building_castle_selectors`. Its report is `20260912T171244Z_serious_stuff_navigation_validation.yaml` in that output directory: two passed, zero failed or skipped. This validates the shared Home/World selectors; the separate core workflow above proves the new Castle edge. All dependent calls reused the same outer process lease and kept the instance warm.
 
+## Authored OPEN_BUILDING binding — September 12, 2026
+
+The default task registry now represents `TaskId.OPEN_BUILDING` as a typed `CoreWorkflowTaskDefinition` using the canonical `OpenBuildingPolicy.from_params` parser. `CoreScriptDispatcher` constructs the existing `OpenBuildingWorkflow` after exact active-castle preflight and returns its typed result through `CoreStepRunResult`; it does not require mail, Chat, or roster storage. Unmodeled targets without a primary screen fail during pre-connect validation; mapped targets without a reviewed route fail at the existing core guard. The dispatcher has no legacy fallback, replay, or generic-details/build-menu success path. The five currently supported endpoints are Castle, Institute, Warehouse, Goddess Statue, and Hero Hall; authored steps targeting other endpoints remain intentionally fail-closed until separately evidenced. Root's authored end-to-end live proof is pending for this binding.
+
 ## Offscreen building focus — September 12, 2026
 
 The feature `codex/open-building-core-focus` began from freshly fetched main `e3a7b839f3a0ec8379c6c9703bdc6a099df39516`. It extends the existing direct core building workflow with a bounded observed camera search. Authored `OPEN_BUILDING` remains legacy: unmodeled endpoints, missing return routes, and unbuilt menus still need evidence before that binding can migrate.
