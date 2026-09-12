@@ -251,6 +251,16 @@ gaps, limited independent profile coverage, and live Quest label abstention abov
 prevent claiming the whole plan or all game workflows complete. No broad rollout,
 crop-only guard replacement, account switch or mutation result is approved here.
 
+## 2026-09-12 resumed integration through `15845b8`
+
+The next merge incorporates mainline `15845b8` into published feature `b2af988`, preserving history. It adds typed authored mail/Chat dispatch, bounded roster refresh, and outer cleanup-policy propagation while retaining the non-YOLO perception and legacy task-support gates. There were no text conflicts; review confirmed typed dispatch borrows the same connected graph and obtains frame/guard/OCR contracts from the canonical core composition.
+
+Validation passed: 136 targeted typed-dispatch, roster, lifecycle and recognition-contract tests, then the full portable suite (**1,688 tests, 5 skips**). Logs: `.local-data/reports/non_yolo_resume_20260912/`. The sandbox's `py` launcher could not discover Python; equivalent commands used `C:/Users/lebel/AppData/Local/Programs/Python/Python313/python.exe` directly. The full command was that interpreter followed by `-u tools/run_tests.py full`; no test failures remain in the combined candidate.
+
+The refreshed live readiness command used the same interpreter with `.local-data/reports/non_yolo_resume_20260912/readiness_probe.py`. It stopped at **`InstanceBusyError` during the canonical reservation's bounded acquisition**, before connection or capture. Evidence: `readiness_summary.json` beside the probe. No launch, game-navigation input, castle switch or resource action occurred. This is a new live blocker; the older launch/connect failures below are historical, not a claim about the current emulator state. The lease was not bypassed and another account was not substituted.
+
+The plan now reflects current typed workflow ownership. F continuation begins with saved Research/Institute evidence and the smallest supported recognition improvement; Research Start and research-row actionability remain unproved and unsupported. Current live promotion still requires the configured testing target after its reservation becomes available.
+
 ## 2026-09-12 integration outcome
 
 Final publication and review: feature code pushed at `6f3f732`. `py -u tools/run_tests.py full` passed **1,642 tests with 5 skips**; the eight newly relocated shutdown tests passed separately. The exact scope, command results, and remaining acceptance limits are in [PNC_NON_YOLO_INTEGRATION_REVIEW.md](PNC_NON_YOLO_INTEGRATION_REVIEW.md). Main advanced to `b0ba590` while validation ran; following the user's push-then-review instruction, this publication includes main through `c7dfdd5` and records the newer integration as pending.

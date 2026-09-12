@@ -79,6 +79,7 @@ class CollectKingdomChatApplicationTests(unittest.TestCase):
             account,
             account.artifact_directory_name,
             required_role=LiveAutomationRole.READ_ONLY,
+            session_cleanup_policy=None,
         )
         runtime.close.assert_called_once_with()
 
@@ -153,7 +154,10 @@ class CollectKingdomChatApplicationTests(unittest.TestCase):
         api = AutomationApi(application=application)
 
         self.assertIs(typed_result, api.collect_kingdom_chat(account_id="account"))
-        application.run_collect_kingdom_chat.assert_called_once_with(account_id="account")
+        application.run_collect_kingdom_chat.assert_called_once_with(
+            account_id="account",
+            session_cleanup_policy=None,
+        )
         application.run_task.assert_not_called()
         application.reserve_accounts.assert_called_once_with(("account",))
         application.reserve_accounts.return_value.close.assert_called_once_with()
@@ -163,7 +167,10 @@ class CollectKingdomChatApplicationTests(unittest.TestCase):
         session = AutomationSession(api=api, account_id="account")
 
         self.assertIs(typed_result, session.collect_kingdom_chat())
-        application.run_collect_kingdom_chat.assert_called_once_with(account_id="account")
+        application.run_collect_kingdom_chat.assert_called_once_with(
+            account_id="account",
+            session_cleanup_policy=None,
+        )
         application.run_task.assert_not_called()
         application.reserve_accounts.assert_called_once_with(("account",))
         application.reserve_accounts.return_value.close.assert_called_once_with()
@@ -224,7 +231,10 @@ class CollectKingdomChatApplicationTests(unittest.TestCase):
 
         application.reserve_accounts.assert_called_once_with(("account",))
         application.reserve_accounts.return_value.close.assert_called_once_with()
-        application.run_collect_kingdom_chat.assert_called_once_with(account_id="account")
+        application.run_collect_kingdom_chat.assert_called_once_with(
+            account_id="account",
+            session_cleanup_policy=None,
+        )
 
 
 def _account() -> SimpleNamespace:

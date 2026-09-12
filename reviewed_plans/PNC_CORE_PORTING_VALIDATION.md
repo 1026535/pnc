@@ -1,5 +1,31 @@
 # Replacement core porting validation ledger
 
+## Authored mail port — September 12, 2026
+
+`TaskId.COLLECT_MAIL` now uses typed script dispatch and the existing `CollectMailWorkflow`; its obsolete legacy task is removed. The canonical parser is shared by direct and authored callers. Preconnect validation requires only the archive store used by the selected task, so mail and Chat remain independently available. The feature checkpoint is `2ce100c` on `codex/collect-mail-script-core-port`, based on integrated main `b0ba590`.
+
+The current-castle authored proof on `serious_stuff` returned `CoreStepRunResult`, success, and final Home. Player mail was explicitly unavailable; zero threads were processed or archived. This proves dispatch and the unavailable-mailbox path, not a fresh thread read. The command was `.local-data/artifacts/replacement_core/authored_mail_port_live.py:run_authored_mail_port_proof()` inside the retained process reservation. It used `ApplicationRunner.run`, player mailbox, limit one, archive mode both, only-new false, `LIVE_TESTING`, and `keep_warm`. No castle selection, message sending, claim, or resource spending occurred.
+
+Result: `.local-data/artifacts/replacement_core/authored_mail_port_result.json`. Trace: `artifacts/2026-09-12/serious_stuff/20260912T072001Z_4cc53ea0_core_trace.jsonl`. Final Home: `20260912T072322Z_core_20260912T072001Z_4cc53ea0_0039_core_11_after_1.png` in the trace directory. Runtime evidence followed the existing explicit local artifact configuration; newly authored helper/result files use `.local-data/`.
+
+Validation passed: 45 focused dispatch/parser/workflow/application/registry tests, seven mail workflow tests after root added assertions for archived text and screenshot bytes, 11 architecture/import ownership tests, and `git diff --check`. The final portable gate, `C:/Users/lebel/AppData/Local/Programs/Python/Python313/python.exe tools/run_tests.py full`, passed 1,493 total tests: 1,489 passed and four expected skips, in 84.476 seconds. Results are in this feature worktree's `.test-impact/results.json`. Root review found no remaining actionable issues in this mail slice.
+
+The next authored roster binding is in `.local-data/worktrees/refresh_castle_roster_script` on `codex/refresh-castle-roster-script-core-port`. Its migration also needs to remove the Daily canary helper's dependency on the legacy roster task by borrowing the existing core preflight, without duplicating scan logic. Authored open-building still needs parity work for offscreen and unbuilt targets before its legacy task can be removed. Other remaining workflows retain the limits recorded below.
+
+## Resumed ports — September 12, 2026
+
+The recovered work now implements direct roster refresh and authored Kingdom Chat dispatch. The candidate includes `origin/main` through `c7dfdd5`, preserving quiescent shutdown, scoped reservations, and generated-output defaults. It combines the roster branch through `93c2f84` and Chat branch through `23be5d0`; both feature checkpoints were pushed before integration. Older checkpoints below remain historical evidence.
+
+Roster refresh passed the corrected live scan on `serious_stuff`: 12 castles, `full_scan`, two top-seek swipes, three scan swipes, and two distinct scan windows. The canonical store wrote `artifacts/replacement_core/roster_port_castles.yaml`. The helper checked that the real `config/castles.yaml` bytes were unchanged. Trace: `artifacts/2026-09-12/serious_stuff/20260912T070027Z_4bf42509_core_trace.jsonl`; final Home: `20260912T070534Z_core_20260912T070027Z_4bf42509_0063_core_18_after_1.png`. The earlier whitespace-gap failure is resolved; the overlap, duplicate, cycle, and exact selected-identity guards remain enabled.
+
+Authored Kingdom Chat passed through `ApplicationRunner.run` using generated YAML with one current-castle `collect_kingdom_chat` step. The result was `CoreStepRunResult`, `success`, and final `pnc_home_city`. Trace: `artifacts/2026-09-12/serious_stuff/20260912T070604Z_fa61a59e_core_trace.jsonl`; final Home: `20260912T071116Z_core_20260912T070604Z_fa61a59e_0046_core_12_after_1.png`. Result: `artifacts/replacement_core/authored_chat_port_result.json`. This proves the typed authored dispatch path; it does not claim live validation of switching to another castle.
+
+One process held the canonical `serious_stuff` reservation across both proofs and their preparation. Coding workers remained offline. The configured game returned to Home between workflows, no castle was selected, no message was sent, and no resource was spent. The earlier launcher/UNKNOWN interruption was superseded by a fresh confirmed Home observation before these proofs. The pre-existing instance stayed open with `keep_warm` cleanup.
+
+Focused integration validation passed 69 tests. The final `tools/run_tests.py full` gate passed: 1,490 total tests, 1,486 passed and four expected skips, in 146.614 seconds. Results are in the integration worktree's `.test-impact/results.json`. `git diff --check` passed, and root review found no remaining actionable issues in these two slices. The Windows `py` launcher was unavailable after the sandbox profile changed; the gate used `C:/Users/lebel/AppData/Local/Programs/Python/Python313/python.exe tools/run_tests.py full` instead.
+
+Remaining caller migration: authored mail, open-building, and roster task IDs still need their typed bindings. Authored mail is being implemented separately on `codex/collect-mail-script-core-port`; its unlanded work must not be confused with the already integrated direct mail workflow. Login, castle selection, sending, resource-changing tasks, and Daily maintenance execution remain outside these completed slices.
+
 ## Recovery checkpoint — September 12, 2026
 
 This checkpoint was reconstructed from fetched `origin/main` at `76c486f`, the current task registry, application entrypoints, branch ancestry, and preserved worktree diffs after a reported loss of conversation context. Earlier sections below are chronological evidence; their old blockers and limitations are superseded where this checkpoint or the final role-selected evidence says otherwise.

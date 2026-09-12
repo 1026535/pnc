@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Final
 
-from pnc_automation.app.automation.engine.task import BaseAutomationTask, CastleTargetPolicy, TaskId
+from pnc_automation.app.automation.engine.task import CastleTargetPolicy, TaskDefinition, TaskId
 from pnc_automation.app.authoring.config.models import AccountCastleTargetsConfig
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.core.errors import ConfigurationError, ScriptValidationError
@@ -26,13 +26,13 @@ _UNRESOLVED_CASTLE: Final[object] = object()
 class TaskRegistry:
     """Owns concrete task lookup by canonical task id."""
 
-    tasks: tuple[BaseAutomationTask, ...]
-    _tasks_by_id: dict[TaskId, BaseAutomationTask] = field(init=False, repr=False)
+    tasks: tuple[TaskDefinition, ...]
+    _tasks_by_id: dict[TaskId, TaskDefinition] = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Builds the canonical task lookup table and rejects duplicate ids."""
 
-        tasks_by_id: dict[TaskId, BaseAutomationTask] = {}
+        tasks_by_id: dict[TaskId, TaskDefinition] = {}
         duplicates: list[TaskId] = []
         for task in self.tasks:
             if task.id in tasks_by_id:
@@ -44,7 +44,7 @@ class TaskRegistry:
             raise ValueError(f"TaskRegistry received duplicate task ids: {duplicate_labels}.")
         object.__setattr__(self, "_tasks_by_id", tasks_by_id)
 
-    def require(self, task_id: TaskId) -> BaseAutomationTask:
+    def require(self, task_id: TaskId) -> TaskDefinition:
         """Returns a registered task or fails fast."""
 
         try:
@@ -330,7 +330,7 @@ def _resolve_castle_ref(
 
 
 def _validate_castle_target_policy(
-    task: BaseAutomationTask,
+    task: TaskDefinition,
     *,
     step_index: int,
     step_path: str,

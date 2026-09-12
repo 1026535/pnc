@@ -45,6 +45,29 @@ class CollectMailCoreWorkflowTests(unittest.TestCase):
         self.assertEqual((0, 0, 0, 0), _counts(mailbox))
         self.assertEqual([("navigate", ScreenType.PNC_MAIL_HUB), ("open_mailbox", MailboxType.PLAYER)], context.calls)
 
+    def test_empty_available_mailbox_returns_zero_counts_without_scroll(self) -> None:
+        """An available mailbox with no rows completes without fabricating thread content."""
+
+        context = _FakeMailContext(
+            availability=MailboxAvailability.AVAILABLE,
+            content=(_mailbox((), captured_at=datetime(2026, 9, 11, 12, 0, tzinfo=UTC), empty=True),),
+        )
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            result = _workflow(temporary_directory).execute(context)
+
+        mailbox = result.mailboxes[0]
+        self.assertEqual(MailboxAvailability.AVAILABLE, mailbox.availability)
+        self.assertEqual((0, 0, 0, 0), _counts(mailbox))
+        self.assertEqual(
+            [
+                ("navigate", ScreenType.PNC_MAIL_HUB),
+                ("open_mailbox", MailboxType.PLAYER),
+                ("observe_content", ScreenType.PNC_MAILBOX_LIST),
+                ("navigate", ScreenType.PNC_MAIL_HUB),
+            ],
+            context.calls,
+        )
+
     def test_collects_and_deduplicates_opened_rows_then_stops_on_repeated_scroll(self) -> None:
         """Persists one fingerprint, counts an in-run duplicate as skipped, and issues one bounded swipe."""
 
@@ -71,14 +94,24 @@ class CollectMailCoreWorkflowTests(unittest.TestCase):
                 observation if observation.artifact_path is not None else _with_artifact(observation, source)
                 for observation in context.content
             )
-            result = _workflow(temporary_directory, limit=3).execute(context)
+            result = _workflow(
+                temporary_directory,
+                limit=3,
+                archive_mode=MailArchiveMode.BOTH,
+            ).execute(context)
 
             mailbox = result.mailboxes[0]
             self.assertEqual((2, 1, 1, 1), _counts(mailbox))
             self.assertEqual(1, result.total_archived_count)
             self.assertEqual(1, result.total_skipped_existing_count)
             self.assertEqual(1, result.total_scroll_count)
-            self.assertTrue(any(path.name == "metadata.json" for path in Path(temporary_directory).rglob("*")))
+            archive_root = Path(temporary_directory) / "mail"
+            metadata_paths = tuple(archive_root.rglob("metadata.json"))
+            self.assertEqual(1, len(metadata_paths))
+            archived = metadata_paths[0].parent
+            self.assertIn("Main", archived.parts)
+            self.assertEqual(source.read_bytes(), (archived / "thread.png").read_bytes())
+            self.assertEqual("Reward message", (archived / "thread.txt").read_text(encoding="utf-8"))
         self.assertIn(("scroll_mailbox", None), context.calls)
 
     def test_existing_fingerprint_is_counted_as_skipped(self) -> None:
@@ -253,7 +286,12 @@ def _row(sender: str, subtitle: str) -> DetectedListEntry:
     )
 
 
-def _mailbox(rows: tuple[DetectedListEntry, ...], *, captured_at: datetime) -> Observation:
+def _mailbox(
+    rows: tuple[DetectedListEntry, ...],
+    *,
+    captured_at: datetime,
+    empty: bool = False,
+) -> Observation:
     """Builds one fresh typed mailbox-list observation."""
 
     return Observation(
@@ -262,7 +300,7 @@ def _mailbox(rows: tuple[DetectedListEntry, ...], *, captured_at: datetime) -> O
         list_entries=rows,
         captured_at=captured_at,
         mailbox_type=MailboxType.PLAYER,
-        mailbox_empty=False,
+        mailbox_empty=empty,
     )
 
 

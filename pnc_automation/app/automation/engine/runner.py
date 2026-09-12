@@ -6,12 +6,19 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Protocol
 
 from pnc_automation.app.automation.engine.observed_action_executor import ObservedActionExecutor
 from pnc_automation.app.authoring.scripts.models import PreparedRunScript, PreparedScriptStep, ScriptStep
 from pnc_automation.app.authoring.scripts.registry import TaskRegistry
-from pnc_automation.app.automation.engine.task import CastleTargetPolicy, TaskId, TaskPreflight
+from pnc_automation.app.automation.engine.core_workflow import CoreWorkflowResult
+from pnc_automation.app.automation.engine.task import (
+    CastleTargetPolicy,
+    CoreWorkflowTaskDefinition,
+    TaskId,
+    TaskPreflight,
+    TaskStatus,
+)
 from pnc_automation.app.automation.engine.task_executor import TaskExecutionResult, TaskExecutor
 from pnc_automation.app.automation.engine.task_context import TaskContext
 from pnc_automation.app.pnc.persistence.chat_archive_store import ChatArchiveStore
@@ -41,6 +48,20 @@ class StepRunResult:
     message: str
     requested_castle: CastleIdentity | None = None
     provenance: dict[str, object] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class CoreStepRunResult(StepRunResult):
+    """Retains the typed replacement-core result for an authored core step."""
+
+    workflow_result: CoreWorkflowResult[Any] = field(kw_only=True)
+
+
+class CoreStepExecutor(Protocol):
+    """Executes one prepared typed step over the runner's shared connected graph."""
+
+    def execute(self, *, step: PreparedScriptStep) -> CoreWorkflowResult[Any]:
+        """Runs one typed core step and returns its typed workflow result."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,6 +105,7 @@ class AutomationRunner:
     world_map_search_service: WorldMapSearchService | None = None
     policy: StepExecutionPolicy = field(default_factory=StepExecutionPolicy)
     close_callback: Callable[[], None] | None = field(default=None, repr=False)
+    core_step_executor: CoreStepExecutor | None = field(default=None, repr=False)
     _closed: bool = field(default=False, init=False, repr=False)
 
     def close(self) -> None:
@@ -234,6 +256,16 @@ class AutomationRunner:
     ) -> StepRunResult:
         """Executes one script step until it succeeds or fails."""
 
+        task = self.task_registry.require(step.task)
+        if isinstance(task, CoreWorkflowTaskDefinition):
+            return self._run_core_step(
+                account=account,
+                step=step,
+                castle_roster_provider=castle_roster_provider,
+                castle_roster_store=castle_roster_store,
+                mail_archive_store=mail_archive_store,
+                chat_archive_store=chat_archive_store,
+            )
         before = self.observation_service.observe(f"{step.task.value}_before")
         before = self._align_step_castle_target(
             account=account,
@@ -262,6 +294,49 @@ class AutomationRunner:
             message=execution.result.message,
             requested_castle=step.castle,
             provenance=dict(step.provenance),
+        )
+
+    def _run_core_step(
+        self,
+        *,
+        account: AccountConfig,
+        step: PreparedScriptStep,
+        castle_roster_provider: Callable[[], PncAccountCastleRosterConfig | None] | None,
+        castle_roster_store: CastleRosterStore | None,
+        mail_archive_store: MailArchiveStore | None,
+        chat_archive_store: ChatArchiveStore | None,
+    ) -> CoreStepRunResult:
+        """Runs a typed core step without invoking legacy observation or task execution."""
+
+        executor = self.core_step_executor
+        if executor is None:
+            raise RuntimeError(
+                f"Typed core task '{step.task}' has no configured core-step executor; dispatch failed closed."
+            )
+        if step.castle is not None:
+            before = self.observation_service.observe(f"{step.task.value}_before")
+            self._align_step_castle_target(
+                account=account,
+                step=step,
+                before=before,
+                castle_roster_provider=castle_roster_provider,
+                castle_roster_store=castle_roster_store,
+                mail_archive_store=mail_archive_store,
+                chat_archive_store=chat_archive_store,
+            )
+        workflow_result = executor.execute(step=step)
+        if not workflow_result.succeeded:
+            raise RuntimeError(
+                f"Core workflow '{workflow_result.workflow_name}' reported failure; the script stopped without replay."
+            )
+        return CoreStepRunResult(
+            task_id=step.task,
+            status=TaskStatus.SUCCESS,
+            attempts=1,
+            message=f"Core workflow '{workflow_result.workflow_name}' completed.",
+            requested_castle=step.castle,
+            provenance=dict(step.provenance),
+            workflow_result=workflow_result,
         )
 
     def _align_step_castle_target(
