@@ -3,6 +3,13 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.test-impact/
+.coverage
+.coverage.*
+coverage.json
+htmlcov/
+test_timings.csv
+.testmondata*
 .venv/
 venv/
 artifacts/

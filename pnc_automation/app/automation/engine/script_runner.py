@@ -35,10 +35,9 @@ from pnc_automation.app.pnc.persistence.world_map_survey_debug_store import Worl
 from pnc_automation.app.authoring.config.models import (
     AccountConfig,
     AppConfig,
-    CastleIdentity,
     LiveAutomationRole,
-    PncAccountCastleRosterConfig,
 )
+from pnc_automation.app.pnc.domain.castles import CastleIdentity, PncAccountCastleRosterConfig
 from pnc_automation.core.infra.emulator.bluestacks_instance import BlueStacksInstance
 from pnc_automation.core.infra.emulator.bluestacks_instance_resolver import BlueStacksInstanceResolver
 from pnc_automation.app.pnc.navigation.world_map_movement_calibration import WorldMapMovementCalibrationService

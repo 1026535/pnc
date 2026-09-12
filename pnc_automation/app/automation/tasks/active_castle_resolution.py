@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pnc_automation.app.automation.engine.task_context import TaskContext
-from pnc_automation.app.authoring.config.models import CastleIdentity
+from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.app.pnc.domain.action_requests import ActionRequest
 from pnc_automation.app.pnc.domain.observation import Observation, castle_names_match, resolve_unambiguous_castle_identity

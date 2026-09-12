@@ -22,10 +22,6 @@ from pnc_automation.app.automation.engine.script_runner import (
     ScriptRunner,
     require_successful_preparation,
 )
-from pnc_automation.bluestacks_management.instance_lease import (
-    PROCESS_INSTANCE_LEASES,
-    InstanceLeaseBundle,
-)
 from pnc_automation.app.pnc.domain.daily_maintenance import (
     DailyQuestRow,
     DailyTargetOutcome,
@@ -178,35 +174,3 @@ class _RejectingCapabilityExecutor:
 
         del target, checkpoint
         raise PermissionError(f"Daily capability '{row.quest_id.value}' is not promoted.")
-
-
-@dataclass(slots=True)
-class ConnectedClaimOnlyRunnerFactory:
-    """Builds an isolated application object graph for each instance worker."""
-
-    config_path: str
-    app_config: AppConfig
-    acknowledgements: tuple[MutationAcknowledgement, ...]
-    verbose: bool = False
-
-    def reserve_instances(self, instance_ids: tuple[str, ...]) -> InstanceLeaseBundle:
-        """Reserves the configured display names for the complete daily worker pool."""
-
-        display_names = tuple(
-            self.app_config.require_instance(instance_id).display_name
-            for instance_id in instance_ids
-        )
-        return PROCESS_INSTANCE_LEASES.acquire_bundle(display_names)
-
-    def build(self, *, instance_id: str) -> ConnectedClaimOnlyCastleRunner:
-        """Builds one worker with an independently owned OCR and connected-runtime graph."""
-
-        from pnc_automation.app.entrypoints.app import build_application_runner
-
-        application = build_application_runner(self.config_path, verbose=self.verbose)
-        return ConnectedClaimOnlyCastleRunner(
-            instance_id=instance_id,
-            app_config=self.app_config,
-            script_runner=application.script_runner,
-            authorizer=DailyMutationAuthorizer(self.acknowledgements),
-        )

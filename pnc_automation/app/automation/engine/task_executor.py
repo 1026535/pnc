@@ -11,7 +11,7 @@ from pnc_automation.app.automation.engine.task_context import TaskContext
 from pnc_automation.app.pnc.domain.observation import Observation
 from pnc_automation.app.pnc.vision.observation_builder import ObservationService
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
-from pnc_automation.app.runtime.observation_artifacts import ObservationArtifactKind, observation_artifact_selection
+from pnc_automation.app.pnc.domain.observation_policy import ObservationArtifactKind, observation_artifact_selection
 from pnc_automation.core.errors import TaskVerificationError
 
 

@@ -18,7 +18,7 @@ from pnc_automation.app.pnc.navigation.world_map_proof import (
 )
 from pnc_automation.app.pnc.navigation.world_map_sweep import WorldMapCoverageWindow, WorldMapProjectedFrame
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
-from pnc_automation.app.runtime.observation_artifacts import ObservationArtifactSelection
+from pnc_automation.app.pnc.domain.observation_policy import ObservationArtifactSelection
 from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.core.infra.capture.screenshot_service import CapturedScreenshot
 

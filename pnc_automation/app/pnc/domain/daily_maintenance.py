@@ -7,7 +7,7 @@ from datetime import date
 from enum import StrEnum
 from typing import Any
 
-from pnc_automation.app.authoring.config.models import CastleIdentity
+from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 
 

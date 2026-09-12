@@ -9,7 +9,8 @@ from typing import Any
 import yaml
 
 from pnc_automation.app.automation.engine.task import TaskId
-from pnc_automation.app.authoring.config.models import AppConfig, CastleIdentity, castle_identity_key
+from pnc_automation.app.authoring.config.models import AppConfig
+from pnc_automation.app.pnc.domain.castles import CastleIdentity, castle_identity_key
 from pnc_automation.app.authoring.config.yaml_helpers import require_int, require_list, require_mapping, require_string
 from pnc_automation.app.pnc.domain.daily_maintenance import (
     CampaignExecutionMode,

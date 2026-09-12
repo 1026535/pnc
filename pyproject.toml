@@ -13,6 +13,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+test = ["coverage==7.10.7"]
 yolo = ["onnxruntime>=1.24.3,<2.0.0"]
 
 [build-system]

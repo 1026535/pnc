@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import unittest
 from pathlib import Path
 
@@ -16,6 +17,8 @@ def require_local_fixture_artifact(name: str, *, default_repo_relative_path: str
     default_path = None if default_repo_relative_path is None else Path(__file__).resolve().parents[1] / default_repo_relative_path
     if default_path is not None and default_path.is_file():
         return default_path
+    if os.environ.get("PNC_TEST_FIXTURE_PROFILE") == "portable":
+        raise unittest.SkipTest("Portable offline profile: optional local screenshot is unavailable.")
     document = _load_fixture_document()
     configured_path = document.get(name)
     if not configured_path:

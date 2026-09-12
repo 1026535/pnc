@@ -8,7 +8,8 @@ import json
 from pathlib import Path
 from uuid import uuid4
 
-from pnc_automation.app.authoring.config.models import AccountConfig, CastleIdentity, LiveAutomationRole
+from pnc_automation.app.authoring.config.models import AccountConfig, LiveAutomationRole
+from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.automation.engine.observed_action_executor import ObservedActionExecutor
 from pnc_automation.app.pnc.domain.observation import CurrentCastleEvidenceKind, Observation
 from pnc_automation.app.pnc.enums.screen_type import ScreenType

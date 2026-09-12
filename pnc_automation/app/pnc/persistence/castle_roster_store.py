@@ -7,7 +7,12 @@ from pathlib import Path
 
 import yaml
 
-from pnc_automation.app.authoring.config.models import CastleIdentity, CastleRosterOrdering, PncAccountCastleRosterConfig, castle_identity_key
+from pnc_automation.app.pnc.domain.castles import (
+    CastleIdentity,
+    CastleRosterOrdering,
+    PncAccountCastleRosterConfig,
+    castle_identity_key,
+)
 from pnc_automation.core.errors import ConfigurationError
 
 

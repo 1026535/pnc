@@ -10,7 +10,7 @@ from enum import StrEnum
 
 from PIL import Image
 
-from pnc_automation.app.authoring.config.models import CastleIdentity
+from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.app.pnc.domain.chat import ChatChannel, ChatEntryKind
 from pnc_automation.app.pnc.domain.building_catalog import (

@@ -11,7 +11,7 @@ from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.pnc_ocr_capabilities import runtime_screen_family_ocr_types
 from pnc_automation.app.pnc.vision.selectors import ClickOutcome
-from pnc_automation.app.runtime.observation_artifacts import (
+from pnc_automation.app.pnc.domain.observation_policy import (
     ObservationArtifactKind,
     ObservationArtifactSelection,
     observation_artifact_selection,

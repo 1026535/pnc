@@ -23,7 +23,7 @@ from pnc_automation.app.entrypoints.app import build_application_runner, build_o
 from pnc_automation.app.pnc.domain.observation import SpatialObjectKind
 from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
 from pnc_automation.app.pnc.vision.yolo_shadow import YoloShadowObserver, YoloShadowReport
-from pnc_automation.app.runtime.observation_mode import ObservationMode
+from pnc_automation.core.vision.observation_policy import ObservationMode
 from pnc_automation.core.infra.capture.screenshot_service import CapturedScreenshot
 from pnc_automation.core.vision.detection.yolo_onnx import YoloOnnxDetector
 

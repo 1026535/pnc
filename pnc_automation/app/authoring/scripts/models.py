@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, TypeAlias
 
 from pnc_automation.app.automation.engine.task import CastleTargetPolicy, TaskId
-from pnc_automation.app.authoring.config.models import CastleIdentity
+from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.core.errors import ScriptValidationError
 
 

@@ -1,6 +1,6 @@
 """Application-wide runtime settings."""
 
-from pnc_automation.app.runtime.observation_artifacts import (
+from pnc_automation.app.pnc.domain.observation_policy import (
     ObservationArtifactKind,
     ObservationArtifactOwner,
     ObservationArtifactRoutine,
@@ -12,7 +12,7 @@ from pnc_automation.app.runtime.observation_artifacts import (
     resolve_observation_artifact_selection,
     resolve_routine_artifact_selection,
 )
-from pnc_automation.app.runtime.observation_mode import ObservationMode
+from pnc_automation.core.vision.observation_policy import ObservationMode
 
 __all__ = [
     "ObservationArtifactKind",

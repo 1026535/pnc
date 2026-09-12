@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Protocol
 
 from pnc_automation.app.automation.engine.observed_action_executor import ObservedActionExecutor
-from pnc_automation.app.authoring.config.models import CastleIdentity
+from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.domain.action_requests import TapAction
 from pnc_automation.app.pnc.domain.observation import Observation, VisibleElementSourceKind
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
