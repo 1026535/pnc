@@ -570,6 +570,64 @@ class NavigationCoreTests(unittest.TestCase):
                 core.open_visible_building(HomeCityObjectId.GODDESS_STATUE, observe_content=lambda _: candidate)
             self.assertEqual(actuator.actions, [])
 
+    def test_castle_building_opens_from_observed_point_and_returns_home_by_template_back(self):
+        target = home_building_object(HomeCityObjectId.CASTLE)
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+
+        def castle_frame(captured_at: datetime) -> Observation:
+            return replace(
+                observation(ScreenType.PNC_CASTLE),
+                visible_elements={
+                    UiElementId.PNC_BACK_BUTTON_TOP_LEFT: VisibleElement(
+                        UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+                        Bounds(22, 8, 58, 38),
+                        0.99,
+                        source_kind=VisibleElementSourceKind.TEMPLATE,
+                    ),
+                },
+                image_size=(540, 960),
+                captured_at=captured_at,
+            )
+
+        def home_frame(captured_at: datetime) -> Observation:
+            return replace(
+                observation(ScreenType.PNC_HOME_CITY),
+                image_size=(540, 960),
+                captured_at=captured_at,
+            )
+
+        frames = iter(
+            (
+                castle_frame(now + timedelta(seconds=1)),
+                castle_frame(now + timedelta(seconds=2)),
+                castle_frame(now + timedelta(seconds=3)),
+                castle_frame(now + timedelta(seconds=4)),
+                home_frame(now + timedelta(seconds=5)),
+                home_frame(now + timedelta(seconds=6)),
+            )
+        )
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator,
+            lambda _: next(frames),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+
+        opened = core.open_visible_building(
+            HomeCityObjectId.CASTLE,
+            observe_content=lambda _: home_building_frame((target,), captured_at=now),
+        )
+        returned = core.navigate(ScreenType.PNC_HOME_CITY)
+
+        self.assertEqual(ScreenType.PNC_CASTLE, opened.screen_type)
+        self.assertEqual(ScreenType.PNC_HOME_CITY, returned.screen_type)
+        self.assertEqual(2, len(actuator.actions))
+        self.assertIsInstance(actuator.actions[0], TapSpatialObjectAction)
+        self.assertEqual((270, 520), actuator.actions[0].target_point)
+        self.assertEqual(UiElementId.PNC_BACK_BUTTON_TOP_LEFT, actuator.actions[1].selector_id)
+
     def test_public_home_scan_sequence_and_budget_match_canonical_navigator(self):
         steps = home_city_scan_steps()
 

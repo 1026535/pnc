@@ -150,6 +150,13 @@
       "sha256": "cbe6b90ded86cb757765cbd3f3db08d71ae873d867285ecbd8c3101ac0932eb9"
     },
     {
+      "image": "castle_audit.png",
+      "screen": "PNC_CASTLE",
+      "split": "reference",
+      "group": "2026-09-12/serious_stuff",
+      "sha256": "68bef77309b15aa049c52bbe18c6469d600077e9c9e8af813ff2511a300c39c5"
+    },
+    {
       "image": "home_city_core.png",
       "screen": "PNC_HOME_CITY",
       "split": "reference",

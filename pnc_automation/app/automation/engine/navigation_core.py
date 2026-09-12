@@ -658,7 +658,7 @@ def reviewed_navigation_edges() -> tuple[NavigationEdge, ...]:
     for source in (
         *sorted(quest, key=lambda value: value.name), screen.PNC_BAG,
         screen.PNC_INSTITUTE, screen.PNC_GODDESS_STATUE,
-        screen.PNC_WAREHOUSE, screen.PNC_HERO_HALL,
+        screen.PNC_WAREHOUSE, screen.PNC_HERO_HALL, screen.PNC_CASTLE,
     ):
         edges.append(NavigationEdge(source, selector.PNC_BACK_BUTTON_TOP_LEFT, frozenset({screen.PNC_HOME_CITY})))
     return tuple(edges)
