@@ -40,6 +40,7 @@ from pnc_automation.app.pnc.persistence.chat_archive_transaction import (
     ChatArchivePublicationError,
     ChatStreamIdentity,
     PendingChatTransaction,
+    decode_pending_bytes,
     load_pending,
     parse_archive_day,
     resolve_root_relative,
@@ -78,6 +79,14 @@ class ChatRecoveryResult:
     snapshot: VisibleChatSnapshot
     transcript_path: Path
     state_path: Path
+
+
+@dataclass(frozen=True, slots=True)
+class _PreparedScreenshot:
+    """Carries validated screenshot bytes until their final name is published."""
+
+    path: Path
+    payload: bytes
 
 
 @dataclass(slots=True)
@@ -184,7 +193,7 @@ class ChatArchiveStore:
             )
             screenshot_path: Path | None = None
             if appended_entries:
-                screenshot_path = self._persist_screenshot(
+                prepared_screenshot = self._prepare_screenshot(
                     directory=directory,
                     captured_at=captured_at,
                     snapshot=snapshot,
@@ -192,7 +201,7 @@ class ChatArchiveStore:
                     screenshot_source_path=screenshot_source_path,
                     screenshot_extension=screenshot_extension,
                 )
-                self._persist_append_transaction(
+                transaction = self._prepare_append_transaction(
                     scope=scope,
                     directory=directory,
                     transcript_path=transcript_path,
@@ -201,7 +210,16 @@ class ChatArchiveStore:
                     snapshot=persisted_snapshot,
                     appended_entries=appended_entries,
                     gap_detected=gap_detected,
-                    screenshot_path=screenshot_path,
+                    screenshot_path=prepared_screenshot.path,
+                    screenshot_length=len(prepared_screenshot.payload),
+                    screenshot_sha256=hashlib.sha256(prepared_screenshot.payload).hexdigest(),
+                )
+                screenshot_path = self._publish_screenshot(prepared_screenshot)
+                self._persist_append_transaction(
+                    scope=scope,
+                    transcript_path=transcript_path,
+                    state_path=state_path,
+                    transaction=transaction,
                 )
             else:
                 retained_evidence = None if current_state is None else current_state.transcript_evidence
@@ -224,7 +242,7 @@ class ChatArchiveStore:
             gap_detected=gap_detected,
         )
 
-    def _persist_append_transaction(
+    def _prepare_append_transaction(
         self,
         *,
         scope: ArchiveOwnershipScope,
@@ -236,12 +254,14 @@ class ChatArchiveStore:
         appended_entries: tuple[NormalizedPlayerChatEntry, ...],
         gap_detected: bool,
         screenshot_path: Path,
-    ) -> None:
-        """Prepares, appends, publishes state, and retires one chat transaction."""
+        screenshot_length: int,
+        screenshot_sha256: str,
+    ) -> PendingChatTransaction:
+        """Prepares and validates one append without publishing any managed evidence."""
 
         self._validate_chat_file(transcript_path, allowed_names={"transcript.log"}, allow_missing=True)
         self._validate_chat_file(state_path, allowed_names={"state.json"}, allow_missing=True)
-        self._validate_managed_file(screenshot_path, allow_missing=False)
+        self._validate_managed_file(screenshot_path, allow_missing=True)
         existing_transcript = transcript_path.read_bytes() if transcript_path.exists() else b""
         if transcript_path.exists():
             _validate_transcript_bytes(existing_transcript)
@@ -280,13 +300,37 @@ class ChatArchiveStore:
             next_state=next_state_document,
             next_state_sha256=hashlib.sha256(next_state_bytes).hexdigest(),
             screenshot_relative_path=relative_screenshot,
-            screenshot_length=screenshot_path.stat().st_size,
-            screenshot_sha256=_sha256_file(screenshot_path),
+            screenshot_length=screenshot_length,
+            screenshot_sha256=screenshot_sha256,
         )
+        decode_pending_bytes(transaction.to_bytes())
+        return transaction
+
+    def _persist_append_transaction(
+        self,
+        *,
+        scope: ArchiveOwnershipScope,
+        transcript_path: Path,
+        state_path: Path,
+        transaction: PendingChatTransaction,
+    ) -> None:
+        """Publishes pending intent, appends bytes, publishes state, and retires intent."""
+
+        self._validate_chat_file(transcript_path, allowed_names={"transcript.log"}, allow_missing=True)
+        self._validate_chat_file(state_path, allowed_names={"state.json"}, allow_missing=True)
+        screenshot_path = resolve_root_relative(self.root, transaction.screenshot_relative_path)
+        self._validate_pending_screenshot_filename(screenshot_path, transaction)
+        self._validate_managed_file(screenshot_path, allow_missing=False)
+        if (
+            not screenshot_path.is_file()
+            or screenshot_path.stat().st_size != transaction.screenshot_length
+            or _sha256_file(screenshot_path) != transaction.screenshot_sha256
+        ):
+            raise ChatArchivePublicationError("Published chat screenshot does not match its prepared transaction.")
         write_pending(scope.pending_path, transaction)
         self._fault("after_pending_publish")
         self._append_pending_bytes(transcript_path, transaction)
-        atomic_write_bytes(state_path, next_state_bytes, prefix="state-", suffix=".tmp")
+        atomic_write_bytes(state_path, canonical_json_bytes(transaction.next_state), prefix="state-", suffix=".tmp")
         self._fault("after_state_publish")
         self._retire_pending(scope.pending_path)
 
@@ -330,6 +374,7 @@ class ChatArchiveStore:
             self._validate_managed_file(screenshot_path, allow_missing=False)
         except ArchiveOwnershipError as error:
             raise ChatArchiveConsistencyError("Chat pending screenshot path is not a safe managed file.") from error
+        self._validate_pending_screenshot_filename(screenshot_path, transaction)
         if not screenshot_path.is_file() or screenshot_path.stat().st_size != transaction.screenshot_length:
             raise ChatArchiveConsistencyError("Chat pending screenshot is missing or incomplete.")
         if _sha256_file(screenshot_path) != transaction.screenshot_sha256:
@@ -488,7 +533,7 @@ class ChatArchiveStore:
         self._validate_chat_file(state_path, allowed_names={"state.json"}, allow_missing=True)
         atomic_write_bytes(state_path, state_bytes(state), prefix="state-", suffix=".tmp")
 
-    def _persist_screenshot(
+    def _prepare_screenshot(
         self,
         *,
         directory: Path,
@@ -497,19 +542,10 @@ class ChatArchiveStore:
         screenshot_payload: bytes | None,
         screenshot_source_path: Path | None,
         screenshot_extension: str,
-    ) -> Path:
-        """Publishes complete collision-safe screenshot evidence before transcript bytes."""
+    ) -> _PreparedScreenshot:
+        """Validates screenshot input and reserves an unused final name without publishing."""
 
-        if not isinstance(screenshot_extension, str):
-            raise ChatArchiveConsistencyError("Chat screenshot extension must be a safe filename segment.")
-        if screenshot_extension == "":
-            extension = "png"
-        elif screenshot_extension.startswith("."):
-            extension = screenshot_extension[1:]
-        else:
-            extension = screenshot_extension
-        if re.fullmatch(r"[A-Za-z0-9]{1,16}", extension) is None:
-            raise ChatArchiveConsistencyError("Chat screenshot extension must be a safe filename segment.")
+        extension = _normalize_screenshot_extension(screenshot_extension)
         if not isinstance(snapshot.fingerprint, str) or re.fullmatch(r"[0-9a-f]{8}", snapshot.fingerprint) is None:
             raise ChatArchiveConsistencyError("Chat snapshot fingerprint is not a canonical filename identity.")
         if screenshot_payload is None and screenshot_source_path is None:
@@ -524,8 +560,6 @@ class ChatArchiveStore:
         screenshots_directory = directory / "screenshots"
         self._validate_chat_directory(directory)
         validate_managed_path(self.root, screenshots_directory, allow_missing_leaf=True)
-        screenshots_directory.mkdir(parents=True, exist_ok=True)
-        validate_managed_path(self.root, screenshots_directory, require_directory=True)
         candidate = screenshots_directory / f"{captured_at.astimezone(UTC).strftime('%Y%m%dT%H%M%SZ')}_{snapshot.fingerprint}.{extension}"
         digest = hashlib.sha256(screenshot_payload).hexdigest()
         for suffix in range(10000):
@@ -533,11 +567,44 @@ class ChatArchiveStore:
             self._validate_managed_file(selected, allow_missing=True)
             if selected.exists():
                 if selected.is_file() and selected.stat().st_size == len(screenshot_payload) and _sha256_file(selected) == digest:
-                    return selected
+                    return _PreparedScreenshot(path=selected, payload=screenshot_payload)
                 continue
-            atomic_write_bytes(selected, screenshot_payload, prefix="screenshot-", suffix=".tmp")
-            return selected
+            return _PreparedScreenshot(path=selected, payload=screenshot_payload)
         raise ChatArchivePublicationError("Unable to allocate a collision-safe chat screenshot path.")
+
+    def _publish_screenshot(self, prepared: _PreparedScreenshot) -> Path:
+        """Publishes one prepared screenshot after its transaction has passed preflight."""
+
+        self._validate_managed_file(prepared.path, allow_missing=True)
+        if prepared.path.exists():
+            if (
+                prepared.path.is_file()
+                and prepared.path.stat().st_size == len(prepared.payload)
+                and _sha256_file(prepared.path) == hashlib.sha256(prepared.payload).hexdigest()
+            ):
+                return prepared.path
+            raise ChatArchivePublicationError("Prepared chat screenshot path was occupied by different bytes.")
+        prepared.path.parent.mkdir(parents=True, exist_ok=True)
+        validate_managed_path(self.root, prepared.path.parent, require_directory=True)
+        atomic_write_bytes(prepared.path, prepared.payload, prefix="screenshot-", suffix=".tmp")
+        return prepared.path
+
+    def _validate_pending_screenshot_filename(
+        self,
+        screenshot_path: Path,
+        transaction: PendingChatTransaction,
+    ) -> None:
+        """Validates the screenshot name against the pending capture identity."""
+
+        expected_timestamp = transaction.captured_at.astimezone(UTC).strftime("%Y%m%dT%H%M%SZ")
+        expected_fingerprint = _state_from_document(transaction.next_state).snapshot.fingerprint
+        match = re.fullmatch(
+            r"(?P<timestamp>\d{8}T\d{6}Z)_(?P<fingerprint>[0-9a-f]{8})(?:-\d+)?\.(?P<extension>[A-Za-z0-9]{1,16})",
+            screenshot_path.name,
+        )
+        if match is None or match.group("timestamp") != expected_timestamp or match.group("fingerprint") != expected_fingerprint:
+            raise ChatArchiveConsistencyError("Chat pending screenshot filename does not match its recorded capture identity.")
+        _normalize_screenshot_extension(match.group("extension"))
 
     def _reject_stale_observation(self, previous_state: ChatArchiveState | None, captured_at: datetime, snapshot: VisibleChatSnapshot) -> None:
         if previous_state is None or previous_state.last_captured_at is None:
@@ -750,3 +817,19 @@ def _validate_captured_at(captured_at: object) -> None:
 
     if not isinstance(captured_at, datetime) or captured_at.tzinfo is None or captured_at.utcoffset() is None:
         raise ChatArchiveConsistencyError("Chat captured_at must be an aware datetime.")
+
+
+def _normalize_screenshot_extension(value: object) -> str:
+    """Validates one screenshot extension used in an authoritative filename."""
+
+    if not isinstance(value, str):
+        raise ChatArchiveConsistencyError("Chat screenshot extension must be a safe filename segment.")
+    if value == "":
+        extension = "png"
+    elif value.startswith("."):
+        extension = value[1:]
+    else:
+        extension = value
+    if re.fullmatch(r"[A-Za-z0-9]{1,16}", extension) is None:
+        raise ChatArchiveConsistencyError("Chat screenshot extension must be a safe filename segment.")
+    return extension

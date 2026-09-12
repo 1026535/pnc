@@ -6,14 +6,18 @@ import subprocess
 import math
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from pnc_automation.core.infra.storage.file_lock import (
+    NativePathLock,
     NativePathLockManager,
     StorageLockBusyError,
     StorageLockReentryError,
+    _HELD_PATHS,
 )
 
 
@@ -78,6 +82,32 @@ class NativePathLockTests(unittest.TestCase):
             NativePathLockManager(poll_interval_seconds=True)
         with self.assertRaises(ValueError):
             NativePathLockManager(poll_interval_seconds=0)
+
+    def test_release_preserves_unlock_and_handle_close_failures_and_cleans_ownership(self) -> None:
+        """A dual cleanup failure retains both exceptions and clears local ownership."""
+
+        class FailingHandle:
+            def close(self) -> None:
+                raise OSError("close failure")
+
+        path = Path(tempfile.gettempdir()) / "native-path-lock-dual-failure.lock"
+        key = str(path.expanduser().resolve())
+        _HELD_PATHS[key] = threading.get_ident()
+        lock = NativePathLock(path=path, handle=FailingHandle())  # type: ignore[arg-type]
+        try:
+            with patch(
+                "pnc_automation.core.infra.storage.file_lock.unlock_file",
+                side_effect=RuntimeError("unlock failure"),
+            ):
+                with self.assertRaises(BaseExceptionGroup) as raised:
+                    NativePathLockManager().release(lock)
+            self.assertEqual(
+                ("unlock failure", "close failure"),
+                tuple(str(error) for error in raised.exception.exceptions),
+            )
+            self.assertNotIn(key, _HELD_PATHS)
+        finally:
+            _HELD_PATHS.pop(key, None)
 
 
 if __name__ == "__main__":

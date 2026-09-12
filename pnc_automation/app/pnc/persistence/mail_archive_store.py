@@ -16,6 +16,7 @@ from pnc_automation.app.pnc.domain.mail import (
     MailArchiveMode,
     MailArchiveRecord,
     MailThreadFingerprint,
+    compute_mail_thread_fingerprint,
     thread_partner_directory_name,
 )
 from pnc_automation.app.pnc.enums.mail import MailboxType
@@ -48,6 +49,14 @@ class MailArchiveCandidateDiagnostic:
 
     candidate_name: str
     status: MailArchiveCandidateStatus
+
+
+@dataclass(frozen=True, slots=True)
+class _MailArchiveCandidateClassification:
+    """Carries candidate diagnostics plus selection-only verification state."""
+
+    status: MailArchiveCandidateStatus
+    versioned_verified: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -268,7 +277,7 @@ class MailArchiveStore:
         if not self.root.exists():
             self._last_candidate_diagnostics = ()
             return None
-        candidates = []
+        candidates: list[tuple[Path, bool]] = []
         diagnostics: list[MailArchiveCandidateDiagnostic] = []
         pattern = re.compile(rf"^\d{{8}}T\d{{6}}Z_{re.escape(fingerprint)}(?:-\d+)?$")
         for metadata_path in self.root.rglob("metadata.json"):
@@ -284,7 +293,7 @@ class MailArchiveStore:
                 continue
             try:
                 validate_managed_path(self.root, directory, require_directory=True)
-                status = _classify_candidate(
+                classification = _classify_candidate(
                     directory,
                     active_castle=active_castle,
                     mailbox_type=mailbox_type,
@@ -292,12 +301,13 @@ class MailArchiveStore:
                     root=self.root,
                 )
             except ArchiveOwnershipError:
-                status = MailArchiveCandidateStatus.CORRUPT
+                classification = _MailArchiveCandidateClassification(MailArchiveCandidateStatus.CORRUPT)
+            status = classification.status
             diagnostics.append(MailArchiveCandidateDiagnostic(candidate_name=directory.name, status=status))
             if status == MailArchiveCandidateStatus.COMPLETE:
-                candidates.append(directory)
+                candidates.append((directory, classification.versioned_verified))
         self._last_candidate_diagnostics = tuple(sorted(diagnostics, key=lambda item: item.candidate_name))
-        return sorted(candidates)[0] if candidates else None
+        return min(candidates, key=lambda item: (not item[1], item[0].as_posix()))[0] if candidates else None
 
 
 def _classify_candidate(
@@ -307,13 +317,13 @@ def _classify_candidate(
     mailbox_type: str,
     fingerprint: str,
     root: Path,
-) -> MailArchiveCandidateStatus:
+) -> _MailArchiveCandidateClassification:
     metadata_path = directory / "metadata.json"
     try:
         validate_managed_path(root, metadata_path, require_file=True)
         metadata = _read_json_object(metadata_path.read_bytes())
     except (ArchiveOwnershipError, OSError, ValueError, TypeError, UnicodeError, json.JSONDecodeError):
-        return MailArchiveCandidateStatus.CORRUPT
+        return _MailArchiveCandidateClassification(MailArchiveCandidateStatus.CORRUPT)
     try:
         if not (
             isinstance(metadata.get("active_castle"), str)
@@ -322,14 +332,18 @@ def _classify_candidate(
             and os.path.normcase(metadata["mailbox_type"]) == os.path.normcase(mailbox_type)
             and metadata.get("fingerprint") == fingerprint
         ):
-            return MailArchiveCandidateStatus.CONTRADICTORY
+            return _MailArchiveCandidateClassification(MailArchiveCandidateStatus.CONTRADICTORY)
         if metadata.get("schema_version") == 2:
-            return _classify_versioned_candidate(directory, metadata, root=root)
+            status = _classify_versioned_candidate(directory, metadata, root=root)
+            return _MailArchiveCandidateClassification(
+                status=status,
+                versioned_verified=status == MailArchiveCandidateStatus.COMPLETE,
+            )
         if "schema_version" in metadata:
-            return MailArchiveCandidateStatus.CORRUPT
-        return _classify_legacy_candidate(directory, metadata, root=root)
+            return _MailArchiveCandidateClassification(MailArchiveCandidateStatus.CORRUPT)
+        return _MailArchiveCandidateClassification(_classify_legacy_candidate(directory, metadata, root=root))
     except (OSError, UnicodeError, ValueError, TypeError):
-        return MailArchiveCandidateStatus.CORRUPT
+        return _MailArchiveCandidateClassification(MailArchiveCandidateStatus.CORRUPT)
 
 
 def _classify_versioned_candidate(
@@ -374,6 +388,34 @@ def _classify_versioned_candidate(
         return MailArchiveCandidateStatus.CORRUPT
     if metadata.get("thread_timestamp_text") is not None and not isinstance(metadata["thread_timestamp_text"], str):
         return MailArchiveCandidateStatus.CORRUPT
+    try:
+        mailbox = MailboxType(metadata["mailbox_type"])
+    except (ValueError, TypeError):
+        return MailArchiveCandidateStatus.CORRUPT
+    relative = directory.relative_to(root).parts
+    directory_match = re.fullmatch(
+        r"(?P<timestamp>\d{8}T\d{6}Z)_(?P<fingerprint>[0-9a-f]{8})(?:-\d+)?",
+        directory.name,
+    )
+    expected_captured_at = captured_at.astimezone(UTC)
+    expected_fingerprint = compute_mail_thread_fingerprint(
+        mailbox_type=mailbox,
+        sender_name=metadata["sender_name"],
+        timestamp_text=metadata["thread_timestamp_text"],
+        normalized_thread_text=metadata["normalized_thread_text"],
+    ).value
+    if (
+        len(relative) != 5
+        or relative[0] != expected_captured_at.strftime("%Y-%m-%d")
+        or os.path.normcase(relative[1]) != os.path.normcase(sanitize_artifact_segment(metadata["active_castle"]))
+        or relative[2] != mailbox.value
+        or os.path.normcase(relative[3]) != os.path.normcase(thread_partner_directory_name(metadata["sender_name"]))
+        or directory_match is None
+        or directory_match.group("timestamp") != expected_captured_at.strftime("%Y%m%dT%H%M%SZ")
+        or directory_match.group("fingerprint") != metadata["fingerprint"]
+        or metadata["fingerprint"] != expected_fingerprint
+    ):
+        return MailArchiveCandidateStatus.CONTRADICTORY
     if not isinstance(metadata.get("source_artifact_paths"), list) or not all(isinstance(item, str) for item in metadata["source_artifact_paths"]):
         return MailArchiveCandidateStatus.CORRUPT
     manifest = metadata.get("manifest")
