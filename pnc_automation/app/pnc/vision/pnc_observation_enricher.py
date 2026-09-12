@@ -4504,6 +4504,9 @@ def _build_popup_additions(
     reconnect_popup = _build_reconnect_popup_additions(image=image, lines=lines)
     if reconnect_popup is not None:
         return reconnect_popup
+    valiant_conquest = _build_valiant_conquest_popup_additions(image=image, lines=lines)
+    if valiant_conquest is not None:
+        return valiant_conquest
     dismiss_anchor = _find_popup_dismiss_anchor(image=image, anchors=anchors)
     if dismiss_anchor is not None:
         return ObservationAdditions(
@@ -4826,6 +4829,69 @@ def _build_reconnect_popup_additions(
             )
         },
         screen_evidence=(ScreenEvidence(ScreenType.PNC_POPUP, "ocr_reconnect_popup"),),
+    )
+
+
+def _build_valiant_conquest_popup_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Returns the known Valiant Conquest event modal and its measured close X.
+
+    The title alone is insufficient because event text can appear in other
+    surfaces.  Require one title/start line, one event-specific body/control
+    line, and an independently measured upper-right X before claiming popup
+    ownership.  This keeps the generic X detector conservative while allowing
+    the known event modal to use the shared safe-popup recovery path.
+    """
+
+    title_line = _find_line_matching(
+        lines=lines,
+        predicate=lambda line: (
+            "VALIANTCONQUEST" in normalize_ocr_text(line.text)
+            and (
+                "ABOUTTOSTART" in normalize_ocr_text(line.text)
+                or "ABOUTTOBEGIN" in normalize_ocr_text(line.text)
+            )
+        ),
+        min_y=int(image.height * 0.25),
+        max_y=int(image.height * 0.72),
+    )
+    if title_line is None:
+        return None
+
+    supporting_tokens = (
+        "EARNPOINTS",
+        "ACTIVATESHIELDS",
+        "EVENTDETAILS",
+        "YOUMAYCHOOSETO",
+    )
+    supporting_line = _find_line_matching(
+        lines=lines,
+        predicate=lambda line: any(
+            token in normalize_ocr_text(line.text) for token in supporting_tokens
+        ),
+        min_y=int(image.height * 0.35),
+        max_y=int(image.height * 0.92),
+    )
+    close_bounds = _find_visual_popup_close_bounds(image=image)
+    if supporting_line is None or close_bounds is None:
+        return None
+
+    return ObservationAdditions(
+        visible_elements={
+            UiElementId.PNC_POPUP_CLOSE_BUTTON: _make_visible(
+                selector_id=UiElementId.PNC_POPUP_CLOSE_BUTTON,
+                x=close_bounds.x,
+                y=close_bounds.y,
+                width=close_bounds.width,
+                height=close_bounds.height,
+                action_point=close_bounds.center(),
+                source_kind=VisibleElementSourceKind.GEOMETRY,
+            )
+        },
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_POPUP, "ocr_valiant_conquest_popup"),),
     )
 
 

@@ -53,6 +53,7 @@ from pnc_automation.core.vision.ocr.ocr_service import OcrLine, OcrResult, Rapid
 from pnc_automation.app.pnc.vision.pnc_observation_enricher import (
     PncObservationEnricher,
     _build_popup_additions,
+    _build_reconnect_popup_additions,
     _build_visual_popup_close_additions,
     _build_world_map_search_button_element,
     _find_world_map_root_coordinate_line,
@@ -4122,6 +4123,81 @@ class CaptureAndVisionTests(unittest.TestCase):
             close_button = observation.require(UiElementId.PNC_POPUP_CLOSE_BUTTON)
             self.assertEqual(close_button.extracted_text, "Confirm")
             self.assertEqual(close_button.action_point, (284, 550))
+            additions = _build_reconnect_popup_additions(
+                image=image,
+                lines=(
+                    _ocr_line("Disconnected. Reconnect now?[-10013]", x=47, y=382, width=422, height=35),
+                    _ocr_line("Confirm", x=231, y=533, width=107, height=34),
+                ),
+            )
+            self.assertIsNotNone(additions)
+            assert additions is not None
+            self.assertEqual("ocr_reconnect_popup", additions.screen_evidence[0].reason)
+
+    def test_valiant_conquest_fixture_uses_ocr_ownership_and_measured_close_x(self) -> None:
+        """Recognizes the real event modal only when OCR and its close X agree."""
+
+        fixture_path = Path(__file__).parent / "data" / "screen_recognition" / "valiant_conquest_popup_real_sanitized.png"
+        with Image.open(fixture_path) as source:
+            image = source.convert("RGB")
+        lines = (
+            _ocr_line("Valiant Conquest is about to start.", x=45, y=809, width=808, height=45),
+            _ocr_line("Valiant Conquest is about to begin!", x=168, y=986, width=564, height=30),
+            _ocr_line("Earn points by defeating enemies and", x=144, y=1022, width=613, height=34),
+            _ocr_line("Activate shields", x=77, y=1220, width=235, height=27),
+            _ocr_line("Event Details", x=77, y=1328, width=195, height=30),
+        )
+
+        additions = _build_popup_additions(image=image, lines=lines, anchors=())
+
+        self.assertIsNotNone(additions)
+        assert additions is not None
+        close_button = additions.visible_elements[UiElementId.PNC_POPUP_CLOSE_BUTTON]
+        self.assertEqual(VisibleElementSourceKind.GEOMETRY, close_button.source_kind)
+        self.assertEqual("ocr_valiant_conquest_popup", additions.screen_evidence[0].reason)
+        self.assertEqual((812, 322), close_button.action_point)
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            screenshot = ScreenshotService(
+                artifact_store=ArtifactStore(root=Path(temp_directory) / "artifacts")
+            ).capture(
+                _FakeScreenshotSession(_encode_png(image)),
+                artifact_directory="valiant_conquest_popup",
+                label="known_event_popup",
+            )
+            observation = ObservationBuilder(
+                selector_registry=SelectorRegistry(selectors=()),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
+                    ocr_service=UnavailableOcrService(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(ocr_service=_FakeOcrService(lines=lines)),
+            ).build(screenshot)
+
+        self.assertEqual(ScreenType.PNC_POPUP, observation.screen_type)
+        self.assertTrue(observation.blocking_popup)
+        self.assertEqual(
+            (812, 322),
+            observation.require(UiElementId.PNC_POPUP_CLOSE_BUTTON).action_point,
+        )
+
+    def test_valiant_conquest_requires_supporting_ocr_and_measured_close_x(self) -> None:
+        """Rejects title-like fragments when modal support or the measured X is absent."""
+
+        fixture_path = Path(__file__).parent / "data" / "screen_recognition" / "valiant_conquest_popup_real_sanitized.png"
+        with Image.open(fixture_path) as source:
+            image = source.convert("RGB")
+        title = _ocr_line("Valiant Conquest is about to start.", x=45, y=809, width=808, height=45)
+        support = _ocr_line("Event Details", x=77, y=1328, width=195, height=30)
+
+        self.assertIsNone(_build_popup_additions(image=image, lines=(title,), anchors=()))
+
+        without_x = image.copy()
+        ImageDraw.Draw(without_x).rectangle((775, 275, 850, 365), fill=(26, 39, 76))
+        self.assertIsNone(
+            _build_popup_additions(image=without_x, lines=(title, support), anchors=())
+        )
 
     def test_popup_classifier_materializes_exact_app_update_confirm(self) -> None:
         """Exposes Confirm only when OCR proves the exact required-update modal."""
