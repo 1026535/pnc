@@ -1,5 +1,17 @@
 # Replacement core porting validation ledger
 
+## Authored mail port — September 12, 2026
+
+`TaskId.COLLECT_MAIL` now uses typed script dispatch and the existing `CollectMailWorkflow`; its obsolete legacy task is removed. The canonical parser is shared by direct and authored callers. Preconnect validation requires only the archive store used by the selected task, so mail and Chat remain independently available. The feature checkpoint is `2ce100c` on `codex/collect-mail-script-core-port`, based on integrated main `b0ba590`.
+
+The current-castle authored proof on `serious_stuff` returned `CoreStepRunResult`, success, and final Home. Player mail was explicitly unavailable; zero threads were processed or archived. This proves dispatch and the unavailable-mailbox path, not a fresh thread read. The command was `.local-data/artifacts/replacement_core/authored_mail_port_live.py:run_authored_mail_port_proof()` inside the retained process reservation. It used `ApplicationRunner.run`, player mailbox, limit one, archive mode both, only-new false, `LIVE_TESTING`, and `keep_warm`. No castle selection, message sending, claim, or resource spending occurred.
+
+Result: `.local-data/artifacts/replacement_core/authored_mail_port_result.json`. Trace: `artifacts/2026-09-12/serious_stuff/20260912T072001Z_4cc53ea0_core_trace.jsonl`. Final Home: `20260912T072322Z_core_20260912T072001Z_4cc53ea0_0039_core_11_after_1.png` in the trace directory. Runtime evidence followed the existing explicit local artifact configuration; newly authored helper/result files use `.local-data/`.
+
+Validation passed: 45 focused dispatch/parser/workflow/application/registry tests, seven mail workflow tests after root added assertions for archived text and screenshot bytes, 11 architecture/import ownership tests, and `git diff --check`. The final portable gate, `C:/Users/lebel/AppData/Local/Programs/Python/Python313/python.exe tools/run_tests.py full`, passed 1,493 total tests: 1,489 passed and four expected skips, in 84.476 seconds. Results are in this feature worktree's `.test-impact/results.json`. Root review found no remaining actionable issues in this mail slice.
+
+The next authored roster binding is in `.local-data/worktrees/refresh_castle_roster_script` on `codex/refresh-castle-roster-script-core-port`. Its migration also needs to remove the Daily canary helper's dependency on the legacy roster task by borrowing the existing core preflight, without duplicating scan logic. Authored open-building still needs parity work for offscreen and unbuilt targets before its legacy task can be removed. Other remaining workflows retain the limits recorded below.
+
 ## Resumed ports — September 12, 2026
 
 The recovered work now implements direct roster refresh and authored Kingdom Chat dispatch. The candidate includes `origin/main` through `c7dfdd5`, preserving quiescent shutdown, scoped reservations, and generated-output defaults. It combines the roster branch through `93c2f84` and Chat branch through `23be5d0`; both feature checkpoints were pushed before integration. Older checkpoints below remain historical evidence.
