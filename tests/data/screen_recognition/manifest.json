@@ -3,6 +3,16 @@
   "annotation": "Direct visual review by the implementing agent. Each sha256 is the decoded RGB digest: width.to_bytes(8, 'big') + height.to_bytes(8, 'big') + RGB bytes. References are never counted as holdout. Same-session and same-layout frames remain correlated; validation samples may share reviewed source groups and are not independent evidence.",
   "samples": [
     {
+      "image": "loading_publisher_splash.png",
+      "screen": "PNC_LOADING",
+      "split": "reference",
+      "group": "2026-09-12/testing/startup",
+      "sha256": "9e1f031d3c18abd561d596898e69802e59da9df4606dfb230fcf4c6ada712c92",
+      "expected_visual_screens": [
+        "PNC_LOADING"
+      ]
+    },
+    {
       "image": "hero_hall.png",
       "screen": "PNC_HERO_HALL",
       "split": "reference",

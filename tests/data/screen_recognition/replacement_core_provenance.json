@@ -1,5 +1,21 @@
 [
   {
+    "asset": "screen_anchors/loading_publisher_37games.png",
+    "source": "tests/data/screen_recognition/loading_publisher_splash.png",
+    "source_sha256": "80e4cffb88debe1808cbfb557fd09892b7c93bad757729355734412293d9afdc",
+    "reference_size": [540, 960],
+    "crop": [115, 390, 427, 450],
+    "review": "Logo-only startup capture from 2026-09-12 testing preflight; both publisher logos required. Reference fixture, not an independent holdout."
+  },
+  {
+    "asset": "screen_anchors/loading_publisher_gzeyu.png",
+    "source": "tests/data/screen_recognition/loading_publisher_splash.png",
+    "source_sha256": "80e4cffb88debe1808cbfb557fd09892b7c93bad757729355734412293d9afdc",
+    "reference_size": [540, 960],
+    "crop": [142, 485, 399, 534],
+    "review": "Logo-only startup capture from 2026-09-12 testing preflight; both publisher logos required. Reference fixture, not an independent holdout."
+  },
+  {
     "asset": "screen_anchors/core_home_city_identity_0.png",
     "source": "artifacts\\2026-09-10\\testing\\20260910T214846Z_replacement_core_baseline.png",
     "source_sha256": "c2d7dc85d6e1f31fa6a13489aff433c2d82446da17b0994b58755a1f14f4c0c1",

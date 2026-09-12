@@ -6,6 +6,47 @@
   ],
   "profiles": [
     {
+      "id": "loading_publisher_splash",
+      "layout_id": "loading_publisher_splash",
+      "screen": "PNC_LOADING",
+      "revision": 1,
+      "source": {
+        "fixture": "loading_publisher_splash.png",
+        "decoded_sha256": "9e1f031d3c18abd561d596898e69802e59da9df4606dfb230fcf4c6ada712c92",
+        "capture_group": "2026-09-12/testing/startup"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Reviewed dual publisher-logo startup anchor group from the frozen reference fixture.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/loading_publisher_37games.png",
+          "search_region": [
+            110,
+            385,
+            325,
+            70
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/loading_publisher_gzeyu.png",
+          "search_region": [
+            135,
+            480,
+            270,
+            60
+          ],
+          "threshold": 0.95
+        }
+      ],
+      "controls": []
+    },
+    {
       "id": "hero_hall",
       "screen": "PNC_HERO_HALL",
       "anchors": [
