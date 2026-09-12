@@ -9,7 +9,7 @@ import string
 
 from PIL import Image
 
-from pnc_automation.app.pnc.domain.screen_decision import ScreenEvidence
+from pnc_automation.app.pnc.domain.screen_decision import ScreenDecision, ScreenEvidence
 from pnc_automation.app.pnc.domain.observation import VisibleElement, VisibleElementSourceKind
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
@@ -83,6 +83,26 @@ class VisualRecognition:
     def ambiguous(self) -> bool:
         """Return whether distinct screen interpretations passed their anchor gates."""
         return len({item.screen_type for item in self.evidence}) > 1
+
+
+def visual_controls_for_decision(
+    recognition: VisualRecognition,
+    decision: ScreenDecision,
+) -> dict[UiElementId, VisibleElement]:
+    """Return measured controls owned by the decided screen and layout."""
+
+    if decision.effective_screen in {
+        ScreenType.UNKNOWN,
+        ScreenType.PNC_LOADING,
+    }:
+        return {}
+    if not recognition.evidence or any(
+        evidence.screen_type != decision.effective_screen
+        or evidence.layout_id != decision.layout_id
+        for evidence in recognition.evidence
+    ):
+        return {}
+    return {control.selector_id: control for control in recognition.controls}
 
 
 @dataclass(frozen=True, slots=True)

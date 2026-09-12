@@ -19,7 +19,10 @@ from pnc_automation.app.pnc.vision.observation_builder import (
 from pnc_automation.app.pnc.vision.observation_provenance import bind_list_entry, bind_visible_elements
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
-from pnc_automation.app.pnc.vision.visual_screen_recognizer import VisualScreenRecognizer
+from pnc_automation.app.pnc.vision.visual_screen_recognizer import (
+    VisualScreenRecognizer,
+    visual_controls_for_decision,
+)
 from pnc_automation.core.infra.capture.screenshot_service import CapturedScreenshot
 from pnc_automation.core.vision.ocr.ocr_service import ObservationOcrContext
 
@@ -122,7 +125,7 @@ class NavigationPerception:
                     )
                 })
         else:
-            controls = {item.selector_id: item for item in visual.controls}
+            controls = visual_controls_for_decision(visual, decision)
         controls = bind_visible_elements(
             controls, frame_ref=screenshot.frame_ref, source_screen=screen,
             source_layout_id=decision.layout_id,
