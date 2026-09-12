@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Protocol
 
-from pnc_automation.app.automation.daily_maintenance.coordinator import DailyQuestSession
 from pnc_automation.app.automation.daily_maintenance.mutation_dispatcher import (
     JournaledMutationDispatcher,
     MutationOperation,
@@ -24,11 +24,18 @@ from pnc_automation.app.pnc.domain.daily_maintenance import (
 from pnc_automation.app.pnc.domain.observation import ListEntryKind, Observation, RowRecognitionStatus
 
 
+class DailyClaimSession(Protocol):
+    """The claim executor needs fresh observations, not navigation or scrolling."""
+
+    def observe_daily_quest(self, label: str) -> Observation:
+        """Return fresh Daily evidence for reacquisition or reconciliation."""
+
+
 @dataclass(slots=True)
 class JournaledDailyClaimExecutor:
     """Claims one fresh row only after intent persistence and exact row re-resolution."""
 
-    session: DailyQuestSession
+    session: DailyClaimSession
     action_executor: ObservedActionExecutor
     dispatcher: JournaledMutationDispatcher
     maximum_claims: int

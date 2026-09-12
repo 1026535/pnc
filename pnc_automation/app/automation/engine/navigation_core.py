@@ -455,6 +455,28 @@ class NavigationCore:
             observe_content,
         )
 
+    def scroll_daily_quest(
+        self, *, adjusted: bool, observe_content: Callable[[str], Observation],
+    ) -> Observation:
+        """Perform one existing Daily-list gesture and prove fresh Daily completion."""
+
+        if type(adjusted) is not bool:
+            raise ValueError("Daily scrolling requires a boolean adjusted flag.")
+        self._sequence += 1
+        label = f"core_{self._sequence}_daily_scroll"
+        before = observe_content(f"{label}_source")
+        if before.screen_type != ScreenType.PNC_QUEST_DAILY or before.blocking_popup:
+            raise RuntimeError("Daily scrolling requires an unblocked Daily screen.")
+        return self._execute_content_and_confirm(
+            SwipeAction(
+                reason="daily_scroll_adjusted" if adjusted else "daily_scroll",
+                start_x_ratio=0.5, start_y_ratio=0.82 if adjusted else 0.80,
+                end_x_ratio=0.5, end_y_ratio=0.49 if adjusted else 0.44,
+                duration_ms=420 if adjusted else 350,
+            ),
+            before, frozenset({ScreenType.PNC_QUEST_DAILY}), label, observe_content,
+        )
+
     def scroll_castle_roster(
         self,
         direction: Literal["up", "down"],
