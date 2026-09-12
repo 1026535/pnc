@@ -917,37 +917,6 @@ class ScreenFlowPlanner:
             ),
         ]
 
-    def send_chat_message(
-        self,
-        observation: Observation,
-        *,
-        message: str,
-        channel: ChatChannel,
-    ) -> list[ActionRequest]:
-        """Plans only the actions valid for the currently observed chat-send origin."""
-
-        if message.strip() == "":
-            raise ValueError("Chat messages must contain at least one non-whitespace character.")
-        channel_actions = self.ensure_chat_channel(observation, channel)
-        if channel_actions:
-            return channel_actions
-        return [
-            InputTextAction(
-                selector_id=UiElementId.PNC_CHAT_INPUT_FIELD,
-                text=message,
-                reason="type_chat_message",
-                replace_existing=True,
-                timing_profile=ActionTimingProfile.CHAT,
-            ),
-            TapAction(
-                selector_id=UiElementId.PNC_CHAT_SEND_BUTTON,
-                reason="send_chat_message",
-                observe_after=True,
-                follow_up_request=ObservationRequest.chat_send_follow_up(),
-                timing_profile=ActionTimingProfile.CHAT,
-            ),
-        ]
-
     def _chat_navigation_outcome(self) -> ClickOutcome:
         """Returns the reviewed destination used by the shared chat-opening flow."""
 

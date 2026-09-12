@@ -64,6 +64,18 @@ The runner limits collection to the four portable tiers. Existing opt-in live
 tests and commands remain separate; none of these commands authorizes or starts
 live testing. No emulator, ADB, account credentials, or live game state is needed.
 
+The opt-in Chat smoke runs exactly one typed, receipt-confirmed send and then
+requires the replacement workflow to return Home. Set
+`PNC_RUN_LIVE_CHAT_SMOKE=1`, `PNC_LIVE_CHAT_CHANNEL=world` or `alliance`, and
+`PNC_LIVE_CHAT_MESSAGE` explicitly before running
+`py -m unittest tests.test_live_chat_workflow_smoke`. The account defaults to
+the configured `testing` account and must have the `SMOKE_TEST` role;
+`PNC_LIVE_CHAT_CONFIG`, `PNC_LIVE_CHAT_ACCOUNT`, and
+`PNC_LIVE_SESSION_CLEANUP` may override the configured path, account, and phase
+cleanup policy. Missing or invalid channel/message values fail before a live
+connection is built. This smoke sends one message only; it does not generate a
+default payload or exercise both channels in one run.
+
 ## Selection safety and limits
 
 `affected` uses Git base/candidate source graphs, reverse imports, component
