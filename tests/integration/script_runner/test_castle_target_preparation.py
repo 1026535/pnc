@@ -49,6 +49,21 @@ class CastleTargetPreparationTests(RuntimeCastleTargetingFixtures, unittest.Test
         with self.assertRaises(ScriptValidationError):
             registry.prepare_script(script)
 
+    def test_prepare_script_materializes_select_castle_as_required_parameterless_core_step(self) -> None:
+        """Preserves the explicit target while preparing the typed selection definition."""
+
+        prepared = build_default_task_registry().prepare_script(
+            RunScript(
+                name="select",
+                path=Path("select.yaml"),
+                steps=(ScriptStep(task=TaskId.SELECT_CASTLE, castle=self.target_castle),),
+            )
+        )
+
+        self.assertEqual(prepared.steps[0].castle, self.target_castle)
+        self.assertEqual(prepared.steps[0].castle_target_policy.value, "required")
+        self.assertIsNone(prepared.steps[0].parsed_params)
+
     def test_prepare_script_accepts_castle_for_optional_task(self) -> None:
         """Preserves optional step-level castle targets on normal post-login tasks."""
 

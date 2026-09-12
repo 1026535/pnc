@@ -11,6 +11,11 @@ from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.domain.chat import ChatChannel
 from pnc_automation.app.pnc.domain.observation import Observation
+from pnc_automation.app.pnc.domain.observation import (
+    CurrentCastleEvidenceKind,
+    CurrentCastleMatchStatus,
+    resolve_current_castle_match,
+)
 from pnc_automation.app.pnc.domain.mail import MailboxAvailability, MailboxType
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 
@@ -179,6 +184,38 @@ class WorkflowContext:
         finally:
             self._sync_from_runtime()
 
+    def select_castle(self, target: CastleIdentity) -> Observation:
+        """Select one exact castle through the observed Manage Characters roster."""
+
+        if self._effect != WorkflowEffect.NONSPENDING_STATE_CHANGE:
+            raise PermissionError("Selecting a castle requires the NONSPENDING_STATE_CHANGE workflow effect.")
+        if not isinstance(target, CastleIdentity):
+            raise ValueError("Castle selection requires a CastleIdentity value.")
+        try:
+            return self._runtime.navigation.select_castle(
+                target,
+                observe_content=self._observe_castle_selection_content,
+            )
+        finally:
+            self._sync_from_runtime()
+
+    def verify_active_castle_identity(self, target: CastleIdentity) -> CastleIdentity:
+        """Revalidate one selected castle through the canonical exact identity preflight."""
+
+        if not isinstance(target, CastleIdentity):
+            raise ValueError("Castle identity verification requires a CastleIdentity value.")
+        active_castle = self._runtime.preflight_active_castle_identity()
+        match = resolve_current_castle_match(
+            current_castle=active_castle,
+            evidence_kind=CurrentCastleEvidenceKind.EXACT,
+            target=target,
+            roster=None,
+        )
+        if match.status != CurrentCastleMatchStatus.MATCH:
+            raise RuntimeError("Active castle identity did not exactly match the requested castle target.")
+        self._sync_from_runtime()
+        return active_castle
+
     def select_chat_channel(self, channel: ChatChannel) -> Observation:
         """Select one typed chat channel and require fresh content confirming it."""
 
@@ -226,6 +263,11 @@ class WorkflowContext:
         """Capture fresh roster content for one constrained scroll operation."""
 
         return self._observe_operation_content(label, operation="Castle roster")
+
+    def _observe_castle_selection_content(self, label: str) -> Observation:
+        """Capture fresh Manage Characters content for one selection operation."""
+
+        return self._observe_operation_content(label, operation="Castle selection")
 
     def _observe_operation_content(self, label: str, *, operation: str) -> Observation:
         """Capture fresh content while preserving shared workflow freshness checks."""

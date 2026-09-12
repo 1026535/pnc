@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from pnc_automation.app.pnc.domain.castles import CastleIdentity, PncAccountCastleRosterConfig
 from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.app.pnc.domain.action_requests import (
     ActionRequest,
@@ -16,7 +15,6 @@ from pnc_automation.app.pnc.domain.action_requests import (
     SelectChatChannelAction,
     SwipeAction,
     TapAction,
-    TapListEntryAction,
     TapPointAction,
     WaitAction,
 )
@@ -38,8 +36,6 @@ from pnc_automation.app.pnc.domain.observation import (
     SpatialObjectKind,
     SpatialObjectQuery,
     SpatialSurfaceType,
-    castle_entry_identity_matches,
-    castle_identities_match,
 )
 from pnc_automation.app.pnc.domain.popup import (
     PopupControlKind,
@@ -1083,122 +1079,6 @@ class ScreenFlowPlanner:
             )
         ]
 
-    def ensure_correct_castle_selected(
-        self,
-        observation: Observation,
-        target_castle: CastleIdentity,
-        castle_roster: PncAccountCastleRosterConfig | None = None,
-    ) -> list[ActionRequest]:
-        """Plans selection of the requested castle when it is not already active."""
-
-        if observation.matches_current_castle(target_castle, roster=castle_roster):
-            return []
-        selected_entry = observation.find_castle_entry(target_castle)
-        if selected_entry is not None and selected_entry.selected:
-            return []
-        actions: list[ActionRequest] = []
-        if observation.screen_type in {ScreenType.PNC_HOME_CITY, ScreenType.PNC_MORE_MENU, ScreenType.PNC_SETTINGS}:
-            return self.open_castle_selection(observation)
-        elif observation.screen_type != ScreenType.PNC_CASTLE_SELECTION:
-            raise SelectorResolutionError(
-                "Castle selection flow requires home city or castle selection screen.",
-                screen_type=observation.screen_type,
-            )
-        if selected_entry is not None:
-            actions.extend(
-                (
-                    TapListEntryAction(
-                        entry_kind=ListEntryKind.CASTLE,
-                        title_text=target_castle.castle_name,
-                        metadata_key="kingdom",
-                        metadata_value=target_castle.kingdom,
-                        use_action_point=True,
-                        reason="select_target_castle",
-                    ),
-                    WaitAction(
-                        milliseconds=1800,
-                        reason="wait_for_castle_switch_transition",
-                        observe_after=True,
-                    ),
-                )
-            )
-            return actions
-        actions.append(
-            _plan_castle_roster_scroll(
-                observation=observation,
-                target_castle=target_castle,
-                castle_roster=castle_roster,
-            )
-        )
-        return actions
-def _plan_castle_roster_scroll(
-    *,
-    observation: Observation,
-    target_castle: CastleIdentity,
-    castle_roster: PncAccountCastleRosterConfig | None,
-) -> ActionRequest:
-    """Plans one roster scroll toward the requested castle when it is currently off-screen."""
-
-    visible_entries = observation.entries(ListEntryKind.CASTLE)
-    if not visible_entries:
-        raise SelectorResolutionError(
-            "Castle-selection scrolling requires at least one visible castle entry.",
-            screen_type=observation.screen_type,
-        )
-    if castle_roster is None:
-        raise SelectorResolutionError(
-            "Castle-selection scrolling requires a cached roster ordering for off-screen targets.",
-            castle_name=target_castle.castle_name,
-            kingdom=target_castle.kingdom,
-        )
-    if not castle_roster.has_trusted_ordering:
-        raise SelectorResolutionError(
-            "Castle-selection scrolling requires a full-scan roster ordering for off-screen targets; run refresh_castle_roster first.",
-            castle_name=target_castle.castle_name,
-            kingdom=target_castle.kingdom,
-        )
-
-    target_index = _find_castle_index(castle_roster.castles, target_castle)
-    if target_index is None:
-        raise SelectorResolutionError(
-            "Target castle is missing from the cached roster ordering.",
-            castle_name=target_castle.castle_name,
-            kingdom=target_castle.kingdom,
-        )
-
-    visible_indexes = [
-        index
-        for index, castle in enumerate(castle_roster.castles)
-        if any(castle_entry_identity_matches(entry, castle) for entry in visible_entries)
-    ]
-    if not visible_indexes:
-        raise SelectorResolutionError(
-            "Visible castle rows do not match the cached roster ordering.",
-            castle_name=target_castle.castle_name,
-            kingdom=target_castle.kingdom,
-        )
-    if target_index < min(visible_indexes):
-        return SwipeAction(
-            direction="down",
-            distance_ratio=0.55,
-            duration_ms=350,
-            reason="scroll_castle_roster_toward_target",
-            observe_after=True,
-        )
-    if target_index > max(visible_indexes):
-        return SwipeAction(
-            direction="up",
-            distance_ratio=0.55,
-            duration_ms=350,
-            reason="scroll_castle_roster_toward_target",
-            observe_after=True,
-        )
-    raise SelectorResolutionError(
-        "Target castle should be visible but could not be resolved in the current roster view.",
-        castle_name=target_castle.castle_name,
-        kingdom=target_castle.kingdom,
-    )
-
 
 def _require_named_entry(
     observation: Observation,
@@ -1355,15 +1235,3 @@ def _raise_missing_route_target(observation: Observation, route: PlayerProfileRo
         title_text=route.player_name,
         screen_type=observation.screen_type,
     )
-
-
-def _find_castle_index(
-    castles: tuple[CastleIdentity, ...],
-    target: CastleIdentity,
-) -> int | None:
-    """Returns the index of one castle identity inside the cached roster ordering."""
-
-    for index, castle in enumerate(castles):
-        if castle_identities_match(castle, target):
-            return index
-    return None
