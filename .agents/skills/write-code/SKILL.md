@@ -34,7 +34,8 @@ Make small, coherent code changes that improve long-term code health. Ground dec
 
 - Python targets Python 3.13+, `unittest`, `pathlib.Path`, type hints, and existing `pnc_automation` abstractions.
 - Reuse the runner, script runner, observation, selector, navigation, storage, emulator, and ADB interfaces instead of adding parallel mechanics.
-- Run targeted tests first. Run `py -m unittest discover -s tests` for cross-cutting changes, shared interfaces, config schemas, authored workflows, or broader regression surfaces; targeted validation may be sufficient for an isolated low-risk change.
+- Run the smallest useful validation first. Use a focused `py tools/run_tests.py group ...` command for a known component. For ordinary changes, inspect `py tools/run_tests.py affected --base origin/main --dry-run --explain`, then execute the same command without `--dry-run`. Use `py tools/run_tests.py full` for cross-cutting changes, shared interfaces, config schemas, authored workflows, test infrastructure, and final merge validation. Do not use raw `unittest discover` as the routine path because it bypasses the repository's portable inventory and ownership rules.
+- Treat `measure` and `measure --contexts` as complete-suite instrumentation. Use them for timing, branch-coverage, and nightly dependency-learning evidence, not as a substitute for focused development validation. Coverage contexts may add tests to a statically safe selection but must never remove mandatory guards or resource-owned tests.
 - For functional PNC changes that depend on live game or emulator behavior, use [test-bluestacks-live](../test-bluestacks-live/SKILL.md) and the smallest relevant opt-in live smoke path. If no BlueStacks instance is open, let the canonical runtime launch the configured instance before validating.
 - Preserve unrelated user changes in the working tree.
 

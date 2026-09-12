@@ -43,7 +43,7 @@ Give each worker only information that changes implementation decisions:
 - applicable repository instructions and canonical owners to inspect;
 - required behavior, constraints, non-goals, migration, cleanup, and documentation impact;
 - required evidence and proportionate validation commands;
-- PNC-specific validation expectations: targeted `unittest` coverage followed by the full offline suite when the change is cross-cutting, plus the smallest relevant opt-in BlueStacks smoke path for live behavior;
+- PNC-specific validation expectations: the smallest relevant `tools/run_tests.py group ...` or explained `affected` selection for each slice, followed by the full portable suite only when the change is cross-cutting or being integrated/merged, plus the smallest relevant opt-in BlueStacks smoke path for live behavior. `measure --contexts` is a complete-suite nightly evidence job, not routine slice validation;
 - escalation conditions for changes to ownership, public API, invariant, architecture, scope, or validation intent;
 - the completion contract: before handoff, Luna must self-review the complete consolidated result, correct its findings, and report changed files, implementation status, validation commands and results, self-review findings and corrections, commit or diff state, divergences, and unresolved implementation issues. Do not request a formal review or acceptance verdict from Luna.
 

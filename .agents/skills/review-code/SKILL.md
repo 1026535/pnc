@@ -26,6 +26,7 @@ Review for defects that matter: correctness, architecture, maintainability, secu
 - Simplicity: Is the design smaller, clearer, or more direct than plausible alternatives?
 - Duplication: Are predicates, parsers, selectors, formatters, schemas, workflows, and validation rules defined once?
 - Tests: Are new and existing tests targeted, deterministic, meaningful, and aligned with the risk?
+- Test selection: Does each changed source/resource path have an explained focused or affected test mapping? Is a full-suite fallback supported by a concrete shared-contract, infrastructure, resource, or uncertainty reason rather than habit? Are coverage contexts treated as additive evidence backed by a scheduled nightly or merge-gate full-suite audit rather than a new full run for every review?
 - Security and robustness: Are inputs validated, errors surfaced, credentials protected, and external calls bounded?
 - Maintainability: Are names, types, docstrings, and comments useful without restating the code?
 - Migration: Are obsolete formats, paths, or APIs removed instead of carried forward in parallel?
