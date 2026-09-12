@@ -71,6 +71,31 @@ class MailArchiveStoreTests(MailWorkflowFixtures, unittest.TestCase):
                 )
             self.assertEqual(before, tuple(path.relative_to(root) for path in root.rglob("*")))
 
+    def test_noncanonical_fingerprint_is_rejected_before_mail_archive_mutation(self) -> None:
+        """A shaped but contradictory fingerprint cannot create control paths or payloads."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory) / "mail"
+            store = MailArchiveStore(root=root)
+            sentinel = root / "sentinel.bin"
+            sentinel.write_bytes(b"preserve me")
+            record = replace(_mail_archive_record(), fingerprint=MailThreadFingerprint("deadbeef"))
+
+            def tree_bytes() -> tuple[tuple[str, bool, bytes | None], ...]:
+                return tuple(sorted(
+                    (
+                        path.relative_to(root).as_posix(),
+                        path.is_dir(),
+                        None if path.is_dir() else path.read_bytes(),
+                    )
+                    for path in root.rglob("*")
+                ))
+
+            before = tree_bytes()
+            with self.assertRaisesRegex(MailArchiveStorageError, "canonical identity"):
+                store.persist(record=record, archive_mode=MailArchiveMode.TEXT)
+            self.assertEqual(before, tree_bytes())
+
     def test_required_payload_failure_does_not_create_completion_marker_and_retry_succeeds(self) -> None:
         """An incomplete candidate never suppresses a later valid capture."""
 

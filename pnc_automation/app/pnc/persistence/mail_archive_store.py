@@ -535,6 +535,14 @@ def _validate_record_for_persistence(record: object) -> None:
         raise MailArchiveStorageError("Mail archive record thread_timestamp_text must be text or None.")
     if not isinstance(record.normalized_thread_text, str):
         raise MailArchiveStorageError("Mail archive record normalized_thread_text must be text.")
+    expected_fingerprint = compute_mail_thread_fingerprint(
+        mailbox_type=record.mailbox_type,
+        sender_name=record.sender_name,
+        timestamp_text=record.thread_timestamp_text,
+        normalized_thread_text=record.normalized_thread_text,
+    ).value
+    if record.fingerprint.value != expected_fingerprint:
+        raise MailArchiveStorageError("Mail archive record fingerprint does not match its canonical identity.")
     if not isinstance(record.source_artifact_paths, tuple) or not all(
         isinstance(path, Path) for path in record.source_artifact_paths
     ):
