@@ -509,5 +509,207 @@
       505,
       285
     ]
+  },
+  {
+    "asset": "screen_anchors/collect_mail_home_pnc_bottom_nav_mail.png",
+    "source": "tests/data/screen_recognition/collect_mail_home.png",
+    "source_sha256": "613509f59b51c629a1eca8bb1d627516bc4b993e0c919b2cf7dcb0e4dc404d36",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      332,
+      891,
+      391,
+      959
+    ]
+  },
+  {
+    "asset": "screen_anchors/collect_mail_hub_identity_0.png",
+    "source": "tests/data/screen_recognition/collect_mail_hub.png",
+    "source_sha256": "7a03da91ef153f590ca15479f64db5d5f604e786d2971766713a43ea8298381b",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      13,
+      0,
+      265,
+      50
+    ]
+  },
+  {
+    "asset": "screen_anchors/collect_mail_hub_identity_1.png",
+    "source": "tests/data/screen_recognition/collect_mail_hub.png",
+    "source_sha256": "7a03da91ef153f590ca15479f64db5d5f604e786d2971766713a43ea8298381b",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      35,
+      176,
+      290,
+      227
+    ]
+  },
+  {
+    "asset": "screen_anchors/collect_mail_hub_player_row.png",
+    "source": "tests/data/screen_recognition/collect_mail_hub.png",
+    "source_sha256": "7a03da91ef153f590ca15479f64db5d5f604e786d2971766713a43ea8298381b",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      35,
+      176,
+      290,
+      227
+    ]
+  },
+  {
+    "asset": "screen_anchors/collect_mail_hub_alliance_row.png",
+    "source": "tests/data/screen_recognition/collect_mail_hub.png",
+    "source_sha256": "7a03da91ef153f590ca15479f64db5d5f604e786d2971766713a43ea8298381b",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      35,
+      273,
+      290,
+      324
+    ]
+  },
+  {
+    "asset": "screen_anchors/collect_mail_list_identity_0.png",
+    "source": "tests/data/screen_recognition/collect_mail_system_list.png",
+    "source_sha256": "e4c4eb1bd815be45e2925043cfeaa82019a83a11ad72b52a920ce62ecba084bc",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      13,
+      0,
+      80,
+      50
+    ],
+    "notes": "Shared mailbox-list back chrome; inferred mailbox-agnostic from the supplied System frame, pending positive Player/Alliance live evidence."
+  },
+  {
+    "asset": "screen_anchors/collect_mail_list_identity_1.png",
+    "source": "tests/data/screen_recognition/collect_mail_system_list.png",
+    "source_sha256": "e4c4eb1bd815be45e2925043cfeaa82019a83a11ad72b52a920ce62ecba084bc",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      170,
+      866,
+      375,
+      945
+    ],
+    "notes": "shared mailbox-list footer: Mark All as Read; inferred mailbox-agnostic from the supplied System frame, pending positive Player/Alliance live evidence."
+  },
+  {
+    "asset": "screen_anchors/collect_mail_thread_identity_0.png",
+    "source": "tests/data/screen_recognition/collect_mail_system_thread.png",
+    "source_sha256": "01eb67bd216f7d909c8cd29d4840d4a210c58dd2382cf62baa838c5285b14453",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      13,
+      0,
+      80,
+      50
+    ],
+    "notes": "Shared mail-thread back chrome; inferred mailbox-agnostic from the supplied System frame, pending positive Player/Alliance live evidence."
+  },
+  {
+    "asset": "screen_anchors/collect_mail_thread_identity_1.png",
+    "source": "tests/data/screen_recognition/collect_mail_system_thread.png",
+    "source_sha256": "01eb67bd216f7d909c8cd29d4840d4a210c58dd2382cf62baa838c5285b14453",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      470,
+      115,
+      530,
+      175
+    ],
+    "notes": "shared mail-thread trash chrome; inferred mailbox-agnostic from the supplied System frame, pending positive Player/Alliance live evidence."
+  },
+  {
+    "asset": "screen_anchors/collect_mail_hub_back.png",
+    "source": "tests/data/screen_recognition/collect_mail_hub.png",
+    "source_sha256": "7a03da91ef153f590ca15479f64db5d5f604e786d2971766713a43ea8298381b",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      13,
+      0,
+      80,
+      50
+    ]
+  },
+  {
+    "asset": "screen_anchors/collect_mail_list_identity_2.png",
+    "source": "tests/data/screen_recognition/collect_mail_system_list.png",
+    "source_sha256": "e4c4eb1bd815be45e2925043cfeaa82019a83a11ad72b52a920ce62ecba084bc",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      400,
+      865,
+      530,
+      945
+    ],
+    "notes": "Shared mailbox-list footer: Manage; inferred mailbox-agnostic from the supplied System frame, pending positive Player/Alliance live evidence."
+  },
+  {
+    "asset": "screen_anchors/collect_mail_list_identity_3.png",
+    "source": "tests/data/screen_recognition/collect_mail_system_list.png",
+    "source_sha256": "e4c4eb1bd815be45e2925043cfeaa82019a83a11ad72b52a920ce62ecba084bc",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      65,
+      865,
+      160,
+      945
+    ],
+    "notes": "Shared mailbox-list footer: Mail; inferred mailbox-agnostic from the supplied System frame, pending positive Player/Alliance live evidence."
+  },
+  {
+    "asset": "screen_anchors/collect_mail_thread_identity_2.png",
+    "source": "tests/data/screen_recognition/collect_mail_system_thread.png",
+    "source_sha256": "01eb67bd216f7d909c8cd29d4840d4a210c58dd2382cf62baa838c5285b14453",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      455,
+      50,
+      535,
+      100
+    ],
+    "notes": "Shared mail-thread pagination chrome; inferred mailbox-agnostic from the supplied System frame, pending positive Player/Alliance live evidence."
   }
 ]

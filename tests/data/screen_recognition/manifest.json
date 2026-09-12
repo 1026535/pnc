@@ -204,6 +204,34 @@
       "split": "validation",
       "group": "2026-09-10/testing",
       "sha256": "48ebe749a36c5f118659aac3b38e46ba51b34af38dab138aabbb1864238f2726"
+    },
+    {
+      "image": "collect_mail_home.png",
+      "screen": "PNC_HOME_CITY",
+      "split": "reference",
+      "group": "2026-09-12/serious_stuff",
+      "sha256": "7163ea34a942a0631b9240ca7337ef2e0068e1ab0da92aae9f9d4cbedb16558c"
+    },
+    {
+      "image": "collect_mail_hub.png",
+      "screen": "PNC_MAIL_HUB",
+      "split": "reference",
+      "group": "2026-09-12/serious_stuff",
+      "sha256": "b196764e3100e95400d2ceba90deb028404de759db95a236c11fefbc36a973ad"
+    },
+    {
+      "image": "collect_mail_system_list.png",
+      "screen": "PNC_MAILBOX_LIST",
+      "split": "reference",
+      "group": "2026-09-12/serious_stuff",
+      "sha256": "f0960b17cd093347311783bbdc062b0a6ba1f78aa178ac305e7392b50484bf7e"
+    },
+    {
+      "image": "collect_mail_system_thread.png",
+      "screen": "PNC_MAIL_THREAD",
+      "split": "reference",
+      "group": "2026-09-12/serious_stuff",
+      "sha256": "471f111a61509f7974e77a6037a7a617a079b39f90df83aa16f764b32e4fc3c8"
     }
   ]
 }

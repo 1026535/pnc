@@ -96,6 +96,8 @@ class NavigationPerception:
             spatial_surface=content.spatial_surface,
             current_castle=content.current_castle,
             current_castle_evidence=content.current_castle_evidence,
+            mailbox_type=content.mailbox_type,
+            mailbox_empty=content.mailbox_empty,
             text_field_states=content.text_field_states,
             available_march_slots=content.available_march_slots,
         )

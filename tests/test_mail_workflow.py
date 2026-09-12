@@ -1869,6 +1869,28 @@ class MailWorkflowTests(unittest.TestCase):
         self.assertIsNotNone(player_mail.action_point)
         self.assertGreaterEqual(player_mail.action_point[0], 800)
 
+    def test_observation_builder_emits_typed_mailbox_categories_and_unavailable_state(self) -> None:
+        """Carries only Player/Alliance category availability into typed hub content."""
+
+        observation = _build_observation(
+            request=ObservationRequest.mail_navigation_follow_up(ScreenType.PNC_MAIL_HUB),
+            lines=(
+                _ocr_line("Mail", x=310, y=42, width=110, height=24),
+                _ocr_line("Player Mail", x=220, y=317, width=155, height=39),
+                _ocr_line("No report yet", x=670, y=320, width=188, height=35),
+                _ocr_line("Alliance Mail", x=221, y=481, width=176, height=32),
+                _ocr_line("3 new", x=670, y=480, width=120, height=38),
+            ),
+        )
+
+        categories = observation.entries(ListEntryKind.MAILBOX_CATEGORY)
+        self.assertEqual(len(categories), 2)
+        self.assertEqual(
+            [(entry.metadata["mailbox_type"], entry.metadata["available"]) for entry in categories],
+            [(MailboxType.PLAYER.value, False), (MailboxType.ALLIANCE.value, True)],
+        )
+        self.assertTrue(all(set(entry.metadata) == {"mailbox_type", "available"} for entry in categories))
+
     def test_observation_builder_parses_live_like_alliance_home_instead_of_mail_hub(self) -> None:
         """Classifies alliance home from its tiles and bottom tabs instead of misreading Alliance Mail as the mail hub."""
 
