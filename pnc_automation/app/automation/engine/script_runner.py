@@ -13,11 +13,11 @@ from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.core.infra.adb.client import AdbClient
 from pnc_automation.app.automation.engine.action_executor import ActionExecutor
 from pnc_automation.app.automation.engine.observed_action_executor import ObservedActionExecutor
-from pnc_automation.app.automation.engine.runner import AutomationRunner, RunResult, StepRunResult
+from pnc_automation.app.automation.engine.runner import AutomationRunner, CoreStepExecutor, RunResult, StepRunResult
 from pnc_automation.app.authoring.scripts.loader import load_run_script
-from pnc_automation.app.authoring.scripts.models import RunScript, ScriptStep
+from pnc_automation.app.authoring.scripts.models import PreparedScriptStep, RunScript, ScriptStep
 from pnc_automation.app.authoring.scripts.registry import TaskRegistry
-from pnc_automation.app.automation.engine.task import TaskId, TaskStatus
+from pnc_automation.app.automation.engine.task import CoreWorkflowTaskDefinition, TaskId, TaskStatus
 from pnc_automation.app.pnc.domain.action_requests import SwipeGesturePrimitive
 from pnc_automation.app.pnc.domain.observation import Observation
 from pnc_automation.app.authoring.mail.loader import (
@@ -232,9 +232,19 @@ class ScriptRunner:
             castle_targets=self.config.find_castle_targets(account.id),
             castle_refs=castle_refs,
         )
+        core_steps = tuple(
+            step
+            for step in prepared_script.steps
+            if isinstance(self.task_registry.require(step.task), CoreWorkflowTaskDefinition)
+        )
+        effective_role = required_role
+        if core_steps:
+            self._validate_core_script_dependencies(core_steps)
+            effective_role = required_role or LiveAutomationRole.LIVE_TESTING
+            account.require_live_role(effective_role)
         runner, castle_roster_provider = self._build_runner(
             account,
-            required_role=required_role,
+            required_role=effective_role,
             session_cleanup_policy=session_cleanup_policy,
         )
         try:
@@ -255,6 +265,14 @@ class ScriptRunner:
             raise
         runner.close()
         return result
+
+    def _validate_core_script_dependencies(self, core_steps: tuple[PreparedScriptStep, ...]) -> None:
+        """Validates typed dispatch dependencies before any connected session is constructed."""
+
+        from pnc_automation.app.automation.engine.core_script_dispatcher import validate_core_script_step
+
+        for prepared_step in core_steps:
+            validate_core_script_step(prepared_step, chat_archive_store=self.chat_archive_store)
 
     def prepare_account_session(
         self,
@@ -470,6 +488,7 @@ class ScriptRunner:
             runner=self._build_automation_runner_from_services(
                 account=account,
                 connected_runtime=connected_runtime,
+                required_role=required_role,
             ),
         )
 
@@ -499,6 +518,7 @@ class ScriptRunner:
             self._build_automation_runner_from_services(
                 account=account,
                 connected_runtime=connected_runtime,
+                required_role=required_role,
             ),
             castle_roster_provider,
         )
@@ -508,6 +528,7 @@ class ScriptRunner:
         *,
         account: AccountConfig,
         connected_runtime: ConnectedAccountRuntime,
+        required_role: LiveAutomationRole | None = None,
     ) -> AutomationRunner:
         """Builds a runner over an already-created connected service graph."""
 
@@ -516,6 +537,11 @@ class ScriptRunner:
                 "Automation runner requires an observation builder exposing selector_registry."
             )
             shared_extra = self._build_shared_extra(account=account, instance=connected_runtime.session.instance)
+            core_step_executor = self._build_core_step_executor(
+                account=account,
+                connected_runtime=connected_runtime,
+                required_role=required_role or LiveAutomationRole.LIVE_TESTING,
+            )
             return AutomationRunner(
                 defaults=self.config.defaults,
                 observation_service=connected_runtime.observation_service,
@@ -526,6 +552,7 @@ class ScriptRunner:
                 flow_planner=connected_runtime.flow_planner,
                 logger=logging.LoggerAdapter(self.logger.logger, extra={**self.logger.extra, **shared_extra}),
                 close_callback=connected_runtime.close,
+                core_step_executor=core_step_executor,
             )
         except BaseException as error:
             close_preserving_error(
@@ -534,6 +561,34 @@ class ScriptRunner:
                 message="Automation runner construction and BlueStacks phase cleanup both failed.",
             )
             raise
+
+    def _build_core_step_executor(
+        self,
+        *,
+        account: AccountConfig,
+        connected_runtime: ConnectedAccountRuntime,
+        required_role: LiveAutomationRole,
+    ) -> CoreStepExecutor | None:
+        """Builds the typed dispatcher lazily over this runner's existing connected services."""
+
+        if self.chat_archive_store is None:
+            return None
+        from pnc_automation.app.automation.engine.core_script_dispatcher import CoreScriptDispatcher
+        from pnc_automation.app.automation.engine.core_runtime import assemble_core_runtime
+
+        return CoreScriptDispatcher(
+            account=account,
+            chat_archive_store=self.chat_archive_store,
+            core_runtime_factory=lambda: assemble_core_runtime(
+                script_runner=self,
+                connected_runtime=connected_runtime,
+                account=account,
+                artifact_directory=account.artifact_directory_name,
+                policy=None,
+                trace_path=None,
+            ),
+            required_role=required_role,
+        )
 
     def build_connected_session(
         self,

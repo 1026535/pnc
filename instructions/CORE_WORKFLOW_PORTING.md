@@ -102,8 +102,8 @@ The full workflow migration is incomplete. A direct API port does not migrate an
 | Daily Quest status | Implemented as the reference typed workflow; this reads status, not Daily maintenance execution. |
 | Open-building | Integrated direct CLI/Python port; authored task dispatch remains legacy. |
 | Collect-mail | Integrated direct Python port; authored task dispatch remains legacy. |
-| Kingdom Chat collection | Integrated direct Python port; authored task dispatch remains legacy. |
-| Authored scripts | The corresponding registered `TaskId`/YAML steps still use legacy dispatch. Typed script dispatch remains missing. |
+| Kingdom Chat collection | Integrated direct Python port and typed authored `TaskId.COLLECT_KINGDOM_CHAT` dispatch. |
+| Authored scripts | `TaskId.COLLECT_KINGDOM_CHAT` uses the typed core dispatcher; other registered `TaskId`/YAML steps remain on legacy dispatch. |
 | Bootstrap and roster workflows | Login, castle selection, and roster refresh remain unported. Core preflight reuses foreground/bootstrap behavior; safe popup recovery belongs to the canonical runtime. Neither is an empty workflow to recreate. |
 | Chat and mail sending | Need typed input/send operations and explicit authorization for the actual message and destination before live sending. |
 | Resource-changing workflows | Construction, upgrade, research, gathering, campaign actions, and Daily maintenance execution still need reviewed typed operations and the existing authorizer/executor/journal bridge. Live spending needs an exact action, target, and budget. |
@@ -114,7 +114,7 @@ The full workflow migration is incomplete. A direct API port does not migrate an
 
 `WorkflowContext.select_chat_channel(ChatChannel.WORLD)` validates the enum and delegates to `NavigationCore`. The core reacquires a fresh unblocked Chat frame, skips the tap when Kingdom is already active, or requires the current-frame template-backed Kingdom tab, taps once, and accepts completion only after bounded fresh Chat frames confirm the requested active channel. The workflow uses the canonical `visible_player_chat_entries` and `visible_unsupported_chat_entries` projections before persisting through `ChatArchiveStore`; unsupported transcript shapes fail closed before archive writes.
 
-`ApplicationRunner.run_collect_kingdom_chat` performs archive availability and exact active-castle preflight before constructing the workflow, then closes its one connected runtime on every outcome. The direct `AutomationApi.collect_kingdom_chat` and module helper hold or reuse the canonical scoped account reservation for the complete call and return the typed core result. Authored `TaskId.COLLECT_KINGDOM_CHAT` YAML steps remain on the legacy `ScriptRunner` dispatch boundary until typed script dispatch is implemented; no adapter routes those steps through `CoreWorkflowRunner`.
+`ApplicationRunner.run_collect_kingdom_chat` performs archive availability and exact active-castle preflight before constructing the workflow, then closes its one connected runtime on every outcome. The direct `AutomationApi.collect_kingdom_chat` and module helper hold or reuse the canonical scoped account reservation for the complete call and return the typed core result. Authored `TaskId.COLLECT_KINGDOM_CHAT` YAML steps now use the typed `ScriptRunner` core dispatch boundary and return the retained typed result; other authored task IDs remain on legacy dispatch, with no fallback adapter or replay.
 
 The September 12 live proof on `serious_stuff` archived five visible player messages and confirmed final Home. Its trace is `artifacts/2026-09-12/serious_stuff/20260912T054101Z_9deb03aa_core_trace.jsonl`; final Home is `20260912T054325Z_core_20260912T054101Z_9deb03aa_0039_core_10_after_1.png` in the same directory. The canonical process-scoped instance lease remained held across implementation and dependent probes. No message was sent and no castle was selected.
 
@@ -156,7 +156,7 @@ Earlier Daily validation recorded a visible cavalry Go control that OCR classifi
 
 The replacement runner supports `WorkflowEffect.READ_ONLY` and `WorkflowEffect.NONSPENDING_STATE_CHANGE`. Collect-mail uses the latter because opening unread mail may update read state and archive persistence writes local files, while it spends no in-game resources. Resource-changing work remains behind the existing Daily authorizer, executor, and journal contracts. Adding a boolean acknowledgement, direct executor access, or a second journal would bypass the intended boundary and is not a valid port.
 
-Direct Python entry points for collect-mail and Kingdom Chat route through their dedicated `ApplicationRunner` methods and return typed core results. Their direct API calls use the canonical account reservation scope. Authored `TaskId.COLLECT_MAIL` and `TaskId.COLLECT_KINGDOM_CHAT` script steps remain on the legacy `ScriptRunner` dispatch path until typed script dispatch is implemented; do not add adapters that route those steps through `CoreWorkflowRunner`.
+Direct Python entry points for collect-mail and Kingdom Chat route through their dedicated `ApplicationRunner` methods and return typed core results. Their direct API calls use the canonical account reservation scope. Authored `TaskId.COLLECT_MAIL` script steps remain on the legacy `ScriptRunner` dispatch path; authored `TaskId.COLLECT_KINGDOM_CHAT` steps use the typed core dispatcher. Typed dispatch has no legacy fallback or replay.
 
 ## Acceptance checklist
 
