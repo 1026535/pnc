@@ -7,11 +7,13 @@ import os
 import tempfile
 import threading
 import unittest
+from dataclasses import replace
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
-from pnc_automation.app.pnc.persistence.mail_archive_store import MailArchiveStore
-from pnc_automation.app.pnc.domain.mail import MailArchiveMode
+from pnc_automation.app.pnc.persistence.mail_archive_store import MailArchiveStorageError, MailArchiveStore
+from pnc_automation.app.pnc.domain.mail import MailArchiveMode, MailThreadFingerprint
 
 from tests.support.core.images import build_png_bytes
 from tests.support.pnc.mail.mail_workflow_fixtures import MailWorkflowFixtures
@@ -46,6 +48,28 @@ class MailArchiveStoreTests(MailWorkflowFixtures, unittest.TestCase):
             self.assertTrue(first.created)
             self.assertFalse(second.created)
             self.assertEqual(first.directory, second.directory)
+
+    def test_invalid_record_identity_is_rejected_before_mail_archive_mutation(self) -> None:
+        """Unclassifiable records cannot allocate control paths or payload destinations."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory) / "mail"
+            store = MailArchiveStore(root=root)
+            record = _mail_archive_record()
+            before = tuple(path.relative_to(root) for path in root.rglob("*"))
+            with self.assertRaisesRegex(MailArchiveStorageError, "aware datetime"):
+                store.persist(
+                    record=replace(record, captured_at=datetime(2026, 1, 1, 12)),
+                    archive_mode=MailArchiveMode.BOTH,
+                    screenshot_source_path=Path(temp_directory) / "missing.png",
+                )
+            with self.assertRaisesRegex(MailArchiveStorageError, "lowercase hexadecimal"):
+                store.persist(
+                    record=replace(record, fingerprint=MailThreadFingerprint("ABCDEF12")),
+                    archive_mode=MailArchiveMode.BOTH,
+                    screenshot_source_path=Path(temp_directory) / "missing.png",
+                )
+            self.assertEqual(before, tuple(path.relative_to(root) for path in root.rglob("*")))
 
     def test_required_payload_failure_does_not_create_completion_marker_and_retry_succeeds(self) -> None:
         """An incomplete candidate never suppresses a later valid capture."""

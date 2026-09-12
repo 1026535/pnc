@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -10,7 +11,7 @@ import tempfile
 import threading
 import time
 import unittest
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
@@ -171,6 +172,110 @@ class ChatArchiveRecoveryTests(unittest.TestCase):
                 )
             self.assertEqual(before, (transcript.read_bytes(), state.read_bytes()))
             self.assertTrue(pending.is_file())
+
+    def test_self_checking_pending_evidence_tamper_preserves_every_managed_file(self) -> None:
+        """A pending digest can be internally consistent yet must not authorize bad physical evidence."""
+
+        for disposition in ("absent", "partial", "complete"):
+            with self.subTest(disposition=disposition), tempfile.TemporaryDirectory() as temporary_directory:
+                root = Path(temporary_directory)
+                snapshot = self._snapshot("tampered")
+
+                def crash(stage: str) -> None:
+                    if stage == "after_pending_publish":
+                        raise SystemExit(stage)
+
+                with self.assertRaises(SystemExit):
+                    ChatArchiveStore(root, fault_injector=crash).persist_heartbeat(
+                        account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                        captured_at=self.captured_at, snapshot=snapshot, screenshot_payload=b"screenshot",
+                    )
+                pending = next((root / ".archive-control").rglob("pending.json"))
+                transaction = decode_pending_bytes(pending.read_bytes())
+                transcript = root / "2026-01-01" / "account" / "k1_castle" / "kingdom" / "transcript.log"
+                if disposition == "partial":
+                    transcript.parent.mkdir(parents=True, exist_ok=True)
+                    transcript.write_bytes(transaction.append_bytes[: len(transaction.append_bytes) // 2])
+                elif disposition == "complete":
+                    transcript.parent.mkdir(parents=True, exist_ok=True)
+                    transcript.write_bytes(transaction.append_bytes)
+                tampered = transaction.to_document()
+                tampered["next_state"]["transcript_evidence"]["sha256"] = "0" * 64
+                tampered["next_state_sha256"] = hashlib.sha256(
+                    canonical_json_bytes(tampered["next_state"])
+                ).hexdigest()
+                tampered["record_sha256"] = hashlib.sha256(
+                    canonical_json_bytes({key: value for key, value in tampered.items() if key != "record_sha256"})
+                ).hexdigest()
+                pending.write_bytes(canonical_json_bytes(tampered))
+                screenshot = root / transaction.screenshot_relative_path
+                state = transcript.with_name("state.json")
+                before = {
+                    "pending": pending.read_bytes(),
+                    "screenshot": screenshot.read_bytes(),
+                    "transcript": None if not transcript.exists() else transcript.read_bytes(),
+                    "state": None if not state.exists() else state.read_bytes(),
+                }
+                with self.assertRaises(ChatArchiveConsistencyError):
+                    ChatArchiveStore(root).persist_heartbeat(
+                        account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                        captured_at=self.captured_at, snapshot=snapshot,
+                    )
+                self.assertEqual(before["pending"], pending.read_bytes())
+                self.assertEqual(before["screenshot"], screenshot.read_bytes())
+                self.assertEqual(before["transcript"], None if not transcript.exists() else transcript.read_bytes())
+                self.assertEqual(before["state"], None if not state.exists() else state.read_bytes())
+
+    def test_naive_chat_capture_is_rejected_before_archive_mutation(self) -> None:
+        """Naive timestamps cannot create a state document that its codec will reject."""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            store = ChatArchiveStore(root)
+            snapshot = self._snapshot("naive")
+            before = tuple(path.relative_to(root) for path in root.rglob("*"))
+            with self.assertRaisesRegex(ChatArchiveConsistencyError, "aware datetime"):
+                store.persist_heartbeat(
+                    account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                    captured_at=datetime(2026, 1, 1, 12), snapshot=snapshot, screenshot_payload=b"naive",
+                )
+            self.assertEqual(before, tuple(path.relative_to(root) for path in root.rglob("*")))
+
+    def test_archive_day_uses_capture_offset_not_host_timezone(self) -> None:
+        """The captured timestamp's own offset owns the archive day."""
+
+        captured_at = datetime(2026, 1, 2, 0, 30, tzinfo=timezone(timedelta(hours=14)))
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            store = ChatArchiveStore(root)
+            update = store.persist_heartbeat(
+                account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                captured_at=captured_at, snapshot=self._snapshot("offset day"), screenshot_payload=b"offset",
+            )
+            self.assertEqual("2026-01-02", update.directory.relative_to(root).parts[0])
+            repeated = store.persist_heartbeat(
+                account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                captured_at=captured_at + timedelta(seconds=1), snapshot=update.snapshot,
+            )
+            self.assertFalse(repeated.changed)
+
+    def test_screenshot_filename_inputs_are_rejected_before_screenshot_mutation(self) -> None:
+        """Screenshot names remain confined to the canonical layout even for public snapshot values."""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            store = ChatArchiveStore(root)
+            valid = self._snapshot("filename")
+            unsafe_fingerprint = VisibleChatSnapshot(entries=valid.entries, fingerprint="../escape")
+            for snapshot, extension in ((valid, "../escape"), (unsafe_fingerprint, "png")):
+                with self.subTest(snapshot=snapshot, extension=extension):
+                    with self.assertRaises(ChatArchiveConsistencyError):
+                        store.persist_heartbeat(
+                            account_id="account", castle=self.castle, channel=ChatChannel.WORLD,
+                            captured_at=self.captured_at, snapshot=snapshot,
+                            screenshot_payload=b"filename", screenshot_extension=extension,
+                        )
+                    self.assertEqual((), tuple(root.rglob("screenshots")))
 
     def test_truncated_state_fails_closed_without_defaulting_to_empty_history(self) -> None:
         """A corrupt existing state cannot turn the next heartbeat into a new baseline."""

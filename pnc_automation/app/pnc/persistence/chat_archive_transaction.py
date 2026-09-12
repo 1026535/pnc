@@ -8,7 +8,7 @@ import hashlib
 import os
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -171,12 +171,8 @@ def decode_pending_bytes(payload: bytes) -> PendingChatTransaction:
         castle_segment=_non_empty_string(identity_document["castle_segment"], "stream_identity.castle_segment"),
         channel=_non_empty_string(identity_document["channel"], "stream_identity.channel"),
     )
-    archive_day = _non_empty_string(document["archive_day"], "archive_day")
-    if _DAY_PATTERN.fullmatch(archive_day) is None:
-        raise ChatArchiveSchemaError("Chat pending archive_day must be YYYY-MM-DD.")
+    archive_day = parse_archive_day(document["archive_day"])
     captured_at = _aware_datetime(document["captured_at"], "captured_at")
-    if captured_at.astimezone().strftime("%Y-%m-%d") != archive_day:
-        raise ChatArchiveSchemaError("Chat pending archive_day does not match captured_at in the local timezone.")
     transcript_existed = _exact_bool(document["transcript_existed"], "transcript_existed")
     previous_offset = _non_negative_int(document["previous_offset"], "previous_offset")
     if not transcript_existed and previous_offset != 0:
@@ -281,6 +277,21 @@ def resolve_root_relative(root: Path, relative_path: str) -> Path:
     except ValueError as error:
         raise ChatArchiveConsistencyError("Stored chat path escapes the configured archive root.") from error
     return candidate
+
+
+def parse_archive_day(value: object) -> str:
+    """Validates one persisted archive-day owner without consulting host timezone state."""
+
+    archive_day = _non_empty_string(value, "archive_day")
+    if _DAY_PATTERN.fullmatch(archive_day) is None:
+        raise ChatArchiveSchemaError("Chat archive_day must be an exact YYYY-MM-DD date.")
+    try:
+        parsed = date.fromisoformat(archive_day)
+    except ValueError as error:
+        raise ChatArchiveSchemaError("Chat archive_day is not a valid calendar date.") from error
+    if parsed.isoformat() != archive_day:
+        raise ChatArchiveSchemaError("Chat archive_day must use the exact YYYY-MM-DD representation.")
+    return archive_day
 
 
 def _mapping(value: object, field_name: str) -> dict[str, Any]:

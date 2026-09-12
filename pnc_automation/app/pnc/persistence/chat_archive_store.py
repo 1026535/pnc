@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -39,6 +40,7 @@ from pnc_automation.app.pnc.persistence.chat_archive_transaction import (
     ChatStreamIdentity,
     PendingChatTransaction,
     load_pending,
+    parse_archive_day,
     resolve_root_relative,
     write_pending,
 )
@@ -123,6 +125,8 @@ class ChatArchiveStore:
     ) -> StoredChatArchiveUpdate:
         """Recovers prior work and persists one current heartbeat under one stream lock."""
 
+        _validate_captured_at(captured_at)
+        archive_day = captured_at.date().isoformat()
         directory = self._build_directory(account_id=account_id, castle=castle, channel=channel, captured_at=captured_at)
         state_path = directory / "state.json"
         transcript_path = directory / "transcript.log"
@@ -146,11 +150,11 @@ class ChatArchiveStore:
             current_state = self._load_state(
                 state_path,
                 transcript_path=transcript_path,
-                archive_day=captured_at.astimezone().strftime("%Y-%m-%d"),
+                archive_day=archive_day,
             )
             previous_state = current_state
             if previous_state is None:
-                previous_day = (captured_at.astimezone() - timedelta(days=1)).strftime("%Y-%m-%d")
+                previous_day = (captured_at.date() - timedelta(days=1)).isoformat()
                 previous_directory = self._build_directory_for_local_day(
                     account_id=account_id,
                     castle=castle,
@@ -329,9 +333,7 @@ class ChatArchiveStore:
         next_state = current_state_bytes is not None and hashlib.sha256(current_state_bytes).hexdigest() == transaction.next_state_sha256
         if not old_state and not next_state:
             raise ChatArchiveConsistencyError("Chat pending recovery found an unrelated or corrupt target state.")
-        status = _classify_transcript(transcript_path, transaction)
-        if status == "complete":
-            _validate_state_transcript_evidence(transaction.next_state, transcript_path)
+        status = _validate_pending_transcript_evidence(transcript_path, transaction)
         if next_state:
             if status != "complete":
                 raise ChatArchiveConsistencyError("Chat target state is published before its complete transcript append.")
@@ -421,12 +423,16 @@ class ChatArchiveStore:
             account_id=account_id,
             castle=castle,
             channel=channel,
-            local_day=captured_at.astimezone().strftime("%Y-%m-%d"),
+            local_day=captured_at.date().isoformat(),
         )
 
     def _build_directory_for_local_day(self, *, account_id: str, castle: CastleIdentity, channel: ChatChannel, local_day: str) -> Path:
         """Builds the canonical archive directory for one already-resolved local day."""
 
+        try:
+            local_day = parse_archive_day(local_day)
+        except ChatArchiveSchemaError as error:
+            raise ChatArchiveConsistencyError("Chat archive day is not a valid calendar date.") from error
         return self.root / local_day / format_account_artifact_directory(account_id=account_id) / format_castle_artifact_directory(
             kingdom=castle.kingdom,
             castle_name=castle.castle_name,
@@ -435,6 +441,10 @@ class ChatArchiveStore:
     def _load_state(self, state_path: Path, *, transcript_path: Path, archive_day: str) -> ChatArchiveState | None:
         """Loads and strictly validates one complete persisted state document."""
 
+        try:
+            parse_archive_day(archive_day)
+        except ChatArchiveSchemaError as error:
+            raise ChatArchiveConsistencyError("Chat archive day is not a valid calendar date.") from error
         try:
             self._validate_chat_file(state_path, allowed_names={"state.json"}, allow_missing=True)
             self._validate_chat_file(transcript_path, allowed_names={"transcript.log"}, allow_missing=True)
@@ -447,8 +457,6 @@ class ChatArchiveStore:
         try:
             decoded = decode_state_document(decode_json_object(state_path.read_bytes(), field_name="state"), allow_legacy=True)
             state = decoded.state
-            if state.last_captured_at is not None and state.last_captured_at.astimezone().strftime("%Y-%m-%d") != archive_day:
-                raise ChatArchiveSchemaError("Chat archive state timestamp does not match its local-day directory.")
             if decoded.legacy:
                 if state.snapshot.entries:
                     evidence = _read_complete_transcript_evidence(transcript_path)
@@ -482,6 +490,18 @@ class ChatArchiveStore:
     ) -> Path:
         """Publishes complete collision-safe screenshot evidence before transcript bytes."""
 
+        if not isinstance(screenshot_extension, str):
+            raise ChatArchiveConsistencyError("Chat screenshot extension must be a safe filename segment.")
+        if screenshot_extension == "":
+            extension = "png"
+        elif screenshot_extension.startswith("."):
+            extension = screenshot_extension[1:]
+        else:
+            extension = screenshot_extension
+        if re.fullmatch(r"[A-Za-z0-9]{1,16}", extension) is None:
+            raise ChatArchiveConsistencyError("Chat screenshot extension must be a safe filename segment.")
+        if not isinstance(snapshot.fingerprint, str) or re.fullmatch(r"[0-9a-f]{8}", snapshot.fingerprint) is None:
+            raise ChatArchiveConsistencyError("Chat snapshot fingerprint is not a canonical filename identity.")
         if screenshot_payload is None and screenshot_source_path is None:
             raise ValueError("ChatArchiveStore requires screenshot payload or source path when persisting a change screenshot.")
         if screenshot_payload is None:
@@ -496,7 +516,6 @@ class ChatArchiveStore:
         validate_managed_path(self.root, screenshots_directory, allow_missing_leaf=True)
         screenshots_directory.mkdir(parents=True, exist_ok=True)
         validate_managed_path(self.root, screenshots_directory, require_directory=True)
-        extension = screenshot_extension.lstrip(".") or "png"
         candidate = screenshots_directory / f"{captured_at.astimezone(UTC).strftime('%Y%m%dT%H%M%SZ')}_{snapshot.fingerprint}.{extension}"
         digest = hashlib.sha256(screenshot_payload).hexdigest()
         for suffix in range(10000):
@@ -645,6 +664,27 @@ def _classify_transcript(path: Path, transaction: PendingChatTransaction) -> str
     return "partial"
 
 
+def _validate_pending_transcript_evidence(path: Path, transaction: PendingChatTransaction) -> str:
+    """Validates the complete next transcript and state evidence before any recovery write."""
+
+    status = _classify_transcript(path, transaction)
+    current = path.read_bytes() if path.exists() else b""
+    prefix = current[: transaction.previous_offset]
+    expected = prefix + transaction.append_bytes
+    expected_length = transaction.previous_offset + transaction.append_length
+    if len(expected) != expected_length:
+        raise ChatArchiveConsistencyError("Chat pending transcript evidence length is inconsistent with its append.")
+    _validate_transcript_bytes(expected)
+    next_state = _state_from_document(transaction.next_state)
+    evidence = next_state.transcript_evidence
+    if evidence is None:
+        raise ChatArchiveConsistencyError("Chat pending next state does not identify transcript evidence.")
+    expected_sha256 = hashlib.sha256(expected).hexdigest()
+    if evidence.length != expected_length or evidence.sha256 != expected_sha256:
+        raise ChatArchiveConsistencyError("Chat pending next state transcript evidence does not match the validated append.")
+    return status
+
+
 def _validate_transcript_prefix(data: bytes, expected_offset: int) -> None:
     if len(data) != expected_offset:
         raise ChatArchiveConsistencyError("Chat transcript prefix length is inconsistent.")
@@ -693,3 +733,10 @@ def _require_non_negative_int(value: object, *, field_name: str) -> int:
     if type(value) is int and value >= 0:
         return value
     raise ChatArchiveSchemaError(f"Chat archive state field '{field_name}' must be a non-negative integer.")
+
+
+def _validate_captured_at(captured_at: object) -> None:
+    """Rejects timestamps that cannot be represented consistently by archive codecs."""
+
+    if not isinstance(captured_at, datetime) or captured_at.tzinfo is None or captured_at.utcoffset() is None:
+        raise ChatArchiveConsistencyError("Chat captured_at must be an aware datetime.")

@@ -19,7 +19,6 @@ from pnc_automation.app.pnc.persistence.chat_transcript_cleanup import (
     build_chat_transcript_cleanup_patterns,
     clean_and_persist_chat_transcript,
     clean_chat_transcript_text,
-    persist_cleaned_chat_transcript,
 )
 from pnc_automation.app.pnc.persistence.archive_ownership import chat_scope_from_transcript_path
 
@@ -82,8 +81,12 @@ class ChatTranscriptCleanupTests(unittest.TestCase):
             transcript = Path(temporary_directory) / "2026-03-24" / "account" / "k1_castle" / "kingdom" / "transcript.log"
             transcript.parent.mkdir(parents=True)
             transcript.write_text("[2026-03-24T10:00:00Z] Enemy Bob: Hello\n", encoding="utf-8")
-            persist_cleaned_chat_transcript(transcript, "[2026-03-24T10:00:00Z] Enemy Bob: Changed\n")
-            self.assertEqual("[2026-03-24T10:00:00Z] Enemy Bob: Changed\n", transcript.read_text(encoding="utf-8"))
+            result = clean_and_persist_chat_transcript(
+                transcript,
+                patterns=build_chat_transcript_cleanup_patterns((r"^hello$",)),
+            )
+            self.assertTrue(result.changed)
+            self.assertEqual("", transcript.read_text(encoding="utf-8"))
 
     def test_persisted_cleanup_refuses_pending_recovery(self) -> None:
         """Manual edits cannot destroy evidence owned by a pending chat transaction."""
@@ -96,7 +99,10 @@ class ChatTranscriptCleanupTests(unittest.TestCase):
             scope = chat_scope_from_transcript_path(transcript)
             scope.pending_path.write_text("{}", encoding="utf-8")
             with self.assertRaisesRegex(RuntimeError, "pending archive recovery"):
-                persist_cleaned_chat_transcript(transcript, "")
+                clean_and_persist_chat_transcript(
+                    transcript,
+                    patterns=build_chat_transcript_cleanup_patterns(),
+                )
             self.assertEqual(original, transcript.read_text(encoding="utf-8"))
 
     def test_cleanup_read_modify_write_is_serialized_with_concurrent_store_writer(self) -> None:

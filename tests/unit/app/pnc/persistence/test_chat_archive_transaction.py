@@ -5,7 +5,8 @@ from __future__ import annotations
 import hashlib
 import tempfile
 import unittest
-from datetime import UTC, datetime
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
 from pnc_automation.app.pnc.persistence.chat_archive_transaction import (
@@ -73,15 +74,28 @@ class ChatArchiveTransactionCodecTests(unittest.TestCase):
         with self.assertRaises(ChatArchiveSchemaError):
             decode_pending_bytes(canonical_json_bytes(boolean_version))
 
-    def test_pending_date_mismatch_and_oversized_read_fail_before_mutation(self) -> None:
+    def test_pending_day_is_validated_as_a_stored_calendar_owner(self) -> None:
         transaction = self._transaction()
-        mismatched = transaction.to_document()
-        mismatched["archive_day"] = "2026-01-02"
-        mismatched["record_sha256"] = hashlib.sha256(
-            canonical_json_bytes({key: value for key, value in mismatched.items() if key != "record_sha256"})
+        offset_timestamp = datetime(2026, 1, 2, 0, 30, tzinfo=timezone(timedelta(hours=14)))
+        offset_state = dict(transaction.next_state)
+        offset_state["last_captured_at"] = offset_timestamp.isoformat()
+        offset_transaction = replace(
+            transaction,
+            archive_day="2026-01-02",
+            captured_at=offset_timestamp,
+            next_state=offset_state,
+            next_state_sha256=hashlib.sha256(canonical_json_bytes(offset_state)).hexdigest(),
+        ).to_bytes()
+        self.assertEqual(offset_transaction, decode_pending_bytes(offset_transaction).to_bytes())
+        impossible = transaction.to_document()
+        impossible["archive_day"] = "2026-02-30"
+        impossible["record_sha256"] = hashlib.sha256(
+            canonical_json_bytes({key: value for key, value in impossible.items() if key != "record_sha256"})
         ).hexdigest()
-        with self.assertRaises(ChatArchiveSchemaError):
-            decode_pending_bytes(canonical_json_bytes(mismatched))
+        with self.assertRaisesRegex(ChatArchiveSchemaError, "calendar date"):
+            decode_pending_bytes(canonical_json_bytes(impossible))
+
+    def test_pending_oversized_read_fails_before_mutation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             pending = Path(temporary_directory) / "pending.json"
             pending.write_bytes(b"x" * (MAX_PENDING_BYTES + 1))
