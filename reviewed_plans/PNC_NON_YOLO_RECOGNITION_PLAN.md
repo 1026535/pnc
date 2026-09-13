@@ -84,6 +84,26 @@ active producers complete merely because their selectors remain unsupported. Kee
 acceptance separate from implementation. Record compact progress and interface references
 here; retain detailed historical evidence in the implementation report.
 
+### B01 refreshed inventory — 2026-09-12
+
+The one required current-tree refresh is recorded in the ignored report
+`.local-data/reports/non_yolo_recognition_coverage_20260912.json`; do not repeat it unless
+the catalog or manifest changes materially. It found 393 selector IDs: 341 catalog-defined,
+52 orphan IDs, 286 enabled definitions, and 55 explicitly unsupported definitions. The
+defined strategies are 258 semantic, 21 guarded-geometry, six template, one OCR-region,
+and 55 unsupported. All six required template assets are present. The corpus has 47 samples
+across 19 independent source groups (29 reference, 11 validation, seven holdout).
+
+The refreshed disposition is: B02's shared provenance/decision/guard foundation remains
+complete; B03 remains family-specific rather than a count-driven rewrite; B04 and B05 are
+active producer gaps; B06 retains completed Development Research and blocks broader
+categories on evidence; B07 retains the demonstrated Quest/Bag work with no new observed
+gap; B08 remains the active login/mail/building/member-family inventory; and B09 still lacks
+the independent target/layout, overlay/control-state, action-containment, row-identity, and
+broader qualification annotations. Runtime-referenced unsupported controls include Gather,
+March Confirm, Campaign entry/battle, and several login/building/member controls. Each stays
+unsupported until its own evidence-backed producer lands.
+
 ---
 
 The dated sections below retain original requirements and historical evidence. Their

@@ -459,6 +459,36 @@
       "expected_visual_screens": [
         "PNC_CAMPAIGN_STAGE"
       ]
+    },
+    {
+      "image": "gather_node.png",
+      "screen": "PNC_GATHER_NODE",
+      "split": "reference",
+      "group": "2026-08-31/serious_stuff/daily_plan_gather_node",
+      "sha256": "4ea1333ee072f270cbd069909677c8f6ffeaab45b8abad5425e819beb9b129a5",
+      "expected_visual_screens": [
+        "PNC_GATHER_NODE"
+      ]
+    },
+    {
+      "image": "march_confirm.png",
+      "screen": "PNC_MARCH_CONFIRM",
+      "split": "reference",
+      "group": "2026-08-30/mega_old_acc/daily_plan_gather_march",
+      "sha256": "151fd25220817dbd93b9d26200be5aa986cbe7c44775ef845bab33b5b9db622d",
+      "expected_visual_screens": [
+        "PNC_MARCH_CONFIRM"
+      ]
+    },
+    {
+      "image": "march_confirm_empty.png",
+      "screen": "PNC_MARCH_CONFIRM",
+      "split": "validation",
+      "group": "2026-08-31/serious_stuff/daily_plan_gather_march_empty",
+      "sha256": "caf031b6018d29ae1fb922cefb1d2bc59fc4aa56d4614fb6775067cdfd22fd17",
+      "expected_visual_screens": [
+        "PNC_MARCH_CONFIRM"
+      ]
     }
   ]
 }

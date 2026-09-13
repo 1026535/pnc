@@ -297,6 +297,12 @@ _RESEARCH_TREE_HEADER_TEXTS = frozenset(
         "COMBAT",
     }
 )
+_CAMPAIGN_REFERENCE_SIZE = (540, 960)
+_CAMPAIGN_MAP_CHAPTER_TITLE = "10GRANDIARUINS"
+_CAMPAIGN_CHAPTER_TITLE = "CH10GRANDIARUINS"
+_CAMPAIGN_MAP_CHAPTER_ROW = Bounds(x=194, y=454, width=151, height=50)
+_CAMPAIGN_CHAPTER_STAGE_THREE_ROW = Bounds(x=293, y=576, width=59, height=74)
+_CAMPAIGN_CHAPTER_TITLE_REGION = Bounds(x=205, y=38, width=325, height=60)
 _DAILY_TO_DO_SECTION_TEXTS = frozenset(
     {
         "CAMP",
@@ -2227,6 +2233,13 @@ class PncObservationEnricher:
             build_speedup = _build_build_speedup_additions(image=image, lines=lines)
             if build_speedup is not None:
                 return build_speedup
+        campaign = _build_campaign_additions(
+            image=image,
+            lines=lines,
+            screen_type=screen_type,
+        )
+        if campaign is not None:
+            return campaign
         text_screen = _build_matching_text_screen_additions(
             image=image,
             lines=lines,
@@ -7262,6 +7275,77 @@ def _bounded_edit_distance(*, left: str, right: str, max_distance: int) -> int:
             return max_distance + 1
         previous_row = current_row
     return previous_row[-1]
+
+
+def _build_campaign_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+    screen_type: ScreenType,
+) -> ObservationAdditions | None:
+    """Returns only the Campaign facts proved by the reviewed screen profile."""
+
+    if screen_type == ScreenType.PNC_CAMPAIGN_MAP:
+        title = _find_line_matching(
+            lines=lines,
+            predicate=lambda line: normalize_ocr_text(line.text) == _CAMPAIGN_MAP_CHAPTER_TITLE,
+        )
+        title_region = _scale_campaign_bounds(_CAMPAIGN_MAP_CHAPTER_ROW, image=image)
+        if title is None or not title_region.contains_bounds(title.bounds):
+            return ObservationAdditions()
+        entry = DetectedListEntry(
+            kind=ListEntryKind.CAMPAIGN_CHAPTER,
+            bounds=title_region,
+            title_text="10 Grandia Ruins",
+            action_point=title_region.center(),
+            metadata={"chapter_number": 10},
+            row_status=RowRecognitionStatus.COMPLETE,
+            action_bounds=title_region,
+        )
+        return ObservationAdditions(list_entries=(entry,))
+
+    if screen_type == ScreenType.PNC_CAMPAIGN_CHAPTER:
+        header = _find_line_matching(
+            lines=lines,
+            predicate=lambda line: normalize_ocr_text(line.text) == _CAMPAIGN_CHAPTER_TITLE,
+        )
+        header_region = _scale_campaign_bounds(_CAMPAIGN_CHAPTER_TITLE_REGION, image=image)
+        row_region = _scale_campaign_bounds(_CAMPAIGN_CHAPTER_STAGE_THREE_ROW, image=image)
+        stage = _find_line_matching(
+            lines=lines,
+            predicate=lambda line: normalize_ocr_text(line.text) == "3",
+        )
+        if (
+            header is None
+            or not header_region.contains_bounds(header.bounds)
+            or stage is None
+            or not row_region.contains_bounds(stage.bounds)
+        ):
+            return ObservationAdditions()
+        entry = DetectedListEntry(
+            kind=ListEntryKind.CAMPAIGN_STAGE,
+            bounds=row_region,
+            title_text="3",
+            action_point=row_region.center(),
+            metadata={"chapter_number": 10, "stage_number": 3},
+            row_status=RowRecognitionStatus.COMPLETE,
+            action_bounds=row_region,
+        )
+        return ObservationAdditions(list_entries=(entry,))
+
+    return None
+
+
+def _scale_campaign_bounds(bounds: Bounds, *, image: Image.Image) -> Bounds:
+    """Scales measured 540x960 Campaign geometry to the current viewport."""
+
+    reference_width, reference_height = _CAMPAIGN_REFERENCE_SIZE
+    return Bounds(
+        x=round(bounds.x * image.width / reference_width),
+        y=round(bounds.y * image.height / reference_height),
+        width=max(1, round(bounds.width * image.width / reference_width)),
+        height=max(1, round(bounds.height * image.height / reference_height)),
+    )
 
 
 def _build_research_tree_additions(
