@@ -522,6 +522,37 @@ class NavigationCore:
             before, frozenset({ScreenType.PNC_QUEST_DAILY}), label, observe_content,
         )
 
+    def scroll_resource_inventory(
+        self, *, upward: bool, adjusted: bool, fine: bool = False,
+        observe_content: Callable[[str], Observation],
+        confirm_scroll: Callable[[], Observation],
+    ) -> Observation:
+        """Swipe the selected Resource list once; its scanner owns stable row completion."""
+
+        if any(type(flag) is not bool for flag in (upward, adjusted, fine)):
+            raise ValueError("Resource scrolling requires boolean gesture flags.")
+        self._sequence += 1
+        before = observe_content(f"core_{self._sequence}_resource_scroll_source")
+        require_resource_inventory_surface(before)
+        low = 0.64 if fine else (0.78 if adjusted else 0.85)
+        high = 0.46 if fine else (0.42 if adjusted else 0.32)
+        if not self.actuator.execute_action(
+            SwipeAction(
+                reason=("resource_inventory_focus_scroll" if fine else
+                        "resource_inventory_scroll_adjusted" if adjusted else "resource_inventory_scroll"),
+                start_x_ratio=0.5, end_x_ratio=0.5,
+                start_y_ratio=high if upward else low,
+                end_y_ratio=low if upward else high,
+                duration_ms=420 if adjusted else 350,
+            ), before,
+        ):
+            raise RuntimeError("Navigation actuator did not execute the Resource scroll.")
+        after = confirm_scroll()
+        require_resource_inventory_surface(after)
+        if after.captured_at <= before.captured_at:
+            raise RuntimeError("Resource scroll completion received a stale capture.")
+        return after
+
     def scroll_castle_roster(
         self,
         direction: Literal["up", "down"],
@@ -818,6 +849,18 @@ class NavigationCore:
                         visited.add(destination)
                         queue.append((destination, first or edge))
         raise RuntimeError(f"No reviewed route from {source.name} to {target.name}.")
+
+
+def require_resource_inventory_surface(observation: Observation) -> None:
+    """Require B's selected Resource anchor before inventory observation or a list action."""
+
+    if (
+        observation.screen_type != ScreenType.PNC_BAG
+        or observation.blocking_popup
+        or observation.decision.guard != GuardVerdict.CLEAR
+        or not _template_control(observation, UiElementId.PNC_BAG_SUBTAB_RESOURCE)
+    ):
+        raise RuntimeError("Resource inventory requires a guarded Bag with the selected Resource tab.")
 
 
 def _require_reviewed_building_route(

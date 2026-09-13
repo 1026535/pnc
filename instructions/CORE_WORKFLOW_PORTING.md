@@ -4,10 +4,10 @@ Current execution plan: [A's coordinated continuation](../reviewed_plans/PNC_COR
 and [shared A/B ownership and backlog](../reviewed_plans/PNC_AB_COORDINATED_CONTINUATION.md).
 These supersede historical pause/publication-only status, while this guide remains the
 canonical porting contract. Resource-changing execution remains rejected before device
-observation except for the exact claim-only or one normal Development Research,
-zero-diamond capability boundary described below; the plan is not a bypass.
+observation except for the exact capabilities in the mutation-boundary section below;
+the plan is not a bypass.
 
-This guide describes the bounded path for moving one workflow onto the reviewed navigation core. It applies to the shared runtime in `pnc_automation/app/automation/engine/`, the typed PNC observations, and the application and CLI entrypoints. The core permits read-only and non-spending state-change workflows. Resource-changing workflows remain rejected before device observation except for the exact claim-only or one normal Development Research, zero-diamond boundary described below.
+This guide describes the bounded path for moving one workflow onto the reviewed navigation core. It applies to the shared runtime in `pnc_automation/app/automation/engine/`, the typed PNC observations, and the application and CLI entrypoints. The core permits read-only and non-spending state-change workflows. Resource-changing workflows require one of the exact canonical boundaries below before device observation.
 
 ## Canonical owners
 
@@ -18,10 +18,10 @@ This guide describes the bounded path for moving one workflow onto the reviewed 
 | Reviewed routing and completion | `pnc_automation/app/automation/engine/navigation_core.py:NavigationCore` and `reviewed_navigation_edges` | Current-frame visual evidence authorizes a single action. Completion requires fresh observed destination frames. Unknown screens, unresolved popups, stale frames, and unexpected destinations stop the route. The connected `ObservedActionExecutor` may clear each newly observed safe popup through its explicit selector before routing continues. |
 | Known popup recovery | `CoreRuntime.observe` and `ObservedActionExecutor.recover_interruption_if_required` | Core observations pass through the canonical bounded recovery path. OCR-owned reconnect and Valiant Conquest modals, VIP reset, and generic X popups with an explicit safe selector may be dismissed once per visual fingerprint. Task-owned dialogs, unknown screens, missing selectors, and repeated fingerprints remain fail-closed; Android Back is never inferred. |
 | Workflow effect and lifecycle | `pnc_automation/app/automation/engine/core_workflow.py` | `WorkflowSpec` validates known entry/exit screens and a `WorkflowEffect`. `CoreWorkflowRunner` allows `READ_ONLY` and `NONSPENDING_STATE_CHANGE`, and accepts `RESOURCE_CHANGING` only with the exact `CoreMutationBoundary` capability scope. It owns entry, execution, and exit, and reports success only after exit is confirmed. |
-| Workflow access | `WorkflowContext` | Exposes only reviewed `navigate` and fresh expected-screen `observe_content`. It has no raw executor, arbitrary swipe, selector-tap, or transition API. Typed Daily scrolling, exactly authorized `claim_daily_reward`, and the bounded Development Research node/start operations use their canonical owners. |
+| Workflow access | `WorkflowContext` | Exposes reviewed navigation, fresh expected-screen content and exact typed operations. It has no raw executor, arbitrary swipe, selector-tap, or transition API. Daily claims, Development Research, Hero Hall and Resource Item operations use their canonical owners. |
 | Typed Daily Quest conversion | `pnc_automation/app/automation/daily_maintenance/coordinator.py:daily_viewport_from_observation` | Converts the canonical typed observation. Do not reimplement row parsing or claim semantics in a replacement workflow. |
 | Application and direct API wiring | `ApplicationRunner.run_daily_quest_status`, `ApplicationRunner.run_collect_mail`, `ApplicationRunner.run_collect_kingdom_chat`, and `pnc_automation.app.entrypoints.api` | Direct application and Python API calls validate before connection, perform explicit active-castle identity preflight, hold the configured account reservation for the complete operation, and return typed core results. The `daily-quest-status` CLI remains the structured JSON example; typed collect-mail and Kingdom Chat are direct Python ports. |
-| Mutation authorization | `pnc_automation/app/automation/engine/core_daily_mutation.py:CoreMutationBoundary`, `daily_maintenance/authorization.py:DailyMutationAuthorizer`, `daily_maintenance/claim_executor.py:JournaledDailyClaimExecutor`, `daily_maintenance/mutation_dispatcher.py:JournaledMutationDispatcher`, `pnc_automation/app/pnc/persistence/daily_run_journal_store.py:DailyRunJournalStore` | One shared authority validates the exact claim-only or one normal Development Research, zero-diamond capability policy, active castle, checkpoint, and durable journal. Research requires a fresh idle Development detail with the normal Start control; uncertain dispatch retains its journal and is never replayed. Do not add a second approval flag or parallel executor/journal. |
+| Mutation authorization | `pnc_automation/app/automation/engine/core_daily_mutation.py:CoreMutationBoundary`, `daily_maintenance/authorization.py:DailyMutationAuthorizer`, the existing feature executors, `daily_maintenance/mutation_dispatcher.py:JournaledMutationDispatcher`, `pnc_automation/app/pnc/persistence/daily_run_journal_store.py:DailyRunJournalStore` | One shared authority validates the exact supported policy, active castle, checkpoint and durable journal. The mutation-boundary section lists each operation's budget and receipt. Uncertain dispatch retains its journal and is never replayed. Do not add a second approval flag or parallel executor/journal. |
 
 ## Porting sequence
 
@@ -40,7 +40,7 @@ This guide describes the bounded path for moving one workflow onto the reviewed 
    )
    ```
 
-   A resource-changing spec is rejected before navigation or capture unless it declares `mutation_capability=DailyQuestId.CLAIM_COMPLETED` for claim-only maintenance or `DailyQuestId.UPGRADE_RESEARCH` for exactly one normal Development Research mutation with zero diamond spend, and the runner has an exact `CoreMutationBoundary`. The boundary reuses the canonical authorizer, executor, journal, checkpoint, active-castle preflight, strict active-detail receipt, and no-replay rules. Other capabilities remain denied. A non-spending state change may use `WorkflowEffect.NONSPENDING_STATE_CHANGE`; future resource-changing work must first define an equally exact bridge.
+   A resource-changing spec is rejected before navigation or capture unless its `mutation_capability` matches an implemented exact policy in `CoreMutationBoundary`. Supported policies are listed below. The boundary reuses the canonical authorizer, executor, journal, checkpoint, active-castle preflight, observed receipt, and no-replay rules. Other capabilities remain denied. A non-spending state change may use `WorkflowEffect.NONSPENDING_STATE_CHANGE`; future resource-changing work must first define an equally exact bridge.
 
 4. Implement the workflow body through `WorkflowContext`. Navigate to the content screen, call `observe_content(expected_screen=...)` once the destination is confirmed, and pass that observation to the canonical typed converter. The context requires a fresh capture newer than the last navigation observation and rejects an unresolved blocking popup. Known safe popups are handled at the connected runtime observation boundary before the workflow sees them. Do not expose the raw runtime or actuator to the workflow.
 
@@ -124,6 +124,7 @@ The full workflow migration is incomplete. A direct API port does not migrate an
 | Bootstrap and roster workflows | Roster refresh and castle selection have typed direct/authored implementations; the active-castle no-op proof passed, while alternate-castle switching remains unproven and the selection binding is not yet accepted or landed as a full switch proof. Login remains legacy. Core preflight reuses foreground/bootstrap behavior; safe popup recovery belongs to the canonical runtime. Neither is an empty workflow to recreate. |
 | Chat and mail sending | Authored `SEND_WORLD_CHAT_MESSAGE` and `SEND_ALLIANCE_CHAT_MESSAGE` use the shared typed `SendChatWorkflow` and chat-send operation. Mail sending remains legacy. Live messages need an authorized destination and exact content. |
 | Research | `ResearchWorkflow` and `CoreMutationBoundary` support only the typed Development route with one normal Start and zero diamond spend. Direct/authored migration, the remaining research categories, and live proof are pending; this is a partial typed workflow/boundary slice. |
+| Hero Hall and Resource Item | Typed workflows adapt the existing executors through the core's exact mutation boundary. Hero Hall uses the distinct free-single control; Resource Item requires the selected Resource tab and a complete inventory. Canary/direct caller migration and live acceptance remain pending. |
 | Resource-changing workflows | Construction, upgrade, gathering, campaign actions, and other Daily maintenance capabilities still need reviewed typed operations and the existing authorizer/executor/journal bridge. Live spending needs an exact action, target, and budget. |
 
 Generated session preparation runs the typed readiness step before the existing legacy Login step. Readiness foregrounds the configured app, passively waits through bounded loading, and returns only a stable known P&C screen; Android Home, unknown screens, stale captures, unresolved blocking popups, and exhausted time budgets fail closed. When this call actually launches the app, transient UNKNOWN or Android Home frames are tolerated within the existing settle budget; an already-foreground app still fails immediately on UNKNOWN. The canonical runtime observation boundary may dismiss an explicitly safe popup during this check. Authored `POPUP_RECOVERY` dispatch reuses that bounded settle boundary on the current app and does not foreground, navigate, or add another popup policy. Unknown frames do not use the legacy Back or relaunch fallback, and a known login screen is only a game-ready endpoint, not account or login verification.
@@ -239,14 +240,29 @@ replace `DailyQuestStatusWorkflow` or turn that one-viewport report into a full 
 executor. Exact account/castle/date/capability-budget authority is required before
 preflight. The canonical preflight must prove the authorized active castle without
 selecting a row. Before any mutation, the supplied checkpoint must match the durable
-journal and contain no unresolved mutation. Fresh unblocked observations govern row or
+journal. Only the same Hero Hall or Resource Item executor may reconcile its own
+DISPATCHED/RECONCILED intent; no unresolved intent permits a new mutation. Fresh unblocked observations govern row or
 Development-node reacquisition and reconciliation. Research additionally requires one
 normal Development detail with the observed blue Start control and a fresh active-detail
 receipt after dispatch. An uncertain action retains its receipt and is never replayed.
 
-The connected Daily maintenance runner remains claim-only. The Research workflow and
-boundary are currently typed and offline-only: direct/authored migration, other research
-categories, and live proof remain pending. Resource Item, Hero Hall, and other action
-capabilities remain rejected. Existing automatic-execution and promotion restrictions
-remain in force. Offline integration does not renew a live mutation budget or prove a new
-live mutation.
+The exact supported policies are:
+
+| Capability | Budget and existing executor | Required receipt |
+| --- | --- | --- |
+| CLAIM_COMPLETED | Configured claim-only limit; `JournaledDailyClaimExecutor` | Fresh Daily row completion |
+| UPGRADE_RESEARCH | One normal Development Start, zero diamonds | Guarded active detail without Start |
+| HERO_HALL | Five free singles, zero diamonds; `HeroHallRecruitmentExecutor`, at most one increment per invocation | Positive attempts before input, exact decrement or observed cooldown; durable cooldown and final full Daily survey |
+| USE_RESOURCE_ITEM | One normal owned pack, zero diamonds; `ResourceItemExecutor` | Full inventory, exact row reacquisition, one stock decrement and full Daily survey |
+
+`ResourceInventorySession` owns the scan, row conversion and single-Use fingerprint
+contract for both adapters. `NavigationCore.scroll_resource_inventory` owns each bounded
+gesture, while the scanner owns stable row completion. A selected Resource anchor is
+not evidence for entering that tab when unselected. Hero Hall uses only the distinct
+template free-single control; generic Recruit 1x and disappearance alone are insufficient.
+
+The connected Daily maintenance runner remains claim-only. Research, Hero Hall and
+Resource Item have typed adapter slices; direct/authored or canary caller migration and
+live acceptance remain pending. Other research categories and action capabilities remain
+unsupported. Existing automatic-execution and promotion restrictions remain in force.
+Offline integration does not renew a live budget or prove a live mutation.

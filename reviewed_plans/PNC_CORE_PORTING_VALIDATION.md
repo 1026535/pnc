@@ -340,3 +340,63 @@ The explicit recovery smoke ran on `testing`, the current `SMOKE_TEST` account, 
 The focused offline validation covering the affected navigation, perception, popup, runtime, live-smoke wiring, and Daily paths completed with 234 tests passing and 3 expected skips. The full offline suite completed with 1,207 tests passing and 22 expected skips. No live proof spent resources, switched castles, or used an unsafe popup action.
 
 The initial Savannah live failure and the deterministic semantic popup identity guard remain part of the engineering evidence. Savannah did not reappear during this final live run, so these results do not claim live reappearance or live dismissal of that popup family after the guard was added.
+
+## September 13 combined Hero Hall and Resource Item gate
+
+The restart preserved A's Daily claim and Development Research work and integrated
+B's published 93798a64de73538c8992c953b7394598468911f9 plus the restart plan
+4a58e86bca931f9905ef5ec2890ec9348002ce3a. Verified origin/main baseline:
+850bdb747be79bb78363b8dca49a0097c6ed6546. All 40 profiles were retained; no
+recognition catalog, asset or producer file was changed by the adapter slices.
+B's ongoing local vision changes and the unrelated dirty main checkout were preserved.
+
+Hero Hall feature e794e1d955a90b3328fc454fcd47fea1fbe05de1 is published. Its 22
+focused checks and affected full fallback (1,984 passed, six skipped) proved the
+canonical free-only adapter and corrected the old generic-control consumption rule.
+Resource Item adds the shared inventory adapter and selected-tab core navigation.
+Its 57 focused checks include the new Resource contracts and existing claims,
+Research and Hero boundaries. Both saved Bag frames were replayed with actual RapidOCR
+through ObservationBuilder and NavigationPerception: CLEAR Bag, selected template tab,
+six complete resource rows each. Saved frames establish neither a full live inventory
+nor a consumption receipt.
+
+Final command on the combined feature tree:
+
+```powershell
+py tools/run_tests.py affected --base origin/main --explain --json .test-impact/resource-selection.json --results .test-impact/resource-results.json
+```
+
+Passed: the repository selected its mandatory full portable fallback for shared
+contracts and new production modules. **2,004 total: 1,998 passed, six skipped, zero
+failures.** Test execution took 239.663 seconds; collection/reporting included,
+255.456 seconds. Five skips are optional local screenshots and one requires Windows
+symlink privilege. The exact results and selection are in the Resource Item worktree's
+.test-impact directory; resource-affected.log retains command output. Source fingerprint:
+b68b7da94725cb723eb03beff9504c9875a4f7d7ef349e9cb24a6f25b9823adb.
+Subsequent changes record documentation only. git diff --check passed. The candidate
+is advanced to this same validated tree; no redundant second full run is needed.
+
+Live checks are blocked, not passed. Under separate canonical process leases:
+
+- testing accepted the required game update, then stopped at a Savannah offer lacking
+  an explicit safe-close selector. No recruit or resource use occurred. Last confirmed
+  screen is that offer, not Home; current castle was not established.
+- 157_farm resolved but foreground preflight raised GameLaunchError because Android
+  output did not contain exactly one mCurrentFocus field. No game input or current
+  screen/castle proof occurred there.
+
+The offer screenshot is in the root workspace at
+.local-data/artifacts/core_ports_20260913/2026-09-13/testing_hero_hall/
+20260913T170227Z_core_20260913T170044Z_e9666465_0006_preflight_settle_2.png.
+Both leases were explicitly released and the owned live Python session exited.
+No workaround popup control or device-parser change was introduced. Repeating either
+unchanged preflight would add no evidence.
+
+Remaining proof: resolve the owned popup/runtime blockers, acquire a fresh canonical
+lease and exact active-castle boundary, then validate CoreHeroHallWorkflow's free
+increment/cooldown/final Daily receipt and CoreResourceItemWorkflow's full scan/single
+Use/stock-and-Daily receipt. There is no promoted core canary CLI yet; existing canary
+bindings remain legacy pending that acceptance. Unselected Resource-tab entry also
+needs a qualified producer/control. Caller migration, live acceptance and broader
+producer-dependent original ports remain incomplete. Automatic Daily execution,
+scheduling and mainline landing remain outside this publication.
