@@ -376,13 +376,22 @@ class BlueStacksInstanceResolver:
             if record.require_adb_port(config_path=self.config_path) == matched_port
         )
         if len(matching_running_port_claims) > 1:
+            conflicting_instance_descriptions = ", ".join(
+                f"{record.instance_key} (display_name={record.display_name!r})"
+                for record in matching_running_port_claims
+            )
             raise ConfigurationError(
-                f"BlueStacks runtime port '{matched_port}' is ambiguously claimed by multiple running instances.",
+                f"BlueStacks runtime port '{matched_port}' is ambiguously claimed by multiple running instances: "
+                f"{conflicting_instance_descriptions}.",
                 display_name=config.display_name,
                 instance_id=config.id,
                 instance_key=match.instance_key,
                 adb_port=str(matched_port),
+                failure_phase="port_ambiguity",
                 instance_keys=tuple(record.instance_key for record in matching_running_port_claims),
+                conflicting_display_names=tuple(
+                    record.display_name for record in matching_running_port_claims
+                ),
                 bluestacks_config_path=str(self.config_path),
             )
 

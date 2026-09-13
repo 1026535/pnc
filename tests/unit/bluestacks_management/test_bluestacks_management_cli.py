@@ -5,6 +5,7 @@ from __future__ import annotations
 from argparse import Namespace
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
+import json
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
@@ -21,6 +22,7 @@ from pnc_automation.bluestacks_management.instance_shutdown import (
     StaleShutdownDisposition,
     StaleShutdownResult,
 )
+from pnc_automation.core.errors import ConfigurationError
 
 
 class BlueStacksManagementCliTests(unittest.TestCase):
@@ -221,6 +223,98 @@ class BlueStacksManagementCliTests(unittest.TestCase):
         self.assertNotIn("cli-secret-sentinel", stdout.getvalue() + stderr.getvalue())
         self.assertNotIn("Traceback", stderr.getvalue())
         self.assertIn('"failure_phase": "configuration"', stderr.getvalue())
+
+    def test_port_ambiguity_reports_only_validated_collision_identities(self) -> None:
+        """The host CLI projects collision identities without serializing arbitrary error details."""
+
+        config = BlueStacksHostConfig(
+            config_path=Path("accounts.yaml"),
+            metadata_path=Path("bluestacks.conf"),
+            instances=(),
+            accounts=(),
+            memory_policy=BlueStacksMemoryPolicy(enabled=True, restart_roles=frozenset()),
+        )
+        error = ConfigurationError(
+            "collision details must not be used as the CLI payload",
+            failure_phase="port_ambiguity",
+            instance_keys=("Nougat32", "Pie64"),
+            conflicting_display_names=("serious_stuff", "mega_old_acc"),
+            bluestacks_config_path=r"C:\secrets\bluestacks.conf",
+            adb_port="5555",
+            command_line="--secret token",
+            unrelated_detail={"credential": "cli-secret-sentinel"},
+        )
+        monitor = SimpleNamespace(sample_once=Mock(side_effect=error))
+        stderr = StringIO()
+        with (
+            patch(
+                "pnc_automation.bluestacks_management.__main__.configure_logging",
+                return_value=Mock(spec=["error"]),
+            ),
+            patch("pnc_automation.bluestacks_management.__main__.load_bluestacks_host_config", return_value=config),
+            patch("pnc_automation.bluestacks_management.__main__.BlueStacksInstanceResolver"),
+            patch("pnc_automation.bluestacks_management.__main__.BlueStacksInstanceMemoryMonitor", return_value=monitor),
+            patch(
+                "pnc_automation.bluestacks_management.__main__.BlueStacksStaleInstanceShutdownReconciler",
+                return_value=SimpleNamespace(reconcile_all=lambda: ()),
+            ),
+            redirect_stderr(stderr),
+        ):
+            result = _run_monitor(Namespace(config="config/accounts.yaml", watch=False))
+
+        payload = json.loads(stderr.getvalue())
+        self.assertEqual(result, 1)
+        self.assertEqual(payload["failure_phase"], "port_ambiguity")
+        self.assertEqual(payload["instance_keys"], ["Nougat32", "Pie64"])
+        self.assertEqual(payload["conflicting_display_names"], ["serious_stuff", "mega_old_acc"])
+        self.assertNotIn("bluestacks_config_path", payload)
+        self.assertNotIn("adb_port", payload)
+        self.assertNotIn("command_line", payload)
+        self.assertNotIn("unrelated_detail", payload)
+        self.assertNotIn("cli-secret-sentinel", stderr.getvalue())
+
+    def test_port_ambiguity_ignores_malformed_identity_details(self) -> None:
+        """The host CLI omits malformed collision fields instead of emitting untrusted values."""
+
+        config = BlueStacksHostConfig(
+            config_path=Path("accounts.yaml"),
+            metadata_path=Path("bluestacks.conf"),
+            instances=(),
+            accounts=(),
+            memory_policy=BlueStacksMemoryPolicy(enabled=True, restart_roles=frozenset()),
+        )
+        error = ConfigurationError(
+            "malformed collision detail",
+            failure_phase="port_ambiguity",
+            instance_keys="not-a-sequence",
+            conflicting_display_names=("serious_stuff", None),
+            malformed_detail="cli-secret-sentinel",
+        )
+        monitor = SimpleNamespace(sample_once=Mock(side_effect=error))
+        stderr = StringIO()
+        with (
+            patch(
+                "pnc_automation.bluestacks_management.__main__.configure_logging",
+                return_value=Mock(spec=["error"]),
+            ),
+            patch("pnc_automation.bluestacks_management.__main__.load_bluestacks_host_config", return_value=config),
+            patch("pnc_automation.bluestacks_management.__main__.BlueStacksInstanceResolver"),
+            patch("pnc_automation.bluestacks_management.__main__.BlueStacksInstanceMemoryMonitor", return_value=monitor),
+            patch(
+                "pnc_automation.bluestacks_management.__main__.BlueStacksStaleInstanceShutdownReconciler",
+                return_value=SimpleNamespace(reconcile_all=lambda: ()),
+            ),
+            redirect_stderr(stderr),
+        ):
+            result = _run_monitor(Namespace(config="config/accounts.yaml", watch=False))
+
+        payload = json.loads(stderr.getvalue())
+        self.assertEqual(result, 1)
+        self.assertEqual(payload["failure_phase"], "port_ambiguity")
+        self.assertNotIn("instance_keys", payload)
+        self.assertNotIn("conflicting_display_names", payload)
+        self.assertNotIn("malformed_detail", payload)
+        self.assertNotIn("cli-secret-sentinel", stderr.getvalue())
 
     def test_legacy_tool_paths_are_thin_compatibility_shims(self) -> None:
         """Keeps existing operator commands forwarding to the package module."""

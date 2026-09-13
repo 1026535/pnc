@@ -444,6 +444,7 @@ class BlueStacksInstanceResolverTests(unittest.TestCase):
                 bst.instance.Pie64.status.adb_port="5555"
                 """,
             )
+            launcher = _FakeInstanceLauncher()
             resolver = BlueStacksInstanceResolver(
                 config_path=config_path,
                 running_instance_source=_FakeRunningInstanceSource(
@@ -452,10 +453,28 @@ class BlueStacksInstanceResolverTests(unittest.TestCase):
                         _make_running_instance(instance_key="Pie64", process_id=102),
                     ),
                 ),
+                instance_launcher=launcher,
             )
 
-            with self.assertRaises(ConfigurationError):
+            with self.assertRaises(ConfigurationError) as raised:
                 resolver.resolve(_make_instance_config(display_name="serious_stuff"))
+
+            self.assertEqual(launcher.launched_instance_keys, [])
+            self.assertEqual(raised.exception.details["failure_phase"], "port_ambiguity")
+            self.assertEqual(raised.exception.details["display_name"], "serious_stuff")
+            self.assertEqual(raised.exception.details["instance_id"], "bs-main")
+            self.assertEqual(raised.exception.details["instance_key"], "Nougat32")
+            self.assertEqual(raised.exception.details["adb_port"], "5555")
+            self.assertEqual(
+                raised.exception.details["instance_keys"],
+                ("Nougat32", "Pie64"),
+            )
+            self.assertEqual(
+                raised.exception.details["conflicting_display_names"],
+                ("serious_stuff", "mega_old_acc"),
+            )
+            self.assertIn("Nougat32 (display_name='serious_stuff')", str(raised.exception))
+            self.assertIn("Pie64 (display_name='mega_old_acc')", str(raised.exception))
 
     def test_resolve_allows_stale_inactive_port_claim_when_target_instance_is_the_only_running_owner(self) -> None:
         """Ignores stale inactive metadata records that reuse the target port but are not currently running."""

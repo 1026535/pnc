@@ -30,6 +30,7 @@ from pnc_automation.bluestacks_management.instance_shutdown import (
     BlueStacksStaleInstanceShutdownReconciler,
     StaleShutdownDisposition,
 )
+from pnc_automation.core.errors import ConfigurationError
 from pnc_automation.core.infra.emulator.bluestacks_instance_resolver import BlueStacksInstanceResolver
 from pnc_automation.core.infra.diagnostics.logging_setup import configure_logging
 
@@ -193,12 +194,33 @@ def _report_cli_failure(
         "failure_phase": phase,
         "error_type": safe_type,
     }
+    payload.update(_safe_port_ambiguity_payload(error, phase))
     if logger is not None:
         try:
             logger.error("BlueStacks host command failed.", extra=payload)
         except Exception:
             pass
     print(json.dumps(payload, sort_keys=True), file=sys.stderr, flush=True)
+
+
+def _safe_port_ambiguity_payload(error: Exception | None, phase: str) -> dict[str, list[str]]:
+    """Projects only validated collision identities for the dedicated port-ambiguity phase."""
+
+    if phase != "port_ambiguity" or not isinstance(error, ConfigurationError):
+        return {}
+    details = error.details
+    if not isinstance(details, dict):
+        return {}
+    payload: dict[str, list[str]] = {}
+    for detail_key, payload_key in (
+        ("instance_keys", "instance_keys"),
+        ("conflicting_display_names", "conflicting_display_names"),
+    ):
+        value = details.get(detail_key)
+        if not isinstance(value, (list, tuple)) or not all(isinstance(item, str) for item in value):
+            continue
+        payload[payload_key] = list(value)
+    return payload
 
 
 def _safe_failure_phase(error: Exception | None, default_phase: str) -> str:
@@ -224,6 +246,7 @@ def _safe_failure_phase(error: Exception | None, default_phase: str) -> str:
         "role_revoked",
         "identity_changed",
         "policy_disabled",
+        "port_ambiguity",
     }
     return candidate if isinstance(candidate, str) and candidate in allowed else default_phase
 
