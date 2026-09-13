@@ -5,7 +5,7 @@ from datetime import timedelta
 import unittest
 from unittest.mock import Mock
 
-from pnc_automation.app.automation.engine.navigation_core import NavigationCore
+from pnc_automation.app.automation.engine.navigation_core import NavigationCore, NavigationPolicy
 from pnc_automation.app.pnc.domain.action_requests import SwipeAction
 from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
@@ -74,3 +74,36 @@ class ResourceInventoryNavigationTests(unittest.TestCase):
             )
         self.assertEqual(1, self.actuator.execute_action.call_count)
         completion.assert_not_called()
+
+    def test_delayed_completion_after_deadline_does_not_claim_scroll(self):
+        clock = _FakeClock()
+        self.navigation = NavigationCore(
+            self.actuator, Mock(), (),
+            policy=NavigationPolicy(max_seconds=1.0), clock=clock,
+        )
+        after = replace(self.source, captured_at=self.source.captured_at + timedelta(seconds=1))
+
+        def delayed_completion():
+            clock.advance(1.0)
+            return after
+
+        with self.assertRaisesRegex(RuntimeError, "completion budget exhausted"):
+            self.navigation.scroll_resource_inventory(
+                upward=True, adjusted=False,
+                observe_content=Mock(return_value=self.source), confirm_scroll=delayed_completion,
+            )
+
+        self.actuator.execute_action.assert_called_once()
+
+
+class _FakeClock:
+    """Deterministic monotonic clock for gesture completion tests."""
+
+    def __init__(self):
+        self.value = 0.0
+
+    def __call__(self):
+        return self.value
+
+    def advance(self, seconds):
+        self.value += seconds
