@@ -71,7 +71,7 @@
           "threshold": 0.93
         }
       ],
-      "revision": 1,
+      "revision": 2,
       "source": {
         "fixture": "hero_hall.png",
         "decoded_sha256": "fcafe76077e5a2a9c82bdfa1e1adeb40c60ccdc9e90bce11236fbaefa1adfb90",
@@ -96,6 +96,19 @@
               38
             ],
             "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_HERO_HALL_FREE_RECRUIT_1X_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/hero_hall_free_recruit_1x.png",
+            "search_region": [
+              56,
+              691,
+              184,
+              54
+            ],
+            "threshold": 0.95
           }
         }
       ],
@@ -302,7 +315,7 @@
           "threshold": 0.93
         }
       ],
-      "revision": 1,
+      "revision": 2,
       "source": {
         "fixture": "bag.png",
         "decoded_sha256": "16d09ecbd0383d86d1e29566008499ee81977227cf13c70b9ddb65e4a2a2f1a8",
@@ -327,6 +340,19 @@
               38
             ],
             "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_BAG_SUBTAB_RESOURCE",
+          "anchor": {
+            "image": "screen_anchors/bag_subtab_resource_selected.png",
+            "search_region": [
+              0,
+              123,
+              107,
+              39
+            ],
+            "threshold": 0.95
           }
         }
       ],
@@ -2269,6 +2295,74 @@
       "layout_id": "collect_mail_mailbox_list"
     },
     {
+      "id": "player_mail_mailbox_list",
+      "screen": "PNC_MAILBOX_LIST",
+      "anchors": [
+        {
+          "image": "screen_anchors/mail_player_list_header.png",
+          "search_region": [
+            80,
+            0,
+            300,
+            75
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/collect_mail_list_identity_1.png",
+          "search_region": [
+            160,
+            850,
+            230,
+            105
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/collect_mail_list_identity_0.png",
+            "search_region": [
+              10,
+              0,
+              85,
+              55
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_MAIL_COMPOSE_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/mail_player_compose_button.png",
+            "search_region": [
+              70,
+              850,
+              70,
+              100
+            ],
+            "threshold": 0.95
+          }
+        }
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/mail_player_list.png",
+        "decoded_sha256": "783298dcd610974aca7d6ac5ab8f893ce8b0c19924f764ee7a7c82fdc429b000",
+        "capture_group": "2026-09-13/mega_old_acc/mail_compose"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Sanitized Player Mail list profile with the observed lower-left compose control; thread identity content is redacted.",
+        "build": "5.2.76 / AppVersion 5.0.204.235",
+        "locale": "English",
+        "qualification": "guarded_reference_only"
+      },
+      "layout_id": "collect_mail_mailbox_list"
+    },
+    {
       "id": "campaign_map",
       "screen": "PNC_CAMPAIGN_MAP",
       "anchors": [
@@ -2361,9 +2455,22 @@
             ],
             "threshold": 0.95
           }
+        },
+        {
+          "selector": "PNC_CAMPAIGN_MAP_REGION_NODE",
+          "anchor": {
+            "image": "screen_anchors/campaign_stage_three.png",
+            "search_region": [
+              293,
+              576,
+              59,
+              74
+            ],
+            "threshold": 0.95
+          }
         }
       ],
-      "revision": 1,
+      "revision": 2,
       "source": {
         "fixture": "tests/data/screen_recognition/campaign_chapter_10.png",
         "decoded_sha256": "b45dc5a7d432665647fe2f5c7541124db8ff09ac31fc3c21df25e63c53c93678",
@@ -2417,9 +2524,22 @@
             "threshold": 0.95
           },
           "dismisses_surface": true
+        },
+        {
+          "selector": "PNC_CAMPAIGN_BATTLE_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/campaign_challenge_button.png",
+            "search_region": [
+              178,
+              643,
+              184,
+              54
+            ],
+            "threshold": 0.95
+          }
         }
       ],
-      "revision": 1,
+      "revision": 2,
       "source": {
         "fixture": "tests/data/screen_recognition/campaign_stage_10_3.png",
         "decoded_sha256": "efab0c7ecb4c30187e057235bfe9efdfb831fc212aa61bc42548791177628157",
@@ -2427,12 +2547,122 @@
       },
       "review": {
         "reference_manifest": "tests/data/screen_recognition/manifest.json",
-        "description": "Evidence-backed Campaign stage detail identity with owned Close surface dismissal; Challenge remains intentionally unregistered.",
+        "description": "Evidence-backed Campaign stage detail identity with owned Close surface dismissal and measured Challenge action control.",
         "build": null,
         "locale": null,
         "qualification": "guarded_reference_only"
       },
       "layout_id": "campaign_stage_10_3"
+    },
+    {
+      "id": "gather_node_selected_resource",
+      "screen": "PNC_GATHER_NODE",
+      "anchors": [
+        {
+          "image": "screen_anchors/gather_node_modal_header.png",
+          "search_region": [
+            50,
+            278,
+            438,
+            134
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/gather_node_modal_body.png",
+          "search_region": [
+            50,
+            412,
+            438,
+            99
+          ],
+          "threshold": 0.95
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_GATHER_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/gather_node_gather_button.png",
+            "search_region": [
+              278,
+              518,
+              194,
+              70
+            ],
+            "threshold": 0.97
+          }
+        }
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/gather_node.png",
+        "decoded_sha256": "4ea1333ee072f270cbd069909677c8f6ffeaab45b8abad5425e819beb9b129a5",
+        "capture_group": "2026-08-31/serious_stuff/daily_plan_gather_node"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Selected FarmLv.7 resource-modal identity uses two independent modal regions; the measured gold Gather control is published only when its template is present.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "layout_id": "gather_node_selected_resource"
+    },
+    {
+      "id": "march_confirm_gather",
+      "screen": "PNC_MARCH_CONFIRM",
+      "anchors": [
+        {
+          "image": "screen_anchors/march_confirm_header.png",
+          "search_region": [
+            12,
+            2,
+            200,
+            48
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/march_confirm_formation.png",
+          "search_region": [
+            12,
+            87,
+            508,
+            170
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_MARCH_CONFIRM_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/march_confirm_dispatch_button.png",
+            "search_region": [
+              170,
+              866,
+              200,
+              70
+            ],
+            "threshold": 0.97
+          }
+        }
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/march_confirm.png",
+        "decoded_sha256": "151fd25220817dbd93b9d26200be5aa986cbe7c44775ef845bab33b5b9db622d",
+        "capture_group": "2026-08-30/mega_old_acc/daily_plan_gather_march"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Gather formation identity is anchored by the title and shared formation slots across selected and empty states; only the measured gold Dispatch control is published.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "layout_id": "march_confirm_gather"
     },
     {
       "id": "collect_mail_thread",

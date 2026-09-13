@@ -43,6 +43,7 @@ from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
+from pnc_automation.app.pnc.vision.selector_interaction_kind import SelectorInteractionKind
 from pnc_automation.app.pnc.vision.selectors import SelectorRegistry
 
 
@@ -119,7 +120,7 @@ class ActionExecutor:
 
         self.logger.info("Executing action.", extra={"action_type": type(action).__name__, "screen_type": observation.screen_type})
         if isinstance(action, TapAction):
-            self.selector_registry.require_supported(action.selector_id)
+            self._validate_selector_input(action.selector_id)
             element = observation.require(action.selector_id)
             self._validate_visible_element_provenance(element, observation, action)
             target = element.action_point if element.action_point is not None else element.bounds.center()
@@ -176,7 +177,7 @@ class ActionExecutor:
             if observation.is_chat_channel_active(action.channel):
                 return False
             selector_id = chat_channel_selector_id(action.channel)
-            self.selector_registry.require_supported(selector_id)
+            self._validate_selector_input(selector_id)
             element = observation.require(selector_id)
             self._validate_visible_element_provenance(element, observation, action)
             target = element.action_point if element.action_point is not None else element.bounds.center()
@@ -187,7 +188,7 @@ class ActionExecutor:
             return True
         if isinstance(action, InputTextAction):
             if action.selector_id is not None:
-                self.selector_registry.require_supported(action.selector_id)
+                self._validate_selector_input(action.selector_id)
                 element = observation.require(action.selector_id)
                 self._validate_visible_element_provenance(element, observation, action)
                 x, y = element.action_point if element.action_point is not None else element.bounds.center()
@@ -353,6 +354,17 @@ class ActionExecutor:
                 provenance_error_type=type(error).__name__,
                 provenance_details=error.details,
             ) from error
+
+    def _validate_selector_input(self, selector_id: UiElementId) -> None:
+        """Reject read-only label targets before center fallback or input authorization."""
+
+        selector = self.selector_registry.require_supported(selector_id)
+        if selector.interaction_kind == SelectorInteractionKind.LABEL:
+            raise SelectorResolutionError(
+                "Label selectors cannot be used as UI input targets.",
+                selector_id=selector_id,
+                interaction_kind=selector.interaction_kind.value,
+            )
 
     def _validate_visible_element_provenance(
         self,

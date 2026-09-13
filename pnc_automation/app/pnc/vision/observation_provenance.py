@@ -5,11 +5,51 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import replace
 
-from pnc_automation.app.pnc.domain.observation import DetectedListEntry, VisibleElement
+from pnc_automation.app.pnc.domain.observation import (
+    DetectedListEntry,
+    VisibleElement,
+    VisibleElementSourceKind,
+)
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
+from pnc_automation.app.pnc.vision.selector_interaction_kind import SelectorInteractionKind
+from pnc_automation.app.pnc.vision.selectors import SelectorRegistry
 from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.core.infra.emulator.provenance import FrameRef
+
+
+def select_content_labels(
+    elements: Mapping[UiElementId, VisibleElement],
+    *,
+    selector_registry: SelectorRegistry | None,
+) -> dict[UiElementId, VisibleElement]:
+    """Selects registry-declared labels and strips any accidental action proof."""
+
+    if selector_registry is None:
+        return {}
+    label_selector_ids = {
+        selector.id
+        for selector in selector_registry.all()
+        if selector.interaction_kind == SelectorInteractionKind.LABEL
+    }
+    selected: dict[UiElementId, VisibleElement] = {}
+    for selector_id, element in elements.items():
+        if selector_id not in label_selector_ids or element.source_kind != VisibleElementSourceKind.OCR:
+            continue
+        if element.selector_id != selector_id:
+            raise SelectorResolutionError(
+                "Content label mapping key does not match its visible selector proof.",
+                selector_id=selector_id,
+                element_selector_id=element.selector_id,
+            )
+        selected[selector_id] = replace(
+            element,
+            action_point=None,
+            identity_evidence=False,
+        )
+    return selected
+
+
 def bind_visible_elements(
     elements: Mapping[UiElementId, VisibleElement],
     *,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 import unittest
 from datetime import UTC, datetime
 from pathlib import Path
@@ -36,7 +37,7 @@ from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict, ScreenDe
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
-from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
+from pnc_automation.app.pnc.vision.selectors import DetectionKind, SelectorRegistry, build_default_selector_registry
 
 from tests.support.automation.session import FakeSession
 from tests.support.core.logging import build_logger
@@ -44,6 +45,25 @@ from tests.support.pnc.observations import make_entry, make_observation
 from tests.support.pnc.spatial import make_spatial_object, make_spatial_surface
 from tests.support.runtime.observation_service import FakeObservationService
 from pnc_automation.core.errors import TaskVerificationError
+
+
+def _unsupported_gather_fixture_registry() -> SelectorRegistry:
+    """Keep this end-to-end denial scenario independent of production support promotion."""
+
+    registry = build_default_selector_registry()
+    return replace(
+        registry,
+        selectors=tuple(
+            replace(
+                selector,
+                detection_kind=DetectionKind.UNSUPPORTED,
+                notes=("fixture producer intentionally unsupported",),
+            )
+            if selector.id is UiElementId.PNC_GATHER_BUTTON
+            else selector
+            for selector in registry.all()
+        ),
+    )
 
 
 class RunnerEndToEndTests(unittest.TestCase):
@@ -315,6 +335,7 @@ class RunnerEndToEndTests(unittest.TestCase):
             session=fake_session,
             registry=registry,
             core_step_executor=core_step_executor,
+            selector_registry=_unsupported_gather_fixture_registry(),
         )
 
         with self.assertRaises(TaskVerificationError) as raised:
@@ -396,16 +417,20 @@ def _make_runner(
     session: FakeSession,
     registry: object,
     core_step_executor: object | None = None,
+    selector_registry: SelectorRegistry | None = None,
 ) -> AutomationRunner:
     """Builds the fake-device production runner used by end-to-end parity scenarios."""
 
+    resolved_selector_registry = (
+        build_default_selector_registry() if selector_registry is None else selector_registry
+    )
     return AutomationRunner(
         defaults=defaults,
         observation_service=observation_service,
         action_executor=ObservedActionExecutor(
-            selector_registry=build_default_selector_registry(),
+            selector_registry=resolved_selector_registry,
             action_executor=ActionExecutor(
-                selector_registry=build_default_selector_registry(),
+                selector_registry=resolved_selector_registry,
                 session=session,
                 stable_click_delay_ms=defaults.stable_click_delay_ms,
                 post_action_observe_delay_ms=defaults.post_action_observe_delay_ms,

@@ -1,377 +1,251 @@
-# Integrate visual recognition, guarded controls, and targeted OCR
-
-## Coordinated continuation: task B — 2026-09-12
-
-This is B's current implementation plan. Follow the single
-[A/B ownership, backlog and interface agreement](PNC_AB_COORDINATED_CONTINUATION.md).
-It supersedes earlier pause/first-Research-only/integration-only instructions and the
-historical progress statements below. Preserve the original design and qualification
-requirements unless explicitly reassigned here. Original phase names A/B/C are not
-the conversation owners; all recognition phases are task B's responsibility.
-
-### Completed work to retain
-
-Recognition foundation, frame/input provenance, immutable shared OCR context, canonical
-decisions and mandatory guards, catalog v3, measured fixed controls, strict numeric parsing,
-Quest/Bag row association and startup recognition are implemented. Later navigation,
-Institute/Development, Bag and Research evidence supersedes older readiness failures;
-do not repeat successful work solely because older sections still say blocked.
-
-Development node/control and active-detail recognition, strict Research postconditions,
-and the real production-builder Start publication correction are included in main
-`2eacb126cfbcb943c08d78104df2200ab9bae9e0` via component `6c48073b`.
-The combined candidate `8a7d1a9d259120544c5382d246f810602527839d` retains all 37
-profiles and passed the recorded combined offline checks. Keep the real-builder consumer
-regression, premium exclusions, overlay protection and current-frame provenance.
-The historical Construction I resource action is evidence, not permission to repeat it.
-
-### Reassigned scope and exclusions
-
-A owns all navigation graph/route implementation, endpoint behavior, workflow/caller
-porting and mutation authorization/execution/journaling. B no longer implements an
-independent Campaign workflow or Research/Gathering execution. B retains and maintains
-A's Campaign recognition assets, produces shared predicates/controls and validates both
-observation paths. SendMail/Login/building recognition dependencies belong to B; their
-workflow implementations belong to A. No duplicate parser, local popup bypass, alternate
-mutation mechanism, YOLO detector, arbitrary new language/aspect or new game task.
-
-### Remaining execution sequence
-
-1. Refresh B01's canonical coverage inventory once against current callers/registry and
-   saved evidence. Disposition every original phase A through F item as retained complete,
-   remaining producer/qualification, reassigned to A, or explicitly blocked. Reconcile
-   historical inventory counts instead of treating 83 fallback families as 83 mandatory
-   rewrites. Reference the generated inventory from this plan; do not copy the whole matrix.
-2. Own and publish producer contracts through the existing canonical models. Prioritize
-   B04 Gathering/March node, formation, confirmation, slot and post-dispatch facts through
-   both real observation paths, while A builds its mutation boundary. Use one Luna xhigh
-   worker for bounded code/test slices, reusing the worker sequentially. Preserve settled
-   contracts and the current slice; peer approval before coding is not required. Missing
-   saved geometry stays blocked; continue independent work instead of inventing controls.
-3. Implement B08 login/mail/building or other active-family facts as A's dependency requests
-   and evidence warrant. Maintain B05 Campaign assets and provide missing content/control
-   facts while A owns routes. Complete B06's evidence-supported remaining categories;
-   Development Start itself is finished. Do not enable inaccessible or premium actions.
-4. Finish B03's genuinely missing OCR/region/caller migrations and B07's demonstrated
-   Quest/Bag gaps. Keep full-frame guard/fallback where qualification is insufficient.
-   Preserve recovery of valid fields, same-frame caching, row/control association and
-   coordinate-only semantics; abstaining on everything is not acceptance.
-5. Complete B09's missing independent annotations, held-out negatives, installed-package
-   assets, current coverage and latency qualification using the original gates below.
-   Coordinate benchmark timing with A so heavy tests do not invalidate measurements.
-   Prior successful metrics/proofs are reused unless relevant code or evidence changed.
-6. Publish coherent reviewed producer batches with one contract/evidence record and one
-   ready-to-integrate notice to A per batch. Continue unblocked items without
-   waiting for mainline landing or a fresh approval at every milestone. A alone owns combined
-   integration/mainline coordination. Follow the fixed ownership in the shared plan;
-   no routine status/acknowledgement or per-slice ownership negotiation. B owns observation
-   models and selector declarations; A owns action consumers and runtime composition.
-   Escalate actual breaking changes or material blockers, not previously recorded gaps.
-
-### Acceptance and completion
-
-Producer tests must use production registry/classifier/recognizer/builder composition,
-including corresponding NavigationPerception publication, blocked/missing/conflicting
-states and provenance. Keep the strict postcondition tests even when their consumer is
-migrated by A. Use focused/affected checks; broaden only for shared contracts, required
-fallback or combined acceptance. Do not run repeated broad suites for unchanged slices.
-
-Treat broader target/build/locale and member-only qualification as explicit evidence
-cells within the original supported scope. Missing captures or live availability are
-concrete blockers, not proof of support. This continuation authorizes offline work; it
-does not renew historical live budgets. Prepare exact bounded evidence requests while
-continuing independent code/qualification work. Luna never drives the game.
-
-Finish when all B01–B09 rows have an evidence-backed disposition and completed producer
-slices are published and accepted by A's combined validation. Do not mark unimplemented
-active producers complete merely because their selectors remain unsupported. Keep live
-acceptance separate from implementation. Record compact progress and interface references
-here; retain detailed historical evidence in the implementation report.
-
----
-
-The dated sections below retain original requirements and historical evidence. Their
-old statuses, live permissions and overlapping workflow assignments are superseded above.
-
-Status (2026-09-12): work is paused at a durable checkpoint on `codex/non-yolo-recognition` in `artifacts/worktrees/non-yolo-integration-current`. Development Research Tree identity, node selection, the blue normal Research control, and active-detail reconciliation are implemented and live-confirmed on `testing`. One authorized Construction I research action spent exactly 16,400 food and 7,010 wood with zero premium currency; the active detail was closed and the instance was returned to Home before releasing its reservation. Remaining Gathering/March, Campaign, broader category, member-only, target, build, and locale gates are incomplete. Exact evidence and validation are recorded in the implementation report.
-
-## Resumed gap: Development research-tree identity
-
-After main landing `2bb3c90`, this bounded slice establishes the missing visual Research Tree producer. At the start of exploration, legacy `_build_research_tree_additions` supplied OCR identity only and no real tree/detail fixture was available. The new Development reference closes that identity gap. Keep `PNC_RESEARCH_START_BUTTON` unsupported; do not activate ResearchTask, select research nodes, or spend resources.
-
-Use the current testing castle under one continuous reservation. Verify identity, use the reviewed Institute focus/entry path, then activate only its already measured Development category control. Capture the resulting screen and pause input while its independent title/support anchors and visible Back are reviewed and tested. Return only through a freshly matched UI Back control after visual qualification, record the actual destination, and retain that known source under the reservation for the final graph replay and Home return. Add only the demonstrated Development-to-tree and return edges; other categories need separate evidence. A second bounded graph replay under the same reservation may confirm the final implementation. Total phase budget: 24 inputs/20 minutes; no resources, castle changes, messages, or guessed taps. Unknown/ambiguous evidence stops input. Preserve the pre-existing instance and require final Home for a success claim.
-
-Acceptance: deterministic positive/missing-anchor/wrong-screen/blocked-control tests, frame-bound Back dispatch, unsupported Start regression, relevant selector/vision/navigation checks, and confirmed live entry/return with artifact paths. This closes only tree identity and navigation, not Research row eligibility, Start, mutation reconciliation, or broader build/locale promotion.
-
-Live disposition: passed on current testing castle, 13 inputs/49 observations within the 24-input/20-minute phase budget. The measured Back returned to Institute, and final graph replay returned Home. The implementation report records exact captures, commands and remaining gates. Treat the checkpoints below as historical where superseded by this status.
-
-Subsequent synchronization includes main `69ae648`: authored Open Building now shares the strict core workflow, and host binding/lease/artifact safety changes are retained. The merged runtime passed a capture-only Home check. These changes do not enable Research Start or add category routes. Continue future F work from this combined ownership and retain the legacy canary CLI limitation documented in the report.
-
-## Earlier reviewed implementation checkpoint (2026-09-12)
-
-This publication integrates main through `87e6151`, preserving bounded observed building focus and the Castle endpoint while migrating the added visual profile to the feature's catalog/provenance schema. Later independent main workflow-safety changes are a subsequent synchronization boundary, not part of this result. The five previously missing graph registrations are implemented and live-confirmed on testing. The saved and fresh live Bag content mismatch is resolved by the existing canonical pipeline: six complete entries, zero Use taps, final Home. Dual-logo publisher startup recognition is now implemented with passive loading/no controls and missing-logo abstention. Numeric repair already used the shared strict parser; mixed punctuation/OCR regressions were added without a second parser.
-
-The main-checkout dirty helper migration is reviewed and accounted for: correct equivalents already exist on this feature; the main-owning task preserved and removed only incomplete superseded copies. The offline provenance fixture now uses private lease registries. Final combined validation passed 1,737 tests with five optional screenshot skips. Detailed commands, fingerprints, failed attempts and live artifacts are recorded in `PNC_NON_YOLO_RECOGNITION_IMPLEMENTATION.md`.
-
-Next work must target genuinely unimplemented F producers and independent evidence gates, preserving exact resource-action authorization boundaries. Do not repeat the now-completed graph registration, Bag parsing, numeric-owner, or startup work from historical sections below.
-
-## Resumption: navigation registry completeness
-
-At clean feature head `cb9a879`, freshly fetched main remains included. The next slice closes the five documented graph registrations only where existing packaged visual profiles prove their controls. Preserve planned maturity, independent screen/guard evidence and one-use frame dispatch; no new image or guessed coordinates are needed. Add canonical registry and real visual-observation dispatch regressions, then run three non-spending core probes (More Rank, Settings children, and world HUD round trip), each capped at sixteen inputs and ten minutes, or combined under one lease with a stricter total cap of twenty-four inputs/ten minutes and one initial active-castle preflight. Every route must finish at Home. Keep each route under one reservation; preserve pre-existing instances. Resolve live evidence failures before promotion, and record any unavailable game state explicitly. The old selector canary's static allowlist does not cover these core routes; use the reviewed core graph for their proof rather than bypassing its source-screen gates.
-
-## Current follow-through
-
-The Institute proof passed on testing with the two queue controls registered in the canonical selector registry; 10 navigation inputs verified the active castle, reached Institute, recognized all four categories, and returned Home. The live guard repair is limited to unique visual Queue identity plus its measured Close; maintain regression coverage for missing proof and a second blocking popup. The five graph registrations for More Rank, Settings Rank, Settings Preferences, Settings Notifications and World HUD Toggle are now implemented and live-confirmed on testing, including both HUD directions and final Home. The first combined probe required a corrected observation budget during world loading; the successful bounded follow-up is recorded in the implementation report. Research Tree, resource-changing actions, new destinations and broad locale/build promotion remain separate evidence gates.
-
-## Context and objective
-
-Complete the specialized recognition architecture: OpenCV identifies supported screens and overlays; reviewed geometry locates fixed controls only after their state is proved; OCR reads requested variable content in bounded regions. Preserve the canonical observation, navigation, spatial, and observed-action interfaces. Exclude YOLO and trained object detection entirely.
-
-Repository baseline: `1026535/pnc`, `b6c1a0176bd80423ba33015440ebac6b620fe001`, verified remotely through the GitHub connector. The current worktree contains the newer recognition and journal changes described in `PNC_SCREEN_RECOGNITION_IMPLEMENTATION.md` and `PNC_FINDINGS_FOLLOW_UP.md`; those local changes take precedence over the baseline. Existing unrelated skill and instruction edits must be preserved.
-
-## Goals and non-goals
-
-1. Give every active screen/control a declared, tested recognition strategy; eliminate silently missing runtime template assets.
-2. Recognize blocking surfaces independently of requested content and underlying screen identity. Never infer that a popup is absent solely because a background header matches.
-3. Make normalized coordinates express location, not presence, enabled state, free availability, or spending authorization.
-4. Read names, counts, timers, coordinates, and row labels only when needed, with explicit OCR regions and frame-local reuse.
-5. Preserve postcondition verification and safe abstention, and measure latency without trading away correctness.
-
-Non-goals: YOLO, trained detectors, replacing current world-map spatial algorithms, OCR-engine replacement, arbitrary languages/aspect ratios, new game tasks, spending resources, switching accounts/castles, or sending messages. Existing mutation workflows are not automatically approved for testing by this plan. A successful read-only proof does not establish a mutating postcondition.
-
-## Updated implementation state — 2026-09-12
-
-The feature branch is `codex/non-yolo-recognition`. The isolated integration worktree preserves its published `5c4ce6b` history and incorporates mainline through `c7dfdd5`, including modular tests, canonical domain/observation-policy owners, direct core mail/Chat/building ports, measured Chat controls, bounded active-roster scanning, quiescent shutdown, and generated-output defaults. Integration uses merge commits so the published feature remains an ancestor. Unrelated work in the original feature and main worktrees is preserved.
-
-Use `py tools/run_tests.py group vision` for the first recognition check and `py tools/run_tests.py full` for the combined integration. Historical flat unittest commands later in this document and the report describe past evidence, not current invocations. Replacement navigation's capture-bound OCR, canonical decision and provenance integration is implemented; it requires validation against these newer ports, not a second implementation. Direct workflow ports do not imply authored YAML dispatch has migrated.
-
-Current execution order, updated by the user's latest request: preserve/publish existing work, merge fresh main, validate and publish that combination, then resume bounded implementation using the documented live findings. The refreshed audit still has 329 selectors (273 enabled, 56 unsupported), 59 orphan enum IDs, and 90 families (7 reviewed region plans, 83 guarded full-frame fallbacks). Keep unsupported controls behind their existing fail-closed boundary until their own reviewed producer evidence exists. Do not use mainline live evidence from another account as proof for the testing instance.
-
-### Resumption against mainline `15845b8`
-
-Mainline now dispatches authored Kingdom Chat and collect-mail steps through `CoreScriptDispatcher`; their legacy task classes are removed. Roster refresh uses its typed bounded scanner and canonical persistence owner. Preserve the shared connected graph, typed parameter checks, exact active-castle preflight, no-replay semantics, and outer cleanup-policy inheritance. The non-YOLO required-selector gate remains on legacy task execution; typed dispatch obtains its recognition/guard contract through the canonical core runtime rather than pretending to be a legacy task.
-
-Acceptance for this integration: typed-dispatch, roster, lifecycle and recognition-contract tests; full portable suite; a scoped testing-instance capture/foreground proof before navigation. For the next F slice, first inventory saved Research/Institute evidence and compare it with a bounded current observation. The existing Research Tree OCR parser establishes screen identity only; it does not produce Research Start controls or research-row action evidence. Do not infer those from a tree header or fabricate rows/coordinates. Implement the smallest evidence-supported visual/control or OCR improvement, add a deterministic fixture regression, and retain unsupported action gates until their own proof exists. Target remains the currently active castle on configured `testing`, at most sixteen navigation inputs/ten minutes for the combined active-castle preflight, Institute entry, and final Home route (the independent selector canary remains capped at eight), no research start, claim, message, switch or other resource action. If readiness fails, record the precise phase and preserve all available captures before continuing independent offline work.
-
-The evidence inventory found a reviewed Institute reference and supplementary 900×1600 Institute captures, but no real Research Tree/detail fixture proving Start or research rows. The first resumed slice therefore adds measured template controls for the four existing Institute category selectors to the existing visual profile. It does not add a core transition into an unproved destination or enable Research Start. Reuse the packaged catalog/recognizer and existing selector IDs; test all four controls at reviewed sizes, removal of one control without losing Institute identity, and blocking-overlay suppression through canonical perception. Keep the profile's `guarded_reference_only` qualification. The initial busy reservation was superseded by successful capture and the canonical More canary on testing. The subsequent Institute probe exposed a Research Queue ownership conflict: the visual profile matched but the legacy OCR generic-popup guard hid its controls. Resolve that conflict only for independently matched Research Queue identity plus its measured Close control, preserving all other guards and the OCR-only fallback; add missing-proof and blocking-update regressions before repeating the fixed non-spending route.
-
-Integration-specific corrections: catalog v3 separates a reviewed layout from appearance-profile IDs so matching Home/Chat-preview variants do not manufacture layout ambiguity. Incompatible layout evidence still abstains. Every manifest image and profile source now uses the canonical dimension-prefixed decoded-RGB hash. Mainline's quiescent shutdown and `.local-data` output defaults are retained alongside frame provenance and bounded probe cleanup. Current readiness attempts on `testing` again failed with `GameLaunchError` and then `DeviceConnectionError` before capture; no game navigation or mutation occurred.
-
-| Slice/owner | Implemented behavior | Remaining acceptance work |
-|---|---|---|
-| A: strategy inventory | Explicit semantic, guarded-geometry, template, OCR-region and unsupported dispositions; enabled assets validated | Refresh coverage after integration; distinguish unsupported controls from completed promotion |
-| B0/B: observation and actions | Frame/input provenance, global guards, immutable `ScreenDecision`, and replacement navigation integration published at `5c4ce6b` | Validate mainline workflow composition and migrated fixtures without restoring synthetic provenance or contradictory-decision shortcuts |
-| C: visual assets | Packaged screen/control anchors, reviewed viewports, explicit failure/abstention | Independent negatives and current-build evidence remain family-specific |
-| D: OCR | Frame-local immutable context, cached reads, compiled field regions and diagnostics; replacement navigation shares genuine capture-bound guard/content context | Validate new Chat transcript/field parsing against mainline controls; preserve requested-region validation and rerun performance evidence before promotion |
-| E1/E2: Bag/Quest rows | Measured row/button associations and conservative abstention; historical live proofs | Preserve provenance and parser isolation in the replacement content path; rerun affected checks |
-| F: workflow promotion | Historical read-only navigation/fields/coordinate/Bag/Quest evidence in implementation report | Research, Gathering/March, Campaign and several subflows still need their own controls and evidence; do not mark them complete or infer mutation success |
-
-### Authorized continuation sequence
-
-1. **Integration contracts first.** Preserve real capture provenance (missing provenance stays missing), reject an explicit screen inconsistent with the supplied decision, retain strict requested-selector validation, and remove duplicate popup helper ownership. Fix offline fixtures to express the real contracts instead of adding production compatibility behavior. Acceptance: deterministic regression tests for each touched boundary and existing targeted suites pass.
-2. **Replacement navigation perception.** Retain independent visual identity and measured navigation controls. Reuse frame-scoped OCR for mandatory guards and optional content; carry canonical guard/layout decisions and bind content to the same capture. Conflicting guards/layouts and loading must abstain from ordinary actions. Content cannot publish controls or change identity. A proved background Home must not suppress a measured popup. Acceptance: guarded Home, loading, conflict, unknown/missing frame, content isolation and OCR-reuse regressions; existing navigation and observation suites pass.
-3. **Combined verification.** Run offline discovery and selector validation, then the smallest canonical non-spending live proof on the configured testing instance's active castle. Preserve the process lease, cap navigation at eight attempted inputs/ten minutes, and finish at observed Home when recovery is supported. Capture exact commands/results and evidence. No castle switch, messages, resource spending or unbounded recovery.
-4. **Remaining F promotion.** Update the family matrix from actual code and evidence. Continue a family only when its required state is reachable within the authorized non-spending boundary. Keep inaccessible/mutation states explicitly pending; do not invent geometry from unrelated screens. Broad promotion requires family-specific evidence, not merely a green shared suite.
-
-`PNC_NON_YOLO_RECOGNITION_IMPLEMENTATION.md` records the earlier implementation and live evidence. Earlier test counts, benchmarks, and dated investigation sections below are historical observations, not claims about this rebased checkout. The original phase checklist below describes deliverables; this table is the current progress authority.
-
-## Planning evidence
-
-| Question that affects design | Disposition | Evidence/consequence |
-|---|---|---|
-| Can an apparently valid header survive a blocking dialog? | `artifact_answered` | `tests/data/screen_recognition/update_over_bag.png`: raw Bag anchors pass beneath an undarkened update dialog. OCR guard must remain until an independently validated replacement proves equivalent protection. |
-| Are More and Settings distinct actionable layouts? | `live_observed` | Same-day implementation traces and the new Bag route observe both distinct states and Manage Char. Separate screen contracts remain mandatory. |
-| Do dynamic rows have one universal action offset? | `live_observed` | Current Bag screenshot shows Use-only versus Use-plus-bulk rows with different vertical button positions. Locate each row's actual control arrangement. |
-| Are Quest tab variants and transition ambiguity observable? | `artifact_answered` | `artifacts/screen_recognition/live/20260910T195757Z_cfa84a53/trace.jsonl` includes both Quest tabs and bounded unknown recovery. |
-| Can requested OCR families hide an unexpected source screen? | `artifact_answered` | Hero Hall scope regression and existing tests. Identity/guard work must be independent of optional content requests. |
-| Does Android expose useful Settings labels? | `artifact_answered` | Prior same-day UI hierarchy: container/view nodes, no useful text-bearing controls. Do not plan an accessibility replacement for this observed screen. |
-| Are all other runtime screens visually proven on the current build? | `unknown`, bounded scope | No. The inventory phase must distinguish existing archived evidence from unavailable feature states. No new selector geometry for those states is assumed here; a workflow remains unpromoted until its particular evidence gate passes. |
-| Do Use, Claim, Recruit, Purchase or Send postconditions work after future changes? | `mutation_boundary` | Safe Bag navigation reached visible Use controls and stopped. No mutation occurred. Exact action/target/budget authorization is required before later mutation validation. |
-
-### New bounded live investigation
-
-Target: configured `testing` instance and currently active castle, identity observed in Manage Char without selecting another row. PNC was explicitly foregrounded through the canonical session. The tool did not record whether BlueStacks had to launch, so startup origin is unknown rather than assumed.
-
-Command: `py artifacts/recognition_implementation/plan_bag_probe.py --account testing`. This local evidence harness reuses the existing visual-navigation proof and canonical runtime, changes the final read-only visit to Bag, and caps actions at eight/ten minutes. It is not a production implementation dependency.
-
-Observed seven actions: Home → More → Settings → Manage Char → Settings → Home → Bag → Home. One intermediate Settings frame was unknown and the existing executor reread it before further action. All planned postconditions passed. Stop reason: Bag layout question answered, safely returned Home; no resource mutation, configuration edit, or castle switch.
-
-Run directory: `artifacts/screen_recognition/planning_bag/20260910T203309Z_36134e9b/` (`trace.jsonl`, `summary.json`). Screenshots and OCR sidecars are under `artifacts/2026-09-10/testing/`:
-
-- Baseline: `20260910T203313Z_visual_20260910T203309Z_36134e9b_1_baseline.png`.
-- Current Bag: `20260910T203402Z_visual_20260910T203309Z_36134e9b_8_post_action_1.png`.
-- Final Home: `20260910T203417Z_visual_20260910T203309Z_36134e9b_9_post_action_1.png`.
-
-Offline prerequisite: `py -m unittest tests.test_visual_screen_recognizer tests.test_validate_visual_navigation tests.test_ocr_service` passed 13 tests. Existing 18-frame benchmark is evidence of initial feasibility, not overall production accuracy. No independent holdout exists for every profile.
-
-## Target design
-
-### One staged observation pipeline
-
-Keep `ObservationBuilder.build()` as the sole entry point:
-
-1. Establish the game viewport/reference transform and a unique captured-frame context. Reject unreviewed layouts; do not stretch arbitrary aspect ratios.
-2. Collect global visual screen/overlay/loading evidence. Candidate/request hints may prioritize work but may not exclude unexpected blocking surfaces or source screens.
-3. Run mandatory guard recognition, using visual evidence plus the existing full-frame OCR guard until each narrower guard is validated. Resolve identity through `ScreenClassifier` before materializing controls.
-4. Build the minimum content OCR plan for the resolved screen, tab, layout, and requested facts. Reuse any full-frame result already acquired for guards rather than unnecessarily OCRing contained crops again.
-5. Parse content through existing family parsers; evaluate control-state predicates and row associations; materialize only controls allowed by the final decision.
-6. Return the existing typed observation data and diagnostic provenance. Let the observed executor decide and verify actions.
-
-Introduce a small typed `ScreenDecision` owned by `ScreenClassifier`, containing base candidate, effective actionable screen, layout/profile identity, guard outcome, and evidence references. `Observation.screen_type` must have one source of truth: derive it from the decision when migrating constructors/callers, rather than independently updating two authoritative screen fields. Keep raw candidates only as diagnostic evidence. Avoid a general scene graph or a second navigation state machine.
-
-Blocking evidence dominates base evidence. Multiple contradictory blockers or unrecognized occlusion produce an unknown guard and no underlying action eligibility. Known blocking overlays expose only their own independently proved controls. Conflicting base candidates abstain. Loading permits bounded observation waits, never background taps. A content parser cannot clear a blocker or authorize an action on another screen.
-
-The coordinate-only movement proof stays explicitly non-action-authorizing. Its cheap coordinate observation cannot be reused to authorize unrelated taps; action execution needs the normal guarded observation path.
-
-Use four explicit guard states: `clear`, `blocked`, `unresolved`, `not_evaluated`; never infer a successful guard from a default false flag. Migration regressions must prove that supporting evidence cannot cancel incompatible evidence, and same-screen profiles with incompatible layouts cannot authorize geometry. Reconcile contradictions discovered during semantic OCR before publication, clearing rejected rows, spatial targets and text-field states as well as buttons. Geometry cannot prove its own screen prerequisites. Execute required guards even with no visual match or a non-UNKNOWN coarse screen: current loading checks are coarse-screen-gated in both `requires_ocr()` and enrichment. Migrate the capability table as part of moving exact visual classification earlier; its current Bag entry excludes `PNC_BAG`, so merely passing an exact screen into the old gate would suppress Bag parsing.
-
-### Enforced action freshness and read-only policy
-
-Before recognition migration canaries, extend existing capture/observation metadata with a typed frame reference (session epoch, capture sequence/time and input sequence), preserving the existing timestamp. Capture identity is distinct from encoded fingerprints and decoded dataset hashes. Bind verified UI targets and row references to that frame and source state. The canonical observed executor must acquire or validate a fresh proof, re-resolve the intended target, check the allowed effect, dispatch once, then observe the outcome. Reject stale session/input/frame proofs, changed layouts and ambiguous rows; do not rely on an age threshold alone. Extend existing models rather than creating a second action subsystem.
-
-Restrict low-level UI dispatch to this verified path and migrate single-action, explicit-point, list-entry and recovery callers. Coordinate movement retains its existing specialized proof boundary and algorithms. Read-only canaries allow only reviewed navigation from a proved state; UNKNOWN permits passive recapture, not Android Back. Enforce the same policy in `screen_flows.py` and automatic update recovery. Keep resource authorization and reconciliation in their existing canonical owners. Tests must cover bypass attempts and an intervening input, not only normal navigation.
-
-### Catalog and asset ownership
-
-Extend existing typed catalog models, rather than creating a separate control registry. Separate the existing geometric `relative_bounds` from explicit presence/state requirements. Use one detection strategy per selector: visual template, guarded fixed geometry, OCR region, existing dynamic/spatial resolver, or explicitly unsupported.
-
-For the 76 missing paths, enumerate actual callers and assign a disposition. Populate a packaged template only when appearance proof is necessary; convert truly fixed reviewed navigation to guarded geometry; retain cropped OCR for semantic labels and existing typed spatial/row resolvers for dynamic targets. Retire obsolete unused IDs and migrate callers. Unsupported controls must disable the dependent workflow with an actionable diagnostic, not silently disappear; merely marking an active required workflow unsupported does not count as completing its integration.
-
-Use the existing packaged visual-data tree for screen and control assets. Add explicit relative asset paths to the canonical catalog loader where needed, with bounds/mask/reference-size metadata and eager validation. Require every enabled template strategy to resolve a valid packaged asset. Remove the old implicit missing-directory convention after all callers migrate. Package-build validation must prove assets survive installation, not just editable checkout.
-
-The local `pyproject.toml` already declares `data/*.json` and `data/screen_anchors/*.png`; preserve that newer change. The pinned GitHub baseline's absent declarations are not a current missing implementation. Installation proof and any additional control-asset directories are still required. `selectors.py` currently synthesizes template filenames from selector IDs; change this canonical loader contract so registry regeneration cannot restore the retired missing-path convention.
-
-Version profiles by layout/build evidence and include source-frame decoded hashes and review provenance. Thresholds are calibrated on independent positives/negatives per profile; do not treat one global similarity score as a probability. Cache decoded templates/normalized frame representations once per applicable frame, preserving existing matching semantics.
-
-### Control eligibility and repeated rows
-
-Continue using normalized `relative_bounds` and explicit `action_point` in the selector registry for fixed locations. Presence requires a resolved layout and guard; disabled/free/cooldown states require separate visual or OCR predicates. Preserve `materialize_relative_bounds: false` where presence cannot be inferred safely.
-
-For Bag, Quest and other repeated lists, reuse `DetectedListEntry` and existing semantic identity/metadata contracts. First establish each complete row's bounds; resolve the actual button within that row; crop its requested text/count/state; bind the action to that row on the same frame. Do not select a generic Use/Claim label globally, reuse a stale row index after scrolling, or infer a button's Y coordinate from a different row variant. Partial/clipped rows, duplicate ambiguous names and missing controls abstain. Existing mutating authorization and journal ownership remain unchanged.
-
-Retain `resource_inventory.py` card segmentation/blue single-Use detection and `daily_quest_rows.py` row geometry. Their header prerequisites must accept explicit proved screen/tab context when body-only OCR is introduced. Unreadable content is not empty inventory; contradictory Go/Claim labels are unresolved. Revise navigation outcomes that depend on incidental mutation controls: the current Bag destination requires `PNC_BAG_USE_BUTTON`, which must become stable screen/tab evidence instead. Separate maturity from resolver support so `PLANNED` cannot silently mean both disabled and working geometry.
-
-### Targeted OCR and frame reuse
-
-Add an application-owned typed `OcrRegionPlan` (family/purpose, `Bounds`, required fact, failure policy) compiled from resolved screen + request. Keep crop definitions in existing canonical family/catalog owners and move ad hoc duplicates into that owner during each migration. `OcrService.read_result(image, region)` remains the engine boundary and returns screenshot coordinates.
-
-Replace the shared last-result cache with an `ObservationOcrContext` created for each captured frame and threaded through selector detection, enrichment, and debug/discovery consumers. Preserve the `OcrService` protocol and migrate all `CachedOcrService` callers rather than leaving competing caches. Cache by frame, region and preprocessing mode; the context owns one immutable captured image and bounded results, never a mutable cross-thread/global frame cache. Release it after its observation and requested artifacts are complete. Test interleaved A/B/A crops, independent contexts, changed pixels/new captures, and coordinate offsets. No cache reuse across sessions or captures based merely on matching dimensions. If full-frame OCR is already available, select complete contained lines/words where semantics allow; do not manufacture accurate character boxes by clipping an unrelated line. Dedicated crop OCR remains available when segmentation differs.
-
-Include debug sidecars and selector-discovery tooling in this migration: both currently can ask for full-frame OCR after another crop has evicted the one-entry cache. World-coordinate processing must retain its filtered-bar/raw-bar/top-HUD fallback ordering while caching each preprocessing variant separately. A diagnostic export must not silently incur another full-frame engine call.
-
-Crop migration order: fixed fields and coordinates; identity/name and timer panels; Quest rows; Bag rows; remaining active family parsers. Preserve normalization, numeric units, punctuation and ambiguity rules. A requested fact absent from a valid crop remains unknown or receives one named same-frame fallback; it never becomes zero or false automatically.
-
-Full-frame guard/fallback remains an intentional supported strategy for unseen layouts, contradictory evidence, unsupported popups and required-update handling. Crop-only promotion needs representative blocker negatives and equivalent safety outcomes; a failed benchmark keeps the guard in place. The goal is justified OCR cost, not zero OCR at any cost.
-
-## Implementation phases
-
-| Slice | Deliverable, files/components | Dependencies and acceptance |
-|---|---|---|
-| A — Coverage and measurement | Extend `tools/benchmark_screen_recognition.py`, fixture manifest/annotations, catalog validation and a generated coverage report. Record stage timings, OCR calls/area, full-frame reasons, expected screen/overlay/state, action-point containment and row identity. | Inventory every enabled workflow and all 76 missing paths; establish manual labels, independent source groups, and supported target/layout cells. No runtime behavior change. |
-| B0 — Freshness and read-only dispatch | Existing screenshot/observation models and service, `domain/action_requests.py`, both canonical executors, `screen_flows.py`, live-tool wiring. | Depends A. Frame/input provenance, one-use verified UI dispatch, no direct-point/list/recovery bypass; passive UNKNOWN, update confirmation blocked, no unintended roster persistence. Preserve specialized world-map proof. |
-| B — Decision and guard ownership | `screen_classifier.py`, `observation_builder.py`, `domain/observation.py`, `observation_request.py`, `pnc_ocr_capabilities.py`; move guard orchestration out of content-family ordering. | Depends B0. One final decision, mandatory guards independent of content scope, no geometry before guard resolution. Migrate constructors/tests and prevent coordinate-only observations authorizing ordinary actions. |
-| C — Catalog and fixed controls | `selector_catalog.py`, `selectors.py`, YAML, packaged assets, discovery/updater/validator tools, `pyproject.toml`; caller migrations. | Depends B. First canary Home/More/Settings/Manage Char; then remaining active fixed screens in separate sub-slices. Zero unresolved asset references for enabled template strategies; state predicates block disabled/absent controls. |
-| D — OCR planning/cache and fixed fields | `ocr_service.py`, application OCR-plan models, request/capability factories, existing enrichment parsers; retain RapidOCR adapter. | Depends B; coordinate with C regions. Exact coordinate semantics, same-frame reuse, typed missing values, named bounded fallback. Preserve coordinate-only proof cost/contract. |
-| E1 — Quest rows | Existing Quest parser helpers, `DetectedListEntry`, Quest follow-up request, row-state fixtures and live read-only probe route. | Depends C/D. Main/Daily distinction, scrolling/clipped rows, duplicated Claim/Go labels and disabled/completed states; correct row/action pairing. No claims. |
-| E2 — Bag rows | Existing Bag/resource inventory parsers and consumers, region/row recognition, same-frame button geometry, dedicated saved current Bag fixture. | Depends C/D. Use versus Use-plus-bulk variants, quantity formats, duplicate/partial rows, no cross-row association. No Use or bulk clicks. |
-| F — Remaining active family coverage and promotion | Apply C/D pattern to every remaining inventory entry; remove obsolete OCR branches/aliases only after migration, update authored workflow contracts and documentation. | Depends earlier slices. Every required active family has a working strategy and target evidence; unsupported cells remain blocked, not counted as complete. No new object detector. |
-
-For C/F, split work by screen family rather than assigning one worker the entire registry. Luna xhigh can implement bounded assets/schema/caller/test migrations after the controlling agent settles interfaces and reviews evidence; the controlling agent owns ambiguous recognition, thresholds, safety and integration decisions.
-
-## Slice-by-slice live validation matrix
-
-Only one canary target is named: `testing`, its observed active castle. Never infer results for other accounts. All future slices begin `blocked: implementation not yet present`; replace each cell with `passed`, `applicability_skip` with an observed predicate, or a precise blocker after implementation. Current planning observations do not count as future implementation passes.
-
-| Slice | Exact entry point after offline checks | Expected proof and mutation boundary | Current target disposition |
-|---|---|---|---|
-| A | Existing saved-image benchmark; no emulator action required | Measurement/manifest/call-site inventory only | `applicability_skip`: no runtime behavior change |
-| B0 | After adding a bounded `--route navigation` to the existing visual-navigation tool, `py tools/validate_visual_navigation.py --account testing --route navigation` | Passive observation/identity proof then Home/More/Home; enforce fresh dispatch and policy on every path, at most eight transitions total | `blocked`: freshness/policy and route not implemented |
-| B | `py tools/validate_visual_navigation.py --account testing` | Home/More/Settings/Manage Char/Quest/Home, no click on unknown/blocked background; retained trace | `blocked`: new decision pipeline not implemented |
-| C first family | `py tools/validate_navigation_selectors.py --account testing --selector PNC_BOTTOM_NAV_MORE --selector PNC_MORE_SETTINGS --output-dir artifacts/screen_recognition/navigation` | Each reviewed navigation outcome matches; then canonical safe-root unwind | `blocked`: new eligibility/catalog migration not implemented |
-| D fixed fields | Extend `tools/validate_visual_navigation.py` with `--route fields` in slice D; invoke `py tools/validate_visual_navigation.py --account testing --route fields` | Read only already-observed identity/field screens; compare annotated facts and OCR regions, return Home | `blocked`: route and OCR planner not implemented |
-| D coordinates | `$env:PNC_RUN_LIVE_WORLD_MAP_MOVEMENT_CALIBRATION="1"; py -m unittest tests.test_live_world_map_movement_calibration_smoke` after reviewing its exact navigation contract | Existing coordinate-proof behavior preserved; no march/attack/gather | `blocked`: changed OCR path not implemented; inspect route before opt-in |
-| E1 | Extend same canonical live tool with `--route quest`; invoke `py tools/validate_visual_navigation.py --account testing --route quest` | Main/Daily and one bounded read-only scroll if needed; row-state/association observed; no Claim/Go mutation | `blocked`: row OCR migration not implemented |
-| E2 | Extend same canonical live tool with `--route bag`; invoke `py tools/validate_visual_navigation.py --account testing --route bag` | Bag labels/counts/button variants on a fresh frame, optional bounded scroll, Home; no Use/bulk | `blocked`: row OCR migration not implemented |
-| F each family | Add a named read-only route to that same tool or use an existing family smoke whose terminal actions are inspected first | Observe the feature and safe exit; stop before any mutation; record family-specific applicability | `blocked`: coverage inventory and family implementations pending |
-
-Every live sub-slice: run smallest offline tests, then full suite when shared owners change. Foreground PNC, verify target identity through canonical observation, allow at most eight navigation transitions/ten minutes for planning-style probes, and preserve unique before/after traces plus screenshots/OCR diagnostics. Existing executor settles transient frames; never add blind click retries. Stop on unrecognized popup, unresolved unknown, second identical transition failure, identity mismatch, or mutation boundary. Return Home through the safe-root flow when possible. Split longer routes into independent bounded runs; do not silently enlarge the budget.
-
-Required future live-tool changes must add allowlist tests, safe route selection and a strict no-resource-action boundary. They may not weaken the existing default proof's safeguards. A pre-existing broad daily/chat smoke is not automatically a read-only substitute.
-
-Count attempted inputs and retries against the transition budget. Cap passive settling at three observations; unresolved state ends the route without a blind unwind. Permit evidence/debug artifacts, but suppress roster-store synchronization in read-only probes through the canonical observation-service configuration. `ObservationService._sync_castle_roster()` exists in the current runtime; prior planning evidence proves no game mutation, not absence of every persistence side effect. Do not change authored configuration or install an alternate observation service.
-
-Before any further canary, add an explicit read-only recovery policy to the canonical `ObservedActionExecutionPolicy` and enforce it inside `recover_update_if_required`. The current executor can automatically dispatch update Confirm after a navigation action, bypassing a tool's top-level action allowlist. Slice B must block and retain evidence instead, including pre-action, post-action, settling and recovery paths; preserve separately authorized ordinary-runtime behavior. Test an update appearing only after the allowed tap and assert no confirmation or recovery mutation is dispatched. The completed planning probe encountered no update and its retained trace contains only the seven navigation actions; this does not prove the latent recovery boundary safe.
-
-## Data, config and migration notes
-
-- Do not modify real account/castle/daily-maintenance config or local fixture configuration. Authored recognition YAML and packaged assets are in scope after implementation is requested.
-- Inventory runtime selectors, authored YAML references, navigation outcomes, and test fixtures before removing an ID. Keep no legacy aliases merely to avoid migrating callers.
-- Freeze evaluation groups before tuning. Require at least two independent capture sessions and a held-out source group for every promoted profile/layout; include different supported resolutions, modal occlusion, loading, wrong tabs, disabled controls and unrelated screens. Synthetic transforms supplement real evidence and are never counted as independent sessions.
-- Keep one manifest with decoded-image SHA semantics explicitly documented. Store manual intended control/row boxes separately from implementation-produced boxes to avoid circular tests.
-- Different game versions/locales/aspects remain separate evidence cells. A new variant cannot silently inherit a prior variant's action authorization.
-
-## Validation and promotion rules
-
-Representative offline commands: `py -m unittest tests.test_visual_screen_recognizer tests.test_screen_classifier tests.test_capture_and_vision`, `py -m unittest tests.test_selectors tests.test_navigation_selector_validator tests.test_selector_registry_updater`, `py -m unittest tests.test_ocr_service tests.test_daily_live_session`, and existing family tests discovered by A. Add tests for new typed contracts alongside their owner. Run `py -m unittest discover -s tests` for each shared-interface migration and final integration; `git diff --check` for the final artifact.
-
-Acceptance gates for each promoted family:
-
-1. Zero wrong actionable screen/layout/control classifications, zero click-through of annotated blockers, and zero cross-row actions on the reviewed suite. Correct abstention is allowed and counted separately. This is a test gate, not an asserted real-world error probability.
-2. Every emitted action point lies inside its independently annotated intended control at supported resolutions. Disabled/missing/ambiguous controls emit no actionable target. Exact-state mutations remain subject to existing authorization.
-3. Requested OCR facts equal reviewed expected values or explicitly abstain; compare known-field recovery to baseline so rejecting everything cannot pass. Report per-field errors/missing values, not just screen accuracy.
-4. Every active template path resolves in an installed-package smoke; no silent missing-file fallback. Every active workflow's required controls have a completed strategy.
-5. Measure at least five warm replays per frame on the same host without concurrent heavy work. Report p50/p95 total observation and stage latency, OCR area/calls/cache hits, and fallback reasons. For crop-migrated families target at least 20% lower median OCR time with p95 observation time no more than 10% above baseline, holding the correctness gates. If unmet, retain the safe path and investigate instead of promoting on a speed claim.
-6. The specific canary route passes with no wrong actions. Any unavailable feature produces a typed applicability skip proven on that target; an unobserved feature is blocked. Other targets require their own later authorization/evidence before rollout.
-
-Rollback removes the newly promoted profile/strategy or reverts its coherent code/catalog/assets slice to the last verified revision. Keep one canonical fallback inside the same builder, with explicit reasons; do not maintain two production pipelines or weaken guards to make a test pass. Preserve failure artifacts and add a deterministic regression before retrying.
-
-## Risks, decisions and execution checklist
-
-Primary risks: unknown popups defeat a header-only fast path; dynamic row layouts invalidate fixed offsets; full-frame guard cost may dominate after cropping; stale caches corrupt facts; catalog cleanup can break hidden callers; blanket UNKNOWN can hide lost functionality. The staged guard, row binding, measured cache, caller inventory, and baseline-recovery gates above address these individually.
-
-Open validation questions: which remaining active families lack current fixtures; which guard regions are genuinely sufficient across popup variants; and which family-specific feature states are available on testing. Do not invent those answers. Resolve each during the bounded family evidence gate before defining its coordinates or promoting its behavior.
-
-- [x] Complete Pro consultation and audit recommendations against local evidence.
-- [x] B0: enforce fresh dispatch and read-only recovery; synthetic capture identity removed from navigation. Current live canary remains blocked by emulator readiness.
-- [ ] A: inventory refreshed on 2026-09-12; independent labels and current baseline metrics remain incomplete.
-- [x] B integration: shared classifier, strict decision/provenance contracts, explicit background evidence, and migrated replacement-navigation fixtures. See the remaining visual-only guard qualification below.
-- [ ] C/D: fixed-navigation/field/caching code and replacement shared OCR are implemented; current live and broader evidence gates remain pending.
-- [x] E1/E2 implementation: Quest/Bag associations and control-state tests; replacement content now binds row provenance. Current live revalidation remains pending.
-- [ ] F: finish every remaining required family and remove obsolete paths.
-- [ ] Pass installed-asset checks, full regression and per-target promotion matrix; document any precise blockers.
-
-Primary technical references: [OpenCV template matching and masks](https://docs.opencv.org/4.13.0/de/da9/tutorial_template_matching.html), [RapidOCR upstream](https://github.com/RapidAI/RapidOCR). The installed adapter and tests, rather than assumptions about upstream API changes, govern this migration; no dependency upgrade is required by the plan.
-
-## Pro consultation and Codex audit
-
-Completed in [Plan Vision Integration](https://chatgpt.com/c/6aa314f2-7014-83ea-a646-b9fba0e4db14), in Chat mode with visible `6 Pro`, the existing `pnc bot` Project and GitHub connector. Pro explicitly confirmed `b6c1a0176bd80423ba33015440ebac6b620fe001`, inspected root instructions and the recursive tree, and distinguished the narrow inline local overlay from inspected GitHub files. No binary fixtures, screenshots, account config or unrelated content were sent. Pro did not run local tests or independently inspect uncommitted code/assets; Codex supplied and verified those facts locally.
-
-Pro's recommendation: keep one staged observation pipeline and one enforced dispatch boundary; resolve guards and conflicting evidence before geometry; inventory every active selector; preserve specialized row/spatial owners; introduce frame-scoped OCR reuse; promote individual capabilities only after offline and bounded live proof. Broad popup/loading OCR remains necessary on current evidence. Codex agrees and incorporated those requirements.
-
-Codex independently confirmed the consequential findings: loading remains coarse-screen-gated; Bag's capability gate excludes its own exact screen; classifier compatibility uses `any` supporting evidence; low-level taps trust the supplied observation; update recovery and UNKNOWN Back can bypass a superficial allowlist; template paths are synthesized; Bag's navigation outcome requires Use; roster synchronization is an observation side effect. B0/B/C now name those migrations and their regression gates. Existing Bag card/button parsing is retained rather than duplicated.
-
-Corrections and limits: local `pyproject.toml` already includes JSON/PNG data and a direct OpenCV dependency, so baseline omissions do not describe the current worktree. Installed-wheel proof remains pending. Matching aspect ratio alone does not prove viewport insets or control geometry. The matcher's 256-candidate cap is bounded search, not a guaranteed combined-score optimum; fallback/abstention and confusing-negative tests must cover it. Crop caching must distinguish backend/configuration revision and preprocessing, preserve successful empty results, and never cache exceptions as success. OCR offsets apply exactly once; synthesized word boxes are not precision click boundaries. No global OCR-free fast path or mutation success claim is accepted.
-
-Most relevant files Pro reports inspecting at that exact commit: `AGENTS.md`, planning skill/references, `pyproject.toml`, screenshot service, OCR/template services, app entrypoint, observation/action models, builder/enricher/request/capabilities/classifier, selectors/catalog/interactions/YAML, resource inventory, daily rows, world-map coordinates/proof, screen flows, both action executors, daily live session and mutation dispatcher; tests for OCR, daily session, resource inventory, classification, selectors, capture/vision, world-map movement, automation framework and flows/tasks. Large files were inspected in relevant sections, not audited end to end. The linked consultation retains the full file list and reasoning.
-
-Readiness verdict: the phased plan is concrete enough to implement. Unknown family/layout coverage is an explicit implementation evidence gate, not assumed support. Mutation postconditions remain outside this planning authorization. No product decision requires clarification before beginning the non-mutating implementation slices.
-
-Planning validation: targeted prerequisite command passed 13 tests; bounded Bag investigation passed seven navigation actions and returned Home; `git diff --check` passed. Full suite was not rerun for this planning-only artifact; the separately recorded 994-test result is the pre-plan baseline, not a validation claim about future changes.
-
-## Continuation result — 2026-09-12
-
-Implemented the integration slice in the feature worktree, without changing the main checkout:
-
-- Replacement perception receives `ObservationBuilder.create_ocr_context` from runtime composition. Mandatory guards and optional content use that one native-frame context; the backend need not be stored on the enricher. Missing capture provenance stays missing.
-- Both observation paths publish controls/rows through `observation_provenance.py`. Conflicting existing frame, source screen or layout proof is rejected.
-- `ScreenClassifier` decides navigation identity, layout conflict, loading and viewport eligibility. Explicit background evidence allows an update above the coordinate dialog without treating the underlying dialog as a competing foreground guard. Conflicting foreground guards still abstain.
-- Exact modal/loading recognizers are shared by both guard entry points. Generic close geometry retains the outer close-band constraint unless a separately proved modal permits a shifted control. Owned dismiss bounds are excluded before candidate selection, so they cannot hide another popup close. Removed the blanket Home suppression and shadowed duplicate helpers.
-- Restored strict requested-field registration and explicit-screen/decision consistency. Restored required selector-registry injection and removed duplicated recovery declaration/error policy added during rebase repair. Existing fixtures were migrated rather than weakening production contracts.
-
-The fresh audit is under `artifacts/non_yolo_recognition/resume_20260912/`: 329 selectors, 273 enabled, 56 explicitly unsupported, 59 orphan enum IDs, and zero missing required template assets. Enabled means configured, not proved actionability. The F matrix still has 90 families, only seven reviewed region plans, and 83 guarded full-frame fallbacks.
-
-Live revalidation is **blocked**: the bounded replacement probe failed with `GameLaunchError` while foregrounding PNC on configured `testing`; a separately leased diagnostic then failed `DeviceConnectionError` during the canonical Android readiness check, before screenshot capture. No navigation tap, castle switch, or resource mutation was sent. `core_summary.json` records the first attempt. Startup origin and final Home are unverified. Resume with the commands in `PNC_NON_YOLO_RECOGNITION_IMPLEMENTATION.md` after the configured instance becomes responsive.
-
-Remaining work: complete current live Bag/Quest/navigation/field/coordinate proofs; independent annotations, package/latency requalification and per-target coverage; then Research/Gathering/Campaign producer and transition evidence. Visual-only generic surface recovery remains a more permissive reviewed navigation policy than the general builder's unresolved-guard policy; this continuation preserves that existing distinction and does not claim uniform visual-only guard promotion. Do not expand either policy without independent positives/negatives. No mutation-backed workflow or broad family rollout is promoted by this continuation.
-
-Final offline verification: 1,392 tests ran with 22 skips and no failures; the last containment refinement also passed the affected 62-test suite. The bounded review corrections preserve guard dismissals on same-screen visual popup profiles and inject the runtime's configured classifier. Full command history and limits are recorded in the implementation report.
+# Remaining screen recognition corrections before integration
+
+Reviewed September 13, 2026 against commit 850bdb747be79bb78363b8dca49a0097c6ed6546.
+This is the active remaining-work plan. Completed work and historical validation
+belong in the [implementation report](PNC_NON_YOLO_RECOGNITION_IMPLEMENTATION.md);
+the [capture findings](PNC_NON_YOLO_CAPTURE_FINDINGS_20260913.md) supply dated evidence.
+Neither an old test result nor a captured frame proves the work below is complete.
+
+## Outcome and scope
+
+Finish the original screen-first approach for currently working coverage and known,
+captured recognition gaps:
+
+| Job | Required production behavior |
+|---|---|
+| Identify screens and blocking popups | Independent OpenCV anchors and reviewed layout/overlay evidence, independent of the caller's requested content. |
+| Locate fixed controls | Measured normalized geometry or template bounds, guarded by current screen, layout, selected tab, state and overlay ownership. |
+| Read names, quantities, timers, coordinates and UI rows | OCR only within reviewed semantic regions, followed by the existing canonical parsers. |
+
+Full-screen OCR is prohibited in the completed PNC observation path, including
+guards, unknown-screen fallback, selector discovery used for qualification, and
+diagnostic export. This also excludes explicit whole-viewport bounds and arbitrary
+tiling that reconstructs a full-screen OCR pass. OpenCV may inspect the whole image;
+storing a screenshot is allowed. An OCR backend may process an entire approved crop
+passed to it. The generic OCR engine API does not need an unrelated redesign.
+
+If one requested value cannot be read, publish it as unknown/missing, preserve other
+independently verified facts, and keep actions requiring that value unavailable.
+An unresolved screen, layout or blocking overlay makes background actions ineligible.
+Write a local recognition-gap report for later bug fixing; do not widen the OCR scan
+or automatically attempt game actions to recover the missing fact.
+
+**No YOLO transition ownership is assigned here.** Do not design or implement a YOLO
+adapter, region-provider protocol, model, classes, dataset, training, evaluation,
+rollout, world-object detection or associated object-label OCR. Do not modify existing
+YOLO/shadow code as part of this work. Another agent owns that future plan and its
+integration. Fixed world HUD coordinates and already selected-object UI panels remain
+ordinary existing screen contracts; this plan adds no map-object discovery.
+
+Retain the landed visual assets, screen decisions, frame-local OCR/cache foundation,
+row provenance, Quest/Bag parsing, Research Development geometry and both-path normal
+Start publication, timer-independent active-detail verification, Campaign/Gathering
+producers, and corrected Player Mail Compose geometry. Rework these only where needed
+to remove a demonstrated defect or full-screen OCR dependency. Do not repeat completed
+Research, construction, upgrade, Campaign, gathering or shield actions for proof.
+
+## Review findings resolved in this revision
+
+1. **The old fallback policy contradicted the requested outcome.**
+   [Region plans](../pnc_automation/app/pnc/vision/ocr_region_plan.py) still allow full-frame
+   fallback, and [capabilities](../pnc_automation/app/pnc/vision/pnc_ocr_capabilities.py)
+   register most families for guarded full-frame reuse. Even the seven region-plan
+   families do not prove zero full-screen work: both guard entry points and enrichment
+   in [the enricher](../pnc_automation/app/pnc/vision/pnc_observation_enricher.py) still
+   request it. Correction: migrate every proved working dependency, then enforce the
+   bounded contract across both production paths; no fallback exemption for guards.
+2. **Parsed content is not fully published by replacement perception.**
+   [NavigationPerception.build](../pnc_automation/app/pnc/vision/navigation_perception.py)
+   retains list/scalar content but discards parsed visible elements. Building level
+   is one known lost label. Correction: share explicit non-actionable label publication
+   with the real builder; never merge all OCR-produced elements as clickable controls.
+3. **Existing diagnostics cannot satisfy the unknown-report requirement.**
+   [ObservationDebugArtifactCollector](../pnc_automation/app/pnc/vision/observation_builder.py)
+   starts a full-screen OCR read and writes nothing without unmatched lines.
+   NavigationPerception does not call it. Correction: reuse the collector for recorded
+   evidence and missing-fact reports from both paths, including zero-OCR unknown frames.
+4. **Catalog counts and capture inventories overstated the remaining contract.**
+   An enabled selector or static reference is not proved runtime coverage; a screenshot
+   omission is not automatically a defect. Correction: freeze an evidence-backed list
+   of working contracts and reproduced gaps. Do not invent controls to fill a matrix,
+   or drop working contracts merely to reach zero full-frame calls.
+5. **The draft needed a firmer integration boundary and migration order.**
+   YOLO transition work is entirely excluded. Guard/content migration must precede
+   final enforcement and promotion, so a global restriction does not silently turn
+   currently working observations into unknowns. Workflow and execution ownership
+   stays with A.
+
+## Work packages and acceptance
+
+### 1. Freeze the regression baseline and remaining cases
+
+Reuse the existing coverage inventory, production callers, portable fixtures, manual
+annotations and September 13 captures. Save one compact checklist alongside this plan
+when implementation starts. For each required case record the screen/layout, consumer
+and required facts, visual control proof, OCR regions, source frames, expected output
+through each applicable observation path, negative cases and completion evidence.
+Classify cases as proved working, reproduced gap, or pre-existing unsupported behavior.
+An enum, planned catalog entry or static reference alone cannot promote a case.
+
+The following captured cases must receive a contract disposition and any necessary
+producer correction. Already correct behavior needs regression coverage, not rebuilding:
+
+| Area | Bounded remaining correction or qualification |
+|---|---|
+| Shared navigation and blockers | Preserve currently working Home/More/Settings and other evidenced screen identities, including return-home candidate-scope negatives. Migrate known modal/loading/update/reconnect guards without allowing background actions through an unresolved overlay. |
+| Research | Qualify the captured Economy/Military/Fortification variants against existing Research contracts. Keep normal blue Research distinct from premium Research Now, and visible control distinct from queue eligibility. Preserve Development and strict active-detail negative regressions. |
+| Building | Publish the existing level label through both paths with non-actionable provenance. Qualify captured construction level 0/1, upgrade level 7/8, unmet requirements and active queue. A satisfied Requirement heading must not become the existing unmet-requirement blocking selector. An empty queue alone cannot prove the new level. |
+| Alliance | Bind tabbed/compact layouts to current visual evidence, not map location. Correct evidenced leader/member Manage geometry and Hall Reinforce row ownership where current contracts need them; retain disabled Transport state at zero selected resources. |
+| Mail and other working text fields | Preserve the corrected Player Compose entry. Read evidenced recipient/subject/body, empty/focused field state and supported mailbox rows from owned regions. Do not introduce send/delivery behavior. |
+| Campaign | Preserve existing stage/chapter controls and qualify captured Hero Formation, battle/result UI only to the extent of existing producer contracts. Do not copy stage/AP/mode into a formation frame that lacks those facts. Read displayed AP cost where present; do not hard-code a global cost. |
+| Gathering/March UI | Preserve selected-target, formation, active march/collection and captured report facts with their actual source/row association. Troop or load capacity is not available march slots. Recognition of a report does not by itself correlate a workflow's dispatch. |
+| Remaining proved working OCR families | Migrate their required labels, numeric fields and dynamic rows, including existing Quest/Bag, Chat, profile and fixed coordinate contracts. Request only the semantic regions those consumers need. |
+
+Use the [seasonal layout](../docs/game-reference/workflows/seasonal-alliance-layout.md),
+[gathering](../docs/game-reference/workflows/neutral-gathering.md),
+[building](../docs/game-reference/workflows/building-upgrade.md) and
+[Campaign](../docs/game-reference/workflows/campaign-navigation.md) notes with the newer
+capture findings. APK 5.0.203/233 is versioned client evidence, not proof of live
+5.2.76 / 5.0.204.235 server behavior. Keep raw private account/mail captures ignored;
+use sanitized minimal fixtures when tracking new evidence.
+
+Acceptance: every required case has an observable expectation and a relevant negative.
+Unobserved march-slot UI, an actual mail-send receipt, and the different native account
+versus legacy Login/Continue route remain named external dependencies. They cannot be
+fabricated, counted as fixed, or made reasons to implement another workflow. Future
+coverage is separate; a blocked required case remains visibly blocked.
+
+### 2. Migrate shared guards and region reads through existing owners
+
+First add offline regressions demonstrating the unbounded reads and recording expected
+facts from saved evidence. Migrate guards and their dependent content in coherent slices;
+do not promote a partially migrated pipeline as coverage-preserving.
+
+- Keep one decision sequence in both builders: validate capture provenance; recognize
+  independent visual identity/layout and foreground ownership; resolve the global guard;
+  read approved content regions for the permitted screen; publish guarded facts.
+  Known popup guard regions may be selected by their independent visual proof even
+  when background identity is unresolved. Caller candidate scopes never suppress guards.
+- Reuse the shared modal recognizers and canonical classifier; remove the duplicated
+  full-frame acquisition/policy between recognize_guards and detect_interruption.
+  Retain legitimate foreground dismiss controls and the established Research detail
+  ownership rules. A missing known-popup match alone is not a clear-frame proof.
+  Require reviewed positive layout/control evidence and applicable occlusion checks;
+  unresolved observed occlusion stays unknown. Do not claim detection of every novel popup.
+- Extend OcrRegionPlan and its compiler for the checklist's guard, header, field and
+  row regions. Reuse existing parsers and typed facts. Missing text does not authorize
+  wider scans, OCR-driven screen invention or approximate click boxes.
+- Remove PNC full-frame fallback plans, guarded-full-frame strategies and observation
+  reuse paths once their supported callers are migrated. Enforce bounded reads at the
+  frame-scoped observation boundary, including unbounded preprocessed or debug calls.
+  Unsupported viewport/layout produces unknown plus diagnostics without OCR fallback.
+- Preserve native-frame offsets exactly once, immutable capture validation, successful
+  empty-result caching, and cache separation by crop, preprocessing and backend revision.
+  Retain the coordinate-only read contract: a bounded coordinate result does not grant
+  screen/action eligibility. Navigation include_content=False remains content-free.
+
+Acceptance: both production paths pass the migrated positive/negative cases without a
+whole-viewport OCR request. Expected region assertions prove semantic cropping on the
+fixtures; a backend spy proves the actual crop received. Review region ownership as well
+as total area so many arbitrary tiles cannot satisfy the rule accidentally. Do not rerun
+the legacy full-screen backend to obtain a benchmark baseline; use recorded evidence.
+
+### 3. Correct publication and unknown reporting
+
+- Share the existing publication/provenance owner across ObservationBuilder and
+  NavigationPerception. Independently proved controls remain authoritative. Publish
+  parsed labels only through explicit label semantics in the canonical selector metadata
+  and a shared non-actionable publication rule; current building label metadata needs
+  that classification. Do not infer label safety from a selector's name or missing
+  click configuration. Do not publish action/navigation elements from this content merge.
+- Preserve current frame, source screen/layout, crop/row association and existing
+  evidence. Reject foreign or contradictory proof instead of rebinding it. A content
+  parser cannot replace visual identity, override blocking guards, or authorize mutation.
+- Use the existing artifact collector and frame context diagnostics to serialize
+  missing screen/guard/required-field facts and already performed region reads. Include
+  screenshot/frame reference, matched profiles, guard decision, expected fact, attempted
+  regions, read result/status and reason for withholding a value/control. The exporter
+  must make zero additional OCR calls and must write unknown reports even with no lines.
+- Reach this same report path from both observation implementations, keeping existing
+  constructor/call semantics and artifact ownership. Persist beside the existing capture
+  when available; normal runtime already persists captures. For ephemeral captures,
+  retain in-memory diagnostics and explicitly distinguish them from a persisted report.
+  Do not add a capture service, automated repair loop, external issue sender or separate
+  deduplication subsystem. Avoid duplicate exports for the same observation.
+
+Acceptance: a real production registry, recognizer and selector engine recover the
+building label and existing Research control at the consumer boundary. Controlled OCR
+must honor crop bounds; do not inject the label/control into the observation under test.
+Use an offline fake actuator where a consumer assertion requires one. Cover foreign
+frames, premium controls, blocked overlays, wrong layouts/rows, missing required fields,
+and zero-OCR unknown diagnostics. Verify known unrelated facts survive a field miss.
+
+### 4. Qualify the complete correction and prepare integration
+
+- Run the narrowest relevant repository test group after each coherent slice, then
+  affected selection. Start with the existing OCR-region/context, Research, screen
+  decision/overlay and production observation tests; use the vision group when shared
+  publication or guards change. Follow [tests/README.md](../tests/README.md).
+- Replay the frozen checklist through the production implementations using saved
+  screenshots. Include real OCR replay for changed crop boundaries in addition to
+  controlled OCR regressions. Assert expected fields and safe action availability;
+  unknown cannot substitute for a previously correct required output.
+- Keep independent annotations and holdout groups for changed visual profiles. Neighboring
+  historical frames and resized duplicates are not independent accuracy evidence.
+  Verify packaged assets using the installed-package check when assets change.
+- Exercise diagnostics and the affected qualification/discovery tools under the same
+  zero-full-screen contract. Record OCR calls, processed area and cache use. If timing
+  qualification is needed, use the existing screen benchmark with at least five warm
+  replays on unchanged source, reporting p50/p95 and host conditions; correctness gates
+  take priority over latency and no new benchmark framework is needed.
+- Run final cross-cutting offline acceptance on the integrated source. Honor mandatory
+  affected fallback; do not rerun an equivalent full result unless edits, failures or
+  another material concern make that necessary. Finish with git diff --check.
+
+Typical commands from the applicable checkout, using the configured Python 3.13+:
+
+```powershell
+py tools/run_tests.py group vision
+py tools/run_tests.py affected --base origin/main --explain
+# Required for final shared-contract integration if not already covered by full fallback:
+py tools/run_tests.py full
+git diff --check
+```
+
+Saved captures suffice to start. Live validation is needed only for a changed boundary
+that offline evidence cannot establish: one bounded relevant smoke through the existing
+lease/live workflow, preserving the user's target and spending constraints. Do not replay
+a battle, research start, dispatch or send solely to validate a visual producer. If new
+state-changing evidence is necessary, record its exact missing fact and action scope.
+
+## Ownership, execution and completion
+
+B owns the existing vision/publication/guard/region and perception-model owners,
+relevant selector assets, vision tests and offline qualification tools under the
+[coordinated boundary](PNC_AB_COORDINATED_CONTINUATION.md#exclusive-whole-file-ownership). A retains routes, workflows,
+runtime composition, authorization, executors, journal mechanisms, live-driving tools
+and consumer tests. Reuse published interfaces; do not port Research or other workflows
+to conceal a producer gap. Preserve the previously authorized narrow consumer-fixture
+correction; it is not blanket permission to edit A's tests. If an integration boundary
+actually requires A's change, specify the smallest dependency and its acceptance check.
+Only the component boundary is carried forward from that historical coordination plan;
+its old pause state, revision numbers and full-frame fallback policy do not govern this
+revision. The YOLO exclusions above narrow B's directory-level ownership for this task.
+
+The lead agent owns diagnosis, uncertain geometry, architecture, orchestration and
+review. During implementation, delegate bounded fixture/region migrations and repetitive
+tests to a Luna xhigh agent with exact file ownership and acceptance criteria. Review
+each slice before integrating it. Do not delegate uncertain scope or safety decisions.
+
+Completion requires all required checklist cases fixed or preserved, zero full-screen
+OCR in the scoped production and diagnostic paths, both-path publication/reporting proof,
+and passing applicable offline/asset checks. A missing required case is a dependency,
+not completion. Report exact source revision, changed files, commands/results, producer
+contract and any remaining combined-main acceptance. A owns that integration and workflow
+acceptance; preserve both sides of overlapping contract tests. No YOLO completion claim
+or future transition deliverable is part of this release.
+
+Review verdict: **implementation_ready: yes** for these corrections and the concrete
+baseline freeze. **promotion_ready: no** until the required cases and integration gates
+above pass. The review used current source and saved evidence; no live action or new
+production implementation was performed while revising this plan.

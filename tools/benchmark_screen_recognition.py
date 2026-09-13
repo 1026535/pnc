@@ -37,6 +37,7 @@ from pnc_automation.app.pnc.vision.selectors import (
     build_default_selector_registry,
 )
 from pnc_automation.core.infra.capture.screenshot_service import CapturedScreenshot
+from pnc_automation.core.vision.image.models import Bounds
 from pnc_automation.core.vision.ocr.ocr_service import ObservationOcrContext
 from pnc_automation.app.pnc.vision.visual_screen_recognizer import VisualRecognition
 
@@ -617,12 +618,14 @@ class _TimedEnricher:
         request: Any,
         *,
         ocr_context: ObservationOcrContext,
+        owned_dismiss_bounds: tuple[Bounds, ...] = (),
     ) -> Any:
         value, elapsed = _timed(
             lambda: self._inner.recognize_guards(
                 image,
                 request,
                 ocr_context=ocr_context,
+                **({"owned_dismiss_bounds": owned_dismiss_bounds} if owned_dismiss_bounds else {}),
             )
         )
         self._probe.guard_seconds += elapsed / 1000.0

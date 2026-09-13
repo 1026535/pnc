@@ -231,7 +231,7 @@ class ObservationRequest:
     def campaign_map_follow_up(cls) -> "ObservationRequest":
         """Returns the narrow OCR scope used after opening the Campaign entry from Home City."""
 
-        target_screens = campaign_flow_screen_types()
+        target_screens = campaign_flow_screen_types() | frozenset({ScreenType.PNC_CAMPAIGN_CHAPTER})
         return cls(
             candidate_screen_types=target_screens,
             ocr_screen_types=target_screens,

@@ -33,7 +33,7 @@ class VisualScreenMetadataTests(unittest.TestCase):
             for sample in manifest["samples"]
             if sample["split"] == "reference"
         }
-        self.assertEqual(37, len(catalog["profiles"]))
+        self.assertEqual(40, len(catalog["profiles"]))
         for profile in catalog["profiles"]:
             with self.subTest(profile=profile["id"]):
                 source = profile["source"]
@@ -56,13 +56,27 @@ class VisualScreenMetadataTests(unittest.TestCase):
                 else:
                     self.assertEqual("tests/data/game_first_navigation/provenance.json", profile["review"]["reference_manifest"])
                 self.assertEqual("guarded_reference_only", profile["review"]["qualification"])
-                self.assertIsNone(profile["review"]["build"])
-                self.assertIsNone(profile["review"]["locale"])
-                expected_revision = 2 if profile["id"] == "institute" else 1
+                if profile["id"] == "player_mail_mailbox_list":
+                    self.assertEqual("5.2.76 / AppVersion 5.0.204.235", profile["review"]["build"])
+                    self.assertEqual("English", profile["review"]["locale"])
+                else:
+                    self.assertIsNone(profile["review"]["build"])
+                    self.assertIsNone(profile["review"]["locale"])
+                expected_revision = (
+                    2
+                    if profile["id"] in {
+                        "institute",
+                        "hero_hall",
+                        "bag",
+                        "campaign_chapter_10",
+                        "campaign_stage_10_3",
+                    }
+                    else 1
+                )
                 self.assertEqual(expected_revision, profile["revision"])
 
         recognizer = load_visual_screen_recognizer()
-        self.assertEqual(37, len(recognizer.profiles))
+        self.assertEqual(40, len(recognizer.profiles))
         self.assertTrue(all(profile.review.qualification == "guarded_reference_only" for profile in recognizer.profiles))
 
         class _MatchAll:
@@ -75,10 +89,22 @@ class VisualScreenMetadataTests(unittest.TestCase):
                 return object()
 
         recognition = load_visual_screen_recognizer(matcher=_MatchAll()).recognize(Image.new("RGB", (540, 960)))
-        self.assertEqual(30, len({item.screen_type for item in recognition.evidence}))
+        self.assertEqual(32, len({item.screen_type for item in recognition.evidence}))
         self.assertTrue(
             all(
-                item.layout_revision == (2 if item.screen_type == ScreenType.PNC_INSTITUTE else 1)
+                item.layout_revision
+                == (
+                    2
+                    if item.screen_type
+                    in {
+                        ScreenType.PNC_INSTITUTE,
+                        ScreenType.PNC_CAMPAIGN_CHAPTER,
+                        ScreenType.PNC_CAMPAIGN_STAGE,
+                        ScreenType.PNC_HERO_HALL,
+                        ScreenType.PNC_BAG,
+                    }
+                    else 1
+                )
                 for item in recognition.evidence
             )
         )

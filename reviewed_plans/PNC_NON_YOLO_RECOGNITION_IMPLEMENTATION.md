@@ -1,5 +1,298 @@
 # Non-YOLO recognition implementation
 
+## First remaining-plan slice — September 13, 2026
+
+The reviewed remaining-work plan was committed as `f3b88f774722a950ae3069a5a516adce9f78d051`
+and pushed to `origin/codex/non-yolo-recognition-continuation`. Its parent and the
+validation base are main commit `850bdb747be79bb78363b8dca49a0097c6ed6546`.
+The implementation described here was prepared on that plan commit and subsequently
+reviewed with the corrections below. It starts the plan; it does not complete or
+promote the full correction.
+The [remaining checklist](PNC_NON_YOLO_RECOGNITION_REMAINING_CHECKLIST.md) records
+working contracts, reproduced gaps and captured variants awaiting qualification.
+
+### Producer contract and changed owners
+
+- `observation_provenance.py` owns registry-declared, OCR-only label selection.
+  `selector_registry.yaml` explicitly classifies the building level as a label.
+  `observation_builder.py`, `navigation_perception.py` and
+  `pnc_observation_enricher.py` reuse this rule. On the independently identified
+  Institute capture, both real production paths publish the existing `8/45` label
+  with native bounds, current frame and source screen/layout. It has no action point
+  or identity authority. Existing visual proof wins a collision; foreign frame/layout
+  and mismatched selector keys are rejected. Blocked/unknown observations and
+  navigation with `include_content=False` do not gain content labels. Generic Farm
+  still lacks independent visual identity and retains its existing navigation abstention.
+- `core/vision/ocr/ocr_service.py` retains immutable results alongside read diagnostics,
+  including cache/reuse outcomes. Existing cache semantics and native-coordinate
+  projection remain unchanged. The shared artifact collector moved from the builder
+  to `vision/observation_diagnostics.py`; the old builder import remains available.
+  It exports acquired lines without requesting OCR. Both production paths reach the
+  same gap reporter for unknown decisions, unresolved guards and recorded terminal
+  missing/error reads, including zero-read unknown frames. Reports retain capture,
+  profile, decision, attempted-region and result evidence. Ephemeral captures retain
+  in-memory diagnostics without claiming a saved report. Successful retries are not
+  reported as remaining missing reads.
+- New regressions are `tests/integration/vision/test_content_label_publication.py`,
+  `tests/integration/vision/test_observation_diagnostics.py` and
+  `tests/unit/core/vision/test_ocr_diagnostic_snapshot.py`. They exercise production
+  registry/recognizer/selector-engine paths and controlled OCR, provenance/overlay
+  negatives, existing visual-proof precedence and zero additional exporter reads.
+  Labels are parsed from OCR evidence rather than injected into the tested observation.
+  Luna xhigh agents implemented bounded publication/tests/checklist slices; root
+  reviewed them and implemented the shared diagnostics and compatibility correction.
+
+### Review corrections
+
+- The new consumer regression first reproduced four failing cases: label taps and
+  label text-focus requests through each production observation path. Clearing the
+  action point had allowed the executor to tap the label's center. The user's request
+  to apply this finding authorized a narrow correction to A's `action_executor.py`:
+  its selector input validation now rejects canonical `LABEL` metadata before
+  geometry fallback, frame authorization or input accounting. Both input forms fail
+  without taps/text or consumed input proof; a measured Development control remains
+  usable from that same frame. No mutation authorization/journal or workflow behavior
+  was redesigned; A retains ongoing ownership of this boundary.
+- Luna xhigh corrected `ocr_region_plan.py` to use the existing planned-read identity
+  for both missing and successful diagnostics. The collector therefore clears a
+  recovered planned miss without parsing a second string convention. Regressions
+  invoke `execute_ocr_region_plans` for a caught backend error followed by success,
+  an unrecovered empty result, and a different unresolved fact at the same bounds.
+  Root reviewed the patch and required the isolation test to preserve actual cache
+  behavior. No recovery action, OCR retry policy or diagnostic schema was added.
+
+### Offline validation
+
+Commands ran in `.local-data/worktrees/non-yolo-recognition-continuation` with
+`C:/Users/lebel/AppData/Local/Programs/Python/Python313/python.exe`:
+
+- `tools/run_tests.py group unit.core.vision`: **46 passed**.
+- `tools/run_tests.py group vision --results
+  .test-impact/recognition-first-slice-vision.json`: **498 run, 493 passed, five skipped**,
+  zero failures/errors, 101.072 seconds.
+- The first affected/full fallback found four existing guard-contract errors because
+  label publication had been made mandatory for content-only guards. The correction
+  makes registry-backed label publication an optional typed capability. A's runtime,
+  workflow and contract tests were preserved. The four affected tests plus all four
+  new publication tests then passed: **8 passed**.
+- Pre-review `tools/run_tests.py affected --base origin/main --explain --json
+  .test-impact/recognition-first-slice-final-selection.json --results
+  .test-impact/recognition-first-slice-final-results.json`: full fallback selected
+  **274/274 modules; 1,943 run, 1,937 passed, six skipped, zero failures/errors**,
+  189.831 seconds (204.207 seconds including selection/reporting). Log:
+  `.local-data/reports/recognition-first-slice-final.log`.
+- Review fixes: `-m unittest tests.integration.vision.test_content_label_publication
+  tests.unit.app.automation.engine.test_action_tap_targets
+  tests.unit.app.automation.engine.test_action_text_and_channel
+  tests.unit.app.automation.engine.test_mail_text_input`: **17 passed**. The new label
+  denial test failed in all four builder/navigation and tap/text-focus combinations
+  before the executor correction, then passed with its valid-control check.
+- Luna's focused diagnostic module: **12 passed**; OCR-region-plan module:
+  **nine passed**. Root inspected the final producer and regression changes.
+- Final review-fix acceptance: `tools/run_tests.py affected --base origin/main
+  --explain --json .test-impact/recognition-review-fixes-selection.json --results
+  .test-impact/recognition-review-fixes-results.json` selected the full portable
+  fallback, **274/274 modules; 1,947 run, 1,941 passed, six skipped, zero failures/errors**.
+  Test time: 154.804 seconds; total including selection/reporting: 163.772 seconds.
+  Log: `.local-data/reports/recognition-review-fixes-tests.log`. Refreshed main base
+  remained `850bdb747be79bb78363b8dca49a0097c6ed6546`. This validates the complete
+  first-slice implementation and both review fixes together.
+- Changed Python files compiled; `git diff --check` passed. No assets changed, so a
+  new installed-package asset check was not required. No live test or game action ran.
+
+### Remaining acceptance
+
+Zero **additional** OCR during export is now verified; zero full-screen OCR across
+the production pipeline is still outstanding. Shared guard/content region migration,
+explicit required-field gap coverage, independent visual qualification and remaining
+captured-contract dispositions must be completed without dropping working facts.
+Research and other retained controls passed the offline suite; they were not rebuilt.
+No YOLO/shadow, workflow, route, runtime composition, mutation authorization or journal
+code changed. The explicit executor label denial is documented above. This result
+includes the recorded main baseline, not later main commits.
+A retains future combined-main/workflow integration acceptance and both sides of
+overlapping contract tests. The plan remains **promotion_ready: no**.
+
+## Capture update — September 13, 2026
+
+The user's separately authorized exploration captured the previously missing
+Research categories, construction, Campaign Hero Formation/battle/result, ordinary
+gathering receipt, Player Mail Compose, Alliance member/Hall variants, and native
+account UI. The [capture findings](PNC_NON_YOLO_CAPTURE_FINDINGS_20260913.md) record
+exact evidence, spending, remaining dependencies and source-backed layout rules.
+K157 was shielded before leaving Lost City; the original castle was returned Home
+and the live reservation released. The K290 comparison confirms the Faction tab's
+absence and resulting Alliance layout shift on a nonparticipating castle.
+
+These captures close evidence gaps only where explicitly identified. Newly
+evidenced producers still require implementation and both-path offline validation;
+the published release and its checks below remain unchanged. In particular,
+available march-slot count, a sent-mail receipt, and the legacy Login/Continue
+contract are not proved by unrelated troop-capacity, Compose, or native SDK frames.
+
+### Working-tree corrections after the capture audit
+
+- Player Mail Compose now has an independent visual control at reference point
+  `(98, 896)` on 540×960, or `(163, 1493)` on 900×1600. Both production observation
+  paths preserve template, current-frame, screen and layout provenance; missing
+  controls, other mailboxes and blocking overlays abstain. The sanitized reference
+  and derived negative share one capture group and are not independent holdouts.
+- The generic building-detail builder now invokes the existing shared level parser.
+  This restores observed `1/45` and `7/45` labels without another parser or changes
+  to satisfied/unmet requirement semantics. A real production-registry builder test
+  covers the publication. NavigationPerception still requires independent visual
+  identity and does not publish parsed label elements in its control-only result;
+  the regression preserves that abstention. This is not complete both-path building
+  qualification and does not change that navigation contract.
+- Root review corrected the overlay regression's viewport so the background level
+  actually lies in its eligible region. Final focused command:
+  `python -m unittest tests.integration.vision.test_visual_selector_scope
+  tests.integration.vision.test_building_confirmation_observation
+  tests.integration.vision.test_building_requirements_observation` — **22 passed**.
+- The initial affected run had one error in the old blank-image Compose consumer
+  fixture. The user authorized its narrow test-only correction after review. Luna
+  applied the captured fixture and canonical visual recognizer; root reviewed the
+  diff. All 11 consumer-module tests pass, including the actual measured dispatch
+  at `(163, 1493)` through the fake actuator. No production behavior was weakened.
+- Final `python tools/run_tests.py affected --base origin/main --explain --json
+  .test-impact/compose-review-fix-selection.json --results
+  .test-impact/compose-review-fix-results.json` passed the full fallback:
+  **1,925 run, 1,919 passed, six skipped, zero failures/errors**, 121.761 seconds
+  (128.835 seconds including selection/reporting). Log:
+  `.local-data/reports/compose-review-fix-tests.log`. `git diff --check` passed.
+- Test base resolved to `0ecb242fbae46ab48b71d26dc5fb91b5a49fe1ef`; tested source is
+  dirty on HEAD `274da71`. Main has two additional commits since the integrated
+  `5135dde` baseline (startup waiting and castle targets). This run is not combined
+  main acceptance. No Git mutation was made during this phase. New installed-wheel
+  and warm/independent-family qualification remain outstanding.
+
+## Resumed vision component release — September 12, 2026
+
+Worktree: `.local-data/worktrees/non-yolo-recognition-continuation`, branch
+`codex/non-yolo-recognition-continuation`. Checkpoint `e3b388f` preserves the
+previous dirty Gathering/March/Campaign slice; `6915b2f` includes current main
+`5135dde` and revised whole-component plan `1c67745`. Historical worktrees remain.
+
+### Concrete corrections and producer contract
+
+- The retained Gathering selected-node and populated/empty March profiles publish
+  only their independently matched Gather/Dispatch controls. Slots and a correlated
+  dispatch receipt remain unknown.
+- Real RapidOCR splits the map's chapter badge `10` from `Grandia Ruins`; enrichment
+  now associates the exact tokens only inside the measured chapter row. The stylized
+  stage `3` is absent from actual full-frame and crop OCR. Its independently matched
+  unlocked badge now supplies `PNC_CAMPAIGN_MAP_REGION_NODE`; the existing Chapter
+  parser uses that evidence with the exact header to publish the measured stage row.
+- ObservationBuilder now supplies preliminary canonical visual controls to content
+  enrichment, matching NavigationPerception. Final decision, guard, and frame binding
+  still own publication. Owned Close geometry is passed to the existing global visual
+  popup exclusion logic; another unowned close or a semantic blocker still abstains.
+  `recognize_guards` accepts additive optional `owned_dismiss_bounds=()`; existing
+  no-visual calls and public builder/perception constructor/build signatures are retained.
+- Initial selector probes are intersected with registry screen ownership only after a
+  clear actionable visual decision. This removes the observed unrelated World-coordinate
+  OCR pass on Mail. Unknown, ambiguous, unreviewed and nonvisual cases retain broad
+  fallback. Global popup/loading OCR runs before this optimization.
+- Chapter and Stage rows retain current-frame, source-screen/layout, measured row/action
+  bounds and provenance in both production paths. No Campaign mode, battle preparation,
+  resource eligibility or mutation success is inferred. Challenge remains an action,
+  not an automatically safe navigation edge. Its geometry has one visual-profile owner.
+- Hero Hall now has a separate `PNC_HERO_HALL_FREE_RECRUIT_1X_BUTTON`, matched
+  from the visible gold `Free Recruit 1x` artwork. The existing generic Recruit 1x
+  selector keeps its meaning. Bag's existing `PNC_BAG_SUBTAB_RESOURCE` is also
+  published through the visual path when its gold selected-state anchor matches.
+  Both reuse canonical guarded publication; neither adds a parser or workflow caller.
+  These facts establish visible control state, not cooldown policy, successful
+  recruitment, or a way to navigate from an unselected Resource tab.
+
+### Evidence and validation
+
+- Actual saved-frame RapidOCR replay exposed and then verified the Campaign corrections.
+- Focused Research/tree/queue/upgrade-warning regressions: 37 tests passed.
+- Installed wheel: built with isolated build dependencies, installed under ignored
+  `.local-data/qualification/installed-final`, and imported outside the checkout. All 39
+  profiles and 343 selectors load; packaged Chapter/Challenge/Gather/Dispatch and
+  Hero Free/Bag Resource anchors recognize their fixtures. Wheel SHA256:
+  `ca456f7b78ac7095b826a4c12a2b500d40ffd662c62190db4614f632ff242696`.
+  Initial builds without setuptools/network failed; the isolated network-enabled build passed.
+- Five paired warm Mail replays against synchronized pre-correction builder `6915b2f`
+  preserved screen, guard, row count and control IDs. Median total time: 1.495s -> 0.827s;
+  nearest-rank p95: 1.538s -> 1.396s. Median OCR time: 1.402s -> 0.693s; backend calls:
+  2 -> 1; processed pixels: 595,674 -> 518,400. This is a local single-frame measurement,
+  not broad independent family/target qualification. Full records and environment are in
+  `.local-data/reports/vision-mail-scope-performance.json`.
+- Focused Campaign/metadata/selector-scope tests: 20 passed. Pre-Hero/Bag repository vision
+  group: 468 tests run, 463 passed and five optional-fixture skips, 54.868s.
+  `git diff --check` passed. Results: `.test-impact/vision-component-results.json`.
+- Required full `affected --base origin/main --explain --verbose` initially stopped
+  in a workflow contract whose mocks looped after measured Gathering support replaced
+  its stale unsupported-catalog assumption. The user approved the narrow test-only
+  ownership exception. Unsupported-selector denial tests now explicitly construct an
+  unsupported test registry; the supported Gather transition-stop test verifies one
+  Gather tap and no dispatch when the destination does not change. No production
+  executor/authorization behavior changed. The first completed full run had 1,913 tests,
+  two further stale-fixture failures and six skips. The corrected final full fallback
+  passed: **1,921 run, 1,915 passed, six skipped**, 130.625s (137.281s including selection
+  and reporting). Command: `python tools/run_tests.py affected --base origin/main
+  --explain --verbose --json .test-impact/vision-final-selection.json --results
+  .test-impact/vision-final-results.json`. Log: `.local-data/reports/vision-final-tests.log`.
+  After that run, the Hero update regression's image was tightened to retain the actual
+  Hero anchors under controlled update OCR; its complete 11-test module passed again
+  in 6.741s. No production files changed after full validation. Both production paths
+  cover Free/paid/disabled state, selected/unselected Bag, overlays, and frame/layout
+  provenance. The two corrected workflow integration modules separately passed six tests.
+- Corpus qualification processed all 50 frames (31 reference, 12 validation, seven
+  holdout), five warm replays per frame. All expected screen labels matched; there were
+  zero wrong actionable classifications, manual-comparison failures or known-field
+  recovery regressions. Only nine frames carry manual action/field annotations, so this
+  is not an all-controls or all-targets accuracy claim. Independent frame contexts share
+  one sequential OCR backend to avoid competing idle engine pools. The initial CLI run
+  was stopped before completion; its timing wrapper lacked the new optional owned-dismiss
+  argument. The wrapper now forwards it and has a production-stack regression.
+  Detailed corpus diagnostics, fallback reasons, OCR calls/area/cache and per-split p50/p95
+  are in `.local-data/reports/vision-component-qualification.json`. The subsequent
+  Hero Free/Bag selected-tab additions passed a separate five-frame qualification,
+  with five warm replays per frame and zero wrong actionable classifications,
+  manual-comparison failures or known-field recovery regressions. This includes the
+  independent Hero/Bag captures and update-over-Bag blocker. Results are in
+  `.local-data/reports/vision-controls-qualification.json`; control-state negatives
+  are covered separately by the focused production-path tests.
+
+### Live evidence and remaining dependencies
+
+The existing Mail Compose tool leased configured `testing`; no access to `main` or a
+second instance occurred. The sandbox attempt could not enumerate processes. The first
+host attempt launched PNC but checked foreground immediately and stopped with zero
+navigation inputs. One follow-up after startup reached Mail, observed an empty Player
+mailbox, returned Home in eight inputs, and released the reservation. Compose is an
+explicit applicability skip. There was no resource spending or message send. Exact run:
+`.local-data/artifacts/vision_resume_mail/20260913T015421Z_8f928e87/summary.json`.
+Configured screenshots remain under the existing root `artifacts/2026-09-13/testing`;
+the config was not changed to relocate them.
+
+Remaining unproved cells are Login/account-switch controls, populated Player Mail/
+Compose and send-receipt facts, non-Development Research categories, Gathering slot
+count and correlated dispatch receipt, Campaign mode/preparation, and additional
+building/member-only layouts. These need actual independently annotated frames;
+current reference transforms do not count as held-out target/build/locale evidence.
+Full-frame guard fallback is retained until independent blocker coverage supports
+narrowing it. The previously authored Campaign source note and index are retained
+for the plan's one-time A handover; future game-reference/workflow maintenance remains A-owned.
+A owns workflow callers/routes/mutation behavior and final combined-main acceptance.
+
+### Release disposition
+
+The first evidence-supported B release is implemented, reviewed and offline validated.
+Fresh `origin/main` remains `5135dde`; it is already an ancestor of this feature.
+The new Hero Free ID is available for A's existing Daily consumer to adopt through its
+normal policy/execution boundary. It does not silently replace the generic Recruit ID.
+Source-hash and exact-crop checks passed for both new Hero/Bag assets, and generated
+wheel/build/report output remains ignored. Historical scratch worktrees are retained.
+The complete original plan is **not** marked finished: the missing capture cells above
+and A's final producer/consumer integration remain required. Spending authorization
+does not supply those observations or permit invented success/receipt facts.
+
+
 Current continuation and ownership are in [B's revised plan](PNC_NON_YOLO_RECOGNITION_PLAN.md)
 and the [shared A/B backlog](PNC_AB_COORDINATED_CONTINUATION.md). The foundation and
 Research production-builder correction are now integrated in main `2eacb12`; later
