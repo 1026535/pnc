@@ -400,3 +400,79 @@ bindings remain legacy pending that acceptance. Unselected Resource-tab entry al
 needs a qualified producer/control. Caller migration, live acceptance and broader
 producer-dependent original ports remain incomplete. Automatic Daily execution,
 scheduling and mainline landing remain outside this publication.
+
+## September 13 foreground repair and independent port review
+
+The user approved the narrow device-owner exception for the paired foreground
+diagnostics. Commit `97ef36f` changes only `BlueStacksSession.is_app_foregrounded`
+to query `dumpsys window`, plus its three existing test-call expectations. The
+strict package parser and lease/role behavior remain unchanged. The repository
+runner's `group unit.core.infra.emulator` passed all 44 tests. A dedicated
+read-only reviewer found no actionable issue in this fix.
+
+The external task `core workflow porting (2)` had reviewed the dirty main
+checkout rather than the core candidate. Its published document/ignore-only
+commit `afc5d867808101d61621ce132eaaf6878c09b045` is retained by a history-preserving
+merge. All 13 relative documentation links resolve; existing reference entries
+survive. The main checkout and mainline branch were not changed.
+
+The dedicated reviewer then checked the actual Hero Hall and Resource Item
+ports and found one deadline gap in Resource scrolling. Commit `f3869a8` rejects
+scanner completion at or after the existing navigation deadline, with the same
+post-dispatch clock convention as other gestures. Row stability remains with
+the scanner. Five focused Resource navigation tests pass, including a fake-clock
+expiry regression proving exactly one gesture; the reviewer accepted the fix.
+
+### Fresh live proof and limits
+
+Root acquired one canonical `157_farm` lease, resolved the configured instance
+and active castle, and preserved the running instance. The foreground query
+returned true, and the exact nonselecting preflight returned Home. This replaces
+the earlier foreground blocker for that instance; it is not a workflow mutation
+receipt. Proof root: `.local-data/artifacts/core_ports_foreground_fix_20260913/`
+in the root workspace. `foreground_preflight_result.json` records the result;
+the trace is under `2026-09-13/157_farm_foreground_fix/` with run ID
+`20260913T175731Z_fc2f4b80`.
+
+The Resource entry observation published a clear Bag, selected Resource anchor
+and six complete visible rows. The first typed workflow attempt stopped on a
+black `PNC_LOADING` source while returning from preflight (capture 0047). A
+bounded canonical passive settle proved Settings, and no mutation intent existed,
+so one new attempt was permitted. That attempt reached actual inventory swipes
+but stopped on another black source (capture 0090) before Use. Offline image
+inspection proves both entire RGB frames are zero; `black_frame_diagnostic.json`
+and `resource_scan_stop.json` preserve the evidence. No third Resource attempt
+was run. The source of the intermittent blank captures is not established; no
+capture fallback, guard relaxation or parser change was added.
+
+After the canonical settle proved Bag, the Hero Hall workflow's fresh preflight
+stopped on an exact identity mismatch, before recruitment. Production replay of
+captures 0042 and 0108 publishes `0 stickerNPC` and `0 sticker NPC` respectively
+for the same visible selected K157, level-15 row. Both are labelled exact by the
+published perception path. `identity_replay_comparison.json` records this concrete
+B-owned identity-publication dependency. Do not normalize away the mismatch in
+the workflow or change authorization/journal identity to bypass it.
+
+The last confirmed screen is Home (capture 0115). Root explicitly closed the
+lease and exited Python REPL 14931. No castle switch, resource pack Use, Hero Hall
+recruitment, spending, or mutation journal write occurred. Screenshots and reports
+are under the proof root; the configured canonical journal root was reused for
+read checks. The passing foreground proof and offline ports do not establish
+Resource/Hero live acceptance, caller migration, five-single canary completion,
+broader Daily readiness or mainline landing. The final combined offline gate is
+recorded below after execution.
+
+### Final combined offline result
+
+`Python313 tools/run_tests.py affected --base origin/main --explain` selected its
+mandatory full fallback on the combined feature tree. It passed **1,999 tests
+with six skips (2,005 total)**, zero failures, in 254.279 seconds of test execution
+and 279.080 seconds including selection/collection/reporting. Five skips require
+optional local screenshots; one requires Windows symlink privilege. Evidence is
+`core_foreground_query_fix/.test-impact/foreground-results.json`, with selection
+and log alongside it. This includes the deadline fix and all retained producer,
+workflow, journal, locking and mainline regressions. The subsequent gate-result
+note changes documentation only; no source or test changes followed the gate.
+`git diff --check` passed. No additional live or full-suite run was needed for
+that result note. Publication retains every completed port and reviewed history;
+live acceptance remains limited as described above.
