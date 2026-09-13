@@ -2386,18 +2386,22 @@ selectors:
   screens:
   - PNC_GATHER_NODE
   status: planned
-  detection_kind: unsupported
+  detection_kind: semantic
+  interaction_kind: action
   materialize_relative_bounds: false
   notes:
-  - 'Proposed unsupported strategy: No gather producer.'
+  - Produced only by the reviewed selected-resource gather-node visual profile when the measured gold Gather control is present.
+  - The resource modal identity is independently anchored; no inferred or OCR-derived click geometry is published.
 - id: PNC_MARCH_CONFIRM_BUTTON
   screens:
   - PNC_MARCH_CONFIRM
   status: planned
-  detection_kind: unsupported
+  detection_kind: semantic
+  interaction_kind: action
   materialize_relative_bounds: false
   notes:
-  - 'Proposed unsupported strategy: No march-confirm producer.'
+  - Produced only by the reviewed Gather formation visual profile when the measured gold Dispatch control is present.
+  - Empty formations retain screen identity but publish no Dispatch control; Quick Select and formation mutation controls remain excluded.
 - id: PNC_CAMPAIGN_ENTRY_BUTTON
   screens:
   - PNC_CAMPAIGN_MAP
@@ -2410,10 +2414,20 @@ selectors:
   screens:
   - PNC_CAMPAIGN_STAGE
   status: planned
-  detection_kind: unsupported
+  detection_kind: semantic
+  interaction_kind: action
+  relative_bounds:
+    x_ratio: 0.32962963
+    y_ratio: 0.66979167
+    width_ratio: 0.34074074
+    height_ratio: 0.05625
+    action_x_ratio: 0.5
+    action_y_ratio: 0.69791667
   materialize_relative_bounds: false
   notes:
-  - 'Proposed unsupported strategy: No campaign-stage producer.'
+  - Produced only by the reviewed campaign_stage_10_3 visual profile when its measured gold Challenge anchor is present.
+  - The measured Challenge control is fixed to the 540x960 campaign_stage_10_3 fixture and scales with the reviewed viewport.
+  - This control proves the available stage-detail action only; it does not infer battle-prep reachability, mode, eligibility, or spending safety.
 - id: PNC_CAMPAIGN_HOME_PORTAL
   screens:
   - PNC_CAMPAIGN_MAP

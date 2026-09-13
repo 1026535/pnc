@@ -1022,6 +1022,15 @@
     "notes": "Measured stage detail owned Close control crop; profile marks it as surface dismissal evidence."
   },
   {
+    "asset": "screen_anchors/campaign_challenge_button.png",
+    "source": ".local-data/artifacts/2026-09-12/serious_stuff/20260912T195913Z_core_20260912T195338Z_6a8f4869_0017_campaign_stage_10_3_settled.png",
+    "source_sha256": "0a3f70a93cba682c50afeca8e432faaf401e75138d255195f6356e32a37bde70",
+    "reference_size": [540, 960],
+    "crop": [178, 643, 362, 697],
+    "capture_group": "2026-09-12/serious_stuff/campaign_navigation",
+    "notes": "Measured gold Challenge control crop from the reviewed stage-detail frame; presence proves the visible stage action only."
+  },
+  {
     "asset": "tests/data/screen_recognition/campaign_map.png",
     "source": ".local-data/artifacts/2026-09-12/serious_stuff/20260912T195710Z_core_20260912T195338Z_6a8f4869_0013_campaign_entry_settled.png",
     "source_sha256": "97a15f36f9d7c1ac56ca7f8ba3903c329a04c3179323d94eb98e2d4ffdca91c1",
@@ -1052,6 +1061,6 @@
     "preserved_regions": [[16, 201, 522, 741]],
     "redacted_regions": [[0, 0, 540, 201], [0, 741, 540, 960]],
     "redaction_fill_rgb": [16, 28, 49],
-    "notes": "Portable sanitized stage-detail fixture; the owned detail panel and Close remain, with private blurred HUD/chat surroundings removed and Challenge unregistered."
+    "notes": "Portable sanitized stage-detail fixture; the owned detail panel, Close, and measured Challenge remain, with private blurred HUD/chat surroundings removed."
   }
 ]

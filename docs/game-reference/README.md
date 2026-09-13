@@ -11,6 +11,7 @@ The packaged PNC **5.0.203 / version code 233** yielded **6,276 gameplay Lua fil
 | [Source map](SOURCE_MAP.md) | Discovery across the recovered source; individual workflows mostly unverified |
 | [Shared request path](REQUEST_PATH.md) | Native outgoing path statically traced; checksum independently checked by isolated emulation |
 | [Building upgrades](workflows/building-upgrade.md) | Normal-upgrade UI checks, request, response handling, and automation implications inspected |
+| [Campaign navigation](workflows/campaign-navigation.md) | Chapter 10 and stage 10-3 saved transitions, source correspondence, and bounded automation implications |
 | [Provenance and reproduction](PROVENANCE.md) | Build, hashes, artifact locations, and offline reconstruction |
 
 Detailed coverage should grow with scoped work. A complete behavioral reference for every UI, event, server rule, and account state cannot be inferred from a source inventory. Start with the workflow affected by the current task, following its callers and state owners only as far as needed to resolve the question.

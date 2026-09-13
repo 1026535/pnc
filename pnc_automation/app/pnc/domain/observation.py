@@ -56,6 +56,7 @@ class ListEntryKind(StrEnum):
     BUILDING = "building"
     RESEARCH = "research"
     GATHER_NODE = "gather_node"
+    CAMPAIGN_CHAPTER = "campaign_chapter"
     CAMPAIGN_STAGE = "campaign_stage"
     EVENT_ENTRY = "event_entry"
     GIFT_ENTRY = "gift_entry"

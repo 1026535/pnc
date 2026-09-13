@@ -2417,9 +2417,22 @@
             "threshold": 0.95
           },
           "dismisses_surface": true
+        },
+        {
+          "selector": "PNC_CAMPAIGN_BATTLE_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/campaign_challenge_button.png",
+            "search_region": [
+              178,
+              643,
+              184,
+              54
+            ],
+            "threshold": 0.95
+          }
         }
       ],
-      "revision": 1,
+      "revision": 2,
       "source": {
         "fixture": "tests/data/screen_recognition/campaign_stage_10_3.png",
         "decoded_sha256": "efab0c7ecb4c30187e057235bfe9efdfb831fc212aa61bc42548791177628157",
@@ -2427,12 +2440,122 @@
       },
       "review": {
         "reference_manifest": "tests/data/screen_recognition/manifest.json",
-        "description": "Evidence-backed Campaign stage detail identity with owned Close surface dismissal; Challenge remains intentionally unregistered.",
+        "description": "Evidence-backed Campaign stage detail identity with owned Close surface dismissal and measured Challenge action control.",
         "build": null,
         "locale": null,
         "qualification": "guarded_reference_only"
       },
       "layout_id": "campaign_stage_10_3"
+    },
+    {
+      "id": "gather_node_selected_resource",
+      "screen": "PNC_GATHER_NODE",
+      "anchors": [
+        {
+          "image": "screen_anchors/gather_node_modal_header.png",
+          "search_region": [
+            50,
+            278,
+            438,
+            134
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/gather_node_modal_body.png",
+          "search_region": [
+            50,
+            412,
+            438,
+            99
+          ],
+          "threshold": 0.95
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_GATHER_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/gather_node_gather_button.png",
+            "search_region": [
+              278,
+              518,
+              194,
+              70
+            ],
+            "threshold": 0.97
+          }
+        }
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/gather_node.png",
+        "decoded_sha256": "4ea1333ee072f270cbd069909677c8f6ffeaab45b8abad5425e819beb9b129a5",
+        "capture_group": "2026-08-31/serious_stuff/daily_plan_gather_node"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Selected FarmLv.7 resource-modal identity uses two independent modal regions; the measured gold Gather control is published only when its template is present.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "layout_id": "gather_node_selected_resource"
+    },
+    {
+      "id": "march_confirm_gather",
+      "screen": "PNC_MARCH_CONFIRM",
+      "anchors": [
+        {
+          "image": "screen_anchors/march_confirm_header.png",
+          "search_region": [
+            12,
+            2,
+            200,
+            48
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/march_confirm_formation.png",
+          "search_region": [
+            12,
+            87,
+            508,
+            170
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_MARCH_CONFIRM_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/march_confirm_dispatch_button.png",
+            "search_region": [
+              170,
+              866,
+              200,
+              70
+            ],
+            "threshold": 0.97
+          }
+        }
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/march_confirm.png",
+        "decoded_sha256": "151fd25220817dbd93b9d26200be5aa986cbe7c44775ef845bab33b5b9db622d",
+        "capture_group": "2026-08-30/mega_old_acc/daily_plan_gather_march"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Gather formation identity is anchored by the title and shared formation slots across selected and empty states; only the measured gold Dispatch control is published.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "layout_id": "march_confirm_gather"
     },
     {
       "id": "collect_mail_thread",
