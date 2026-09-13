@@ -3728,6 +3728,7 @@ selectors:
   - PNC_BUILDING_DETAILS
   status: planned
   detection_kind: semantic
+  interaction_kind: label
   materialize_relative_bounds: false
   notes:
   - Proposed semantic catalog metadata for producer _add_shared_building_level_label;

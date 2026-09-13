@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import hashlib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
@@ -52,7 +51,14 @@ from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.core.text.normalization import normalize_ocr_text
 from pnc_automation.app.pnc.vision.image_models import SelectorMatch
-from pnc_automation.app.pnc.vision.observation_provenance import bind_list_entry, bind_visible_elements
+from pnc_automation.app.pnc.vision.observation_diagnostics import (
+    ObservationDebugArtifactCollector as ObservationDebugArtifactCollector,
+)
+from pnc_automation.app.pnc.vision.observation_provenance import (
+    bind_list_entry,
+    bind_visible_elements,
+    select_content_labels,
+)
 from pnc_automation.app.pnc.vision.observation_request import (
     ObservationRequest,
     world_map_coordinate_dialog_text_field_selector_ids,
@@ -65,7 +71,6 @@ from pnc_automation.app.pnc.vision.ocr_region_plan import (
 )
 from pnc_automation.core.vision.ocr.ocr_service import (
     ObservationOcrContext,
-    OcrLine,
     OcrReadPurpose,
     OcrService,
     UnavailableOcrService,
@@ -193,63 +198,6 @@ class SelectorEngine(Protocol):
         ocr_context: ObservationOcrContext | None = None,
     ) -> Sequence[SelectorMatch]:
         """Returns all selectors detected in the image."""
-
-
-@dataclass(slots=True)
-class ObservationDebugArtifactCollector:
-    """Persists debug-only OCR sidecars that capture lines the runtime could not yet classify."""
-
-    def persist_unidentified_ocr_sidecar(
-        self,
-        *,
-        screenshot: CapturedScreenshot,
-        observation: Observation,
-        ocr_context: ObservationOcrContext,
-    ) -> None:
-        """Writes one sidecar containing unmatched OCR lines next to the persisted screenshot artifact."""
-
-        artifact_path = screenshot.artifact_path
-        if artifact_path is None:
-            return
-        recognized_texts = _recognized_ocr_text_hints(observation)
-        unidentified_lines = _unidentified_ocr_lines(
-            lines=ocr_context.read_lines(
-                screenshot.image,
-                purpose=OcrReadPurpose.DEBUG,
-                detail="debug_unidentified_ocr",
-            ),
-            recognized_texts=recognized_texts,
-        )
-        if not unidentified_lines:
-            return
-        sidecar_path = artifact_path.with_name(f"{artifact_path.stem}_unidentified_ocr.json")
-        sidecar_path.write_text(
-            json.dumps(
-                {
-                    "artifact_path": str(artifact_path),
-                    "screen_type": observation.screen_type.value,
-                    "captured_at": observation.captured_at.isoformat(),
-                    "recognized_text_hints": sorted(recognized_texts),
-                    "unidentified_ocr_lines": [
-                        {
-                            "text": line.text,
-                            "normalized_text": normalize_ocr_text(line.text),
-                            "bounds": {
-                                "x": line.bounds.x,
-                                "y": line.bounds.y,
-                                "width": line.bounds.width,
-                                "height": line.bounds.height,
-                            },
-                            "confidence": line.confidence,
-                        }
-                        for line in unidentified_lines
-                    ],
-                },
-                indent=2,
-                ensure_ascii=True,
-            ),
-            encoding="utf-8",
-        )
 
 
 @dataclass(slots=True)
@@ -437,6 +385,7 @@ class ObservationBuilder:
                 decision=decision,
                 visible_elements=additions.visible_elements,
                 additions=additions,
+                ocr_context=ocr_context,
             )
 
         visual = (
@@ -475,6 +424,8 @@ class ObservationBuilder:
                 decision=preliminary,
                 visible_elements=guard_additions.visible_elements,
                 additions=guard_additions,
+                ocr_context=ocr_context,
+                profile_ids=visual.profile_ids,
             )
         if guard_verdict == GuardVerdict.BLOCKED:
             # A known modal may expose requested fields of its own, but its
@@ -521,6 +472,8 @@ class ObservationBuilder:
                 decision=preliminary,
                 visible_elements=guard_additions.visible_elements,
                 additions=guard_additions,
+                ocr_context=ocr_context,
+                profile_ids=visual.profile_ids,
             )
 
         semantic_request = replace(
@@ -666,6 +619,8 @@ class ObservationBuilder:
             decision=decision,
             visible_elements=visible_elements,
             additions=additions,
+            ocr_context=ocr_context,
+            profile_ids=visual.profile_ids,
         )
 
     def _publish(
@@ -675,6 +630,8 @@ class ObservationBuilder:
         decision: ScreenDecision,
         visible_elements: Mapping[UiElementId, VisibleElement],
         additions: ObservationAdditions,
+        ocr_context: ObservationOcrContext | None = None,
+        profile_ids: tuple[str, ...] = (),
     ) -> Observation:
         """Publishes only facts tied to an accepted screen decision and frame."""
 
@@ -692,12 +649,21 @@ class ObservationBuilder:
             decision=decision,
             additions=additions,
         )
-        visible_elements = bind_visible_elements(
+        content_labels = select_content_labels(
+            visible_elements,
+            selector_registry=self.selector_registry,
+        )
+        visible_elements = {
+            selector_id: content_labels.get(selector_id, element)
+            for selector_id, element in visible_elements.items()
+        }
+        bound_visible_elements = bind_visible_elements(
             visible_elements,
             frame_ref=getattr(screenshot, "frame_ref", None),
             source_screen=decision.effective_screen,
             source_layout_id=decision.layout_id,
         )
+        visible_elements = bound_visible_elements
         bound_list_entries = tuple(
             bind_list_entry(
                 entry,
@@ -707,7 +673,7 @@ class ObservationBuilder:
             )
             for entry in additions.list_entries
         )
-        return Observation(
+        observation = Observation(
             decision=decision,
             visible_elements=visible_elements,
             list_entries=bound_list_entries,
@@ -735,6 +701,14 @@ class ObservationBuilder:
             chat_draft_text=additions.chat_draft_text,
             frame_ref=getattr(screenshot, "frame_ref", None),
         )
+        if self.debug_artifact_collector is not None and ocr_context is not None:
+            self.debug_artifact_collector.persist_recognition_gap(
+                screenshot=screenshot,
+                observation=observation,
+                ocr_context=ocr_context,
+                profile_ids=profile_ids,
+            )
+        return observation
 
     def _filter_visible_elements_for_decision(
         self,
@@ -1278,77 +1252,6 @@ def _trusted_observed_account_id(observation: Observation) -> str | None:
     if observation.screen_type not in {ScreenType.PNC_LOGIN, ScreenType.PNC_ACCOUNT_SWITCH}:
         return None
     return observation.current_pnc_account_id
-
-
-def _recognized_ocr_text_hints(observation: Observation) -> frozenset[str]:
-    """Returns normalized OCR phrases already explained by the typed observation."""
-
-    recognized_texts: set[str] = set()
-    _add_recognized_text(recognized_texts, observation.current_pnc_account_id)
-    _add_recognized_text(recognized_texts, observation.verified_pnc_account_id)
-    _add_recognized_text(recognized_texts, observation.profile_player_name)
-    _add_recognized_text(recognized_texts, observation.chat_draft_text)
-    if observation.current_castle is not None:
-        _add_recognized_text(recognized_texts, observation.current_castle.castle_name)
-        _add_recognized_text(recognized_texts, observation.current_castle.kingdom)
-    for element in observation.visible_elements.values():
-        _add_recognized_text(recognized_texts, element.extracted_text)
-    for entry in observation.list_entries:
-        _add_recognized_text(recognized_texts, entry.title_text)
-        _add_recognized_text(recognized_texts, entry.subtitle_text)
-        for value in entry.metadata.values():
-            if isinstance(value, str):
-                _add_recognized_text(recognized_texts, value)
-    if observation.spatial_surface is not None:
-        coordinate_text = observation.spatial_surface.metadata.get("coordinate_text")
-        if isinstance(coordinate_text, str):
-            _add_recognized_text(recognized_texts, coordinate_text)
-        for object_ in observation.spatial_surface.objects:
-            _add_recognized_text(recognized_texts, object_.name_text)
-            _add_recognized_text(recognized_texts, object_.alliance_tag)
-            _add_recognized_text(recognized_texts, object_.kingdom)
-            if object_.alliance_tag is not None and object_.name_text is not None:
-                _add_recognized_text(recognized_texts, f"{object_.alliance_tag}{object_.name_text}")
-    return frozenset(recognized_texts)
-
-
-def _add_recognized_text(recognized_texts: set[str], text: str | None) -> None:
-    """Adds one non-blank normalized text hint to the recognized OCR set."""
-
-    if text is None:
-        return
-    normalized_text = normalize_ocr_text(text)
-    if normalized_text == "":
-        return
-    recognized_texts.add(normalized_text)
-
-
-def _unidentified_ocr_lines(
-    *,
-    lines: Sequence[OcrLine],
-    recognized_texts: frozenset[str],
-) -> tuple[OcrLine, ...]:
-    """Returns only OCR lines whose normalized text is not already explained by the observation."""
-
-    unidentified_lines: list[OcrLine] = []
-    for line in lines:
-        normalized_text = normalize_ocr_text(line.text)
-        if normalized_text == "" or _recognized_text_matches_line(normalized_text, recognized_texts):
-            continue
-        unidentified_lines.append(line)
-    return tuple(unidentified_lines)
-
-
-def _recognized_text_matches_line(normalized_text: str, recognized_texts: frozenset[str]) -> bool:
-    """Returns whether one normalized OCR line is already represented by the typed observation."""
-
-    for recognized_text in recognized_texts:
-        if normalized_text == recognized_text:
-            return True
-        if len(normalized_text) >= 4 and len(recognized_text) >= 4:
-            if normalized_text in recognized_text or recognized_text in normalized_text:
-                return True
-    return False
 
 
 def _screenshot_artifact_path(screenshot: object) -> object:
