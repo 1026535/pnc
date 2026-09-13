@@ -117,6 +117,9 @@ class PowerShellBlueStacksRunningInstanceSource:
                 encoding="utf-8",
                 check=False,
                 timeout=self.timeout_seconds,
+                # This runs once per monitor sample; do not flash a console
+                # window for the short-lived process-discovery child.
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
         except subprocess.TimeoutExpired as error:
             raise ConfigurationError(
