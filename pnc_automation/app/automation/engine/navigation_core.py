@@ -110,6 +110,7 @@ class NavigationCore:
     sleep: Callable[[float], None] = time.sleep
     clock: Callable[[], float] = time.monotonic
     record: Callable[[dict[str, object]], None] = lambda _: None
+    observe_ready: Callable[[str], Observation] | None = None
     _sequence: int = field(default=0, init=False)
 
     def transition(self, edge: NavigationEdge) -> Observation:
@@ -118,7 +119,7 @@ class NavigationCore:
             raise ValueError("Transition is outside the reviewed navigation graph.")
         self._sequence += 1
         label = f"core_{self._sequence}"
-        before = self.observe(f"{label}_source")
+        before = self._observe_source(f"{label}_source")
         if before.blocking_popup or before.screen_type != edge.source:
             raise RuntimeError("Navigation source changed or is interrupted; no action sent.")
         element = before.visible_elements.get(edge.selector)
@@ -825,7 +826,7 @@ class NavigationCore:
         """Replan through the reviewed graph after each confirmed transition."""
         if max_transitions < 1 or target == ScreenType.UNKNOWN:
             raise ValueError("Navigation needs a known target and positive transition budget.")
-        current = self.observe("core_route_source")
+        current = self._observe_source("core_route_source")
         for _ in range(max_transitions):
             if current.blocking_popup or current.screen_type == ScreenType.UNKNOWN:
                 raise RuntimeError("Cannot route from an unknown or interrupted screen.")
@@ -852,6 +853,13 @@ class NavigationCore:
                         visited.add(destination)
                         queue.append((destination, first or edge))
         raise RuntimeError(f"No reviewed route from {source.name} to {target.name}.")
+
+    def _observe_source(self, label: str) -> Observation:
+        """Capture a reviewed edge source through the optional loading-ready boundary."""
+
+        if self.observe_ready is not None:
+            return self.observe_ready(label)
+        return self.observe(label)
 
 
 def require_resource_inventory_surface(observation: Observation) -> None:

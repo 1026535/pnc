@@ -35,6 +35,45 @@ class TypedPopupClassificationTests(unittest.TestCase):
         self.assertEqual((270, 546), confirm.action_point)
         self.assertEqual(ScreenType.PNC_POPUP, additions.screen_evidence[0].screen_type)
 
+    def test_popup_classifier_materializes_exact_update_failure_confirm(self) -> None:
+        """Publishes the existing update recovery control for the observed retry dialog."""
+
+        additions = _build_popup_additions(
+            image=Image.new("RGB", (900, 1600)),
+            lines=(
+                _ocr_line("CONQUEST", x=292, y=40, width=300, height=60),
+                _ocr_line("Update failed. Try again?", x=98, y=640, width=374, height=38),
+                _ocr_line("Confirm", x=388, y=890, width=124, height=39),
+                _ocr_line("10%", x=420, y=1390, width=64, height=32),
+                _ocr_line("Downloading update resources...0/2 0%", x=154, y=1449, width=593, height=36),
+            ),
+            anchors=(),
+        )
+
+        self.assertIsNotNone(additions)
+        assert additions is not None
+        confirm = additions.visible_elements[UiElementId.PNC_UPDATE_CONFIRM_BUTTON]
+        self.assertEqual("Confirm", confirm.extracted_text)
+        self.assertEqual((450, 909), confirm.action_point)
+        self.assertIsNotNone(additions.popup_overlay)
+        assert additions.popup_overlay is not None
+        self.assertEqual(PopupControlKind.UPDATE_CONFIRM, additions.popup_overlay.candidates[0].control_kind)
+        self.assertEqual("required_game_update", additions.popup_overlay.layout_id)
+
+    def test_popup_classifier_rejects_nonexact_update_failure_message(self) -> None:
+        """Does not authorize a generic Confirm for an unreviewed update message."""
+
+        additions = _build_popup_additions(
+            image=Image.new("RGB", (900, 1600)),
+            lines=(
+                _ocr_line("Update failed. Try later?", x=98, y=640, width=374, height=38),
+                _ocr_line("Confirm", x=388, y=890, width=124, height=39),
+            ),
+            anchors=(),
+        )
+
+        self.assertIsNone(additions)
+
     def test_popup_classifier_accepts_generic_negative_only_with_compact_modal_support(self) -> None:
         """Requires message content above the paired negative/primary action row."""
 

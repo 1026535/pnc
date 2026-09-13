@@ -6,6 +6,7 @@ navigation harness across settling, observation budgets, and terminal outcomes.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -17,7 +18,9 @@ from PIL import Image
 
 from pnc_automation.app.automation.engine.core_runtime import CoreRuntime, build_core_runtime
 from pnc_automation.app.automation.engine.action_executor import ActionExecutor
-from pnc_automation.app.automation.engine.navigation_core import NavigationPolicy
+from pnc_automation.app.automation.engine.navigation_core import (
+    NavigationCore, NavigationPolicy, reviewed_navigation_edges,
+)
 from pnc_automation.app.automation.engine.observed_action_executor import ObservedActionExecutor
 from pnc_automation.app.entrypoints.app import ApplicationRunner
 from pnc_automation.app.pnc.domain.observation import (
@@ -49,6 +52,7 @@ from pnc_automation.core.vision.ocr.ocr_service import ObservationOcrContext, Oc
 
 from tests.support.automation.session import FakeSession
 from tests.support.core.logging import build_logger
+from tests.support.pnc.observations import make_observation
 from tests.support.paths import TEST_DATA_ROOT
 
 
@@ -76,6 +80,103 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertEqual(ScreenType.PNC_LOGIN, ready.screen_type)
         session.ensure_app_foregrounded.assert_called_once_with()
         self.assertEqual([], navigation.navigate_calls)
+
+    def test_observe_ready_settles_only_published_loading_and_preserves_content(self) -> None:
+        """A loading source gets one bounded passive settle with content on every frame."""
+
+        clock = _FakeClock()
+        navigation = _SettleNavigation(clock)
+        resource = make_observation(
+            ScreenType.PNC_BAG,
+            visible_ids=(UiElementId.PNC_BAG_SUBTAB_RESOURCE,),
+        )
+        runtime = _SequencedCoreRuntime(
+            navigation,
+            [
+                _frame(ScreenType.PNC_LOADING, 0),
+                replace(resource, captured_at=datetime(2026, 9, 10, tzinfo=UTC) + timedelta(seconds=1)),
+                replace(resource, captured_at=datetime(2026, 9, 10, tzinfo=UTC) + timedelta(seconds=2)),
+            ],
+        )
+
+        ready = runtime.observe_ready("resource_source", include_content=True)
+
+        self.assertEqual(ScreenType.PNC_BAG, ready.screen_type)
+        self.assertTrue(ready.has(UiElementId.PNC_BAG_SUBTAB_RESOURCE))
+        self.assertEqual(3, runtime.observation_count)
+        self.assertEqual([True, True, True], runtime.content_requests)
+        self.assertEqual(2, len(navigation.sleep_calls))
+
+    def test_observe_ready_does_not_retry_unknown_or_blocked_non_loading(self) -> None:
+        """Readiness leaves non-loading failures for the caller's fail-closed guard."""
+
+        for frame in (_frame(ScreenType.UNKNOWN, 0), _frame(ScreenType.PNC_BAG, 0, blocking_popup=True)):
+            with self.subTest(screen=frame.screen_type, blocked=frame.blocking_popup):
+                runtime = _SequencedCoreRuntime(_SettleNavigation(_FakeClock()), [frame])
+
+                result = runtime.observe_ready("source")
+
+                self.assertIs(frame, result)
+                self.assertEqual(1, runtime.observation_count)
+
+    def test_observe_ready_counts_initial_capture_against_settle_budget(self) -> None:
+        """A capture that already exhausts the budget cannot enter a late settle."""
+
+        clock = _FakeClock()
+        runtime = _SequencedCoreRuntime(
+            _SettleNavigation(clock, max_seconds=1.0),
+            [_frame(ScreenType.PNC_LOADING, 0), _frame(ScreenType.PNC_BAG, 1)],
+            capture_delays=[2.0, 0.0],
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "budget exhausted"):
+            runtime.observe_ready("resource_source")
+
+        self.assertEqual(1, runtime.observation_count)
+        self.assertEqual([], runtime.navigation.sleep_calls)
+
+    def test_loading_ready_source_reaches_one_reviewed_dispatch(self) -> None:
+        """Settles a loading source before one template-backed route action."""
+
+        clock = _FakeClock()
+        settle_navigation = _SettleNavigation(clock)
+        home = make_observation(
+            ScreenType.PNC_HOME_CITY,
+            visible_ids=(UiElementId.PNC_HOME_WORLD_SWITCH,),
+        )
+        runtime = _SequencedCoreRuntime(
+            settle_navigation,
+            [
+                _frame(ScreenType.PNC_LOADING, 0),
+                replace(home, captured_at=datetime(2026, 9, 10, tzinfo=UTC) + timedelta(seconds=1)),
+                replace(home, captured_at=datetime(2026, 9, 10, tzinfo=UTC) + timedelta(seconds=2)),
+                replace(home, captured_at=datetime(2026, 9, 10, tzinfo=UTC) + timedelta(seconds=3)),
+            ],
+        )
+        world_frames = iter(
+            (
+                _frame(ScreenType.PNC_WORLD_MAP, 4),
+                _frame(ScreenType.PNC_WORLD_MAP, 5),
+            )
+        )
+        post_observe = Mock(side_effect=lambda label: next(world_frames))
+        actuator = Mock()
+        actuator.execute_action.return_value = True
+        navigation = NavigationCore(
+            actuator,
+            post_observe,
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+            observe_ready=runtime.observe_ready,
+        )
+
+        result = navigation.navigate(ScreenType.PNC_WORLD_MAP)
+
+        self.assertEqual(ScreenType.PNC_WORLD_MAP, result.screen_type)
+        self.assertEqual(1, actuator.execute_action.call_count)
+        self.assertEqual(4, runtime.observation_count)
+        self.assertEqual(["core_1_after_0", "core_1_after_1"], [call.args[0] for call in post_observe.call_args_list])
 
     def test_ensure_game_ready_rejects_stable_android_home(self) -> None:
         """Does not treat a stable Android Home frame as a game-ready endpoint."""
@@ -791,7 +892,7 @@ class _SettleNavigation:
 class _SequencedCoreRuntime(CoreRuntime):
     """Core runtime with deterministic typed frames in place of screenshots."""
 
-    __slots__ = ("_frames", "_capture_delays", "_recovered_flags", "_clock")
+    __slots__ = ("_frames", "_capture_delays", "_recovered_flags", "_clock", "_content_requests")
 
     def __init__(
         self,
@@ -813,9 +914,17 @@ class _SequencedCoreRuntime(CoreRuntime):
         self._capture_delays = list(capture_delays or [0.0] * len(frames))
         self._recovered_flags = list(recovered_flags or [False] * len(frames))
         self._clock = navigation._clock
+        self._content_requests: list[bool] = []
+
+    @property
+    def content_requests(self) -> list[bool]:
+        """Returns the content scope requested for each deterministic capture."""
+
+        return self._content_requests
 
     def observe(self, label: str, *, include_content: bool = False) -> Observation:
-        del label, include_content
+        del label
+        self._content_requests.append(include_content)
         self._capture_count += 1
         self._clock.advance(self._capture_delays.pop(0))
         self._last_observe_recovered = self._recovered_flags.pop(0)

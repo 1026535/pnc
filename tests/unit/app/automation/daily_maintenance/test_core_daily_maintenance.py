@@ -4,22 +4,26 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from datetime import date
 from pathlib import Path
 
 from pnc_automation.app.authoring.config.daily_maintenance import (
-    DailyCapabilityPolicy,
     DailyMaintenanceTargetConfig,
 )
 from pnc_automation.app.automation.daily_maintenance.core_daily_maintenance import (
     CoreDailyMaintenanceWorkflow,
 )
-from pnc_automation.app.automation.engine.task import TaskId
+from pnc_automation.app.automation.daily_maintenance.application_service import DailyRunBoundary
+from pnc_automation.app.automation.daily_maintenance.authorization import DailyMutationAuthorizer
+from pnc_automation.app.automation.engine.core_daily_mutation import CoreMutationBoundary
+from pnc_automation.app.automation.engine.core_workflow import WorkflowContext, WorkflowEffect
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.domain.daily_maintenance import (
     DailyQuestId,
     DailyTargetOutcome,
     DailyTargetOutcomeStatus,
     DailyTaskCheckpoint,
+    MutationAcknowledgement,
 )
 from pnc_automation.app.pnc.domain.observation import (
     DetectedListEntry,
@@ -54,6 +58,15 @@ class CoreDailyMaintenanceWorkflowTests(unittest.TestCase):
             account_id="mega_old_acc",
             castle=self.castle,
         )
+        self.scope = CoreMutationBoundary(
+            target=self.target,
+            boundary=DailyRunBoundary(date(2026, 9, 4), self.checkpoint.game_reset_id),
+            authorizer=DailyMutationAuthorizer((MutationAcknowledgement(
+                self.target.account_id, self.target.castle_ref, DailyQuestId.CLAIM_COMPLETED,
+                date(2026, 9, 4), self.target.max_claims, 0,
+            ),)),
+            journal_store=self._journal_store(),
+        )
 
     def test_real_coordinator_traverses_viewports_and_reopens_after_claim(self) -> None:
         """Claims a row found after scrolling, then settles on the reordered final viewport."""
@@ -61,7 +74,7 @@ class CoreDailyMaintenanceWorkflowTests(unittest.TestCase):
         first = _observation(_entry(DailyQuestId.HERO_ARENA, "requirement"))
         claim = _observation(_entry(DailyQuestId.UPGRADE_BUILDING, "claim", bottom=True))
         final = _observation(_entry(DailyQuestId.UPGRADE_BUILDING, "completed", bottom=True))
-        context = _FakeCoreContext([first, first, claim, claim, final, final])
+        context = _FakeCoreContext(self.scope, [first, first, claim, claim, final, final])
 
         result = self._workflow().execute(context)
 
@@ -78,7 +91,7 @@ class CoreDailyMaintenanceWorkflowTests(unittest.TestCase):
         """Stops on one pending claim outcome and never reopens or claims the row again."""
 
         claim = _observation(_entry(DailyQuestId.UPGRADE_BUILDING, "claim", bottom=True))
-        context = _FakeCoreContext([claim, claim], claim_status=DailyTargetOutcomeStatus.PENDING_CLARIFICATION)
+        context = _FakeCoreContext(self.scope, [claim, claim], claim_status=DailyTargetOutcomeStatus.PENDING_CLARIFICATION)
 
         result = self._workflow().execute(context)
 
@@ -90,7 +103,7 @@ class CoreDailyMaintenanceWorkflowTests(unittest.TestCase):
         """Leaves a failed claim visible to the runner so it cannot replay or hide the error."""
 
         claim = _observation(_entry(DailyQuestId.UPGRADE_BUILDING, "claim", bottom=True))
-        context = _FakeCoreContext([claim, claim], claim_error=RuntimeError("claim verification failed"))
+        context = _FakeCoreContext(self.scope, [claim, claim], claim_error=RuntimeError("claim verification failed"))
 
         with self.assertRaisesRegex(RuntimeError, "claim verification failed"):
             self._workflow().execute(context)
@@ -98,30 +111,19 @@ class CoreDailyMaintenanceWorkflowTests(unittest.TestCase):
         self.assertEqual([DailyQuestId.UPGRADE_BUILDING], context.claimed_rows)
         self.assertEqual([ScreenType.PNC_QUEST_DAILY], context.navigations)
 
-    def test_action_capabilities_are_rejected_before_execution(self) -> None:
-        """Rejects a configured Go capability because this core scope owns claims only."""
+    def test_read_only_context_cannot_run_a_claim_sweep(self) -> None:
+        """Even a sweep without claims must use its authorized mutation boundary."""
 
-        target = DailyMaintenanceTargetConfig(
-            account_id=self.target.account_id,
-            castle_ref=self.target.castle_ref,
-            castle=self.target.castle,
-            capabilities=(DailyCapabilityPolicy(DailyQuestId.HERO_ARENA, TaskId.HERO_ARENA, 1),),
-        )
-        with self.assertRaisesRegex(PermissionError, "action capabilities"):
-            CoreDailyMaintenanceWorkflow(
-                target=target,
-                checkpoint=self.checkpoint,
-                journal_store=self._journal_store(),
-            )
+        context = _FakeCoreContext(self.scope, [])
+        context._effect = WorkflowEffect.READ_ONLY
+        with self.assertRaises(PermissionError):
+            self._workflow().execute(context)
+        self.assertEqual([], context.navigations)
 
     def _workflow(self) -> CoreDailyMaintenanceWorkflow:
         """Builds the workflow while keeping coordinator execution real."""
 
-        return CoreDailyMaintenanceWorkflow(
-            target=self.target,
-            checkpoint=self.checkpoint,
-            journal_store=self._journal_store(),
-        )
+        return CoreDailyMaintenanceWorkflow(checkpoint=self.checkpoint)
 
     def _journal_store(self) -> DailyRunJournalStore:
         """Returns the isolated journal store for one test."""
@@ -129,16 +131,19 @@ class CoreDailyMaintenanceWorkflowTests(unittest.TestCase):
         return DailyRunJournalStore(Path(self.temporary_directory.name))
 
 
-class _FakeCoreContext:
+class _FakeCoreContext(WorkflowContext):
     """Supplies typed core seam behavior while leaving the real coordinator in charge."""
 
     def __init__(
         self,
+        boundary: CoreMutationBoundary,
         observations: list[Observation],
         *,
         claim_status: DailyTargetOutcomeStatus = DailyTargetOutcomeStatus.SUCCESS,
         claim_error: Exception | None = None,
     ) -> None:
+        self._effect = WorkflowEffect.RESOURCE_CHANGING
+        self._mutation_boundary = boundary
         self.observations = observations
         self.claim_status = claim_status
         self.claim_error = claim_error

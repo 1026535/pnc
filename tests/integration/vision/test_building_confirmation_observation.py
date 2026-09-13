@@ -12,6 +12,8 @@ from PIL import Image
 
 from pnc_automation.core.infra.storage.artifact_store import ArtifactStore
 from pnc_automation.core.infra.capture.screenshot_service import ScreenshotService
+from pnc_automation.app.pnc.domain.popup import PopupControlKind
+from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.observation_builder import (
@@ -174,6 +176,57 @@ class BuildingConfirmationObservationTests(unittest.TestCase):
             self.assertTrue(observation.blocking_popup)
             self.assertFalse(observation.has(UiElementId.PNC_BUILDING_LEVEL_LABEL))
             self.assertTrue(observation.has(UiElementId.PNC_UPDATE_CONFIRM_BUTTON))
+
+    def test_observation_builder_classifies_update_failure_over_publisher_splash(self) -> None:
+        """Lets the exact retry dialog own a frame whose background also looks like loading."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            root = Path(temp_directory)
+            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            screenshot = screenshot_service.capture(
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                artifact_directory="update_failure_popup",
+                label="update_failure_popup",
+            )
+            builder = ObservationBuilder(
+                selector_registry=_minimal_runtime_registry(),
+                selector_engine=ImageSelectorEngine(
+                    template_matcher=OpenCvTemplateMatcher(),
+                ),
+                screen_classifier=ScreenClassifier(),
+                enricher=PncObservationEnricher(),
+                ocr_service=_FakeOcrService(
+                    lines=(
+                        _ocr_line("CONQUEST", x=292, y=40, width=300, height=60),
+                        _ocr_line("Update failed. Try again?", x=98, y=640, width=374, height=38),
+                        _ocr_line("Confirm", x=388, y=890, width=124, height=39),
+                        _ocr_line("10%", x=420, y=1390, width=64, height=32),
+                        _ocr_line(
+                            "Downloading update resources...0/2 0%",
+                            x=154,
+                            y=1449,
+                            width=593,
+                            height=36,
+                        ),
+                    )
+                ),
+            )
+
+            observation = builder.build(screenshot)
+
+            self.assertEqual(observation.screen_type, ScreenType.PNC_POPUP)
+            self.assertIsNotNone(observation.decision)
+            assert observation.decision is not None
+            self.assertEqual(GuardVerdict.BLOCKED, observation.decision.guard)
+            self.assertTrue(observation.blocking_popup)
+            self.assertTrue(observation.has(UiElementId.PNC_UPDATE_CONFIRM_BUTTON))
+            self.assertFalse(observation.has(UiElementId.PNC_LOADING_RECONNECT_BUTTON))
+            self.assertIsNotNone(observation.popup_overlay)
+            assert observation.popup_overlay is not None
+            self.assertEqual(
+                PopupControlKind.UPDATE_CONFIRM,
+                observation.popup_overlay.candidates[0].control_kind,
+            )
 
     def test_observation_builder_rejects_upgrade_like_non_building_screens(self) -> None:
         """Keeps ambiguous upgrade screens unknown when the building evidence is incomplete."""

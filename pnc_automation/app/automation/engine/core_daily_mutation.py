@@ -16,7 +16,14 @@ from pnc_automation.app.automation.daily_maintenance.mutation_dispatcher import 
     MutationReconciliation,
 )
 from pnc_automation.app.automation.engine.core_runtime import CoreRuntime
-from pnc_automation.app.automation.daily_maintenance.coordinator import DailyReadOnlySurvey
+from pnc_automation.app.automation.daily_maintenance.coordinator import (
+    DailyMaintenanceCoordinator,
+    DailyMaintenanceResult,
+    DailyQuestSession,
+    DailyReadOnlySurvey,
+    DailyRowClaimExecutor,
+    ForbiddenDailyMutationExecutor,
+)
 from pnc_automation.app.automation.daily_maintenance.hero_hall import HeroHallRecruitmentExecutor
 from pnc_automation.app.automation.daily_maintenance.resource_item import ResourceItemExecutor
 from pnc_automation.app.automation.engine.core_hero_hall_session import CoreHeroHallSession
@@ -37,6 +44,7 @@ from pnc_automation.app.pnc.domain.daily_maintenance import (
     MutationIntentState,
 )
 from pnc_automation.app.pnc.domain.observation import Observation, VisibleElementSourceKind
+from pnc_automation.app.pnc.domain.daily_quest_catalog import DailyQuestCatalog
 from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
@@ -117,6 +125,24 @@ class CoreMutationBoundary:
             raise PermissionError(
                 "The active castle does not match the authorized mutation target."
             )
+
+    def run_daily_maintenance(
+        self, *, session: DailyQuestSession, claim_executor: DailyRowClaimExecutor,
+        checkpoint: DailyTaskCheckpoint,
+    ) -> DailyMaintenanceResult:
+        """Validate the entire claim sweep before its coordinator may save progress."""
+
+        self.authorize()
+        if self.policy.quest_id != DailyQuestId.CLAIM_COMPLETED:
+            raise PermissionError("This scope does not authorize a Daily claim sweep.")
+        self._require_checkpoint(checkpoint)
+        return DailyMaintenanceCoordinator(
+            session=session,
+            claim_executor=claim_executor,
+            capability_executor=ForbiddenDailyMutationExecutor(),
+            journal_store=self.journal_store,
+            catalog=DailyQuestCatalog(),
+        ).run(target=self.target, checkpoint=checkpoint)
 
     def claim(
         self,

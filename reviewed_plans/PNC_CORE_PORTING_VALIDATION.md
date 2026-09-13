@@ -476,3 +476,273 @@ note changes documentation only; no source or test changes followed the gate.
 `git diff --check` passed. No additional live or full-suite run was needed for
 that result note. Publication retains every completed port and reviewed history;
 live acceptance remains limited as described above.
+
+## September 13 resumed implementation
+
+The user resumed the handoff's STOP in the existing integration worktree. Fresh
+inspection verified `codex/workflow-recognition-integration`, clean at
+`196e5b165f2d907158fd547f25d2fd4c1534be27`. No reset, merge, commit, push, or
+other worktree edit occurred. The source changes below, including the later
+exact update-popup recognition fix, remain uncommitted on that checkpoint.
+
+### Daily durable checkpoint regression
+
+An added regression using the real core runner, coordinator and journal reproduced
+the handoff's defect: a no-claim sweep erased one newer committed intent. The
+initial `group contract.workflows` run failed that assertion (52 passed, one
+failed). Evidence: `.test-impact/stale-reproduction-results.json` in the candidate.
+
+`CoreDailyMaintenanceWorkflow` now supplies only its checkpoint through
+`WorkflowContext.run_daily_maintenance`. `CoreMutationBoundary` checks exact
+authority and durable checkpoint state before the coordinator runs, then supplies
+its own target and journal. Per-claim validation remains in the same owner. The
+connected caller uses this boundary; its duplicate checkpoint guards were removed.
+No shared persistence internals changed. Regressions prove stale/unresolved/wrong-
+date state is rejected before Daily entry and a current no-claim sweep preserves
+committed receipts. Claim-first scrolling, reopening and ambiguity semantics remain.
+
+### Bounded source readiness
+
+`CoreRuntime.observe_ready` captures once and enters the existing passive settle
+loop only for `PNC_LOADING`. It retains initial capture time/count, requested
+content, stable known completion, freshness and popup episode ownership. Reviewed
+initial/edge source acquisition and Resource content opt in. Exact source/control
+and selected-tab guards still govern input. Ordinary observations, navigation
+post-action polling and Chat capture behavior remain unchanged; there is no
+generic UNKNOWN retry. Resource scrolling retains its outer completion deadline.
+
+### New offline results
+
+All commands used installed Python 3.13.5 at
+`C:/Users/lebel/AppData/Local/Programs/Python/Python313/python.exe`; the `py -3.13`
+launcher reported no installed Python. The repository runner remained the test
+authority.
+
+- `tools/run_tests.py group unit.app.automation.daily_maintenance`: 114 passed.
+- `tools/run_tests.py group contract.workflows`: 55 passed.
+- `tools/run_tests.py group integration.workflows`: 200 passed.
+- `tools/run_tests.py group unit.app.pnc.navigation`: 245 passed.
+- `tools/run_tests.py group unit.app.pnc.vision`: 122 passed.
+- `tools/run_tests.py group integration.vision`: 337 passed, five skipped.
+- `tools/run_tests.py affected --base origin/main --explain --json
+  .test-impact/resume-selection-final.json --results .test-impact/resume-results-final.json`:
+  mandatory full fallback passed, **2,010 passed, six skipped, 2,016 total**,
+  zero failures; total 149.720 seconds. Five skips require optional local
+  screenshots; one requires Windows symlink privilege.
+
+Final gate evidence is in the candidate's `.test-impact/resume-selection-final.json`
+and `resume-results-final.json`. Run ID:
+`e5b294e3e4334365bb4fde1ec27dbc74`; source fingerprint:
+`8d6a8e81531c142c7a8ddc0d37603ed1042ba5df4ce033da39ac4f0d151822af`.
+The dedicated read-only review found no actionable defect in either completed
+slice. Only result/contract documentation followed this source/test gate.
+
+### Fresh live attempts and remaining gates
+
+The user freshly authorized all needed in-game actions and unlimited resource
+spending on `mega_old_acc`. Configured authority resolves that account to
+`bs-mega-old-acc`, with the `daily_canary` role and canary target K157 / `NPC 2`,
+level 22. This is configured identity, not a new verified active-castle finding.
+No local account, castle, Daily config or shared device/storage code was changed.
+
+The prepared bounded mutation proof would run one normal Resource pack Use and
+one free Hero Hall increment, both with zero diamonds, through the canonical
+scope and journal. Its first invocation failed during canonical process
+discovery because sandboxed CIM access was denied, before any game input.
+The elevated invocation was rejected by automatic approval review, which stated
+that exact actions/target/budgets needed explicit authorization despite the broad
+authorization above. It was not executed or bypassed. The user then explicitly
+approved the prepared one-pack/one-free-single proof on `mega_old_acc` / K157 /
+`NPC 2`, zero diamonds, after readiness and exact identity are proven. This
+resolves the requested action/target/budget confirmation; do not ask again.
+
+A separate approved read-only helper constructed no mutation workflow. It held
+the canonical account reservation while resolving/foregrounding the game and
+attempting nonselecting identity preflight. The default eight-observation startup
+budget expired with all frames published as `PNC_LOADING`: the first and last
+were all-zero RGB; intermediate frames showed the publisher splash. This is
+cold-start evidence, not proof of a persistent blank-capture defect. Inspecting
+that evidence justified one read-only retry with 20 observations and the same
+45-second deadline. That attempt also exhausted the deadline with loading frames.
+Visual inspection of its final frame revealed `Update failed. Try again?` with a
+Confirm button over the update download screen. This refines the second stop to
+an update-failure dialog that was unrecognized at that checkpoint, rather than
+merely slow startup. No further
+unchanged attempt was made. Active identity and final Home were never
+proven; no claims, Resource Use, recruitment, or mutation-journal write occurred.
+Both helper processes exited 1 after canonical context cleanup and reservation
+release. Cleanup preserves pre-existing instances.
+
+Evidence is under the candidate's `.local-data/artifacts/core_resume/`:
+`sandbox_discovery_stop.json`, `live_ports.py` (unexecuted elevated mutation path),
+`preflight_only.py`, and `preflight/initial_eight_frame_result.json`, `result.json`,
+`black_frame_diagnostic.json`, `update_failure_replay.json`. The read-only traces are
+`20260913T211330Z_49d7b3a3_core_trace.jsonl` and
+`20260913T211751Z_e1dd626b_core_trace.jsonl` under
+`preflight/2026-09-13/mega_old_acc_preflight/`. The diagnostic covers the initial
+eight frames. These outcomes do not establish the new source-readiness path's
+live acceptance or Resource/Hero caller acceptance.
+
+Offline RapidOCR replay of the final second-run frame now publishes `PNC_POPUP`,
+guard `blocked`, `blocking_popup=True`, the existing
+`PNC_UPDATE_CONFIRM_BUTTON`, and one `PopupControlKind.UPDATE_CONFIRM` candidate
+with `required_game_update` layout. The exact retry dialog takes precedence over
+the same frame's publisher loading-splash evidence. The canonical
+`ObservedActionExecutor.recover_update_if_required` can therefore own the
+bounded Confirm/recovery path when mutation policy permits; read-only probes
+still fail closed. No generic Confirm click, workflow-local parser, or popup
+bypass was added.
+
+Next concrete step: establish game readiness through canonical recovery, rerun
+exact identity preflight, and use the now-approved bounded mutation proof. Keep the
+`0 stickerNPC` / `0 sticker NPC` exact-identity publication blocker with the
+recognition owner. Broader Research categories, Campaign preparation, building
+normal/queue receipts, Gathering slots/correlated receipts, Mail send receipt,
+Login facts, and the pending Resource/Hero proofs still gate the remaining
+consumer/caller migrations. The full porting plan is not complete; automatic
+Daily remains disabled and no merge or push was performed.
+Final `git diff --check` passed; only these documentation notes followed the
+passing source/test gate.
+
+### Manual resumption and Resource boundary, 21:33–21:48 UTC
+
+The user requested manual Confirm handling and left the update recognition fix
+with another agent. On fresh inspection the download had already completed and
+a Savannah purchase offer was visible. The operator dismissed its visible X;
+no Confirm remained to click and no purchase occurred. Home was then observed.
+The canonical runtime reservation remained held across these dependent steps.
+
+The first nonselecting identity attempt stopped on More → Settings returning
+Home. Saved replay of the source publishes `PNC_MORE_SETTINGS` with template
+bounds `(772, 1430, 105, 43)` and action point `(824, 1451)` on its label in the
+900×1600 frame. This is evidence of the failing published point, not proof of
+the underlying UI cause. No coordinate override or producer edit was made by
+the workflow task. When the user pressed Escape, Computer Use stopped and the
+helper explicitly released its lease, preserving the running game.
+
+On the next authorized resumption, the fresh starting frame was Settings.
+`CoreWorkflowRunner(CoreResourceItemWorkflow(...))` then passed canonical
+identity verification against **K157 / NPC 2 / level 22** without a castle-row
+tap. It entered the selected Resource tab and performed the bounded inventory
+scan. The result was `PENDING_CLARIFICATION`: inventory remained unknown, so
+no pack was selected. The checkpoint contained **zero mutation intents**. The
+workflow returned to freshly confirmed Home; its `succeeded=True` records
+lifecycle completion and does not make the pending feature outcome a success.
+No resource or diamonds were spent and no new durable mutation was recorded.
+
+Candidate evidence under `.local-data/artifacts/core_resume/`:
+
+- `manual_update_20260913T213334Z/identity_stop.json`, `settings_replay.json`,
+  `closed.json`, and trace `20260913T213336Z_d6b5d31e_core_trace.jsonl`.
+- `manual_update_20260913T214455Z/use_resource_item.json`, `resource_summary.json`,
+  and trace `20260913T214457Z_b39f74f1_core_trace.jsonl`.
+- Exact selected-row frame `..._0008_active_castle_identity.png`; final inventory
+  frames `..._0041_resource_scroll_first.png`, `..._0042_resource_scroll_second.png`,
+  `..._0043_resource_scroll_settled.png`; Home `..._0047_core_10_after_1.png`.
+  Frames/traces are under each run's `2026-09-13/mega_old_acc_manual_update/`.
+
+Resource caller migration remains gated on complete inventory and the actual
+single-Use/Daily receipt. Hero proof is independent and still pending. The
+historical `0 stickerNPC` / `0 sticker NPC` producer mismatch remains recorded
+for that selected identity; NPC 2 success does not fix it or qualify other
+accounts. The remaining producer-dependent ports in the plan remain incomplete.
+
+### Resource replay and Hero result dependency
+
+Luna replayed the three final Resource frames with real RapidOCR through both
+`ObservationBuilder` and `NavigationPerception(include_content=True)`. Both paths
+agree on CLEAR Bag, selected Resource, matching rows, and unresolved
+`missing_or_ambiguous_title_or_count` boundary cards. The final settled frame has
+a bottom card at `(9, 1458, 882, 141)` with missing count; an earlier frame also
+has a truncated top card. The canonical scanner returns UNKNOWN for these typed
+unresolved rows, and the executor correctly returns pending without selecting or
+using an item. No workflow-local crop, parser or unknown-row exemption was added.
+Detailed replay: `manual_update_20260913T214455Z/`
+`resource_inventory_replay_diagnostic_20260913T215446Z.json`.
+
+After the user manually opened Settings, the Hero workflow independently passed
+the exact NPC 2 preflight, found Hero Hall through bounded Home camera scanning,
+and observed five Daily attempts with the distinct free-single template control.
+At 21:52 UTC it sent exactly one approved free tap. The following capture showed
+the summon animation and published UNKNOWN; `HeroHallState.from_observation`
+stopped the workflow. Durable intent `hero-hall-recruit-001` remained DISPATCHED
+with `before_daily_attempts_remaining=5`, zero diamond budget/spend, and no replay.
+This failure is preserved in `hero_hall_stop.json` in the same run directory.
+
+A later diagnostic frame showed Albertus with Confirm. The user's Confirm click
+revealed a fragments result with blue Close and a distinct paid Recruit 1x.
+Both result frames also published UNKNOWN, without a supported safe result
+control. The user was asked to click Close; no second Recruit was requested or
+executed. Frames are `..._0077_hero_hall_recruit_pre.png`,
+`..._0078_hero_hall_dispatch.png`, `..._0079_hero_hall_recruit_post.png`,
+`..._0080_hero_result_diagnostic.png`, and `..._0081_hero_after_manual_confirm.png`.
+The [scoped source/live reference](../docs/game-reference/workflows/hero-hall-recruitment.md)
+explains why neither result closure nor the paid repeat button is a free receipt.
+
+Automatic Hero acceptance remains blocked on qualified result-state/control
+publication, then A-owned bounded traversal back to fresh Hero Hall receipt
+evidence. One successful free tap or manual result dismissal does not establish
+the complete automatic workflow, the full five-single Daily canary, or caller
+promotion. The existing journal is the authority for subsequent reconciliation.
+
+At 22:00 UTC a fresh diagnostic still showed the fragments result and blue Close.
+The requested manual Close had not been observed and no reply had arrived, so no
+reconciliation or further input was attempted. The helper saved
+`awaiting_manual_close.json`, released the lease explicitly, and preserved the
+running game (`closed.json`). Final Home is unproven for this Hero attempt.
+Next: after manual Close, capture fresh Hero Hall state and reconcile only the
+existing `hero-hall-recruit-001` intent through the canonical executor/dispatcher.
+Do not repeat the free tap or use the result screen's paid Recruit control.
+
+The latest Resource diagnostic adds the actual OCR lines supporting the same
+finding: `resource_inventory_replay_diagnostic_with_ocr_20260913T215728Z.json` in
+the run directory. No additional test suite or live Resource attempt was run for
+this evidence-only diagnosis. The previously recorded Daily/readiness checks
+remain the validation for those unchanged implementations.
+
+### Hero reconciliation complete, 22:03–22:08 UTC
+
+The user's Ready followed the requested blue Close. A new canonical lease and
+fresh capture proved clear Hero Hall with **Daily attempts: 4**, compared with
+five before the single authorized tap; eight recruit items remained displayed.
+The operator used the visible More menu and Settings gear, which responded to
+manual input, without changing a production selector or castle. Canonical
+nonselecting preflight then freshly verified K157 / NPC 2 / level 22 and returned
+Home. Settings displayed footer version text `5.2.77 5.0.204.235`.
+
+The ignored `core_resume/reconcile_hero_only.py` helper validated the existing
+checkpoint through `CoreMutationBoundary`, reopened Hero Hall through the core,
+and used `HeroHallRecruitmentExecutor._reconcile_existing` with the core session
+and `JournaledMutationDispatcher`. It did not call the executor's new-increment
+path. A fresh guarded four-attempt frame committed `hero-hall-recruit-001`,
+retaining the canonical cooldown metadata and zero diamond spend. **No new
+recruit tap occurred.** Final Home was confirmed with two fresh frames; explicit
+cleanup released the lease and preserved the running game. The prior unresolved
+journal and final-Home blocker are therefore resolved.
+
+Evidence: `.local-data/artifacts/core_resume/manual_update_20260913T220305Z/`
+contains `hero_after_close.json`, `identity.json`, `hero_reconciliation.json`,
+`reconciliation_summary.json`, `reconciliation_final_home.json`, and `closed.json`.
+Its `2026-09-13/mega_old_acc_manual_update/` directory contains trace
+`20260913T220307Z_2fe54436_core_trace.jsonl`, receipt
+`..._0025_hero-hall-recruit-001_reconcile.png`, and Home
+`..._0029_core_7_after_1.png`.
+
+This proves one free-single consumption and reconciliation with manual result
+dismissal. It does not accept the automatic result path, the five-single Daily
+requirement, or the Hero caller migration. Resource Use remains zero. No new
+supported producer facts were added by the workflow task; remaining original
+consumer ports retain their precise recognition dependencies in the plan.
+
+The saved final runner report was also rechecked: its 2,016 records comprise
+2,010 passes and six skips. The earlier notes double-counted the skips and paired
+the gate filename with the final run's metadata; the counts, paths and duration
+above now match the actual final JSON. This resumption changed only evidence and
+documentation, so no additional unit/full run was needed. `git diff --check`
+passed after the updates. No merge, push, account/castle change or automatic
+Daily activation occurred.
+
+After this proof, the user clarified that computer/BlueStacks manipulation must
+be left to them. Future needed clicks or navigation are requested from the user;
+the workflow task continues code work and offline validation without desktop or
+game input. No further live input was sent after that clarification.
