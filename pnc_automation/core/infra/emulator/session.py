@@ -218,7 +218,7 @@ class BlueStacksSession:
         """Returns whether the configured P&C package is the foreground app."""
 
         self._ensure_lease()
-        result = self.adb_client.shell(self.instance.device_id, "dumpsys", "window", "windows")
+        result = self.adb_client.shell(self.instance.device_id, "dumpsys", "window")
         if not result.succeeded:
             raise GameLaunchError(
                 f"Failed to determine foreground app for '{self.instance.device_id}'.",
