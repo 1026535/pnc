@@ -305,6 +305,16 @@
       ]
     },
     {
+      "image": "mail_player_list.png",
+      "screen": "PNC_MAILBOX_LIST",
+      "split": "reference",
+      "group": "2026-09-13/mega_old_acc/mail_compose",
+      "sha256": "783298dcd610974aca7d6ac5ab8f893ce8b0c19924f764ee7a7c82fdc429b000",
+      "expected_visual_screens": [
+        "PNC_MAILBOX_LIST"
+      ]
+    },
+    {
       "image": "chat_home_alliance.png",
       "screen": "PNC_HOME_CITY",
       "split": "reference",

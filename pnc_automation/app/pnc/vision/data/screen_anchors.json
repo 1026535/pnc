@@ -2295,6 +2295,74 @@
       "layout_id": "collect_mail_mailbox_list"
     },
     {
+      "id": "player_mail_mailbox_list",
+      "screen": "PNC_MAILBOX_LIST",
+      "anchors": [
+        {
+          "image": "screen_anchors/mail_player_list_header.png",
+          "search_region": [
+            80,
+            0,
+            300,
+            75
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/collect_mail_list_identity_1.png",
+          "search_region": [
+            160,
+            850,
+            230,
+            105
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/collect_mail_list_identity_0.png",
+            "search_region": [
+              10,
+              0,
+              85,
+              55
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_MAIL_COMPOSE_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/mail_player_compose_button.png",
+            "search_region": [
+              70,
+              850,
+              70,
+              100
+            ],
+            "threshold": 0.95
+          }
+        }
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/mail_player_list.png",
+        "decoded_sha256": "783298dcd610974aca7d6ac5ab8f893ce8b0c19924f764ee7a7c82fdc429b000",
+        "capture_group": "2026-09-13/mega_old_acc/mail_compose"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Sanitized Player Mail list profile with the observed lower-left compose control; thread identity content is redacted.",
+        "build": "5.2.76 / AppVersion 5.0.204.235",
+        "locale": "English",
+        "qualification": "guarded_reference_only"
+      },
+      "layout_id": "collect_mail_mailbox_list"
+    },
+    {
       "id": "campaign_map",
       "screen": "PNC_CAMPAIGN_MAP",
       "anchors": [

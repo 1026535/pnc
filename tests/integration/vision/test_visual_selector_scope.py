@@ -76,6 +76,16 @@ def _builder(ocr_service: _RecordingOcrService) -> ObservationBuilder:
     )
 
 
+def _player_mail_lines() -> tuple[OcrLine, ...]:
+    """Return controlled OCR for the reviewed Player Mail list fixture."""
+
+    return (
+        OcrLine("Player Mail", Bounds(110, 12, 155, 28), 1.0),
+        OcrLine("Mark All as Read", Bounds(177, 884, 184, 34), 1.0),
+        OcrLine("Manage", Bounds(402, 884, 72, 30), 1.0),
+    )
+
+
 def _production_observations(
     image: Image.Image,
     *,
@@ -101,6 +111,89 @@ def _production_observations(
 
 class VisualSelectorScopeTests(unittest.TestCase):
     """Keep visual identity scoping cheap while preserving guard and coordinate fallbacks."""
+
+    def test_generic_building_level_uses_the_real_builder_without_promoting_navigation_identity(self) -> None:
+        """Publish captured Farm OCR through the builder; retain visual-only navigation identity."""
+
+        level_bounds = Bounds(201, 408, 68, 31)
+        capture, observations = _production_observations(
+            Image.new("RGB", (900, 1600), (15, 28, 68)),
+            request=ObservationRequest.source_screen_retry(ScreenType.PNC_BUILDING_DETAILS),
+            lines=(
+                OcrLine("Farm", Bounds(180, 23, 123, 46), 1.0),
+                OcrLine("Where Food is produced. Upgrade", Bounds(471, 245, 415, 26), 1.0),
+                OcrLine("1/45", level_bounds, 1.0),
+                OcrLine("Upgrade", Bounds(671, 440, 147, 37), 1.0),
+                OcrLine("Time", Bounds(59, 552, 71, 29), 1.0),
+                OcrLine("Requirement", Bounds(62, 713, 177, 27), 1.0),
+                OcrLine("Materials required", Bounds(61, 865, 251, 26), 1.0),
+                OcrLine("Effect", Bounds(60, 1035, 83, 31), 1.0),
+            ),
+        )
+        builder = observations["builder"]
+        self.assertEqual(builder.screen_type, ScreenType.PNC_BUILDING_DETAILS)
+        level = builder.require(UiElementId.PNC_BUILDING_LEVEL_LABEL)
+        self.assertEqual(level.extracted_text, "1/45")
+        self.assertEqual(level.bounds, level_bounds)
+        self.assertEqual(level.frame_ref, capture.frame_ref)
+        self.assertEqual(level.source_screen, ScreenType.PNC_BUILDING_DETAILS)
+        self.assertFalse(builder.has(UiElementId.PNC_BUILDING_REQUIREMENT_HEADER))
+
+        navigation = observations["navigation"]
+        self.assertEqual(navigation.screen_type, ScreenType.UNKNOWN)
+        self.assertFalse(navigation.has(UiElementId.PNC_BUILDING_LEVEL_LABEL))
+
+    def test_player_mail_compose_is_published_by_both_visual_paths_with_frame_provenance(self) -> None:
+        """Publishes the observed lower-left compose control only from the Player Mail profile."""
+
+        image = _image("mail_player_list.png")
+        capture, observations = _production_observations(
+            image,
+            request=ObservationRequest.mailbox_observation(MailboxType.PLAYER),
+            lines=_player_mail_lines(),
+        )
+        for path, observation in observations.items():
+            with self.subTest(path=path):
+                self.assertEqual(observation.screen_type, ScreenType.PNC_MAILBOX_LIST)
+                compose = observation.require(UiElementId.PNC_MAIL_COMPOSE_BUTTON)
+                self.assertEqual(compose.source_kind.name, "TEMPLATE")
+                self.assertEqual(compose.bounds, Bounds(78, 866, 40, 60))
+                self.assertEqual(compose.action_point, (98, 896))
+                self.assertEqual(compose.source_screen, ScreenType.PNC_MAILBOX_LIST)
+                self.assertEqual(compose.source_layout_id, "collect_mail_mailbox_list")
+                self.assertEqual(compose.frame_ref, capture.frame_ref)
+                self.assertEqual(observation.frame_ref, capture.frame_ref)
+
+    def test_player_mail_compose_abstains_when_missing_wrong_mailbox_or_blocked(self) -> None:
+        """Keeps a visually plausible compose action absent from unsupported or blocked mailbox frames."""
+
+        cases = (
+            ("mail_player_list_no_compose.png", _player_mail_lines(), ObservationRequest.mailbox_observation(MailboxType.PLAYER)),
+            (
+                "collect_mail_system_list.png",
+                (OcrLine("System Message", Bounds(111, 12, 190, 28), 1.0),),
+                ObservationRequest.base(),
+            ),
+            (
+                "mail_player_list.png",
+                _player_mail_lines()
+                + (
+                    OcrLine(
+                        "New version detected. Tap Confirm to update.",
+                        Bounds(58, 380, 420, 28),
+                        1.0,
+                    ),
+                    OcrLine("Confirm", Bounds(221, 531, 90, 27), 1.0),
+                ),
+                ObservationRequest.mailbox_observation(MailboxType.PLAYER),
+            ),
+        )
+        for name, lines, request in cases:
+            capture, observations = _production_observations(_image(name), request=request, lines=lines)
+            for path, observation in observations.items():
+                with self.subTest(case=name, path=path):
+                    self.assertNotIn(UiElementId.PNC_MAIL_COMPOSE_BUTTON, observation.visible_elements)
+                    self.assertEqual(observation.frame_ref, capture.frame_ref)
 
     def test_hero_free_recruit_control_is_template_bound_across_reviewed_frames(self) -> None:
         """Publishes the gold Free Recruit 1x control on the reference, scaled, and holdout frames."""
