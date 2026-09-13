@@ -47,6 +47,7 @@ from pnc_automation.app.pnc.navigation.world_map_overview_projection import (
 )
 from pnc_automation.core.text.normalization import normalize_ocr_text
 from pnc_automation.app.pnc.vision.observation_builder import ObservationAdditions
+from pnc_automation.app.pnc.vision.observation_provenance import select_content_labels
 from pnc_automation.app.pnc.vision.ocr_region_plan import (
     OcrRegionFailurePolicy,
     OcrRegionRead,
@@ -1842,6 +1843,18 @@ class PncObservationEnricher:
 
     selector_registry: SelectorRegistry | None = None
     text_anchor_detector: TextAnchorDetector = field(default_factory=TextAnchorDetector)
+
+    def content_labels(
+        self,
+        additions: ObservationAdditions,
+    ) -> Mapping[UiElementId, VisibleElement]:
+        """Returns only labels explicitly declared non-actionable by the registry."""
+
+        return select_content_labels(
+            additions.visible_elements,
+            selector_registry=self.selector_registry,
+        )
+
     def detect_interruption(
         self, image: Image.Image, *, ocr_context: ObservationOcrContext,
         owned_dismiss_bounds: tuple[Bounds, ...] = (),

@@ -72,12 +72,13 @@ class OcrReadStatus(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class OcrReadDiagnostic:
-    """Immutable reason and outcome for one context-bound OCR request."""
+    """Immutable request outcome and acquired result, retained for OCR-free export."""
 
     purpose: OcrReadPurpose
     status: OcrReadStatus
     region: Bounds | None
     detail: str | None = None
+    result: OcrResult | None = None
 
 
 class OcrService(Protocol):
@@ -124,8 +125,8 @@ class ObservationOcrContext:
     The source image identity is retained only to reject accidental reads from a
     different capture. OCR always receives a private copy, and cache keys never
     contain image identity or dimensions. A successful raw full-frame result is
-    pinned so repeated bounded-region discovery cannot evict the result needed by
-    later diagnostics.
+    pinned while legacy guard/content callers still reuse it. Diagnostics retain
+    acquired results independently of cache eviction and never need another read.
     """
 
     _source_image: Image.Image = field(init=False, repr=False)
@@ -249,8 +250,9 @@ class ObservationOcrContext:
         status: OcrReadStatus,
         region: Bounds | None,
         detail: str | None,
+        result: OcrResult | None = None,
     ) -> None:
-        self._diagnostics.append(OcrReadDiagnostic(purpose, status, region, detail))
+        self._diagnostics.append(OcrReadDiagnostic(purpose, status, region, detail, result))
 
     def record_diagnostic(
         self,
@@ -304,6 +306,7 @@ class ObservationOcrContext:
                     status=OcrReadStatus.CACHE_HIT,
                     region=validated_region,
                     detail=detail,
+                    result=cached.result,
                 )
                 return cached.result
             if validated_region is not None and reuse_full_frame:
@@ -311,13 +314,15 @@ class ObservationOcrContext:
                 fullframe = self._cache.get(fullframe_key)
                 if fullframe is not None and fullframe.result is not None:
                     self._fullframe_reuses += 1
+                    result = _contained_result(fullframe.result, validated_region)
                     self._record_diagnostic(
                         purpose=purpose,
                         status=OcrReadStatus.FULL_FRAME_REUSE,
                         region=validated_region,
                         detail=detail,
+                        result=result,
                     )
-                    return _contained_result(fullframe.result, validated_region)
+                    return result
             try:
                 result = self._run_backend(
                     key=key,
@@ -338,6 +343,7 @@ class ObservationOcrContext:
                 status=OcrReadStatus.ENGINE,
                 region=validated_region,
                 detail=detail,
+                result=result,
             )
             return result
 
@@ -419,6 +425,7 @@ class ObservationOcrContext:
                     status=OcrReadStatus.MISSING if cached.not_applicable else OcrReadStatus.CACHE_HIT,
                     region=validated_region,
                     detail=detail,
+                    result=cached.result,
                 )
                 return None if cached.not_applicable else cached.result
             try:
@@ -441,6 +448,7 @@ class ObservationOcrContext:
                 status=OcrReadStatus.MISSING if result is None else OcrReadStatus.ENGINE,
                 region=validated_region,
                 detail=detail,
+                result=result,
             )
             return result
 

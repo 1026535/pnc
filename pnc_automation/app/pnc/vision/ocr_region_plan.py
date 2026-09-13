@@ -131,7 +131,8 @@ def execute_ocr_region_plans(
                     if plan.failure_policy == OcrRegionFailurePolicy.FULL_FRAME_FALLBACK
                     else plan.bounds
                 ),
-                detail=f"plan_missing:{plan.required_fact}",
+                # Keep one diagnostic key across a transient miss and its retry.
+                detail=detail,
             )
             reads.append(OcrRegionRead(plan, None, OcrRegionReadStatus.MISSING))
             continue
@@ -145,7 +146,7 @@ def execute_ocr_region_plans(
                     if plan.failure_policy == OcrRegionFailurePolicy.FULL_FRAME_FALLBACK
                     else plan.bounds
                 ),
-                detail=f"plan_missing:{plan.required_fact}",
+                detail=detail,
             )
         reads.append(OcrRegionRead(plan, result, status))
     return tuple(reads)

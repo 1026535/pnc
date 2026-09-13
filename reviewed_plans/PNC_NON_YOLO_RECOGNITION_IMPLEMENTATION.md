@@ -1,5 +1,118 @@
 # Non-YOLO recognition implementation
 
+## First remaining-plan slice — September 13, 2026
+
+The reviewed remaining-work plan was committed as `f3b88f774722a950ae3069a5a516adce9f78d051`
+and pushed to `origin/codex/non-yolo-recognition-continuation`. Its parent and the
+validation base are main commit `850bdb747be79bb78363b8dca49a0097c6ed6546`.
+The implementation described here was prepared on that plan commit and subsequently
+reviewed with the corrections below. It starts the plan; it does not complete or
+promote the full correction.
+The [remaining checklist](PNC_NON_YOLO_RECOGNITION_REMAINING_CHECKLIST.md) records
+working contracts, reproduced gaps and captured variants awaiting qualification.
+
+### Producer contract and changed owners
+
+- `observation_provenance.py` owns registry-declared, OCR-only label selection.
+  `selector_registry.yaml` explicitly classifies the building level as a label.
+  `observation_builder.py`, `navigation_perception.py` and
+  `pnc_observation_enricher.py` reuse this rule. On the independently identified
+  Institute capture, both real production paths publish the existing `8/45` label
+  with native bounds, current frame and source screen/layout. It has no action point
+  or identity authority. Existing visual proof wins a collision; foreign frame/layout
+  and mismatched selector keys are rejected. Blocked/unknown observations and
+  navigation with `include_content=False` do not gain content labels. Generic Farm
+  still lacks independent visual identity and retains its existing navigation abstention.
+- `core/vision/ocr/ocr_service.py` retains immutable results alongside read diagnostics,
+  including cache/reuse outcomes. Existing cache semantics and native-coordinate
+  projection remain unchanged. The shared artifact collector moved from the builder
+  to `vision/observation_diagnostics.py`; the old builder import remains available.
+  It exports acquired lines without requesting OCR. Both production paths reach the
+  same gap reporter for unknown decisions, unresolved guards and recorded terminal
+  missing/error reads, including zero-read unknown frames. Reports retain capture,
+  profile, decision, attempted-region and result evidence. Ephemeral captures retain
+  in-memory diagnostics without claiming a saved report. Successful retries are not
+  reported as remaining missing reads.
+- New regressions are `tests/integration/vision/test_content_label_publication.py`,
+  `tests/integration/vision/test_observation_diagnostics.py` and
+  `tests/unit/core/vision/test_ocr_diagnostic_snapshot.py`. They exercise production
+  registry/recognizer/selector-engine paths and controlled OCR, provenance/overlay
+  negatives, existing visual-proof precedence and zero additional exporter reads.
+  Labels are parsed from OCR evidence rather than injected into the tested observation.
+  Luna xhigh agents implemented bounded publication/tests/checklist slices; root
+  reviewed them and implemented the shared diagnostics and compatibility correction.
+
+### Review corrections
+
+- The new consumer regression first reproduced four failing cases: label taps and
+  label text-focus requests through each production observation path. Clearing the
+  action point had allowed the executor to tap the label's center. The user's request
+  to apply this finding authorized a narrow correction to A's `action_executor.py`:
+  its selector input validation now rejects canonical `LABEL` metadata before
+  geometry fallback, frame authorization or input accounting. Both input forms fail
+  without taps/text or consumed input proof; a measured Development control remains
+  usable from that same frame. No mutation authorization/journal or workflow behavior
+  was redesigned; A retains ongoing ownership of this boundary.
+- Luna xhigh corrected `ocr_region_plan.py` to use the existing planned-read identity
+  for both missing and successful diagnostics. The collector therefore clears a
+  recovered planned miss without parsing a second string convention. Regressions
+  invoke `execute_ocr_region_plans` for a caught backend error followed by success,
+  an unrecovered empty result, and a different unresolved fact at the same bounds.
+  Root reviewed the patch and required the isolation test to preserve actual cache
+  behavior. No recovery action, OCR retry policy or diagnostic schema was added.
+
+### Offline validation
+
+Commands ran in `.local-data/worktrees/non-yolo-recognition-continuation` with
+`C:/Users/lebel/AppData/Local/Programs/Python/Python313/python.exe`:
+
+- `tools/run_tests.py group unit.core.vision`: **46 passed**.
+- `tools/run_tests.py group vision --results
+  .test-impact/recognition-first-slice-vision.json`: **498 run, 493 passed, five skipped**,
+  zero failures/errors, 101.072 seconds.
+- The first affected/full fallback found four existing guard-contract errors because
+  label publication had been made mandatory for content-only guards. The correction
+  makes registry-backed label publication an optional typed capability. A's runtime,
+  workflow and contract tests were preserved. The four affected tests plus all four
+  new publication tests then passed: **8 passed**.
+- Pre-review `tools/run_tests.py affected --base origin/main --explain --json
+  .test-impact/recognition-first-slice-final-selection.json --results
+  .test-impact/recognition-first-slice-final-results.json`: full fallback selected
+  **274/274 modules; 1,943 run, 1,937 passed, six skipped, zero failures/errors**,
+  189.831 seconds (204.207 seconds including selection/reporting). Log:
+  `.local-data/reports/recognition-first-slice-final.log`.
+- Review fixes: `-m unittest tests.integration.vision.test_content_label_publication
+  tests.unit.app.automation.engine.test_action_tap_targets
+  tests.unit.app.automation.engine.test_action_text_and_channel
+  tests.unit.app.automation.engine.test_mail_text_input`: **17 passed**. The new label
+  denial test failed in all four builder/navigation and tap/text-focus combinations
+  before the executor correction, then passed with its valid-control check.
+- Luna's focused diagnostic module: **12 passed**; OCR-region-plan module:
+  **nine passed**. Root inspected the final producer and regression changes.
+- Final review-fix acceptance: `tools/run_tests.py affected --base origin/main
+  --explain --json .test-impact/recognition-review-fixes-selection.json --results
+  .test-impact/recognition-review-fixes-results.json` selected the full portable
+  fallback, **274/274 modules; 1,947 run, 1,941 passed, six skipped, zero failures/errors**.
+  Test time: 154.804 seconds; total including selection/reporting: 163.772 seconds.
+  Log: `.local-data/reports/recognition-review-fixes-tests.log`. Refreshed main base
+  remained `850bdb747be79bb78363b8dca49a0097c6ed6546`. This validates the complete
+  first-slice implementation and both review fixes together.
+- Changed Python files compiled; `git diff --check` passed. No assets changed, so a
+  new installed-package asset check was not required. No live test or game action ran.
+
+### Remaining acceptance
+
+Zero **additional** OCR during export is now verified; zero full-screen OCR across
+the production pipeline is still outstanding. Shared guard/content region migration,
+explicit required-field gap coverage, independent visual qualification and remaining
+captured-contract dispositions must be completed without dropping working facts.
+Research and other retained controls passed the offline suite; they were not rebuilt.
+No YOLO/shadow, workflow, route, runtime composition, mutation authorization or journal
+code changed. The explicit executor label denial is documented above. This result
+includes the recorded main baseline, not later main commits.
+A retains future combined-main/workflow integration acceptance and both sides of
+overlapping contract tests. The plan remains **promotion_ready: no**.
+
 ## Capture update — September 13, 2026
 
 The user's separately authorized exploration captured the previously missing
