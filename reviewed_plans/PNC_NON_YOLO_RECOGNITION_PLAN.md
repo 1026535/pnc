@@ -1,92 +1,86 @@
-# Integrate visual recognition, guarded controls, and targeted OCR
+# B: finish screen-first non-OCR vision and targeted OCR
 
-## Coordinated continuation: task B — 2026-09-12
+## Paused; original mandate restored
 
-This is B's current implementation plan. Follow the single
-[A/B ownership, backlog and interface agreement](PNC_AB_COORDINATED_CONTINUATION.md).
-It supersedes earlier pause/first-Research-only/integration-only instructions and the
-historical progress statements below. Preserve the original design and qualification
-requirements unless explicitly reassigned here. Original phase names A/B/C are not
-the conversation owners; all recognition phases are task B's responsibility.
+Await an explicit revised handoff under [whole-component ownership](PNC_AB_COORDINATED_CONTINUATION.md).
+The user requested a graceful stop before this redesign. Preserve the entire current
+Gathering/March and Campaign checkpoint, including dirty assets/tests and pending failures.
+No further finishing, synchronization or live action is authorized by this plan's publication.
 
-### Completed work to retain
+B's original deliverable is the complete specialized vision subsystem: OpenCV visual anchors
+for screen/popup identity; measured normalized fixed controls guarded by screen/tab/state;
+and targeted OCR for names, quantities, timers, coordinates and dynamic rows. Reduce full
+OCR where correctness evidence supports it. Benchmarking qualifies implementation; it is
+not a replacement for finishing the unfinished non-OCR component.
 
-Recognition foundation, frame/input provenance, immutable shared OCR context, canonical
-decisions and mandatory guards, catalog v3, measured fixed controls, strict numeric parsing,
-Quest/Bag row association and startup recognition are implemented. Later navigation,
-Institute/Development, Bag and Research evidence supersedes older readiness failures;
-do not repeat successful work solely because older sections still say blocked.
+## Retain and exclude
 
-Development node/control and active-detail recognition, strict Research postconditions,
-and the real production-builder Start publication correction are included in main
-`2eacb126cfbcb943c08d78104df2200ab9bae9e0` via component `6c48073b`.
-The combined candidate `8a7d1a9d259120544c5382d246f810602527839d` retains all 37
-profiles and passed the recorded combined offline checks. Keep the real-builder consumer
-regression, premium exclusions, overlay protection and current-frame provenance.
-The historical Construction I resource action is evidence, not permission to repeat it.
+Retain the landed foundation, canonical decisions/provenance, immutable OCR context/cache,
+profile catalog, Quest/Bag parsing and guarded Research Start in both real builders. Keep
+all Campaign assets and the current Gathering/March/Campaign producer work. Those features
+remain within B only as screen/control/content recognition and publication.
 
-### Reassigned scope and exclusions
+A owns all route/endpoint/workflow/caller implementation, game-driving tools, runtime
+composition, action execution/authorization/journal and live choreography. B does not port
+Research, implement Campaign traversal/battles, dispatch a march or add a second parser,
+local popup bypass or executor. No new YOLO detector, OCR engine or arbitrary locale scope.
 
-A owns all navigation graph/route implementation, endpoint behavior, workflow/caller
-porting and mutation authorization/execution/journaling. B no longer implements an
-independent Campaign workflow or Research/Gathering execution. B retains and maintains
-A's Campaign recognition assets, produces shared predicates/controls and validates both
-observation paths. SendMail/Login/building recognition dependencies belong to B; their
-workflow implementations belong to A. No duplicate parser, local popup bypass, alternate
-mutation mechanism, YOLO detector, arbitrary new language/aspect or new game task.
+## Whole-component write boundary
 
-### Remaining execution sequence
+B owns all `core/vision` and `app/pnc/vision`, the exact perception model/identifier files,
+vision tests/fixtures, offline selector/benchmark tools and vision asset packaging named
+in the shared plan. A must not edit these files. B must not edit runtime/workflow/nav code,
+consumer tests or live-driving tools, even to wire a new producer. Keep published builder/
+perception constructor and call semantics stable and publish through both existing paths.
 
-1. Refresh B01's canonical coverage inventory once against current callers/registry and
-   saved evidence. Disposition every original phase A through F item as retained complete,
-   remaining producer/qualification, reassigned to A, or explicitly blocked. Reconcile
-   historical inventory counts instead of treating 83 fallback families as 83 mandatory
-   rewrites. Reference the generated inventory from this plan; do not copy the whole matrix.
-2. Own and publish producer contracts through the existing canonical models. Prioritize
-   B04 Gathering/March node, formation, confirmation, slot and post-dispatch facts through
-   both real observation paths, while A builds its mutation boundary. Use one Luna xhigh
-   worker for bounded code/test slices, reusing the worker sequentially. Preserve settled
-   contracts and the current slice; peer approval before coding is not required. Missing
-   saved geometry stays blocked; continue independent work instead of inventing controls.
-3. Implement B08 login/mail/building or other active-family facts as A's dependency requests
-   and evidence warrant. Maintain B05 Campaign assets and provide missing content/control
-   facts while A owns routes. Complete B06's evidence-supported remaining categories;
-   Development Start itself is finished. Do not enable inaccessible or premium actions.
-4. Finish B03's genuinely missing OCR/region/caller migrations and B07's demonstrated
-   Quest/Bag gaps. Keep full-frame guard/fallback where qualification is insufficient.
-   Preserve recovery of valid fields, same-frame caching, row/control association and
-   coordinate-only semantics; abstaining on everything is not acceptance.
-5. Complete B09's missing independent annotations, held-out negatives, installed-package
-   assets, current coverage and latency qualification using the original gates below.
-   Coordinate benchmark timing with A so heavy tests do not invalidate measurements.
-   Prior successful metrics/proofs are reused unless relevant code or evidence changed.
-6. Publish coherent reviewed producer batches with one contract/evidence record and one
-   ready-to-integrate notice to A per batch. Continue unblocked items without
-   waiting for mainline landing or a fresh approval at every milestone. A alone owns combined
-   integration/mainline coordination. Follow the fixed ownership in the shared plan;
-   no routine status/acknowledgement or per-slice ownership negotiation. B owns observation
-   models and selector declarations; A owns action consumers and runtime composition.
-   Escalate actual breaking changes or material blockers, not previously recorded gaps.
+## First release and remaining original work
 
-### Acceptance and completion
+1. After explicit restart, inspect only changes since the final pause checkpoint. Finish
+   the retained B04/B05 producer slice and its diagnosed regressions in B-owned files.
+   Current evidence supports Gathering node/formation and Campaign Chapter/Stage/Challenge
+   work; unsupported slot counts, correlated dispatch receipt, campaign mode and Battle Prep
+   stay explicit. No additional game action follows from a measured control being available.
+2. Reuse B01 inventory and classify remaining OCR dependencies by purpose. Identify which
+   supported identity/fixed-control paths still rely on OCR and which semantic fields use
+   unnecessarily broad OCR. Original phase A-F requirements remain, with current completion
+   evidence retained. Do not repeat the broad audit or convert every fallback to meet a count.
+3. Complete one coherent vision release: independent anchors for evidenced screen/popup
+   families, guarded fixed controls, required targeted regions and existing canonical parsers
+   for text. Include applicable Login/mail/building/Research/Gathering/Campaign and remaining
+   active-family requirements already listed in the shared backlog. Missing saved evidence
+   creates a recorded blocked cell, not an invented control or another request for A policy.
+4. Preserve mandatory blocking guards independently of requested content, exact control/row
+   association, provenance, unknown/conflicting semantics and strict observed postconditions.
+   Full-frame fallback remains where layout/blocker evidence is insufficient. No global
+   OCR-free promotion or loss of known-field recovery merely to improve latency.
+5. Run independent positive/negative and real-builder/publication tests, installed-package
+   asset checks, and original qualification gates. Freeze tested source while required broad
+   checks run; never keep editing the tree and later claim that run validates the final state.
+   Measure five or more warm replays in a quiet host window, with OCR calls/area/cache/fallback,
+   p50/p95 total time and known-field recovery. Retain original crop-performance thresholds
+   only alongside correctness. Unavailable holdout/target evidence remains blocked.
+6. Publish the reviewed release with one exact commit/interface/evidence report. A integrates
+   at this checkpoint; no per-control approval, ownership negotiations or acknowledgements.
+   Continue remaining independent vision families and qualification on stable published API
+   semantics. A real breaking requirement is queued as one explicit compatibility decision.
 
-Producer tests must use production registry/classifier/recognizer/builder composition,
-including corresponding NavigationPerception publication, blocked/missing/conflicting
-states and provenance. Keep the strict postcondition tests even when their consumer is
-migrated by A. Use focused/affected checks; broaden only for shared contracts, required
-fallback or combined acceptance. Do not run repeated broad suites for unchanged slices.
+B01-B09 remain B's original vision workload; existing completed foundations are retained,
+not rebuilt. Phase F completion means supported active families work through the intended
+vision strategy; marking all missing controls unsupported is not completion. Independent
+annotations, held-out groups and installed assets remain acceptance requirements. A handles
+any separately authorized future evidence capture phase; this proposed B restart is offline
+and does not renew old leases or spending permissions. Package missing frames once for that
+phase; continue independent vision work while they are unavailable.
 
-Treat broader target/build/locale and member-only qualification as explicit evidence
-cells within the original supported scope. Missing captures or live availability are
-concrete blockers, not proof of support. This continuation authorizes offline work; it
-does not renew historical live budgets. Prepare exact bounded evidence requests while
-continuing independent code/qualification work. Luna never drives the game.
+One reusable Luna xhigh worker handles concrete repetitive code/tests; B supervises uncertain
+recognition, evidence, design and review. Finish when applicable remaining implementation and
+qualification are evidenced, with precise external blockers. Final combined acceptance is
+A's responsibility and can require a bounded B-owned correction; do not poll A for progress.
 
-Finish when all B01–B09 rows have an evidence-backed disposition and completed producer
-slices are published and accepted by A's combined validation. Do not mark unimplemented
-active producers complete merely because their selectors remain unsupported. Keep live
-acceptance separate from implementation. Record compact progress and interface references
-here; retain detailed historical evidence in the implementation report.
+## Original requirements and historical evidence
+
+Historical phase labels below identify requirements, not current live authority or permission
+to edit A's component. The current whole-file ownership and offline restart scope govern.
 
 ---
 
