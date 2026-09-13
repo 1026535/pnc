@@ -89,6 +89,7 @@ class ObservationEnricher(Protocol):
         request: ObservationRequest,
         *,
         ocr_context: ObservationOcrContext,
+        owned_dismiss_bounds: tuple[Bounds, ...] = (),
     ) -> "ObservationAdditions":
         """Recognizes global blocking/loading guards independently of request scope."""
 
@@ -172,10 +173,11 @@ class DefaultObservationEnricher:
         request: ObservationRequest,
         *,
         ocr_context: ObservationOcrContext,
+        owned_dismiss_bounds: tuple[Bounds, ...] = (),
     ) -> ObservationAdditions:
         """Leaves guard recognition explicitly unevaluated for test doubles."""
 
-        del image, request, ocr_context
+        del image, request, ocr_context, owned_dismiss_bounds
         return ObservationAdditions()
 
 
@@ -453,6 +455,8 @@ class ObservationBuilder:
             screenshot.image,
             active_request,
             ocr_context=ocr_context,
+            **({"owned_dismiss_bounds": tuple(control.bounds for control in visual.dismiss_controls)}
+               if visual.dismiss_controls else {}),
         )
         guard_verdict = guard_additions.guard_verdict
         global_evidence = (*visual.evidence, *guard_additions.screen_evidence)
@@ -477,10 +481,27 @@ class ObservationBuilder:
             # background selectors must never participate in this decision.
             visible_elements = dict(guard_additions.visible_elements)
         else:
+            visual_decision = self.screen_classifier.decide(
+                {}, global_evidence, guard=guard_verdict,
+                viewport_reviewed=viewport_reviewed,
+            )
+            probe_selector_ids = detection_plan.selector_ids
+            if visual.evidence and visual_decision.action_eligible:
+                # Global guards have already run. A proved layout needs only
+                # its own selectors, not unrelated OCR identity probes.
+                owned_ids = {
+                    selector.id for selector in self.selector_registry.for_screen(
+                        visual_decision.effective_screen
+                    )
+                }
+                probe_selector_ids = tuple(
+                    selector_id for selector_id in probe_selector_ids
+                    if selector_id in owned_ids
+                )
             probe_matches = self.selector_engine.detect(
                 screenshot.image,
                 self.selector_registry,
-                selector_ids=detection_plan.selector_ids,
+                selector_ids=probe_selector_ids,
                 ocr_context=ocr_context,
             )
             visible_elements = _matches_to_visible_elements(probe_matches)
@@ -528,7 +549,11 @@ class ObservationBuilder:
         additions = self.enricher.enrich(
             screenshot.image,
             preliminary.effective_screen,
-            visible_elements,
+            _merge_visible_element_maps(
+                visible_elements,
+                visual_controls_for_decision(visual, preliminary)
+                if preliminary.action_eligible else {},
+            ),
             semantic_request,
             ocr_context=ocr_context,
             ocr_regions=ocr_regions,

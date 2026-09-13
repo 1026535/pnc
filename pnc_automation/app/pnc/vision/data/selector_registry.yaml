@@ -1234,6 +1234,15 @@ selectors:
     width_ratio: 0.34
     height_ratio: 0.06
   materialize_relative_bounds: false
+- id: PNC_HERO_HALL_FREE_RECRUIT_1X_BUTTON
+  screens:
+  - PNC_HERO_HALL
+  status: planned
+  detection_kind: semantic
+  interaction_kind: action
+  materialize_relative_bounds: false
+  notes:
+  - Published only when the reviewed gold Free Recruit1x control is visually matched.
 - id: PNC_MAIL_HEADER
   screens:
   - PNC_MAIL_HUB
@@ -2410,19 +2419,21 @@ selectors:
   materialize_relative_bounds: false
   notes:
   - 'Proposed unsupported strategy: No campaign-map producer.'
+- id: PNC_CAMPAIGN_MAP_REGION_NODE
+  screens:
+  - PNC_CAMPAIGN_CHAPTER
+  status: planned
+  detection_kind: semantic
+  interaction_kind: action
+  materialize_relative_bounds: false
+  notes:
+  - Only the independently matched unlocked stage 3 badge in the reviewed Chapter 10 layout.
 - id: PNC_CAMPAIGN_BATTLE_BUTTON
   screens:
   - PNC_CAMPAIGN_STAGE
   status: planned
   detection_kind: semantic
   interaction_kind: action
-  relative_bounds:
-    x_ratio: 0.32962963
-    y_ratio: 0.66979167
-    width_ratio: 0.34074074
-    height_ratio: 0.05625
-    action_x_ratio: 0.5
-    action_y_ratio: 0.69791667
   materialize_relative_bounds: false
   notes:
   - Produced only by the reviewed campaign_stage_10_3 visual profile when its measured gold Challenge anchor is present.

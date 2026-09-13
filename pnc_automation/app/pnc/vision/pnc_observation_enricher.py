@@ -1977,6 +1977,7 @@ class PncObservationEnricher:
         request: ObservationRequest,
         *,
         ocr_context: ObservationOcrContext,
+        owned_dismiss_bounds: tuple[Bounds, ...] = (),
     ) -> ObservationAdditions:
         """Runs independent global guard recognizers before semantic enrichment."""
 
@@ -2005,9 +2006,12 @@ class PncObservationEnricher:
             lines=lines,
             selector_registry=self.selector_registry,
         )
+        excluded_close_bounds = owned_dismiss_bounds + (
+            () if overview_close_bounds is None else (overview_close_bounds,)
+        )
         visual_popup = _build_visual_popup_close_additions(
             image=image,
-            excluded_bounds=() if overview_close_bounds is None else (overview_close_bounds,),
+            excluded_bounds=excluded_close_bounds,
         )
         if visual_popup is not None:
             if lines:
@@ -2021,14 +2025,14 @@ class PncObservationEnricher:
                 )
             return replace(visual_popup, guard_verdict=GuardVerdict.UNRESOLVED)
         if (
-            overview_close_bounds is not None
+            excluded_close_bounds
             and _find_visual_popup_close_bounds(
                 image=image,
-                excluded_bounds=() if overview_close_bounds is None else (overview_close_bounds,),
+                excluded_bounds=excluded_close_bounds,
             )
             is not None
         ):
-            # An additional close glyph outside the reviewed overview control
+            # An additional close glyph outside the reviewed control
             # makes the frame ambiguous even when it lacks enough surface
             # support to authorize a generic popup dismissal.
             return ObservationAdditions(
@@ -2237,6 +2241,7 @@ class PncObservationEnricher:
             image=image,
             lines=lines,
             screen_type=screen_type,
+            visible_elements=visible_elements,
         )
         if campaign is not None:
             return campaign
@@ -7282,16 +7287,19 @@ def _build_campaign_additions(
     image: Image.Image,
     lines: tuple[OcrLine, ...],
     screen_type: ScreenType,
+    visible_elements: Mapping[UiElementId, VisibleElement],
 ) -> ObservationAdditions | None:
     """Returns only the Campaign facts proved by the reviewed screen profile."""
 
     if screen_type == ScreenType.PNC_CAMPAIGN_MAP:
-        title = _find_line_matching(
-            lines=lines,
-            predicate=lambda line: normalize_ocr_text(line.text) == _CAMPAIGN_MAP_CHAPTER_TITLE,
-        )
         title_region = _scale_campaign_bounds(_CAMPAIGN_MAP_CHAPTER_ROW, image=image)
-        if title is None or not title_region.contains_bounds(title.bounds):
+        # The numbered badge and name are separate OCR lines on the real frame.
+        title = "".join(
+            normalize_ocr_text(line.text)
+            for line in sorted(lines, key=lambda item: item.bounds.x)
+            if title_region.contains_bounds(line.bounds)
+        )
+        if title != _CAMPAIGN_MAP_CHAPTER_TITLE:
             return ObservationAdditions()
         entry = DetectedListEntry(
             kind=ListEntryKind.CAMPAIGN_CHAPTER,
@@ -7311,15 +7319,13 @@ def _build_campaign_additions(
         )
         header_region = _scale_campaign_bounds(_CAMPAIGN_CHAPTER_TITLE_REGION, image=image)
         row_region = _scale_campaign_bounds(_CAMPAIGN_CHAPTER_STAGE_THREE_ROW, image=image)
-        stage = _find_line_matching(
-            lines=lines,
-            predicate=lambda line: normalize_ocr_text(line.text) == "3",
-        )
+        stage = visible_elements.get(UiElementId.PNC_CAMPAIGN_MAP_REGION_NODE)
         if (
             header is None
             or not header_region.contains_bounds(header.bounds)
             or stage is None
             or not row_region.contains_bounds(stage.bounds)
+            or stage.source_kind != VisibleElementSourceKind.TEMPLATE
         ):
             return ObservationAdditions()
         entry = DetectedListEntry(

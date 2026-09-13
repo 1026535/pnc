@@ -977,6 +977,15 @@
     "notes": "Independent observed chapter-node path crop."
   },
   {
+    "asset": "screen_anchors/campaign_stage_three.png",
+    "source": ".local-data/artifacts/2026-09-12/serious_stuff/20260912T195809Z_core_20260912T195338Z_6a8f4869_0015_campaign_chapter_10_settled.png",
+    "source_sha256": "738f8218eb53c6e802f55f5d1056f35fd907e907c62c800605ade61d63314d56",
+    "reference_size": [540, 960],
+    "crop": [301, 591, 351, 644],
+    "capture_group": "2026-09-12/serious_stuff/campaign_navigation",
+    "notes": "Measured unlocked Chapter 10 stage 3 badge crop; presence proves the observed stage row only."
+  },
+  {
     "asset": "screen_anchors/campaign_stage_title.png",
     "source": ".local-data/artifacts/2026-09-12/serious_stuff/20260912T195913Z_core_20260912T195338Z_6a8f4869_0017_campaign_stage_10_3_settled.png",
     "source_sha256": "0a3f70a93cba682c50afeca8e432faaf401e75138d255195f6356e32a37bde70",
@@ -1062,5 +1071,23 @@
     "redacted_regions": [[0, 0, 540, 201], [0, 741, 540, 960]],
     "redaction_fill_rgb": [16, 28, 49],
     "notes": "Portable sanitized stage-detail fixture; the owned detail panel, Close, and measured Challenge remain, with private blurred HUD/chat surroundings removed."
+  },
+  {
+    "asset": "screen_anchors/hero_hall_free_recruit_1x.png",
+    "source": "tests/data/screen_recognition/hero_hall.png",
+    "source_sha256": "41bec68391c043c71a65d18a5c2a4af338f8254496472d21c996e3b775a7d322",
+    "reference_size": [540, 960],
+    "crop": [68, 700, 228, 733],
+    "capture_group": "2026-09-10/mega_old_acc",
+    "notes": "Measured gold Free Recruit1x control crop; the independent hero_hall_aug29 holdout retains the same control pixels."
+  },
+  {
+    "asset": "screen_anchors/bag_subtab_resource_selected.png",
+    "source": "tests/data/screen_recognition/bag.png",
+    "source_sha256": "348d1ba637b8e69b599f912a5d9fa15d31857e97e2999f55c4ebb14f72f1f236",
+    "reference_size": [540, 960],
+    "crop": [0, 123, 107, 162],
+    "capture_group": "2026-08-30/mega_old_acc",
+    "notes": "Measured selected-gold Resource subtab crop; independent 900px Bag evidence is covered by the focused visual publication tests."
   }
 ]

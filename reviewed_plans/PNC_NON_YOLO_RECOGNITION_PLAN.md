@@ -1,11 +1,38 @@
 # B: finish screen-first non-OCR vision and targeted OCR
 
-## Paused; original mandate restored
+## Resumed implementation — September 12, 2026
 
-Await an explicit revised handoff under [whole-component ownership](PNC_AB_COORDINATED_CONTINUATION.md).
-The user requested a graceful stop before this redesign. Preserve the entire current
-Gathering/March and Campaign checkpoint, including dirty assets/tests and pending failures.
-No further finishing, synchronization or live action is authorized by this plan's publication.
+The user's new handoff resumes B under the whole-component ownership below. The
+continuation branch is `codex/non-yolo-recognition-continuation`; paused source and
+binary edits were preserved at `e3b388f`, then current `origin/main` (`5135dde`)
+and revised plan (`1c67745`) were merged without conflicts. Historical pause/live
+limits below are superseded by this handoff: at most two non-main instances, with
+resource spending including diamonds authorized for task validation; Cash Mall and
+real-money purchases remain excluded. A's workflow/runtime write ownership remains.
+
+Current first slice corrects actual Campaign OCR segmentation, independently matches
+the unlocked stage 3 badge, and supplies measured dismiss ownership and controls to
+the real builder before enrichment. It retains all Research provenance/active-detail
+regressions and preserves the existing Gathering/March profiles. Full-frame blocking
+guards remain mandatory; no blanket OCR-free promotion is claimed.
+
+The existing Mail Compose probe first checked foreground immediately after launching
+PNC and stopped before navigation. A single follow-up after startup reached Mail and
+returned Home in eight inputs, then released the reservation. Compose was an explicit
+applicability skip because Player Mail was empty. No resources were spent. Evidence:
+`.local-data/artifacts/vision_resume_mail/20260913T015421Z_8f928e87/summary.json`.
+The observed extra world-coordinate OCR pass on Mail motivated scoping selector probes
+to the independently proved clear visual layout while retaining broad fallback when
+identity is absent/ambiguous. Mandatory global guards remain unchanged.
+
+The first evidence-supported release is now implemented and offline validated:
+Campaign/Gathering/March publication, the explicit Hero Free control, selected Bag
+Resource tab, and visual selector scoping. The implementation report records the
+1,921-test full fallback, both-path state regressions, installed-package proof and
+50-frame plus affected five-frame qualification. Current remote main is still
+`5135dde` and already merged. Next acceptance is A's combined consumer integration
+and the explicitly missing capture cells; those remain open rather than being
+silently promoted by the passing reference-frame checks.
 
 B's original deliverable is the complete specialized vision subsystem: OpenCV visual anchors
 for screen/popup identity; measured normalized fixed controls guarded by screen/tab/state;

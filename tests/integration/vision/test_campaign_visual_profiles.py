@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 import unittest
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from pnc_automation.app.automation.engine.navigation_core import reviewed_navigation_edges
 from pnc_automation.app.pnc.domain.observation import ListEntryKind, VisibleElementSourceKind
@@ -94,6 +94,20 @@ def _navigation_perception(ocr_lines: tuple[OcrLine, ...] = ()) -> NavigationPer
 class CampaignVisualProfileTests(unittest.TestCase):
     """Require campaign identity and controls to remain evidence-backed and scoped."""
 
+    def test_benchmark_wrapper_preserves_owned_detail_close(self) -> None:
+        """Timing instrumentation must retain the production guard contract."""
+        from tools.benchmark_screen_recognition import _instrument_builder
+
+        builder, probe = _instrument_builder(_builder((
+            OcrLine("[10-3] Grandia Ruins", Bounds(142, 211, 256, 27), 1.0),
+            OcrLine("Challenge", Bounds(216, 666, 109, 25), 1.0),
+        )))
+        observation = builder.build(_capture(_image("campaign_stage_10_3.png")))
+        self.assertEqual(observation.screen_type, ScreenType.PNC_CAMPAIGN_STAGE)
+        self.assertTrue(observation.has(UiElementId.PNC_CAMPAIGN_BATTLE_BUTTON))
+        self.assertIsNotNone(probe)
+        self.assertGreater(probe.guard_calls, 0)
+
     def test_campaign_profiles_expose_their_measured_controls(self) -> None:
         recognizer = load_visual_screen_recognizer()
         expected = {
@@ -103,7 +117,10 @@ class CampaignVisualProfileTests(unittest.TestCase):
             ),
             "campaign_chapter_10.png": (
                 ScreenType.PNC_CAMPAIGN_CHAPTER,
-                {UiElementId.PNC_CAMPAIGN_BACK_BUTTON},
+                {
+                    UiElementId.PNC_CAMPAIGN_BACK_BUTTON,
+                    UiElementId.PNC_CAMPAIGN_MAP_REGION_NODE,
+                },
             ),
             "campaign_stage_10_3.png": (
                 ScreenType.PNC_CAMPAIGN_STAGE,
@@ -133,7 +150,13 @@ class CampaignVisualProfileTests(unittest.TestCase):
         recognizer = load_visual_screen_recognizer()
         expected = {
             "campaign_map.png": (ScreenType.PNC_CAMPAIGN_MAP, UiElementId.PNC_CAMPAIGN_HOME_PORTAL),
-            "campaign_chapter_10.png": (ScreenType.PNC_CAMPAIGN_CHAPTER, UiElementId.PNC_CAMPAIGN_BACK_BUTTON),
+            "campaign_chapter_10.png": (
+                ScreenType.PNC_CAMPAIGN_CHAPTER,
+                {
+                    UiElementId.PNC_CAMPAIGN_BACK_BUTTON,
+                    UiElementId.PNC_CAMPAIGN_MAP_REGION_NODE,
+                },
+            ),
             "campaign_stage_10_3.png": (
                 ScreenType.PNC_CAMPAIGN_STAGE,
                 {UiElementId.PNC_CAMPAIGN_CLOSE_BUTTON, UiElementId.PNC_CAMPAIGN_BATTLE_BUTTON},
@@ -165,6 +188,23 @@ class CampaignVisualProfileTests(unittest.TestCase):
         )
         self.assertTrue(close_control.dismisses_surface)
 
+    def test_campaign_challenge_removal_preserves_stage_identity_without_control(self) -> None:
+        recognizer = load_visual_screen_recognizer()
+        image = _image("campaign_stage_10_3.png")
+        image.paste((0, 0, 0), (178, 643, 362, 697))
+
+        result = recognizer.recognize(image)
+
+        self.assertEqual({item.screen_type for item in result.evidence}, {ScreenType.PNC_CAMPAIGN_STAGE})
+        self.assertEqual(
+            {item.selector_id for item in result.controls},
+            {UiElementId.PNC_CAMPAIGN_CLOSE_BUTTON},
+        )
+        self.assertEqual(
+            {item.selector_id for item in result.dismiss_controls},
+            {UiElementId.PNC_CAMPAIGN_CLOSE_BUTTON},
+        )
+
     def test_campaign_challenge_uses_measured_geometry_at_both_viewports(self) -> None:
         recognizer = load_visual_screen_recognizer()
         control = next(
@@ -187,7 +227,10 @@ class CampaignVisualProfileTests(unittest.TestCase):
         )
 
     def test_campaign_enricher_publishes_only_observed_rows_without_mode(self) -> None:
-        map_lines = (OcrLine("10 Grandia Ruins", Bounds(237, 473, 105, 15), 1.0),)
+        map_lines = (
+            OcrLine("10", Bounds(205, 473, 22, 14), 1.0),
+            OcrLine("Grandia Ruins", Bounds(236, 472, 106, 17), 1.0),
+        )
         map_observation = _builder(map_lines).build(
             _capture(_image("campaign_map.png")),
             request=ObservationRequest.campaign_map_follow_up(),
@@ -207,7 +250,6 @@ class CampaignVisualProfileTests(unittest.TestCase):
 
         chapter_lines = (
             OcrLine("Ch.10 Grandia Ruins", Bounds(230, 55, 295, 30), 1.0),
-            OcrLine("3", Bounds(318, 606, 18, 28), 1.0),
         )
         chapter_observation = _builder(chapter_lines).build(
             _capture(_image("campaign_chapter_10.png")),
@@ -225,6 +267,12 @@ class CampaignVisualProfileTests(unittest.TestCase):
         self.assertEqual(stage.source_screen, ScreenType.PNC_CAMPAIGN_CHAPTER)
         self.assertEqual(stage.source_layout_id, "campaign_chapter_10")
         self.assertEqual(stage.frame_ref, chapter_observation.frame_ref)
+        self.assertTrue(chapter_observation.has(UiElementId.PNC_CAMPAIGN_MAP_REGION_NODE))
+        chapter_control = chapter_observation.visible_elements[UiElementId.PNC_CAMPAIGN_MAP_REGION_NODE]
+        self.assertEqual(chapter_control.source_kind, VisibleElementSourceKind.TEMPLATE)
+        self.assertEqual(chapter_control.source_screen, ScreenType.PNC_CAMPAIGN_CHAPTER)
+        self.assertEqual(chapter_control.source_layout_id, "campaign_chapter_10")
+        self.assertEqual(chapter_control.frame_ref, chapter_observation.frame_ref)
 
     def test_campaign_chapter_is_in_the_narrow_and_full_runtime_ocr_scopes(self) -> None:
         follow_up = ObservationRequest.campaign_map_follow_up()
@@ -236,17 +284,17 @@ class CampaignVisualProfileTests(unittest.TestCase):
         cases = (
             (
                 "campaign_map.png",
-                (OcrLine("10 Grandia Ruins", Bounds(237, 473, 105, 15), 1.0),),
+                (
+                    OcrLine("10", Bounds(205, 473, 22, 14), 1.0),
+                    OcrLine("Grandia Ruins", Bounds(236, 472, 106, 17), 1.0),
+                ),
                 ListEntryKind.CAMPAIGN_CHAPTER,
                 ScreenType.PNC_CAMPAIGN_MAP,
                 "campaign_map",
             ),
             (
                 "campaign_chapter_10.png",
-                (
-                    OcrLine("Ch.10 Grandia Ruins", Bounds(230, 55, 295, 30), 1.0),
-                    OcrLine("3", Bounds(318, 606, 18, 28), 1.0),
-                ),
+                (OcrLine("Ch.10 Grandia Ruins", Bounds(230, 55, 295, 30), 1.0),),
                 ListEntryKind.CAMPAIGN_STAGE,
                 ScreenType.PNC_CAMPAIGN_CHAPTER,
                 "campaign_chapter_10",
@@ -263,6 +311,13 @@ class CampaignVisualProfileTests(unittest.TestCase):
                 self.assertEqual(entries[0].source_layout_id, layout_id)
                 self.assertEqual(entries[0].frame_ref, capture.frame_ref)
                 self.assertNotIn("mode", entries[0].metadata)
+                if screen is ScreenType.PNC_CAMPAIGN_CHAPTER:
+                    self.assertTrue(observation.has(UiElementId.PNC_CAMPAIGN_MAP_REGION_NODE))
+                    control = observation.visible_elements[UiElementId.PNC_CAMPAIGN_MAP_REGION_NODE]
+                    self.assertEqual(control.source_kind, VisibleElementSourceKind.TEMPLATE)
+                    self.assertEqual(control.source_screen, screen)
+                    self.assertEqual(control.source_layout_id, layout_id)
+                    self.assertEqual(control.frame_ref, capture.frame_ref)
 
     def test_campaign_content_abstains_without_exact_title_or_header(self) -> None:
         missing_map_title = _builder().build(
@@ -272,14 +327,47 @@ class CampaignVisualProfileTests(unittest.TestCase):
         self.assertEqual(missing_map_title.screen_type, ScreenType.PNC_CAMPAIGN_MAP)
         self.assertFalse(missing_map_title.entries(ListEntryKind.CAMPAIGN_CHAPTER))
 
+        missing_stage_badge = _image("campaign_chapter_10.png")
+        missing_stage_badge.paste((0, 0, 0), (301, 591, 351, 644))
         missing_chapter_stage = _builder(
-            (OcrLine("Ch.10 Grandia Ruins", Bounds(230, 55, 295, 30), 1.0),)
+            (
+                OcrLine("Ch.10 Grandia Ruins", Bounds(230, 55, 295, 30), 1.0),
+                OcrLine("3", Bounds(318, 606, 18, 28), 1.0),
+            )
         ).build(
-            _capture(_image("campaign_chapter_10.png")),
+            _capture(missing_stage_badge),
             request=ObservationRequest.campaign_map_follow_up(),
         )
-        self.assertEqual(missing_chapter_stage.screen_type, ScreenType.PNC_CAMPAIGN_CHAPTER)
+        self.assertIn(missing_chapter_stage.screen_type, {ScreenType.UNKNOWN, ScreenType.PNC_CAMPAIGN_CHAPTER})
         self.assertFalse(missing_chapter_stage.entries(ListEntryKind.CAMPAIGN_STAGE))
+        self.assertFalse(missing_chapter_stage.has(UiElementId.PNC_CAMPAIGN_MAP_REGION_NODE))
+
+        partial_stage_badge = _image("campaign_chapter_10.png")
+        partial_stage_badge.paste((0, 0, 0), (321, 608, 337, 628))
+        partial_chapter_stage = _builder(
+            (
+                OcrLine("Ch.10 Grandia Ruins", Bounds(230, 55, 295, 30), 1.0),
+                OcrLine("3", Bounds(318, 606, 18, 28), 1.0),
+            )
+        ).build(
+            _capture(partial_stage_badge),
+            request=ObservationRequest.campaign_map_follow_up(),
+        )
+        self.assertIn(partial_chapter_stage.screen_type, {ScreenType.UNKNOWN, ScreenType.PNC_CAMPAIGN_CHAPTER})
+        self.assertFalse(partial_chapter_stage.entries(ListEntryKind.CAMPAIGN_STAGE))
+        self.assertFalse(partial_chapter_stage.has(UiElementId.PNC_CAMPAIGN_MAP_REGION_NODE))
+
+        foreign_map_title = _builder(
+            (
+                OcrLine("10", Bounds(10, 473, 22, 14), 1.0),
+                OcrLine("Grandia Ruins", Bounds(41, 472, 106, 17), 1.0),
+            )
+        ).build(
+            _capture(_image("campaign_map.png")),
+            request=ObservationRequest.campaign_map_follow_up(),
+        )
+        self.assertEqual(foreign_map_title.screen_type, ScreenType.PNC_CAMPAIGN_MAP)
+        self.assertFalse(foreign_map_title.entries(ListEntryKind.CAMPAIGN_CHAPTER))
 
         foreign_stage_content = _builder(
             (OcrLine("10 Grandia Ruins", Bounds(237, 473, 105, 15), 1.0),)
@@ -322,7 +410,13 @@ class CampaignVisualProfileTests(unittest.TestCase):
         """The owned stage Close is passed to popup detection without making it a popup."""
 
         capture = _capture(_image("campaign_stage_10_3.png"))
-        perception = _navigation_perception()
+        stage_lines = (
+            OcrLine("[10-3] Grandia Ruins", Bounds(142, 211, 256, 27), 1.0),
+            OcrLine("Enemylineup", Bounds(209, 271, 117, 20), 1.0),
+            OcrLine("150/120", Bounds(379, 593, 78, 20), 1.0),
+            OcrLine("Challenge", Bounds(216, 666, 109, 25), 1.0),
+        )
+        perception = _navigation_perception(stage_lines)
 
         result = perception.build(capture)
 
@@ -333,16 +427,62 @@ class CampaignVisualProfileTests(unittest.TestCase):
         self.assertFalse(result.has(UiElementId.PNC_POPUP_CLOSE_BUTTON))
         self.assertEqual(result.decision.guard.value, "clear")
 
+        builder_result = _builder(stage_lines).build(
+            capture,
+            request=ObservationRequest.campaign_map_follow_up(),
+        )
+        self.assertEqual(builder_result.screen_type, ScreenType.PNC_CAMPAIGN_STAGE)
+        self.assertFalse(builder_result.blocking_popup)
+        self.assertTrue(builder_result.has(UiElementId.PNC_CAMPAIGN_CLOSE_BUTTON))
+        self.assertTrue(builder_result.has(UiElementId.PNC_CAMPAIGN_BATTLE_BUTTON))
+        self.assertFalse(builder_result.has(UiElementId.PNC_POPUP_CLOSE_BUTTON))
+        self.assertEqual(builder_result.decision.guard.value, "clear")
+
+    def test_owned_stage_close_does_not_hide_an_additional_unowned_close(self) -> None:
+        """A measured detail dismiss control cannot clear another surface's X."""
+
+        image = _image("campaign_stage_10_3.png")
+        drawing = ImageDraw.Draw(image)
+        drawing.rectangle((465, 300, 510, 345), fill=(15, 28, 68))
+        drawing.line((474, 309, 501, 336), fill=(255, 247, 218), width=5)
+        drawing.line((501, 309, 474, 336), fill=(255, 247, 218), width=5)
+        self.assertTrue(load_visual_screen_recognizer().recognize(image).dismiss_controls)
+        lines = (OcrLine("[10-3] Grandia Ruins", Bounds(142, 211, 256, 27), 1.0),)
+        capture = _capture(image)
+
+        for index, observation in enumerate((
+            _builder(lines).build(capture),
+            _navigation_perception(lines).build(capture),
+        )):
+            with self.subTest(path=index):
+                self.assertNotEqual(observation.decision.guard.value, "clear")
+                self.assertFalse(observation.has(UiElementId.PNC_CAMPAIGN_BATTLE_BUTTON))
+
     def test_campaign_registry_and_reviewed_edges_are_canonical(self) -> None:
-        battle = build_default_selector_registry().require(UiElementId.PNC_CAMPAIGN_BATTLE_BUTTON)
+        registry = build_default_selector_registry()
+        stage_node = registry.require(UiElementId.PNC_CAMPAIGN_MAP_REGION_NODE)
+        self.assertEqual(stage_node.status.value, "planned")
+        self.assertEqual(stage_node.detection_kind, DetectionKind.SEMANTIC)
+        self.assertEqual(stage_node.interaction_kind, SelectorInteractionKind.ACTION)
+        self.assertFalse(stage_node.materialize_relative_bounds)
+
+        battle = registry.require(UiElementId.PNC_CAMPAIGN_BATTLE_BUTTON)
         self.assertEqual(battle.status.value, "planned")
         self.assertEqual(battle.detection_kind, DetectionKind.SEMANTIC)
         self.assertEqual(battle.interaction_kind, SelectorInteractionKind.ACTION)
         self.assertFalse(battle.materialize_relative_bounds)
-        self.assertEqual(battle.relative_bounds.materialize_region(image_size=(540, 960)), CAMPAIGN_CHALLENGE_BOX)
-        entry = build_default_selector_registry().require(UiElementId.PNC_CAMPAIGN_ENTRY_BUTTON)
+        stage_profile = next(
+            profile for profile in load_visual_screen_recognizer().profiles if profile.id == "campaign_stage_10_3"
+        )
+        challenge_anchor = next(
+            control.anchor
+            for control in stage_profile.controls
+            if control.selector_id is UiElementId.PNC_CAMPAIGN_BATTLE_BUTTON
+        )
+        self.assertEqual(challenge_anchor.search_region, CAMPAIGN_CHALLENGE_BOX)
+        entry = registry.require(UiElementId.PNC_CAMPAIGN_ENTRY_BUTTON)
         self.assertEqual(entry.detection_kind, DetectionKind.UNSUPPORTED)
-        selector = build_default_selector_registry().require(UiElementId.PNC_CAMPAIGN_HOME_PORTAL)
+        selector = registry.require(UiElementId.PNC_CAMPAIGN_HOME_PORTAL)
         self.assertEqual(selector.interaction_kind, SelectorInteractionKind.NAVIGATION)
         self.assertEqual(selector.click_outcomes[0].target_screen, ScreenType.PNC_HOME_CITY)
         self.assertTrue(selector.click_outcomes[0].safe_to_click)
@@ -395,6 +535,14 @@ class CampaignVisualProfileTests(unittest.TestCase):
         self.assertEqual(challenge["crop"], [178, 643, 362, 697])
         self.assertEqual(challenge["capture_group"], stage.source.capture_group)
         self.assertEqual(challenge["source_sha256"], by_asset["tests/data/screen_recognition/campaign_stage_10_3.png"]["source_sha256"])
+        stage_three = by_asset["screen_anchors/campaign_stage_three.png"]
+        self.assertEqual(stage_three["reference_size"], [540, 960])
+        self.assertEqual(stage_three["crop"], [301, 591, 351, 644])
+        self.assertEqual(stage_three["capture_group"], "2026-09-12/serious_stuff/campaign_navigation")
+        self.assertEqual(
+            stage_three["source_sha256"],
+            by_asset["tests/data/screen_recognition/campaign_chapter_10.png"]["source_sha256"],
+        )
 
     def test_campaign_anchor_gate_fails_closed_when_identity_is_partial(self) -> None:
         recognizer = load_visual_screen_recognizer()
