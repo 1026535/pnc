@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 import logging
 import unittest
 from unittest.mock import Mock
@@ -16,10 +17,22 @@ from pnc_automation.app.automation.tasks.gathering_task import GatheringTask
 from pnc_automation.app.automation.tasks.research_task import ResearchTask
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
-from pnc_automation.app.pnc.vision.selectors import DetectionKind, build_default_selector_registry
+from pnc_automation.app.pnc.vision.selectors import DetectionKind, SelectorRegistry, build_default_selector_registry
 from pnc_automation.core.errors import TaskVerificationError
 from tests.support.core.logging import build_logger
 from tests.support.pnc.observations import make_observation
+
+
+def _unsupported_task_registry() -> SelectorRegistry:
+    """Exercise denial independently of production recognition promotion."""
+    registry = build_default_selector_registry()
+    required = {*GatheringTask.required_recognition_selectors, *CampaignTask.required_recognition_selectors}
+    return replace(registry, selectors=tuple(
+        replace(selector, detection_kind=DetectionKind.UNSUPPORTED,
+                notes=("fixture producer intentionally unsupported",))
+        if selector.id in required else selector
+        for selector in registry.all()
+    ))
 
 
 class TaskRecognitionRequirementTests(unittest.TestCase):
@@ -40,7 +53,7 @@ class TaskRecognitionRequirementTests(unittest.TestCase):
         )
 
     def test_unsupported_requirement_fails_before_recovery_or_plan(self) -> None:
-        registry = build_default_selector_registry()
+        registry = _unsupported_task_registry()
         action_executor = Mock()
         canonical_registry = registry
         action_executor.action_executor.selector_registry = canonical_registry
@@ -88,7 +101,7 @@ class TaskRecognitionRequirementTests(unittest.TestCase):
         for task in (GatheringTask(), CampaignTask()):
             with self.subTest(task=task.id.value):
                 action_executor = Mock()
-                action_executor.action_executor.selector_registry = build_default_selector_registry()
+                action_executor.action_executor.selector_registry = _unsupported_task_registry()
                 observation_service = Mock()
                 flow_planner = Mock()
                 runner = AutomationRunner(

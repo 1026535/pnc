@@ -58,7 +58,17 @@ class VisualScreenMetadataTests(unittest.TestCase):
                 self.assertEqual("guarded_reference_only", profile["review"]["qualification"])
                 self.assertIsNone(profile["review"]["build"])
                 self.assertIsNone(profile["review"]["locale"])
-                expected_revision = 2 if profile["id"] in {"institute", "campaign_stage_10_3"} else 1
+                expected_revision = (
+                    2
+                    if profile["id"] in {
+                        "institute",
+                        "hero_hall",
+                        "bag",
+                        "campaign_chapter_10",
+                        "campaign_stage_10_3",
+                    }
+                    else 1
+                )
                 self.assertEqual(expected_revision, profile["revision"])
 
         recognizer = load_visual_screen_recognizer()
@@ -78,9 +88,17 @@ class VisualScreenMetadataTests(unittest.TestCase):
         self.assertEqual(32, len({item.screen_type for item in recognition.evidence}))
         self.assertTrue(
             all(
-                item.layout_revision == (
+                item.layout_revision
+                == (
                     2
-                    if item.screen_type in {ScreenType.PNC_INSTITUTE, ScreenType.PNC_CAMPAIGN_STAGE}
+                    if item.screen_type
+                    in {
+                        ScreenType.PNC_INSTITUTE,
+                        ScreenType.PNC_CAMPAIGN_CHAPTER,
+                        ScreenType.PNC_CAMPAIGN_STAGE,
+                        ScreenType.PNC_HERO_HALL,
+                        ScreenType.PNC_BAG,
+                    }
                     else 1
                 )
                 for item in recognition.evidence

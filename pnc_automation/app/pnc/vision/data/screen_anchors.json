@@ -71,7 +71,7 @@
           "threshold": 0.93
         }
       ],
-      "revision": 1,
+      "revision": 2,
       "source": {
         "fixture": "hero_hall.png",
         "decoded_sha256": "fcafe76077e5a2a9c82bdfa1e1adeb40c60ccdc9e90bce11236fbaefa1adfb90",
@@ -96,6 +96,19 @@
               38
             ],
             "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_HERO_HALL_FREE_RECRUIT_1X_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/hero_hall_free_recruit_1x.png",
+            "search_region": [
+              56,
+              691,
+              184,
+              54
+            ],
+            "threshold": 0.95
           }
         }
       ],
@@ -302,7 +315,7 @@
           "threshold": 0.93
         }
       ],
-      "revision": 1,
+      "revision": 2,
       "source": {
         "fixture": "bag.png",
         "decoded_sha256": "16d09ecbd0383d86d1e29566008499ee81977227cf13c70b9ddb65e4a2a2f1a8",
@@ -327,6 +340,19 @@
               38
             ],
             "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_BAG_SUBTAB_RESOURCE",
+          "anchor": {
+            "image": "screen_anchors/bag_subtab_resource_selected.png",
+            "search_region": [
+              0,
+              123,
+              107,
+              39
+            ],
+            "threshold": 0.95
           }
         }
       ],
@@ -2361,9 +2387,22 @@
             ],
             "threshold": 0.95
           }
+        },
+        {
+          "selector": "PNC_CAMPAIGN_MAP_REGION_NODE",
+          "anchor": {
+            "image": "screen_anchors/campaign_stage_three.png",
+            "search_region": [
+              293,
+              576,
+              59,
+              74
+            ],
+            "threshold": 0.95
+          }
         }
       ],
-      "revision": 1,
+      "revision": 2,
       "source": {
         "fixture": "tests/data/screen_recognition/campaign_chapter_10.png",
         "decoded_sha256": "b45dc5a7d432665647fe2f5c7541124db8ff09ac31fc3c21df25e63c53c93678",
