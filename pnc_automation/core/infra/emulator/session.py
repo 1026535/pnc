@@ -47,6 +47,8 @@ def _input_dispatch(function: Callable[..., object]) -> Callable[..., object]:
 
 
 DEFAULT_BLUESTACKS_SHUTDOWN_GRACE_SECONDS = 120.0
+_app_foreground_attempts = 30
+_app_foreground_retry_delay_seconds = 2.0
 
 
 class BlueStacksSessionCleanupMode(StrEnum):
@@ -230,13 +232,29 @@ class BlueStacksSession:
         return current_focus_package == self.instance.app_package
 
     def ensure_app_foregrounded(self) -> bool:
-        """Launches the game when needed and reports whether a launch was started."""
+        """Launches the game when needed and waits for its package to take focus."""
 
         if self.is_app_foregrounded():
             return False
         self._require_app_launch()
         self.launch_app()
+        self._wait_for_app_foreground()
         return True
+
+    def _wait_for_app_foreground(self) -> None:
+        """Waits through launcher or store startup before a caller captures the game."""
+
+        attempts = max(1, _app_foreground_attempts)
+        for attempt_index in range(attempts):
+            if self.is_app_foregrounded():
+                return
+            if attempt_index < attempts - 1 and _app_foreground_retry_delay_seconds > 0:
+                self.sleep(_app_foreground_retry_delay_seconds)
+        raise GameLaunchError(
+            f"Timed out waiting for package '{self.instance.app_package}' to take foreground focus.",
+            package=self.instance.app_package,
+            device_id=self.instance.device_id,
+        )
 
     @_input_dispatch
     def launch_app(self) -> None:

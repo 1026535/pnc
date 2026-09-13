@@ -7,6 +7,7 @@ import tempfile
 import unittest
 from dataclasses import dataclass, field
 from pathlib import Path
+from unittest.mock import patch
 
 from pnc_automation.core.infra.adb.command_result import CommandResult
 from pnc_automation.core.infra.emulator.bluestacks_instance import BlueStacksInstance
@@ -86,7 +87,7 @@ class _SequencedConnectionAdbClient:
 
 @dataclass(slots=True)
 class _SequencedShellAdbClient:
-    """Returns deterministic shell results for responsiveness retry tests."""
+    """Returns deterministic shell results for retry and foreground-wait tests."""
 
     shell_results: tuple[CommandResult, ...]
     shell_calls: list[tuple[str, tuple[str, ...]]] = field(default_factory=list)
@@ -762,23 +763,60 @@ class BlueStacksSessionTests(unittest.TestCase):
         self.assertEqual(1, len(adb_client.shell_calls))
 
     def test_ensure_app_foregrounded_reports_true_when_it_starts_a_launch(self) -> None:
-        """Reports the launch boundary needed by passive post-launch screen settling."""
+        """Waits for P&C after a launcher/store window before reporting the launch boundary."""
 
-        adb_client = _FakeAdbClient(
-            connect_result=_command_result(returncode=0, stdout_text="connected"),
-            state_result=_command_result(returncode=0, stdout_text="device"),
-            shell_result=_command_result(returncode=0, stdout_text=_launcher_window_dump()),
+        adb_client = _SequencedShellAdbClient(
+            shell_results=(
+                _command_result(returncode=0, stdout_text=_play_store_window_dump()),
+                _command_result(returncode=0, stdout_text="monkey: Monkeying"),
+                _command_result(returncode=0, stdout_text=_play_store_window_dump()),
+                _command_result(returncode=0, stdout_text=_game_window_dump()),
+            ),
         )
-        session = self._make_session(adb_client=adb_client)
+        sleeps: list[float] = []
+        session = self._track(BlueStacksSession(
+            adb_client=adb_client,
+            instance=_make_instance(),
+            sleep=sleeps.append,
+            lease_registry=self._lease_registry,
+        ))
 
         self.assertTrue(session.ensure_app_foregrounded())
         self.assertEqual(
             [
                 ("127.0.0.1:5555", ("dumpsys", "window", "windows")),
                 ("127.0.0.1:5555", ("monkey", "-p", "com.global.tmslg", "-c", "android.intent.category.LAUNCHER", "1")),
+                ("127.0.0.1:5555", ("dumpsys", "window", "windows")),
+                ("127.0.0.1:5555", ("dumpsys", "window", "windows")),
             ],
             adb_client.shell_calls,
         )
+        self.assertEqual([2.0], sleeps)
+
+    def test_ensure_app_foregrounded_fails_after_bounded_wait(self) -> None:
+        """Reports a launch failure instead of sending input while the launcher remains focused."""
+
+        adb_client = _FakeAdbClient(
+            connect_result=_command_result(returncode=0, stdout_text="connected"),
+            state_result=_command_result(returncode=0, stdout_text="device"),
+            shell_result=_command_result(returncode=0, stdout_text=_play_store_window_dump()),
+        )
+        session = self._track(BlueStacksSession(
+            adb_client=adb_client,
+            instance=_make_instance(),
+            sleep=lambda _: None,
+            lease_registry=self._lease_registry,
+        ))
+
+        with patch(
+            "pnc_automation.core.infra.emulator.session._app_foreground_attempts",
+            2,
+        ), patch(
+            "pnc_automation.core.infra.emulator.session._app_foreground_retry_delay_seconds",
+            0,
+        ), self.assertRaisesRegex(GameLaunchError, "Timed out waiting"):
+            session.ensure_app_foregrounded()
+        self.assertEqual(4, len(adb_client.shell_calls))
 
     def test_foreground_detection_ignores_background_game_window_when_launcher_has_focus(self) -> None:
         """Reads only mCurrentFocus instead of treating a background game window as foreground."""
@@ -917,6 +955,12 @@ def _launcher_window_dump(*, include_background_game: bool = False) -> str:
     return background + "  mFocusedApp=Window{7654321 u0 com.global.tmslg/com.global.tmslg.MainActivity}\n" + _window_dump(
         "com.uncube.launcher3/com.bluestacks.launcher.activity.HomeActivity"
     )
+
+
+def _play_store_window_dump() -> str:
+    """Builds a Google Play Store focused window seen during instance startup."""
+
+    return _window_dump("com.android.vending/com.google.android.finsky.activities.MainActivity")
 
 
 def _make_instance() -> BlueStacksInstance:
