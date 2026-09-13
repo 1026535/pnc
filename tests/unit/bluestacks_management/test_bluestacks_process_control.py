@@ -81,6 +81,10 @@ class BlueStacksProcessControlTests(unittest.TestCase):
         self.assertEqual(raised.exception.details["failure_phase"], "discovery")
         self.assertEqual(raised.exception.details["timeout_seconds"], 15)
         self.assertEqual(_run.call_args.kwargs["timeout"], 15)
+        self.assertEqual(
+            _run.call_args.kwargs["creationflags"],
+            getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
         self.assertNotIn("stdout", raised.exception.details)
         self.assertNotIn("stderr", raised.exception.details)
 
@@ -97,6 +101,10 @@ class BlueStacksProcessControlTests(unittest.TestCase):
         self.assertEqual(raised.exception.details["failure_phase"], "stop")
         self.assertEqual(raised.exception.details["timeout_seconds"], 35)
         self.assertEqual(_run.call_args.kwargs["timeout"], 35)
+        self.assertEqual(
+            _run.call_args.kwargs["creationflags"],
+            getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
         self.assertNotIn("stdout", raised.exception.details)
         self.assertNotIn("stderr", raised.exception.details)
 
