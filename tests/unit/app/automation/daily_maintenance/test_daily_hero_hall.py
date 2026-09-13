@@ -21,6 +21,7 @@ from pnc_automation.app.pnc.domain.daily_maintenance import (
     DailyTaskCheckpoint,
 )
 from pnc_automation.app.pnc.domain.observation import Observation
+from pnc_automation.app.pnc.domain.observation import VisibleElementSourceKind
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.persistence.daily_run_journal_store import DailyRunJournalStore
@@ -38,6 +39,10 @@ class _FakeHeroHallSession:
         self.dispatch_count = 0
         self.daily_complete = False
         self.cooldown_seconds_after_dispatch: int | None = None
+        self.use_generic_control = False
+        self.omit_attempts = False
+        self.disappear_without_receipt = False
+        self.blocked = False
 
     def observe_hero_hall(self, label: str) -> Observation:
         """Returns a typed Hero Hall observation with the current counter."""
@@ -47,18 +52,33 @@ class _FakeHeroHallSession:
         # The recruit button remains visible while the daily counter is positive;
         # the counter decrement is the postcondition used by the executor.
         visible_ids.append(UiElementId.PNC_HERO_HALL_RECRUIT_BANNER)
-        if self.cooldown_seconds_after_dispatch is not None and self.dispatch_count > 0:
+        if self.omit_attempts or (
+            self.disappear_without_receipt and self.dispatch_count > 0
+        ):
+            banner_text = "Hero Hall"
+        elif self.cooldown_seconds_after_dispatch is not None and self.dispatch_count > 0:
             banner_text = "Free in 00:10:00"
         else:
             banner_text = f"Daily attempts: {self.remaining}"
-        if self.remaining > 0 and (self.cooldown_seconds_after_dispatch is None or self.dispatch_count == 0):
-            visible_ids.append(UiElementId.PNC_HERO_HALL_RECRUIT_1X_BUTTON)
+        if self.remaining > 0 and (self.cooldown_seconds_after_dispatch is None or self.dispatch_count == 0) and not (
+            self.disappear_without_receipt and self.dispatch_count > 0
+        ):
+            visible_ids.append(
+                UiElementId.PNC_HERO_HALL_RECRUIT_1X_BUTTON
+                if self.use_generic_control
+                else UiElementId.PNC_HERO_HALL_FREE_RECRUIT_1X_BUTTON
+            )
         return make_observation(
             ScreenType.PNC_HERO_HALL,
             visible_ids=tuple(visible_ids),
+            source_kinds=(
+                {UiElementId.PNC_HERO_HALL_RECRUIT_1X_BUTTON: VisibleElementSourceKind.GEOMETRY}
+                if self.use_generic_control else {}
+            ),
             visible_texts={
                 UiElementId.PNC_HERO_HALL_RECRUIT_BANNER: banner_text,
             },
+            blocking_popup=self.blocked,
         )
 
     def recruit_free_single(self) -> None:
@@ -157,6 +177,69 @@ class HeroHallRecruitmentExecutorTests(unittest.TestCase):
             intent for intent in checkpoint.mutation_intents if intent.quest_id == DailyQuestId.HERO_HALL
         )
         self.assertEqual("2026-09-09T00:10:00+00:00", intent.metadata["next_ready_at"])
+
+    def test_generic_recruit_control_cannot_authorize_free_single(self) -> None:
+        """Keeps the generic Recruit 1x geometry from authorizing a mutation."""
+
+        self.session.use_generic_control = True
+        executor = HeroHallRecruitmentExecutor(
+            session=self.session,
+            dispatcher=JournaledMutationDispatcher(self.store),
+            now=lambda: self.current_time,
+        )
+
+        checkpoint, outcome = executor.execute(checkpoint=self.checkpoint)
+
+        self.assertEqual(DailyTargetOutcomeStatus.PENDING_CLARIFICATION, outcome.status)
+        self.assertEqual(0, self.session.dispatch_count)
+        self.assertEqual((), checkpoint.mutation_intents)
+
+    def test_missing_attempts_cannot_dispatch_free_single(self) -> None:
+        """Requires a positive observed attempt counter in addition to the free template."""
+
+        self.session.omit_attempts = True
+        executor = HeroHallRecruitmentExecutor(
+            session=self.session,
+            dispatcher=JournaledMutationDispatcher(self.store),
+            now=lambda: self.current_time,
+        )
+
+        checkpoint, outcome = executor.execute(checkpoint=self.checkpoint)
+
+        self.assertEqual(DailyTargetOutcomeStatus.PENDING_CLARIFICATION, outcome.status)
+        self.assertEqual(0, self.session.dispatch_count)
+        self.assertEqual((), checkpoint.mutation_intents)
+
+    def test_disappearance_without_counter_or_cooldown_stays_pending_without_replay(self) -> None:
+        """Does not treat disappearance alone as a receipt and never sends a second tap."""
+
+        self.session.disappear_without_receipt = True
+        executor = HeroHallRecruitmentExecutor(
+            session=self.session,
+            dispatcher=JournaledMutationDispatcher(self.store),
+            now=lambda: self.current_time,
+        )
+
+        checkpoint, first = executor.execute(checkpoint=self.checkpoint)
+        checkpoint, second = executor.execute(checkpoint=checkpoint)
+
+        self.assertEqual(DailyTargetOutcomeStatus.PENDING_CLARIFICATION, first.status)
+        self.assertEqual(DailyTargetOutcomeStatus.PENDING_CLARIFICATION, second.status)
+        self.assertEqual(1, self.session.dispatch_count)
+
+    def test_blocked_hero_hall_state_fails_closed(self) -> None:
+        """Rejects a popup-owned Hero Hall frame before any dispatch."""
+
+        self.session.blocked = True
+        executor = HeroHallRecruitmentExecutor(
+            session=self.session,
+            dispatcher=JournaledMutationDispatcher(self.store),
+            now=lambda: self.current_time,
+        )
+
+        with self.assertRaisesRegex(ValueError, "positively clear"):
+            executor.execute(checkpoint=self.checkpoint)
+        self.assertEqual(0, self.session.dispatch_count)
 
 
 if __name__ == "__main__":

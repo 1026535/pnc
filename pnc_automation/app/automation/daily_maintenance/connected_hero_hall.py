@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from pnc_automation.app.automation.daily_maintenance.hero_hall import HeroHallState
 from pnc_automation.app.automation.engine.observed_action_executor import ObservedActionExecutor
 from pnc_automation.app.automation.engine.runner import AutomationRunner
 from pnc_automation.app.pnc.domain.action_requests import TapAction
@@ -88,21 +89,29 @@ class ConnectedHeroHallSession:
         )
 
     def recruit_free_single(self) -> None:
-        """Re-observes Hero Hall and taps the normalized free 1x region once."""
+        """Re-observes Hero Hall and taps the current-frame free template once."""
 
         observation = self.observe_hero_hall("hero_hall_recruit_dispatch")
-        if not observation.has(UiElementId.PNC_HERO_HALL_RECRUIT_1X_BUTTON):
+        state = HeroHallState.from_observation(observation)
+        if not state.free_single_available:
             raise SelectorResolutionError(
                 "Hero Hall did not expose the free 1x recruit control before dispatch.",
-                selector_id=UiElementId.PNC_HERO_HALL_RECRUIT_1X_BUTTON,
+                selector_id=UiElementId.PNC_HERO_HALL_FREE_RECRUIT_1X_BUTTON,
             )
-        self.action_executor.execute_action(
+        if state.daily_attempts_remaining is None or state.daily_attempts_remaining <= 0:
+            raise SelectorResolutionError(
+                "Hero Hall free 1x recruit requires positive observed daily attempts.",
+                selector_id=UiElementId.PNC_HERO_HALL_FREE_RECRUIT_1X_BUTTON,
+            )
+        executed = self.action_executor.execute_action(
             TapAction(
-                selector_id=UiElementId.PNC_HERO_HALL_RECRUIT_1X_BUTTON,
+                selector_id=UiElementId.PNC_HERO_HALL_FREE_RECRUIT_1X_BUTTON,
                 reason="hero_hall_free_single",
             ),
             observation,
         )
+        if not executed:
+            raise RuntimeError("Hero Hall free 1x recruit action was not executed.")
 
     def daily_requirement_completed(self) -> bool:
         """Delegates final Daily proof to the caller-owned read-only Daily survey."""

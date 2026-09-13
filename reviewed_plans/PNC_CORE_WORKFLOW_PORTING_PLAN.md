@@ -199,3 +199,34 @@ atomic journal and shared-lock checks. Five skips are optional local screenshots
 one is Windows symlink privilege. Diff check passed. The subsequent authorization
 and result notes change documentation only; this offline checkpoint performs no live
 operation and does not establish full workflow or vision completion.
+
+## September 13 Hero Hall adapter slice
+
+The typed CoreHeroHallWorkflow and CoreMutationBoundary now consume the distinct
+PNC_HERO_HALL_FREE_RECRUIT_1X_BUTTON through the existing HeroHallRecruitmentExecutor,
+DailyMutationAuthorizer, JournaledMutationDispatcher and DailyRunJournalStore.
+The five-single/zero-diamond policy remains exact; each invocation executes at most
+one eligible increment. Durable cooldown, reconciliation without replay, and the
+final full Daily survey remain canonical. Unknown/zero attempts cannot dispatch,
+and disappearance alone is no longer accepted as consumption. The existing legacy
+canary dispatch also uses the distinct free selector, without redefining generic 1x.
+Its navigation/caller migration remains pending live acceptance.
+
+Real RapidOCR replay of both saved Hero Hall fixtures through both production paths
+proved a CLEAR Hero Hall screen, distinct template Free control and Daily attempts:5.
+This exposed and fixed the consumer's old generic-selector check. No vision files
+were changed. Focused Hero/core checks passed (22 tests); the affected mandatory
+full fallback passed 1,984 tests with six existing skips (1,990 total), no failures,
+225.015 seconds including collection/reporting. Diff check passed.
+
+Live proof remains blocked before any recruit or spending. Under separate canonical
+leases, testing resolved and accepted the required game update, then encountered a
+Savannah hero offer popup without a published safe-close selector. Evidence is
+.local-data/artifacts/core_ports_20260913/2026-09-13/testing_hero_hall/
+20260913T170227Z_core_20260913T170044Z_e9666465_0006_preflight_settle_2.png in the root
+workspace. Testing was released at that popup, without a current-castle assertion.
+157_farm resolved, but canonical foreground preflight failed because Android window
+output did not contain exactly one mCurrentFocus field; no game action occurred there.
+Those perception/runtime blockers are outside this port's ownership. No bypass was
+added. Hero Hall live acceptance, final five-single canary proof and caller migration
+are not claimed complete; automatic Daily execution remains disabled.
