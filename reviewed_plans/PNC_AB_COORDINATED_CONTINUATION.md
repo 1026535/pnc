@@ -1,5 +1,26 @@
 # A/B remaining work: complete vision and workflow components
 
+## September 13 execution update: A restart after B's published slice
+
+Current execution authority is [A's updated restart plan](PNC_CORE_WORKFLOW_PORTING_PLAN.md).
+It supersedes the historical pause and parallel-period sequencing below. Whole-file
+component ownership remains in effect. The user requested this plan update; publication
+does not itself resume A or B.
+
+B published `93798a6` on top of main `850bdb7`; its latest reviewed slice is complete,
+not its full vision plan. A's candidate `1994020` separately preserves `291f049` Daily
+claims and `9e34d14` Research. Merge the histories as specified in A's plan; do not replace
+A with the newer B tip. Remote refs were verified September 13. Current catalog union is
+40 profiles, subject to legitimate later additions.
+
+B retains outstanding guard/region migration, full-screen OCR removal and qualification
+in its current plan/checklist. Its later explicit zero-full-screen objective supersedes
+this document's historical fallback allowances. A consumes supported current production
+facts for bounded workflow implementation and does not declare that global goal achieved.
+The latest narrow label-input rejection in A's executor and prior consumer-test corrections
+were directly authorized in B's task; retain them without extending B's ongoing ownership.
+YOLO/map-object work belongs to the separate active tasks and is excluded from A/B porting.
+
 ## Proposed revision; no restart yet
 
 This replaces `bad1898` and `521019b` ownership/coordination instructions following the
