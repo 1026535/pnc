@@ -16,6 +16,9 @@ from pnc_automation.app.automation.daily_maintenance.mutation_dispatcher import 
     MutationReconciliation,
 )
 from pnc_automation.app.automation.engine.core_runtime import CoreRuntime
+from pnc_automation.app.automation.daily_maintenance.coordinator import DailyReadOnlySurvey
+from pnc_automation.app.automation.daily_maintenance.hero_hall import HeroHallRecruitmentExecutor
+from pnc_automation.app.automation.engine.core_hero_hall_session import CoreHeroHallSession
 from pnc_automation.app.automation.engine.task import TaskId
 from pnc_automation.app.automation.tasks.research_task import _is_active_research_detail
 from pnc_automation.app.authoring.config.daily_maintenance import (
@@ -78,6 +81,13 @@ class CoreMutationBoundary:
                 and policy.max_diamond_spend == 0
             ):
                 return policy
+            if (
+                policy.quest_id == DailyQuestId.HERO_HALL
+                and policy.task_id == TaskId.HERO_HALL
+                and policy.max_mutations == 5
+                and policy.max_diamond_spend == 0
+            ):
+                return policy
         raise PermissionError("The core mutation scope has no supported exact capability policy.")
 
     def authorize(self) -> None:
@@ -123,7 +133,9 @@ class CoreMutationBoundary:
             maximum_claims=self.target.max_claims,
         ).claim(row=row, checkpoint=checkpoint)
 
-    def _require_checkpoint(self, checkpoint: DailyTaskCheckpoint) -> None:
+    def _require_checkpoint(
+        self, checkpoint: DailyTaskCheckpoint, *, reconcilable_quest: DailyQuestId | None = None,
+    ) -> None:
         """Do not replace durable receipts with stale or cross-target caller state."""
 
         if (
@@ -144,9 +156,28 @@ class CoreMutationBoundary:
             raise RuntimeError("Mutation history is missing from the durable journal.")
         if any(
             intent.state != MutationIntentState.COMMITTED
+            and not (
+                intent.quest_id == reconcilable_quest
+                and intent.state in {MutationIntentState.DISPATCHED, MutationIntentState.RECONCILED}
+            )
             for intent in checkpoint.mutation_intents
         ):
             raise RuntimeError("An unresolved mutation must be reconciled before another claim.")
+
+    def recruit_hero_hall(
+        self, *, runtime: CoreRuntime, observe: Callable[[str], Observation],
+        daily_survey: Callable[[], DailyReadOnlySurvey], checkpoint: DailyTaskCheckpoint,
+    ) -> tuple[DailyTaskCheckpoint, DailyTargetOutcome]:
+        """Run or reconcile one increment through the existing five-single executor."""
+
+        self.authorize()
+        if self.policy.quest_id != DailyQuestId.HERO_HALL:
+            raise PermissionError("This scope does not authorize Hero Hall.")
+        self._require_checkpoint(checkpoint, reconcilable_quest=DailyQuestId.HERO_HALL)
+        return HeroHallRecruitmentExecutor(
+            session=CoreHeroHallSession(runtime, observe, daily_survey),
+            dispatcher=JournaledMutationDispatcher(self.journal_store),
+        ).execute(checkpoint=checkpoint)
 
     def start_research(
         self,

@@ -111,6 +111,35 @@ class WorkflowContext:
         self._mutation_boundary = mutation_boundary
         self._research_node: str | None = None
 
+    def recruit_hero_hall(
+        self, checkpoint: DailyTaskCheckpoint,
+    ) -> tuple[DailyTaskCheckpoint, DailyTargetOutcome]:
+        """Execute one authorized free-single increment, or reconcile its existing intent."""
+
+        if self._effect != WorkflowEffect.RESOURCE_CHANGING or self._mutation_boundary is None:
+            raise PermissionError("Hero Hall requires an exact resource-changing boundary.")
+        # The coordinator adapter imports this context for its typed workflow contract.
+        from pnc_automation.app.automation.daily_maintenance.core_daily_maintenance import _CoreDailyQuestSession
+        from pnc_automation.app.automation.daily_maintenance.coordinator import DailyMaintenanceCoordinator
+        from pnc_automation.app.pnc.domain.daily_quest_catalog import DailyQuestCatalog
+
+        coordinator = DailyMaintenanceCoordinator.for_read_only(
+            session=_CoreDailyQuestSession(self), journal_store=self._mutation_boundary.journal_store,
+            catalog=DailyQuestCatalog(),
+        )
+        try:
+            return self._mutation_boundary.recruit_hero_hall(
+                runtime=self._runtime, observe=self._observe_hero_hall,
+                daily_survey=coordinator.survey_read_only, checkpoint=checkpoint,
+            )
+        finally:
+            self._sync_from_runtime()
+
+    def _observe_hero_hall(self, label: str) -> Observation:
+        """Capture through the canonical recovery owner without a workflow-local bypass."""
+
+        return self._observe_operation_content(label, operation="Hero Hall")
+
     def open_research_node(self, title: str, category: ResearchCategory) -> Observation:
         """Reacquire one exact supported node before proving its idle detail."""
 

@@ -22,12 +22,30 @@ from pnc_automation.app.pnc.domain.daily_maintenance import (
     MutationIntent,
     MutationIntentState,
 )
-from pnc_automation.app.pnc.domain.observation import Observation
+from pnc_automation.app.pnc.domain.observation import Observation, VisibleElementSourceKind
+from pnc_automation.app.automation.daily_maintenance.coordinator import DailyReadOnlySurvey
+from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 
 HERO_HALL_FREE_SINGLE_TARGET = 5
 HERO_HALL_FREE_SINGLE_COOLDOWN_SECONDS = 300
+
+
+def hero_hall_daily_completed(survey: DailyReadOnlySurvey) -> bool:
+    """Retain the existing five-recruit Daily completion rule without claiming a reward."""
+
+    return any(
+        row.quest_id == DailyQuestId.HERO_HALL
+        and (
+            row.state.value in {"claim", "completed"}
+            or (
+                row.progress_current is not None and row.progress_required is not None
+                and row.progress_current >= HERO_HALL_FREE_SINGLE_TARGET
+            )
+        )
+        for row in survey.rows
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,10 +63,13 @@ class HeroHallState:
 
         if observation.screen_type != ScreenType.PNC_HERO_HALL:
             raise ValueError(f"Hero Hall state requires PNC_HERO_HALL, got '{observation.screen_type}'.")
+        if observation.blocking_popup or observation.decision.guard != GuardVerdict.CLEAR:
+            raise ValueError("Hero Hall state requires a positively clear current screen.")
         banner = observation.get(UiElementId.PNC_HERO_HALL_RECRUIT_BANNER)
         banner_text = "" if banner is None or banner.extracted_text is None else banner.extracted_text
+        free = observation.get(UiElementId.PNC_HERO_HALL_FREE_RECRUIT_1X_BUTTON)
         return cls(
-            free_single_available=observation.has(UiElementId.PNC_HERO_HALL_RECRUIT_1X_BUTTON),
+            free_single_available=(free is not None and free.source_kind == VisibleElementSourceKind.TEMPLATE),
             daily_attempts_remaining=_parse_daily_attempts(banner_text),
             cooldown_seconds_remaining=_parse_cooldown_seconds(banner_text),
             artifact_path=None if observation.artifact_path is None else str(observation.artifact_path),
@@ -147,9 +168,18 @@ class HeroHallRecruitmentExecutor:
                 )
             return checkpoint, DailyTargetOutcome(
                 quest_id=DailyQuestId.HERO_HALL,
-                status=DailyTargetOutcomeStatus.WAITING_COOLDOWN,
+                status=(
+                    DailyTargetOutcomeStatus.WAITING_COOLDOWN
+                    if before.cooldown_seconds_remaining is not None and before.cooldown_seconds_remaining > 0
+                    else DailyTargetOutcomeStatus.PENDING_CLARIFICATION
+                ),
                 message="Hero Hall has not exposed the next free single yet.",
                 artifact_paths=self._artifacts(intents, before.artifact_path),
+            )
+
+        if before.daily_attempts_remaining is None or before.daily_attempts_remaining <= 0:
+            return checkpoint, self._pending(
+                "A free control without positive current attempts cannot authorize recruitment.", intents,
             )
 
         operation_id = f"hero-hall-recruit-{committed_count + 1:03d}"
@@ -229,7 +259,7 @@ class HeroHallRecruitmentExecutor:
                 not after.free_single_available
                 and after.cooldown_seconds_remaining is not None
                 and after.cooldown_seconds_remaining > 0
-            ) or (before_remaining is None and not after.free_single_available)
+            )
             ready_at = _next_ready_at(
                 now=self.now(),
                 observed_cooldown_seconds=after.cooldown_seconds_remaining,
@@ -298,7 +328,11 @@ def _single_consumed(*, before: HeroHallState, after: HeroHallState) -> bool:
 
     if before.daily_attempts_remaining is not None and after.daily_attempts_remaining is not None:
         return after.daily_attempts_remaining == before.daily_attempts_remaining - 1
-    return before.free_single_available and not after.free_single_available
+    return (
+        before.free_single_available and not after.free_single_available
+        and after.cooldown_seconds_remaining is not None
+        and after.cooldown_seconds_remaining > 0
+    )
 
 
 def _remaining_cooldown(*, intents: tuple[MutationIntent, ...], now: datetime) -> int:

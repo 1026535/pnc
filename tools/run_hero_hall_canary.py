@@ -33,6 +33,7 @@ from pnc_automation.app.automation.daily_maintenance.coordinator import DailyMai
 from pnc_automation.app.automation.daily_maintenance.hero_hall import (
     HeroHallRecruitmentExecutor,
     HeroHallState,
+    hero_hall_daily_completed,
 )
 from pnc_automation.app.automation.daily_maintenance.live_session import ConnectedDailyQuestSession
 from pnc_automation.app.automation.daily_maintenance.mutation_dispatcher import JournaledMutationDispatcher
@@ -229,19 +230,7 @@ def main() -> int:
 def _daily_hero_hall_complete(coordinator: DailyMaintenanceCoordinator) -> bool:
     """Proves the Hero Hall Daily row through the shared read-only coordinator."""
 
-    survey = coordinator.survey_read_only()
-    return any(
-        row.quest_id == DailyQuestId.HERO_HALL
-        and (
-            row.state.value in {"claim", "completed"}
-            or (
-                row.progress_current is not None
-                and row.progress_required is not None
-                and row.progress_current >= 5
-            )
-        )
-        for row in survey.rows
-    )
+    return hero_hall_daily_completed(coordinator.survey_read_only())
 
 
 def _classify_outcome(status: DailyTargetOutcomeStatus) -> tuple[CanaryOutcome, CanaryReason]:
