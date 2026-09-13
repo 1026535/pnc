@@ -1781,7 +1781,7 @@ def _add_shared_building_level_label(
 ) -> None:
     """Adds the current building level from labels such as `8/45` on exact building screens."""
 
-    if not is_upgradeable_primary_screen(screen_type):
+    if screen_type != ScreenType.PNC_BUILDING_DETAILS and not is_upgradeable_primary_screen(screen_type):
         return
     level_line = _find_line_matching(
         lines=lines,
@@ -6273,6 +6273,12 @@ def _build_building_detail_additions(
             ),
         ),
     }
+    _add_shared_building_level_label(
+        image=image,
+        lines=lines,
+        screen_type=ScreenType.PNC_BUILDING_DETAILS,
+        visible_elements=visible_elements,
+    )
     confirm_line = _find_building_upgrade_confirm_line(image=image, lines=lines)
     required_section_lines = _find_text_lines_in_texts(
         lines=lines,

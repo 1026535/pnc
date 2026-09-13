@@ -1,5 +1,58 @@
 # Non-YOLO recognition implementation
 
+## Capture update — September 13, 2026
+
+The user's separately authorized exploration captured the previously missing
+Research categories, construction, Campaign Hero Formation/battle/result, ordinary
+gathering receipt, Player Mail Compose, Alliance member/Hall variants, and native
+account UI. The [capture findings](PNC_NON_YOLO_CAPTURE_FINDINGS_20260913.md) record
+exact evidence, spending, remaining dependencies and source-backed layout rules.
+K157 was shielded before leaving Lost City; the original castle was returned Home
+and the live reservation released. The K290 comparison confirms the Faction tab's
+absence and resulting Alliance layout shift on a nonparticipating castle.
+
+These captures close evidence gaps only where explicitly identified. Newly
+evidenced producers still require implementation and both-path offline validation;
+the published release and its checks below remain unchanged. In particular,
+available march-slot count, a sent-mail receipt, and the legacy Login/Continue
+contract are not proved by unrelated troop-capacity, Compose, or native SDK frames.
+
+### Working-tree corrections after the capture audit
+
+- Player Mail Compose now has an independent visual control at reference point
+  `(98, 896)` on 540×960, or `(163, 1493)` on 900×1600. Both production observation
+  paths preserve template, current-frame, screen and layout provenance; missing
+  controls, other mailboxes and blocking overlays abstain. The sanitized reference
+  and derived negative share one capture group and are not independent holdouts.
+- The generic building-detail builder now invokes the existing shared level parser.
+  This restores observed `1/45` and `7/45` labels without another parser or changes
+  to satisfied/unmet requirement semantics. A real production-registry builder test
+  covers the publication. NavigationPerception still requires independent visual
+  identity and does not publish parsed label elements in its control-only result;
+  the regression preserves that abstention. This is not complete both-path building
+  qualification and does not change that navigation contract.
+- Root review corrected the overlay regression's viewport so the background level
+  actually lies in its eligible region. Final focused command:
+  `python -m unittest tests.integration.vision.test_visual_selector_scope
+  tests.integration.vision.test_building_confirmation_observation
+  tests.integration.vision.test_building_requirements_observation` — **22 passed**.
+- The initial affected run had one error in the old blank-image Compose consumer
+  fixture. The user authorized its narrow test-only correction after review. Luna
+  applied the captured fixture and canonical visual recognizer; root reviewed the
+  diff. All 11 consumer-module tests pass, including the actual measured dispatch
+  at `(163, 1493)` through the fake actuator. No production behavior was weakened.
+- Final `python tools/run_tests.py affected --base origin/main --explain --json
+  .test-impact/compose-review-fix-selection.json --results
+  .test-impact/compose-review-fix-results.json` passed the full fallback:
+  **1,925 run, 1,919 passed, six skipped, zero failures/errors**, 121.761 seconds
+  (128.835 seconds including selection/reporting). Log:
+  `.local-data/reports/compose-review-fix-tests.log`. `git diff --check` passed.
+- Test base resolved to `0ecb242fbae46ab48b71d26dc5fb91b5a49fe1ef`; tested source is
+  dirty on HEAD `274da71`. Main has two additional commits since the integrated
+  `5135dde` baseline (startup waiting and castle targets). This run is not combined
+  main acceptance. No Git mutation was made during this phase. New installed-wheel
+  and warm/independent-family qualification remain outstanding.
+
 ## Resumed vision component release — September 12, 2026
 
 Worktree: `.local-data/worktrees/non-yolo-recognition-continuation`, branch

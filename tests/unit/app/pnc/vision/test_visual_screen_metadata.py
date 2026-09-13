@@ -33,7 +33,7 @@ class VisualScreenMetadataTests(unittest.TestCase):
             for sample in manifest["samples"]
             if sample["split"] == "reference"
         }
-        self.assertEqual(39, len(catalog["profiles"]))
+        self.assertEqual(40, len(catalog["profiles"]))
         for profile in catalog["profiles"]:
             with self.subTest(profile=profile["id"]):
                 source = profile["source"]
@@ -56,8 +56,12 @@ class VisualScreenMetadataTests(unittest.TestCase):
                 else:
                     self.assertEqual("tests/data/game_first_navigation/provenance.json", profile["review"]["reference_manifest"])
                 self.assertEqual("guarded_reference_only", profile["review"]["qualification"])
-                self.assertIsNone(profile["review"]["build"])
-                self.assertIsNone(profile["review"]["locale"])
+                if profile["id"] == "player_mail_mailbox_list":
+                    self.assertEqual("5.2.76 / AppVersion 5.0.204.235", profile["review"]["build"])
+                    self.assertEqual("English", profile["review"]["locale"])
+                else:
+                    self.assertIsNone(profile["review"]["build"])
+                    self.assertIsNone(profile["review"]["locale"])
                 expected_revision = (
                     2
                     if profile["id"] in {
@@ -72,7 +76,7 @@ class VisualScreenMetadataTests(unittest.TestCase):
                 self.assertEqual(expected_revision, profile["revision"])
 
         recognizer = load_visual_screen_recognizer()
-        self.assertEqual(39, len(recognizer.profiles))
+        self.assertEqual(40, len(recognizer.profiles))
         self.assertTrue(all(profile.review.qualification == "guarded_reference_only" for profile in recognizer.profiles))
 
         class _MatchAll:

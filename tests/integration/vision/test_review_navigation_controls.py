@@ -22,6 +22,7 @@ from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservationEnricher
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
 from pnc_automation.app.pnc.vision.selectors import Region, build_default_selector_registry
+from pnc_automation.app.pnc.vision.visual_screen_recognizer import VisualScreenRecognizer, load_visual_screen_recognizer
 from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.core.infra.emulator.provenance import FrameRef
 from pnc_automation.core.vision.ocr.ocr_service import OcrLine, OcrResult
@@ -69,6 +70,7 @@ def _build_observation(
     image_size: tuple[int, int] = (900, 1600),
     image: Image.Image | None = None,
     request: ObservationRequest | None = None,
+    visual_recognizer: VisualScreenRecognizer | None = None,
 ):
     """Builds one capture through the production selector, classifier, and enricher stack."""
 
@@ -91,6 +93,7 @@ def _build_observation(
         screen_classifier=ScreenClassifier(),
         enricher=PncObservationEnricher(selector_registry=registry),
         ocr_service=_DeterministicOcr(lines),
+        visual_recognizer=visual_recognizer,
     )
     return builder.build(screenshot, request=request or ObservationRequest.full_runtime_default())
 
@@ -146,12 +149,16 @@ class ReviewNavigationControlsTests(unittest.TestCase):
     """Keeps guarded controls tied to reviewed screen identity and geometry."""
 
     def test_player_mailbox_compose_is_produced_and_dispatched(self) -> None:
+        fixture_root = TEST_DATA_ROOT / "screen_recognition"
+        with Image.open(fixture_root / "mail_player_list.png") as source:
+            image = source.convert("RGB").resize((900, 1600))
         observation = _build_observation(
             (
-                _line("Player Mail", x=183, y=17, width=292, height=52),
-                _line("Manage", x=678, y=44, width=108, height=35),
-                _line("No report yet", x=300, y=730, width=180, height=26),
+                _line("Player Mail", x=183, y=20, width=258, height=46),
+                _line("No report yet", x=500, y=1216, width=300, height=43),
             ),
+            image=image,
+            visual_recognizer=load_visual_screen_recognizer(),
             request=ObservationRequest.mailbox_observation(MailboxType.PLAYER),
         )
 
@@ -159,7 +166,7 @@ class ReviewNavigationControlsTests(unittest.TestCase):
         self.assertEqual(observation.mailbox_type, MailboxType.PLAYER)
         self.assertTrue(observation.mailbox_empty)
         compose = observation.require(UiElementId.PNC_MAIL_COMPOSE_BUTTON)
-        self.assertEqual(compose.action_point, (819, 240))
+        self.assertEqual(compose.action_point, (163, 1493))
 
         action = ScreenFlowPlanner().open_mail_compose(
             observation,
@@ -186,7 +193,7 @@ class ReviewNavigationControlsTests(unittest.TestCase):
             sleep=lambda _: None,
         )
         executor.execute_action(action, observation)
-        self.assertEqual(session.taps, [(819, 240)])
+        self.assertEqual(session.taps, [(163, 1493)])
 
     def test_mail_hub_has_no_compose_and_empty_player_refuses_before_input(self) -> None:
         observation = _build_observation(_mail_hub_lines())

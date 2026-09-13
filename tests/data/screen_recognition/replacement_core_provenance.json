@@ -713,6 +713,44 @@
     "notes": "Shared mailbox-list footer: Mail; inferred mailbox-agnostic from the supplied System frame, pending positive Player/Alliance live evidence."
   },
   {
+    "asset": "tests/data/screen_recognition/mail_player_list.png",
+    "source": ".local-data/artifacts/capture_gap_exploration/20260913T030954Z/0011_player_mail_list.png",
+    "source_sha256": "5f9b97ee73b54a768839e7c2393ba65a0cba0212e453d93a976eca34072f46a5",
+    "reference_size": [540, 960],
+    "preserved_regions": [[0, 0, 540, 80], [0, 845, 540, 960]],
+    "redacted_region": [0, 80, 540, 845],
+    "redaction_fill_rgb": [15, 28, 68],
+    "capture_group": "2026-09-13/mega_old_acc/mail_compose",
+    "notes": "Portable sanitized Player Mail fixture; sender, player name, and body pixels are removed while the title, shared footer identity, and compose control remain."
+  },
+  {
+    "asset": "screen_anchors/mail_player_list_header.png",
+    "source": ".local-data/artifacts/capture_gap_exploration/20260913T030954Z/0011_player_mail_list.png",
+    "source_sha256": "5f9b97ee73b54a768839e7c2393ba65a0cba0212e453d93a976eca34072f46a5",
+    "reference_size": [540, 960],
+    "crop": [90, 0, 280, 58],
+    "capture_group": "2026-09-13/mega_old_acc/mail_compose",
+    "notes": "Measured Player Mail title identity crop from the sanitized fixture; thread identity content is excluded."
+  },
+  {
+    "asset": "tests/data/screen_recognition/mail_player_list_no_compose.png",
+    "source": "tests/data/screen_recognition/mail_player_list.png",
+    "source_sha256": "783298dcd610974aca7d6ac5ab8f893ce8b0c19924f764ee7a7c82fdc429b000",
+    "reference_size": [540, 960],
+    "removed_region": [70, 855, 130, 935],
+    "capture_group": "2026-09-13/mega_old_acc/mail_compose",
+    "notes": "Negative derivative of the sanitized Player Mail fixture with the compose control crop removed; it shares the source capture group and retains mailbox identity/footer context."
+  },
+  {
+    "asset": "screen_anchors/mail_player_compose_button.png",
+    "source": ".local-data/artifacts/capture_gap_exploration/20260913T030954Z/0011_player_mail_list.png",
+    "source_sha256": "5f9b97ee73b54a768839e7c2393ba65a0cba0212e453d93a976eca34072f46a5",
+    "reference_size": [540, 960],
+    "crop": [78, 866, 118, 926],
+    "capture_group": "2026-09-13/mega_old_acc/mail_compose",
+    "notes": "Measured lower-left Mail/compose footer control; template presence is required before publication and action point is the observed (98, 896) tap."
+  },
+  {
     "asset": "screen_anchors/collect_mail_thread_identity_2.png",
     "source": "tests/data/screen_recognition/collect_mail_system_thread.png",
     "source_sha256": "01eb67bd216f7d909c8cd29d4840d4a210c58dd2382cf62baa838c5285b14453",

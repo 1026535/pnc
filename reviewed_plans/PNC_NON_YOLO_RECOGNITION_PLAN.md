@@ -1,5 +1,18 @@
 # B: finish screen-first non-OCR vision and targeted OCR
 
+## Evidence update — September 13, 2026
+
+Use the [new capture findings](PNC_NON_YOLO_CAPTURE_FINDINGS_20260913.md) and ignored
+annotated package for subsequent B-owned producer slices. Missing-frame statements
+below are historical where superseded by that inventory; captured UI is not an
+implemented producer. Preserve the published foundation and A's workflow/runtime
+ownership. First correct the reproduced Player Mail Compose geometry, then qualify
+the newly evidenced families through both canonical observation paths. Distinguish
+seasonal Alliance layouts, Research visible-control versus queue eligibility, and
+Campaign stage versus Hero Formation. Available march-slot count, sent-mail receipt,
+and the legacy Login/Continue route remain precise dependencies. The capture phase
+ended at the original castle's Home with its lease released; do not reuse that process.
+
 ## Resumed implementation — September 12, 2026
 
 The user's new handoff resumes B under the whole-component ownership below. The
