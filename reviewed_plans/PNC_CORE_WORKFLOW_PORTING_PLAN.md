@@ -12,6 +12,14 @@ exclusive lease across dependent steps, and record each bounded action and resul
 through the existing mutation boundary where applicable. Ambiguous outcomes are
 not authority to replay an action. Workers remain offline.
 
+The user also approved the narrow shared-device exception for the demonstrated
+foreground-query defect: change `BlueStacksSession.is_app_foregrounded` from
+`dumpsys window windows` to `dumpsys window` and update its existing test
+expectations. This does not transfer broader device or perception ownership.
+Future reviews use a dedicated read-only subagent. The existing Luna xhigh worker
+continues concrete implementation; a second Luna xhigh worker may handle an
+independent review-finding slice when there is a non-overlapping write set.
+
 Resume the unfinished original core workflow ports against B's published vision work.
 This supersedes this file's September 12 wait-for-B instructions and initial sequencing.
 B has finished a reviewed implementation slice, not its complete vision plan. A may resume
