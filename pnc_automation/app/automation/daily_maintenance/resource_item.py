@@ -6,11 +6,12 @@ from dataclasses import dataclass
 import re
 from typing import Protocol
 
+from pnc_automation.app.automation.daily_maintenance.coordinator import DailyReadOnlySurvey
 from pnc_automation.app.automation.daily_maintenance.mutation_dispatcher import (
     JournaledMutationDispatcher, MutationOperation, MutationReconciliation,
 )
 from pnc_automation.app.pnc.domain.daily_maintenance import (
-    DailyApplicabilitySkipReason, DailyQuestId, DailyTargetOutcome,
+    DailyApplicabilitySkipReason, DailyQuestId, DailyQuestRowState, DailyTargetOutcome,
     DailyTargetOutcomeStatus, DailyTaskCheckpoint, MutationIntent, MutationIntentState,
 )
 from pnc_automation.app.pnc.domain.resource_items import (
@@ -19,6 +20,22 @@ from pnc_automation.app.pnc.domain.resource_items import (
     ResourceItem,
     smallest_resource_item,
 )
+
+
+def resource_item_daily_completed(survey: DailyReadOnlySurvey) -> bool:
+    """Keep the existing full-survey resource-use receipt shared by both adapters."""
+
+    return any(
+        row.quest_id == DailyQuestId.USE_RESOURCE_ITEM
+        and (
+            row.state in {DailyQuestRowState.CLAIM, DailyQuestRowState.COMPLETED}
+            or (
+                row.progress_current is not None and row.progress_required is not None
+                and row.progress_current >= row.progress_required
+            )
+        )
+        for row in survey.rows
+    )
 
 
 class ResourceItemSession(Protocol):

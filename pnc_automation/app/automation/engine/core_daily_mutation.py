@@ -18,7 +18,9 @@ from pnc_automation.app.automation.daily_maintenance.mutation_dispatcher import 
 from pnc_automation.app.automation.engine.core_runtime import CoreRuntime
 from pnc_automation.app.automation.daily_maintenance.coordinator import DailyReadOnlySurvey
 from pnc_automation.app.automation.daily_maintenance.hero_hall import HeroHallRecruitmentExecutor
+from pnc_automation.app.automation.daily_maintenance.resource_item import ResourceItemExecutor
 from pnc_automation.app.automation.engine.core_hero_hall_session import CoreHeroHallSession
+from pnc_automation.app.automation.engine.core_resource_item_session import CoreResourceItemSession
 from pnc_automation.app.automation.engine.task import TaskId
 from pnc_automation.app.automation.tasks.research_task import _is_active_research_detail
 from pnc_automation.app.authoring.config.daily_maintenance import (
@@ -77,6 +79,13 @@ class CoreMutationBoundary:
             if (
                 policy.quest_id == DailyQuestId.UPGRADE_RESEARCH
                 and policy.task_id == TaskId.RESEARCH
+                and policy.max_mutations == 1
+                and policy.max_diamond_spend == 0
+            ):
+                return policy
+            if (
+                policy.quest_id == DailyQuestId.USE_RESOURCE_ITEM
+                and policy.task_id == TaskId.USE_RESOURCE_ITEM
                 and policy.max_mutations == 1
                 and policy.max_diamond_spend == 0
             ):
@@ -178,6 +187,24 @@ class CoreMutationBoundary:
             session=CoreHeroHallSession(runtime, observe, daily_survey),
             dispatcher=JournaledMutationDispatcher(self.journal_store),
         ).execute(checkpoint=checkpoint)
+
+    def use_resource_item(
+        self, *, runtime: CoreRuntime, observe: Callable[[str], Observation],
+        open_inventory: Callable[[], None], daily_survey: Callable[[], DailyReadOnlySurvey],
+        checkpoint: DailyTaskCheckpoint, allow_empty_skip: bool = False,
+    ) -> tuple[DailyTaskCheckpoint, DailyTargetOutcome]:
+        """Use or reconcile one normal pack through the existing executor and journal."""
+
+        self.authorize()
+        if self.policy.quest_id != DailyQuestId.USE_RESOURCE_ITEM:
+            raise PermissionError("This scope does not authorize Resource Item use.")
+        if type(allow_empty_skip) is not bool:
+            raise TypeError("Resource Item allow_empty_skip must be a bool.")
+        self._require_checkpoint(checkpoint, reconcilable_quest=DailyQuestId.USE_RESOURCE_ITEM)
+        return ResourceItemExecutor(
+            session=CoreResourceItemSession(runtime, observe, open_inventory, daily_survey),
+            dispatcher=JournaledMutationDispatcher(self.journal_store),
+        ).execute(checkpoint=checkpoint, allow_empty_skip=allow_empty_skip)
 
     def start_research(
         self,

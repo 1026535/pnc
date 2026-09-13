@@ -230,3 +230,34 @@ output did not contain exactly one mCurrentFocus field; no game action occurred 
 Those perception/runtime blockers are outside this port's ownership. No bypass was
 added. Hero Hall live acceptance, final five-single canary proof and caller migration
 are not claimed complete; automatic Daily execution remains disabled.
+
+## September 13 Resource Item adapter slice
+
+CoreResourceItemWorkflow now delegates one exact USE_RESOURCE_ITEM policy through
+WorkflowContext and CoreMutationBoundary to the existing ResourceItemExecutor and
+durable journal. ResourceInventorySession owns the unchanged bounded full inventory
+scan, stable row conversion and exact single-Use fingerprint contract for both the
+legacy and core adapters. No alternate parser, mutation authorizer or journal was
+added. Core navigation owns each Resource swipe and consumes the published CLEAR
+Bag/selected Resource anchor. Unselected-tab entry remains unsupported; no guessed
+tab tap, bulk Use or purchase path was introduced.
+
+The shared full Daily survey supplies both adapters' completion receipts. One stock
+decrement without Daily completion remains pending; later reconciliation can commit
+without another Use. Unknown inventory remains unknown, and exact active-castle
+preflight, durable dispatch before input and no-replay behavior are retained.
+
+Actual RapidOCR replay of bag.png and bag_current_testing.png through both production
+observation paths yielded CLEAR Bag, the selected Resource template anchor and six
+complete Resource rows per frame, with no unresolved rows. These are saved viewport
+facts, not a live full-inventory or consumption proof. The replay report is
+.local-data/resource_production_replay.json in the Resource Item feature worktree.
+Focused Resource/navigation and existing claims/Research/Hero contracts passed 57
+checks. The combined final portable result is recorded in the validation ledger.
+
+The same two unchanged live blockers recorded above prevent Resource Item live
+acceptance. They were not replayed. No resource pack was used. Canary/direct caller
+migration and unselected-tab entry remain pending; automatic Daily execution remains
+disabled. Hero Hall/Resource Item are supported offline adapter slices, not completed
+live workflows. Remaining original ports still need the specific published producer
+facts listed in the table above; unfinished vision/YOLO work remains outside A.

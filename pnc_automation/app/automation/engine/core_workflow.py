@@ -6,11 +6,16 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Generic, Literal, Protocol, TypeVar
 
+from pnc_automation.app.automation.daily_maintenance.coordinator import (
+    DailyMaintenanceCoordinator, DailyReadOnlySurvey,
+)
 from pnc_automation.app.automation.engine.core_runtime import CoreRuntime
 from pnc_automation.app.automation.engine.core_daily_mutation import CoreMutationBoundary
+from pnc_automation.app.automation.engine.navigation_core import require_resource_inventory_surface
 from pnc_automation.app.pnc.domain.daily_maintenance import (
     DailyQuestId, DailyQuestRow, DailyTaskCheckpoint, DailyTargetOutcome,
 )
+from pnc_automation.app.pnc.domain.daily_quest_catalog import DailyQuestCatalog
 from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.domain.policy_models import ResearchCategory
 from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
@@ -118,19 +123,10 @@ class WorkflowContext:
 
         if self._effect != WorkflowEffect.RESOURCE_CHANGING or self._mutation_boundary is None:
             raise PermissionError("Hero Hall requires an exact resource-changing boundary.")
-        # The coordinator adapter imports this context for its typed workflow contract.
-        from pnc_automation.app.automation.daily_maintenance.core_daily_maintenance import _CoreDailyQuestSession
-        from pnc_automation.app.automation.daily_maintenance.coordinator import DailyMaintenanceCoordinator
-        from pnc_automation.app.pnc.domain.daily_quest_catalog import DailyQuestCatalog
-
-        coordinator = DailyMaintenanceCoordinator.for_read_only(
-            session=_CoreDailyQuestSession(self), journal_store=self._mutation_boundary.journal_store,
-            catalog=DailyQuestCatalog(),
-        )
         try:
             return self._mutation_boundary.recruit_hero_hall(
                 runtime=self._runtime, observe=self._observe_hero_hall,
-                daily_survey=coordinator.survey_read_only, checkpoint=checkpoint,
+                daily_survey=self._survey_daily_requirements, checkpoint=checkpoint,
             )
         finally:
             self._sync_from_runtime()
@@ -139,6 +135,49 @@ class WorkflowContext:
         """Capture through the canonical recovery owner without a workflow-local bypass."""
 
         return self._observe_operation_content(label, operation="Hero Hall")
+
+    def use_resource_item(
+        self, checkpoint: DailyTaskCheckpoint, *, allow_empty_skip: bool = False,
+    ) -> tuple[DailyTaskCheckpoint, DailyTargetOutcome]:
+        """Delegate one existing pack use, full scan and Daily proof to its exact boundary."""
+
+        if self._effect != WorkflowEffect.RESOURCE_CHANGING or self._mutation_boundary is None:
+            raise PermissionError("Resource Item requires an exact resource-changing boundary.")
+        try:
+            return self._mutation_boundary.use_resource_item(
+                runtime=self._runtime, observe=self._observe_resource_inventory,
+                open_inventory=self._open_resource_inventory,
+                daily_survey=self._survey_daily_requirements, checkpoint=checkpoint,
+                allow_empty_skip=allow_empty_skip,
+            )
+        finally:
+            self._sync_from_runtime()
+
+    def _open_resource_inventory(self) -> None:
+        """Use the reviewed Bag route; an unselected tab supplies no entry authority."""
+
+        self.navigate(ScreenType.PNC_BAG)
+        self._observe_resource_inventory("resource_inventory_entry")
+
+    def _survey_daily_requirements(self) -> DailyReadOnlySurvey:
+        """Use one canonical full-survey composition for mutation completion receipts."""
+
+        # The Daily workflow adapter also imports this context; defer that one import.
+        from pnc_automation.app.automation.daily_maintenance.core_daily_maintenance import _CoreDailyQuestSession
+
+        if self._mutation_boundary is None:
+            raise PermissionError("Mutation receipt survey requires its existing boundary.")
+        return DailyMaintenanceCoordinator.for_read_only(
+            session=_CoreDailyQuestSession(self), journal_store=self._mutation_boundary.journal_store,
+            catalog=DailyQuestCatalog(),
+        ).survey_read_only()
+
+    def _observe_resource_inventory(self, label: str) -> Observation:
+        """Require current published Resource-tab facts after canonical recovery."""
+
+        observation = self._observe_operation_content(label, operation="Resource Item")
+        require_resource_inventory_surface(observation)
+        return observation
 
     def open_research_node(self, title: str, category: ResearchCategory) -> Observation:
         """Reacquire one exact supported node before proving its idle detail."""
