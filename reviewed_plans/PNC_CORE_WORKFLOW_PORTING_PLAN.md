@@ -269,3 +269,23 @@ migration and unselected-tab entry remain pending; automatic Daily execution rem
 disabled. Hero Hall/Resource Item are supported offline adapter slices, not completed
 live workflows. Remaining original ports still need the specific published producer
 facts listed in the table above; unfinished vision/YOLO work remains outside A.
+
+## September 13 reviewed fixes and fresh live boundary
+
+The authorized foreground-query fix is implemented and live-proven on `157_farm`:
+the canonical nonselecting identity preflight now returns Home. The independent
+review also identified and fixed late Resource-scroll completion without adding
+another gesture or changing the scanner. The external review's document-only
+fixes are retained by history-preserving integration.
+
+Resource live acceptance now stops on intermittent all-black capture frames,
+despite successful selected-tab entry and actual inventory scrolling. Hero Hall
+preflight stops on the published identity changing from `0 stickerNPC` to
+`0 sticker NPC` for the same selected row. The latter is a B-owned producer gap;
+the blank-capture cause is unresolved. No mutation occurred, and the lease was
+released with Home last confirmed. Evidence, focused checks and the final gate
+are in the [validation ledger](PNC_CORE_PORTING_VALIDATION.md#september-13-foreground-repair-and-independent-port-review).
+These findings supersede the earlier foreground blocker without claiming live
+workflow or production caller acceptance. Remaining unsupported producer slices
+remain parked. Small fixes stay with the supervisor; delegate only substantial,
+self-contained coding batches, and batch completed changes for read-only review.
