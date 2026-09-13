@@ -94,6 +94,7 @@ class BuildingRequirementsObservationTests(unittest.TestCase):
                         lines=(
                             _ocr_line("Infantry Barracks", x=88, y=16, width=240, height=30),
                             _ocr_line("Glory Level", x=588, y=142, width=154, height=32),
+                            _ocr_line("9/45", x=201, y=410, width=67, height=29),
                             _ocr_line("Upgrade", x=734, y=308, width=120, height=40),
                             _ocr_line("Requirement", x=59, y=714, width=177, height=32),
                             _ocr_line("Recruiting Center : Lv.7", x=152, y=769, width=278, height=28),
@@ -110,6 +111,10 @@ class BuildingRequirementsObservationTests(unittest.TestCase):
             self.assertTrue(observation.has(UiElementId.PNC_BUILDING_REQUIREMENT_HEADER))
             self.assertTrue(observation.has(UiElementId.PNC_BUILDING_REQUIREMENT_TARGET_LABEL))
             self.assertTrue(observation.has(UiElementId.PNC_BUILDING_REQUIREMENT_GO_BUTTON))
+            self.assertEqual(
+                observation.require(UiElementId.PNC_BUILDING_LEVEL_LABEL).extracted_text,
+                "9/45",
+            )
             self.assertEqual(
                 observation.require(UiElementId.PNC_BUILDING_REQUIREMENT_TARGET_LABEL).extracted_text,
                 "Recruiting Center : Lv.7",

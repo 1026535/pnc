@@ -713,6 +713,44 @@
     "notes": "Shared mailbox-list footer: Mail; inferred mailbox-agnostic from the supplied System frame, pending positive Player/Alliance live evidence."
   },
   {
+    "asset": "tests/data/screen_recognition/mail_player_list.png",
+    "source": ".local-data/artifacts/capture_gap_exploration/20260913T030954Z/0011_player_mail_list.png",
+    "source_sha256": "5f9b97ee73b54a768839e7c2393ba65a0cba0212e453d93a976eca34072f46a5",
+    "reference_size": [540, 960],
+    "preserved_regions": [[0, 0, 540, 80], [0, 845, 540, 960]],
+    "redacted_region": [0, 80, 540, 845],
+    "redaction_fill_rgb": [15, 28, 68],
+    "capture_group": "2026-09-13/mega_old_acc/mail_compose",
+    "notes": "Portable sanitized Player Mail fixture; sender, player name, and body pixels are removed while the title, shared footer identity, and compose control remain."
+  },
+  {
+    "asset": "screen_anchors/mail_player_list_header.png",
+    "source": ".local-data/artifacts/capture_gap_exploration/20260913T030954Z/0011_player_mail_list.png",
+    "source_sha256": "5f9b97ee73b54a768839e7c2393ba65a0cba0212e453d93a976eca34072f46a5",
+    "reference_size": [540, 960],
+    "crop": [90, 0, 280, 58],
+    "capture_group": "2026-09-13/mega_old_acc/mail_compose",
+    "notes": "Measured Player Mail title identity crop from the sanitized fixture; thread identity content is excluded."
+  },
+  {
+    "asset": "tests/data/screen_recognition/mail_player_list_no_compose.png",
+    "source": "tests/data/screen_recognition/mail_player_list.png",
+    "source_sha256": "783298dcd610974aca7d6ac5ab8f893ce8b0c19924f764ee7a7c82fdc429b000",
+    "reference_size": [540, 960],
+    "removed_region": [70, 855, 130, 935],
+    "capture_group": "2026-09-13/mega_old_acc/mail_compose",
+    "notes": "Negative derivative of the sanitized Player Mail fixture with the compose control crop removed; it shares the source capture group and retains mailbox identity/footer context."
+  },
+  {
+    "asset": "screen_anchors/mail_player_compose_button.png",
+    "source": ".local-data/artifacts/capture_gap_exploration/20260913T030954Z/0011_player_mail_list.png",
+    "source_sha256": "5f9b97ee73b54a768839e7c2393ba65a0cba0212e453d93a976eca34072f46a5",
+    "reference_size": [540, 960],
+    "crop": [78, 866, 118, 926],
+    "capture_group": "2026-09-13/mega_old_acc/mail_compose",
+    "notes": "Measured lower-left Mail/compose footer control; template presence is required before publication and action point is the observed (98, 896) tap."
+  },
+  {
     "asset": "screen_anchors/collect_mail_thread_identity_2.png",
     "source": "tests/data/screen_recognition/collect_mail_system_thread.png",
     "source_sha256": "01eb67bd216f7d909c8cd29d4840d4a210c58dd2382cf62baa838c5285b14453",
@@ -977,6 +1015,15 @@
     "notes": "Independent observed chapter-node path crop."
   },
   {
+    "asset": "screen_anchors/campaign_stage_three.png",
+    "source": ".local-data/artifacts/2026-09-12/serious_stuff/20260912T195809Z_core_20260912T195338Z_6a8f4869_0015_campaign_chapter_10_settled.png",
+    "source_sha256": "738f8218eb53c6e802f55f5d1056f35fd907e907c62c800605ade61d63314d56",
+    "reference_size": [540, 960],
+    "crop": [301, 591, 351, 644],
+    "capture_group": "2026-09-12/serious_stuff/campaign_navigation",
+    "notes": "Measured unlocked Chapter 10 stage 3 badge crop; presence proves the observed stage row only."
+  },
+  {
     "asset": "screen_anchors/campaign_stage_title.png",
     "source": ".local-data/artifacts/2026-09-12/serious_stuff/20260912T195913Z_core_20260912T195338Z_6a8f4869_0017_campaign_stage_10_3_settled.png",
     "source_sha256": "0a3f70a93cba682c50afeca8e432faaf401e75138d255195f6356e32a37bde70",
@@ -1022,6 +1069,15 @@
     "notes": "Measured stage detail owned Close control crop; profile marks it as surface dismissal evidence."
   },
   {
+    "asset": "screen_anchors/campaign_challenge_button.png",
+    "source": ".local-data/artifacts/2026-09-12/serious_stuff/20260912T195913Z_core_20260912T195338Z_6a8f4869_0017_campaign_stage_10_3_settled.png",
+    "source_sha256": "0a3f70a93cba682c50afeca8e432faaf401e75138d255195f6356e32a37bde70",
+    "reference_size": [540, 960],
+    "crop": [178, 643, 362, 697],
+    "capture_group": "2026-09-12/serious_stuff/campaign_navigation",
+    "notes": "Measured gold Challenge control crop from the reviewed stage-detail frame; presence proves the visible stage action only."
+  },
+  {
     "asset": "tests/data/screen_recognition/campaign_map.png",
     "source": ".local-data/artifacts/2026-09-12/serious_stuff/20260912T195710Z_core_20260912T195338Z_6a8f4869_0013_campaign_entry_settled.png",
     "source_sha256": "97a15f36f9d7c1ac56ca7f8ba3903c329a04c3179323d94eb98e2d4ffdca91c1",
@@ -1052,6 +1108,24 @@
     "preserved_regions": [[16, 201, 522, 741]],
     "redacted_regions": [[0, 0, 540, 201], [0, 741, 540, 960]],
     "redaction_fill_rgb": [16, 28, 49],
-    "notes": "Portable sanitized stage-detail fixture; the owned detail panel and Close remain, with private blurred HUD/chat surroundings removed and Challenge unregistered."
+    "notes": "Portable sanitized stage-detail fixture; the owned detail panel, Close, and measured Challenge remain, with private blurred HUD/chat surroundings removed."
+  },
+  {
+    "asset": "screen_anchors/hero_hall_free_recruit_1x.png",
+    "source": "tests/data/screen_recognition/hero_hall.png",
+    "source_sha256": "41bec68391c043c71a65d18a5c2a4af338f8254496472d21c996e3b775a7d322",
+    "reference_size": [540, 960],
+    "crop": [68, 700, 228, 733],
+    "capture_group": "2026-09-10/mega_old_acc",
+    "notes": "Measured gold Free Recruit1x control crop; the independent hero_hall_aug29 holdout retains the same control pixels."
+  },
+  {
+    "asset": "screen_anchors/bag_subtab_resource_selected.png",
+    "source": "tests/data/screen_recognition/bag.png",
+    "source_sha256": "348d1ba637b8e69b599f912a5d9fa15d31857e97e2999f55c4ebb14f72f1f236",
+    "reference_size": [540, 960],
+    "crop": [0, 123, 107, 162],
+    "capture_group": "2026-08-30/mega_old_acc",
+    "notes": "Measured selected-gold Resource subtab crop; independent 900px Bag evidence is covered by the focused visual publication tests."
   }
 ]

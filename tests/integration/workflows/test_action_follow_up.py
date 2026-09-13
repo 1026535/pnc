@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pnc_automation.core.errors import SelectorResolutionError
-
 import unittest
 
 from pnc_automation.app.automation.engine.action_executor import ActionExecutor
@@ -181,19 +179,19 @@ class ActionFollowUpTests(AutomationFrameworkFixtures, unittest.TestCase):
             sleep=lambda _: None,
         )
 
-        with self.assertRaises(SelectorResolutionError):
-            executor.execute_actions(
-                (
-                    TapAction(
-                        selector_id=UiElementId.PNC_GATHER_BUTTON,
-                        reason="open_gather_march",
-                        observe_after=True,
-                        follow_up_request=ObservationRequest.march_confirm_follow_up(),
-                    ),
-                    TapAction(selector_id=UiElementId.PNC_MARCH_CONFIRM_BUTTON, reason="confirm_gather_march"),
+        result = executor.execute_actions(
+            (
+                TapAction(
+                    selector_id=UiElementId.PNC_GATHER_BUTTON,
+                    reason="open_gather_march",
+                    observe_after=True,
+                    follow_up_request=ObservationRequest.march_confirm_follow_up(),
                 ),
-                make_observation(ScreenType.PNC_GATHER_NODE, visible_ids=(UiElementId.PNC_GATHER_BUTTON,)),
-                observe=fake_observer.observe,
-            )
+                TapAction(selector_id=UiElementId.PNC_MARCH_CONFIRM_BUTTON, reason="confirm_gather_march"),
+            ),
+            make_observation(ScreenType.PNC_GATHER_NODE, visible_ids=(UiElementId.PNC_GATHER_BUTTON,)),
+            observe=fake_observer.observe,
+        )
 
-        self.assertEqual(fake_session.taps, [])
+        self.assertEqual(result.screen_type, ScreenType.PNC_GATHER_NODE)
+        self.assertEqual(fake_session.taps, [(5, 5)])

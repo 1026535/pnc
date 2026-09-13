@@ -2,20 +2,21 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass, replace
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field, replace
 import hashlib
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from PIL import Image
 
-from pnc_automation.app.pnc.domain.observation import Bounds, Observation
+from pnc_automation.app.pnc.domain.observation import Bounds, Observation, VisibleElement
 from pnc_automation.app.pnc.domain.screen_decision import ScreenEvidence, is_reviewed_viewport
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.observation_builder import (
     ObservationAdditions, ObservationEnricher,
 )
+from pnc_automation.app.pnc.vision.observation_diagnostics import ObservationDebugArtifactCollector
 from pnc_automation.app.pnc.vision.observation_provenance import bind_list_entry, bind_visible_elements
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
@@ -37,6 +38,16 @@ class NavigationGuard(ObservationEnricher, Protocol):
     ) -> ObservationAdditions: ...
 
 
+@runtime_checkable
+class _ContentLabelPublisher(Protocol):
+    """Optional registry-backed publication for guards that also produce labels."""
+
+    def content_labels(
+        self,
+        additions: ObservationAdditions,
+    ) -> Mapping[UiElementId, VisibleElement]: ...
+
+
 @dataclass(frozen=True, slots=True)
 class NavigationPerception:
     """Recognize without candidate hints, inferred geometry, or content-driven identity.
@@ -52,6 +63,9 @@ class NavigationPerception:
     guard: NavigationGuard
     screen_classifier: ScreenClassifier
     create_ocr_context: Callable[[CapturedScreenshot], ObservationOcrContext]
+    debug_artifact_collector: ObservationDebugArtifactCollector = field(
+        default_factory=ObservationDebugArtifactCollector, kw_only=True,
+    )
 
     def build(self, screenshot: CapturedScreenshot, *, include_content: bool = False) -> Observation:
         """Return only controls actually matched on an independently identified frame."""
@@ -140,7 +154,7 @@ class NavigationPerception:
             frame_ref=screenshot.frame_ref,
         )
         if not include_content or interrupted or not decision.action_eligible:
-            return observation
+            return self._finish(screenshot, observation, ocr_context, visual.profile_ids)
         content_request = (
             ObservationRequest.chat_transcript_observation()
             if screen == ScreenType.PNC_CHAT
@@ -152,10 +166,19 @@ class NavigationPerception:
         )
         if any(item.screen_type != screen for item in content.screen_evidence):
             raise ValueError("Content parser contradicted independent screen identity.")
+        content_labels = bind_visible_elements(
+            self.guard.content_labels(content)
+            if isinstance(self.guard, _ContentLabelPublisher) else {},
+            frame_ref=screenshot.frame_ref,
+            source_screen=screen,
+            source_layout_id=decision.layout_id,
+        )
         # Parsed content cannot create controls, replace identity, or redirect a
         # transition. Keep the existing typed content parsers during migration.
-        return replace(
-            observation, list_entries=tuple(
+        observation = replace(
+            observation,
+            visible_elements={**content_labels, **observation.visible_elements},
+            list_entries=tuple(
                 bind_list_entry(entry, frame_ref=screenshot.frame_ref, source_screen=screen,
                                      source_layout_id=decision.layout_id)
                 for entry in content.list_entries
@@ -171,6 +194,19 @@ class NavigationPerception:
             chat_draft_empty=content.chat_draft_empty,
             chat_draft_text=content.chat_draft_text,
         )
+        return self._finish(screenshot, observation, ocr_context, visual.profile_ids)
+
+    def _finish(
+        self, screenshot: CapturedScreenshot, observation: Observation,
+        ocr_context: ObservationOcrContext, profile_ids: tuple[str, ...],
+    ) -> Observation:
+        """Report remaining recognition gaps using this capture's existing evidence."""
+
+        self.debug_artifact_collector.persist_recognition_gap(
+            screenshot=screenshot, observation=observation, ocr_context=ocr_context,
+            profile_ids=profile_ids,
+        )
+        return observation
 
 
 def _is_near_black_frame(image: Image.Image) -> bool:

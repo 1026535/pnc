@@ -18,6 +18,7 @@ class _ClearObservationEnricher(DefaultObservationEnricher):
         request: ObservationRequest,
         *,
         ocr_context,
+        owned_dismiss_bounds=(),
     ) -> ObservationAdditions:
-        del image, request, ocr_context
+        del image, request, ocr_context, owned_dismiss_bounds
         return ObservationAdditions(guard_verdict=GuardVerdict.CLEAR)
