@@ -84,36 +84,36 @@ accounts:
   - account_id: main
     castle_targets:
       main:
-        kingdom: K191
-        castle_name: Farming NPC
-        castle_level: 29
-      lazy_intern:
-        kingdom: K290
-        castle_name: Lazy Intern
+        kingdom: K157
+        castle_name: Sword NPC2
         castle_level: 26
-      jobless_intern:
-        kingdom: K290
-        castle_name: Jobless Intern
+      lazy_intern:
+        kingdom: K157
+        castle_name: another NPC
         castle_level: 22
+      jobless_intern:
+        kingdom: K157
+        castle_name: Sword NPC
+        castle_level: 29
       npc_on_hopium:
         kingdom: K157
         castle_name: NPC on Hopium
         castle_level: 31
       npc_on_copium:
-        kingdom: K191
+        kingdom: K157
         castle_name: NPC on Copium
         castle_level: 24
       hopeful_npc_k157:
-        kingdom: K157
+        kingdom: K233
         castle_name: Hopeful NPC- _-
         castle_level: 34
       underpaid_intern:
-        kingdom: K290
-        castle_name: Underpaid Intern
+        kingdom: K157
+        castle_name: Poney NPC
         castle_level: 31
       coping_intern:
-        kingdom: K290
-        castle_name: Coping Intern
+        kingdom: K226
+        castle_name: Bubbled(o> - <)
         castle_level: 22
 
   - account_id: mega_old_acc
