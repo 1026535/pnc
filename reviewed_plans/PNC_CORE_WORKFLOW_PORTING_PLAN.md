@@ -2,6 +2,16 @@
 
 ## Current purpose and execution boundary
 
+Current user authorization (September 13): `157_farm` and `testing` may be used
+for any in-game action needed to implement and validate these workflow ports,
+including necessary resource spending. This supersedes this restart document's
+earlier live-action restriction for those two instances. It does not authorize
+mainline landing, unrelated vision/YOLO work, real-money purchases, or scheduler
+activation. Resolve fresh target identity through the canonical runtime, hold its
+exclusive lease across dependent steps, and record each bounded action and result
+through the existing mutation boundary where applicable. Ambiguous outcomes are
+not authority to replay an action. Workers remain offline.
+
 Resume the unfinished original core workflow ports against B's published vision work.
 This supersedes this file's September 12 wait-for-B instructions and initial sequencing.
 B has finished a reviewed implementation slice, not its complete vision plan. A may resume
@@ -175,3 +185,17 @@ pre-dispatch authority and no replay. Its gate passed 1,911 tests with six skips
 not replace validation of the new combined tree. No live claim/Research action was
 performed in those slices; the prior discovery conflict and released lease remain
 historical, not a current emulator-state assertion.
+
+## September 13 integration checkpoint result
+
+Merged published plan 4a58e86b (including B 93798a6 and main 850bdb7) into A's
+1994020 candidate with history preserved. Only this plan conflicted; the current
+execution plan and the A completion evidence above are both retained. All 40
+profiles survive, with no missing IDs from A, B or main. The frozen production tree
+passed the final portable gate: 1,967 passed, six skipped (1,973 total), no failures,
+194.006 seconds including collection/reporting. This includes real-builder Research,
+mutation/no-replay, label-input rejection, retry diagnostics, Campaign, Chat/archive,
+atomic journal and shared-lock checks. Five skips are optional local screenshots;
+one is Windows symlink privilege. Diff check passed. The subsequent authorization
+and result notes change documentation only; this offline checkpoint performs no live
+operation and does not establish full workflow or vision completion.
