@@ -784,10 +784,10 @@ class BlueStacksSessionTests(unittest.TestCase):
         self.assertTrue(session.ensure_app_foregrounded())
         self.assertEqual(
             [
-                ("127.0.0.1:5555", ("dumpsys", "window", "windows")),
+                ("127.0.0.1:5555", ("dumpsys", "window")),
                 ("127.0.0.1:5555", ("monkey", "-p", "com.global.tmslg", "-c", "android.intent.category.LAUNCHER", "1")),
-                ("127.0.0.1:5555", ("dumpsys", "window", "windows")),
-                ("127.0.0.1:5555", ("dumpsys", "window", "windows")),
+                ("127.0.0.1:5555", ("dumpsys", "window")),
+                ("127.0.0.1:5555", ("dumpsys", "window")),
             ],
             adb_client.shell_calls,
         )
