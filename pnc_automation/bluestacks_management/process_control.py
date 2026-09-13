@@ -29,6 +29,9 @@ def run_powershell(
             encoding="utf-8",
             check=False,
             timeout=timeout_seconds,
+            # The monitor is normally hosted by pythonw.exe, but each child
+            # PowerShell must also be prevented from creating a console window.
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
     except subprocess.TimeoutExpired as error:
         raise ConfigurationError(
