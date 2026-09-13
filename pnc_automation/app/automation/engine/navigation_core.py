@@ -547,7 +547,10 @@ class NavigationCore:
             ), before,
         ):
             raise RuntimeError("Navigation actuator did not execute the Resource scroll.")
+        started = self.clock()
         after = confirm_scroll()
+        if self.clock() - started >= self.policy.max_seconds:
+            raise RuntimeError("Resource scroll completion budget exhausted; the gesture was not repeated.")
         require_resource_inventory_surface(after)
         if after.captured_at <= before.captured_at:
             raise RuntimeError("Resource scroll completion received a stale capture.")
