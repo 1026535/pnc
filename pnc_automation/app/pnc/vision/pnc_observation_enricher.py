@@ -246,6 +246,7 @@ _GENERIC_POPUP_NEGATIVE_TEXT_KINDS = {
     "NO": PopupControlKind.NEGATIVE_ACTION,
 }
 _GENERIC_POPUP_PRIMARY_TEXTS = frozenset({"CONFIRM", "OK", "JOIN", "APPLY", "CLAIM", "BUY", "UPGRADE", "NEXT"})
+_UPDATE_FAILURE_MESSAGE_TEXT = "UPDATEFAILEDTRYAGAIN"
 _ALLIANCE_INVITATION_BODY_TOKENS = frozenset({"JOIN", "ALLIANCE", "STRONG", "TOGETHER"})
 _ALLIANCE_INVITATION_TITLE_TEXTS = frozenset({"ALLIANCEINVITATION", "ALLIANCEINVITE", "JOINOURALLIANCE"})
 _BUILDING_DETAIL_CONFLICT_ANCHOR_IDS = frozenset(
@@ -1910,7 +1911,15 @@ class PncObservationEnricher:
         reconnect_popup = _build_reconnect_popup_additions(image=image, lines=lines)
         if reconnect_popup is not None:
             strong.append(reconnect_popup)
-        loading = _build_loading_additions(image=image, lines=lines)
+        # The retry dialog is rendered over the publisher splash and can share
+        # its Conquest/progress OCR.  The modal owns the frame whenever its
+        # exact update evidence is present; do not turn that overlap into an
+        # unresolved loading/update conflict.
+        loading = (
+            None
+            if update_required is not None
+            else _build_loading_additions(image=image, lines=lines)
+        )
         if loading is not None:
             strong.append(loading)
         coordinate_dialog = self._build_world_map_coordinate_dialog_additions(
@@ -5230,14 +5239,11 @@ def _build_update_required_popup_additions(
     image: Image.Image,
     lines: tuple[OcrLine, ...],
 ) -> ObservationAdditions | None:
-    """Materializes Confirm only for the exact required game-update message."""
+    """Materializes Confirm only for an exact required-update dialog message."""
 
     update_line = _find_line_matching(
         lines=lines,
-        predicate=lambda line: (
-            "NEWVERSIONDETECTED" in normalize_ocr_text(line.text)
-            and "CONFIRMTOUPDATE" in normalize_ocr_text(line.text)
-        ),
+        predicate=lambda line: _is_update_confirmation_message(line.text),
         min_y=0,
         max_y=int(image.height * 0.7),
     )
@@ -5280,6 +5286,16 @@ def _build_update_required_popup_additions(
             evidence_kind=PopupEvidenceKind.OCR_TEXT,
             reason="ocr_update_required_popup",
         ),
+    )
+
+
+def _is_update_confirmation_message(text: str) -> bool:
+    """Recognize only the reviewed required-update and update-failure messages."""
+
+    normalized_text = normalize_ocr_text(text)
+    return normalized_text == _UPDATE_FAILURE_MESSAGE_TEXT or (
+        "NEWVERSIONDETECTED" in normalized_text
+        and "CONFIRMTOUPDATE" in normalized_text
     )
 
 

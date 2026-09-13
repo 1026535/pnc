@@ -320,6 +320,32 @@ class NavigationCoreTests(unittest.TestCase):
                               NavigationPolicy(max_observations=4), sleep=lambda _: None)
         return core, actuator, core.edges[0]
 
+    def test_route_uses_ready_source_for_initial_and_reviewed_edge_reacquisition(self):
+        """Loading-aware source reacquisition leaves post-action completion unchanged."""
+
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+        home = replace(observation(ScreenType.PNC_HOME_CITY), captured_at=now)
+        world = replace(observation(ScreenType.PNC_WORLD_MAP), captured_at=now + timedelta(seconds=2))
+        world_after = replace(observation(ScreenType.PNC_WORLD_MAP), captured_at=now + timedelta(seconds=3))
+        ready = Mock(side_effect=[home, home])
+        observe = Mock(side_effect=[world, world_after])
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator,
+            observe,
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+            observe_ready=ready,
+        )
+
+        result = core.navigate(ScreenType.PNC_WORLD_MAP)
+
+        self.assertIs(world_after, result)
+        self.assertEqual(["core_route_source", "core_1_source"], [call.args[0] for call in ready.call_args_list])
+        self.assertEqual(["core_1_after_0", "core_1_after_1"], [call.args[0] for call in observe.call_args_list])
+        self.assertEqual(1, len(actuator.actions))
+
     def test_chat_route_has_reviewed_home_entry_and_back_edges(self):
         edges = reviewed_navigation_edges()
 

@@ -192,6 +192,7 @@ class _Runtime:
         self.last_observation = None
         self.current_screen = ScreenType.PNC_HOME_CITY
         self.targets: list[ScreenType] = []
+        self.ready_labels: list[str] = []
         self.record = Mock()
         self.trace_path = Path("trace.jsonl")
         self.preflight_active_castle_identity = Mock(return_value=castle)
@@ -212,6 +213,12 @@ class _Runtime:
                 _daily_resource_observation(completed=self.daily_completed),
             )
         return self.fresh(self.resource_frame())
+
+    def observe_ready(self, label: str, *, include_content: bool = False):
+        """Mirror the runtime's ready boundary for Resource Item contract coverage."""
+
+        self.ready_labels.append(label)
+        return self.observe(label, include_content=include_content)
 
     def resource_frame(self):
         item = self.item
@@ -295,6 +302,7 @@ class CoreResourceItemMutationTests(unittest.TestCase):
         self.assertEqual("before", action.metadata_value)
         self.assertTrue(action.use_action_point)
         self.assertEqual(("resource.png", "daily.png"), outcome.artifact_paths)
+        self.assertIn("resource_inventory_entry", runtime.ready_labels)
 
     def test_ambiguous_result_reconciles_without_replaying_input(self) -> None:
         runtime = _Runtime(

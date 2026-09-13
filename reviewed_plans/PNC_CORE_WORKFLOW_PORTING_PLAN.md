@@ -2,15 +2,86 @@
 
 ## Current purpose and execution boundary
 
-Current user authorization (September 13): `157_farm` and `testing` may be used
-for any in-game action needed to implement and validate these workflow ports,
-including necessary resource spending. This supersedes this restart document's
-earlier live-action restriction for those two instances. It does not authorize
-mainline landing, unrelated vision/YOLO work, real-money purchases, or scheduler
-activation. Resolve fresh target identity through the canonical runtime, hold its
-exclusive lease across dependent steps, and record each bounded action and result
-through the existing mutation boundary where applicable. Ambiguous outcomes are
-not authority to replay an action. Workers remain offline.
+Current continuation resumes the September 13 20:20 UTC handoff's STOP in the
+existing integration worktree. Branch `codex/workflow-recognition-integration`
+was verified clean at `196e5b165f2d907158fd547f25d2fd4c1534be27`; no reset or new
+integration was needed. Earlier integration checkpoints below are historical.
+
+Fresh user authorization names `mega_old_acc` and allows all needed in-game
+actions with unlimited resource spending. Each actual proof still uses exact
+active identity, the canonical lease, supported bounded mutation policies,
+observed receipts and no replay. No merge, push, automatic Daily activation,
+real-money purchase or other task/worktree changes are authorized. Workers stay
+offline. Earlier permissions for other accounts are not used in this continuation.
+
+The completed Hero Hall and Resource Item adapter sections below supersede the
+original implementation sequence. Current remaining A-owned work and the newly
+resolved recognition dependency are:
+
+1. Completed: fix the reproduced no-claim sweep checkpoint overwrite in the canonical
+   mutation boundary, keeping the target and durable journal there. Regression
+   reproduction erased one committed intent without game input; validation of
+   the whole sweep now precedes coordinator execution. New combined checks passed.
+2. Completed: explicit loading-only ready-source acquisition through the existing
+   passive settle owner for reviewed route sources and Resource inventory content.
+   Preserve first-capture timing, freshness, content and stable-screen limits;
+   ordinary observation and Chat/post-action contracts remain unchanged.
+3. Validate supported ports on `mega_old_acc` and migrate remaining callers only
+   after their bounded proof. Keep `0 stickerNPC` versus `0 sticker NPC` recorded
+   as a recognition dependency; exact identity checks remain unchanged. The
+   producer dependencies in the remaining-ports table still apply.
+4. Completed offline: qualify the exact `Update failed. Try again?` plus paired
+   `Confirm` dialog through the existing typed `UPDATE_CONFIRM` popup path. The
+   recognized modal takes precedence over the publisher loading splash; live
+   recovery and mutation proof remain pending stable readiness and exact identity.
+
+The new combined affected/full fallback passed 2,010 tests with six expected skips
+(2,016 total), and independent review found no actionable issue in the completed
+runtime, workflow, and popup-recognition slices.
+Actual live disposition and evidence are recorded in the validation ledger's
+September 13 resumed implementation section. This is an uncommitted continuation
+of `196e5b1`; no merge or publication was performed.
+The earlier `mega_old_acc` startup proof stopped at an `Update failed. Try again?`
+/ Confirm dialog. Offline replay now publishes it through the existing typed
+update-confirm path. On the manual resumption the update had completed; a
+visible offer was dismissed, without a purchase. Automated update recovery
+itself remains unproven. The user subsequently gave
+the exact approval requested by automatic review: one normal owned Resource
+pack Use and one free Hero Hall single on `mega_old_acc` / K157 / `NPC 2`, zero
+diamonds, after readiness and exact identity. Retain that approval without asking
+again. Stable readiness and the producer table's missing facts remain prerequisites;
+no caller was promoted based on offline passes alone.
+
+The September 13 21:44 UTC continuation proved exact K157 / `NPC 2`, level 22,
+through the canonical nonselecting preflight. Resource entry and bounded inventory
+scrolling worked, but the scan returned unknown inventory; no pack was selected,
+no mutation intent was written, and the workflow returned Home. Caller promotion
+still needs a complete inventory and actual consumption/Daily receipt proof.
+Separately, the preceding More-to-Settings tap returned Home; saved replay places
+the published Settings action point on its text label. Preserve that recognition
+dependency and use explicitly requested manual navigation for the live proof;
+do not install a workflow-local coordinate override. The user's latest preference
+is to perform computer and BlueStacks manipulations themselves: request the
+needed click/navigation step instead of taking control of the desktop or game.
+Continue code work and offline checks independently.
+
+The independent Hero proof then verified the same exact castle, opened Hero Hall,
+and dispatched one proven free single. Its first receipt frame was the summon
+animation (`UNKNOWN`); the later Albertus Confirm and fragments Close screens
+also lack published identities/controls. The durable intent prevents replay.
+The user-assisted result dismissal and journal reconciliation are separate from
+automatic workflow acceptance. B must qualify the summon/result states and safe
+Confirm/Close controls before A can implement bounded result traversal and promote
+the caller; a generic UNKNOWN retry or generic Recruit 1x is not a substitute.
+The [Hero flow reference](../docs/game-reference/workflows/hero-hall-recruitment.md)
+records inspected source symbols and the actual result screens.
+
+At 22:07 UTC, after the user's Close and a fresh exact NPC 2 preflight, the
+canonical existing-intent reconciliation committed `hero-hall-recruit-001`
+from the observed five-to-four attempts decrement. No second recruit was sent;
+final Home was confirmed and the lease released. This completes reconciliation
+of the authorized single, while automatic result traversal, full five-single
+Daily proof and caller migration remain blocked as described above.
 
 The user also approved the narrow shared-device exception for the demonstrated
 foreground-query defect: change `BlueStacksSession.is_app_foregrounded` from

@@ -22,7 +22,6 @@ from pnc_automation.app.automation.engine.script_runner import (
 from pnc_automation.app.pnc.domain.daily_maintenance import (
     DailyTargetOutcomeStatus,
     DailyTaskCheckpoint,
-    MutationIntentState,
 )
 from pnc_automation.app.pnc.persistence.daily_run_journal_store import DailyRunJournalStore
 
@@ -98,22 +97,13 @@ class ConnectedClaimOnlyCastleRunner:
             account_id=target.account_id,
             castle=target.castle,
         )
-        if checkpoint.game_reset_id != boundary.game_reset_id:
-            raise RuntimeError("Existing Daily journal has a different game-reset identity.")
-        unresolved = tuple(
-            intent for intent in checkpoint.mutation_intents if intent.state != MutationIntentState.COMMITTED
-        )
-        if unresolved:
-            raise RuntimeError(
-                "Daily journal contains an unresolved mutation; reconcile it before another live run."
-            )
         result = CoreWorkflowRunner(
             core,
             mutation_boundary=CoreMutationBoundary(
                 target=target, boundary=boundary, authorizer=self.authorizer,
                 journal_store=journal_store,
             ),
-        ).run(CoreDailyMaintenanceWorkflow(target, checkpoint, journal_store)).value
+        ).run(CoreDailyMaintenanceWorkflow(checkpoint)).value
         failed_outcomes = tuple(
             outcome for outcome in result.outcomes
             if outcome.status not in {

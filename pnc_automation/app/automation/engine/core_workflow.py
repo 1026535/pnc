@@ -7,7 +7,7 @@ from enum import StrEnum
 from typing import Generic, Literal, Protocol, TypeVar
 
 from pnc_automation.app.automation.daily_maintenance.coordinator import (
-    DailyMaintenanceCoordinator, DailyReadOnlySurvey,
+    DailyMaintenanceCoordinator, DailyMaintenanceResult, DailyReadOnlySurvey,
 )
 from pnc_automation.app.automation.engine.core_runtime import CoreRuntime
 from pnc_automation.app.automation.engine.core_daily_mutation import CoreMutationBoundary
@@ -175,7 +175,9 @@ class WorkflowContext:
     def _observe_resource_inventory(self, label: str) -> Observation:
         """Require current published Resource-tab facts after canonical recovery."""
 
-        observation = self._observe_operation_content(label, operation="Resource Item")
+        observation = self._observe_operation_content(
+            label, operation="Resource Item", ready=True,
+        )
         require_resource_inventory_surface(observation)
         return observation
 
@@ -214,6 +216,21 @@ class WorkflowContext:
         """Keep research captures fresh; operation owners evaluate their published facts."""
 
         return self._observe_operation_content(label, operation="Research")
+
+    def run_daily_maintenance(self, checkpoint: DailyTaskCheckpoint) -> DailyMaintenanceResult:
+        """Run the whole claim sweep under the canonical target and journal authority."""
+
+        from pnc_automation.app.automation.daily_maintenance.core_daily_maintenance import (
+            _CoreDailyClaimExecutor, _CoreDailyQuestSession,
+        )
+
+        if self._effect != WorkflowEffect.RESOURCE_CHANGING or self._mutation_boundary is None:
+            raise PermissionError("Daily maintenance requires an exact resource-changing boundary.")
+        return self._mutation_boundary.run_daily_maintenance(
+            session=_CoreDailyQuestSession(self),
+            claim_executor=_CoreDailyClaimExecutor(self),
+            checkpoint=checkpoint,
+        )
 
     def claim_daily_reward(
         self, row: DailyQuestRow, checkpoint: DailyTaskCheckpoint,
@@ -425,10 +442,13 @@ class WorkflowContext:
 
         return self._observe_operation_content(label, operation="Castle selection")
 
-    def _observe_operation_content(self, label: str, *, operation: str) -> Observation:
+    def _observe_operation_content(
+        self, label: str, *, operation: str, ready: bool = False,
+    ) -> Observation:
         """Capture fresh content while preserving shared workflow freshness checks."""
 
-        observation = self._runtime.observe(label, include_content=True)
+        observer = self._runtime.observe_ready if ready else self._runtime.observe
+        observation = observer(label, include_content=True)
         if self._runtime.observation_count <= self._last_navigation_count:
             raise RuntimeError(f"{operation} operation content was not captured after the previous workflow observation.")
         if self._last_observation is not None and observation.captured_at <= self._last_observation.captured_at:

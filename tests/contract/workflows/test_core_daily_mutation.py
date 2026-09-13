@@ -12,6 +12,7 @@ from pnc_automation.app.automation.daily_maintenance.application_service import 
 from pnc_automation.app.automation.daily_maintenance.authorization import DailyMutationAuthorizer
 from pnc_automation.app.automation.daily_maintenance.coordinator import daily_viewport_from_observation
 from pnc_automation.app.automation.daily_maintenance.connected_runner import ConnectedClaimOnlyCastleRunner
+from pnc_automation.app.automation.daily_maintenance.core_daily_maintenance import CoreDailyMaintenanceWorkflow
 from pnc_automation.app.automation.engine.core_daily_mutation import CoreMutationBoundary
 from pnc_automation.app.automation.engine.core_workflow import CoreWorkflowRunner, WorkflowContext, WorkflowEffect, WorkflowSpec
 from pnc_automation.app.automation.engine.navigation_core import NavigationCore, NavigationPolicy
@@ -156,6 +157,46 @@ class CoreDailyMutationTests(unittest.TestCase):
         self.assertEqual(MutationIntentState.DISPATCHED, self.load().mutation_intents[0].state)
         self.assertNotIn(ScreenType.PNC_HOME_CITY, runtime.targets)
         runtime.actuator.execute_action.assert_called_once()
+
+    def test_no_claim_sweep_cannot_erase_newer_durable_receipt(self):
+        claimed = Runtime(self.castle, (daily(), daily("completed")))
+        CoreWorkflowRunner(claimed, self.scope).run(ClaimWorkflow(self.checkpoint))
+        durable = self.load()
+        runtime = Runtime(self.castle, (daily("completed"), daily("completed")))
+        with self.assertRaisesRegex(RuntimeError, "stale"):
+            CoreWorkflowRunner(runtime, self.scope).run(
+                CoreDailyMaintenanceWorkflow(self.checkpoint),
+            )
+        self.assertEqual(durable, self.load())
+        self.assertNotIn(ScreenType.PNC_QUEST_DAILY, runtime.targets)
+        runtime.actuator.execute_action.assert_not_called()
+
+    def test_current_no_claim_sweep_preserves_committed_receipts(self):
+        claimed = Runtime(self.castle, (daily(), daily("completed")))
+        CoreWorkflowRunner(claimed, self.scope).run(ClaimWorkflow(self.checkpoint))
+        durable = self.load()
+        runtime = Runtime(self.castle, (daily("completed"), daily("completed")))
+        result = CoreWorkflowRunner(runtime, self.scope).run(CoreDailyMaintenanceWorkflow(durable))
+        self.assertTrue(result.succeeded)
+        self.assertEqual(durable.mutation_intents, self.load().mutation_intents)
+        self.assertEqual(ScreenType.PNC_HOME_CITY, self.load().last_typed_screen)
+        runtime.actuator.execute_action.assert_not_called()
+
+    def test_no_claim_sweep_rejects_unresolved_receipt_and_wrong_boundary(self):
+        claimed = Runtime(self.castle, (daily(), daily("unknown_action")))
+        CoreWorkflowRunner(claimed, self.scope).run(ClaimWorkflow(self.checkpoint))
+        durable = self.load()
+        for checkpoint, error in (
+            (durable, RuntimeError),
+            (replace(durable, maintenance_date="2026-09-13"), PermissionError),
+        ):
+            with self.subTest(checkpoint=checkpoint.maintenance_date):
+                runtime = Runtime(self.castle, (daily("completed"), daily("completed")))
+                with self.assertRaises(error):
+                    CoreWorkflowRunner(runtime, self.scope).run(CoreDailyMaintenanceWorkflow(checkpoint))
+                self.assertEqual(durable, self.load())
+                self.assertNotIn(ScreenType.PNC_QUEST_DAILY, runtime.targets)
+                runtime.actuator.execute_action.assert_not_called()
 
     def test_consumed_cap_and_wrong_boundary_are_rejected(self):
         runtime = Runtime(self.castle, (daily(), daily("completed")))

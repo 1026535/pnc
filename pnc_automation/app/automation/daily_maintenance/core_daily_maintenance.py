@@ -5,11 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import ClassVar
 
-from pnc_automation.app.authoring.config.daily_maintenance import DailyMaintenanceTargetConfig
 from pnc_automation.app.automation.daily_maintenance.coordinator import (
-    DailyMaintenanceCoordinator,
     DailyMaintenanceResult,
-    ForbiddenDailyMutationExecutor,
 )
 from pnc_automation.app.automation.engine.core_workflow import (
     CoreWorkflow,
@@ -23,10 +20,8 @@ from pnc_automation.app.pnc.domain.daily_maintenance import (
     DailyTaskCheckpoint,
     DailyTargetOutcome,
 )
-from pnc_automation.app.pnc.domain.daily_quest_catalog import DailyQuestCatalog
 from pnc_automation.app.pnc.domain.observation import Observation
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
-from pnc_automation.app.pnc.persistence.daily_run_journal_store import DailyRunJournalStore
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,9 +73,7 @@ class _CoreDailyClaimExecutor:
 class CoreDailyMaintenanceWorkflow(CoreWorkflow[DailyMaintenanceResult]):
     """Runs the claim-only Daily lifecycle with typed Home boundaries."""
 
-    target: DailyMaintenanceTargetConfig
     checkpoint: DailyTaskCheckpoint
-    journal_store: DailyRunJournalStore
 
     _spec: ClassVar[WorkflowSpec] = WorkflowSpec(
         name="daily_maintenance",
@@ -91,18 +84,10 @@ class CoreDailyMaintenanceWorkflow(CoreWorkflow[DailyMaintenanceResult]):
     )
 
     def __post_init__(self) -> None:
-        """Rejects action capabilities before entering the connected runtime."""
+        """Reject malformed caller state; the runner owns the exact claim authority."""
 
-        if not isinstance(self.target, DailyMaintenanceTargetConfig):
-            raise TypeError("CoreDailyMaintenanceWorkflow requires a DailyMaintenanceTargetConfig.")
         if not isinstance(self.checkpoint, DailyTaskCheckpoint):
             raise TypeError("CoreDailyMaintenanceWorkflow requires a DailyTaskCheckpoint.")
-        if not isinstance(self.journal_store, DailyRunJournalStore):
-            raise TypeError("CoreDailyMaintenanceWorkflow requires a DailyRunJournalStore.")
-        if self.target.capabilities:
-            raise PermissionError(
-                "Core Daily maintenance supports CLAIM_COMPLETED only; action capabilities are not supported."
-            )
 
     @property
     def spec(self) -> WorkflowSpec:
@@ -113,11 +98,4 @@ class CoreDailyMaintenanceWorkflow(CoreWorkflow[DailyMaintenanceResult]):
     def execute(self, context: WorkflowContext) -> DailyMaintenanceResult:
         """Runs the canonical coordinator without duplicating parsing or retry policy."""
 
-        coordinator = DailyMaintenanceCoordinator(
-            session=_CoreDailyQuestSession(context),
-            claim_executor=_CoreDailyClaimExecutor(context),
-            capability_executor=ForbiddenDailyMutationExecutor(),
-            journal_store=self.journal_store,
-            catalog=DailyQuestCatalog(),
-        )
-        return coordinator.run(target=self.target, checkpoint=self.checkpoint)
+        return context.run_daily_maintenance(self.checkpoint)

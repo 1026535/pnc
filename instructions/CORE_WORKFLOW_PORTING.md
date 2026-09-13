@@ -234,6 +234,10 @@ The canary identity helper also borrows the caller's connected runtime through `
 navigation, fresh content and bounded Daily scrolling. It retains claim-first ordering,
 reopening after a claim, unknown rows, ambiguous outcomes and final Home. It does not
 replace `DailyQuestStatusWorkflow` or turn that one-viewport report into a full survey.
+The workflow supplies only its checkpoint. `WorkflowContext.run_daily_maintenance`
+delegates the whole sweep to `CoreMutationBoundary`, which validates durable state
+before coordinator execution and supplies its canonical target and journal. This
+also protects the final checkpoint save when no claimable row is found.
 
 `CoreMutationBoundary` reuses `DailyMutationAuthorizer`, `JournaledDailyClaimExecutor`,
 `JournaledMutationDispatcher`, `DailyRunJournalStore` and the connected observed-action
@@ -260,6 +264,14 @@ contract for both adapters. `NavigationCore.scroll_resource_inventory` owns each
 gesture, while the scanner owns stable row completion. A selected Resource anchor is
 not evidence for entering that tab when unselected. Hero Hall uses only the distinct
 template free-single control; generic Recruit 1x and disappearance alone are insufficient.
+
+Reviewed route sources and Resource inventory content use `CoreRuntime.observe_ready`.
+Only an explicit `PNC_LOADING` frame enters the existing passive settle owner; the
+initial capture counts against its observation and time budgets. Settling preserves
+requested content and requires fresh stable known frames. Source screen/control and
+selected Resource checks still apply afterward. Ordinary `observe`, navigation
+post-action confirmation and Chat captures retain their existing behavior; UNKNOWN
+is not a generic retry condition. Resource scroll completion retains its outer deadline.
 
 The connected Daily maintenance runner remains claim-only. Research, Hero Hall and
 Resource Item have typed adapter slices; direct/authored or canary caller migration and
