@@ -4,14 +4,31 @@ from __future__ import annotations
 
 import unittest
 
+from PIL import Image
+
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
+from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservationEnricher
+from pnc_automation.core.vision.ocr.ocr_service import ObservationOcrContext, OcrLine
 
 from tests.support.pnc.mail.mail_workflow_fixtures import MailWorkflowFixtures
 from tests.support.pnc.mail.build_observation import _build_observation
 from tests.support.pnc.mail.ocr_line import _ocr_line
+from tests.support.pnc.mail.fake_ocr_service import _FakeOcrService
+
+
+def _parse_legacy_compose_fields(*, image: Image.Image, lines: tuple[OcrLine, ...]):
+    """Exercise the preserved field parser without claiming visual qualification."""
+
+    context = ObservationOcrContext(image, _FakeOcrService(lines=lines), None, "legacy-compose-fields")
+    context.require_bounded_regions()
+    return PncObservationEnricher(
+        selector_registry=build_default_selector_registry(),
+    )._build_mail_compose_additions(
+        image=image, lines=lines, include_fields=True, ocr_context=context, ocr_regions={},
+    )
 
 
 class MailComposeObservationTests(MailWorkflowFixtures, unittest.TestCase):
@@ -28,8 +45,11 @@ class MailComposeObservationTests(MailWorkflowFixtures, unittest.TestCase):
 
         observation = _build_observation(
             request=ObservationRequest.mail_compose_follow_up(),
+            accepted_screen=ScreenType.PNC_MAIL_COMPOSE_POPUP,
+            layout_id="mail_compose_semantic",
+            semantic_parser=_parse_legacy_compose_fields,
             lines=(
-                _ocr_line("Edit Mail", x=305, y=42, width=180, height=24),
+                _ocr_line("Edit Mail", x=305, y=240, width=180, height=24),
                 _ocr_line("Send", x=782, y=1380, width=70, height=22),
                 _ocr_line("Enemy Bob", x=target_region.x + 10, y=target_region.y + 8, width=120, height=22),
                 _ocr_line("Greetings", x=subject_region.x + 10, y=subject_region.y + 8, width=120, height=22),
@@ -57,9 +77,11 @@ class MailComposeObservationTests(MailWorkflowFixtures, unittest.TestCase):
 
         observation = _build_observation(
             request=ObservationRequest.mail_compose_follow_up(),
+            accepted_screen=ScreenType.PNC_MAIL_COMPOSE_POPUP,
+            layout_id="mail_compose_centered",
             lines=(
                 _ocr_line("Edit Mail", x=363, y=378, width=179, height=41),
-                _ocr_line("Alliance Mail", x=130, y=498, width=200, height=30),
+                _ocr_line("Alliance Mail", x=170, y=498, width=200, height=30),
                 _ocr_line("Can enter up to 1000 characters", x=86, y=670, width=390, height=28),
                 _ocr_line("Send", x=405, y=1109, width=92, height=40),
             ),

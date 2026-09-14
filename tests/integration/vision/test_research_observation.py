@@ -20,8 +20,13 @@ from pnc_automation.app.pnc.vision.observation_builder import (
     ObservationBuilder,
     ImageSelectorEngine,
 )
+from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.core.vision.ocr.ocr_service import UnavailableOcrService
-from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservationEnricher
+from pnc_automation.app.pnc.vision.pnc_observation_enricher import (
+    PncObservationEnricher,
+    _build_matching_text_screen_additions,
+    _build_research_tree_additions,
+)
 from pnc_automation.app.pnc.vision.navigation_perception import NavigationPerception
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
 from pnc_automation.app.pnc.vision.selectors import SelectorRegistry
@@ -35,6 +40,9 @@ from tests.support.pnc.capture_vision.fake_screenshot_session import _FakeScreen
 from tests.support.pnc.capture_vision.encode_png import _encode_png
 from tests.support.pnc.capture_vision.ocr_line import _ocr_line
 from tests.support.pnc.capture_vision.fake_screenshot_session import make_captured_frame
+from tests.support.pnc.capture_vision.build_observation_from_ocr_lines import (
+    _build_observation_from_ocr_lines,
+)
 from tests.support.paths import TEST_DATA_ROOT
 
 
@@ -270,81 +278,56 @@ class ResearchObservationTests(unittest.TestCase):
         self.assertFalse(any(row.row_status == RowRecognitionStatus.COMPLETE for row in rows))
         self.assertTrue(all(row.action_bounds is None and row.action_point is None for row in rows))
 
-    def test_observation_builder_classifies_research_tree_from_live_like_ocr(self) -> None:
-        """Recognizes the live research grid so flows can back out to home safely."""
+    def test_explicit_screen_decision_publishes_research_tree_identity(self) -> None:
+        """Publishes the accepted research-tree identity without classifier OCR authority."""
 
-        with tempfile.TemporaryDirectory() as temp_directory:
-            root = Path(temp_directory)
-            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
-            screenshot = screenshot_service.capture(
-                _FakeScreenshotSession(_encode_png(Image.new("RGB", (540, 960), (15, 28, 68)))),
-                artifact_directory="k230_live_research_tree",
-                label="research_tree_live_like",
-            )
-            builder = ObservationBuilder(
-                selector_registry=_minimal_runtime_registry(),
-                selector_engine=ImageSelectorEngine(
-                    template_matcher=OpenCvTemplateMatcher(),
+        observation = _build_observation_from_ocr_lines(
+            (
+                _ocr_line("Military", x=107, y=9, width=109, height=38),
+                _ocr_line("Troop Size I", x=229, y=340, width=90, height=20),
+                _ocr_line("March Speed", x=221, y=714, width=103, height=19),
+                _ocr_line("0/3", x=106, y=425, width=25, height=14),
+                _ocr_line("0/5", x=230, y=615, width=27, height=16),
+            ),
+            accepted_screen=ScreenType.PNC_RESEARCH_TREE,
+            image_size=(540, 960),
+            semantic_parser=lambda image, lines: _build_research_tree_additions(
+                image=image,
+                lines=lines,
+                proved_screen=ScreenType.PNC_RESEARCH_TREE,
+            ),
+        )
 
-                ),
-                screen_classifier=ScreenClassifier(),
-                enricher=PncObservationEnricher(
+        self.assertEqual(observation.screen_type, ScreenType.PNC_RESEARCH_TREE)
 
-                ),
-            ocr_service=_FakeOcrService(
-                        lines=(
-                            _ocr_line("Military", x=107, y=9, width=109, height=38),
-                            _ocr_line("Troop Size I", x=229, y=340, width=90, height=20),
-                            _ocr_line("March Speed", x=221, y=714, width=103, height=19),
-                            _ocr_line("0/3", x=106, y=425, width=25, height=14),
-                            _ocr_line("0/5", x=230, y=615, width=27, height=16),
-                        )
-                    )
-                )
+    def test_explicit_screen_decision_publishes_institute_overview(self) -> None:
+        """Publishes Institute category controls after the caller accepts its identity."""
 
-            observation = builder.build(screenshot)
+        observation = _build_observation_from_ocr_lines(
+            (
+                _ocr_line("Institute", x=108, y=12, width=115, height=29),
+                _ocr_line("Upgrade", x=404, y=263, width=88, height=25),
+                _ocr_line("Development", x=41, y=335, width=111, height=20),
+                _ocr_line("Economy", x=304, y=333, width=79, height=24),
+                _ocr_line("Military", x=38, y=412, width=67, height=24),
+                _ocr_line("Fortification", x=306, y=415, width=99, height=17),
+            ),
+            accepted_screen=ScreenType.PNC_INSTITUTE,
+            image_size=(540, 960),
+            semantic_parser=lambda image, lines: _build_matching_text_screen_additions(
+                image=image,
+                lines=lines,
+                request=ObservationRequest.full_runtime_default(),
+                observed_screen=ScreenType.PNC_INSTITUTE,
+                selector_registry=None,
+            ),
+            materialize_geometry=False,
+        )
 
-            self.assertEqual(observation.screen_type, ScreenType.PNC_RESEARCH_TREE)
-
-    def test_observation_builder_classifies_institute_overview_from_live_like_ocr(self) -> None:
-        """Recognizes the live institute overview and exposes a safe back target."""
-
-        with tempfile.TemporaryDirectory() as temp_directory:
-            root = Path(temp_directory)
-            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
-            screenshot = screenshot_service.capture(
-                _FakeScreenshotSession(_encode_png(Image.new("RGB", (540, 960), (15, 28, 68)))),
-                artifact_directory="k230_live_academy",
-                label="academy_live_like",
-            )
-            builder = ObservationBuilder(
-                selector_registry=_minimal_runtime_registry(),
-                selector_engine=ImageSelectorEngine(
-                    template_matcher=OpenCvTemplateMatcher(),
-
-                ),
-                screen_classifier=ScreenClassifier(),
-                enricher=PncObservationEnricher(
-
-                ),
-            ocr_service=_FakeOcrService(
-                        lines=(
-                            _ocr_line("Institute", x=108, y=12, width=115, height=29),
-                            _ocr_line("Upgrade", x=404, y=263, width=88, height=25),
-                            _ocr_line("Development", x=41, y=335, width=111, height=20),
-                            _ocr_line("Economy", x=304, y=333, width=79, height=24),
-                            _ocr_line("Military", x=38, y=412, width=67, height=24),
-                            _ocr_line("Fortification", x=306, y=415, width=99, height=17),
-                        )
-                    )
-                )
-
-            observation = builder.build(screenshot)
-
-            self.assertEqual(observation.screen_type, ScreenType.PNC_INSTITUTE)
-            self.assertFalse(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
-            self.assertTrue(observation.has(UiElementId.PNC_INSTITUTE_DEVELOPMENT_BUTTON))
-            self.assertTrue(observation.has(UiElementId.PNC_INSTITUTE_ECONOMY_BUTTON))
+        self.assertEqual(observation.screen_type, ScreenType.PNC_INSTITUTE)
+        self.assertFalse(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
+        self.assertTrue(observation.has(UiElementId.PNC_INSTITUTE_DEVELOPMENT_BUTTON))
+        self.assertTrue(observation.has(UiElementId.PNC_INSTITUTE_ECONOMY_BUTTON))
 
     def test_observation_builder_rejects_academy_title_without_upgrade_and_categories(self) -> None:
         """Keeps isolated academy-like titles unknown when the overview structure is absent."""

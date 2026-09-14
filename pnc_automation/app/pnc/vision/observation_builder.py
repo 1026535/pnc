@@ -42,6 +42,7 @@ from pnc_automation.app.pnc.domain.observation import (
     castle_entry_identity_matches,
 )
 from pnc_automation.app.pnc.domain.screen_decision import (
+    BLOCKING_SCREEN_TYPES,
     GuardVerdict,
     ScreenDecision,
     ScreenEvidence,
@@ -75,7 +76,7 @@ from pnc_automation.core.vision.ocr.ocr_service import (
     OcrService,
     UnavailableOcrService,
 )
-from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
+from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier, partition_guard_evidence
 from pnc_automation.app.pnc.vision.selectors import DetectionKind, SelectorRegistry
 from pnc_automation.app.pnc.vision.world_map_coordinates import read_world_coordinate_bar_text, world_coordinate_text_matches
 from pnc_automation.app.pnc.vision.visual_screen_recognizer import (
@@ -107,6 +108,7 @@ class ObservationEnricher(Protocol):
         *,
         ocr_context: ObservationOcrContext,
         ocr_regions: Mapping[UiElementId, OcrRegionRead],
+        layout_id: str | None = None,
     ) -> "ObservationAdditions":
         """Returns derived observation additions."""
 
@@ -166,10 +168,11 @@ class DefaultObservationEnricher:
         *,
         ocr_context: ObservationOcrContext,
         ocr_regions: Mapping[UiElementId, OcrRegionRead],
+        layout_id: str | None = None,
     ) -> ObservationAdditions:
         """Returns an empty enrichment result."""
 
-        del image, screen_type, visible_elements, request, ocr_context, ocr_regions
+        del image, screen_type, visible_elements, request, ocr_context, ocr_regions, layout_id
         return ObservationAdditions()
 
     def recognize_guards(
@@ -317,12 +320,14 @@ class ObservationBuilder:
             backend = getattr(self.enricher, "ocr_service", None)
         if backend is None:
             backend = UnavailableOcrService()
-        return ObservationOcrContext(
+        context = ObservationOcrContext(
             screenshot.image,
             backend,
             getattr(screenshot, "frame_ref", None),
             self.ocr_backend_revision,
         )
+        context.require_bounded_regions()
+        return context
 
     def compile_ocr_region_plans(
         self,
@@ -353,6 +358,7 @@ class ObservationBuilder:
             ocr_context = self.create_ocr_context(screenshot)
         else:
             ocr_context.validate_capture(screenshot.image, getattr(screenshot, "frame_ref", None))
+        ocr_context.require_bounded_regions()
         active_request = request or ObservationRequest.full_runtime_default()
         viewport_reviewed = is_reviewed_viewport(screenshot.image.size)
         if active_request.world_map_coordinate_only:
@@ -383,7 +389,9 @@ class ObservationBuilder:
             return self._publish(
                 screenshot=screenshot,
                 decision=decision,
-                visible_elements=additions.visible_elements,
+                visible_elements=select_content_labels(
+                    additions.visible_elements, selector_registry=self.selector_registry,
+                ),
                 additions=additions,
                 ocr_context=ocr_context,
             )
@@ -397,9 +405,7 @@ class ObservationBuilder:
         if visual.evidence:
             active_request = replace(active_request, include_popup_guard=True, include_loading_guard=True)
         detection_plan = self._selector_detection_plan(active_request)
-        # The mandatory full-frame guard stage owns the first OCR read.  Any
-        # later selector/content crop can then reuse contained lines from this
-        # pinned context without issuing an independent backend call.
+        # Global guard regions run independently of the caller's content scope.
         guard_additions = self.enricher.recognize_guards(
             screenshot.image,
             active_request,
@@ -407,9 +413,12 @@ class ObservationBuilder:
             **({"owned_dismiss_bounds": tuple(control.bounds for control in visual.dismiss_controls)}
                if visual.dismiss_controls else {}),
         )
+        guard_additions = reconcile_visual_modal_guard(visual, guard_additions)
         guard_verdict = guard_additions.guard_verdict
-        global_evidence = (*visual.evidence, *guard_additions.screen_evidence)
-        if guard_verdict == GuardVerdict.BLOCKED and not _blocked_screen_has_requested_fields(
+        global_evidence, background_evidence = partition_guard_evidence(
+            visual.evidence, guard_additions.screen_evidence,
+        )
+        if guard_verdict == GuardVerdict.BLOCKED and not allows_guarded_field_enrichment(
             active_request,
             guard_additions,
         ):
@@ -418,6 +427,7 @@ class ObservationBuilder:
                 global_evidence,
                 guard=guard_verdict,
                 viewport_reviewed=viewport_reviewed,
+                background_evidence=background_evidence,
             )
             return self._publish(
                 screenshot=screenshot,
@@ -435,8 +445,28 @@ class ObservationBuilder:
             visual_decision = self.screen_classifier.decide(
                 {}, global_evidence, guard=guard_verdict,
                 viewport_reviewed=viewport_reviewed,
+                background_evidence=background_evidence,
             )
+            if visual_decision.effective_screen == ScreenType.PNC_LOADING:
+                # Foreground guards already ran. A passive loading decision has
+                # no selector or semantic-field reads to acquire.
+                return self._publish(
+                    screenshot=screenshot, decision=visual_decision,
+                    visible_elements={}, additions=guard_additions,
+                    ocr_context=ocr_context, profile_ids=visual.profile_ids,
+                )
             probe_selector_ids = detection_plan.selector_ids
+            if visual_decision.effective_screen == ScreenType.UNKNOWN:
+                # Text fields have no semantic owner before independent identity.
+                # Template probes may still establish a supported legacy screen.
+                unowned_ocr_ids = {
+                    selector.id for selector in self.selector_registry.all()
+                    if selector.detection_kind == DetectionKind.OCR_REGION
+                }
+                probe_selector_ids = tuple(
+                    selector_id for selector_id in probe_selector_ids
+                    if selector_id not in unowned_ocr_ids
+                )
             if visual.evidence and visual_decision.action_eligible:
                 # Global guards have already run. A proved layout needs only
                 # its own selectors, not unrelated OCR identity probes.
@@ -462,8 +492,15 @@ class ObservationBuilder:
             global_evidence,
             guard=guard_verdict,
             viewport_reviewed=viewport_reviewed,
+            background_evidence=background_evidence,
         )
-        if preliminary.guard == GuardVerdict.BLOCKED and not _blocked_screen_has_requested_fields(
+        if not preliminary.action_eligible:
+            return self._publish(
+                screenshot=screenshot, decision=preliminary,
+                visible_elements={}, additions=ObservationAdditions(),
+                ocr_context=ocr_context, profile_ids=visual.profile_ids,
+            )
+        if preliminary.guard == GuardVerdict.BLOCKED and not allows_guarded_field_enrichment(
             active_request,
             guard_additions,
         ):
@@ -481,9 +518,8 @@ class ObservationBuilder:
             include_popup_guard=False,
             include_loading_guard=False,
         )
-        # Compile and execute only the fixed fields owned by the accepted screen.
-        # The mandatory guard has already pinned the full-frame result, so these
-        # reads reuse that context without creating a second OCR owner.
+        # Compile only fixed fields owned by the accepted screen. All reads share
+        # this immutable capture and retain their own crop/cache identity.
         ocr_region_plans = self.compile_ocr_region_plans(
             resolved_screen=preliminary.effective_screen,
             request=semantic_request,
@@ -510,7 +546,10 @@ class ObservationBuilder:
             semantic_request,
             ocr_context=ocr_context,
             ocr_regions=ocr_regions,
+            layout_id=preliminary.layout_id,
         )
+        if any(item.screen_type != preliminary.effective_screen for item in additions.screen_evidence):
+            raise ValueError("Content parser contradicted independent screen identity.")
         if guard_verdict == GuardVerdict.BLOCKED:
             # Preserve the modal's own guarded fields and controls while
             # allowing explicitly requested content enrichment to add facts.
@@ -532,30 +571,6 @@ class ObservationBuilder:
             visible_elements = {}
             additions = ObservationAdditions(guard_verdict=guard_verdict)
             global_evidence = tuple(item for item in visual.evidence if item.screen_type in overlay_screens)
-        if (
-            preliminary.effective_screen == ScreenType.UNKNOWN
-            and not additions.screen_evidence
-            and guard_verdict == GuardVerdict.CLEAR
-            and _request_has_narrow_semantic_scope(active_request)
-        ):
-            # A narrow source request cannot hide an unexpected screen.  Give
-            # the canonical semantic enricher one broad retry on this same
-            # frame, then let the final classifier reconcile its evidence.
-            fallback_additions = self.enricher.enrich(
-                screenshot.image,
-                ScreenType.UNKNOWN,
-                visible_elements,
-                replace(
-                    ObservationRequest.full_runtime_default(),
-                    include_popup_guard=False,
-                    include_loading_guard=False,
-                    expected_mailbox=active_request.expected_mailbox,
-                    expected_world_coordinate=active_request.expected_world_coordinate,
-                ),
-                ocr_context=ocr_context,
-                ocr_regions=ocr_regions,
-            )
-            additions = _merge_observation_additions(additions, fallback_additions)
         combined_evidence = (*global_evidence, *additions.screen_evidence)
         guard_verdict = _merge_guard_verdicts(guard_verdict, additions.guard_verdict)
         visible_elements = _merge_visible_element_maps(
@@ -567,6 +582,7 @@ class ObservationBuilder:
             combined_evidence,
             guard=guard_verdict,
             viewport_reviewed=viewport_reviewed,
+            background_evidence=background_evidence,
         )
         visible_elements = _merge_visible_element_maps(
             visible_elements,
@@ -577,6 +593,7 @@ class ObservationBuilder:
             combined_evidence,
             guard=guard_verdict,
             viewport_reviewed=viewport_reviewed,
+            background_evidence=background_evidence,
         )
 
         # Complete selector detection before geometry publication, while keeping
@@ -596,6 +613,7 @@ class ObservationBuilder:
                 combined_evidence,
                 guard=guard_verdict,
                 viewport_reviewed=viewport_reviewed,
+                background_evidence=background_evidence,
             )
         if decision.effective_screen != ScreenType.UNKNOWN and decision.guard != GuardVerdict.UNRESOLVED:
             visible_elements, _ = self._complete_screen_scope(
@@ -613,7 +631,22 @@ class ObservationBuilder:
                 combined_evidence,
                 guard=guard_verdict,
                 viewport_reviewed=viewport_reviewed,
+                background_evidence=background_evidence,
             )
+        visible_elements = visual_controls_for_decision(
+            visual, decision, candidates=visible_elements,
+        )
+        if visual.evidence and decision.action_eligible and guard_verdict == GuardVerdict.CLEAR:
+            # Match NavigationPerception: parsed text contributes declared labels,
+            # while current visual evidence owns controls. Content cannot repair
+            # a missing template or create an unmeasured premium action.
+            visible_elements = {
+                **visual_controls_for_decision(visual, decision),
+                **select_content_labels(
+                    {**visible_elements, **additions.visible_elements},
+                    selector_registry=self.selector_registry,
+                ),
+            }
         return self._publish(
             screenshot=screenshot,
             decision=decision,
@@ -1084,12 +1117,9 @@ def _merge_observation_additions(
     primary: ObservationAdditions,
     fallback: ObservationAdditions,
 ) -> ObservationAdditions:
-    """Appends broad fallback evidence without discarding facts from the scoped pass.
+    """Combine same-frame guard and owned content facts without losing either.
 
-    A narrow request may already have extracted rows, spatial state, or text
-    fields before its screen identity was unresolved.  The broad same-frame
-    retry supplies identity evidence; it must not replace those facts or make
-    the observation lose its original semantic context.
+    This merge does not acquire OCR or retry unresolved screen identity.
     """
 
     list_entries = list(primary.list_entries)
@@ -1139,7 +1169,65 @@ def _merge_observation_additions(
     )
 
 
-def _blocked_screen_has_requested_fields(
+def reconcile_visual_modal_guard(
+    visual: VisualRecognition, guard: ObservationAdditions,
+) -> ObservationAdditions:
+    """Let a proved modal own its measured controls without requiring title OCR.
+
+    A foreign or unresolved global interruption always retains precedence.
+    """
+
+    screens = {item.screen_type for item in visual.evidence}
+    visual_only_families = {
+        ScreenType.PNC_VIP_DAILY_RESET,
+        ScreenType.PNC_WORLD_COORDINATE_DIALOG,
+        ScreenType.PNC_BUILD_SPEEDUP_CONFIRM,
+        ScreenType.PNC_MAIL_COMPOSE_POPUP,
+        ScreenType.PNC_CHAT_PLAYER_ACTION_POPUP,
+        ScreenType.PNC_ALLIANCE_MEMBER_MANAGE_POPUP,
+        ScreenType.PNC_RESEARCH_QUEUE,
+    }
+    guard_screens = {item.screen_type for item in guard.screen_evidence}
+    if (
+        guard.guard_verdict == GuardVerdict.UNRESOLVED
+        and guard.screen_evidence
+        and all(item.reason == "weak_unmeasured_ocr_popup_cancel_button"
+                for item in guard.screen_evidence)
+        and visual.evidence
+        and all(item.screen_type == ScreenType.PNC_POPUP
+                and item.layout_id == "alliance_invitation_footer"
+                for item in visual.evidence)
+    ):
+        # The portrait invitation extends to the screen edge, outside the
+        # compact modal geometry probe. Its independent visual anchors prove
+        # this layout; only its current Cancel template can supply an action.
+        # Other unresolved guards retain precedence over this profile.
+        return replace(
+            guard, screen_evidence=visual.evidence,
+            visible_elements={item.selector_id: item for item in visual.controls},
+            guard_verdict=GuardVerdict.BLOCKED,
+        )
+    if guard.guard_verdict == GuardVerdict.BLOCKED and guard_screens.intersection(visual_only_families):
+        if len(screens) == 1 and guard_screens == screens:
+            return replace(guard, visible_elements={item.selector_id: item for item in visual.controls})
+        return replace(
+            guard, visible_elements={}, popup_overlay=None,
+            screen_evidence=tuple(replace(item, reason=f"weak_unproved_{item.reason}")
+                                  for item in guard.screen_evidence),
+            guard_verdict=GuardVerdict.UNRESOLVED,
+        )
+    if len(screens) != 1 or not screens.issubset(BLOCKING_SCREEN_TYPES):
+        return guard
+    if guard.guard_verdict != GuardVerdict.CLEAR or guard.screen_evidence:
+        return guard
+    return replace(
+        guard, screen_evidence=visual.evidence,
+        visible_elements={item.selector_id: item for item in visual.controls},
+        guard_verdict=GuardVerdict.BLOCKED,
+    )
+
+
+def allows_guarded_field_enrichment(
     request: ObservationRequest,
     guard_additions: ObservationAdditions,
 ) -> bool:
@@ -1167,28 +1255,6 @@ def _single_screen_evidence(evidence: Sequence[ScreenEvidence]) -> ScreenType | 
         if item.screen_type not in {ScreenType.UNKNOWN, ScreenType.PNC_LOADING}
     }
     return next(iter(screens)) if len(screens) == 1 else None
-
-
-def _request_has_narrow_semantic_scope(request: ObservationRequest) -> bool:
-    """Returns whether a request actually narrows semantic family/content work.
-
-    Guard flags are intentionally excluded: normal observations run the guard
-    stage independently, so a caller may disable those flags on an otherwise
-    full semantic request without accidentally triggering a second broad pass.
-    """
-
-    full_runtime = ObservationRequest.full_runtime_default()
-    return any(
-        (
-            request.candidate_screen_types != full_runtime.candidate_screen_types,
-            request.ocr_screen_types != full_runtime.ocr_screen_types,
-            request.include_chat_state != full_runtime.include_chat_state,
-            request.include_chat_entries != full_runtime.include_chat_entries,
-            request.text_field_selectors != full_runtime.text_field_selectors,
-            request.expected_mailbox is not None,
-            request.expected_world_coordinate is not None,
-        )
-    )
 
 
 def _should_replace_visible_element(*, current: VisibleElement, candidate: VisibleElement) -> bool:

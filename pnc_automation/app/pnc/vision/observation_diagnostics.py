@@ -12,12 +12,63 @@ from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.core.infra.capture.screenshot_service import CapturedScreenshot
 from pnc_automation.core.text.normalization import normalize_ocr_text
+from pnc_automation.core.vision.image.models import Bounds
 from pnc_automation.core.vision.ocr.ocr_service import (
     ObservationOcrContext,
     OcrLine,
     OcrReadDiagnostic,
     OcrReadStatus,
+    OcrRequiredFieldDiagnostic,
+    OcrRequiredFieldStatus,
+    OcrResult,
+    OcrWord,
 )
+
+
+def recorded_ocr_result(context: ObservationOcrContext) -> OcrResult:
+    """Return the immutable OCR evidence already recorded by one context.
+
+    This helper deliberately never calls the OCR context or its backend.  Read
+    diagnostics can contain the same native line or word more than once (for
+    example, after a cache hit or a bounded reuse), so the first occurrence is
+    retained while preserving native screenshot coordinates.
+    """
+
+    lines: list[OcrLine] = []
+    words: list[OcrWord] = []
+    seen_lines: set[tuple[str, Bounds]] = set()
+    seen_words: set[tuple[str, Bounds]] = set()
+
+    for read in context.read_diagnostics:
+        result = read.result
+        if result is None:
+            continue
+        for line in result.lines:
+            line_key = (line.text, line.bounds)
+            if line_key not in seen_lines:
+                seen_lines.add(line_key)
+                lines.append(line)
+            for word in line.words:
+                _append_recorded_word(word, words=words, seen_words=seen_words)
+        for word in result.words:
+            _append_recorded_word(word, words=words, seen_words=seen_words)
+
+    return OcrResult(lines=tuple(lines), words=tuple(words))
+
+
+def _append_recorded_word(
+    word: OcrWord,
+    *,
+    words: list[OcrWord],
+    seen_words: set[tuple[str, Bounds]],
+) -> None:
+    """Append one native OCR word once, preserving the first recorded value."""
+
+    word_key = (word.text, word.bounds)
+    if word_key in seen_words:
+        return
+    seen_words.add(word_key)
+    words.append(word)
 
 
 @dataclass(slots=True)
@@ -38,12 +89,7 @@ class ObservationDebugArtifactCollector:
         if artifact_path is None:
             return
         recognized_texts = _recognized_ocr_text_hints(observation)
-        recorded_lines = tuple(dict.fromkeys(
-            line
-            for read in ocr_context.read_diagnostics
-            if read.result is not None
-            for line in read.result.lines
-        ))
+        recorded_lines = recorded_ocr_result(ocr_context).lines
         unidentified_lines = _unidentified_ocr_lines(
             lines=recorded_lines, recognized_texts=recognized_texts,
         )
@@ -68,6 +114,13 @@ class ObservationDebugArtifactCollector:
 
         _validate_report_capture(screenshot, observation, ocr_context)
         reads = ocr_context.read_diagnostics
+        required_field_history = ocr_context.required_field_diagnostics
+        latest_required_fields = _latest_required_field_diagnostics(
+            required_field_history,
+        )
+        latest_required_by_fact = {
+            field.required_fact: field for field in latest_required_fields
+        }
         reasons: list[str] = []
         if observation.screen_type == ScreenType.UNKNOWN:
             reasons.append("unknown_screen")
@@ -76,13 +129,25 @@ class ObservationDebugArtifactCollector:
         }:
             reasons.append(f"guard_{observation.decision.guard.value}")
         # A retried read that eventually succeeded is not a remaining OCR gap.
-        latest_reads = {(read.purpose, read.region, read.detail): read for read in reads}
+        latest_reads = {
+            (read.purpose, read.region, read.detail, read.required_fact): read
+            for read in reads
+        }
         missing_reads = tuple(
             read for read in latest_reads.values()
             if read.status in {OcrReadStatus.MISSING, OcrReadStatus.ERROR}
+            and not _read_is_recovered_by_required_field(
+                read, latest_required_by_fact,
+            )
+        )
+        missing_required_fields = tuple(
+            field for field in latest_required_fields
+            if field.status != OcrRequiredFieldStatus.PRESENT
         )
         if missing_reads:
             reasons.append("missing_ocr_facts")
+        if missing_required_fields:
+            reasons.append("missing_required_fields")
         if not reasons or screenshot.artifact_path is None:
             return
         document = _capture_document(screenshot, observation)
@@ -94,6 +159,15 @@ class ObservationDebugArtifactCollector:
             "evidence": [asdict(item) for item in observation.decision.evidence],
             "missing_reads": [_read_document(read) for read in missing_reads],
             "ocr_reads": [_read_document(read) for read in reads],
+            "required_field_diagnostics": [
+                _required_field_document(field) for field in required_field_history
+            ],
+            "latest_required_field_diagnostics": [
+                _required_field_document(field) for field in latest_required_fields
+            ],
+            "missing_required_fields": [
+                _required_field_document(field) for field in missing_required_fields
+            ],
         })
         _write_sidecar(screenshot.artifact_path, "recognition_gap", document)
 
@@ -142,7 +216,46 @@ def _read_document(read: OcrReadDiagnostic) -> dict[str, object]:
         "status": read.status.value,
         "region": None if read.region is None else asdict(read.region),
         "detail": read.detail,
+        "required_fact": read.required_fact,
         "lines": None if read.result is None else [_line_document(line) for line in read.result.lines],
+    }
+
+
+def _latest_required_field_diagnostics(
+    diagnostics: Sequence[OcrRequiredFieldDiagnostic],
+) -> tuple[OcrRequiredFieldDiagnostic, ...]:
+    """Retain the latest parser outcome for each semantic required fact."""
+
+    latest = {
+        diagnostic.required_fact: diagnostic
+        for diagnostic in diagnostics
+    }
+    return tuple(latest.values())
+
+
+def _read_is_recovered_by_required_field(
+    read: OcrReadDiagnostic,
+    latest_required_by_fact: dict[str, OcrRequiredFieldDiagnostic],
+) -> bool:
+    """Return whether a failed read belongs to a field already parsed successfully."""
+
+    if read.required_fact is None:
+        return False
+    diagnostic = latest_required_by_fact.get(read.required_fact)
+    return diagnostic is not None and diagnostic.status == OcrRequiredFieldStatus.PRESENT
+
+
+def _required_field_document(
+    diagnostic: OcrRequiredFieldDiagnostic,
+) -> dict[str, object]:
+    """Serialize one parser outcome without re-reading its OCR region."""
+
+    return {
+        "required_fact": diagnostic.required_fact,
+        "status": diagnostic.status.value,
+        "region": None if diagnostic.region is None else asdict(diagnostic.region),
+        "reason": diagnostic.reason,
+        "detail": diagnostic.detail,
     }
 
 

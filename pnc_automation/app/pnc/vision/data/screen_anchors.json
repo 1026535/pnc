@@ -47,6 +47,47 @@
       "controls": []
     },
     {
+      "id": "loading_configured_game_launch",
+      "layout_id": "loading_configured_game_launch",
+      "screen": "PNC_LOADING",
+      "revision": 1,
+      "source": {
+        "fixture": "loading_variants/configured_game_launch.png",
+        "decoded_sha256": "bbe6f46101857236ad709429ad495f6d84db4c426e8c6c1759db32f4d655abd1",
+        "capture_group": "2026-09-13/independent_recognition/20260913T234148Z/3xx_spies"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Reviewed configured game-launch loading surface from the stable title logo and tools/spanner chrome; no controls or OCR fields are owned.",
+        "build": "5.2.77 / AppVersion 5.0.201.227",
+        "locale": "English",
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/loading_configured_game_logo.png",
+          "search_region": [
+            135,
+            0,
+            270,
+            75
+          ],
+          "threshold": 0.98
+        },
+        {
+          "image": "screen_anchors/loading_configured_game_tools.png",
+          "search_region": [
+            415,
+            10,
+            120,
+            48
+          ],
+          "threshold": 0.98
+        }
+      ],
+      "controls": []
+    },
+    {
       "id": "hero_hall",
       "screen": "PNC_HERO_HALL",
       "anchors": [
@@ -607,17 +648,17 @@
           "threshold": 0.93
         },
         {
-          "image": "screen_anchors/alliance_invitation_1.png",
+          "image": "screen_anchors/alliance_invitation_legacy_portrait.png",
           "search_region": [
-            199,
-            532,
-            121,
-            31
+            0,
+            325,
+            175,
+            196
           ],
-          "threshold": 0.93
+          "threshold": 0.95
         }
       ],
-      "revision": 1,
+      "revision": 2,
       "source": {
         "fixture": "alliance_invitation.png",
         "decoded_sha256": "5840f6be2d5a45a5f9222e931d7b2536db5568e5d2ce0ffc1c53bbdaeccdc305",
@@ -625,12 +666,31 @@
       },
       "review": {
         "reference_manifest": "tests/data/screen_recognition/manifest.json",
-        "description": "Reviewed PNC_POPUP identity anchor group from the frozen reference fixture.",
+        "description": "Reviewed legacy portrait invitation: static message and portrait own identity independently of the measured Cancel control. Shares the same footer layout with the current capture.",
         "build": null,
         "locale": null,
         "qualification": "guarded_reference_only"
       },
-      "layout_id": "alliance_invitation"
+      "layout_id": "alliance_invitation_footer",
+      "controls": [
+        {
+          "selector": "PNC_POPUP_CLOSE_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/alliance_invitation_1.png",
+            "search_region": [
+              199,
+              532,
+              121,
+              31
+            ],
+            "threshold": 0.93
+          },
+          "dismisses_surface": true
+        }
+      ],
+      "occludes": [
+        "PNC_HOME_CITY"
+      ]
     },
     {
       "id": "institute",
@@ -1064,7 +1124,7 @@
           }
         },
         {
-          "selector": "PNC_WORLD_COORDINATE_BAR",
+          "selector": "PNC_WORLD_SEARCH_BUTTON",
           "anchor": {
             "image": "screen_anchors/core_world_map_pnc_world_coordinate_bar.png",
             "search_region": [
@@ -1116,7 +1176,7 @@
           }
         }
       ],
-      "revision": 1,
+      "revision": 2,
       "source": {
         "fixture": "tests/data/screen_recognition/world_map_core.png",
         "decoded_sha256": "d3e13823aa5ccc3962c6faf6689e161303e9d418f728f2f15fd01413f8ac45b8",
@@ -1124,7 +1184,7 @@
       },
       "review": {
         "reference_manifest": "tests/data/screen_recognition/manifest.json",
-        "description": "Rebased reviewed PNC_WORLD_MAP identity and control anchors from origin/main.",
+        "description": "Rebased reviewed PNC_WORLD_MAP identity and measured magnifier action anchor; coordinate-bar OCR remains a separate label.",
         "build": null,
         "locale": null,
         "qualification": "guarded_reference_only"
@@ -2728,6 +2788,1194 @@
         "qualification": "guarded_reference_only"
       },
       "layout_id": "collect_mail_thread"
+    },
+    {
+      "id": "building_detail_farm",
+      "layout_id": "building_detail_farm",
+      "screen": "PNC_BUILDING_DETAILS",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/building_variants/farm_upgrade_available.png",
+        "decoded_sha256": "d5ae79922e313606f6dcc90255fca0437449b9181fb9a9d8e24e3ae7add81f8d",
+        "capture_group": "2026-09-13/capture_gap_exploration/20260913T030954Z"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Reviewed Farm building-detail identity from the exact Farm title and stable two-line production description; level and premium/boost controls are not identity anchors.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/farm_title.png",
+          "search_region": [
+            102,
+            8,
+            92,
+            41
+          ],
+          "threshold": 0.9
+        },
+        {
+          "image": "screen_anchors/farm_description.png",
+          "search_region": [
+            270,
+            136,
+            270,
+            54
+          ],
+          "threshold": 0.9
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/core_institute_pnc_back_button_top_left.png",
+            "search_region": [
+              22,
+              8,
+              58,
+              38
+            ],
+            "threshold": 0.86
+          }
+        },
+        {
+          "selector": "PNC_BUILDING_UPGRADE_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/farm_upgrade_button.png",
+            "search_region": [
+              378,
+              247,
+              139,
+              55
+            ],
+            "threshold": 0.95
+          }
+        }
+      ]
+    },
+    {
+      "id": "building_construction_farm",
+      "layout_id": "building_construction_farm",
+      "screen": "PNC_BUILDING_CONSTRUCTION",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/building_variants/farm_construction_available.png",
+        "decoded_sha256": "e1cb4ee4ddc4325eed133b5e05f69807a9c5d838c5b30951e50603ec74b08e01",
+        "capture_group": "2026-09-13/capture_gap_exploration/20260913T030954Z"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Captured Farm construction identity from the Farm title and stable three-line production description; mutable level, material values, timer, and premium Build Now are excluded from identity.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/farm_title.png",
+          "search_region": [
+            90,
+            0,
+            120,
+            60
+          ],
+          "threshold": 0.9
+        },
+        {
+          "image": "screen_anchors/farm_construction_description.png",
+          "search_region": [
+            250,
+            120,
+            260,
+            95
+          ],
+          "threshold": 0.9
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/core_institute_pnc_back_button_top_left.png",
+            "search_region": [
+              22,
+              8,
+              58,
+              38
+            ],
+            "threshold": 0.86
+          }
+        },
+        {
+          "selector": "PNC_BUILDING_CONSTRUCTION_BUILD_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/farm_construction_build_button.png",
+            "search_region": [
+              365,
+              230,
+              165,
+              90
+            ],
+            "threshold": 0.93
+          }
+        }
+      ]
+    },
+    {
+      "id": "build_queue_centered",
+      "layout_id": "build_queue_centered",
+      "screen": "PNC_BUILD_QUEUE",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/build_queue_variants/build_queue_idle.png",
+        "decoded_sha256": "92419f14b0acd034962cc1356ad632e1a0850caf35e6b06f6317991ee1c35c35",
+        "capture_group": "2026-09-13/capture_gap_exploration/20260913T030954Z"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Captured centered Build Queue identity from its title and fixed second queue hammer; active row text and timers remain bounded content OCR.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/build_queue_title.png",
+          "search_region": [
+            165,
+            230,
+            225,
+            85
+          ],
+          "threshold": 0.9
+        },
+        {
+          "image": "screen_anchors/build_queue_second_hammer.png",
+          "search_region": [
+            30,
+            390,
+            125,
+            105
+          ],
+          "threshold": 0.9
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_POPUP_CLOSE_BUTTON",
+          "dismisses_surface": true,
+          "anchor": {
+            "image": "screen_anchors/build_queue_close.png",
+            "search_region": [
+              450,
+              225,
+              75,
+              90
+            ],
+            "threshold": 0.9
+          }
+        }
+      ]
+    },
+    {
+      "id": "alliance_home_compact",
+      "layout_id": "alliance_home_compact",
+      "screen": "PNC_ALLIANCE_HOME",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/alliance_variants/alliance_compact.png",
+        "decoded_sha256": "cac23413ff7d287035af7237ef7917bd4ced996eae5181be28bc1bc981f6f9bd",
+        "capture_group": "2026-09-13/capture_gap_exploration/20260913T030954Z/alliance_compact"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Sanitized compact Alliance Home proof from the independently reviewed K290 frame: shared Alliance title plus the fixed compact Member icon. Identity excludes names, counts, insignia, map content, and OCR fallback.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/alliance_title.png",
+          "search_region": [
+            100,
+            5,
+            135,
+            50
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/alliance_member_compact.png",
+          "search_region": [
+            260,
+            160,
+            60,
+            55
+          ],
+          "threshold": 0.95
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/core_institute_pnc_back_button_top_left.png",
+            "search_region": [
+              22,
+              8,
+              58,
+              38
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_ALLIANCE_BOTTOM_TAB_MAIL",
+          "anchor": {
+            "image": "screen_anchors/alliance_bottom_tab_mail.png",
+            "search_region": [
+              165,
+              830,
+              105,
+              90
+            ],
+            "threshold": 0.95
+          }
+        },
+        {
+          "selector": "PNC_ALLIANCE_TILE_MEMBER",
+          "anchor": {
+            "image": "screen_anchors/alliance_tile_member_compact.png",
+            "search_region": [
+              275,
+              755,
+              180,
+              55
+            ],
+            "threshold": 0.95
+          }
+        }
+      ]
+    },
+    {
+      "id": "alliance_home_tabbed",
+      "layout_id": "alliance_home_tabbed",
+      "screen": "PNC_ALLIANCE_HOME",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/alliance_variants/alliance_tabbed.png",
+        "decoded_sha256": "0751f749b77621e1b83b223d36e316c56df28574f4f58443e24f1294600bec26",
+        "capture_group": "2026-09-13/capture_gap_exploration/20260913T030954Z/alliance_tabbed"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Sanitized tabbed Alliance Home proof from the independently reviewed participating frame: shared Alliance title, selected Alliance tab, and the fixed tabbed Member icon. Faction presence is not inferred beyond the selected Alliance tab, and identity excludes names, counts, insignia, map content, and OCR fallback.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/alliance_title.png",
+          "search_region": [
+            100,
+            5,
+            135,
+            50
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/alliance_tab_selected.png",
+          "search_region": [
+            45,
+            50,
+            195,
+            65
+          ],
+          "threshold": 0.97
+        },
+        {
+          "image": "screen_anchors/alliance_member_tabbed.png",
+          "search_region": [
+            260,
+            210,
+            60,
+            58
+          ],
+          "threshold": 0.95
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/core_institute_pnc_back_button_top_left.png",
+            "search_region": [
+              22,
+              8,
+              58,
+              38
+            ],
+            "threshold": 0.93
+          }
+        },
+        {
+          "selector": "PNC_ALLIANCE_BOTTOM_TAB_MAIL",
+          "anchor": {
+            "image": "screen_anchors/alliance_bottom_tab_mail.png",
+            "search_region": [
+              165,
+              830,
+              105,
+              90
+            ],
+            "threshold": 0.95
+          }
+        },
+        {
+          "selector": "PNC_ALLIANCE_TILE_MEMBER",
+          "anchor": {
+            "image": "screen_anchors/alliance_tile_member_tabbed.png",
+            "search_region": [
+              280,
+              800,
+              175,
+              45
+            ],
+            "threshold": 0.95
+          }
+        }
+      ]
+    },
+    {
+      "id": "mail_compose_centered",
+      "layout_id": "mail_compose_centered",
+      "screen": "PNC_MAIL_COMPOSE_POPUP",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/mail_compose_variants/mail_compose_empty.png",
+        "decoded_sha256": "1d87ae9f142ddd1ced8026e65b6b1bcc71229f1d8a3c69134ef4f88be7cfa1b5",
+        "capture_group": "2026-09-13/capture_gap_exploration/20260913T030954Z/mail_compose_empty"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Sanitized centered Compose proof with the reviewed Edit Mail title, recipient and subject icons, and measured close and Send controls. Field contents are qualified separately through bounded OCR.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/mail_compose_title.png",
+          "search_region": [
+            200,
+            215,
+            150,
+            55
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/mail_compose_recipient_icon.png",
+          "search_region": [
+            35,
+            275,
+            55,
+            60
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/mail_compose_subject_icon.png",
+          "search_region": [
+            30,
+            335,
+            60,
+            65
+          ],
+          "threshold": 0.95
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_MAIL_COMPOSE_CLOSE_BUTTON",
+          "dismisses_surface": true,
+          "anchor": {
+            "image": "screen_anchors/mail_compose_close.png",
+            "search_region": [
+              450,
+              210,
+              75,
+              70
+            ],
+            "threshold": 0.95
+          }
+        },
+        {
+          "selector": "PNC_MAIL_COMPOSE_SEND_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/mail_compose_send.png",
+            "search_region": [
+              165,
+              635,
+              220,
+              90
+            ],
+            "threshold": 0.95
+          }
+        }
+      ]
+    },
+    {
+      "id": "alliance_remaining_member_list",
+      "layout_id": "alliance_remaining_member_list",
+      "screen": "PNC_ALLIANCE_MEMBER_LIST",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/alliance_variants/alliance_remaining_member_list.png",
+        "decoded_sha256": "6e54abac52def0bd268853801857e2e826d1f30a85274b7fc2656411d5aa052d",
+        "capture_group": "2026-09-13/capture_gap_exploration/20260913T030954Z/0156_member_list"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Sanitized Alliance Member roster identity using the static header and officer banner artwork; names, counts, member rows, and Depose controls are excluded.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/alliance_remaining_member_list_title.png",
+          "search_region": [
+            95,
+            0,
+            310,
+            70
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/alliance_remaining_member_list_banner.png",
+          "search_region": [
+            20,
+            45,
+            150,
+            150
+          ],
+          "threshold": 0.95
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/alliance_remaining_member_list_back.png",
+            "search_region": [
+              10,
+              0,
+              90,
+              65
+            ],
+            "threshold": 0.95
+          }
+        }
+      ]
+    },
+    {
+      "id": "alliance_remaining_member_reinforce",
+      "layout_id": "alliance_remaining_member_reinforce",
+      "screen": "PNC_ALLIANCE_MEMBER_REINFORCE",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/alliance_variants/alliance_remaining_member_reinforce.png",
+        "decoded_sha256": "64c944f9b39d6877d92ffa747c7470b2089781c0599999249fee13535f1269a6",
+        "capture_group": "2026-09-13/capture_gap_exploration/20260913T030954Z/0182_member_reinforce"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Sanitized Alliance reinforcement roster identity using the static header and rank artwork; names, counts, member rows, and Reinforce actions are excluded.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/alliance_remaining_member_reinforce_title.png",
+          "search_region": [
+            95,
+            0,
+            310,
+            70
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/alliance_remaining_member_reinforce_rank5.png",
+          "search_region": [
+            0,
+            45,
+            100,
+            70
+          ],
+          "threshold": 0.95
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/alliance_remaining_member_reinforce_back.png",
+            "search_region": [
+              10,
+              0,
+              90,
+              65
+            ],
+            "threshold": 0.95
+          }
+        }
+      ]
+    },
+    {
+      "id": "alliance_remaining_manage_leader",
+      "layout_id": "alliance_remaining_manage_leader",
+      "screen": "PNC_ALLIANCE_MEMBER_MANAGE_POPUP",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/alliance_variants/alliance_remaining_manage_leader.png",
+        "decoded_sha256": "18635de0ad475a4e4c461344fe24810ca9ed2807002a24cd42a8747ad94cfe49",
+        "capture_group": "2026-09-13/capture_gap_exploration/20260913T030954Z/0157_leader_manage"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Sanitized leader Manage popup identity using Manage and the static Impeachment Rules icon; only the measured Personal Info row and dismissal control are retained. Send, Depose, and Impeach actions are excluded.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/alliance_remaining_manage_leader_title.png",
+          "search_region": [
+            200,
+            225,
+            160,
+            70
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/alliance_remaining_manage_leader_rules.png",
+          "search_region": [
+            40,
+            390,
+            120,
+            100
+          ],
+          "threshold": 0.95
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_POPUP_CLOSE_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/alliance_remaining_manage_leader_close.png",
+            "search_region": [
+              445,
+              220,
+              85,
+              75
+            ],
+            "threshold": 0.95
+          },
+          "dismisses_surface": true
+        },
+        {
+          "selector": "PNC_ALLIANCE_MEMBER_MANAGE_PERSONAL_INFO_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/alliance_remaining_manage_leader_personal_info.png",
+            "search_region": [
+              20,
+              475,
+              515,
+              80
+            ],
+            "threshold": 0.95
+          }
+        }
+      ]
+    },
+    {
+      "id": "alliance_remaining_manage_ordinary",
+      "layout_id": "alliance_remaining_manage_ordinary",
+      "screen": "PNC_ALLIANCE_MEMBER_MANAGE_POPUP",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/alliance_variants/alliance_remaining_manage_ordinary.png",
+        "decoded_sha256": "3ee12a3e77db80bfcdcbaca8c9adebc641e4d8df13c9ab25a54449c06eb3f3a7",
+        "capture_group": "2026-09-13/capture_gap_exploration/20260913T030954Z/0161_ordinary_manage"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Sanitized ordinary-member Manage popup identity using Manage and the static Send icon; only the measured Personal Info row and dismissal control are retained. Impeach, Depose, and Send actions are excluded.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/alliance_remaining_manage_ordinary_title.png",
+          "search_region": [
+            200,
+            225,
+            160,
+            70
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/alliance_remaining_manage_ordinary_send.png",
+          "search_region": [
+            40,
+            390,
+            120,
+            100
+          ],
+          "threshold": 0.95
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_POPUP_CLOSE_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/alliance_remaining_manage_ordinary_close.png",
+            "search_region": [
+              445,
+              220,
+              85,
+              75
+            ],
+            "threshold": 0.95
+          },
+          "dismisses_surface": true
+        },
+        {
+          "selector": "PNC_ALLIANCE_MEMBER_MANAGE_PERSONAL_INFO_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/alliance_remaining_manage_ordinary_personal_info.png",
+            "search_region": [
+              20,
+              330,
+              515,
+              90
+            ],
+            "threshold": 0.95
+          }
+        }
+      ]
+    },
+    {
+      "id": "alliance_remaining_hall",
+      "layout_id": "alliance_remaining_hall",
+      "screen": "PNC_ALLIANCE_HALL",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/alliance_variants/alliance_remaining_hall.png",
+        "decoded_sha256": "188237122e0d7b65f8bf52a8506669368628253cd22bf768d487a0a6b5f8139e",
+        "capture_group": "2026-09-13/capture_gap_exploration/20260913T030954Z/0181_alliance_hall"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Sanitized Alliance Hall identity using the static facility description; timers, names, levels, capacity, and reinforcement rows are excluded. Measured Upgrade, Send Back, and Reinforce controls remain visible as producer dependencies.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/alliance_remaining_hall_title.png",
+          "search_region": [
+            95,
+            0,
+            315,
+            70
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/alliance_remaining_hall_description.png",
+          "search_region": [
+            260,
+            125,
+            280,
+            80
+          ],
+          "threshold": 0.95
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/alliance_remaining_hall_back.png",
+            "search_region": [
+              10,
+              0,
+              90,
+              65
+            ],
+            "threshold": 0.95
+          }
+        },
+        {
+          "selector": "PNC_ALLIANCE_HALL_UPGRADE_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/alliance_remaining_hall_upgrade.png",
+            "search_region": [
+              360,
+              230,
+              180,
+              90
+            ],
+            "threshold": 0.95
+          }
+        },
+        {
+          "selector": "PNC_ALLIANCE_HALL_SEND_BACK_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/alliance_remaining_hall_send_back.png",
+            "search_region": [
+              40,
+              850,
+              220,
+              100
+            ],
+            "threshold": 0.95
+          }
+        },
+        {
+          "selector": "PNC_ALLIANCE_HALL_REINFORCE_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/alliance_remaining_hall_reinforce.png",
+            "search_region": [
+              285,
+              850,
+              220,
+              100
+            ],
+            "threshold": 0.95
+          }
+        }
+      ]
+    },
+    {
+      "id": "remote_player_profile_gear",
+      "layout_id": "remote_player_profile_gear",
+      "screen": "PNC_PLAYER_PROFILE",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/player_profile_variants/remote_player_profile_gear.png",
+        "decoded_sha256": "ceeb5c23364f263d3687383dd55f140c3d0a606261f5ca916f2d9cb022349195",
+        "capture_group": "2026-09-13/capture_gap_exploration/20260913T030954Z/0158_remote_player_profile_gear"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Sanitized remote Player Profile Gear layout using selected Gear chrome and the static Alliance Info + Settings footer pair; player name, gear art, stats, and identity are excluded.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/alliance_remaining_profile_gear_tab.png",
+          "search_region": [
+            0,
+            54,
+            115,
+            60
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/alliance_remaining_profile_alliance_info.png",
+          "search_region": [
+            90,
+            830,
+            145,
+            130
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/alliance_remaining_profile_settings.png",
+          "search_region": [
+            195,
+            830,
+            145,
+            130
+          ],
+          "threshold": 0.95
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/alliance_remaining_profile_back.png",
+            "search_region": [
+              0,
+              0,
+              110,
+              60
+            ],
+            "threshold": 0.95
+          }
+        },
+        {
+          "selector": "PNC_PLAYER_PROFILE_MAIL_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/alliance_remaining_profile_mail.png",
+            "search_region": [
+              305,
+              830,
+              130,
+              130
+            ],
+            "threshold": 0.95
+          }
+        }
+      ]
+    },
+    {
+      "id": "coordinate_dialog_captured",
+      "layout_id": "coordinate_dialog_captured",
+      "screen": "PNC_WORLD_COORDINATE_DIALOG",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/coordinate_dialog_variants/coordinate_dialog_20260613.png",
+        "decoded_sha256": "b6ca1d1530f187aaaa715c533ba0e8a131d3553ffcceb890f877a9ae7acd0821",
+        "capture_group": "2026-06-13/serious_stuff"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Captured coordinate dialog identity from the stable modal header and K/X/Y field labels; variable kingdom and coordinate values are excluded. Go and Close are measured from the same frame.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/coordinate_dialog_panel_header.png",
+          "search_region": [
+            10,
+            290,
+            470,
+            75
+          ],
+          "threshold": 0.97
+        },
+        {
+          "image": "screen_anchors/coordinate_dialog_label_k.png",
+          "search_region": [
+            60,
+            380,
+            55,
+            60
+          ],
+          "threshold": 0.97
+        },
+        {
+          "image": "screen_anchors/coordinate_dialog_label_x.png",
+          "search_region": [
+            185,
+            380,
+            60,
+            60
+          ],
+          "threshold": 0.97
+        },
+        {
+          "image": "screen_anchors/coordinate_dialog_label_y.png",
+          "search_region": [
+            315,
+            380,
+            60,
+            60
+          ],
+          "threshold": 0.97
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_WORLD_COORDINATE_DIALOG_GO_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/coordinate_dialog_go_button.png",
+            "search_region": [
+              160,
+              500,
+              225,
+              90
+            ],
+            "threshold": 0.97
+          }
+        },
+        {
+          "selector": "PNC_WORLD_COORDINATE_DIALOG_CLOSE_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/core_coordinate_dialog_pnc_world_coordinate_dialog_close_button.png",
+            "search_region": [
+              450,
+              295,
+              75,
+              70
+            ],
+            "threshold": 0.97
+          },
+          "dismisses_surface": true
+        }
+      ]
+    },
+    {
+      "id": "institute_upgrade_detail",
+      "layout_id": "institute_upgrade_detail",
+      "screen": "PNC_INSTITUTE",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/building_variants/institute_upgrade_blocked.png",
+        "decoded_sha256": "335992f0ae81f5fb889f48e592741a799ef4ff3f84be89a37d252da6399fead3",
+        "capture_group": "2026-09-13/capture_gap_exploration/20260913T030954Z"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Captured Institute upgrade-detail identity from the stable title, building art, and requirement panel. Only the measured prerequisite Go is exposed; the red Upgrade-ineligible state, paid Builder Set Go, and category buttons are excluded.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/institute_upgrade_title.png",
+          "search_region": [
+            90,
+            0,
+            160,
+            55
+          ],
+          "threshold": 0.97
+        },
+        {
+          "image": "screen_anchors/institute_upgrade_building.png",
+          "search_region": [
+            20,
+            50,
+            225,
+            210
+          ],
+          "threshold": 0.97
+        },
+        {
+          "image": "screen_anchors/institute_upgrade_panel.png",
+          "search_region": [
+            20,
+            400,
+            220,
+            100
+          ],
+          "threshold": 0.97
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/institute_upgrade_back.png",
+            "search_region": [
+              15,
+              5,
+              80,
+              50
+            ],
+            "threshold": 0.97
+          }
+        },
+        {
+          "selector": "PNC_BUILDING_REQUIREMENT_GO_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/institute_upgrade_prerequisite_go.png",
+            "search_region": [
+              390,
+              440,
+              145,
+              60
+            ],
+            "threshold": 0.97
+          }
+        }
+      ]
+    },
+    {
+      "id": "android_launcher_june17",
+      "layout_id": "android_launcher_june17",
+      "screen": "ANDROID_HOME",
+      "revision": 1,
+      "source": {
+        "fixture": "android_launcher_june17.png",
+        "decoded_sha256": "bb650f5e39bf52052ddb8b6a749bae0cda8a3739fc7d12010f452733881a3152",
+        "capture_group": "2026-06-17/bluestacks/android_launcher"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Reviewed launcher search bar and System apps tile establish the launcher independently of the PNC icon control. This template source is correlated reference evidence.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/android_launcher_search.png",
+          "search_region": [
+            85,
+            41,
+            370,
+            44
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/android_launcher_system_apps.png",
+          "search_region": [
+            230,
+            131,
+            80,
+            79
+          ],
+          "threshold": 0.95
+        }
+      ],
+      "controls": [
+        {
+          "selector": "ANDROID_HOME_PNC_ICON",
+          "anchor": {
+            "image": "screen_anchors/android_launcher_pnc_icon.png",
+            "search_region": [
+              399,
+              138,
+              65,
+              66
+            ],
+            "threshold": 0.95
+          }
+        }
+      ]
+    },
+    {
+      "id": "alliance_invitation_portrait",
+      "layout_id": "alliance_invitation_footer",
+      "screen": "PNC_POPUP",
+      "revision": 1,
+      "source": {
+        "fixture": "alliance_variants/alliance_invitation_portrait.png",
+        "decoded_sha256": "ca53f18677edc4dfb1d9128c7bb22383469f5b142a33734381d05e71aafb65db",
+        "capture_group": "2026-09-13/independent_recognition/20260913T234148Z/3xx_spies"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Reviewed portrait and static Alliance invitation message independently own the full-width footer layout; only the current Cancel template is an action.",
+        "build": "5.2.77 / AppVersion 5.0.201.227",
+        "locale": "English",
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/alliance_invitation_portrait.png",
+          "search_region": [
+            0,
+            325,
+            175,
+            196
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/alliance_invitation_portrait_message.png",
+          "search_region": [
+            184,
+            378,
+            340,
+            64
+          ],
+          "threshold": 0.95
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_POPUP_CLOSE_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/alliance_invitation_portrait_cancel.png",
+            "search_region": [
+              191,
+              519,
+              140,
+              53
+            ],
+            "threshold": 0.95
+          },
+          "dismisses_surface": true
+        }
+      ],
+      "occludes": [
+        "PNC_HOME_CITY"
+      ]
+    },
+    {
+      "id": "alliance_join_landing",
+      "layout_id": "alliance_join_landing",
+      "screen": "PNC_ALLIANCE_JOIN",
+      "revision": 1,
+      "source": {
+        "fixture": "alliance_variants/alliance_join_landing.png",
+        "decoded_sha256": "949922560e3607bd020fa07a23369f547ca20a4787fc107992d0810e55d78867",
+        "capture_group": "2026-09-13/independent_recognition/20260913T234148Z/3xx_spies"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Reviewed Alliance Join landing identity from independent Odin portrait and static Join Alliance banner anchors; no Join or Create action is owned.",
+        "build": "5.2.77 / AppVersion 5.0.201.227",
+        "locale": "English",
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/alliance_join_landing_odin.png",
+          "search_region": [
+            155,
+            45,
+            240,
+            275
+          ],
+          "threshold": 0.98
+        },
+        {
+          "image": "screen_anchors/alliance_join_landing_banner.png",
+          "search_region": [
+            150,
+            355,
+            250,
+            70
+          ],
+          "threshold": 0.98
+        }
+      ],
+      "controls": [],
+      "occludes": [
+        "PNC_HOME_CITY"
+      ]
     }
   ]
 }

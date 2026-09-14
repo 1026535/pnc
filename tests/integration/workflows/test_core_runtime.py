@@ -459,10 +459,12 @@ class CoreRuntimeTests(unittest.TestCase):
         )
         captured_at = datetime(2026, 9, 10, 12, 0, tzinfo=UTC)
 
+        sidecar_directory = Path(self.enterContext(tempfile.TemporaryDirectory()))
+
         def screenshot(image: Image.Image, name: str, offset: int) -> CapturedScreenshot:
             return CapturedScreenshot(
                 artifact=ArtifactRecord(
-                    path=Path(name),
+                    path=sidecar_directory / name,
                     captured_at=captured_at + timedelta(seconds=offset),
                     size_bytes=1,
                     sha256=name,
@@ -726,7 +728,7 @@ class CoreRuntimeTests(unittest.TestCase):
                 del image, ocr_context, owned_dismiss_bounds, owned_navigation_screen
                 return ObservationAdditions(guard_verdict=GuardVerdict.CLEAR)
 
-            def enrich(self, image, screen_type, visible_elements, request, *, ocr_context, ocr_regions):
+            def enrich(self, image, screen_type, visible_elements, request, *, ocr_context, ocr_regions, layout_id=None):
                 del image, screen_type, visible_elements, request
                 return ObservationAdditions(
                     current_castle=identity,

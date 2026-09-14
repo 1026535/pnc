@@ -7,6 +7,7 @@ synthetic capture fixture across selector states and diagnostic reports.
 from __future__ import annotations
 
 import tempfile
+from dataclasses import replace
 import unittest
 from pathlib import Path
 
@@ -24,11 +25,13 @@ from pnc_automation.app.pnc.domain.observation import (
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.observation_builder import (
+    CapturedObservation,
     ObservationBuilder,
     ImageSelectorEngine,
 )
 from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservationEnricher
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
+from pnc_automation.app.pnc.vision.visual_screen_recognizer import load_visual_screen_recognizer
 from pnc_automation.app.pnc.vision.selector_catalog import (
     SelectorCatalogDocument,
     SelectorCatalogEntry,
@@ -41,12 +44,48 @@ from pnc_automation.app.pnc.vision.selectors import SelectorRegistry
 from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict, ScreenDecision, ScreenEvidence
 from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
 from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
+from pnc_automation.core.vision.ocr.ocr_service import (
+    ObservationOcrContext,
+    OcrReadPurpose,
+    OcrResult,
+)
 
 from tests.support.pnc.capture_vision.fake_ocr_service import _FakeOcrService
-from tests.support.pnc.capture_vision.fake_screenshot_session import _FakeScreenshotSession
+from tests.support.pnc.capture_vision.fake_screenshot_session import _FakeScreenshotSession, make_captured_frame
 from tests.support.pnc.capture_vision.encode_png import _encode_png
 from tests.support.pnc.capture_vision.ocr_line import _ocr_line
 from tests.support.pnc.observations import make_observation
+
+
+class _RecordingOcrService:
+    """Returns queued OCR results while recording every backend region."""
+
+    def __init__(self, responses: list[OcrResult]) -> None:
+        """Initialize one deterministic sequence of backend responses."""
+
+        self.responses = responses
+        self.calls: list[Bounds | None] = []
+
+    def read_result(self, image: Image.Image, region: Bounds | None = None) -> OcrResult:
+        """Return the next result and record the requested crop."""
+
+        del image
+        self.calls.append(region)
+        if region is None:
+            raise AssertionError("Selector discovery must not request full-frame OCR.")
+        if not self.responses:
+            return OcrResult(lines=(), words=())
+        return self.responses.pop(0)
+
+    def read_lines(self, image: Image.Image, region: Bounds | None = None) -> tuple:
+        """Expose the protocol's line helper for context construction."""
+
+        return self.read_result(image, region).lines
+
+    def read_text(self, image: Image.Image, region: Bounds) -> str:
+        """Expose the protocol's text helper for context construction."""
+
+        return "\n".join(line.text for line in self.read_result(image, region).lines)
 
 
 class SelectorDiscoveryTests(unittest.TestCase):
@@ -57,7 +96,7 @@ class SelectorDiscoveryTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_directory:
             root = Path(temp_directory)
-            screenshot = self._capture_blank_screenshot(root=root, label="academy")
+            screenshot = self._capture_blank_screenshot(root=root, label="academy", fixture="institute_audit.png")
             analyzer = self._build_analyzer(
                 lines=(
                     _ocr_line("Institute", x=108, y=12, width=115, height=29),
@@ -89,7 +128,7 @@ class SelectorDiscoveryTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_directory:
             root = Path(temp_directory)
-            screenshot = self._capture_blank_screenshot(root=root, label="academy_existing")
+            screenshot = self._capture_blank_screenshot(root=root, label="academy_existing", fixture="institute_audit.png")
             analyzer = self._build_analyzer(
                 lines=(
                     _ocr_line("Institute", x=108, y=12, width=115, height=29),
@@ -124,11 +163,11 @@ class SelectorDiscoveryTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_directory:
             root = Path(temp_directory)
-            screenshot = self._capture_blank_screenshot(root=root, label="research_tree")
+            screenshot = self._capture_blank_screenshot(root=root, label="research_tree", fixture="research_tree_development.png")
             analyzer = self._build_analyzer(
                 lines=(
-                    _ocr_line("Military", x=107, y=9, width=109, height=38),
-                    _ocr_line("Troop Size I", x=229, y=340, width=90, height=20),
+                    _ocr_line("Development", x=107, y=9, width=109, height=38),
+                    _ocr_line("Construction I", x=229, y=340, width=90, height=20),
                     _ocr_line("March Speed", x=221, y=714, width=103, height=19),
                     _ocr_line("0/3", x=106, y=425, width=25, height=14),
                     _ocr_line("0/5", x=230, y=615, width=27, height=16),
@@ -535,6 +574,228 @@ class SelectorDiscoveryTests(unittest.TestCase):
         self.assertAlmostEqual(draft_by_id["PNC_EVENT_CENTER_ENTRY_TITLE_REGION"].relative_bounds.y_ratio, 0.34)
         self.assertAlmostEqual(draft_by_id["PNC_EVENT_CENTER_ENTRY_TIMER_REGION"].relative_bounds.y_ratio, 0.58)
 
+    def test_build_visible_selector_drafts_reuses_recorded_context_without_backend_reads(self) -> None:
+        """Uses immutable context OCR evidence without adding a discovery backend request."""
+
+        image = Image.new("RGB", (200, 100), (0, 0, 0))
+        row_bounds = Bounds(x=0, y=24, width=180, height=60)
+        spy = _RecordingOcrService(
+            responses=[
+                OcrResult(
+                    lines=(_ocr_line("Super Sale Bundle", x=18, y=36, width=120, height=16),),
+                    words=(),
+                ),
+            ]
+        )
+        analyzer = self._build_analyzer(
+            lines=(),
+            catalog=SelectorCatalogDocument(
+                selectors=(
+                    SelectorCatalogEntry(
+                        id="PNC_CASH_MALL_ENTRY_TITLE_REGION",
+                        screens=("PNC_CASH_MALL",),
+                        status="planned",
+                        detection_kind="semantic",
+                        materialize_relative_bounds=False,
+                    ),
+                ),
+            ),
+        )
+        analyzer.observation_builder.ocr_service = spy
+        observation = Observation(
+            decision=ScreenDecision(
+                base_screen=ScreenType.PNC_CASH_MALL,
+                effective_screen=ScreenType.PNC_CASH_MALL,
+                guard=GuardVerdict.CLEAR,
+                evidence=(ScreenEvidence(ScreenType.PNC_CASH_MALL, "test"),),
+            ),
+            visible_elements={
+                UiElementId.PNC_CASH_MALL_ENTRY_ROW: VisibleElement(
+                    selector_id=UiElementId.PNC_CASH_MALL_ENTRY_ROW,
+                    bounds=row_bounds,
+                    confidence=1.0,
+                    source_kind=VisibleElementSourceKind.TEMPLATE,
+                ),
+            },
+            artifact_path=Path("cash_mall.png"),
+            image_size=image.size,
+        )
+        context = ObservationOcrContext(image, spy, None, "selector-discovery-test")
+        context.read_result(image, row_bounds, purpose=OcrReadPurpose.CONTENT, detail="entry_title")
+        before_calls = list(spy.calls)
+
+        drafts = analyzer.build_visible_selector_drafts(
+            observation=observation,
+            artifact_path=Path("cash_mall.png"),
+            selector_ids=(UiElementId.PNC_CASH_MALL_ENTRY_TITLE_REGION,),
+            image=image,
+            ocr_context=context,
+        )
+
+        self.assertEqual(spy.calls, before_calls)
+        self.assertEqual([draft.id for draft in drafts], ["PNC_CASH_MALL_ENTRY_TITLE_REGION"])
+        self.assertAlmostEqual(drafts[0].relative_bounds.y_ratio, 0.36)
+
+    def test_snapshot_reuses_recorded_context_without_backend_reads(self) -> None:
+        """Analyzing a captured observation consumes diagnostics without a discovery OCR request."""
+
+        with tempfile.TemporaryDirectory() as temp_directory:
+            screenshot = self._capture_blank_screenshot(root=Path(temp_directory), label="recorded_snapshot")
+            spy = _RecordingOcrService(
+                responses=[
+                    OcrResult(
+                        lines=(_ocr_line("Recorded", x=20, y=20, width=70, height=16),),
+                        words=(),
+                    ),
+                ]
+            )
+            analyzer = self._build_analyzer(lines=())
+            analyzer.observation_builder.ocr_service = spy
+            context = ObservationOcrContext(
+                screenshot.image,
+                spy,
+                screenshot.frame_ref,
+                "selector-discovery-test",
+            )
+            context.read_result(
+                screenshot.image,
+                Bounds(x=0, y=0, width=100, height=50),
+                purpose=OcrReadPurpose.CONTENT,
+                detail="recorded_snapshot",
+            )
+            observation = make_observation(
+                ScreenType.UNKNOWN,
+                image_size=screenshot.image.size,
+                frame_ref=screenshot.frame_ref,
+            )
+            capture = CapturedObservation(
+                screenshot=screenshot,
+                observation=observation,
+                ocr_context=context,
+            )
+            before_calls = list(spy.calls)
+
+            snapshot = analyzer.analyze_captured_observation(capture)
+
+            self.assertEqual(spy.calls, before_calls)
+            self.assertEqual([line.text for line in snapshot.ocr_lines], ["Recorded"])
+
+            foreign_frame = make_captured_frame(
+                _encode_png(screenshot.image), session_id="foreign-discovery-snapshot",
+            ).frame_ref
+            for recorded_context in (context, None):
+                with self.subTest(recorded_context=recorded_context is not None):
+                    with self.assertRaisesRegex(ValueError, "different capture frame"):
+                        analyzer.analyze_captured_observation(CapturedObservation(
+                            screenshot=screenshot,
+                            observation=replace(observation, frame_ref=foreign_frame),
+                            ocr_context=recorded_context,
+                        ))
+            self.assertEqual(spy.calls, before_calls)
+
+    def test_build_visible_selector_drafts_artifact_reads_observed_row_and_excludes_outside_label(self) -> None:
+        """Restricts artifact-only OCR to the observed collection row."""
+
+        image = Image.new("RGB", (200, 100), (0, 0, 0))
+        row_bounds = Bounds(x=0, y=24, width=180, height=60)
+        spy = _RecordingOcrService(
+            responses=[
+                OcrResult(
+                    lines=(
+                        _ocr_line("Super Sale Bundle", x=18, y=36, width=120, height=16),
+                        _ocr_line("Outside Label", x=18, y=5, width=96, height=16),
+                    ),
+                    words=(),
+                ),
+            ]
+        )
+        analyzer = self._build_analyzer(
+            lines=(),
+            catalog=SelectorCatalogDocument(
+                selectors=(
+                    SelectorCatalogEntry(
+                        id="PNC_CASH_MALL_ENTRY_TITLE_REGION",
+                        screens=("PNC_CASH_MALL",),
+                        status="planned",
+                        detection_kind="semantic",
+                        materialize_relative_bounds=False,
+                    ),
+                ),
+            ),
+        )
+        analyzer.observation_builder.ocr_service = spy
+        observation = Observation(
+            decision=ScreenDecision(
+                base_screen=ScreenType.PNC_CASH_MALL,
+                effective_screen=ScreenType.PNC_CASH_MALL,
+                guard=GuardVerdict.CLEAR,
+                evidence=(ScreenEvidence(ScreenType.PNC_CASH_MALL, "test"),),
+            ),
+            visible_elements={
+                UiElementId.PNC_CASH_MALL_ENTRY_ROW: VisibleElement(
+                    selector_id=UiElementId.PNC_CASH_MALL_ENTRY_ROW,
+                    bounds=row_bounds,
+                    confidence=1.0,
+                    source_kind=VisibleElementSourceKind.TEMPLATE,
+                ),
+            },
+            artifact_path=Path("cash_mall.png"),
+            image_size=image.size,
+        )
+
+        bound_frame = make_captured_frame(_encode_png(image), session_id="discovery-bound-capture")
+        with self.assertRaisesRegex(ValueError, "requires its recorded OCR context"):
+            analyzer.build_visible_selector_drafts(
+                observation=replace(observation, frame_ref=bound_frame.frame_ref),
+                artifact_path=Path("cash_mall.png"),
+                selector_ids=(UiElementId.PNC_CASH_MALL_ENTRY_TITLE_REGION,),
+                image=Image.new("RGB", image.size, (30, 20, 10)),
+            )
+        self.assertEqual(spy.calls, [])
+
+        drafts = analyzer.build_visible_selector_drafts(
+            observation=observation,
+            artifact_path=Path("cash_mall.png"),
+            selector_ids=(UiElementId.PNC_CASH_MALL_ENTRY_TITLE_REGION,),
+            image=image,
+        )
+
+        self.assertEqual(spy.calls, [row_bounds])
+        self.assertEqual([draft.id for draft in drafts], ["PNC_CASH_MALL_ENTRY_TITLE_REGION"])
+        self.assertAlmostEqual(drafts[0].relative_bounds.y_ratio, 0.36)
+
+    def test_build_visible_selector_drafts_does_not_scan_unknown_or_unproved_screen(self) -> None:
+        """Does not create a broad OCR request when the required row is unproved."""
+
+        image = Image.new("RGB", (200, 100), (0, 0, 0))
+        spy = _RecordingOcrService(responses=[])
+        analyzer = self._build_analyzer(
+            lines=(),
+            catalog=SelectorCatalogDocument(
+                selectors=(
+                    SelectorCatalogEntry(
+                        id="PNC_CASH_MALL_ENTRY_TITLE_REGION",
+                        screens=("PNC_CASH_MALL",),
+                        status="planned",
+                        detection_kind="semantic",
+                        materialize_relative_bounds=False,
+                    ),
+                ),
+            ),
+        )
+        analyzer.observation_builder.ocr_service = spy
+        observation = make_observation(ScreenType.UNKNOWN, image_size=image.size)
+
+        drafts = analyzer.build_visible_selector_drafts(
+            observation=observation,
+            artifact_path=Path("unknown.png"),
+            selector_ids=(UiElementId.PNC_CASH_MALL_ENTRY_TITLE_REGION,),
+            image=image,
+        )
+
+        self.assertEqual(drafts, ())
+        self.assertEqual(spy.calls, [])
+
     def test_load_artifact_paths_deduplicates_and_accepts_uppercase_pngs(self) -> None:
         """Loads explicit and directory-sourced artifacts without duplicate resolved paths."""
 
@@ -570,6 +831,7 @@ class SelectorDiscoveryTests(unittest.TestCase):
                 template_matcher=OpenCvTemplateMatcher(),
             ),
             screen_classifier=ScreenClassifier(),
+            visual_recognizer=load_visual_screen_recognizer(),
             enricher=PncObservationEnricher(selector_registry=runtime_registry),
             ocr_service=ocr_service,
         )
@@ -578,12 +840,16 @@ class SelectorDiscoveryTests(unittest.TestCase):
             catalog=SelectorCatalogDocument(selectors=()) if catalog is None else catalog,
         )
 
-    def _capture_blank_screenshot(self, *, root: Path, label: str) -> object:
+    def _capture_blank_screenshot(self, *, root: Path, label: str, fixture: str | None = None) -> object:
         """Writes one blank PNG artifact consumable by artifact-path discovery tests."""
 
+        image = Image.new("RGB", (540, 960), (15, 28, 68))
+        if fixture is not None:
+            with Image.open(Path("tests/data/screen_recognition") / fixture) as source:
+                image = source.convert("RGB").resize((540, 960))
         screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
         return screenshot_service.capture(
-            _FakeScreenshotSession(_encode_png(Image.new("RGB", (540, 960), (15, 28, 68)))),
+            _FakeScreenshotSession(_encode_png(image)),
             artifact_directory="k230_discovery",
             label=label,
         )

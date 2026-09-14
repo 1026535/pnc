@@ -428,7 +428,9 @@
       "split": "validation",
       "group": "2026-08-30/mega_old_acc",
       "sha256": "b599564706d9ad00abd548122276be8f265d0a9bc382e8a48d3d2c4fe03745dc",
-      "expected_visual_screens": []
+      "expected_visual_screens": [
+        "PNC_ALLIANCE_HOME"
+      ]
     },
     {
       "image": "castle_aug25.png",
@@ -498,6 +500,390 @@
       "sha256": "caf031b6018d29ae1fb922cefb1d2bc59fc4aa56d4614fb6775067cdfd22fd17",
       "expected_visual_screens": [
         "PNC_MARCH_CONFIRM"
+      ]
+    },
+    {
+      "image": "building_variants/farm_upgrade_available.png",
+      "screen": "PNC_BUILDING_DETAILS",
+      "split": "reference",
+      "group": "2026-09-13/capture_gap_exploration/20260913T030954Z",
+      "sha256": "d5ae79922e313606f6dcc90255fca0437449b9181fb9a9d8e24e3ae7add81f8d",
+      "expected_visual_screens": [
+        "PNC_BUILDING_DETAILS"
+      ]
+    },
+    {
+      "image": "building_variants/farm_level_one_detail.png",
+      "screen": "PNC_BUILDING_DETAILS",
+      "split": "validation",
+      "group": "2026-09-13/capture_gap_exploration/20260913T030954Z",
+      "sha256": "f57c094eb7a0848fb8fd41bc0ff1ab6c3940210b386158188bd809469015574b",
+      "expected_visual_screens": [
+        "PNC_BUILDING_DETAILS"
+      ]
+    },
+    {
+      "image": "building_variants/farm_construction_available.png",
+      "screen": "PNC_BUILDING_CONSTRUCTION",
+      "split": "reference",
+      "group": "2026-09-13/capture_gap_exploration/20260913T030954Z",
+      "sha256": "e1cb4ee4ddc4325eed133b5e05f69807a9c5d838c5b30951e50603ec74b08e01",
+      "expected_visual_screens": [
+        "PNC_BUILDING_CONSTRUCTION"
+      ]
+    },
+    {
+      "image": "building_variants/institute_upgrade_blocked.png",
+      "screen": "PNC_INSTITUTE",
+      "split": "reference",
+      "group": "2026-09-13/capture_gap_exploration/20260913T030954Z",
+      "sha256": "335992f0ae81f5fb889f48e592741a799ef4ff3f84be89a37d252da6399fead3",
+      "expected_visual_screens": [
+        "PNC_INSTITUTE"
+      ]
+    },
+    {
+      "image": "build_queue_variants/build_queue_idle.png",
+      "screen": "PNC_BUILD_QUEUE",
+      "split": "reference",
+      "group": "2026-09-13/capture_gap_exploration/20260913T030954Z",
+      "sha256": "92419f14b0acd034962cc1356ad632e1a0850caf35e6b06f6317991ee1c35c35",
+      "expected_visual_screens": [
+        "PNC_BUILD_QUEUE"
+      ]
+    },
+    {
+      "image": "build_queue_variants/build_queue_active_infirmary.png",
+      "screen": "PNC_BUILD_QUEUE",
+      "split": "validation",
+      "group": "2026-09-13/capture_gap_exploration/20260913T030954Z",
+      "sha256": "8d9f97442fccd0ae8233e67a5691bf262871172900a836b0cafd12938fd99c58",
+      "expected_visual_screens": [
+        "PNC_BUILD_QUEUE"
+      ]
+    },
+    {
+      "image": "build_queue_variants/build_queue_active_infirmary_fresh.png",
+      "screen": "PNC_BUILD_QUEUE",
+      "split": "validation",
+      "group": "2026-09-13/capture_gap_exploration/20260913T030954Z",
+      "sha256": "a253d9ac9f00d0141406a43a534f073ae525fdd55b758fc2016d34b79760714d",
+      "expected_visual_screens": [
+        "PNC_BUILD_QUEUE"
+      ]
+    },
+    {
+      "image": "alliance_variants/alliance_compact.png",
+      "screen": "PNC_ALLIANCE_HOME",
+      "split": "reference",
+      "group": "2026-09-13/capture_gap_exploration/20260913T030954Z/alliance_compact",
+      "sha256": "cac23413ff7d287035af7237ef7917bd4ced996eae5181be28bc1bc981f6f9bd",
+      "expected_visual_screens": [
+        "PNC_ALLIANCE_HOME"
+      ]
+    },
+    {
+      "image": "alliance_variants/alliance_tabbed.png",
+      "screen": "PNC_ALLIANCE_HOME",
+      "split": "reference",
+      "group": "2026-09-13/capture_gap_exploration/20260913T030954Z/alliance_tabbed",
+      "sha256": "0751f749b77621e1b83b223d36e316c56df28574f4f58443e24f1294600bec26",
+      "expected_visual_screens": [
+        "PNC_ALLIANCE_HOME"
+      ]
+    },
+    {
+      "image": "alliance_variants/alliance_tabbed_validation.png",
+      "screen": "PNC_ALLIANCE_HOME",
+      "split": "validation",
+      "group": "2026-09-13/capture_gap_exploration/20260913T030954Z/alliance_tabbed_correlated_0155",
+      "sha256": "214f4ca41da586b34b646a2f96fc5deca1ce9a4cd9c0feb2e4f341cd117e7677",
+      "expected_visual_screens": [
+        "PNC_ALLIANCE_HOME"
+      ]
+    },
+    {
+      "image": "mail_compose_variants/mail_compose_empty.png",
+      "screen": "PNC_MAIL_COMPOSE_POPUP",
+      "split": "reference",
+      "group": "2026-09-13/capture_gap_exploration/20260913T030954Z/mail_compose_empty",
+      "sha256": "1d87ae9f142ddd1ced8026e65b6b1bcc71229f1d8a3c69134ef4f88be7cfa1b5",
+      "expected_visual_screens": [
+        "PNC_MAIL_COMPOSE_POPUP"
+      ]
+    },
+    {
+      "image": "mail_compose_variants/mail_compose_subject.png",
+      "screen": "PNC_MAIL_COMPOSE_POPUP",
+      "split": "validation",
+      "group": "2026-09-13/capture_gap_exploration/20260913T030954Z/mail_compose_subject",
+      "sha256": "a7412bee71a3bfac8492ffae9e1ded31b6f67f638ee99d410b3d75303088a7e3",
+      "expected_visual_screens": [
+        "PNC_MAIL_COMPOSE_POPUP"
+      ]
+    },
+    {
+      "image": "mail_compose_variants/mail_compose_body.png",
+      "screen": "PNC_MAIL_COMPOSE_POPUP",
+      "split": "validation",
+      "group": "2026-09-13/capture_gap_exploration/20260913T030954Z/mail_compose_body",
+      "sha256": "9b5535841b18563a4cd8a96badf67a4d9c804f539fc3e93a2766ab24013cc384",
+      "expected_visual_screens": [
+        "PNC_MAIL_COMPOSE_POPUP"
+      ]
+    },
+    {
+      "image": "alliance_variants/alliance_remaining_member_list.png",
+      "screen": "PNC_ALLIANCE_MEMBER_LIST",
+      "split": "reference",
+      "group": "2026-09-13/capture_gap_exploration/20260913T030954Z/0156_member_list",
+      "sha256": "6e54abac52def0bd268853801857e2e826d1f30a85274b7fc2656411d5aa052d",
+      "expected_visual_screens": [
+        "PNC_ALLIANCE_MEMBER_LIST"
+      ]
+    },
+    {
+      "image": "alliance_variants/alliance_remaining_member_reinforce.png",
+      "screen": "PNC_ALLIANCE_MEMBER_REINFORCE",
+      "split": "reference",
+      "group": "2026-09-13/capture_gap_exploration/20260913T030954Z/0182_member_reinforce",
+      "sha256": "64c944f9b39d6877d92ffa747c7470b2089781c0599999249fee13535f1269a6",
+      "expected_visual_screens": [
+        "PNC_ALLIANCE_MEMBER_REINFORCE"
+      ]
+    },
+    {
+      "image": "alliance_variants/member_rows/alliance_member_manage_rows.png",
+      "screen": "PNC_ALLIANCE_MEMBER_LIST",
+      "split": "reference",
+      "group": "2026-09-13/capture_gap_exploration/20260913T030954Z/0156_member_list",
+      "sha256": "76f1372551db9c31bcc6b1e66b2342d895b8588059975065c222663910d2f345",
+      "expected_visual_screens": [
+        "PNC_ALLIANCE_MEMBER_LIST"
+      ]
+    },
+    {
+      "image": "alliance_variants/member_rows/alliance_member_reinforce_rows.png",
+      "screen": "PNC_ALLIANCE_MEMBER_REINFORCE",
+      "split": "reference",
+      "group": "2026-09-13/capture_gap_exploration/20260913T030954Z/0182_member_reinforce",
+      "sha256": "80dff85c4ca6a03843646905bd464a4f51b2063c75e215a3c60bc45fe2db08bc",
+      "expected_visual_screens": [
+        "PNC_ALLIANCE_MEMBER_REINFORCE"
+      ]
+    },
+    {
+      "image": "alliance_variants/alliance_remaining_manage_leader.png",
+      "screen": "PNC_ALLIANCE_MEMBER_MANAGE_POPUP",
+      "split": "reference",
+      "group": "2026-09-13/capture_gap_exploration/20260913T030954Z/0157_leader_manage",
+      "sha256": "18635de0ad475a4e4c461344fe24810ca9ed2807002a24cd42a8747ad94cfe49",
+      "expected_visual_screens": [
+        "PNC_ALLIANCE_MEMBER_MANAGE_POPUP"
+      ]
+    },
+    {
+      "image": "alliance_variants/alliance_remaining_manage_ordinary.png",
+      "screen": "PNC_ALLIANCE_MEMBER_MANAGE_POPUP",
+      "split": "reference",
+      "group": "2026-09-13/capture_gap_exploration/20260913T030954Z/0161_ordinary_manage",
+      "sha256": "3ee12a3e77db80bfcdcbaca8c9adebc641e4d8df13c9ab25a54449c06eb3f3a7",
+      "expected_visual_screens": [
+        "PNC_ALLIANCE_MEMBER_MANAGE_POPUP"
+      ]
+    },
+    {
+      "image": "alliance_variants/alliance_remaining_hall.png",
+      "screen": "PNC_ALLIANCE_HALL",
+      "split": "reference",
+      "group": "2026-09-13/capture_gap_exploration/20260913T030954Z/0181_alliance_hall",
+      "sha256": "188237122e0d7b65f8bf52a8506669368628253cd22bf768d487a0a6b5f8139e",
+      "expected_visual_screens": [
+        "PNC_ALLIANCE_HALL"
+      ]
+    },
+    {
+      "image": "alliance_variants/alliance_remaining_transport_negative.png",
+      "screen": "PNC_ALLIANCE_MEMBER_TRANSPORT",
+      "split": "validation",
+      "group": "2026-09-13/capture_gap_exploration/20260913T030954Z/0171_transport_negative",
+      "sha256": "a24cbfd686eb138fb832db687f2b1550239687fb48fb16457a10dd3f7ca3ca36",
+      "expected_visual_screens": []
+    },
+    {
+      "image": "player_profile_variants/remote_player_profile_gear.png",
+      "screen": "PNC_PLAYER_PROFILE",
+      "split": "reference",
+      "group": "2026-09-13/capture_gap_exploration/20260913T030954Z/0158_remote_player_profile_gear",
+      "sha256": "ceeb5c23364f263d3687383dd55f140c3d0a606261f5ca916f2d9cb022349195",
+      "expected_visual_screens": [
+        "PNC_PLAYER_PROFILE"
+      ]
+    },
+    {
+      "image": "player_profile_variants/remote_player_profile_lord_negative.png",
+      "screen": "PNC_PLAYER_PROFILE",
+      "split": "validation",
+      "group": "2026-09-13/capture_gap_exploration/20260913T030954Z/0005_lord_identity_negative",
+      "sha256": "2ba7d08aa9cda42b8ed1c1c1fe64e9507bc1e5ea3e6b650158da4ef140b7f66c",
+      "expected_visual_screens": []
+    },
+    {
+      "image": "home_city_core.png",
+      "screen": "PNC_HOME_CITY",
+      "split": "reference",
+      "group": "rebased-origin-main/screen_recognition",
+      "sha256": "8d31fc8d74814eccbbb125f3e340d6514d48fed7fc5a89d0d7e8c52de543c15f",
+      "expected_visual_screens": [
+        "PNC_HOME_CITY"
+      ]
+    },
+    {
+      "image": "world_map_core.png",
+      "screen": "PNC_WORLD_MAP",
+      "split": "reference",
+      "group": "rebased-origin-main/screen_recognition",
+      "sha256": "d3e13823aa5ccc3962c6faf6689e161303e9d418f728f2f15fd01413f8ac45b8",
+      "expected_visual_screens": [
+        "PNC_WORLD_MAP"
+      ]
+    },
+    {
+      "image": "coordinate_dialog_core.png",
+      "screen": "PNC_WORLD_COORDINATE_DIALOG",
+      "split": "reference",
+      "group": "rebased-origin-main/screen_recognition",
+      "sha256": "80266aa435ace85cc0be3402cec77ec7a9b0ce00f8e4bcb012ce061656211dbf",
+      "expected_visual_screens": [
+        "PNC_WORLD_COORDINATE_DIALOG"
+      ]
+    },
+    {
+      "image": "world_overview_core.png",
+      "screen": "PNC_WORLD_MAP_OVERVIEW",
+      "split": "reference",
+      "group": "rebased-origin-main/screen_recognition",
+      "sha256": "b3d587f53a5b0266f60b5b87774753afaeb5d3ad84d44dcc478edda0934ce4c9",
+      "expected_visual_screens": [
+        "PNC_WORLD_MAP_OVERVIEW"
+      ]
+    },
+    {
+      "image": "world_expanded_core.png",
+      "screen": "PNC_WORLD_MAP_EXPANDED",
+      "split": "reference",
+      "group": "rebased-origin-main/screen_recognition",
+      "sha256": "0ac6296cf2afcbef46326b3a571f7c8e0eeb08d5dc610246a70581b089dfb6f7",
+      "expected_visual_screens": [
+        "PNC_WORLD_MAP_EXPANDED"
+      ]
+    },
+    {
+      "image": "research_queue_core.png",
+      "screen": "PNC_RESEARCH_QUEUE",
+      "split": "reference",
+      "group": "rebased-origin-main/screen_recognition",
+      "sha256": "da9dcec5feaf2ae0dc4f8aa3ba32851701d42b8076839a15311fd37332981d4e",
+      "expected_visual_screens": [
+        "PNC_RESEARCH_QUEUE"
+      ]
+    },
+    {
+      "image": "castle_identity_variants/castle_identity_0042.png",
+      "screen": "PNC_CASTLE_SELECTION",
+      "split": "reference",
+      "group": "2026-09-13/core_ports_foreground_fix_20260913/157_farm_foreground_fix",
+      "sha256": "ea7a5efc8ae99d36301f81f381ade75d2a3b08a936587635c2165726836a0728",
+      "expected_visual_screens": [
+        "PNC_CASTLE_SELECTION"
+      ]
+    },
+    {
+      "image": "coordinate_dialog_variants/coordinate_dialog_20260613.png",
+      "screen": "PNC_WORLD_COORDINATE_DIALOG",
+      "split": "reference",
+      "group": "2026-06-13/serious_stuff",
+      "sha256": "b6ca1d1530f187aaaa715c533ba0e8a131d3553ffcceb890f877a9ae7acd0821",
+      "expected_visual_screens": [
+        "PNC_WORLD_COORDINATE_DIALOG"
+      ]
+    },
+    {
+      "image": "coordinate_dialog_variants/coordinate_dialog_20260614.png",
+      "screen": "PNC_WORLD_COORDINATE_DIALOG",
+      "split": "validation",
+      "group": "2026-06-14/serious_stuff",
+      "sha256": "d201036e9cc3d4f042797876163a509ae45d6bf34cb1b78c7951928cb2bf0056",
+      "expected_visual_screens": [
+        "PNC_WORLD_COORDINATE_DIALOG"
+      ]
+    },
+    {
+      "image": "castle_identity_variants/castle_identity_0108.png",
+      "screen": "PNC_CASTLE_SELECTION",
+      "split": "reference",
+      "group": "2026-09-13/core_ports_foreground_fix_20260913/157_farm_foreground_fix",
+      "sha256": "3f369d1217ffa32aaba001abec6fcfb9355ac351850ba3ad6bd71164d6926acd",
+      "expected_visual_screens": [
+        "PNC_CASTLE_SELECTION"
+      ]
+    },
+    {
+      "image": "android_launcher_june17.png",
+      "screen": "ANDROID_HOME",
+      "split": "reference",
+      "group": "2026-06-17/bluestacks/android_launcher",
+      "sha256": "bb650f5e39bf52052ddb8b6a749bae0cda8a3739fc7d12010f452733881a3152",
+      "expected_visual_screens": [
+        "ANDROID_HOME"
+      ]
+    },
+    {
+      "image": "commercial_offer_loading_negative.png",
+      "screen": "PNC_POPUP",
+      "split": "validation",
+      "group": "2026-09-13/capture_gap_exploration/hero_offer",
+      "sha256": "71d700c087dca28ace93a71ff9e50f409cb2f6abab11b67aea2615ac7aca7b2b",
+      "expected_visual_screens": []
+    },
+    {
+      "image": "castle_identity_variants/castle_identity_3xx_holdout.png",
+      "screen": "PNC_CASTLE_SELECTION",
+      "split": "reference",
+      "group": "2026-09-13/independent_recognition/20260913T234148Z/3xx_spies",
+      "sha256": "e0c9ce0561bee5cbd165e98d69d2a7d477017ed75a2f36fd050a84897dcd162d",
+      "expected_visual_screens": [
+        "PNC_CASTLE_SELECTION"
+      ]
+    },
+    {
+      "image": "loading_variants/configured_game_launch.png",
+      "screen": "PNC_LOADING",
+      "split": "reference",
+      "group": "2026-09-13/independent_recognition/20260913T234148Z/3xx_spies",
+      "sha256": "bbe6f46101857236ad709429ad495f6d84db4c426e8c6c1759db32f4d655abd1",
+      "expected_visual_screens": [
+        "PNC_LOADING"
+      ]
+    },
+    {
+      "image": "alliance_variants/alliance_invitation_portrait.png",
+      "screen": "PNC_POPUP",
+      "split": "reference",
+      "group": "2026-09-13/independent_recognition/20260913T234148Z/3xx_spies",
+      "sha256": "ca53f18677edc4dfb1d9128c7bb22383469f5b142a33734381d05e71aafb65db",
+      "expected_visual_screens": [
+        "PNC_POPUP"
+      ]
+    },
+    {
+      "image": "alliance_variants/alliance_join_landing.png",
+      "screen": "PNC_ALLIANCE_JOIN",
+      "split": "reference",
+      "group": "2026-09-13/independent_recognition/20260913T234148Z/3xx_spies",
+      "sha256": "949922560e3607bd020fa07a23369f547ca20a4787fc107992d0810e55d78867",
+      "expected_visual_screens": [
+        "PNC_ALLIANCE_JOIN"
       ]
     }
   ]

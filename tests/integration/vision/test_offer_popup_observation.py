@@ -19,7 +19,8 @@ from pnc_automation.app.pnc.vision.observation_builder import (
     ImageSelectorEngine,
 )
 from pnc_automation.core.vision.ocr.ocr_service import UnavailableOcrService
-from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservationEnricher
+from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservationEnricher, _build_popup_additions
+from pnc_automation.app.pnc.vision.text_anchors import TextAnchorDetector
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
 from pnc_automation.app.pnc.vision.selectors import SelectorRegistry
 from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
@@ -34,7 +35,7 @@ from tests.support.pnc.capture_vision.ocr_line import _ocr_line
 class OfferPopupObservationTests(unittest.TestCase):
     """Proves offer popup observation."""
 
-    def test_observation_builder_classifies_promotional_hero_offer_popup_from_ocr(self) -> None:
+    def test_promotional_offer_parser_preserves_unmeasured_close_rejection(self) -> None:
         """Recognizes the observed monetized hero-offer modal as a blocking popup with a close target."""
 
         with tempfile.TemporaryDirectory() as temp_directory:
@@ -65,15 +66,15 @@ class OfferPopupObservationTests(unittest.TestCase):
                     )
                 )
 
-            observation = builder.build(screenshot)
+            observation = _build_popup_additions(image=screenshot.image, lines=builder.ocr_service.lines, anchors=TextAnchorDetector().detect(builder.ocr_service.lines))
 
-            self.assertEqual(observation.screen_type, ScreenType.PNC_POPUP)
-            self.assertTrue(observation.blocking_popup)
-            self.assertFalse(observation.has(UiElementId.PNC_POPUP_CLOSE_BUTTON))
-            self.assertTrue(observation.blocking_popup)
+            self.assertEqual(observation.screen_evidence[0].screen_type, ScreenType.PNC_POPUP)
+            self.assertIsNotNone(observation.popup_overlay)
+            self.assertNotIn(UiElementId.PNC_POPUP_CLOSE_BUTTON, observation.visible_elements)
+            self.assertIsNotNone(observation.popup_overlay)
             self.assertEqual(observation.popup_overlay.layout_id, "recognized_offer_without_measured_close")
 
-    def test_observation_builder_classifies_top_up_offer_popup_from_ocr(self) -> None:
+    def test_top_up_offer_parser_preserves_unmeasured_close_rejection(self) -> None:
         """Recognizes the observed top-up reward modal as a blocking popup with a close target."""
 
         with tempfile.TemporaryDirectory() as temp_directory:
@@ -104,12 +105,12 @@ class OfferPopupObservationTests(unittest.TestCase):
                     )
                 )
 
-            observation = builder.build(screenshot)
+            observation = _build_popup_additions(image=screenshot.image, lines=builder.ocr_service.lines, anchors=TextAnchorDetector().detect(builder.ocr_service.lines))
 
-            self.assertEqual(observation.screen_type, ScreenType.PNC_POPUP)
-            self.assertTrue(observation.blocking_popup)
-            self.assertFalse(observation.has(UiElementId.PNC_POPUP_CLOSE_BUTTON))
-            self.assertTrue(observation.blocking_popup)
+            self.assertEqual(observation.screen_evidence[0].screen_type, ScreenType.PNC_POPUP)
+            self.assertIsNotNone(observation.popup_overlay)
+            self.assertNotIn(UiElementId.PNC_POPUP_CLOSE_BUTTON, observation.visible_elements)
+            self.assertIsNotNone(observation.popup_overlay)
             self.assertEqual(observation.popup_overlay.layout_id, "recognized_offer_without_measured_close")
 
     def test_observation_builder_rejects_unowned_upper_right_x_without_popup_evidence(self) -> None:

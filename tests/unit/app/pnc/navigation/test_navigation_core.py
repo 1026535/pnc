@@ -60,6 +60,8 @@ from pnc_automation.core.infra.emulator.provenance import FrameRef
 from pnc_automation.core.vision.ocr.ocr_service import ObservationOcrContext, OcrLine, OcrResult, OcrService
 from pnc_automation.core.errors import SelectorResolutionError
 from tests.support.paths import REPOSITORY_ROOT, TEST_DATA_ROOT
+from tests.support.pnc.capture_vision.modal_overlay import with_update_modal
+from pnc_automation.app.pnc.vision.ocr_region_plan import compile_guard_ocr_region_plans
 
 
 def _perception(recognizer, guard, *, ocr_service=None):
@@ -1232,7 +1234,7 @@ class NavigationPerceptionTests(unittest.TestCase):
                 super().__init__()
                 self.requests = []
 
-            def enrich(self, image, screen_type, visible_elements, request, *, ocr_context, ocr_regions):
+            def enrich(self, image, screen_type, visible_elements, request, *, ocr_context, ocr_regions, layout_id=None):
                 del image, screen_type, visible_elements, ocr_context, ocr_regions
                 self.requests.append(request)
                 return ObservationAdditions(
@@ -1411,12 +1413,15 @@ class NavigationPerceptionTests(unittest.TestCase):
         self.assertEqual(result.screen_type, ScreenType.PNC_WORLD_COORDINATE_DIALOG)
         self.assertFalse(result.blocking_popup)
         self.assertTrue(result.has(UiElementId.PNC_WORLD_COORDINATE_DIALOG_CLOSE_BUTTON))
-        ocr.read_result.assert_called_once()
+        # Integration review: the guard now owns one bounded modal crop;
+        # loading identity is visual and must not add diagnostic OCR.
+        self.assertEqual(len(compile_guard_ocr_region_plans(capture.image.size)), ocr.read_result.call_count)
+        self.assertTrue(all(call.args[1] is not None for call in ocr.read_result.call_args_list))
         ocr.read_result.return_value = OcrResult(lines=(
             OcrLine('New version detected. Tap Confirm to update.', Bounds(58, 380, 420, 28), 1.0),
             OcrLine('Confirm', Bounds(221, 531, 90, 27), 1.0),
         ), words=())
-        result = perception.build(capture)
+        result = perception.build(replace(capture, image=with_update_modal(capture.image)))
         self.assertTrue(result.blocking_popup)
         self.assertTrue(result.has(UiElementId.PNC_UPDATE_CONFIRM_BUTTON))
         self.assertFalse(result.has(UiElementId.PNC_POPUP_CLOSE_BUTTON))
@@ -1474,14 +1479,14 @@ class NavigationPerceptionTests(unittest.TestCase):
         )
         row = DetectedListEntry(ListEntryKind.DAILY_QUEST, Bounds(10, 10, 100, 40), title_text='Observed row')
 
-        def content(image, screen, controls, request, *, ocr_context, ocr_regions):
+        def content(image, screen, controls, request, *, ocr_context, ocr_regions, layout_id=None):
             ocr_context.validate_capture(image, capture.frame_ref)
-            ocr_context.read_result(image)
+            ocr_context.read_result(image, Bounds(10, 10, 100, 40))
             return ObservationAdditions(list_entries=(row,))
 
         with patch.object(PncObservationEnricher, 'enrich', side_effect=content):
             result = perception.build(capture, include_content=True)
-            self.assertEqual(1, ocr.read_result.call_count)
+            self.assertEqual(len(compile_guard_ocr_region_plans(capture.image.size)) + 1, ocr.read_result.call_count)
             self.assertEqual(capture.image.size, ocr.read_result.call_args.args[0].size)
             self.assertEqual(capture.frame_ref, result.list_entries[0].frame_ref)
             self.assertEqual(result.decision.layout_id, result.list_entries[0].source_layout_id)

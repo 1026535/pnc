@@ -16,6 +16,7 @@ from pnc_automation.app.pnc.domain.observation import Observation
 from pnc_automation.app.pnc.vision.observation_diagnostics import (
     ObservationDebugArtifactCollector,
 )
+from pnc_automation.app.pnc.vision.world_map_coordinates import read_world_coordinate_bar_viewport
 from pnc_automation.app.pnc.vision.navigation_perception import NavigationPerception
 from pnc_automation.app.pnc.vision.observation_builder import (
     ImageSelectorEngine,
@@ -38,6 +39,7 @@ from pnc_automation.core.vision.ocr.ocr_service import (
     OcrLine,
     OcrReadPurpose,
     OcrReadStatus,
+    OcrRequiredFieldStatus,
     OcrResult,
 )
 from pnc_automation.app.pnc.vision.ocr_region_plan import (
@@ -52,6 +54,9 @@ from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateM
 from tests.support.pnc.capture_vision.encode_png import _encode_png
 from tests.support.pnc.capture_vision.fake_screenshot_session import (
     _FakeScreenshotSession,
+)
+from tests.support.pnc.capture_vision.coordinate_bar_top_hud_fallback_ocr_service import (
+    _CoordinateBarTopHudFallbackOcrService,
 )
 from tests.support.pnc.observations import make_observation
 
@@ -307,6 +312,154 @@ class ObservationDiagnosticsTests(unittest.TestCase):
             self.assertEqual(document["reasons"], ["missing_ocr_facts"])
             self.assertEqual(document["missing_reads"][0]["detail"], "field:PNC_PLAYER_PROFILE_NAME_LABEL")
 
+    def test_parser_missing_field_writes_gap_after_nonempty_ocr_read(self) -> None:
+        """Reports a semantic parser miss separately from generic OCR read misses."""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            screenshot = self._capture(root, label="parser_missing")
+            observation = make_observation(ScreenType.PNC_HOME_CITY, frame_ref=screenshot.frame_ref)
+            field_region = Bounds(x=70, y=40, width=130, height=28)
+            backend = _BoundedOcrSpy(responses=[_ocr_result(_ocr_line("not-a-coordinate", x=75, y=44))])
+            context = self._context(screenshot, backend)
+            context.read_result(
+                screenshot.image,
+                field_region,
+                purpose=OcrReadPurpose.CONTENT,
+                detail="plan:world_coordinate_pair",
+            )
+            context.record_required_field_diagnostic(
+                required_fact="world_coordinate_pair",
+                status=OcrRequiredFieldStatus.INVALID,
+                region=field_region,
+                reason="invalid_value",
+                detail="parser:world_coordinate_dialog_field",
+            )
+
+            before_metrics = context.metrics
+            ObservationDebugArtifactCollector().persist_recognition_gap(
+                screenshot=screenshot,
+                observation=observation,
+                ocr_context=context,
+            )
+
+            self.assertEqual(context.metrics, before_metrics)
+            self.assertEqual(backend.calls, [field_region])
+            document = json.loads(self._sidecar(screenshot, "recognition_gap").read_text(encoding="utf-8"))
+            self.assertEqual(document["reasons"], ["missing_required_fields"])
+            self.assertEqual(document["missing_reads"], [])
+            self.assertEqual(
+                document["missing_required_fields"],
+                [{
+                    "required_fact": "world_coordinate_pair",
+                    "status": "invalid",
+                    "region": {"x": 70, "y": 40, "width": 130, "height": 28},
+                    "reason": "invalid_value",
+                    "detail": "parser:world_coordinate_dialog_field",
+                }],
+            )
+
+    def test_recovered_parser_field_does_not_leave_a_gap(self) -> None:
+        """Uses the latest parser outcome when a retry recovers the same field."""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            screenshot = self._capture(root, label="parser_recovered")
+            observation = make_observation(ScreenType.PNC_HOME_CITY, frame_ref=screenshot.frame_ref)
+            field_region = Bounds(x=70, y=40, width=130, height=28)
+            backend = _BoundedOcrSpy()
+            context = self._context(screenshot, backend)
+            context.record_required_field_diagnostic(
+                required_fact="world_coordinate_pair",
+                status=OcrRequiredFieldStatus.INVALID,
+                region=field_region,
+                reason="invalid_value",
+            )
+            context.record_required_field_diagnostic(
+                required_fact="world_coordinate_pair",
+                status=OcrRequiredFieldStatus.PRESENT,
+                region=field_region,
+                reason="parsed",
+            )
+
+            ObservationDebugArtifactCollector().persist_recognition_gap(
+                screenshot=screenshot,
+                observation=observation,
+                ocr_context=context,
+            )
+
+            self.assertFalse(self._sidecar(screenshot, "recognition_gap").exists())
+            self.assertEqual(backend.calls, [])
+
+    def test_coordinate_top_hud_recovery_clears_linked_miss_and_retains_attempt_history(self) -> None:
+        """Keeps bounded fallback provenance while leaving unrelated misses reportable."""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            screenshot = self._capture(root, size=(540, 960), label="coordinate_fallback_recovered")
+            observation = make_observation(ScreenType.PNC_WORLD_MAP, frame_ref=screenshot.frame_ref)
+            selector_region = Bounds(x=100, y=100, width=200, height=50)
+            top_hud_region = Bounds(x=0, y=0, width=540, height=172)
+            backend = _CoordinateBarTopHudFallbackOcrService(
+                top_hud_lines=(_ocr_line("X:370Y:510", x=10, y=10, width=100, height=20),)
+            )
+            context = self._context(screenshot, backend)
+            context.record_required_field_diagnostic(
+                required_fact="world_coordinate_pair",
+                status=OcrRequiredFieldStatus.INVALID,
+                region=selector_region,
+                reason="invalid_value",
+            )
+            parsed = read_world_coordinate_bar_viewport(
+                image=screenshot.image,
+                bounds=selector_region,
+                ocr_context=context,
+            )
+            context.record_diagnostic(
+                purpose=OcrReadPurpose.CONTENT,
+                status=OcrReadStatus.MISSING,
+                region=selector_region,
+                detail="unrelated_fact",
+                required_fact="unrelated_fact",
+            )
+
+            ObservationDebugArtifactCollector().persist_recognition_gap(
+                screenshot=screenshot,
+                observation=observation,
+                ocr_context=context,
+            )
+
+            self.assertIsNotNone(parsed)
+            self.assertEqual(
+                [(diagnostic.status, diagnostic.region) for diagnostic in context.required_field_diagnostics],
+                [
+                    (OcrRequiredFieldStatus.INVALID, selector_region),
+                    (OcrRequiredFieldStatus.PRESENT, top_hud_region),
+                ],
+            )
+            document = json.loads(self._sidecar(screenshot, "recognition_gap").read_text(encoding="utf-8"))
+            self.assertEqual(document["reasons"], ["missing_ocr_facts"])
+            self.assertEqual(
+                [read["detail"] for read in document["missing_reads"]],
+                ["unrelated_fact"],
+            )
+            self.assertEqual(
+                [read["required_fact"] for read in document["ocr_reads"]],
+                [
+                    "world_coordinate_pair",
+                    "world_coordinate_pair",
+                    "world_coordinate_pair",
+                    "unrelated_fact",
+                ],
+            )
+            self.assertEqual(
+                [field["region"] for field in document["required_field_diagnostics"]],
+                [
+                    {"x": 100, "y": 100, "width": 200, "height": 50},
+                    {"x": 0, "y": 0, "width": 540, "height": 172},
+                ],
+            )
+
     def test_known_clear_observation_with_no_misses_creates_no_gap(self) -> None:
         """Does not report a recognition gap after a successful bounded read on a clear screen."""
 
@@ -545,6 +698,49 @@ class ObservationDiagnosticsTests(unittest.TestCase):
                 ["plan:different_field"],
             )
             self.assertEqual(backend.calls, [crop, crop, crop])
+
+    def test_semantic_misses_sharing_read_key_do_not_overwrite_each_other(self) -> None:
+        """Keeps distinct semantic misses when their OCR request metadata is identical."""
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            screenshot = self._capture(root, label="semantic_shared_read")
+            observation = make_observation(ScreenType.PNC_HOME_CITY, frame_ref=screenshot.frame_ref)
+            crop = Bounds(x=40, y=30, width=160, height=90)
+            backend = _BoundedOcrSpy()
+            context = self._context(screenshot, backend)
+
+            for required_fact in ("missing_fact", "recovered_fact"):
+                context.record_diagnostic(
+                    purpose=OcrReadPurpose.CONTENT,
+                    status=OcrReadStatus.MISSING,
+                    region=crop,
+                    detail="shared_detail",
+                    required_fact=required_fact,
+                )
+            context.record_required_field_diagnostic(
+                required_fact="recovered_fact",
+                status=OcrRequiredFieldStatus.PRESENT,
+                region=crop,
+                reason="parsed",
+            )
+
+            ObservationDebugArtifactCollector().persist_recognition_gap(
+                screenshot=screenshot,
+                observation=observation,
+                ocr_context=context,
+            )
+
+            document = json.loads(self._sidecar(screenshot, "recognition_gap").read_text(encoding="utf-8"))
+            self.assertEqual(document["reasons"], ["missing_ocr_facts"])
+            self.assertEqual(
+                [(read["detail"], read["required_fact"]) for read in document["missing_reads"]],
+                [("shared_detail", "missing_fact")],
+            )
+            self.assertEqual(
+                [read["required_fact"] for read in document["ocr_reads"]],
+                ["missing_fact", "recovered_fact"],
+            )
 
     def test_ephemeral_capture_writes_no_files_or_extra_ocr_and_retains_diagnostics(self) -> None:
         """Leaves ephemeral captures file-free while preserving their existing OCR diagnostics."""

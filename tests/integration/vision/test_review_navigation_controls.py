@@ -71,9 +71,14 @@ def _build_observation(
     image: Image.Image | None = None,
     request: ObservationRequest | None = None,
     visual_recognizer: VisualScreenRecognizer | None = None,
+    fixture: str | None = None,
 ):
     """Builds one capture through the production selector, classifier, and enricher stack."""
 
+    captured = image is not None or fixture is not None
+    if fixture is not None:
+        with Image.open(TEST_DATA_ROOT / "screen_recognition" / fixture) as source:
+            image = source.convert("RGB").resize(image_size)
     image = Image.new("RGB", image_size, (15, 28, 68)) if image is None else image.copy()
     screenshot = SimpleNamespace(
         image=image,
@@ -93,7 +98,7 @@ def _build_observation(
         screen_classifier=ScreenClassifier(),
         enricher=PncObservationEnricher(selector_registry=registry),
         ocr_service=_DeterministicOcr(lines),
-        visual_recognizer=visual_recognizer,
+        visual_recognizer=visual_recognizer or (load_visual_screen_recognizer() if captured else None),
     )
     return builder.build(screenshot, request=request or ObservationRequest.full_runtime_default())
 
@@ -196,7 +201,7 @@ class ReviewNavigationControlsTests(unittest.TestCase):
         self.assertEqual(session.taps, [(163, 1493)])
 
     def test_mail_hub_has_no_compose_and_empty_player_refuses_before_input(self) -> None:
-        observation = _build_observation(_mail_hub_lines())
+        observation = _build_observation(_mail_hub_lines(), fixture="collect_mail_hub.png")
 
         self.assertEqual(observation.screen_type, ScreenType.PNC_MAIL_HUB)
         self.assertEqual(observation.empty_mailboxes, frozenset({MailboxType.PLAYER, MailboxType.ALLIANCE}))
@@ -224,7 +229,7 @@ class ReviewNavigationControlsTests(unittest.TestCase):
                 _line("Player Mail", x=220, y=317, width=155, height=39),
                 _line("Alliance Mail", x=221, y=481, width=176, height=32),
                 _line("No report yet", x=670, y=480, width=189, height=38),
-            )
+            ), fixture="collect_mail_hub.png",
         )
         self.assertEqual(observation.empty_mailboxes, frozenset({MailboxType.ALLIANCE}))
         self.assertNotIn(MailboxType.PLAYER, observation.empty_mailboxes)
@@ -236,6 +241,7 @@ class ReviewNavigationControlsTests(unittest.TestCase):
                 _line("No report yet", x=300, y=730, width=180, height=26),
             ),
             request=ObservationRequest.mailbox_observation(MailboxType.ALLIANCE),
+            fixture="collect_mail_system_list.png",
         )
         self.assertEqual(alliance_mailbox.screen_type, ScreenType.PNC_MAILBOX_LIST)
         self.assertFalse(alliance_mailbox.has(UiElementId.PNC_MAIL_COMPOSE_BUTTON))
@@ -255,7 +261,7 @@ class ReviewNavigationControlsTests(unittest.TestCase):
                 _line("Mail", x=533, y=1568, width=55, height=24),
                 _line("Alliance", x=666, y=1567, width=100, height=26),
                 _line("More", x=795, y=1568, width=70, height=25),
-            )
+            ), fixture="world_map_core.png",
         )
         self.assertEqual(observation.screen_type, ScreenType.PNC_WORLD_MAP)
         self.assertTrue(observation.has(UiElementId.PNC_WORLD_EXPAND_BUTTON))
@@ -276,7 +282,8 @@ class ReviewNavigationControlsTests(unittest.TestCase):
             sleep=lambda _: None,
         )
         executor.execute_action(action, observation)
-        self.assertEqual(session.taps, [(58, 1184)])
+        self.assertEqual(session.taps, [observation.require(UiElementId.PNC_WORLD_EXPAND_BUTTON).action_point])
+        self.assertTrue(Region(23, 1115, 74, 74).contains_point(session.taps[0]))
 
     def test_unreviewed_world_map_popup_and_unknown_do_not_authorize_expand(self) -> None:
         unreviewed = _build_observation(
@@ -334,23 +341,29 @@ class ReviewNavigationControlsTests(unittest.TestCase):
         self.assertFalse(observation.has(UiElementId.PNC_POPUP_CLOSE_BUTTON))
 
     def test_strong_update_popup_stays_blocked_when_overview_pixels_are_present(self) -> None:
-        image, overview_lines = _world_overview_fixture()
+        image, _ = _world_overview_fixture()
+        with Image.open(TEST_DATA_ROOT / "screen_recognition" / "update_over_bag.png") as source:
+            overlay = source.convert("RGB").resize(image.size)
+        w, h = image.size
+        box = (round(w * .04), round(h * .30), round(w * .96), round(h * .65))
+        image.paste(overlay.crop(box), box)
+        scale = w / 540
         lines = (
-            *overview_lines,
-            _line("New version detected. Tap Confirm to update.", x=59, y=385, width=408, height=19),
-            _line("Confirm", x=234, y=800, width=73, height=20),
+            _line("New version detected. Tap Confirm to update.", x=round(58*scale), y=round(380*scale), width=round(420*scale), height=round(28*scale)),
+            _line("Confirm", x=round(221*scale), y=round(531*scale), width=round(90*scale), height=round(27*scale)),
         )
         observation = _build_observation(lines, image=image, image_size=image.size)
-
         self.assertEqual(observation.screen_type, ScreenType.PNC_POPUP)
         self.assertTrue(observation.blocking_popup)
         self.assertTrue(observation.has(UiElementId.PNC_UPDATE_CONFIRM_BUTTON))
+        self.assertFalse(observation.has(UiElementId.PNC_WORLD_OVERVIEW_CLOSE_BUTTON))
 
-    def test_close_x_without_overview_header_is_fail_safe(self) -> None:
+
+    def test_captured_overview_owns_close_when_header_ocr_is_missing(self) -> None:
         image, _ = _world_overview_fixture()
         observation = _build_observation((), image=image, image_size=image.size)
 
-        self.assertEqual(observation.screen_type, ScreenType.UNKNOWN)
+        self.assertEqual(observation.screen_type, ScreenType.PNC_WORLD_MAP_OVERVIEW)
         self.assertFalse(observation.has(UiElementId.PNC_POPUP_CLOSE_BUTTON))
 
 
