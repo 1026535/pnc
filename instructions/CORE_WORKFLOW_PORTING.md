@@ -1,11 +1,47 @@
 # Porting a workflow to the replacement core
 
-Current execution plan: [A's coordinated continuation](../reviewed_plans/PNC_CORE_WORKFLOW_PORTING_PLAN.md)
-and [shared A/B ownership and backlog](../reviewed_plans/PNC_AB_COORDINATED_CONTINUATION.md).
-These supersede historical pause/publication-only status, while this guide remains the
-canonical porting contract. Resource-changing execution remains rejected before device
-observation except for the exact capabilities in the mutation-boundary section below;
-the plan is not a bypass.
+Current execution plan: [six independent feature packages](../reviewed_plans/PNC_CORE_WORKFLOW_PORTING_PLAN.md#six-remaining-agent-packages).
+The [A/B coordination record](../reviewed_plans/PNC_AB_COORDINATED_CONTINUATION.md)
+is historical for those packages. The merged baseline is
+`6bc27585fbac1244672cf4a653ea6248955a4aca`; the ownership revision below supersedes
+older blanket A-runtime/B-vision and whole-file reservations for these six tasks.
+This guide remains the canonical behavioral porting contract. Plans do not enable
+unsupported resource-changing operations before their exact boundary exists.
+
+## Active feature ownership — September 14
+
+Each of the six feature agents owns its named behavior end to end: feature-specific
+visual facts/controls and bounded OCR, both-observer publication, navigation,
+policy/operations, direct/authored entrypoints, relevant tests and its own live
+acceptance. Shared files are partitioned by the methods, screen/profile/model
+fields, selector/data keys and TaskId branches in the linked ownership table.
+Agents work in separate feature worktrees; they do not reserve whole shared files
+or wait for B to implement an ordinary feature producer. Generic capture/OCR,
+guards, freshness/recovery, lease and persistence mechanics retain canonical
+ownership and invariants. A concrete generic-service question may prompt rare
+Continue core/Continue non-YOLO consultation, not routine handoffs or approvals.
+
+The building feature owns construction/upgrade mutation identity, policy and
+receipts for direct and Daily entry. Gathering owns its resource/target/formation
+identity and receipts for both entry paths. Daily Go is an alternative navigation
+entry into that same feature action; quest/progress context is separate from the
+action kind and durable operation ID. Each feature makes the necessary typed
+integration in the existing authorizer/dispatcher/journal without inventing Daily
+rows, renaming Stone to Gold or creating duplicate execution/storage. Preserve
+legacy receipts and exact target/budget/stale/no-replay rules. This is remaining
+implementation owned by those feature plans, not a claim that the current
+Daily-shaped core already supports the new identities or a shared prerequisite
+that they must wait for another task to deliver. Automatic Daily remains outside
+these explicit feature adapters.
+
+Research owns Institute Home acquisition; Buildings owns the other building and
+build/upgrade panels; Gathering owns world target/march facts and Search/dialog;
+Campaign owns stage and Campaign hero formation; Mail/Login owns its producers
+and authentication/preparation ordering; Castle owns roster/selection and
+More/Settings. Preserve the detailed semantic boundary table in the active index.
+A feature's definition of done is its own implementation and acceptance, not peer
+completion or final combined integration. Missing required evidence is incomplete,
+even when it is external rather than an implementation defect.
 
 This guide describes the bounded path for moving one workflow onto the reviewed navigation core. It applies to the shared runtime in `pnc_automation/app/automation/engine/`, the typed PNC observations, and the application and CLI entrypoints. The core permits read-only and non-spending state-change workflows. Resource-changing workflows require one of the exact canonical boundaries below before device observation.
 
@@ -90,7 +126,7 @@ This guide describes the bounded path for moving one workflow onto the reviewed 
 
 8. Require final Home evidence. A successful result is emitted only after the runner confirms the declared exit screen. A failure at exit propagates without an automatic retry or `finally` navigation. Recovery is a separate explicit call to `CoreWorkflowRunner.recover_to_home`; it uses the reviewed graph, allows the connected safe-popup recovery boundary to clear known interruptions, and stops on unknown or unresolved popup states.
 
-9. Migrate production callers only after offline parity and the bounded proof are complete. Then remove the obsolete duplicate capture/perception/construction path for that caller. Keep unrelated legacy daily maintenance unchanged until each workflow has its own reviewed port and evidence.
+9. After offline parity, wire the production caller to the typed core so the bounded proof exercises that real caller. Require the bounded proof before promoting the migrated binding or removing its obsolete legacy implementation. The wired caller has one execution owner and no legacy fallback during proof; retaining old code temporarily does not authorize a second execution path. Keep unrelated legacy daily maintenance unchanged until each workflow has its own reviewed port and evidence.
 
 ## Current boundary
 
@@ -106,7 +142,7 @@ Castle now has an independent visual profile requiring both the measured `Castle
 
 Active-castle preflight recognizes the selected row through exact Manage Characters evidence. It searches a long roster with bounded swipes in both directions and stops on repeated viewport signatures without tapping a castle row.
 
-`SelectCastleWorkflow` is the typed Home-to-Home `NONSPENDING_STATE_CHANGE` port for authored `TaskId.SELECT_CASTLE`. It enters Manage Characters through the reviewed graph, searches only fresh observed roster windows with at most six swipes in each direction, reacquires one exact kingdom/name row before a single observed-point tap, and requires exact active-identity proof before returning Home. A selected target is a no-op; missing, ambiguous, stale, interrupted, or changed rows fail closed without fallback or replay. Focused offline checks are complete, and the root-owned live no-op proof on active `free cookies` passed with a row-tap veto and final Home. Alternate-castle switching proof remains pending the user's target answer, so this binding is not yet accepted or landed as a full switch proof.
+`SelectCastleWorkflow` is the typed Home-to-Home `NONSPENDING_STATE_CHANGE` port for authored `TaskId.SELECT_CASTLE`. It enters Manage Characters through the reviewed graph, searches only fresh observed roster windows with at most six swipes in each direction, reacquires one exact kingdom/name row before a single observed-point tap, and requires exact active-identity proof before returning Home. A selected target is a no-op; missing, ambiguous, stale, interrupted, or changed rows fail closed without fallback or replay. Focused offline checks are complete, and the root-owned live no-op proof on active `free cookies` passed with a row-tap veto and final Home. Alternate-castle switching proof remains required in package 06; that worker chooses a configured alternate under the active target policy and proves return to the observed source. The earlier no-op is not a full switch proof.
 
 ## Migration status
 

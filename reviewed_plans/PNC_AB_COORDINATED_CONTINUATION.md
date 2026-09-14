@@ -1,5 +1,31 @@
 # A/B remaining work: complete vision and workflow components
 
+## Current ownership amendment — September 14
+
+The user reports the A/B merge is complete; the published integration branch was
+verified and fast-forwarded to `6bc27585fbac1244672cf4a653ea6248955a4aca`, containing
+A `5c1cb92` and B `10740eb`. The six remaining feature plans now use
+[independent vertical ownership](PNC_CORE_WORKFLOW_PORTING_PLAN.md#six-remaining-agent-packages).
+That current contract supersedes this document's historical wait-for-B, whole-file
+reservations, shared coordinator edits and cross-package acceptance sequencing
+for those six packages. Each owns its producers, consumers and proof. Continue
+core/Continue non-YOLO are rare consultants for a concrete generic-service question.
+
+Institute Home acquisition/Development belongs to 01; Buildings to 02; Gathering
+and World Search/dialog to 03; Campaign preparation to 04; Mail/Login and
+preparation order to 05; Castle/roster/More/Settings to 06. Building and Gathering
+action identities and direct/Daily entry convergence belong to their respective
+features. Daily Go is an alternative entry to the same action, not another engine
+or a coordinator-owned mutation foundation. Resource/Hero/broader Research remain
+outside the six packages. Preserve their existing separate handoff, except that
+Institute acquisition has transferred to 01.
+
+The sections below retain earlier evidence and instructions as history; they do
+not override the current feature ownership or require another merge of B's batch.
+Final integration of future feature branches remains separate from each feature's
+own definition of done. No further task was started by this plan amendment.
+
+
 ## September 13 execution update: A restart after B's published slice
 
 Current execution authority is [A's updated restart plan](PNC_CORE_WORKFLOW_PORTING_PLAN.md).

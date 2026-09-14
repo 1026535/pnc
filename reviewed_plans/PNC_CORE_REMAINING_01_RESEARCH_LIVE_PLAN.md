@@ -1,9 +1,31 @@
 # Remaining 01 — Development Research live acceptance
 
-Reconciled September 14, 2026. Owner: A workflow/runtime acceptance. This handoff is
-limited to the one already implemented Development Research caller and its one
-supported live canary proof. It does not reopen broader Research categories,
-change the mutation bridge, or absorb B's producer work.
+Revised September 14, 2026. **Owner: the Development Research feature agent,
+from Institute acquisition through producer qualification, caller execution and
+live acceptance.** The agent fixes the missing feature facts itself in its own
+worktree. Continue core and Continue non-YOLO are occasional consultants, not
+upstream delivery or approval gates. Broader Research categories remain outside
+this package.
+
+Execution base: merged `6bc27585fbac1244672cf4a653ea6248955a4aca` or a
+verified descendant containing it, plus this plan revision. The Research caller
+and Hero reconciliation are already committed in `5c1cb92`; B's `10740eb` is
+already merged. Use a separate feature worktree; never execute six agents in
+the integration checkout. Record the exact starting commit and plan revision.
+Read the [independent package contract](PNC_CORE_WORKFLOW_PORTING_PLAN.md#six-remaining-agent-packages).
+
+### Saved evidence locations
+
+Historical ignored `core_resume/` evidence resolves under
+`C:/Users/lebel/pnc/.local-data/worktrees/workflow-recognition-integration/.local-data/artifacts/`.
+Historical B `.local-data/reports/` diagnostics resolve under
+`C:/Users/lebel/pnc/.local-data/worktrees/non-yolo-recognition-continuation/.local-data/reports/`.
+Other numbered capture paths use the exact roots in the linked capture-findings
+record. Read these saved artifacts in place; they are not copied into a new
+feature worktree. Tracked fixtures arrive with the merged base. Put this feature's
+new captures, replays and reports under its own ignored `.local-data/` and test
+selection under `.test-impact/`. Missing historical evidence is reported with its
+exact source path, never replaced by a guessed current screen or invented result.
 
 ## Finish line
 
@@ -34,15 +56,16 @@ The current source already implements the caller. The outstanding acceptance
 failure is Home spatial publication after Research Queue Go, including the
 missing Institute object. The September 14 replay of published B `10740eb`
 recognizes Home but publishes zero building objects on the saved source; this
-also loses the four other objects in A's earlier replay. A future worker must qualify that producer handback before
+also loses the four other objects in A's earlier replay. This feature agent
+owns reproducing, correcting and qualifying that Institute acquisition gap before
 attempting the Start proof. A successful lifecycle result with
 `PENDING_CLARIFICATION`, a manual Institute tap, or a clean process exit is not
 Research acceptance.
 
 ## Canonical owners and the current blocked boundary
 
-Use these existing A owners in the dirty integration candidate at HEAD `4f33202`.
-They locate the remaining producer-consumption and live acceptance work; the
+Use these existing owners in the merged execution base.
+They locate the remaining producer and live acceptance work; the
 caller implementation itself is not a task to repeat:
 
 | Owner | Verified contract to preserve |
@@ -70,7 +93,8 @@ The current caller tests and core tests establish the offline boundary:
   and unsupported policy rejection.
 - `tests/contract/workflows/test_core_research_mutation.py` covers the existing
   exact authorizer, normal-versus-active detail guard, durable dispatcher and
-  no-replay semantics. It is root-owned; do not edit it in this slice.
+  no-replay semantics. This feature agent owns Research-specific additions to
+  that contract test; other capabilities' tests remain unchanged.
 
 The current A validation ledger records the latest caller gate as **2,027 passed,
 six skipped (2,033 tests)**, with focused caller groups also passing. Do not
@@ -93,18 +117,16 @@ The prior live attempt is the material evidence for the remaining producer gap:
   records the exact one-Start/zero-diamond policy, K157 / `NPC 2` / level 22,
   and the canonical journal root without connecting.
 
-That failure is a B-owned producer dependency, not permission to add a guessed
-coordinate, a workflow-local parser, or a legacy tap. The authoritative queued
-handoff is
-`reviewed_plans/PNC_B_FOLLOWUP_RECOGNITION_HANDOFF.md`: B owns the Institute
-identity/action evidence and broader Research category producers; A owns the
-category policy, route, mutation journal and callers. Read B's documentation
-and published checkpoint only. Do not read/import or modify unfinished code in
-`C:/Users/lebel/pnc/.local-data/worktrees/non-yolo-recognition-continuation`.
+That failure is now an owned implementation item in this package. Correct it in
+the canonical vision pipeline, never with a guessed coordinate, workflow-local
+parser or legacy tap. The later ownership revision transfers Institute Home
+acquisition and Development-specific producer gaps from the queued B handoff to
+this feature agent. B retains Resource, Hero and broader Research. Read saved
+evidence in place; do not import or edit another task's unfinished worktree.
 
-Apply the shared source-freeze, ownership and evidence rules in the [six-package
+Record the independent code/plan revision and apply the semantic ownership and evidence rules in the [six-package
 checkpoint](PNC_CORE_WORKFLOW_PORTING_PLAN.md#common-starting-checkpoint-and-evidence-rules)
-before handing this slice to a future live worker.
+before beginning this feature's own live phase.
 
 ### Producer acceptance on the saved Institute source
 
@@ -119,16 +141,17 @@ backend reads per path. This was a diagnostic execution, not a passing acceptanc
 test or a live run. A's earlier four-object replay remains historical evidence;
 do not describe it as the result on `10740eb`.
 
-B's `vision/ocr_region_plan.py` currently owns only Home queue-status and bottom
+The merged `vision/ocr_region_plan.py` currently supplies only Home queue-status and bottom
 navigation content regions. `pnc_observation_enricher._build_home_city_additions`
 passes the content lines to `spatial_surfaces.build_home_city_spatial_surface`;
 none of those semantic crops contains the pictured building labels. The broad
 popup guard crop is not an alternative content source. Thus a new Institute
 string rule alone cannot repair this production path. Keep the correction inside
-the existing Research handoff's Home producer work and preserve supported Home
-objects for package 02; do not create a competing navigation or OCR owner.
+this feature's Institute/Home producer slice and preserve supported Home objects.
+Package 02 owns additional building-specific acquisition, not this repair.
+Do not create a competing navigation or OCR engine.
 
-The B handback must make the following concrete before A opens Institute:
+The feature agent must implement and prove the following before opening Institute:
 
 1. Independently establish Home/layout and foreground ownership, then establish
    the visible building or its semantically bounded nameplate/level region using
@@ -154,53 +177,48 @@ The B handback must make the following concrete before A opens Institute:
    evidence is read-only Home/Queue focus/Institute open/return on the configured
    target, only where an existing source/transition cannot prove that boundary.
    Do not start Research merely to collect a Home nameplate holdout.
-5. A replays the actual saved source and published objects through the canonical
+5. Replay the actual saved source and published objects through the canonical
    `NavigationCore` resolver, then tests fresh reacquisition immediately before
    the Institute action. Expected screen, target supplied by the workflow, or a
    cached earlier object must not supply missing current evidence. Proceed to
    the one Start proof only after the route and destination gates pass.
 
-## Remaining work and dependency order
+## Remaining implementation sequence
 
-Preserve the implemented Development caller. A production changes are conditional
-on a concrete mismatch with the completed producer handback, not a new caller
-rewrite. The dependency order for the eventual validation worker is:
-
-1. **B producer handback.** B's preceding recognition batch is published at
-   `10740ebb9b8d9d43fc24f970b904796ca41bd082`; it does not close this gate.
-   The separate follow-up Research slice must publish one exact Institute object with
-   valid current-frame identity, bounds and safe action point through both
-   production observation paths, or report the precise remaining producer
-   limitation. The handback must include the producer commit/checkpoint, focused
-   tests, the preceding both-observer replay, source/build provenance and negative behavior for missing/ambiguous
-   Institute content. A focus arrow, expected camera position, OCR word alone,
-   or one builder-only result is insufficient.
-2. **A source freeze.** Before any caller or live worker starts, record the
-   current A worktree as `HEAD 4f33202` plus its dirty caller/core/docs state.
-   Inspect `git status --short --ignored` and the diff of the existing Research
-   caller files. Do not reset, stash, clean, cherry-pick, or start from bare
-   `4f33202`; doing so can lose the uncommitted caller plumbing. Root owns the
-   shared plan/index and integration sequencing.
-3. **A review of B's publication.** Confirm that the existing A consumer can
-   consume the published Institute object without changes to the observation
-   model. If a published contract genuinely requires an A adaptation, edit only
-   A-owned automation/entrypoint files and add a focused consumer regression.
-   Never compensate for absent identity with a coordinate, OCR string, fuzzy
-   building match, or a second observer. Re-run the focused groups below after
-   that adaptation. Broader Economy/Military/Fortification tree rows and their
-   busy/active/completion variants remain in the three-item B follow-up handoff;
-   they are not prerequisites for this Development-only caller, and this caller's
-   success must not close them. Captured tree files 0028/0034/0039 are still
-   unsupported at `10740eb`, while a separately captured Economy idle detail
-   already has a bounded proof worth reusing.
-4. **One bounded live proof.** Use the existing prepared helper or an ignored
-   timestamped equivalent, with the exact target and scope recorded before
-   connection. Perform one production `AutomationApi.research` call. Do not
-   repeat it after a journal intent exists.
-5. **Promotion decision.** Promote only when the exact Research result and
-   journal receipt pass. Otherwise preserve the stop artifacts and report the
-   first unproved predicate. Do not promote from a no-visible-node pending
-   result, a manually completed action, or a partial route.
+1. **Record the independent base.** Verify merged `6bc2758` or a containing
+   descendant and this plan revision in the feature's own worktree. Preserve the
+   committed caller and existing journal behavior; no B release or dirty-source
+   snapshot is needed. Verify this plan's symbols against that exact base.
+2. **Own the Institute producer correction.** Reproduce the saved Home crop gap
+   through both actual observers, implement semantically bounded Institute
+   acquisition in the existing vision owners, and qualify the facts listed above.
+   Own any required Institute-specific visual anchor/nameplate/level/geometry,
+   OCR-plan content region, parser/publication hook and captured regression.
+   Retain neighboring supported objects. Do not redesign the generic OCR engine
+   or implement package 02's remaining building catalog.
+3. **Close Development-specific facts and consumer gaps.** Reuse current
+   Research Queue, Development node/detail, normal Start and active receipt
+   producers. Fix a demonstrated defect in this package's fact/control/route
+   contract in place, including both observer paths and its feature tests. The
+   caller is already wired; change it only for an observed mismatch. Economy,
+   Military and Fortification trees remain outside this package and cannot gate it.
+4. **Qualify and validate.** Run the relevant existing producer/consumer groups,
+   real-OCR motivating replay and independent capture-group check, then the
+   required affected gate for changed source. A reference frame used to tune the
+   fix is not an independent holdout. No extra Research mutation is needed merely
+   to qualify an Institute label.
+5. **Prepare this proof's input session independently.** Use an authenticated
+   `mega_old_acc` session with `npc_2` active. Existing canonical API inspection or
+   an explicit supported target setup may establish that initial state under the
+   standing authority. Record setup separately. A valid starting Settings/Manage
+   Characters screen may be prepared for the caller's fresh identity preflight;
+   this does not accept package 06's Home-to-Settings route or package 05's Login.
+   Do not wait for either package's completion or skip the production preflight.
+6. **Run one production proof and accept locally.** Invoke the exact caller
+   below once. Require the committed receipt, typed success, fresh Home exit and
+   cleanup. Report the first failing predicate if incomplete; resolve owned
+   producer/route defects yourself before another eligible attempt. A durable
+   Research intent prevents a second Start. No peer sign-off is part of DoD.
 
 ## Target, authority and decisions
 
@@ -223,9 +241,10 @@ The tracked target catalog contains the following exact `mega_old_acc` aliases:
 The earlier blocked Research proof used `npc_2`, and the user authorization
 already covers that exact target for the resumed proof. Require it to be active
 after connection and before Research navigation. If another castle is active,
-stop without switching and wait for package 06's explicit alternate-castle
-handling or a separately recorded target decision; do not silently select a
-castle inside Research.
+stop the Research invocation without switching. The same feature worker may
+perform separate explicit supported setup for the authorized `npc_2` target,
+then re-prove identity in a fresh invocation before any Research intent exists.
+Do not wait for package 06 or silently select a castle inside Research.
 
 | Decision or permission | State | Worker action |
 | --- | --- | --- |
@@ -235,15 +254,17 @@ castle inside Research.
 | Exact Research castle alias | Authorized as `npc_2` | Record K157 / `NPC 2` / level 22 before connection and require it still active after connection; do not switch inside Research. |
 | Return/round-trip policy | Not part of Research acceptance; package 06 owns alternate selection and restoration | Do not add a second castle switch to this proof. |
 | Other accounts, unconfigured castles, local config edits, credentials/session secrets, direct game-service calls or external sign-in | Not authorized by this request | Do not access or change them. |
-| Merge, push, destructive Git/filesystem operations | Not part of this worker handoff | Return a reviewable diff/report to root; root owns integration. |
+| Merge, push, destructive Git/filesystem operations | Not part of this worker handoff | Deliver the feature change and acceptance report; a later merge is not part of feature DoD. |
 
 ## Offline checkpoint before live work
 
-Run the narrowest affected checks after B's handback and any A consumer change,
+Run the narrowest relevant checks after this feature's producer or consumer change,
 using the installed Python 3.13 executable:
 
 ```powershell
 $py = 'C:\Users\lebel\AppData\Local\Programs\Python\Python313\python.exe'
+# When Institute/Development producer implementation or fixtures change:
+& $py tools/run_tests.py group integration.vision
 & $py tools/run_tests.py group integration.workflows
 # If caller/dispatcher code changes, add the corresponding focused group:
 & $py tools/run_tests.py group unit.app.entrypoints
@@ -255,8 +276,8 @@ mutation module belongs to `contract.workflows`, which is required if its shared
 boundary changes. Do not run every listed group for an unchanged caller:
 `tests/unit/app/entrypoints/test_research_callers.py`,
 `tests/integration/script_runner/test_core_research_dispatch.py`,
-`tests/integration/workflows/test_research_core_workflow.py`, and the root-owned
-Research mutation contract. If an A-owned navigation/consumer adaptation is
+`tests/integration/workflows/test_research_core_workflow.py`, and the Research-specific
+mutation contract. If an A-owned navigation/consumer adaptation is
 made, also run:
 
 ```powershell
@@ -266,7 +287,7 @@ made, also run:
 
 Record command output in a unique ignored `.local-data` result file. Use
 `tools/run_tests.py affected --base origin/main --explain` only after an actual
-source change or B integration; use the full fallback if the runner selects it.
+source change; use the full fallback if the runner selects it.
 The prior 2,027-pass/6-skip result remains the baseline and is not new evidence
 for a changed candidate.
 
@@ -299,8 +320,9 @@ After acquiring the lease:
    Characters row must prove the authorized K157 / `NPC 2` / level-22
    `CastleIdentity` with exact kingdom, name and supplied level. Do not select a
    castle in this Research proof. If another configured castle is active, stop
-   and wait for package 06's explicit switch/return handling; do not silently
-   switch it inside Research.
+   before Research input. This worker may establish the authorized input target
+   in a separately recorded setup phase and then rerun the fresh preflight while
+   no Research intent exists; no dependency on package 06 is created.
 3. The direct caller may use a separate read-only inspection runtime before the
    production call, but retain the single outer account reservation across both
    dependent phases. Close only that inspection runtime through its existing
@@ -337,15 +359,15 @@ The Institute step is the first meaningful gate. If either production observatio
 path publishes zero or ambiguous Institute objects, the core must raise before
 an Institute tap and before any journal intent. Save the source frame, both
 builder observations, OCR/diagnostic report, trace, `summary.json`, `stop.json`
-and cleanup record, then return a B producer blocker. Do not retry unchanged
+and cleanup record, then retain it as this feature's producer defect to diagnose and fix. Do not retry unchanged
 captures or spend the Research budget to test the same absence.
 
 ## Success, stop and no-replay rules
 
 | Observation | Disposition |
 | --- | --- |
-| Exact preflight, Institute, Development row/detail, normal Start, two stable active-detail frames, typed success and Home all pass | Accept this Development caller cell and hand the evidence to root for combined integration. |
-| Institute absent/ambiguous, missing safe point, unsupported return edge, unknown/popup/stale frame | Stop before that action; classify the producer/route predicate precisely and retain artifacts. No retry without a new diagnosis or published fix. |
+| Exact preflight, Institute, Development row/detail, normal Start, two stable active-detail frames, typed success and Home all pass | Accept this feature locally and publish its evidence with the reviewable change; peer completion is irrelevant. |
+| Institute absent/ambiguous, missing safe point, unsupported return edge, unknown/popup/stale frame | Stop before that action; classify the producer/route predicate precisely and retain artifacts. No retry without a new diagnosis and relevant fix/state change. |
 | No visible supported Development row or row is incomplete/ambiguous | A typed pending/verification outcome is expected; this is not live acceptance and must not be promoted. |
 | Start control missing, premium-only, active detail, or queue eligibility unproved | Stop before mutation. Do not treat a visible blue word as authorization. |
 | Dispatch returns uncertain or cleanup fails | Retain the durable intent and trace, do not replay. Report the exact journal state and cleanup error. |
@@ -363,45 +385,59 @@ Research client sources as `commands/collegetech/collegetechcommand.lua` and
 `datas/collegedata.lua`. The recovered package is 5.0.203 / version code 233,
 while the live footer in the saved run is a later 5.2.77 / 5.0.204.235. Client
 handlers are useful source evidence only; they do not prove current server
-eligibility, visual publication, or a successful live Start. The saved A replay
-and B handback are the authoritative producer/consumer evidence for this plan.
+eligibility, visual publication, or a successful live Start. The saved replays locate the defect; this feature's own new production replay and
+live proof establish acceptance on its final candidate.
 
-## Exclusive ownership and return package
+## Precise ownership and independent definition of done
 
-| Area | Owner for this slice |
-| --- | --- |
-| Research producer, Institute visual profile/identity/action publication, observation model and vision fixtures/tests | B. Read published handback; never edit/import B's dirty files. |
-| Research policy, route, `CoreMutationBoundary`, journal, workflow, `CoreScriptDispatcher`, `ScriptRunner`, `ApplicationRunner`, `AutomationApi` and A-owned consumer tests | A/root. Any adaptation must remain in these files and preserve the current API/result contract. |
-| Shared plan/index and validation ledger | Root. Do not edit them from this worker plan. |
-| Live helper/artifacts | A-owned live phase; write only ignored timestamped artifacts and sanitized reports. |
+| Area | Exclusive feature edit scope |
+|---|---|
+| Home/Institute producer | Institute Home identity/nameplate/level/action acquisition in `vision/spatial_surfaces.py`, Home content-region declarations in `vision/ocr_region_plan.py`, `_build_home_city_additions` publication and its both-observer hooks. Preserve existing Home object output; additional building definitions belong to 02. Extract substantial Institute-specific logic to a feature vision module rather than grow a generic second observer. |
+| Development producer | Development/Research Queue profile/control keys in `screen_anchors.json` and `selector_registry.yaml`, feature enum/model fields and the Research-specific publication branches. Institute upgrade/requirements panels belong to 02; broader Research trees remain in the separate follow-up. |
+| Runtime and policy | `research.py`; Research-specific methods/edges in `NavigationCore`, `WorkflowContext.start_research`, `CoreMutationBoundary.start_research`; Research `TaskId` validation/dispatch and direct/session/module caller methods. Keep generic dispatch, identity and persistence mechanics canonical. |
+| Tests and fixtures | Research/Institute acquisition producer fixtures and feature-specific records in the recognition manifests/annotations; Research caller, workflow, mutation and navigation contract tests. The feature may edit those tests itself, including shared test containers' Research cases. |
+| Plan/evidence | This plan and a feature-local ignored report/artifact directory. No shared index updates or another agent's progress report are required. |
 
-Before handing back, verify the source freeze (HEAD and dirty state), list every
-file actually changed after the B publication, record focused commands/results,
-and include the exact live target, role, policy, journal state, trace/artifacts,
-cleanup decision and first stop predicate. Do not claim the full port complete:
-broader Economy/Military/Fortification support remains the queued B producer/A
-consumer work in `PNC_B_FOLLOWUP_RECOGNITION_HANDOFF.md`.
+The master ownership table reserves symbols and data keys, not entire shared
+files. The existing general Home-building collector and typed object output are
+shared support: 02 may repair general acquisition for its own routes, including
+baseline Institute support, without waiting for this plan. This plan owns the
+Institute-specific Research focus/qualification and preserves that output contract;
+neither feature creates a second parser. Use a separate worktree, keep edits scoped, and preserve other feature
+branches. Continue non-YOLO is consulted only for a demonstrated generic vision
+engine/guard question; Continue core only for a demonstrated generic runtime or
+journal contract question. Missing Institute facts and normal Research caller
+adaptations are this agent's work, not consultation gates.
+
+**Done means all of:** the owned Institute and Development facts qualify through
+both production paths; the existing direct/authored contract remains correct;
+changed-contract tests and required repository gate pass; the single real caller
+proof meets all six finish-line conditions; the final feature diff/commit and
+sanitized evidence identify the actual base, target, one intent, receipt, final
+Home and cleanup. The worker records those results in this plan or its linked
+feature report. No B release, other feature proof or combined merge is needed.
+
+An absent required producer, unsupported required return, unavailable authorized
+target, pending Research result or missing live proof is **incomplete**, even if
+all offline tests pass. State the exact outstanding predicate and next action;
+do not repeat the Start or relabel setup/manual work as production acceptance.
 
 ## Copyable worker kickoff
 
-> Work only in `C:/Users/lebel/pnc/.local-data/worktrees/workflow-recognition-integration`.
-> This is the remaining Development Research live-acceptance slice. Start from
-> the source checkpoint `HEAD 4f33202` **plus the existing dirty caller/core/docs
-> changes**; inspect status and preserve them, and never reset, stash, clean,
-> merge, push or start from a bare commit. Read `AGENTS.md`,
-> `instructions/CORE_WORKFLOW_PORTING.md`, this plan, the current A validation
-> ledger, and `PNC_B_FOLLOWUP_RECOGNITION_HANDOFF.md`. Do not read/import/edit
-> unfinished code in the B worktree. Wait for B's published Institute producer
-> handback. The callers already pass the current offline gate (2,027 passed,
-> six skipped); do not redesign them. Use only the exact existing Research
-> scope: `UPGRADE_RESEARCH`, one normal Start, zero diamonds, `DAILY_CANARY`,
-> exact configured account/castle/journal and one durable `research-001` receipt.
-> The user authorizes `mega_old_acc` live actions with unlimited resources, and
-> the Research target is already authorized as `npc_2` (K157 / `NPC 2` / level
-> 22). Require that castle to remain active after connection; if another castle
-> is active, wait for package 06's explicit switch/return handling rather than
-> switching inside Research. After B handback and focused
-> offline checks, run one canonical leased production `AutomationApi.research`
-> proof. Stop before Institute tap/Start on missing, ambiguous, stale, popup or
-> identity evidence; never replay a Research intent. Return a sanitized result
-> package and the exact success/stop predicate to root.
+> Execute only the remaining work in this plan in your own feature worktree from
+> merged `6bc27585fbac1244672cf4a653ea6248955a4aca` or a verified descendant,
+> recording the code base and this plan revision. Read AGENTS, the porting guide,
+> the independent package contract and the scoped evidence. You own Institute
+> Home acquisition, Development-specific producer corrections in both observers,
+> the Research route/caller tests and one-Start live acceptance. Do not wait for B,
+> package 02/05/06 or coordinator edits. Preserve the existing callers and canonical
+> exact `UPGRADE_RESEARCH`, one-Start/zero-diamond journal boundary. Use an
+> authenticated `mega_old_acc` / `npc_2` session as the input precondition; any
+> supported explicit setup is separate from acceptance, and the production caller
+> must freshly prove exact K157 / NPC 2 / level 22. Use saved evidence/real OCR and
+> repository tests, then one canonical leased caller proof. Daily/Hero receipts
+> already present must survive. Never guess missing identity/points, harvest guard
+> OCR, create a duplicate observer, or replay a Research intent. Consult the core
+> or non-YOLO task only for a concrete generic-service contract question outside
+> this feature. Deliver your own DoD evidence and reviewable change; final combined
+> integration and broader Research are separate work.

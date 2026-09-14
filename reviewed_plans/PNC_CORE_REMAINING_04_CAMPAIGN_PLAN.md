@@ -1,11 +1,28 @@
 # Remaining package 04 — Campaign selection through battle preparation
 
 Planning snapshot: September 14, 2026. This is A16's remaining implementation and
-validation contract, for one delegated consumer agent. It is not a new Campaign
-project and does not include battle execution. Read the
-[six-package coordination contract](PNC_CORE_WORKFLOW_PORTING_PLAN.md#six-remaining-agent-packages)
-before this plan. Status: consumer design can proceed; execution acceptance needs
-qualified mode/eligibility and Hero Formation observations.
+validation contract for one vertical Campaign owner. It includes the
+feature-specific producer and consumer work needed by Campaign, and does not
+include battle execution. Read the
+[independent package contract](PNC_CORE_WORKFLOW_PORTING_PLAN.md#six-remaining-agent-packages)
+for shared scope only; this plan's named Campaign partitions govern its feature
+files and symbols. The execution base is the immutable merged revision
+`6bc27585fbac1244672cf4a653ea6248955a4aca`; do not rely on a dirty predecessor
+or wait for a peer release. Status: implementation may proceed; acceptance still
+needs qualified mode/eligibility, Hero Formation and safe-return evidence.
+
+### Saved evidence locations
+
+Historical ignored `core_resume/` evidence resolves under
+`C:/Users/lebel/pnc/.local-data/worktrees/workflow-recognition-integration/.local-data/artifacts/`.
+Historical B `.local-data/reports/` diagnostics resolve under
+`C:/Users/lebel/pnc/.local-data/worktrees/non-yolo-recognition-continuation/.local-data/reports/`.
+Other numbered capture paths use the exact roots in the linked capture-findings
+record. Read these saved artifacts in place; they are not copied into a new
+feature worktree. Tracked fixtures arrive with the merged base. Put this feature's
+new captures, replays and reports under its own ignored `.local-data/` and test
+selection under `.test-impact/`. Missing historical evidence is reported with its
+exact source path, never replaced by a guessed current screen or invented result.
 
 ## Outcome and exact scope
 
@@ -51,10 +68,10 @@ qualify recognition. The exact captured facts are:
 | Saved frame | What it proves | What it does not prove |
 | --- | --- | --- |
 | `0087_campaign_stage6_5_detail.png` | Human-reviewed stage-detail appearance for `[6-5] Marsh of Tear`; `AP 120/120`; visible Challenge cost `20` and close control. Expected producer identity is `PNC_CAMPAIGN_STAGE`. | A qualified producer identity/control profile for this stage, mode/eligibility metadata beyond what is visible, or a battle-preparation receipt. |
-| `0088_campaign_stage6_5_challenge.png` | Distinct `PNC_HERO_FORMATION` surface with `Hero Formation`, five selected hero cards/check marks, and a bottom Challenge label. | Current stage, mode, AP, cost or eligibility. Those facts are absent and must not be carried forward from `0087`; its Hero Formation header/control profile is unmatched by B. |
+| `0088_campaign_stage6_5_challenge.png` | Distinct `PNC_HERO_FORMATION` surface with `Hero Formation`, five selected hero cards/check marks, and a bottom Challenge label. | Current stage, mode, AP, cost or eligibility. Those facts are absent and must not be carried forward from `0087`; its Hero Formation header/control profile is currently unmatched. |
 | `0097_campaign_victory_receipt.png` | A historic Campaign Victory/result frame after a battle. | Preparation acceptance for this package. Victory/result automation is conditional on a separate consumer requirement and remains outside the stage-to-preparation endpoint. |
 
-The existing producer is narrow: `pnc_observation_enricher.py` publishes the reviewed
+The current Campaign producer is narrow: `pnc_observation_enricher.py` publishes the reviewed
 Chapter 10/stage 3 rows and the stage 10-3 Challenge profile only. It does not prove
 the saved 6-5 Marsh of Tear stage, displayed AP/cost, mode/eligibility, or the
 Hero Formation layout. Both `0087` and `0088` are currently unmatched producer
@@ -64,12 +81,10 @@ gap, never completed Campaign support.
 
 ## Starting gate and evidence to inspect
 
-1. Work from the coordinator's verified A snapshot in the existing candidate or
-   an explicitly assigned isolated copy. At planning time the candidate is
-   `codex/workflow-recognition-integration`, HEAD
-   `4f332027e924a9f73e3e3740d92980d8950ddae1`, with completed, uncommitted A callers
-   and other user changes. A branch at bare HEAD omits those callers. Check status
-   and the supplied change manifest; never reset to the planning hash.
+1. Work from the immutable merged base
+   `6bc27585fbac1244672cf4a653ea6248955a4aca` in the assigned isolated copy.
+   Record the revision and clean-start status in the plan evidence; there is no
+   dirty A baseline to preserve and no peer release to await.
 2. Read `AGENTS.md`, the applicable write-code/live skills,
    [CORE_WORKFLOW_PORTING](../instructions/CORE_WORKFLOW_PORTING.md), the current
    [coordination document](PNC_AB_COORDINATED_CONTINUATION.md), and only the relevant
@@ -90,10 +105,10 @@ gap, never completed Campaign support.
    Hero Formation lacks stage/mode/AP labels. The saved successful battle is
    already evidence; another battle is unnecessary for this package.
 
-The A candidate already includes the reviewed no-claim checkpoint protection and
+The merged base already includes the reviewed no-claim checkpoint protection and
 loading-only `CoreRuntime.observe_ready` path. Preserve those fixes and use them for
 the Campaign workflow; do not reopen them as Campaign work or add generic UNKNOWN
-retries. A root-owned RapidOCR replay of the saved `0026` Home frame at producer
+retries. A recorded RapidOCR replay of the saved `0026` Home frame at producer
 commit `10740eb` also produced a clear `home_city` with zero published spatial
 building objects through both `ObservationBuilder.build` and
 `NavigationPerception.build`. Although `HomeCityObjectId.CAMPAIGN` and the
@@ -102,7 +117,7 @@ entry control is not thereby proven. Treat the producer's current Home publicati
 and the entry selector as a prerequisite; do not assume a Campaign portal is usable
 from endpoint mapping alone.
 
-The replay result is recorded in B's
+The replay result is recorded in
 `.local-data/reports/institute_remaining_audit_20260914/results.json` and its
 `replay.py`; it is retained as a Home-publication regression, not a reason to add a
 Home coordinate guess or a second observer.
@@ -114,14 +129,18 @@ operations, not proof of current control geometry or server behavior. Consult
 the scoped note before expanding source inspection; never invoke game-service
 requests to bypass UI evidence.
 
-## Producer dependencies and release acceptance
+## Campaign-owned producer and release acceptance
 
-B owns perception models/IDs, OCR, guards, assets and both production observation
-paths. The following needs are outside the separate authoritative three-item
-Resource-partial/Hero-results/broader-Research handoff
-(`PNC_B_FOLLOWUP_RECOGNITION_HANDOFF.md`). Record them as Campaign-specific producer
-dependencies; do not claim that handoff already schedules Campaign qualification or
-fold these requirements into it.
+The Campaign owner owns the Campaign-specific perception models/IDs, assets,
+bounded OCR/anchors, fixtures, qualification and publication through both
+`ObservationBuilder.build` and `NavigationPerception.build`, together with the
+consumer that decides whether those facts prove a workflow. This scope excludes
+generic vision engines, global guard changes and the Resource, Hero recruitment,
+Gathering march-formation and broader Research families. The existing
+Resource-partial/Hero-results/broader-Research work remains outside this plan;
+Campaign must not wait for or extend it. DailyGo, if an entry path is relevant,
+is only an adapter to this same Campaign workflow and does not create a second
+identity, engine or battle path.
 
 | Required fact | Consumer use | Qualification required before enabling the path |
 |---|---|---|
@@ -131,15 +150,16 @@ fold these requirements into it.
 | Stage-detail Challenge distinct from formation Challenge | Open preparation exactly once | Source-screen-specific actionable control, with competing overlay/premium/label-only negatives |
 | Current Hero Formation identity | Prove preparation was reached | Independent `PNC_HERO_FORMATION` identity for the 0088 layout and its current controls; do not equate it to `PNC_BATTLE_PREP` or copy stage/mode/AP from 0087 |
 | Formation safe return control and actual destination | Finish Home without attack | Qualified current-frame action and saved transition back to stage/map, then existing Home route |
-| Home-to-Campaign entry control | Enter the Campaign map from the shared Home boundary | Both-path Home replay at B `10740eb` published zero spatial building objects; qualify a current Campaign portal/route before relying on `HomeCityObjectId.CAMPAIGN` mapping |
+| Home-to-Campaign entry control | Enter the Campaign map from the shared Home boundary | The recorded both-path Home replay at producer revision `10740eb` published zero spatial building objects; qualify a current Campaign portal/route before relying on `HomeCityObjectId.CAMPAIGN` mapping |
 
-Require a reviewed B release or committed producer slice after B finishes. Compare
-its supplied examples/contracts to the exact consumer needs, replay relevant
-saved frames through both real observation paths and preserve negative guards.
-Do not copy B's dirty worktree, add a consumer parser, alias a mismatched surface,
-or fabricate `mode` metadata in production. If one mode lacks evidence, keep that
-mode explicitly unsupported and leave its requirement open; do not call the full
-policy port complete.
+Implement and review the named Campaign producer slice in the same vertical change.
+Replay relevant saved frames through both real observation paths and preserve
+negative guards. Do not add a consumer parser, alias a mismatched surface, or
+fabricate `mode` metadata in production. If one mode lacks evidence, keep that mode
+explicitly unsupported and leave its requirement open; do not call the full policy
+port complete. A change to a generic OCR, guard or runtime engine is outside this
+plan unless a concrete cross-cutting defect is demonstrated and one focused
+consultation establishes its smallest safe fix.
 
 ## Canonical owners: existing symbols and proposed seams
 
@@ -151,11 +171,22 @@ authorize a second parser, route graph or battle runner:
 | --- | --- | --- |
 | Policy/input | `CampaignPolicy.from_params`, `CampaignMode.STANDARD` and `CampaignMode.ELITE` in `pnc_automation/app/pnc/domain/policy_models.py` | Reuse enabled-mode order and default Standard. Reject missing/unknown mode or eligibility; do not coerce an unobserved mode to Standard. |
 | Legacy selection | `CampaignTask.plan`, `CampaignTask.verify`, `choose_priority_entry`, and `_tap_entry` in `pnc_automation/app/automation/tasks/campaign_task.py` | `CampaignWorkflow` selects one exact observed row and returns a typed `CampaignPreparationResult`; preserve no-candidate skip/unsupported behavior without legacy fallback. |
-| Screen identity | `ScreenType.PNC_CAMPAIGN_MAP`, `PNC_CAMPAIGN_CHAPTER`, `PNC_CAMPAIGN_STAGE`, `PNC_BATTLE_PREP`, and `PNC_HERO_FORMATION` | B publishes independent map/chapter/stage/mode/eligibility and Hero Formation identities. `PNC_HERO_FORMATION` is not an alias for `PNC_BATTLE_PREP`; reconcile the endpoint contract explicitly. |
-| Existing route graph | `campaign_flow_screen_types()`, `NavigationCore.navigate`, `NavigationCore.transition`, and `reviewed_navigation_edges()` (`PNC_CAMPAIGN_MAP -- PNC_CAMPAIGN_HOME_PORTAL -> PNC_HOME_CITY`, chapter Back, stage Close) | Add only stage selection, stage-detail Challenge, preparation confirmation and qualified formation return edges. The Home-to-Campaign entry control needs fresh producer evidence because endpoint mapping alone is insufficient. |
+| Screen identity | `ScreenType.PNC_CAMPAIGN_MAP`, `PNC_CAMPAIGN_CHAPTER`, `PNC_CAMPAIGN_STAGE`, `PNC_BATTLE_PREP`, and `PNC_HERO_FORMATION` | Campaign owns the named Campaign producer profiles, fields and controls in the shared identifier/observation partitions. `PNC_HERO_FORMATION` is not an alias for `PNC_BATTLE_PREP`; reconcile the endpoint contract explicitly and keep Gathering's formation controls separate. |
+| Existing route graph | `campaign_flow_screen_types()`, `NavigationCore.navigate`, `NavigationCore.transition`, and `reviewed_navigation_edges()` (`PNC_CAMPAIGN_MAP -- PNC_CAMPAIGN_HOME_PORTAL -> PNC_HOME_CITY`, chapter Back, stage Close) | Campaign owns only the named Campaign edges and constrained operations: stage selection, stage-detail Challenge, preparation confirmation and qualified formation return. The Home-to-Campaign entry control needs fresh Campaign producer evidence because endpoint mapping alone is insufficient. |
 | Existing core context | `WorkflowContext.navigate`, `WorkflowContext.observe_content`, `CoreWorkflowRunner.run`, and `CoreWorkflowRunner.recover_to_home` | Add typed Campaign selection/preparation/return methods using current-frame content, bounded loading settle and exact source/control checks. No raw tap or `TaskContext` leak into the workflow. |
-| Callers | `TaskRegistry` registers `CampaignTask`; `AutomationApi.campaign`, `AutomationSession.campaign`, and module helper call `run_task`; typed core dispatcher currently has no Campaign branch | Add one `CoreWorkflowTaskDefinition`/factory and migrate direct/authored callers together. The typed binding must have no silent legacy fallback and must stop before formation Challenge/attack. |
+| Callers | `TaskRegistry` registers `CampaignTask`; `AutomationApi.campaign`, `AutomationSession.campaign`, and module helper call `run_task`; typed core dispatcher currently has no Campaign branch | Campaign owns the `TaskId.CAMPAIGN` registry entry, dispatcher branch/factory and direct/authored caller bindings in their named partitions. The typed binding must have no silent legacy fallback and must stop before formation Challenge/attack. Leave other TaskId branches unchanged. |
 | Result/receipt | Legacy `TaskResult` accepts `PNC_BATTLE_PREP` or a route transition as success | Add a typed receipt containing selected chapter/stage, proven mode/eligibility, current preparation screen/layout/frame/artifact and final Home evidence. Preparation evidence remains valid after exit; Home alone is not preparation. |
+
+Campaign's producer partitions are its named entries and fields in
+`screen_type.py`, `ui_element_id.py`, `screen_contracts.py`, `selector_registry.yaml`,
+`screen_anchors.json`, `ocr_region_plan.py`, `observation_request.py`,
+`pnc_observation_enricher.py`, `screen_classifier.py` and `observation.py`, plus
+the corresponding Campaign fixtures, provenance and qualification tests. Its
+consumer partitions are the Campaign methods/edges in `navigation_core.py` and
+`core_workflow.py`, the `TaskId.CAMPAIGN` branches in the registry/dispatcher/API
+and the typed workflow/result modules. This named partitioning lets Campaign own
+the complete vertical in an isolated copy while leaving generic OCR/guard/runtime
+engines and other task families unchanged.
 
 `PNC_CAMPAIGN_BATTLE_BUTTON` is an existing selector whose tested production profile
 is the narrow `campaign_stage_10_3` layout. It is not evidence that the saved 6-5
@@ -167,17 +198,17 @@ attack or preparation control without independent current-frame qualification.
 
 ## Independent qualification scope
 
-B's evidence audit leaves independent positive holdouts missing for 19 changed
-layouts overall. That is a producer qualification queue, not a requirement to replay
+The prior evidence audit leaves independent positive holdouts missing for 19 changed
+layouts overall. That is a Campaign-owned qualification queue, not a requirement to replay
 every historical screen before this Campaign consumer can be reviewed. Campaign
 requires separately reviewed positives for the exact Home entry, chapter/stage and
 mode/eligibility facts, stage-detail Challenge, distinct Hero Formation identity and
 safe return control that the workflow actually consumes, with wrong-screen,
 locked/absent, overlay and unowned-control negatives. Preserve the recorded idle
 Build Queue and Economy idle-detail proofs without rerunning them or treating
-them as Campaign stage or Hero Formation qualification. A correction capture cannot become an untouched holdout
-for the same corrected profile. Record each feature's holdout, both-path result and
-producer revision independently.
+them as Campaign stage or Hero Formation qualification. A correction capture cannot become
+an untouched holdout for the same corrected profile. Record each feature's holdout,
+both-path result and producer revision independently.
 
 ## Remaining implementation sequence
 
@@ -240,9 +271,13 @@ Reuse subsequent return routes. If only arrival can be proven but the return
 control is not qualified, retain the evidence and mark live workflow acceptance
 blocked at exit; do not press the attack control to escape.
 
-Shared files are an exclusive coordinator slot, especially `navigation_core.py`,
-`core_workflow.py`, route registration and policy/result exports. Submit a precise
-patch or wait for that slot; do not race the building, Login or castle agents.
+Shared modules are partitioned by named Campaign symbols, `TaskId.CAMPAIGN`,
+Campaign screen/profile/data keys and Campaign test cases. Campaign owns its
+vertical slices in `navigation_core.py`, `core_workflow.py`, route registration,
+policy/result exports and entrypoints; leave generic engines and other task branches
+unchanged. Work in the assigned isolated copy and keep edits within those named
+partitions. Do not change SELECT_CASTLE/roster semantics, Gathering march
+formation, or unrelated building, Mail/Login and Research symbols.
 
 Acceptance: production navigation selects from fresh facts, reaches preparation
 once and can confirm Home. No operation dispatches formation Challenge or an
@@ -256,7 +291,11 @@ navigation only, after source and current transition evidence support that
 effect. The typed receipt must retain the preparation observation before exit.
 Do not assign resource-changing capability merely to permit an unmodeled action.
 If current evidence shows that an intended navigation action itself consumes AP,
-stop and resolve the changed boundary with the coordinator instead of relabeling it.
+stop and record that concrete capability boundary instead of relabeling it. Consult
+the coordinator only if the smallest fix necessarily changes a generic effect,
+runner, lease or guard contract; a missing Campaign fact remains an explicit blocked
+Campaign slice. DailyGo, if relevant, must call this same preparation workflow and
+must not create a second battle or mutation identity.
 
 Wire `TaskId.CAMPAIGN`, direct application/API callers and authored dispatch to
 the same factory/workflow. Validate policy before connection; reuse exact active
@@ -275,8 +314,9 @@ Use the repository runner and current Python 3.13+, not raw discovery. Begin wit
 the affected Campaign component and new contract module. Existing anchors include
 `tests/unit/app/automation/tasks/test_campaign.py`,
 `tests/integration/vision/test_campaign_visual_profiles.py`, and
-`tests/integration/script_runner/test_typed_core_dispatch.py`. Vision tests remain
-B-owned; A can replay them/read results without editing their recognition contracts.
+`tests/integration/script_runner/test_typed_core_dispatch.py`. Campaign owns the
+producer and qualification assertions for its named profiles in the shared vision
+test/data partitions; generic vision-engine tests remain outside this package.
 
 Required behavioral cases, grouped into existing test owners:
 
@@ -314,9 +354,10 @@ references, and semantic fields. The replay must preserve the following distinct
    coverage.
 
 Any `UNKNOWN`, missing profile, absent mode/eligibility, wrong-screen Challenge,
-overlay, or unowned control is a truthful producer gap and stops the consumer. A
-passing legacy fixture or a manually built observation is insufficient for the
-both-path release gate.
+overlay, or unowned control is a truthful Campaign producer gap and stops the
+consumer. A passing legacy fixture or a manually built observation is insufficient
+for the both-path release gate. Campaign owns producer test edits for its named
+profiles; generic vision-engine tests remain outside this package.
 
 Concrete development commands from the assigned worktree:
 
@@ -344,13 +385,15 @@ There is no unresolved Campaign-specific product question or additional permissi
 request at planning time. The mode, AP, preparation identity and return decisions
 are technical evidence gates; the worker must resolve the current stage from fresh
 observation and stop if it is not qualified.
+The proof may start from a prepared authenticated active-castle session; it does
+not certify fresh Login or alternate-castle switching.
 
 This package does not rebudget the task, run automatic Daily maintenance, merge or
 push to main, use desktop mouse/keyboard control, call a game service directly, or
 perform real-money actions. The live proof stops before formation Challenge and any
 battle/AP spend.
 
-After focused checks and the producer gate pass:
+After focused checks and the Campaign-owned producer gate pass:
 
 1. Resolve `mega_old_acc` and the required live role through configured account
    resolution. Hold the canonical process-scoped lease across entry, workflow,
@@ -382,24 +425,28 @@ observations, navigation trace, preparation receipt, final Home/stop evidence an
 cleanup disposition. Link them from the validation ledger with actual pass,
 blocked or applicability outcome. Do not require private screenshots in Git.
 
-## Completion and handoff to the coordinator
+## Completion and self-contained definition of done
 
-Complete this package only when the requested policy coverage, constrained
-consumer, public/authored migration, fresh offline checks, both-path producer
-replay, one stage-to-preparation receipt, no formation Challenge/attack input, and
-reviewed Home exit pass. Report any remaining mode/surface gap by exact producer
-fact and saved frame; a partial Standard-only slice is useful but is not full
-two-mode contract completion. A production-safe `UNKNOWN`, absent Home entry
-control, or unqualified Hero Formation remains blocked coverage. Leave final A/B
-integration to its separate owner.
+Complete this package only when the requested policy coverage, Campaign-owned
+producer models/IDs/bounded OCR/fixtures and both-path publication, constrained
+consumer, public/authored migration, fresh offline checks, one stage-to-preparation
+receipt, no formation Challenge/attack input, and reviewed Home exit pass. Report
+any remaining mode/surface gap by exact producer fact and saved frame; a partial
+Standard-only slice is useful but is not full two-mode contract completion. A
+production-safe `UNKNOWN`, absent Home entry control, or unqualified Hero Formation
+remains blocked coverage and is not Done. The final combined merge/integration is
+outside this package and is not a prerequisite for its own reviewable completion.
 
-Copyable agent assignment:
+Copyable vertical assignment:
 
-> Execute only PNC_CORE_REMAINING_04_CAMPAIGN_PLAN.md from the coordinator's
-> verified A snapshot. Preserve completed routes and dirty A work. Own Campaign
-> workflow/caller tests; request an exclusive shared-file slot for navigation,
-> context and entrypoint wiring. Consume only qualified producer facts after B's
-> release. Use the canonical runner and, when the gates pass, one leased
-> mega_old_acc proof reaching preparation and returning Home, with no battle
-> start. Existing unlimited in-game authority is retained. Report exact changed
-> files, current test output, preparation/exit evidence and remaining dependencies.
+> Execute PNC_CORE_REMAINING_04_CAMPAIGN_PLAN.md from immutable merged base
+> `6bc27585fbac1244672cf4a653ea6248955a4aca`. Own the Campaign vertical end to
+> end: feature-specific producer models/IDs, bounded OCR/anchors/controls,
+> fixtures and qualification in both observer paths, typed stage/preparation
+> workflow, named caller bindings and tests. Use the canonical runner and, when
+> the gates pass, one leased `mega_old_acc` proof reaching preparation and
+> returning Home, with no battle start. Existing unlimited in-game authority is
+> retained. A prepared authenticated active castle may be used as the starting
+> session; this proof does not certify Login or alternate castle switching. Report
+> exact changed files, current test output, preparation/exit evidence and exact
+> producer gaps. Do not wait for or hand off routine work to another package.

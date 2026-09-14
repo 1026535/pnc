@@ -2,6 +2,25 @@
 
 Date: September 13, 2026. Owner: B, the recognition task.
 
+## Current scope amendment — September 14
+
+B's preceding batch `10740eb` is merged in `6bc2758`. The six independent feature
+packages now own their own required recognition and execution work; they do not
+wait for this handoff. **Institute Home acquisition and Development-specific
+producer corrections transfer to feature 01.** Feature 02 owns build/upgrade
+panels (including Institute upgrade requirements), 03 Gathering/world Search,
+04 Campaign preparation, 05 Mail/Login, and 06 Castle/More/Settings facts.
+
+This separate follow-up retains Resource partial-card recognition, Hero
+summon/result recognition and broader Economy/Military/Fortification Research.
+Preserve the existing Development producer contract while extending broader
+categories, but do not independently redo feature 01's Institute correction.
+Shared container files are partitioned by feature symbols/profile/control keys;
+the [active ownership contract](PNC_CORE_WORKFLOW_PORTING_PLAN.md#six-remaining-agent-packages)
+supersedes the blanket whole-file restrictions below for the six packages.
+Generic vision-engine questions may be consulted occasionally; ordinary feature
+recognition is no longer a B delivery prerequisite.
+
 ## Activation and purpose
 
 The user requested this handoff so B takes complete recognition ownership of these
@@ -38,7 +57,7 @@ below. Full task transcripts and the full extracted game source are unnecessary.
 |---|---|
 | Resource fragment/card facts and action evidence in both production observation paths | Bounded scrolling/reframing, full-inventory completion, single Use, stock/Daily receipts and execution callers |
 | Hero stable result identities, transition evidence, distinct Confirm/Close controls, attempts/cooldown facts | Bounded result traversal/settling, recruitment policy, cooldown orchestration, durable reconciliation and execution callers |
-| Research category/node/detail/requirements/queue facts, including the missing Institute entry evidence | Category/node selection policy, navigation edges, Start eligibility enforcement, mutation journal and caller integration |
+| Research category/node/detail/requirements/queue facts, excluding Institute Home acquisition, now owned by feature 01 | Category/node selection policy, navigation edges, Start eligibility enforcement, mutation journal and caller integration |
 
 Use the existing vision owners and whole-file ownership in
 [A/B coordination](PNC_AB_COORDINATED_CONTINUATION.md). A's runtime, navigation,
@@ -165,20 +184,16 @@ screens alone, and visible blue Research does not establish an idle queue.
   where displayed, and independent idle/busy/active/completed queue/detail facts.
   An unmet requirement must be distinguished from a satisfied Requirement heading;
   an empty field or merely visible Start cannot imply eligibility or completion.
-- Close the reproduced Institute entry dependency within this Research slice:
-  after Research Queue Go, A's saved Home frame visibly shows Institute but both
-  builders publish zero Institute objects and OCR returns no Institute line.
-  Correct the existing Home building identity/observed-action publication using
-  supported visual evidence. The focus arrow or expected camera position alone
-  cannot authorize a guessed building tap; no new YOLO discovery is requested.
+- Reuse feature 01's Institute acquisition contract. Its saved failure evidence
+  below remains a useful reference, but correcting or qualifying that entry is
+  no longer a deliverable of this separate broader-category handoff.
 
 **Acceptance:** replay the existing category variants and add the missing
 tree-node/queue cases through both real production builders, with sufficient
 saved evidence for each category's newly supported facts. Cover normal/premium,
 idle/busy, active/Start suppression, satisfied/unmet and ambiguous/missing-node
-distinctions where they affect this contract. The Institute failure frame must
-produce one correct Institute identity with valid evidence/geometry, or B must
-report the exact remaining producer limitation. Document which facts allow A to
+distinctions where they affect this contract. Institute entry acceptance belongs to feature 01 and cannot block this broader
+producer qualification. Document which facts allow the broader Research consumer to
 add an idle-queue predicate; implementing that workflow predicate remains A's job.
 Do not claim a new research has started from a screenshot-only qualification.
 

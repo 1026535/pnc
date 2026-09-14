@@ -1,17 +1,34 @@
 # Remaining package 05 — Mail sending and Login
 
 Planning snapshot: September 14, 2026. This package contains the original A08
-Send Mail and A03 Login remainders. They share one delegated caller agent and
-entrypoint coordination, but have separate implementations and acceptance gates.
-Read the [six-package coordination contract](PNC_CORE_WORKFLOW_PORTING_PLAN.md#six-remaining-agent-packages).
-Status: offline contract/source work can proceed; Mail live Send needs the user's
-recipient kind/name/kingdom and exact subject/body, and Login needs the intended
-sign-in method plus qualified observations for that route. These decisions have
-been asked and remain pending with the coordinator. The published B checkpoint
-already fixes the Compose field interiors and both observer paths' requested-only
-field behavior, including exact body spaces and punctuation; it contains no send
-or delivery receipt. The native provider route is email-only with Log In, which
-is a separate contract from the legacy username/password/Continue route.
+Send Mail and A03 Login remainders. They share one vertical owner and entrypoint
+surface, but have separate implementations and acceptance gates. Read the
+[independent package contract](PNC_CORE_WORKFLOW_PORTING_PLAN.md#six-remaining-agent-packages)
+for shared scope only; this plan's named Mail/Login partitions govern its feature
+files and symbols. The execution base is the immutable merged revision
+`6bc27585fbac1244672cf4a653ea6248955a4aca`; do not rely on a dirty predecessor
+or wait for a peer release.
+Status: implementation may proceed; Mail live Send needs the user's recipient
+kind/name/kingdom and exact subject/body, and Login needs the intended sign-in
+method plus qualified observations for that route. These are direct user inputs
+that this package must request when needed. The saved Compose checkpoint already
+fixes the field interiors and both observer paths' requested-only field behavior,
+including exact body spaces and punctuation; it contains no send or delivery
+receipt. The native provider route is email-only with Log In, which is a separate
+contract from the legacy username/password/Continue route.
+
+### Saved evidence locations
+
+Historical ignored `core_resume/` evidence resolves under
+`C:/Users/lebel/pnc/.local-data/worktrees/workflow-recognition-integration/.local-data/artifacts/`.
+Historical B `.local-data/reports/` diagnostics resolve under
+`C:/Users/lebel/pnc/.local-data/worktrees/non-yolo-recognition-continuation/.local-data/reports/`.
+Other numbered capture paths use the exact roots in the linked capture-findings
+record. Read these saved artifacts in place; they are not copied into a new
+feature worktree. Tracked fixtures arrive with the merged base. Put this feature's
+new captures, replays and reports under its own ignored `.local-data/` and test
+selection under `.test-impact/`. Missing historical evidence is reported with its
+exact source path, never replaced by a guessed current screen or invented result.
 
 ## Outcome and existing boundaries to preserve
 
@@ -33,11 +50,10 @@ or reuse an unrelated Daily mutation capability for authentication or messaging.
 
 ## Required starting evidence and code map
 
-Use the coordinator's verified snapshot of
-`codex/workflow-recognition-integration`. Planning HEAD is
-`4f332027e924a9f73e3e3740d92980d8950ddae1` with completed uncommitted A code/tests.
-Do not start from that hash alone or reset existing changes. Inspect status and the
-supplied manifest, root/scoped `AGENTS.md`, applicable skills and
+Use immutable merged base
+`6bc27585fbac1244672cf4a653ea6248955a4aca` in the assigned isolated copy. Record
+the revision and clean-start status; there is no dirty A baseline to preserve and
+no peer release to await. Read root/scoped `AGENTS.md`, applicable skills and
 [CORE_WORKFLOW_PORTING](../instructions/CORE_WORKFLOW_PORTING.md).
 
 | Area | Existing canonical owner or evidence to inspect |
@@ -69,25 +85,25 @@ After the user names the method, inspect only its relevant UI/callback chain and
 record a scoped source note if it establishes reusable behavior. Never dump login
 payloads, tokens, credential values or the entire extracted source.
 
-The clean B audit at commit `10740ebb9b8d9d43fc24f970b904796ca41bd082` is a
-producer checkpoint, not an A consumer acceptance result. Its saved Compose
-replay exercises both `ObservationBuilder` and `NavigationPerception` paths and
-qualifies the centered Compose identity, field interiors and actionable Send
-control without dispatching Send. The separate
-`PNC_B_FOLLOWUP_RECOGNITION_HANDOFF.md` remains authoritative only for its
-Resource-partial, Hero-results and broader-Research/Institute follow-up slices;
-those slices must not be folded into this Mail/Login plan.
-Use that saved producer evidence first; do not repeat a proven recognition
-mutation merely to qualify a Mail or Login consumer.
+The saved producer audit at commit `10740ebb9b8d9d43fc24f970b904796ca41bd082`
+is retained as evidence, not as a handoff or consumer acceptance result. Its
+saved Compose replay exercises both `ObservationBuilder` and
+`NavigationPerception` paths and qualifies the centered Compose identity, field
+interiors and actionable Send control without dispatching Send. Mail/Login owns
+any additional feature-specific producer corrections, models, bounded OCR,
+fixtures and qualification needed by the current contract. Generic vision
+engines and the Resource-partial, Hero-results and broader-Research/Institute
+families remain outside this plan. Use saved evidence first; do not repeat a
+proven recognition mutation merely to qualify a consumer.
 
 ## Questions and permission ledger
 
 | Decision or action | Current status | Agent handling |
 |---|---|---|
 | Live BlueStacks API tests on `mega_old_acc`, necessary in-game actions and resource costs | Granted by latest user request, unlimited in-game budget | Record it in the run manifest. Do not ask again for a resource cap. Use the smallest proof needed. |
-| Exact Mail recipient and subject/body | Asked; pending; root-coordinated | Root obtains the recipient kind, exact name and kingdom, and approved subject/body before Send. Prefer another character owned by the user, not the active sender: the inspected client rejects self-send. Do not invent a nonce or change approved text silently. |
-| Alliance broadcast, if chosen for a live proof | No exact audience/payload supplied; root-coordinated | Require the actual alliance audience and exact message before broadcasting. A player-mail answer is not an alliance-send instruction. Offline alliance coverage can proceed. |
-| Intended Login method for `mega_old_acc` | Asked; pending; root-coordinated | Record the named method when supplied, without sending credentials. Do not silently replace the legacy username/password contract with an email-only flow. |
+| Exact Mail recipient and subject/body | Asked; pending; this package asks the user directly | Obtain the recipient kind, exact name and kingdom, and approved subject/body before Send. Prefer another character owned by the user, not the active sender: the inspected client rejects self-send. Do not invent a nonce or change approved text silently. |
+| Alliance broadcast, if chosen for a live proof | No exact audience/payload supplied; this package asks the user directly | Require the actual alliance audience and exact message before broadcasting. A player-mail answer is not an alliance-send instruction. Offline alliance coverage can proceed. |
+| Intended Login method for `mega_old_acc` | Asked; pending; this package asks the user directly | Record the named method when supplied, without sending credentials. Do not silently replace the legacy username/password contract with an email-only flow. |
 | Provider consent, email-link/code or MFA interaction if required by that method | Conditional on discovered real route | Request the exact needed user interaction at that point. Keep secret entry in the configured secure channel or user-operated UI; do not put secrets in chat/docs. |
 | Controlled logout/sign-in on the same named account | In-game authority granted; recovery route must first be concrete | Prove the supported method and availability of configured credentials/operator step before disrupting the current session. A second account is outside the named target. |
 | Adding live roles, changing credentials/account configuration, enabling automatic Daily, merge/push | Not part of this planning or implementation package | Report the exact separate change if it becomes necessary. Never change config merely to pass a role/identity guard. |
@@ -96,9 +112,26 @@ These missing details gate only the dependent live action/contract. They do not
 block repository inspection, deterministic validation design or supported Mail
 navigation work. If the user answers during execution, record the answer here
 or in a linked nonsecret run manifest and continue without repeating the question.
-Root is coordinating these already-asked choices, including the alternate target
-decision used by package 06. This package must not ask for the same three pending
-user details again or infer a recipient, payload, provider method or test audience.
+This package owns these already-identified user questions and must ask for the
+missing details directly when the dependent live action or contract is reached.
+Do not infer a recipient, payload, provider method or test audience. The alternate
+castle target and SELECT_CASTLE semantics belong to package 06, but this package
+does not wait for or jointly edit that behavior.
+
+The vertical write boundary is explicit. Mail owns `SendMailParams`, send-specific
+matching/receipt helpers and the `MailRecipientKind`/profile-route partitions;
+Login owns its provider contract, identity result and `TaskId.LOGIN` lifecycle
+behavior. Mail/Login owns only the named Mail/Login entries and profile/data keys
+in `screen_type.py`, `ui_element_id.py`, `selector_registry.yaml`,
+`screen_anchors.json`, `ocr_region_plan.py`, `observation_request.py`,
+`pnc_observation_enricher.py`, `screen_classifier.py` and `observation.py`, with
+fixtures and qualification tests for both observer paths. It also owns the named
+Mail/Login methods in `navigation_core.py`, `core_workflow.py`,
+`core_script_dispatcher.py`, `script_runner.py`, the registry and entrypoints.
+Generic OCR/guard/runtime/lease/recovery engines stay unchanged. `TaskId.SELECT_CASTLE`,
+castle-roster scanning, current-castle selection and synthetic optional-task
+alignment retain their existing package 06 semantics; Login may consume their
+post-authentication result but never introduces a second scanner or selector.
 
 ## M1 — Close the Mail contract and producer gate
 
@@ -107,15 +140,16 @@ exactly one of `player_name` or `profile_route`; route kinds are player territor
 chat message, alliance member and Might Rank. Preserve this finite public contract.
 The current `SendMailParams` fields are `recipient_kind`, `player_name`,
 `profile_route`, `subject` and `body`; kingdom is not currently represented.
-Before enabling a live player send, root must resolve whether kingdom is supplied
-by the selected `PlayerProfileRoute` or becomes an explicit contract field. Do
-not smuggle kingdom through a name, fixture or matcher default.
+Before enabling a live player send, this package must resolve whether kingdom is
+supplied by the selected `PlayerProfileRoute` or becomes an explicit contract
+field. Do not smuggle kingdom through a name, fixture or matcher default.
 For each route identify the existing typed navigation support and qualified
 profile/Compose producer. Implement supported routes first; mark any unqualified
 original route explicitly blocked, not silently omitted from package completion.
 
-B owns the following producer requirements. They are **additional dependencies**,
-not part of the separate Resource/Hero recruitment/broader-Research handoff:
+Mail/Login owns the following feature-specific producer requirements as part of
+this vertical package. They are outside the Resource/Hero recruitment and
+broader-Research families, whose generic or unrelated work remains out of scope:
 
 - Independent correct mailbox, player profile and Compose identities, requested
   recipient kind, actionable fields/Send and visible field state after editing.
@@ -162,8 +196,10 @@ typed error/result conventions; do not add a generic transaction framework.
 Use a Home-to-Home `NONSPENDING_STATE_CHANGE` workflow. Extend `WorkflowContext`
 and the canonical navigation/action owner only with the constrained operations
 this flow needs. No raw executor, workflow-local OCR, clipboard automation or
-fixed-coordinate route is allowed. Shared-file edits require the coordinator's
-exclusive slot.
+fixed-coordinate route is allowed. Mail/Login owns the named Mail methods and
+their feature partitions in shared modules; leave generic OCR, guard, runtime,
+lease and recovery engines unchanged unless a concrete cross-cutting defect
+requires one focused consultation.
 
 Execution order and observable acceptance:
 
@@ -214,12 +250,11 @@ unsupported outcomes with open plan items, rather than hidden legacy fallback.
 
 Acceptance: direct and authored sends have the same target/receipt/no-replay
 semantics and typed output, and no caller promotes Compose closure to success.
-The coordinator remains the single editor for shared lifecycle, dispatcher,
-runner and API boundaries while B publishes the independent observer producer
-facts. Mail-domain tests and route-contract review can proceed in parallel with
-package 06's roster consumer tests; shared caller edits serialize after both
-producer contracts are recorded. The final integrated core gate is root's
-separate tenth item.
+Mail/Login owns its named `TaskId.SEND_MAIL` registry/dispatcher/API/session/module
+bindings and feature tests. `TaskId.SELECT_CASTLE`, roster scanning and synthetic
+optional-task alignment remain package 06's unchanged semantics; Mail/Login may
+consume the active identity they provide but does not add a second scanner or
+selection path. The final integrated core gate is outside this package.
 
 ## L1 — Specify the actual Login contract before changing credentials flow
 
@@ -245,11 +280,13 @@ may support comparison but cannot replace a fresh account/selected-character fac
 If the product only needs an accessible existing session for one caller, name
 that narrower result explicitly instead of claiming account authentication.
 
-Producer gate: B must qualify the actual native/provider screen identities,
-fields and safe controls, loading/overlays, and the evidence needed for expected
-account verification. Raw account captures 0199–0202 remain ignored and private.
-They cannot become portable fixtures until sanitized without invalidating the
-assertion. This authentication surface is not covered by the three-item B handoff.
+Producer gate: Mail/Login must qualify the actual native/provider screen
+identities, fields and safe controls, loading/overlays, and the evidence needed
+for expected account verification. Raw account captures 0199–0202 remain ignored
+and private. They cannot become portable fixtures until sanitized without
+invalidating the assertion. This package owns the Login-specific models/IDs,
+bounded OCR/anchors, fixtures and both observer-path publication needed for this
+route; generic vision engines remain outside its scope.
 
 Acceptance: the intended provider contract and success evidence are concrete,
 secrets remain in the existing secure configuration path, and missing producer or
@@ -290,14 +327,16 @@ automated login proof.
 Acceptance: bounded lifecycle handles a supported known logged-out route and an
 already-signed-in route without circular preflight or false account success.
 
-## L3 — Migrate Login/preparation callers with package 06
+## L3 — Migrate Login/preparation callers without changing castle selection
 
 Update default `TaskId.LOGIN`, authored dispatch, direct/session preparation
 helpers and generated `_prepare_account_session_steps` to use the typed lifecycle.
 Preserve the intentional ordering: game readiness, account/session verification,
-then explicit castle selection where requested. Package 06 owns exact castle
-selection, roster identity and common navigation fixes; coordinate one shared-file
-patch instead of editing `script_runner.py` concurrently.
+then explicit castle selection where requested. Mail/Login owns the Login branch and
+`_prepare_account_session_steps`; `TaskId.SELECT_CASTLE`, roster identity and
+synthetic optional-task alignment retain package 06's unchanged semantics. Do not
+add a second roster scanner or selection path, and do not wait for or jointly edit
+package 06's implementation.
 
 Validate unsupported provider/missing configuration before attempting the dependent
 action. Do not force credential availability for a valid already-signed-in proof
@@ -316,9 +355,9 @@ Mail anchors: `tests/unit/app/automation/tasks/test_send_mail_confirmation.py`,
 canonical parameter/API tests; typed core workflow and script dispatch contracts.
 Retain meaningful old cases while replacing legacy retry expectations.
 
-Before accepting the Mail consumer, replay the saved B Compose fixtures through
+Before accepting the Mail consumer, replay the saved Compose fixtures through
 both actual observer paths (`ObservationBuilder` and `NavigationPerception`) with
-actual RapidOCR and normal bounded semantic requests. A passing vision group
+actual RapidOCR and normal bounded semantic requests. A passing producer group
 containing injected-OCR tests alone is not that replay. Assert independent Compose identity, requested-only
 recipient/subject/body interiors, exact body spacing/punctuation, fresh Send
 control and guard provenance. Keep this as an offline no-send replay; it cannot
@@ -343,7 +382,9 @@ Login anchors: `tests/unit/app/automation/tasks/test_login_navigation.py`,
 `test_login_identity.py`, `tests/integration/vision/test_login_observation.py`,
 `tests/integration/script_runner/test_typed_core_dispatch.py`,
 `test_castle_target_preparation.py` in that directory, and runner/API preparation
-tests. B owns recognition test changes; A owns identity consumption and callers.
+tests. Mail/Login owns recognition and consumer test changes for its named
+profiles, fields, lifecycle and callers; generic vision-engine tests and
+SELECT_CASTLE/roster implementation tests remain outside this package.
 
 Required Login cases:
 
@@ -360,13 +401,13 @@ Required Login cases:
 - Typed generated preparation orders lifecycle before an explicitly requested
   castle selection and neither reconnects nor closes the borrowed runtime.
 
-Run the narrow new workflow contract groups as documented when adding them, then
-the repository affected selection for the current candidate. Example commands:
+Run the narrow new producer/workflow contract groups as documented when adding
+them, then the repository affected selection for this package. Example commands:
 
 ```powershell
 & 'C:/Users/lebel/AppData/Local/Programs/Python/Python313/python.exe' tools/run_tests.py group unit.app.automation.tasks
-# Add this producer group when its implementation/fixtures change; record the
-# actual RapidOCR both-path replay separately from controlled-parser tests.
+# Record the actual RapidOCR both-path replay separately from controlled-parser
+# tests when Mail/Login producer fixtures or models change.
 & 'C:/Users/lebel/AppData/Local/Programs/Python/Python313/python.exe' tools/run_tests.py group integration.vision
 & 'C:/Users/lebel/AppData/Local/Programs/Python/Python313/python.exe' tools/run_tests.py group integration.script_runner
 & 'C:/Users/lebel/AppData/Local/Programs/Python/Python313/python.exe' tools/run_tests.py group api
@@ -376,13 +417,14 @@ git diff --check
 
 Let `affected` require its full fallback for shared/public contracts when necessary;
 do not duplicate a passing final gate. Record actual counts/skips/failures on the
-new code, not the historical A suite or B's separate results.
+new code, not historical results from another revision.
 
 ## Live proof M — One approved, correlated Mail send
 
 Run after Mail producer/consumer checks pass and the user supplies the exact
-recipient kind/name/kingdom and payload. Root supplies the already-pending choice;
-do not invent a test audience or ask again in this package. Resolve `mega_old_acc`
+recipient kind/name/kingdom and payload. This package asks the user directly for
+that already-pending choice; do not invent a test audience or alter approved text.
+Resolve `mega_old_acc`
 and the required configured live role,
 hold the process-scoped canonical lease across all dependent steps and use the
 active castle. Prefer one approved player send as the representative send proof;
@@ -392,9 +434,9 @@ acceptance and the user supplies its audience/message. Do not send once per API.
 Capture exact identity, recipient, relevant current baseline and Compose fields.
 Invoke the migrated production caller, send once, collect the correlated receipt
 and return Home. A unique user-approved test payload simplifies proof but cannot
-be inserted without approval. A receipt is not currently proven by the B Compose
-checkpoint, so the live run must retain the pre-send baseline and correlate a
-new recipient-matching message. If the action's result is uncertain, stop and
+be inserted without approval. A receipt is not currently proven by the saved
+Compose checkpoint, so the live run must retain the pre-send baseline and correlate
+a new recipient-matching message. If the action's result is uncertain, stop and
 inspect existing evidence; do not repeat Send. Do not clear Campaign progress or
 change the recipient to evade an observed gate. Record that applicability
 condition.
@@ -434,23 +476,51 @@ in chat or artifacts. Save redacted before/after observations, action count,
 proof strength, last screen, `summary.json`, `stop.json`, `cleanup.json` and
 cleanup result under `.local-data/artifacts/core_ports/login/<run-id>/`.
 
-## Completion and copyable assignment
+## Completion and self-contained definitions of done
 
 Report Mail and Login separately as implemented/offline passed/live passed or
 blocked, with exact remaining route/producer/user decision. Package completion
-requires the intended original Mail routes and specified Login method, actual
-typed callers, meaningful current checks and each material live boundary. A Mail
-send pass does not close Login, and existing-session verification does not close
-fresh authentication. Final A/B integration remains outside this package.
+requires both component definitions below plus one reviewable vertical change from
+the immutable base. A blocked producer, missing user input or unavailable live
+boundary is not Done.
 
-> Execute PNC_CORE_REMAINING_05_MAIL_LOGIN_PLAN.md from the coordinator's verified
-> A snapshot. Preserve completed collection/readiness and dirty A work. Own only
-> Mail-send/Login consumers and their tests; coordinate shared navigation,
-> lifecycle, script runner and API files with packages 04/06 and the coordinator.
-> Begin independent source/contract/offline work now, and gate Send on the user's
-> exact recipient kind/name/kingdom, subject/body and authentication on the
-> specified method. Retain
-> mega_old_acc's unlimited in-game authorization without asking for another
-> budget. Use only qualified recognition, canonical API/lease/input, one-send
-> semantics and truthful identity/receipt evidence. Report separate Mail and
-> Login results, unanswered questions, exact validation commands and dependencies.
+Mail is Done only when the supported original player/alliance/profile routes use
+the feature-owned producer models/IDs, bounded OCR/anchors, fixtures and both
+observer-path publication; one typed compose/send/verify workflow; direct,
+authored and helper parity; strict target/field/current-identity checks; exactly
+zero or one Send dispatch with an explicit uncertain disposition; meaningful
+before/after recipient-correlated receipt; canonical Home exit; focused offline
+checks; the actual RapidOCR both-path no-send replay; and one approved
+`mega_old_acc` live send when the user has supplied the exact recipient and
+payload. A Compose close, toast or old matching thread is not a receipt.
+
+Login is Done only when the specified provider method has feature-owned screen and
+control models, bounded OCR/anchors, fixtures and both observer-path publication;
+typed lifecycle behavior for logged-out and already-signed-in routes; truthful
+readiness, active-character and expected-account evidence; sensitive input
+redaction; no generic retry or credential resubmission; direct/authored/generated
+preparation parity through `_prepare_account_session_steps`; unchanged
+`SELECT_CASTLE` semantics after authentication; focused offline checks; and the
+controlled same-account live proof when the user has supplied the method and any
+required secure operator step. Existing-session verification does not close fresh
+authentication.
+
+The overall package is Done only when both component results are reported
+separately with exact changed files, validation counts/skips/failures, live
+artifacts and remaining route/producer/user decisions. Final combined merge or
+integration is outside this package and is not a prerequisite for its own
+reviewable completion.
+
+> Execute PNC_CORE_REMAINING_05_MAIL_LOGIN_PLAN.md from immutable merged base
+> `6bc27585fbac1244672cf4a653ea6248955a4aca`. Own Mail and actual Login
+> vertically end to end: feature-specific producer models/IDs, bounded
+> OCR/anchors/controls, fixtures and qualification in both observer paths, typed
+> workflows, named navigation/lifecycle/caller bindings and tests. Ask the user
+> directly for the exact Mail recipient kind/name/kingdom and subject/body and
+> the intended Login method; never invent them or put credentials in chat or
+> artifacts. Retain `mega_old_acc`'s unlimited in-game authorization, use only
+> the canonical BlueStacks API/lease/input, and enforce one-send and truthful
+> identity/receipt evidence. Use unchanged `SELECT_CASTLE` semantics after Login;
+> do not wait for or hand off routine work to package 06, Campaign or a generic
+> vision owner. Report separate Mail and Login results plus the overall package
+> result, exact validation commands and every material blocker.

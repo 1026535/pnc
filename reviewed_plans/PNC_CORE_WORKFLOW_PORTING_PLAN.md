@@ -1,6 +1,40 @@
-# A workflow implementation restart — September 13, 2026
+# Core workflow port — independent remaining packages
 
 ## Current purpose and execution boundary
+
+The September 14 instruction makes the six feature plans independently executable.
+Each feature agent owns its required observation facts, navigation, canonical
+operation, direct/authored/Daily entry adapters where applicable, tests and live
+acceptance. Continue core and Continue non-YOLO provide occasional consultation
+for a specific cross-cutting question; neither supplies a routine approval,
+producer release, shared-file edit or definition-of-done gate.
+
+The published A/B merge is `6bc27585fbac1244672cf4a653ea6248955a4aca` on
+`codex/workflow-recognition-integration`. It contains A `5c1cb92` and B `10740eb`.
+This planning work fast-forwarded the clean existing feature worktree to that
+already-published merge. The dirty main checkout was not changed. Old dirty
+`4f33202` starting instructions and wait-for-B/whole-file rules below are history.
+Use the [six independent packages](#six-remaining-agent-packages) as the active
+execution and ownership contract.
+
+**User's action model:** buildings owns construction/upgrade mutation identity
+both inside and outside Daily; Gathering owns gathering identity both inside and
+outside Daily. Daily Go is an alternative entry route into the same action. It
+must not create a second executor, action identity, journal or budget. There is
+no separately coordinated common-mutation prerequisite. Each feature implements
+its own typed identity and necessary integration with the existing canonical
+journal/dispatcher, preserving existing receipts.
+
+Only planning documents change in this revision. A feature is done when its own
+implementation and required acceptance pass; other feature branches and their
+later combined integration need not be finished. A missing producer owned by the
+feature is remaining implementation, not a reason to wait for B. Missing external
+user input or unavailable live evidence remains an explicit incomplete result.
+
+## Historical continuation evidence — September 13
+
+The following records preserve the earlier sequence, authority and receipts.
+They do not assign current file ownership or require repeating completed work.
 
 Current continuation resumes the September 13 20:20 UTC handoff's STOP in the
 existing integration worktree. Branch `codex/workflow-recognition-integration`
@@ -125,7 +159,7 @@ supported offline implementation after the integration checkpoint below; unsuppo
 producer dependencies remain parked. This document's publication does not itself send
 or resume a task. A uses it when the user delivers the restart instruction.
 
-Keep [whole-file ownership](PNC_AB_COORDINATED_CONTINUATION.md#exclusive-whole-file-ownership):
+The historical [whole-file ownership](PNC_AB_COORDINATED_CONTINUATION.md#exclusive-whole-file-ownership) was:
 A owns workflows/navigation, runtime composition, canonical action/mutation boundaries and
 consumer tests; B owns vision, perception models/IDs, assets/catalogs, parsers, both observation
 paths and vision tests. YOLO and map-object integration belong to their separate active tasks.
@@ -250,252 +284,216 @@ not D01's new Daily capabilities or release/scheduler work.
 
 ## Remaining original work, separated by dependency
 
-This split supersedes the earlier blanket implication that all remaining caller
-work must wait for B. Ownership and dependency differ: A owns all consumer work
-below, but only some of it needs new recognition. An independently implementable
-slice still needs its own proportionate checks and any material live acceptance.
+The earlier A/B execution split is replaced by feature ownership. Preserve all
+completed ports and receipts. These six plans contain the original remaining
+work; they neither reduce the nineteen-building remainder nor silently add full
+Campaign battle execution, automatic Daily scheduling or unrelated YOLO work.
 
-### A can implement or close independently of a new B release
-
-| Original work | Concrete deliverable | Acceptance and limit |
-|---|---|---|
-| A14 / X01: Development Research callers | Bind the existing Development-only `ResearchWorkflow` to the required direct/authored caller path through the existing exact target, authorizer, checkpoint and journal. Resolve the caller's missing mutation context in A-owned composition. | Existing Development producers, normal Start and strict active-detail receipt are available. Reject other priorities and missing/mismatched authority before connection; test typed result/lease ownership and no replay. One supported normal Start proof is the live acceptance gate for the changed caller. Broader categories remain separately blocked below. |
-| A17 / X01: Hero reconciliation-only caller | Give the existing-intent reconciliation operation an explicit entry point that cannot create or dispatch a new increment; use it for the core/canary reconciliation path on an already supported clear Hero screen. | `run_hero_hall_canary.py` currently calls `HeroHallRecruitmentExecutor.execute` in reconcile-only mode; that method can continue after reconciliation/cooldown. Reuse the canonical reconciliation/dispatcher, validate exact identity and durable checkpoint, and test no new mutation intent or recruit tap for expired cooldown, already committed and ambiguous cases. Preserve the current CLI's absence of new-spend authority. The saved five-to-four receipt supports this contract; no new recruit is needed for offline proof. Automatic result dismissal is still blocked below. |
-| A11: required building endpoint inventory | Finish the finite mapping from original open-building callers to the catalog, current independent screen publication and reviewed return edges. Close already supported mappings and name each remaining missing endpoint. | Reuse `OpenBuildingWorkflow`, `NavigationCore.open_building` and `_require_reviewed_building_route`. Only add a route if its existing producer and saved transition evidence already support it. An inventory is a completed planning deliverable, not completion of every unmodeled building. Do not expand to every catalog object. |
-
-For these slices, use focused consumer/entrypoint tests and the repository's
-affected selection. X02 review and integration of A-only changes can proceed
-without B; the current `4f33202` integration gate is already complete and should
-not be rerun unchanged. A later combined B release needs a new proportional gate.
-
-### A can prepare now, but these execution paths need B before completion
-
-Preparation means identifying existing policy/caller contracts, inspecting saved
-frames or package source, and defining exact receipts. Do not create placeholder
-workflows, mocked-only success paths or a generic mutation framework to fill this
-bucket. Resource/Hero source and receipt evidence is already recorded; repeating
-their live actions is not remaining preparation.
-
-| Original work | B must publish or qualify | A implements once that dependency is met |
-|---|---|---|
-| A17 Resource Item | Visible edge fragments retained, accurate CLIPPED versus unreadable status, complete item/count/action evidence in both observation paths; an actionable unselected Resource tab if that entry state is required. | Bounded reframing/full-inventory traversal, exact single Use and stock/Daily receipts, then execution/canary caller migration. Do not ignore partial rows. |
-| A17 Hero Hall automatic execution | Summon/result identities and safe, distinct Confirm/Close controls, separate from paid Recruit. | Bounded result traversal, fresh attempts/cooldown receipt, remaining five-single Daily acceptance and execution caller migration. The completed manual single is not replayed. |
-| A14 Research beyond Development | Qualified category/tree/node content, eligible normal controls, busy/active/completed details for the additional categories. | Category navigation and the existing Research policy/callers through the same mutation boundary. Visible blue Start with no idle queue remains ineligible. |
-| A12/A13 Construction and upgrade | Independent endpoint/build-menu identity, normal versus premium controls, unmet requirements, queue state and target level/other actual completion receipt. | Port the existing prerequisite/queue policy, exact typed mutation capability and caller bindings. Empty queue alone does not prove a new level; satisfied Requirement is not an unmet blocker. |
-| A11 Unmodeled required building endpoints | The missing endpoint's independent identity/control evidence and observed return destination identified by the A11 inventory. | Extend the existing bounded building route; no generic-success fallback. |
-| A15 Gathering | Available march slots and a correlated dispatch/collection receipt; required target/occupancy/formation facts must be reliable in production. | Existing target/formation/dispatch workflow and exact mutation bridge. Troop/load capacity is not slots; cavalry/search policy and YOLO remain outside this port. |
-| A16 Campaign endpoint | Mode/eligibility facts needed by the original policy, and separate battle-preparation identity/control/content. Current chapter/stage fixtures omit mode and do not qualify arbitrary stages. | Port the original stage-selection-to-battle-preparation behavior and its callers. Retain existing entry/return routes; do not promote earlier stage data to current formation content or add battle automation/global AP cost. |
-| A08 Send Mail | Complete compose/recipient/body current-screen contracts and a meaningful send receipt. | Typed compose/send and direct/authored parity through the existing shared owners. The corrected Compose button alone does not prove delivery. |
-| A03 Login | Independent facts for the actual intended native/provider login route and overlays. | Typed login/preparation/caller migration once that route is specified. The captured email-only form cannot stand in for legacy password/Continue controls. |
-| A04 / shared preflight defects | Correct exact selected-name publication for `0 stickerNPC` versus `0 sticker NPC`, and the demonstrated More-to-Settings action geometry. | Consume qualified facts through existing navigation; preserve exact matching and avoid workflow-local coordinate overrides. NPC 2 success does not qualify the mismatched identity. |
-
-### Other prerequisites are not B implementation work
-
-- A04's remaining alternate-castle switch/return proof needs an explicitly named
-  target/round trip and a responsive supported UI. Do not count it as a new port
-  or infer target selection from an unlimited resource budget.
-- A08 live sending additionally needs an exact authorized recipient and message.
-- A03 needs agreement on the intended current login route before changing the
-  old credential contract; proof may require user-operated native UI.
-- Existing supported route checks can use canonical BlueStacks API evidence;
-  use observed API input for inspection and request manual input only when BlueStacks is unresponsive. Inspection workarounds do not qualify a production selector. Required
-  readiness/identity failure blocks that live run, not independent offline code.
-
-Completed A01/A02, A05-A07, A09/A10 and already accepted A04/A11 slices remain
-complete. Do not manufacture more work or repeat their proofs. Automatic Daily,
-scheduling, new Daily capabilities and full Campaign battles remain D01's scope.
+| Remaining scope | Owner that implements and accepts it |
+|---|---|
+| Development Research, including missing Institute Home acquisition | 01, including its producer correction, route, caller and one-Start receipt |
+| Nineteen remaining building endpoints, construction and upgrade policies | 02, including visual facts, normal/optional branches, feature action identities and direct/Daily entry parity |
+| Gathering target/slots/formation/march correlation, World Search dialog and execution | 03, including feature action identity, Stone policy and direct/Daily entry parity |
+| Campaign stage selection through formation and return | 04, including stage/preparation producers and callers |
+| Mail send and actual Login/session preparation | 05, including producers, exact new-send receipt and authentication proof |
+| Exact alternate-castle round trip and More/Settings | 06, including roster/control producers and navigation |
+| Resource partial cards, Hero result sequence and broader Research | Existing separate follow-up; none is a prerequisite for completing 01–06 |
+| Combined integration of independently accepted features | Later integration activity; not a feature's definition of done |
 
 ## Six remaining agent packages
 
-This is the user's requested split of the six A work packages after separating
-the three [B follow-up recognition packages](PNC_B_FOLLOWUP_RECOGNITION_HANDOFF.md)
-and final integration. The six are work packages, not six equally sized tasks or
-six completely independent implementation streams. In particular, Mail/Login
-contains two acceptance boundaries, and buildings contains the finite original
-endpoint and construction/upgrade remainder.
+Each plan is a complete assignment to one accountable feature agent. That agent
+may delegate cohesive implementation work, but retains its own diagnosis,
+ownership decisions, review and acceptance. No feature agent waits for another
+feature agent to finish, hand back files, approve tests or run its live proof.
 
-| Package | Detailed remaining implementation and validation plan | Value and completion boundary |
+| Package | Saved plan | Definition-of-done boundary |
 |---|---|---|
-| 01 | [Development Research live proof](PNC_CORE_REMAINING_01_RESEARCH_LIVE_PLAN.md) | Prove the already-wired real caller starts one eligible Development research through the durable boundary and observes its receipt. |
-| 02 | [Building routes, construction and upgrades](PNC_CORE_REMAINING_02_BUILDINGS_PLAN.md) | Reach the remaining original building endpoints and execute supported normal construction/upgrades with target, requirement, queue and receipt proof. |
-| 03 | [Gathering execution](PNC_CORE_REMAINING_03_GATHERING_PLAN.md) | Turn supported target/formation observations into one controlled dispatch with a correlated march/collection receipt. |
-| 04 | [Campaign selection through battle preparation](PNC_CORE_REMAINING_04_CAMPAIGN_PLAN.md) | Replace the legacy stage-selection caller while proving distinct preparation arrival and a reviewed return, without adding battle automation. |
-| 05 | [Mail sending and Login](PNC_CORE_REMAINING_05_MAIL_LOGIN_PLAN.md) | Confirm a new message to the intended recipient and migrate the specified authentication/session-preparation route without false identity success. |
-| 06 | [Castle switching and shared navigation](PNC_CORE_REMAINING_06_CASTLE_NAVIGATION_PLAN.md) | Prove an exact alternate-castle round trip and correct remaining consumer navigation defects through shared owners. |
+| 01 | [Development Research](PNC_CORE_REMAINING_01_RESEARCH_LIVE_PLAN.md) | Qualified Institute/Development facts, preserved caller contract, one authorized production Start with durable success receipt and Home exit |
+| 02 | [Buildings](PNC_CORE_REMAINING_02_BUILDINGS_PLAN.md) | Original finite routes and construction/upgrade policy remainder, canonical action identities for direct and Daily entry, caller parity, required offline/live acceptance |
+| 03 | [Gathering](PNC_CORE_REMAINING_03_GATHERING_PLAN.md) | Exact resource/target/slots/formation, one canonical dispatch for direct and Daily entry, correlated new march receipt, original policy/caller acceptance |
+| 04 | [Campaign](PNC_CORE_REMAINING_04_CAMPAIGN_PLAN.md) | Supported stage selection to independently recognized preparation and reviewed return, with real callers; no battle added |
+| 05 | [Mail and Login](PNC_CORE_REMAINING_05_MAIL_LOGIN_PLAN.md) | Separate Mail and Login acceptance both pass; one confirmed new authorized message and the user-specified actual authentication route with caller/preparation parity |
+| 06 | [Castle and navigation](PNC_CORE_REMAINING_06_CASTLE_NAVIGATION_PLAN.md) | Exact production switch/return and More/Settings, with fresh identity and cleanup proof |
 
 ### Common starting checkpoint and evidence rules
 
-At this planning snapshot A is on `codex/workflow-recognition-integration`, HEAD
-`4f332027e924a9f73e3e3740d92980d8950ddae1`, in the existing
-`C:/Users/lebel/pnc/.local-data/worktrees/workflow-recognition-integration`
-worktree. Completed Research caller/Hero reconciliation code and tests are
-uncommitted beyond that HEAD. The fresh existing offline gate was 2,027 passed,
-six skipped, 2,033 total, run `c467de4a5dcb42809cef0545c3aa43e6`; it validates
-that earlier candidate only. These planning changes do not revalidate future code.
+Start each implementation in its own worktree on a `codex/` feature branch from
+`6bc27585fbac1244672cf4a653ea6248955a4aca`, or a verified descendant that contains
+it and this plan revision. Record the immutable code base and plan revision.
+Do not create six checkouts from the obsolete bare `4f33202`, copy dirty work,
+reset another checkout, or place six writers in the integration worktree. The
+merge has already incorporated B; there is no producer-import gate to repeat.
+The current planning task does not create implementation tasks or authorize new
+pushes/merges. Workers deliver reviewable commits/diffs under their assignment's
+Git authority; final integration is independent of feature acceptance.
 
-B's preceding recognition batch is now published and clean at
-`10740ebb9b8d9d43fc24f970b904796ca41bd082`, on
-`codex/non-yolo-recognition-continuation`. Its recorded gate is 2,046 passed,
-six skipped, 2,052 run, zero failures/errors; the focused review-fix gate is
-25 passed. Those results do not certify the dirty A candidate or close missing
-producer contracts. The current A guide/source already contains the no-claim
-checkpoint guard and loading-only `observe_ready` fix; the older core handoff's
-unfinished status for those two fixes must not create new work packages.
+Earlier A and B test counts remain historical evidence. The A pre-push gate was
+2,027 passed/six skipped and the B gate was 2,046 passed/six skipped; neither is
+new validation of a feature's future changes or an asserted merged-suite result.
+Inspect only relevant code, tests, saved artifacts and scoped game-reference notes.
+Keep extracted APK code and live artifacts ignored. Source build 5.0.203/233
+explains client behavior; later screenshots/server outcomes need current evidence.
+Do not load old task transcripts, issue direct game-service calls or infer visual
+facts from filenames, expected destinations or workflow targets.
 
-For this documentation reconciliation, a recoverable copy of the seven edited
-plans/index and a hash/status manifest of pre-existing dirty files is under
-`.local-data/reports/remaining_plan_audit_20260914/`. Runtime files were not
-changed by this audit. That documentation snapshot is not a substitute for the
-implementation source freeze required below.
+### Independence, producer ownership and entry conditions
 
-Before implementation delegation, the coordinator must record current branch,
-HEAD, status and a recoverable source snapshot/change manifest including the
-completed dirty A changes. Give each worker that exact base. Do not branch six
-agents from bare `4f33202`, reset to the historical clean checkpoint, stage
-unrelated changes, or overwrite another worktree. A local checkpoint is not a
-mainline merge or push. Follow the source-control skill for actual Git operations.
+A feature owns the full vertical path for its supported behavior. Its agent may
+edit the necessary feature-specific vision models/IDs, bounded semantic OCR plans,
+visual anchors/controls, parsers, publication hooks in BOTH observers, captured
+fixtures and qualification tests. This supersedes the older blanket rule that B
+alone edits vision files. Generic OCR execution, visual matching algorithms,
+foreground guards, freshness/recovery mechanics, ADB/lease infrastructure and
+unrelated feature facts remain shared services to reuse, not rewrite.
 
-Each worker reads applicable guidance and only its scoped code, plans, source
-notes and evidence. Do not load old task transcripts or resume another user task.
-The plan's paths/class names are discovery anchors at this snapshot; verify them
-against the execution base and distinguish proposed additions from existing APIs.
-Use repository tests and saved captures first. APK code is versioned client
-evidence, not current server acceptance. Keep extracted code and raw live evidence
-ignored and never use direct game-service calls as a recognition bypass.
-
-### Independence, producer gates and execution order
-
-1. Contract inspection, saved-evidence review, scoped offline work and test design
-   can proceed for all six, subject to exclusive file ownership. Implement only
-   supported concrete slices. Do not fill missing producers with placeholder
-   success paths, consumer OCR or mocked-only workflows.
-2. Package 01 has little new feature implementation: preserve the existing caller,
-   then consume B's qualified Institute Home action and prove its live boundary.
-   Broad Research remains in B's separate producer handoff and later consumer scope.
-3. Packages 02–05 each name additional producer facts they need. The three-item B
-   handoff does not automatically implement all building, Gathering, Campaign,
-   Mail or Login producers. The feature plans own the remaining consumer sequence
-   and name their exact B dependencies; schedule producer changes through the
-   coordinator without duplicating the three existing B packages.
-4. Package 06 is the shared consumer-navigation owner. Its target identity and
-   More/Settings route support other packages; its alternate-castle proof is not
-   a prerequisite for every workflow on an already-proven active castle.
-   Package 05 owns authentication/lifecycle semantics; package 06 owns exact
-   roster/selection semantics. They jointly specify preparation order, with one
-   editor for the shared runner change.
-5. The published preceding B batch is available for review; the three follow-ups
-   and the additional gates below are still unfinished. Consume reviewed producer
-   changes only through the coordinator and the separate final integration item.
-   This plan update neither integrates B nor authorizes merge/push. Never edit or
-   import unfinished dirty work. A missing fact is a specific producer dependency,
-   not permission to bypass guard/identity checks.
-6. After a package's offline/producer gates pass, serialize live phases on
-   `mega_old_acc`; Research/construction can change queues and Gathering can occupy
-   marches, so later workers must re-observe state rather than rely on earlier
-   plans. Release one lease before the next worker takes it. Final combined
-   validation/integration remains the tenth separate work item.
-
-The September 14 remaining-dependency register is part of these packages, not
-another implementation plan:
-
-| Gate | Exact remaining behavior and authoritative owner |
+| Feature-owned slice | Exact shared-container boundary |
 |---|---|
-| Home/Institute publication | Actual RapidOCR replay of A's saved `0026_core_7_building_source.png` through B `10740eb` gives Home/CLEAR but zero spatial objects in both paths; the older A replay had four other buildings and no Institute. B restores bounded current Home object publication including Institute under the existing Research follow-up; package 01 consumes that handback, and package 02 preserves other Home building acquisition. See package 01's source hash, replay and negative contract. |
-| Resource/Hero/broader Research | The [three-item B handoff](PNC_B_FOLLOWUP_RECOGNITION_HANDOFF.md) remains the sole follow-up scope: clipped/partial cards, summon/result sequence, and Economy/Military/Fortification trees/queue variants plus Institute. Existing Resource Use and Hero committed receipts must not be replayed to collect producer evidence. A's later traversal/callers/eligibility remain consumers of that handback. |
-| Buildings | Package 02 retains all 19 original A11 endpoints and the full construction/upgrade policy remainder. Published Farm/queue/level/prerequisite and Hall-reference facts are reusable subsets. Each missing endpoint/source/return and each action's target-associated requirements, current control and new receipt are explicit gates; normal Start is not optional-branch completion. |
-| Gathering | Package 03 requires current slot statistics separately from busy army count, plus target/formation/new march/report correlation. Saved 0150 active Gathering and 0215 report surfaces are unmatched by the published producer; 0148 ordinary World Map is not a receipt. B publishes actual row facts; A owns correlation and dispatch authority. |
-| Campaign | Package 04 requires the captured stage 6-5 appearance and displayed AP/cost, independently recognized Hero Formation, and reviewed return. The formation frame lacks current stage/AP/mode and must not inherit them. Victory is conditional on the existing preparation endpoint, not an automatic battle-execution task. |
-| Mail/Login | Package 05 requires requested field/recipient and correlated new-send receipt, plus the user-selected actual native/provider Login route. Compose field scoping is fixed; a receipt and account identity cannot be inferred from Compose closure or game-ready Home. |
-| Castle/shared navigation | Package 06 consumes the fixed exact `0 sticker NPC` identity, proves the configured alternate/return, More→Settings, and measured World Search control. `0 stickerNPC` stays distinct. The Search action is `PNC_WORLD_SEARCH_BUTTON`; the coordinate-bar label cannot authorize it. |
-| Remaining B recognition acceptance | The original recognition plan still requires disposition of the saved zero-selection Transport Resources form (0171), independent qualification of the changed layout groups, and a durable real both-observer Event Center regression. These remain B producer/test obligations, not Transport workflow/navigation or a seventh A package. Keep their exact status in B's existing plan/checklist and audit. |
+| 01 Institute Home acquisition and Development Research | Institute Home object/nameplate/action binding; Development tree/node/detail and Research Queue fact/control keys; `ResearchWorkflow`, Research caller/dispatcher branches and `start_research` contract. Preserve already-supported neighboring Home objects. No Institute upgrade-panel policy or broader Research category changes. |
+| 02 Building navigation/construction/upgrade | Remaining building object identities, build/upgrade/prerequisite/queue/speedup/help panels and keys, including Institute upgrade/requirements and shared build-queue content; building `TaskId` branches, feature policies and action receipts. May repair canonical general Home-building acquisition for owned routes, preserving the existing Institute output contract and 01's Research-specific focus behavior. |
+| 03 Gathering | World resource-node/occupancy/slot/status facts, Search/coordinate-dialog control and edge, march formation and march/report correlation; Gathering `TaskId` branch, resource/formation policy and action receipts. Campaign hero formation is excluded. The Search-edge remainder formerly in 06 moves here so world navigation does not depend on a castle task. |
+| 04 Campaign | Campaign Home-entry object/control, map/chapter/stage/mode/eligibility and Campaign hero formation fields/controls/return edges; Campaign policy, workflow and caller branches. Gathering march formation is a separate screen/contract. |
+| 05 Mail/Login | Compose/recipient/profile-route/send-receipt and actual Login/provider overlays/identity; Mail/Login caller branches; authentication/lifecycle sequence in `ScriptRunner._prepare_account_session_steps`. Calls existing castle selection without changing its matching or alignment semantics. |
+| 06 Castle/navigation | Castle/selected-roster identity and measured list-entry controls, More/Settings/Manage Characters; `SelectCastleWorkflow`, active-identity preflight, selection branches and `AutomationRunner._align_step_castle_target`. Does not redesign Login/preparation ordering. |
 
-The B evidence audit is
-`C:/Users/lebel/pnc/.local-data/worktrees/non-yolo-recognition-continuation/.local-data/reports/PNC_NON_YOLO_REMAINING_AUDIT_20260914.md`,
-with `non_yolo_remaining_evidence_audit.md` beside it. Its older A safety-status
-paragraph is superseded by this current A source check. The new Home replay is
-`institute_remaining_audit_20260914/results.json` in that same reports directory.
-None of the 20 changed B profiles across 19 layouts has a matching positive
-formal holdout in the manifest. Reuse the separate frozen-catalog idle Build Queue
-proof and Economy idle-detail proof; do not call them active-queue or all-layout
-acceptance. Freeze new candidates before independent capture-group replay;
-reference captures, resizes and failed holdouts used for a fix stay regression
-evidence. Do not collect new Research/build/recruit/dispatch/send actions solely
-to replace saved visual evidence.
+`screen_anchors.json`, selector catalogs, `ScreenType`/`UiElementId`, observation
+models, semantic region plans, publication dispatchers, `NavigationCore`,
+`WorkflowContext`, application/API entrypoints, task registry and shared test
+containers are **not whole-file locks**. Each agent may add/change its rows,
+methods, fields, imports and branch cases listed above in its own worktree.
+Use feature-specific modules and fixtures for substantial new logic; integrate
+through the existing canonical dispatch points. Do not reorder unrelated tables,
+reformat entire shared files, move another feature's code or add a plugin system
+solely to avoid a later Git conflict. Feature semantic ownership is exclusive;
+textual merge conflicts are resolved during later integration, not through
+per-edit scheduling while implementing.
 
-### Exclusive file and shared-runtime ownership
+01–04 accept an already-authenticated, exactly identified configured target
+session as their input precondition. They do not require 05's fresh-login proof
+or 06's alternate-switch proof. Their agent can prepare the initial screen/target
+with the existing supported API/explicit target setup under the user's authority,
+then run a fresh production identity preflight; setup is recorded separately and
+never claimed as Login/castle-route acceptance. If a required common preflight
+has an actual reproducible defect that cannot be avoided by a valid declared
+initial state, consult Continue core once with the exact predicate/evidence;
+do not add a local bypass or turn every feature into another Login/castle port.
 
-Each package agent owns its feature workflow, feature-specific caller tests and
-plan/evidence update. The coordinator reserves shared files for one change at a
-time, or applies the workers' small reviewed patches itself. Parallel agents may
-read these files; they may not concurrently edit them:
+Feature-specific missing facts are normal owned work. A proven defect in a generic
+service outside the ownership table is a rare consultation with Continue core
+(runtime/authority) or Continue non-YOLO (generic vision). Send one bounded question
+with the relevant symbols, evidence and proposed smallest change; continue
+independent work. No routine permission for edits, test groups, commits-as-work
+products, producer handbacks or feature completion is required from those tasks.
 
-- `core_workflow.py`, `core_daily_mutation.py`, `core_runtime.py`,
-  `navigation_core.py` and shared route registration;
-- `core_script_dispatcher.py`, `script_runner.py`, shared policy/result definitions;
-- application/API entrypoints, task registry and shared exports;
-- common fake runtimes, entrypoint fixtures and test-selection infrastructure.
+The Home-building collector is an existing shared contract, not a deliverable
+that 02 must wait for 01 to publish. 01 qualifies Institute-specific acquisition
+for Research; 02 can correct general building acquisition needed by its own
+routes through the same collector, including baseline Institute support. Preserve
+the canonical typed Home-object output and neighboring feature semantics. This
+limited shared support scope does not authorize a second parser or a change to
+another feature's workflow.
 
-Use one canonical operation/receipt owner per concept. Construction and Gathering
-must not independently invent mutation frameworks; coordinate any needed exact
-capability bridge through the existing authorizer/executor/journal boundary.
-Construction has no honest Daily quest identity, and the original Gathering
-policy accepts Stone while the Daily enum has Gold instead. The coordinator owns
-the narrow standalone-capability design and shared boundary/schema changes as
-part of packages 02/03. `max_parallel_marches` semantics also belong to package 03
-and this shared policy owner: choose the supported finite contract from the
-current policy/caller evidence rather than asking for another resource budget.
-Preserve existing persisted Daily identities and receipts;
-do not invent a construction Daily quest or relabel Stone as Gold. Freeze that
-contract before delegating its repetitive consumer plumbing. These are technical
-implementation decisions, not missing user permissions or another work package.
-Campaign and Mail must not expose generic raw input to avoid shared-file
-coordination. Preserve existing passive-settle timing and freshness ownership.
-Perception models/IDs, guards, OCR, assets/catalogs and both observation publication
-paths stay B-owned even when a consumer plan depends on them. YOLO/map-object and
-separate cavalry policy work remain with their existing owners.
+### Feature action identity and Daily entry
+
+**02 owns building action identity and execution both inside and outside Daily.
+03 owns gathering action identity and execution both inside and outside Daily.**
+There is no common-foundation work package or requirement to wait for the other
+feature. Each owns its typed feature domain identity, policy, authorization
+binding, journal integration and adapter tests.
+
+Keep three concepts distinct:
+
+1. The feature action kind and exact target/parameters: construct/upgrade a
+   particular building toward a level, or gather a particular resource at an
+   exact world target with the chosen formation.
+2. The durable `operation_id` for one execution request. It survives interruption
+   and entry-route changes and identifies the receipt to reconcile.
+3. Optional Daily quest/row context and progress. Daily Go locates the feature;
+   it is neither a second action kind nor evidence of completion.
+
+The existing `MutationOperation`, `MutationIntent`, `CoreMutationBoundary`,
+`JournaledMutationDispatcher` and `DailyRunJournalStore` are the canonical starting
+owners. `operation_id` and durable no-replay handling already exist and must be
+reused. Their present Daily-shaped fields are an implementation limitation each
+feature must address for its own action, not a reason to invent a construction
+Daily quest, map Stone to Gold, duplicate storage/transition machinery or send
+through an unjournaled path. Add the narrow typed feature binding/serialization
+needed in those owners while preserving old Daily payloads and unrelated receipts.
+Keep feature identity/payload validation in feature domain code; keep common
+prepare/dispatch/reconcile/commit, atomic persistence, exact caller/target and
+stale-checkpoint enforcement canonical. Shared envelope changes must be additive,
+feature-discriminated and reject unknown/ambiguous identity data; do not rename
+old Daily enum values or reinterpret old receipts. A genuinely conflicting shared
+contract change is one rare core consultation, not a preplanned coordinator stage.
+
+Direct and Daily Go paths resolve the same effective feature policy and call the
+same feature executor. Daily's narrower action/budget constraints remain additional
+constraints on that invocation. The same interrupted operation entered through
+the other route reuses its receipt/budget; changing entry cannot renew authority
+or replay a dispatched action. This is not a blanket ban on a separately authorized
+later standalone request when feature policy permits one. Feature receipts prove
+the action; a fresh Daily survey separately proves quest progress/completion.
+Go, a closed dialog, an empty queue or a Home return is not either receipt.
+
+Each of 02/03 must test direct/Daily convergence, cross-entry retry of one durable
+operation, compatible legacy receipt loading, unchanged unrelated receipts,
+stale/wrong-target rejection, ambiguous no-replay and a genuinely distinct request
+where policy allows it. Do not enable automatic Daily scheduling or new automatic
+capabilities as part of exposing an explicit Go-entry adapter.
 
 ### Permission and unanswered-detail register
 
-The latest user request explicitly grants canonical BlueStacks API live testing
-on **mega_old_acc**, **any needed in-game action**, and **unlimited in-game resource
-spending**. Retain that authority across these packages; do not ask again for a
-budget. Each proof still records its concrete action/target and uses the minimum
-useful number of actions. An existing exact one-Start or other runtime policy
-stays exact until a supported scoped implementation changes it; unlimited user
-authority does not disable capability, journal or no-replay checks.
+The user's standing authority covers `mega_old_acc`, any needed in-game action,
+and unlimited in-game resources. Each proof records its actual target/action and
+minimum useful bounds. Existing exact runtime policies remain enforced until the
+owning feature implements a supported explicit replacement; authority never
+bypasses fresh identity, configured live roles, receipts or no-replay checks.
+Use canonical BlueStacks APIs/leases, not desktop mouse/keyboard control. Ask the
+user for manual help when BlueStacks is unresponsive. Inspection/manual setup is
+not production-route acceptance. Never silently edit protected account/target
+configuration or expose credentials. Other accounts, real-money purchases,
+automatic Daily scheduling and later merge/push require their own authority.
 
-Current unresolved questions, already asked while drafting:
+Only genuine external choices stay open, locally to their feature:
 
-| Question | Packages affected | Work that may continue before the answer |
-|---|---|---|
-| Mail recipient kind/exact name and kingdom, subject and body | 05 live Send | Canonical contract, receipt design, producer gap review, navigation and deterministic tests |
-| Intended Login method for mega_old_acc, without credentials in chat | 05 authentication | Existing-session identity analysis and lifecycle design; no invented password/provider mapping |
-| Agent-selected already-configured alternate castle and return, or a user-named destination | 06 live round trip | Offline selection/return tests and current-castle navigation analysis |
+| Input | Owner and handling |
+|---|---|
+| Exact Mail recipient kind/name/kingdom and subject/body | 05 asks the user directly before Send; other packages continue. No authority to message another person is inferred from a resource budget. |
+| Actual Login/provider method and any required private interaction | 05 asks the user without requesting credentials in chat; implement only the selected route. |
+| Alternate castle for the 06 round trip | 06 records a user-selected alias if supplied; otherwise it may choose a different already-configured alias on authorized mega_old_acc, freeze its exact identity and return to the observed source. No other agent chooses it or runs the proof. |
+| Missing local role, changed configured identity or unavailable live evidence | The affected feature reports the exact runtime/configuration input to the user; it does not wait for another feature to repair unrelated configuration. |
 
-No additional resource permission is missing for 01–04. Missing live roles or a
-requested edit to protected target/account configuration requires the exact
-configuration decision; never silently change those files. Any provider consent,
-verification code or login interaction is requested only if the chosen method
-actually requires it. Mail's exact payload/audience must be supplied before sending
-to another person or group. Real-money purchases, automatic Daily/scheduling,
-mainline merge/push and actions on other accounts are outside these packages.
-Use canonical API inspection/input rather than taking desktop mouse/keyboard
-control; ask for manual manipulation when BlueStacks is unresponsive. A manual
-or observed-point inspection workaround does not count as production-route proof.
+Live processes sharing the same physical emulator still use the canonical
+process-scoped lease. This is resource exclusion, not a human sequencing plan.
+Attempt a lease through the existing API, preserve pre-existing instances, release
+it while waiting for user input and re-observe all mutable state after acquisition.
+Do not steal a lease, inspect another process's live session, or add a scheduler.
+Queues, marches and active castle state cannot be borrowed from another feature's
+old evidence. Each feature's own captures establish its current prerequisites.
 
 ### Reporting and acceptance discipline for every agent
 
-Each package reports changed files, real runner commands/counts/skips/failures,
-which caller was exercised, before/action/receipt/exit evidence, preserved journal
-state where relevant, lease cleanup and exact remaining dependencies. Use passed,
-blocked and applicability outcomes accurately; a process exit, fixture-only pass,
-manual navigation or old successful action is not new live acceptance.
+A package's DoD is local: all specified owned implementation and supported original
+callers are complete, meaningful changed-contract tests and required runner gates
+pass, required live evidence proves its own receipt/exit/cleanup, and the change
+is reviewable on its recorded base with its own plan/report updated. No peer's
+status, approval or final combined merge is a completion predicate.
 
-Run the smallest relevant checks after a changed slice, then the repository
-`affected --base origin/main --explain` gate. Follow a required full fallback once.
-Do not rerun unchanged historical proofs merely to fill a checklist. Final combined
-A/B validation belongs to the separate integration package. Update only the
-remaining-work and current evidence items, retaining historical facts as history.
+Record component statuses as implemented/offline-validated/live-accepted or
+blocked, not a single misleading completion flag. A missing required producer,
+unsupported required policy branch or unperformed required live proof keeps that
+package incomplete. For 05 both Mail and Login must individually satisfy their
+DoDs. Original finite requirements remain finite and explicit; do not drop a hard
+endpoint to declare independence. Final combined integration checks remain later
+work and do not repeat every already-proven live action.
+
+Use each feature's narrow existing test groups after meaningful changes, then
+`tools/run_tests.py affected --base origin/main --explain`; follow a required full
+fallback. Saved both-observer real-OCR regression and independent capture-group
+qualification are required for changed visual facts as described in each plan.
+Keep command/count/skip/failure details, source/build provenance, action/journal
+proof, final state and cleanup in the feature's own evidence report. Edit only
+that feature plan; the shared index need not receive progress edits from six agents.
 
 ### Independent execution record — September 13
 
@@ -537,17 +535,17 @@ The detailed finite mapping is saved in ignored
 `.local-data/artifacts/core_resume/a11_endpoint_inventory.json`; tracked requirements
 and blockers remain here. Only the six supported targets have the required reference
 samples and anchor blocks. Classifier/enricher definitions alone do not qualify a
-replacement endpoint. B owns the missing producer facts; A owns the eventual routes.
-An endpoint's profile/return qualification does not guarantee every Home label is
-published: the September 13 NPC 2 Institute focus frame requires B to publish its
-visible Institute identity and authoritative action geometry before a consumer tap.
+replacement endpoint. At that checkpoint B owned the producer facts and A the
+routes; the current plans transfer both to each feature. Institute Home acquisition
+now belongs to 01 and the other building acquisition/panels to 02. Endpoint
+identity/return qualification still does not guarantee a Home label/action point.
 
 Dedicated independent source review found and resolved the Hero local-date defect;
 the final Research caller and Hero reconciliation review has no actionable findings.
 Actual offline/live results belong to [the validation ledger](PNC_CORE_PORTING_VALIDATION.md).
-The next consumer implementation requires qualified B evidence. Per the user's latest
-instruction, defer A/B coordinated integration until B has finished; do not import
-its dirty work or repeat the completed manual Hero single.
+That earlier continuation awaited qualified B evidence. B's batch is now merged,
+and the six feature plans own their remaining facts/consumers independently.
+Preserve the committed manual Hero single; do not replay it.
 
 The user's subsequent [B follow-up handoff](PNC_B_FOLLOWUP_RECOGNITION_HANDOFF.md)
 assigns B complete recognition implementation/qualification ownership of Resource
@@ -557,23 +555,19 @@ dependencies delivered or transfer A's execution consumers.
 
 ## Stop/report and completion
 
-B's incomplete vision work remains B-owned; A does not resume B or renegotiate each missing
-field. Record one dependency list and continue supported rows. If all remaining rows depend
-on unimplemented producers, stop with exact blocking facts and acceptance tests; do not call
-A's original plan complete or silently absorb B's outstanding workload.
+For the six packages, use each feature's own DoD and the active ownership table.
+An owned producer or caller gap is remaining work for that same agent; it is not
+an automatic B dependency. Continue core/non-YOLO consultation is exceptional and
+specific to generic contracts. Preserve other tasks' worktrees and runtime/config
+work. No operator substitutes a desired target or missing fact to pass a guard.
 
-A's earlier port collision is historical. Current main contains startup/focus improvements,
-but this task did not validate live discovery or resolve any Codex task/fork blocker. Preserve
-other agents' runtime/configuration work. Before a separately authorized live phase use the
-canonical resolver/lease and exact account/action/target/budget; do not assume either blocker
-is fixed from unrelated commits. The earlier restart itself supplied no live or
-cross-task approval; the latest mega_old_acc live authority for the six packages
-is recorded above and supersedes that historical live restriction.
-
-Finish A when original supported ports/callers are implemented and integrated with required
-checks, with unavailable evidence/authority clearly marked. Final portable validation belongs
-to the combined candidate, and live proof remains separate. Hand broader D01 completion to
-the future Daily owner with exact remaining capabilities; no cleanup or scheduling required.
+A live stop retains its first unproved predicate, action/receipt state and cleanup;
+independent offline work may continue. Missing required acceptance is incomplete,
+not Done-with-a-blocker. Complete a feature when its named scope and evidence pass,
+without waiting for peers. The later combined candidate has its own integration
+validation and does not retroactively replace missing feature-level live proof.
+Automatic Daily scheduling and broader D01 rollout remain separate. Building and
+Gathering's explicit direct/Daily Go adapters are included in their feature plans.
 
 ## Retained A completion evidence
 

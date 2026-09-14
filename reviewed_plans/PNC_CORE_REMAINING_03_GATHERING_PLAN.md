@@ -1,505 +1,500 @@
-# Remaining A15 gathering workflow — bounded implementation plan
+# Remaining gathering workflow, world resource facts, and dispatch
 
-## Status, owner, and checkpoint gate
+## Objective and ownership
 
-Planning snapshot: September 14, 2026. This is an A-owned remaining-work plan for porting the legacy neutral-resource
-Gathering caller to the replacement navigation and mutation core. It covers one
-bounded dispatch workflow with exact target, march-slot, formation, and correlated
-receipt semantics. It does not rewrite cavalry selection, search, YOLO, or broader
-march policy, and it does not claim collection success from a screen transition.
+This is the independently executable A03 vertical slice for the remaining gathering
+feature. It owns the end-to-end feature contract: world resource and occupancy
+observations, current slot and active-march facts, formation and march controls,
+target selection, route and return edges, the bounded World Search edge transferred
+from A06, typed gathering models, canonical gathering action identity, executor,
+authority and receipt/journal integration, direct and Daily-Go adapters, both
+production observation paths, focused fixtures and tests, and the live evidence
+needed by those contracts.
 
-Read the [six-package coordination contract](PNC_CORE_WORKFLOW_PORTING_PLAN.md#six-remaining-agent-packages) before implementation. It defines the shared snapshot, exclusive-file ownership, and permission ledger that govern this plan.
+The execution base is the clean merged checkpoint
+6bc27585fbac1244672cf4a653ea6248955a4aca. Each worker uses its own isolated
+worktree. Do not use the dirty historical 4f33202 snapshot, wait for another
+feature worker, or take a whole-file coordinator lock. Shared files may contain
+semantic slices for other features; ownership is by the exact methods, task ids,
+screen profiles, and data keys in this plan. Physical same-file edits can merge
+later.
 
-The implementation worker must begin by recording:
+A03 is independently complete when its own branch implements and validates the
+full feature slice. A routine B handback, a prerequisite proof from A05/A06, or a
+coordinator-owned mutation design is not part of its definition of done. Consult
+the Continue core owner only for a concrete generic conflict; the gathering
+implementation and its missing producer facts remain A03 work.
 
-```text
-git rev-parse HEAD
-git status --short --ignored
-```
+## Saved evidence roots
 
-The expected source checkpoint is `4f332027e924a9f73e3e3740d92980d8950ddae1`
-(`HEAD4f33202`). The worktree contains dirty, completed A changes and root-owned
-plans/ledger files. Preserve that snapshot, never reset or clean it, and never
-overwrite a root-owned hunk. Shared files are serialized with the Buildings plan
-and root's concurrent work:
+Historical ignored core_resume artifacts remain read-in-place under
+C:/Users/lebel/pnc/.local-data/worktrees/workflow-recognition-integration/.local-data/artifacts/.
+B diagnostic report references remain read-in-place under
+C:/Users/lebel/pnc/.local-data/worktrees/non-yolo-recognition-continuation/.local-data/reports/.
+Those artifacts are not copied into each isolated feature worktree. New A03
+artifacts belong under its own ignored .local-data/artifacts/core_resume/ run
+directory. The exact remaining B capture roots are recorded in
+reviewed_plans/PNC_NON_YOLO_CAPTURE_FINDINGS_20260913.md.
 
-- `pnc_automation/app/automation/engine/core_daily_mutation.py`
-- `pnc_automation/app/automation/engine/core_workflow.py`
-- `pnc_automation/app/automation/engine/navigation_core.py`
-- `pnc_automation/app/entrypoints/task_registry.py`
-- `pnc_automation/app/entrypoints/api.py`
-- shared domain/policy or observation contracts
+## Definition of done
 
-Publish an exact intended patch range before editing any shared file and wait for
-its owner to release it. Do not use another worktree, merge, reset, or commit in
-this plan. Report the preserved dirty paths, changed files, focused commands, and
-results to root.
+A03 is complete only when all of the following are reviewable from its branch:
 
-The current A candidate already contains the reviewed no-claim checkpoint guard and
-loading-only `CoreRuntime.observe_ready` behavior. Those are preserved inputs to this
-package, not remaining Gathering defects. Do not reopen them, add a second readiness
-loop, or describe a successful lifecycle exit as a Gathering receipt. The current
-candidate is intentionally dirty; implementation starts from its exact checked-out
-state after the producer gate, not from a bare copy of `4f33202`.
+1. A typed gathering workflow selects one exact neutral resource target, validates
+   current resource/occupancy/owner facts, formation and march controls, enforces
+   available slots and max_parallel_marches, dispatches once, records a
+   target-correlated receipt, and returns through a reviewed Home boundary.
+2. Resource node, occupancy, coordinate, current slot, active-march, formation,
+   control, post-dispatch and optional report facts are independently published
+   by both ObservationBuilder.build and NavigationPerception.build with screen or
+   layout identity, source frame, provenance and freshness. The feature owns
+   producer work for its named screens and fields; manually populated observations
+   cannot satisfy this item.
+3. Gathering has one feature-owned canonical action identity for direct entry and
+   Daily-Go entry. It distinguishes action kind, exact resource target and
+   parameters, and durable operation_id. DailyQuestId is optional entry/progress
+   metadata only. Retries of the same operation reuse the receipt or pending
+   journal state; a separate authorized operation remains possible when policy
+   permits it.
+4. The existing journal, dispatcher, authorizer and runtime mechanics remain the
+   one canonical store/state machine. The gathering slice adds only its typed
+   identity, target metadata, capability and receipt semantics to the shared
+   envelope/serialization, preserving old Daily receipts and limits. No duplicate
+   journal or mutation framework exists.
+5. Both direct and authored callers exercise the same executor, operation identity,
+   journal, authority, receipt and return behavior. Meaningful offline tests cover
+   positive dispatch, no-input guards, pending ambiguity, no replay and a genuinely
+   separate operation where policy allows it.
+6. The transferred World Search edge has a correct measured control and a separate
+   nonspending Home-to-World-to-coordinate-dialog-to-Home proof. If a Gathering
+   run traverses this exact edge, its evidence may satisfy the edge proof without a
+   duplicate live run. A03 does not add coordinate submission, search policy,
+   YOLO/OCR engine changes, or a new target-finding system.
+7. After offline acceptance, one bounded live proof on the configured authenticated
+   active castle captures the exact target, formation, preflight facts, single
+   dispatch input, receipt, journal transition, no-replay behavior and reviewed
+   return. An unknown or ambiguous result remains pending and is never replayed.
 
-### Current evidence boundary
+## Scope and non-goals
 
-The saved exploration under B's continuation worktree is useful evidence, but it is
-not a qualified replacement producer and it does not authorize replay. The exact
-Gathering facts are:
+The feature covers the existing gathering caller's full bounded dispatch behavior:
 
-| Saved frame | What it proves | What it does not prove |
+- FOOD, WOOD, IRON and STONE remain distinct resource inputs. STONE is never
+  relabeled as GOLD. A resource without current authority receives an explicit
+  standalone capability disposition and is rejected before input until that
+  capability is covered.
+- Resource priority from GatheringPolicy remains the selection policy. A target
+  must be a fresh exact resource node with coordinate, identity or the approved
+  typed equivalent, visible geometry, and occupancy/owner state.
+- Current available march slots and active own marches are separate facts.
+  GatheringPolicy.max_parallel_marches remains an enforced bound, and one
+  invocation dispatches at most one march.
+- Existing formation/army selection is observed and correlated. The workflow does
+  not invent a cavalry lineup, default heroes, or a hidden army id.
+- The existing Gather, march-confirm and Dispatch controls are revalidated from
+  fresh content immediately before each input. One durable intent precedes one
+  dispatch input.
+- The post-dispatch receipt is correlated to the same target and selected army.
+  A later Troop Info or Gathering Report observation is read-only evidence for
+  that operation; collection-back/turn actions are outside this slice unless an
+  existing separately authorized caller already owns them.
+- Existing Home-to-World, World-to-Home, node, march-confirm and report routes are
+  used or extended with exact source, control and destination predicates.
+
+The transferred A06 edge is also in scope:
+
+- A03 owns the World Map to coordinate dialog transition using the measured
+  PNC_WORLD_SEARCH_BUTTON control. PNC_WORLD_COORDINATE_BAR is content/label
+  evidence and is not an actionable substitute.
+- A03 owns the coordinate-dialog fields and controls needed to identify a fresh
+  dialog and the safe close/back return. The standalone proof is
+  Home -> World Map -> Search -> fresh coordinate dialog -> safe return -> fresh
+  Home, with no coordinate submission and no resource mutation.
+- This edge is an existing navigation correction, not new search scope. A03 reuses
+  the current navigation and observation machinery and does not create a YOLO,
+  coordinate parser, or generic search framework.
+
+Out of scope are generic OCR/guard/readiness/lease mechanics, cavalry or formation
+policy beyond observed selection, generic world search or coordinate submission,
+Resource/Hero/Daily-claim workflows, broader Research, building workflows, battle
+automation, collection mutations, and real-money actions. Generic changes that are
+truly necessary may receive one concrete core consultation, but they do not become
+a scheduled peer handoff.
+
+## Hard technical contracts and organizational non-dependencies
+
+The current code has concrete gaps that A03 must close inside its feature slice:
+
+| Existing technical fact | A03 contract |
+| --- | --- |
+| MutationOperation and MutationIntent are shaped around DailyQuestId; DailyRunJournalStore serializes quest_id and the core boundary rejects gathering capability | Add typed gathering action kind, target/parameter metadata, capability and receipt branches under A03 semantic ownership. Reuse the same JournaledMutationDispatcher, DailyRunJournalStore, CoreMutationBoundary and state transitions; preserve legacy Daily deserialization and receipts. |
+| DailyQuestId has GATHER_FOOD/WOOD/IRON/GOLD, while ResourceType is FOOD/WOOD/IRON/STONE and Stone is not Daily Gold | DailyQuestId remains optional entry context. Preserve Stone as Stone and give unsupported standalone gathering input an explicit feature capability/policy outcome. Never map Stone to Gold or add a fake Daily row. |
+| Observation has optional available_march_slots but no qualified freshness/source contract and no active_marches field | A03 owns typed fields and producer publication for both observers. Troop count, load, army limit, or a stale slot decrement cannot stand in for either fact. |
+| Spatial world parsing publishes resource_type and coordinates but not a complete target/occupancy/receipt contract | A03 owns resource-node identity, coordinate, owner/occupancy/shield/hostility, formation, control and target-correlated receipt fields for the named surfaces. |
+| Legacy GatheringTask accepts slot decrease or World Map return as success and does not enforce max_parallel_marches | Typed workflow must re-read target and current facts, apply active_marches + 1 <= max_parallel_marches and require a correlated receipt. |
+| Core task registry/API/dispatcher have legacy gathering entry points but no typed gathering branch | A03 adds strict TaskId.GATHERING binding and migrates direct/authored callers through one executor without a legacy mutation fallback. |
+| reviewed_navigation_edges() has Home/World edges but no complete gathering route and currently maps PNC_WORLD_COORDINATE_BAR as the World Search action | A03 adds exact gathering edges and transfers the Search correction to PNC_WORLD_SEARCH_BUTTON with fresh-dialog and safe-return predicates. |
+| Saved capture rows 0150 and 0215 are not covered by the current production catalog | A03 qualifies the active Troop Info and Gathering Report facts through both production paths or records the exact unsupported result. Historical pixels do not authorize a current target. |
+
+These are implementation contracts, not requests to another feature agent. A01's
+Institute and Research ownership, A02's building ownership, A05's setup, A06's
+castle/roster/More/Settings ownership, and root's integration work do not gate A03.
+Use an already authenticated exact active castle for feature proof; setup work is
+not acceptance evidence.
+
+## Existing implementation and evidence anchors
+
+| Area | Existing owner | Current behavior and porting consequence |
 | --- | --- | --- |
-| `0148_ordinary_gather_dispatch.png` | An ordinary `PNC_WORLD_MAP` frame after the visible gathering sequence. | A dispatch receipt, a slot count, or a target-bound army status. World Map identity alone is not receipt evidence. |
-| `0150_march_troop_overview.png` | A `Troop Info` row in Gathering state for Farm level 6 at `X231 Y479`, troop size `1,000`, and a remaining timer. | A qualified producer profile, available march slots, an exact active-army id, or server acceptance. |
-| `0215_gathering_report_list.png` | A `Gathering Report` row for Farm level 6, `K157 X231 Y479`, displaying `31.2K` food. | A qualified producer profile or an exact unrounded quantity; preserve the displayed rounded value. |
+| Legacy workflow | pnc_automation/app/automation/tasks/gathering_task.py:GatheringTask | WORLD_MAP preflight, preferred resource selection, node tap, PNC_GATHER_BUTTON, PNC_MARCH_CONFIRM_BUTTON, and slot-decrement/map-return shortcut. Preserve policy/phase order while replacing the success shortcut. |
+| Policy | pnc_automation/app/pnc/domain/policy_models.py:GatheringPolicy and ResourceType | Preferred FOOD/WOOD/IRON and max_parallel_marches=2. Keep all original resource inputs, including Stone, with explicit authority disposition. |
+| Observation | pnc_automation/app/pnc/domain/observation.py; pnc_automation/app/pnc/vision/spatial_surfaces.py | DetectedSpatialObject metadata already carries resource_type and coordinates. available_march_slots is optional; active_marches, ownership and receipt contracts are absent or unqualified. |
+| Production paths | pnc_automation/app/pnc/vision/observation_builder.py:ObservationBuilder.build; pnc_automation/app/pnc/vision/navigation_perception.py:NavigationPerception.build | Both must publish the same typed gathering facts with frame/layout/provenance/freshness. A consumer fixture alone is insufficient. |
+| Observation scopes | pnc_automation/app/pnc/vision/observation_request.py | Reuse world-map, gather-node, march-confirm, post-march-dispatch, report and home follow-up scopes; add only bounded gathering fields within A03 ownership. |
+| Navigation/context | pnc_automation/app/automation/engine/navigation_core.py:NavigationCore; pnc_automation/app/automation/engine/core_workflow.py:WorkflowContext | Home/World transition primitives and source revalidation exist; add focused gathering target/formation/receipt operations and exact Search/dialog transition. |
+| Mutation | pnc_automation/app/automation/engine/core_daily_mutation.py:CoreMutationBoundary; pnc_automation/app/automation/daily_maintenance/mutation_dispatcher.py:JournaledMutationDispatcher; pnc_automation/app/pnc/persistence/daily_run_journal_store.py:DailyRunJournalStore | Existing PREPARED/DISPATCHED/RECONCILED/COMMITTED lifecycle is the single durable owner. Add gathering semantic fields and capability adapters in A03-owned methods. |
+| Binding | pnc_automation/app/automation/engine/core_script_dispatcher.py; pnc_automation/app/entrypoints/task_registry.py; pnc_automation/app/entrypoints/api.py | Core typed dispatch currently rejects TaskId.GATHERING while direct API reaches the legacy task. Add one strict typed branch and converge callers. |
+| Tests/evidence | tests/unit/app/automation/tasks/test_gathering.py; tests/integration/vision/test_gathering_march_visual_profiles.py; tests/data/screen_recognition/gather_node.png, march_confirm.png, march_confirm_empty.png | Preserve legacy meanings while callers migrate; add typed producer, receipt, journal, parity and no-replay coverage. |
 
-Frames `0150` and `0215` are unmatched by B's current production catalog. Frame
-`0148` matches ordinary World Map only and remains explicitly receipt-ineligible.
-The captured Farm/coordinate and Buffalo Catapults formation are historical
-correlation evidence; they are never copied as a current target or default lineup.
-The producer must independently publish the row/frame identity, destination/resource/
-state/time association, and the smallest typed receipt facts through both production
-paths before the consumer can report acceptance.
+The saved exploration under
+.local-data/artifacts/capture_gap_exploration/20260913T030954Z/ is bounded
+evidence only:
 
-## Remaining deliverables and scope
-
-Deliver the following finite slice:
-
-1. Port the existing `GatheringTask` target selection, world-map preflight, march
-   confirmation, and dispatch behavior into a typed replacement workflow.
-2. Require an exact visible resource node, available march-slot fact, selected
-   formation/army facts, and a fresh correlated dispatch receipt before reporting
-   success. Preserve the existing resource priority and enforce
-   `max_parallel_marches` as an explicit bounded policy; the legacy task does not
-   currently enforce it. The producer must publish a fresh active-march count so the
-   workflow computes allowed new dispatches (for example, active 1/max 2 permits
-   one, active 2/max 2 permits none).
-3. Use the existing reviewed navigation, loading-only ready-source acquisition,
-   durable mutation journal, and `CoreMutationBoundary`. A dispatch creates one
-   durable intent and one actuator input; an ambiguous result is reconciled without
-   replay.
-4. Keep collection correlation observable. If the original caller only dispatches a
-   march, a later collection/return receipt is evidence associated with that march,
-   not permission to invent a second mutation. A separate collect-back or turn
-   action is outside this bounded port unless an existing caller explicitly owns it.
-5. Wire the relevant direct/authored callers once the typed path has producer
-   facts and offline acceptance, then use that path for one bounded live proof.
-   Promote live acceptance only after its receipt and exit pass. Leave unrelated Daily,
-   Research, Resource, Hero, building, and battle policy unchanged.
-
-## Existing implementation and caller map
-
-| Area | Existing path | Current behavior | Porting consequence |
-| --- | --- | --- | --- |
-| Legacy workflow | `pnc_automation/app/automation/tasks/gathering_task.py:GatheringTask` | `TaskPreflight.WORLD_MAP`; chooses visible resource nodes by `GatheringPolicy.preferred_resources`; zero slots skip; taps `PNC_GATHER_BUTTON`, then `PNC_MARCH_CONFIRM_BUTTON` | Preserve the policy and phase order but replace generic task dispatch with typed target/formation/receipt contracts |
-| Node selection | `GatheringTask.plan` | Uses published `resource_type` and spatial node; no exact server/node identity or ownership proof | Require a typed node key, resource type, coordinate/owner facts, and source re-read before dispatch; an internal server id is optional when it is not observable |
-| Follow-up | `GatheringTask.plan` plus `ObservationRequest.march_confirm_follow_up` and `post_march_dispatch_follow_up` | Strict phase transitions exist; node→confirm is a replan; confirmation accepts slot decrement or return to World Map | Keep phase-specific content confirmation, but a World Map return without a correlated receipt becomes pending/failure |
-| Current verification | `GatheringTask.verify` | Accepts available-slot decrease or World Map return as dispatch success; fails when unchanged map has unknown slots | Replace inferred success with target/player-army correlation and explicit status |
-| Policy | `pnc_automation/app/pnc/domain/policy_models.py:GatheringPolicy` | Preferred FOOD/WOOD/IRON and `max_parallel_marches=2` | Keep these bounded inputs; do not invent cavalry/search/formation defaults |
-| Entrypoint registry | `pnc_automation/app/entrypoints/task_registry.py` | `GatheringTask` remains a legacy task | Add one typed step and migrate one caller after acceptance; remove duplicate mutation ownership for that caller |
-| Direct API | `pnc_automation/app/entrypoints/api.py:gathering` | Forwards to `run_task` | Preserve parameter shape while forwarding to the typed workflow and same authority/journal |
-| Core dispatcher | `pnc_automation/app/automation/engine/core_script_dispatcher.py` | No typed gathering branch; step validation rejects it | Add only the explicit gathering operation and strict parameters |
-| Navigation | `pnc_automation/app/automation/engine/navigation_core.py:NavigationCore` | Reviewed routes/content action primitives exist; no typed gathering target/formation/dispatch helpers | Add focused world-map seams that revalidate exact source/control and use existing ready/content owners |
-| Context | `pnc_automation/app/automation/engine/core_workflow.py:WorkflowContext` | Typed navigation/open-building/content helpers; no world-map gathering method | Add narrow typed methods, preserving raw ordinary post-action and Chat observation |
-
-The existing `tests/unit/app/automation/tasks/test_gathering.py` is useful legacy
-behavior evidence. It is not proof that the replacement producer publishes the
-facts required by this plan.
-
-## Canonical owners: existing symbols and proposed seams
-
-Keep the existing symbols as the behavioral baseline and make every new seam
-explicit before implementation. The names below are an ownership map, not permission
-to add a parallel runner or observer:
-
-| Concern | Existing verified owner | Remaining typed seam |
+| Frame | Reusable fact | Limit |
 | --- | --- | --- |
-| Policy/input | `GatheringPolicy.from_params` and `ResourceType` in `pnc_automation/app/pnc/domain/policy_models.py` | Reuse the policy; add only strict capability validation, including an explicit disposition for `STONE`. The Daily quest model has `GATHER_GOLD`; the Gathering policy has no `GOLD` resource value. |
-| Legacy selection/phase behavior | `GatheringTask.plan`, `GatheringTask.verify`, `choose_priority_candidate`, `TaskPreflight.WORLD_MAP` | `GatheringWorkflow` and a typed result that preserve priority and phase order while replacing slot-decrement/map-return success shortcuts. |
-| Screen/content model | `Observation`, `DetectedSpatialObject`, `ObservationAdditions.available_march_slots`, `NavigationPerception.build`, `ObservationBuilder.build` | B publishes independently qualified node, occupancy, controls, formation, active-march, slot and receipt facts with frame/layout provenance. Add no consumer parser or guessed metadata. |
-| Navigation/context | `NavigationCore.navigate`, `NavigationCore.transition`, `NavigationCore._observe_source`, `WorkflowContext.navigate`, `WorkflowContext.observe_content` | Add focused world-map target/formation operations only after producer fields are released; they must revalidate the current source and action point immediately before input. |
-| Mutation/reconciliation | `CoreMutationBoundary`, `DailyMutationAuthorizer`, `JournaledMutationDispatcher`, `DailyRunJournalStore` | Add one Gathering capability/receipt adapter to this boundary. One durable intent precedes one Dispatch input; duplicate or ambiguous operation ids reconcile by observation and never replay. |
-| Callers | `GatheringTask` is registered in `task_registry.py`; `AutomationApi.gathering` and `AutomationSession.gathering` currently reach the legacy task path; typed core dispatch currently rejects `TaskId.GATHERING` | Add one `CoreWorkflowTaskDefinition`/factory and migrate direct/authored callers together after offline acceptance. No legacy fallback may remain behind the typed binding. |
+| 0148_ordinary_gather_dispatch.png | Ordinary PNC_WORLD_MAP after the visible sequence | No dispatch receipt, target army, slot count or server acceptance |
+| 0150_march_troop_overview.png | Farm level 6 at K157 X231 Y479, troop size 1,000 and remaining timer in Troop Info | No qualified active-march or army id producer |
+| 0215_gathering_report_list.png | Gathering Report row for Farm level 6, K157 X231 Y479, displayed 31.2K food | Rounded report display and no proof of the current target or dispatch |
 
-`available_march_slots` already exists as an optional field on the observation model,
-builder additions and navigation perception, but the saved producer replay does not
-qualify its source or freshness and there is no `active_marches` field in the current
-model. Treat both as missing producer contracts until B publishes them through both
-paths. A test fixture that manually supplies the optional field proves only consumer
-logic; it does not close production recognition coverage.
+The historical Farm and Buffalo Catapults formation are correlation evidence only. They
+must never become a current target or default lineup.
 
-## Producer facts required before implementation can be accepted
+## Exact semantic ownership
 
-These facts must be published by the canonical observation producer in both
-production paths. B's separate authoritative follow-up
-(`PNC_B_FOLLOWUP_RECOGNITION_HANDOFF.md`) owns Resource partial, Hero results and
-broader Research recognition; it does not make these Gathering facts complete.
-Do not fold this Gathering producer dependency into that three-item handoff. The active/report
-surfaces below are additional producer dependencies. A must not add OCR, assets,
-screen anchors, classifier exceptions, or workflow-local coordinate guesses to fill
-the gap.
+A03 owns the following slices even when a file also contains another feature:
 
-### Resource-node source facts
+| Concern | A03-owned symbols, methods, screens or keys |
+| --- | --- |
+| Resource identity | ResourceType handling for FOOD/WOOD/IRON/STONE, typed gathering target/action models, target identity and exact resource/coordinate/occupancy fields |
+| World producer | World Map/resource node spatial metadata, owner/occupancy/shield/hostility, current slot and active-march facts, formation/army facts, march/report rows, and target-correlated receipt fields in both observer paths |
+| Gathering controls | PNC_GATHER_BUTTON, PNC_MARCH_CONFIRM_BUTTON, exact Dispatch control and their screen/layout profiles, bounded OCR regions and fixtures |
+| Search edge | reviewed_navigation_edges() slice for PNC_WORLD_MAP -> PNC_WORLD_COORDINATE_DIALOG using PNC_WORLD_SEARCH_BUTTON; fresh dialog fields/controls and safe dialog-to-World/Home return predicates; no coordinate submission |
+| Gathering routes | Exact Home/World/node/march-confirm/report source and return predicates; A03's NavigationCore and WorkflowContext methods for target and formation revalidation |
+| Workflow | GatheringWorkflow, one-dispatch state/receipt/reconcile behavior, max_parallel_marches enforcement and direct/Daily-Go convergence |
+| Mutation | Gathering action kind, exact target/parameters, operation_id, capability/authority and receipt semantics in existing shared envelope/serialization; no new store or state machine |
+| Binding | TaskId.GATHERING typed definition, strict core dispatcher validation, registry and direct API/authored adapters |
+| Validation | Gathering unit, observer replay, route, contract, journal, caller parity, artifact and bounded live evidence |
 
-Publish one exact stable node identity (server/resource point id when it is actually observable, otherwise the repository's approved typed equivalent), resource type, map coordinate, visible node geometry, occupancy/owner, and shield/hostility state. The consumer may correlate by exact resource/coordinate plus own march/formation facts when internal ids are not published. The final pre-dispatch
-observation must re-read the selected tile and either confirm the same node or stop.
-A label such as `Farm` with a coordinate but no identity/owner correlation is not
-sufficient for a mutation target.
+A03 may edit shared files at these exact semantic slices. It does not claim the whole
+file, and it does not replace generic runtime/lease/readiness mechanics.
 
-The source client evidence shows this re-read boundary in
-`SlgWarColHandler:FightStartClickHandler`: it calls `MapData:GetTileInfo2(x,y)`,
-updates the map element, and checks `playerId`/`unionId` before sending. The
-replacement observation must expose the facts needed for the consumer to make the
-same decision. Unknown occupancy or an enemy/shield branch stops; the workflow does
-not guess that the node is safe.
+## Producer contract
 
-### Gather and formation facts
+A03 must make the named production facts available through both
+ObservationBuilder.build and NavigationPerception.build. Each fact carries the
+screen/layout identity, frame reference, capture freshness and source/provenance
+needed by a consumer to reject stale or ambiguous state.
 
-Publish the exact Gather control on the selected node panel, the march-confirm
-screen, the selected formation/army identity, and the exact dispatch control. The
-formation model must identify the selected heroes/army or the approved existing
-formation id; it must not silently pick cavalry or a default lineup because a field
-was missing. An absent or ambiguous formation is a no-input stop.
+### Resource node and occupancy
 
-### Slot, active-march, and receipt facts
+Publish one stable node identity: a server/resource point id when observable,
+otherwise the approved typed equivalent based on exact resource and coordinate.
+Publish resource type, coordinate, visible node geometry, owner/player or union
+relation, occupancy, shield and hostility state. The final pre-dispatch observation
+must re-read the tile and confirm the same identity and safe state. Unknown,
+changed, occupied, enemy or shielded state stops before Gather.
 
-Publish available march slots as an independent typed value with its source and
-freshness. Total troops, load capacity, army limit, or a historical slot decrement
-must not be substituted for available march slots. If the field is unknown, the workflow skips/stops before the Gather input according to the existing policy. The typed workflow must enforce `max_parallel_marches`; publish the fresh active-march count as well, because spare slots alone do not establish that cap.
+The source client evidence gives the boundary in
+SlgWarColHandler:FightStartClickHandler: it re-reads MapData:GetTileInfo2(x,y),
+updates the map element and checks playerId/unionId before SendRequest. This is
+versioned client evidence, so the replacement producer exposes the facts needed to
+make the same safe decision without treating the extracted source as server proof.
 
-After dispatch, publish the strongest observable receipt correlated to the same node and selected formation: a server/player army id when it is actually exposed, or exact resource/coordinate plus own march/formation facts and a target-bound status such as `ON_THE_WAY_TO` or `UNDER_CONTROL`. A later collection/return observation must retain that correlation and expose the resource point and army status/report. A generic
-World Map screen, the saved `0148` ordinary World Map frame, a changed node count,
-or a slot decrement without target correlation is not a success receipt. The saved
-`0150` Troop Info row is the expected active-gathering producer shape; the saved
-`0215` Gathering Report row is the expected completed/report shape. Both need an
-independent layout identity, bounded row association, and both-path publication.
+### Slots and active marches
 
-The producer must also identify reviewed return edges for the march-confirm and
-post-dispatch states. Existing visual fixtures prove portions of the node and march
-screens, but they do not prove available slots or a production dispatch/collection
-receipt:
+Publish available_march_slots as an independent typed value with source and
+freshness, and publish active_marches as a separate fresh count for the active
+castle. The workflow allows one dispatch only if slots are positive and
+active_marches + 1 <= max_parallel_marches. Unknown or stale facts stop before
+input. GetSelfArmyLimit, GetSelfArmyNum, troop size, load/carry capacity, formation
+hero slots and a historical slot decrement are not valid substitutes. Keep the
+configured cap explicit even when free slots exceed it.
 
-- `tests/data/screen_recognition/gather_node.png`
-- `tests/data/screen_recognition/march_confirm.png`
-- `tests/data/screen_recognition/march_confirm_empty.png`
-- `tests/integration/vision/test_gathering_march_visual_profiles.py`
+### Formation, controls and receipt
 
-The producer must publish `active_marches` separately from `available_march_slots`.
-The source symbols `MapArmyData:GetSelfArmyNum` and `CampDataWin:UpdatePanel` expose
-busy/total army statistics, while `MapArmyData:GetSelfArmyLimit` exposes an army
-limit; none is an available-slot fact. Likewise, troop size, load/carry capacity,
-formation hero slots, and a boolean collecting queue cannot be used for either
-`active_marches` or `available_march_slots`. A numeric value without its source,
-frame reference and freshness is unknown and stops before Gather.
+Publish the selected formation/army identity, exact Gather control on the node panel,
+march-confirm state, and exact Dispatch control. A missing or ambiguous formation
+is a no-input stop. Do not silently choose cavalry, heroes or a default lineup.
 
-These are B/producer evidence inputs; they are not a reason to bypass missing
-fields.
+After dispatch, publish the strongest target-correlated receipt available: a player
+army id when exposed, or exact resource/coordinate plus own march/formation facts and
+target-bound status such as ON_THE_WAY_TO or UNDER_CONTROL. A generic World Map,
+changed node count, free-slot change or World Map return alone is not a receipt.
+Troop Info and Gathering Report rows retain the resource point and army correlation
+when available. A later report is read-only post-dispatch evidence.
 
-## Target design and exact contracts
+The existing fixtures prove parts of node and march presentation but not this full
+contract. Replay saved 0148, 0150 and 0215 through both production paths with actual
+RapidOCR and normal ObservationRequest scopes. 0148 must remain ordinary World Map
+without a receipt. 0150 and 0215 must either publish qualified active/report facts or
+return an explicit unsupported result. Do not pass this gate by constructing an
+Observation manually or mocking OCR.
 
-Create one explicit typed operation, using the existing workflow module conventions, for example GatheringWorkflow. Its WorkflowSpec should use the shared Home-to-Home workflow boundary: enter from PNC_HOME_CITY, navigate through the reviewed World Map/node/march states, and return to PNC_HOME_CITY after a correlated dispatch receipt. Record the legacy task's final World Map as an internal transition, not as a second public boundary. A caller that needs to remain on World Map may use a separate reviewed navigation step after the workflow; do not hide a second behavior in the gather action.
+## Canonical action and mutation contract
 
-Declare `RESOURCE_CHANGING` with the exact applicable capability through the
-canonical mutation boundary. Both public and authored callers use this same
-Home-to-Home contract and retain the dispatch receipt independently of exit.
+Create one typed GatheringActionIdentity and one GatheringWorkflow using existing
+workflow conventions. The identity distinguishes:
 
-Add only focused context/navigation seams, such as:
+1. action kind: gather;
+2. exact action target and parameters: resource type (including Stone), stable
+   node/resource identity or exact approved resource/coordinate identity,
+   occupancy/owner expectation, selected formation/army, and policy-relevant
+   parameters such as max_parallel_marches; and
+3. durable operation_id: one caller request, reused when the same request retries
+   through a direct caller or Daily-Go.
 
-- `WorkflowContext.observe_world_map_content` for fresh typed node/slot content;
-- `NavigationCore.open_gathering_target` for selecting the observed node and
-  revalidating its identity/ownership immediately before input;
-- `NavigationCore.confirm_gathering_formation` for the exact selected formation and
-  dispatch control;
-- a typed dispatch/reconcile method that calls the existing mutation boundary and
-  returns the existing journaled result.
+DailyQuestId may be attached as optional entry/progress context after a real Daily
+row's Go control launches the action. It does not define the operation, turn Stone
+into Daily Gold, authorize a different target, renew a consumed budget, or prevent
+every future gather action for the same castle. The direct adapter skips the Daily
+row; the Daily-Go adapter revalidates and consumes PNC_QUEST_GO_BUTTON on the real
+row, then invokes the same feature executor with the same action identity. A
+genuinely separate operation id may proceed when current policy and authority
+permit it.
 
-Names may follow the repository's established naming once the interfaces are inspected, but the data contract must remain explicit: node identity, resource type, coordinate, occupancy/owner evidence, available slots, active-march count required by `max_parallel_marches`, formation/army identity, operation id, and correlated dispatch/collection receipt. Do not use an untyped `dict` of screen labels or add a generic navigation/mutation framework.
+Persist the intent before the final Gather/Dispatch actuator input. Use
+CoreMutationBoundary, DailyMutationAuthorizer, JournaledMutationDispatcher and
+DailyRunJournalStore as the one runtime/journal owner. Add a typed gathering
+capability/receipt adapter and feature metadata to the existing envelope and
+serializer under A03's semantic branches while preserving old Daily quest receipts.
+The adapter preserves Daily limits when DailyQuestId is present and uses the
+feature's standalone capability when the action is direct or is a resource not
+represented by an honest Daily quest. No fake Daily row, duplicate store, or second
+state machine is allowed.
 
-Use `CoreMutationBoundary`, `DailyMutationAuthorizer`,
-`JournaledMutationDispatcher`, and `DailyRunJournalStore` as the one mutation owner.
-Use existing `GATHER_FOOD`, `GATHER_WOOD`, or `GATHER_IRON` authority only where the operation is covered by the current policy. `ResourceType` is FOOD, WOOD, IRON, or STONE, while `DailyQuestId` also has GATHER_GOLD; GOLD is not a current GatheringPolicy value. Preserve STONE as an original input and resolve a narrow standalone capability/identity for STONE (and any other unsupported resource) with the shared mutation owner before dispatch. Do not relabel STONE as GOLD or silently add GOLD to the policy. Keep one mutation per invocation, zero diamond budget, and the existing account/castle/date acknowledgement. If the policy cannot authorize a requested resource, reject before navigation. A repeated or already committed operation id reconciles observation and never taps Gather or Dispatch again.
-
-The typed operation must use a durable intent before the final actuator input and
-freshly revalidate source, node, formation, and control immediately before that
-input. `CoreRuntime.observe_ready` may settle a canonical `PNC_LOADING` source once
-within the existing bounded budget. Ordinary post-action and Chat observations
-remain raw; no generic UNKNOWN retry or sleep loop is allowed.
-
-Keep `GatheringPolicy.max_parallel_marches` as an explicit bound. A typed available
-slot of zero is a known no-action result. A slot value that is absent, stale, or
-inconsistent with the fresh confirm screen is a stop. Do not infer capacity from
-`MapArmyData:GetSelfArmyLimit` or `GetSelfArmyNum`.
-
-The legacy task parses `max_parallel_marches` but never reads it during dispatch.
-Close that gap in this port instead of accepting and ignoring the parameter.
-For this bounded caller, the limit applies to the active castle's own currently
-dispatched marches, separate from troop capacity and remaining game slots.
-Require fresh `active_marches` and `available_march_slots` facts before dispatch:
-one new march is eligible only if slots are positive and
-`active_marches + 1 <= max_parallel_marches`. Dispatch at most one per invocation,
-even if the difference is larger. Missing active-count evidence is an explicit
-producer blocker for the promised cap, not permission to silently disable it.
-
-Full package completion preserves FOOD/WOOD/IRON/STONE input and this limit.
-A useful FOOD-only proof does not qualify Stone or close its standalone-capability
-dependency. Add no Gold policy value as a substitute and no unrelated resource
-families. Source/producer inspection and the shared owner resolve those technical
-contracts without another user spending question.
+One invocation performs at most one dispatch. A repeated operation id loads the
+existing PREPARED, DISPATCHED, RECONCILED or COMMITTED intent and reconciles by
+observation without another Gather or Dispatch input. An unrelated operation id is a
+new request and is governed by the current cap, target state and authority. A
+World Map return or ambiguous post-action state leaves the durable operation
+pending; it does not authorize replay.
 
 ## Required behavior
 
-### Read-only target and preflight
+### Read-only preflight and target
 
-1. Validate the resource policy, exact active account/castle, world-map entry, and
-   one requested target/formation. Select a node only from a fresh published typed
-   observation and the existing resource priority.
-2. If available slots are zero, return the existing no-action result without opening
-   the node. If slots are unknown or stale, stop before Gather. Require a fresh active-march count for the configured `max_parallel_marches` cap and allow at most one dispatch only when `active_marches + 1 <= max_parallel_marches`; for example active 1/max 2 permits one, while active 2/max 2 permits none. Do not treat spare slots as existing active-march count.
-3. Revalidate the tile/node identity, owner/occupancy, shield state, and resource
-   type from a fresh source frame. A changed, missing, enemy, shielded, or ambiguous
-   node stops before input.
-4. Open the exact node panel and revalidate the Gather control. A loading source may
-   use bounded ready settlement; an unknown or blocked source stops.
+1. Validate the resource policy, exact account/castle, one current target request
+   and one observed formation. Use fresh Home/World guards and the existing
+   resource priority.
+2. If available slots are zero, return the existing no-action result before opening
+   the node. If slots or active_marches are missing, stale or inconsistent, stop
+   before Gather. Active 1/max 2/free 3 permits exactly one dispatch; active 2/max
+   2/free 3 permits none.
+3. Re-read the selected tile/node and confirm identity, resource, coordinate,
+   owner/occupancy, shield and hostility. Changed, missing, enemy, occupied,
+   shielded or ambiguous state stops before input.
+4. Open the exact node panel, confirm the node identity and Gather control, and use
+   the bounded loading-only ready settlement if the source is PNC_LOADING. No
+   generic UNKNOWN retry or caller sleep loop is permitted.
 
-### Formation and one dispatch
+### Formation and dispatch
 
-1. Revalidate the march-confirm screen, available slots, exact formation/army, and
-   dispatch control from fresh content. A missing formation or ambiguous control
-   stops without input.
-2. Create the durable operation intent before dispatch. Press the exact Dispatch
-   control once. The operation carries the target node identity, resource type,
-   coordinate, formation/army identity, and zero-diamond authority.
-3. Reobserve fresh content and accept only a receipt correlated to the same node and
-   operation: a player army id/status, an explicit target-bound active march, or the
-   exact approved equivalent. A World Map return alone is not success.
-4. If the receipt is ambiguous, preserve the journaled intent as pending and stop.
-   Reconciliation may inspect the current map/report once later; it must not replay
-   the dispatch.
-5. If the workflow later receives a collection/return report for the same army and
-   resource point, record that correlation as post-dispatch evidence. Do not issue
-   `GoingForCollectBack` or `GoingForCollectTurn` as a new mutation unless a separate
-   existing caller and authority contract explicitly require it.
+1. Revalidate march-confirm content, independent slots and active-march facts,
+   selected formation/army, and exact Dispatch control from fresh content.
+2. Create one durable intent containing the target, resource, coordinate, formation,
+   authority and operation_id before pressing Dispatch. Press Gather and Dispatch
+   only on their exact reviewed controls, once per operation.
+3. Reobserve fresh content and accept only a receipt correlated to the same target
+   and operation: player army id/status or the approved exact resource/coordinate
+   plus own march/formation status. A World Map return alone is pending.
+4. If the receipt is ambiguous, preserve the journal intent and stop. Later
+   reconciliation may observe the map, Troop Info or report once but must not replay.
+5. Correlate any later collection/return report to the same node and army as
+   read-only evidence. Do not issue GoingForCollectBack or GoingForCollectTurn in
+   this slice.
+
+### World Search edge proof
+
+A03's separate nonspending navigation proof starts from a fresh Home, uses the
+reviewed Home-to-World edge, confirms fresh World Map, taps
+PNC_WORLD_SEARCH_BUTTON, confirms a fresh PNC_WORLD_COORDINATE_DIALOG, then safely
+closes/backs out and confirms fresh World Map and fresh Home. It submits no
+coordinate and performs no gathering mutation. PNC_WORLD_COORDINATE_BAR may be
+published as dialog content but cannot satisfy the action control. If an accepted
+Gathering live run traverses this exact edge, retain its evidence and do not run a
+second live proof solely for duplication.
 
 ## Implementation sequence
 
-1. Freeze the checkpoint and inspect current dirty paths. Obtain the producer's
-   typed node, slot, formation, occupancy, control, and receipt facts for one
-   unoccupied representative. If any fact is absent, record the exact producer
-   dependency and do not weaken the consumer.
-2. Resolve the exact observation model additions with the producer owner. Keep
-   B-owned fields/assets/OCR in B's files; A may add only A-owned domain/workflow
-   contracts after the producer agrees on field names and freshness semantics.
-3. Add the typed node/formation/receipt domain models and policy validation, reusing
-   `GatheringPolicy` and existing resource quest ids. Reject unsupported resources
-   and missing authority before navigation.
-4. Implement the reviewed World Map/node/march edges and focused context methods.
-   Reuse loading-only readiness, fresh content observation, source revalidation,
-   and existing action follow-up semantics.
-5. Implement `GatheringWorkflow` and its one journaled dispatch/reconcile path. Do
-   not accept a slot decrement or map return without correlated target receipt.
-6. Add the typed dispatcher step and strict validator. Migrate one direct/authored
-   caller (`task_registry`/API as applicable) in one coherent patch, preserving
-   existing parameter semantics and removing the migrated legacy mutation owner.
-7. Add focused unit/contract/integration regressions, run the smallest repository
-   groups, and inspect journal/artifact output. Keep legacy task tests while their
-   caller remains unmigrated; remove or update only tests that assert the migrated
-   path's old mutation behavior.
-8. Acquire the canonical live lease only after offline acceptance. Run one named,
-   unoccupied target with one named formation, capture the correlated dispatch
-   receipt, and optionally observe the later collection report without a second
-   dispatch. Stop on the first unknown/ambiguous result.
-9. Promote the caller only after exact receipt, journal, and no-replay evidence are
-   recorded. Report the shared-file ranges and any producer fields still pending.
+1. Verify the clean base and inspect the current gathering task, policy, observation
+   models, producer paths, route graph, journal, callers and focused tests. Record
+   missing facts as A03-owned implementation items.
+2. Define GatheringActionIdentity, exact target/formation/receipt values, resource
+   and capability dispositions, binding them to the existing operation_id and
+   canonical no-replay handling. Keep DailyQuestId
+   optional metadata and preserve legacy Daily envelope loading.
+3. Implement world resource/node, occupancy, slot, active-march, formation, control,
+   Troop Info/report and receipt publication in both production observers, with
+   bounded OCR profiles/assets/fixtures for the named surfaces. Use actual
+   RapidOCR replay before consumer acceptance.
+4. Add exact Home/World/node/march-confirm/report route and return predicates.
+   Correct the transferred Search edge to PNC_WORLD_SEARCH_BUTTON and add its
+   fresh-dialog/safe-return predicates and standalone nonspending proof.
+5. Add focused WorkflowContext/NavigationCore methods and GatheringWorkflow.
+   Reuse observe_ready, source revalidation, raw post-action/Chat observation and
+   existing action-follow-up mechanisms.
+6. Integrate gathering action kind, target metadata, operation_id, authority,
+   receipt and no-replay semantics into the existing mutation envelope,
+   serializer, journal and dispatcher. Do not add another journal/store/runtime.
+7. Add strict typed TaskId.GATHERING dispatcher/registry/API/authored adapters.
+   Migrate the direct and Daily-Go callers to the same executor and remove the
+   migrated legacy mutation owner from those paths.
+8. Add focused unit, contract, route, observer replay, journal and caller parity
+   regressions. Run the narrowest repository groups accepted by the test runner.
+9. After offline acceptance, acquire the canonical process-scoped lease and run one
+   bounded live proof using the already authenticated configured active castle, one
+   current neutral target, one observed formation, zero diamonds and at most one
+   Dispatch input. Capture the target receipt, journal state, no-replay result,
+   return and optional read-only report.
+10. Promote the direct/Daily-Go binding only after exact receipt, journal and
+    parity evidence are reviewable. Report any field that remains explicitly
+    unsupported; unsupported is not silently successful.
 
 ## Offline validation and acceptance
 
-Use the repository runner and the installed Python 3.13 launcher:
+Documentation changes require git diff --check. No unit or live run is required
+for this plan-only change.
 
-```text
+The implementation worker should use the narrowest repository runner groups for
+the changed symbols, then the affected gate on the actual candidate:
+
 C:\Users\lebel\AppData\Local\Programs\Python\Python313\python.exe tools/run_tests.py group unit.app.automation.tasks
 C:\Users\lebel\AppData\Local\Programs\Python\Python313\python.exe tools/run_tests.py group integration.workflows
 C:\Users\lebel\AppData\Local\Programs\Python\Python313\python.exe tools/run_tests.py group contract.entrypoints
-```
+C:\Users\lebel\AppData\Local\Programs\Python\Python313\python.exe tools/run_tests.py affected --base origin/main --explain --json .test-impact/gathering-selection.json --results .test-impact/gathering-results.json
 
-Select the narrowest groups accepted by the runner and report the exact selected
-names. The existing combined affected gate at the starting checkpoint passed 2,033
-tests, with 2,027 passed and six skipped, run id
-`c467de4a5dcb42809cef0545c3aa43e6` at `2026-09-13T23:18:18.415109+00:00`; do not
-rerun that unchanged gate because this document was added. For these documentation
-edits, run `git diff --check`; no unit or live run is required before implementation.
+Do not run unit or live tests for this plan-only change.
 
-Add only meaningful typed-contract regressions:
+Meaningful regressions must cover:
 
-- positive: exact node/resource/owner facts, available slot, selected formation,
-  Gather and Dispatch controls, one dispatch, correlated army/node receipt, and
-  reviewed World Map-to-Home return;
-- no action: zero available slots produces no input;
-- negative before input: wrong resource priority, changed/missing node identity,
-  unknown occupancy or shield, stale slot, no formation, missing/ambiguous Gather or
-  Dispatch control, unsupported resource, absent authority, stale checkpoint, and
-  wrong account/castle/capability/date;
-- negative after dispatch: World Map return without target/army receipt, stale or
-  unrelated receipt, unknown result, or blocked screen leaves a durable pending
-  operation and causes no replay;
-- duplicate/committed/PREPARED/DISPATCHED intents reconcile through the existing
-  dispatcher and produce zero additional Gather/Dispatch inputs;
-- collection/return evidence correlates to the same node and player army; it does
-  not silently create a second mutation;
-- direct API and authored dispatcher callers produce identical typed target,
-  formation, authority, journal, receipt, and return behavior;
-- existing `test_gathering.py`, visual profiles, and action-follow-up tests retain
-  their legacy meanings until the corresponding caller is migrated. Do not add a
-  matrix for every resource, formation, or catalog node.
+- positive exact target/resource/owner facts, fresh slots and active-march count,
+  observed formation, Gather and Dispatch controls, one input and correlated
+  army/node receipt;
+- no input for zero slots, active cap reached, unknown/stale slots or active
+  count,
+  wrong resource, changed/missing/occupied/enemy/shielded node, absent formation,
+  missing/ambiguous control, unsupported capability, stale checkpoint or wrong
+  account/castle/date;
+- World Map return without target/army receipt, unrelated/stale receipt, UNKNOWN
+  or blocked post-action leaves a durable pending intent and performs no replay;
+- PREPARED retains the canonical retry-permitted disposition with fresh
+  validation; DISPATCHED, RECONCILED and COMMITTED duplicate retries use the
+  existing no-replay handling and produce no additional Gather/Dispatch input;
+- direct and Daily-Go callers converge on the same action kind, exact target,
+  operation_id, authority, journal, receipt and return; a separate authorized
+  operation id remains possible when policy permits;
+- the explicit Daily adapter revalidates the actual resource quest row and
+  PNC_QUEST_GO_BUTTON, proves the expected world/gathering arrival, and invokes
+  the same executor; wrong/stale Go or arrival stops before mutation, and a fresh
+  Daily survey separately establishes quest progress;
+- Stone remains Stone with an honest standalone capability disposition, and no
+  GATHER_GOLD relabeling is accepted;
+- collection/report observation correlates to the same node/army and does not
+  create a second mutation;
+- both production observers publish every consumed field with source/layout/frame
+  provenance and freshness;
+- Search uses PNC_WORLD_SEARCH_BUTTON, opens a fresh coordinate dialog, safely
+  returns to Home, submits no coordinate, and does not depend on a coordinate-bar
+  label being actionable.
 
-The producer gate is a real both-path observer replay, not a consumer fixture: replay
-the saved `0148`, `0150`, and `0215` pixels through both
-`ObservationBuilder.build` and `NavigationPerception.build`, with actual RapidOCR
-and their normal `ObservationRequest` scopes, and compare screen/layout, guard, row/control, frame and
-semantic-field provenance. `0148` must remain ordinary World Map without a receipt;
-`0150` and `0215` must either publish the qualified active/report facts or retain an
-explicit unsupported result. Do not make a passing consumer test from mocked OCR or a
-manually populated `Observation` close this producer gate.
-
-Tests must prove the observable contract: positive input plus fresh receipt, or
-negative no-input/pending behavior. Do not test implementation wording or replace
-missing producer facts with mocked OCR.
-
-Add the actual parallel-limit regression: active 1/max 2/free 3 permits exactly
-one dispatch; active 2/max 2/free 3 permits none; unknown active count cannot claim
-the cap was enforced. Verify all four original resource inputs have an honest
-capability disposition, including Stone. Positive workflow/caller tests must
-confirm Home after retaining the correlated march receipt.
-
-After source changes, run the repository affected gate on the actual candidate:
-
-```powershell
-& 'C:/Users/lebel/AppData/Local/Programs/Python/Python313/python.exe' tools/run_tests.py affected --base origin/main --explain --json .test-impact/gathering-selection.json --results .test-impact/gathering-results.json
-git diff --check
-```
-
-Follow a required full fallback once; do not repeat the unchanged historical gate.
+The producer gate replays 0148, 0150 and 0215 through both
+ObservationBuilder.build and NavigationPerception.build with actual RapidOCR and
+normal scopes. 0148 remains ordinary World Map without a receipt; 0150/0215 either
+publish qualified active/report facts or retain explicit unsupported results.
+Mocked OCR and manually populated observations cannot close the gate.
 
 ## Live proof and stop conditions
 
-After the offline gate and a qualified both-path producer replay, use the canonical
-process-scoped lease and configured live role for `mega_old_acc`; exact identity and
-active castle must pass preflight. Select an eligible neutral node and existing
-formation from fresh published observation under the granted authority, and record
-the resource type, exact node/coordinate, occupancy, and formation/army choice in the
-execution trace. A previously observed Farm at `K157 X231 Y479` with Buffalo Catapults
-is evidence of one possible fixture, not a current target. Do not redo a previously
-proven spend merely to qualify recognition; this live run is one consumer proof after
-the producer gate.
+Use the canonical process-scoped lease and the configured live role for
+mega_old_acc only after offline acceptance. The existing user authorization covers
+all needed in-game actions and unlimited in-game spend; do not ask for a new budget
+question. Resolve the exact active castle, current neutral target, resource type,
+occupancy and existing formation from fresh configured observation. The historical
+Farm K157 X231 Y479 and Buffalo Catapults are not a current target or default.
 
-Run one normal zero-diamond dispatch to an unoccupied node. The user's unlimited
-mega_old_acc authorization covers all in-game actions/resources, so do not ask for
-   spending permission again. The worker may choose an eligible current node and
-   existing formation under that grant; account/castle identity still comes from
-    configured preflight and must not be switched. Capture preflight identity, node
-source, independent slot and active-march facts, formation facts, fresh controls, durable intent, dispatch input, target-correlated
-receipt, journal transition, and reviewed return under a unique
-`.local-data/artifacts/core_resume/` run directory.
+Run one normal zero-diamond dispatch at most. Record preflight identity, node
+source and target, independent slot and active-march facts, selected formation,
+fresh controls, durable operation identity, intent, actuator inputs,
+target-correlated receipt, journal transition, no-replay retry result and reviewed
+Home return under a unique .local-data/artifacts/core_resume/ run directory. A
+later Troop Info or Gathering Report observation is optional read-only evidence for
+the same operation.
 
-If an occupied/enemy/shielded node, unavailable slot, stale target, loading state
-outside the bounded ready path, UNKNOWN, blocked control, or ambiguous receipt is
-seen, stop. Preserve the durable intent, reconcile by observation only, and never
-repeat Dispatch. If the one proof obtains a correlated active march, a later
-collection report may be observed without another dispatch; it is optional evidence
-for the same operation, using the `0150`/`0215` destination and resource association,
-not a second spend or a new `GoingForCollectBack`/`GoingForCollectTurn` mutation.
+If a node is occupied, enemy or shielded, a slot/cap fact is unavailable, a source
+is loading beyond bounded readiness, a control is blocked, a receipt is stale or
+ambiguous, or identity/lease checks fail, stop. Preserve the intent and reconcile
+by observation only. Never repeat Gather or Dispatch to obtain evidence. A slot
+decrement or World Map return alone does not satisfy acceptance.
 
-Acceptance is one exact target/formation dispatch receipt, correct journal state, no
-duplicate input, and a confirmed reviewed return. A slot decrement or World Map
-return alone does not satisfy acceptance.
+The separate Search edge proof is nonspending and uses the same lease and active
+castle. Capture Home, World Map, PNC_WORLD_SEARCH_BUTTON, fresh coordinate dialog,
+safe return and fresh Home. If the gathering proof already traverses this exact
+edge, reference that artifact instead of duplicating it.
 
 ## Evidence and version caveats
 
-The original A15 requirements and current porting boundaries are in
-`reviewed_plans/PNC_CORE_WORKFLOW_PORTING_PLAN.md` and
-`instructions/CORE_WORKFLOW_PORTING.md`. The current legacy implementation is
-`pnc_automation/app/automation/tasks/gathering_task.py`; its focused tests are
-`tests/unit/app/automation/tasks/test_gathering.py`.
+The source workflow note is docs/game-reference/workflows/neutral-gathering.md.
+It records package build 5.0.203/version code 233 and live footer 5.0.204.235.
+Relevant extracted client symbols are versioned evidence:
 
-The source workflow note is `docs/game-reference/workflows/neutral-gathering.md`.
-It records package build 5.0.203/version code 233 and a live footer 5.0.204.235.
-Relevant extracted client symbols are:
+- handler/slgwar/handler/slgwarcolhandler.lua:SlgWarColHandler:FightStartClickHandler
+  and SendRequest re-read the tile, check playerId/unionId, and send the resource
+  point/resource request;
+- commands/resource/resourcecommand.lua:ResourceSend.RequireGoingForCollect
+  describes lord/king/point/heroes/armys/lineup request inputs;
+- commands/resource/resourcecommand.lua:GoingForCollect,
+  GoingForCollectBack and GoingForCollectTurn update self-army/map-army and
+  collection/return state;
+- scenes/worldmap/data/maparmydata.lua:GetSelfArmyLimit and GetSelfArmyNum are
+  total army/troop calculations, not available slots;
+- uis/camp/campdatawin.lua:CampDataWin:UpdatePanel is troop/load display, not a
+  slot source.
 
-- `handler/slgwar/handler/slgwarcolhandler.lua:SlgWarColHandler:FightStartClickHandler`
-  and `SendRequest`: tile re-read, `playerId`/`unionId` ownership checks, resource
-  point id, resource id, and the request boundary;
-- `commands/resource/resourcecommand.lua:ResourceSend.RequireGoingForCollect`:
-  lord/king/point/heroes/armys/lineup request parameters;
-- `commands/resource/resourcecommand.lua:command.GoingForCollect`,
-  `GoingForCollectBack`, and `GoingForCollectTurn`: success updates to self army,
-  map army, and collection/return state;
-- `scenes/worldmap/data/maparmydata.lua:GetSelfArmyLimit` and `GetSelfArmyNum`:
-  total troop/army calculations, not available march slots;
-- `uis/camp/campdatawin.lua:CampDataWin:UpdatePanel`: camp troop/load display,
-  also not a slot source.
+The captured evidence directory
+.local-data/artifacts/capture_gap_exploration/20260913T030954Z/ and fixtures are
+versioned observations, not current server proof. The latest live build differs.
+Current production observation, exact active identity and durable journal evidence
+govern acceptance.
 
-The live capture under B's evidence directory
-`.local-data/artifacts/capture_gap_exploration/20260913T030954Z/` showed the historical
-Farm `K157 X231 Y479`, `1,000` Buffalo Catapults, displayed food capacity `31,279`,
-and travel time `47s`. `0148` is ordinary World Map and is not a receipt. `0150`
-contains the active Gathering Troop Info row; `0215` contains the later Gathering
-Report row. The captured sequence did not publish a usable available-slot field,
-active-march count, or fully correlated replacement receipt. Do not copy that dirty
-evidence into A source or treat it as current target authorization.
-
-The source package is versioned client evidence, not proof of current server rules
-or a successful live action. The latest live build differs. Live observation and
-journal evidence are required before caller acceptance.
-
-## Permission, configuration, and technical gates
-
-| Item | State and required action |
-| --- | --- |
-| Account/resources | Granted: `mega_old_acc`, all in-game actions/resources, unlimited budget. Do not re-request spending approval. |
-| Workers/network | Keep workers offline during implementation and offline gates; live execution uses the assigned canonical lease only after those gates. No direct service calls, APK changes, or other worktree edits. |
-| Castle/identity | Exact configured active castle and account identity must pass preflight; do not switch them. |
-| Resource target | Select an eligible neutral resource type and node identity/coordinate from fresh observation during the bounded proof; record occupancy/owner evidence. |
-| Formation | Select an existing observed formation/hero/army selection during the bounded proof and record it; do not invent a cavalry or default lineup. |
-| Slots | Producer must publish an independent available-march-slots value and a fresh active-march count for the configured cap. Troop count/load capacity is not a substitute. |
-| Mutation authority | Use existing `GATHER_FOOD`, `GATHER_WOOD`, or `GATHER_IRON` authority when applicable; preserve STONE as an original policy input and resolve a narrow standalone capability for it before dispatch. Keep one mutation, zero diamonds, and account/castle/date acknowledgement. |
-| Collection | Dispatch receipt is the caller acceptance boundary. A later collection/return report is optional read-only evidence correlated to the same node/army; it never creates a second mutation in this slice. |
-| Producer facts | B/another explicit producer owner must publish node, occupancy, controls, formation, slots, and correlated receipt. A owns consumer/navigation/mutation after publication. |
-
-There is no pending user choice for this package. The user's broad live authorization
-already covers `mega_old_acc`, any needed in-game action, and unlimited in-game spend;
-the remaining slot, Stone capability, and collection-correlation items are technical
-contracts resolved by the producer/consumer owners. Do not request a new budget,
-target, formation, or collection permission. The live worker still resolves the
-current target and formation from fresh configured observation and must stop on an
-identity, lease, guard, or receipt failure.
-
-This package does not rebudget the task, run automatic Daily maintenance, merge or
-push to main, use desktop mouse/keyboard control, call a game service directly, or
-perform real-money actions.
-
-## Independent qualification scope
-
-B's evidence audit leaves independent positive holdouts missing for 19 changed
-layouts overall. That inventory remains a B qualification queue; this consumer plan
-does not require a blanket all-layout or all-resource replay. Gathering needs only
-independent, separately reviewed positives for the exact node, active `Troop Info`,
-report, slot/active-march and formation/control surfaces that its contract consumes,
-plus wrong-node/occupied/unknown/blocked negatives. The already recorded idle Build
-Queue and Economy idle-detail proofs are outside Gathering's acceptance; preserve
-them without rerunning them or using them to qualify active/report facts. A correction capture cannot be promoted to an untouched holdout for
-the same correction. Keep each feature's holdout and source revision in its own
-artifact record.
-
-Technical decisions and evidence gates before implementation or live dispatch:
-
-1. Qualify the typed field and provenance for available march slots, distinct from troop/load capacity, plus the fresh active-march count required to enforce the configured cap.
-2. Qualify the strongest observable dispatch/collection correlation on the current build: resource point id and/or player army id when visible, otherwise exact resource/coordinate plus own march/formation facts.
-3. Select an existing observed formation and army selection for the representative proof; do not invent a default where the producer is ambiguous.
-4. Keep collection/return as an observation-only postcondition for this dispatch port unless an existing authorized caller owns `GoingForCollectBack`/`Turn`.
-5. Qualify the reviewed edge from the exact march/report state back through World Map to the shared Home boundary.
+This plan does not change automatic Daily maintenance, scheduling, Resource/Hero/
+Research/building ownership, generic OCR/guard/runtime/lease mechanics, direct game
+services, APKs, real-money actions, or other worktrees. Its branch is complete when
+the feature definition of done and all required evidence are reviewable
+independently of peer completion or final merge.
 
 ## Copyable worker kickoff
 
-```text
-Work in C:\Users\lebel\pnc\.local-data\worktrees\workflow-recognition-integration at verified HEAD4f33202, preserving all existing root-owned dirty files. Implement only reviewed_plans/PNC_CORE_REMAINING_03_GATHERING_PLAN.md: a typed bounded GatheringWorkflow for one exact neutral resource dispatch through NavigationCore/WorkflowContext and the existing CoreMutationBoundary/journal. Require published node identity/resource/owner facts, independent available march slots, exact formation/army and controls, fresh source revalidation, one durable intent, one Dispatch input, and the strongest target-correlated receipt (player-army id when exposed, otherwise exact resource/coordinate plus own march/formation facts). Do not accept a slot decrement or World Map return alone. Do not edit B-owned vision/OCR/assets/observation producer files, Resource/Hero/Research/building work, or other worktrees. First verify the producer facts; if node identity, slots, formation, occupancy, receipt, or reviewed return edges are missing, report the exact dependency and stop. Preserve GatheringPolicy and existing FOOD/WOOD/IRON authority; carry STONE as an original input until the shared owner adds its narrow capability. No generic mutation/navigation framework, YOLO/cavalry/search rewrite, or second collection mutation. Reuse loading-only observe_ready and raw post-action/Chat observation. Add focused no-input, stale/unknown/blocked, duplicate/no-replay, journal, receipt-correlation, and direct/authored parity tests. Use the installed Python 3.13 repository runner, never live tools until offline checks pass. For live proof, use only authorized mega_old_acc, exact preflight, canonical lease, one named unoccupied node and formation, zero diamonds, one dispatch at most, captured receipt/journal/return, optional read-only collection report, and stop on UNKNOWN or ambiguity without replay. Report exact changed files, shared-file ranges, test results, artifacts, and unresolved producer facts.
-```
+Work in an isolated worktree based on clean checkpoint
+6bc27585fbac1244672cf4a653ea6248955a4aca. Implement only the A03 gathering slice:
+world resource/node and occupancy facts, independent available slots and active
+march count, observed formation and exact Gather/march-confirm/Dispatch controls,
+typed GatheringWorkflow, canonical gathering action identity and operation_id,
+existing journal/dispatcher/authority/receipt integration, direct and Daily-Go
+adapters, both production observers, exact reviewed routes and tests. Keep FOOD,
+WOOD, IRON and STONE distinct; do not map Stone to Daily Gold. Persist one intent
+before one Dispatch input, require a target-correlated receipt and never replay an
+ambiguous operation.
+
+Own the transferred World Search edge: use PNC_WORLD_SEARCH_BUTTON to open a fresh
+coordinate dialog and prove safe Home return without coordinate submission. A
+Gathering run may reuse that exact proof. Do not add YOLO, coordinate submission,
+generic OCR/runtime/navigation/mutation framework, Resource/Hero/Research/building
+work or collection mutations. Do not wait for B or feature 05/06 setup; resolve
+missing facts in this named slice or record the exact unsupported contract.
+
+Use the repository runner after implementation and no live action before offline
+acceptance. For the one bounded live proof use only the already authenticated
+mega_old_acc active castle, canonical lease, one current neutral target, one
+observed formation, zero diamonds and at most one dispatch. Capture receipt,
+journal, no-replay and return evidence; stop on ambiguity. Report exact files,
+semantic shared-file ranges, tests, artifacts and residual unsupported facts.
