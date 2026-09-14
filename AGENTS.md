@@ -104,10 +104,11 @@ Read the applicable `SKILL.md` completely before its workflow.
 ## Review And Source Control
 
 - Reviews lead with actionable findings ordered by severity and file/line. Prioritize correctness, security, data loss, behavior, ownership, and meaningful test gaps; omit theoretical or style-only findings that would not justify a change.
-- Use `.agents/skills/manage-source-control` for branch, worktree, rebase, merge, push, or cleanup operations.
-- Inspect status before editing or staging. Do not overwrite unrelated changes or use destructive Git/filesystem commands without explicit authorization and verified targets.
+- Use `.agents/skills/manage-source-control` before tracked edits and for branch, worktree, commit, synchronization, integration, push, or cleanup operations.
+- Before modifying tracked files, including documentation and plans, confirm the checkout is task-owned. Reuse its worktree when existing changes belong to the task; do not edit a shared or default-branch checkout. If ownership is unclear or unrelated work is present, use an isolated `codex/` worktree before editing.
+- Preserve unrelated changes. Do not use destructive Git/filesystem commands without explicit authorization and verified targets.
 - Keep generated output out of Git. Before staging, use `git status --short --ignored` and inspect unexpected paths with `git check-ignore -v`.
 
 ## Completion
 
-Finish when the requested behavior is implemented and the smallest sufficient checks pass. Report commands as passed, failed, or skipped. For a required live check that cannot run, give the exact blocker and remaining command. Mention only material residual risks and never expose secrets.
+Finish when the requested behavior is implemented and the smallest sufficient checks pass. For modifying tasks, inspect final status and report task-owned uncommitted paths plus commit and push state; a commit in another checkout does not make the original clean. Report commands as passed, failed, or skipped. For a required live check that cannot run, give the exact blocker and remaining command. Mention only material residual risks and never expose secrets.
