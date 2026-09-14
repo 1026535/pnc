@@ -12,6 +12,8 @@ import unittest
 from PIL import Image
 
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
+from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
 from pnc_automation.app.pnc.vision.visual_screen_recognizer import load_visual_screen_recognizer
 from tools.benchmark_screen_recognition import _decoded_image_sha256
 from tests.support.paths import REPOSITORY_ROOT, TEST_DATA_ROOT
@@ -33,7 +35,7 @@ class VisualScreenMetadataTests(unittest.TestCase):
             for sample in manifest["samples"]
             if sample["split"] == "reference"
         }
-        self.assertEqual(40, len(catalog["profiles"]))
+        self.assertEqual(58, len(catalog["profiles"]))
         for profile in catalog["profiles"]:
             with self.subTest(profile=profile["id"]):
                 source = profile["source"]
@@ -46,18 +48,25 @@ class VisualScreenMetadataTests(unittest.TestCase):
                 with Image.open(fixture) as image:
                     decoded_sha256 = _decoded_image_sha256(image)
                 self.assertEqual(decoded_sha256, source["decoded_sha256"])
-                if source["fixture"] in references:
-                    sample = references[source["fixture"]]
+                fixture_key = fixture.relative_to(DATA_ROOT).as_posix() if fixture.is_relative_to(DATA_ROOT) else None
+                if profile["review"]["reference_manifest"] == "tests/data/screen_recognition/manifest.json":
+                    self.assertIn(fixture_key, references)
+                    sample = references[fixture_key]
                     self.assertEqual(sample["sha256"], source["decoded_sha256"])
                     self.assertEqual(sample["group"], source["capture_group"])
-                    self.assertEqual("tests/data/screen_recognition/manifest.json", profile["review"]["reference_manifest"])
-                elif profile["review"]["reference_manifest"] == "tests/data/screen_recognition/manifest.json":
                     self.assertEqual("tests/data/screen_recognition/manifest.json", profile["review"]["reference_manifest"])
                 else:
                     self.assertEqual("tests/data/game_first_navigation/provenance.json", profile["review"]["reference_manifest"])
                 self.assertEqual("guarded_reference_only", profile["review"]["qualification"])
                 if profile["id"] == "player_mail_mailbox_list":
                     self.assertEqual("5.2.76 / AppVersion 5.0.204.235", profile["review"]["build"])
+                    self.assertEqual("English", profile["review"]["locale"])
+                elif profile["id"] in {
+                    "loading_configured_game_launch",
+                    "alliance_invitation_portrait",
+                    "alliance_join_landing",
+                }:
+                    self.assertEqual("5.2.77 / AppVersion 5.0.201.227", profile["review"]["build"])
                     self.assertEqual("English", profile["review"]["locale"])
                 else:
                     self.assertIsNone(profile["review"]["build"])
@@ -67,7 +76,9 @@ class VisualScreenMetadataTests(unittest.TestCase):
                     if profile["id"] in {
                         "institute",
                         "hero_hall",
+                        "alliance_invitation",
                         "bag",
+                        "world_map",
                         "campaign_chapter_10",
                         "campaign_stage_10_3",
                     }
@@ -76,7 +87,7 @@ class VisualScreenMetadataTests(unittest.TestCase):
                 self.assertEqual(expected_revision, profile["revision"])
 
         recognizer = load_visual_screen_recognizer()
-        self.assertEqual(40, len(recognizer.profiles))
+        self.assertEqual(58, len(recognizer.profiles))
         self.assertTrue(all(profile.review.qualification == "guarded_reference_only" for profile in recognizer.profiles))
 
         class _MatchAll:
@@ -89,25 +100,23 @@ class VisualScreenMetadataTests(unittest.TestCase):
                 return object()
 
         recognition = load_visual_screen_recognizer(matcher=_MatchAll()).recognize(Image.new("RGB", (540, 960)))
-        self.assertEqual(32, len({item.screen_type for item in recognition.evidence}))
-        self.assertTrue(
-            all(
-                item.layout_revision
-                == (
-                    2
-                    if item.screen_type
-                    in {
-                        ScreenType.PNC_INSTITUTE,
-                        ScreenType.PNC_CAMPAIGN_CHAPTER,
-                        ScreenType.PNC_CAMPAIGN_STAGE,
-                        ScreenType.PNC_HERO_HALL,
-                        ScreenType.PNC_BAG,
-                    }
-                    else 1
-                )
-                for item in recognition.evidence
-            )
-        )
+        self.assertEqual(44, len({item.screen_type for item in recognition.evidence}))
+        # Alternate appearances can share a layout and retain separate source
+        # revisions; each evidence item must preserve its matched profile's one.
+        revisions = {f"visual_anchor:{profile['id']}": profile["revision"] for profile in catalog["profiles"]}
+        self.assertTrue(all(item.layout_revision == revisions[item.reason] for item in recognition.evidence))
+
+    def test_profile_controls_are_declared_for_their_screen(self) -> None:
+        """Keep visual control publication aligned with selector ownership metadata."""
+
+        registry = build_default_selector_registry()
+        catalog = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
+        for profile in catalog["profiles"]:
+            screen = ScreenType[profile["screen"]]
+            for control in profile.get("controls", ()):
+                selector = registry.require(UiElementId(control["selector"]))
+                with self.subTest(profile=profile["id"], selector=control["selector"]):
+                    self.assertIn(screen, selector.screens)
 
     def test_malformed_provenance_is_rejected_eagerly(self) -> None:
         original = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))

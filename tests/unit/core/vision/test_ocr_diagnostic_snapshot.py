@@ -16,6 +16,7 @@ from pnc_automation.core.vision.ocr.ocr_service import (
     OcrLine,
     OcrReadPurpose,
     OcrReadStatus,
+    OcrRequiredFieldStatus,
     OcrResult,
     OcrWord,
 )
@@ -68,6 +69,36 @@ class _RecordingBackend:
 
 class OcrDiagnosticSnapshotTests(unittest.TestCase):
     """Validate immutable read history for bounded raw and preprocessed OCR."""
+
+    def test_optional_required_fact_is_retained_on_each_context_read_path(self) -> None:
+        """Carries semantic ownership into immutable raw and transformed read evidence."""
+
+        image = Image.new("RGB", (120, 100), (1, 2, 3))
+        regions = (
+            Bounds(0, 0, 20, 20),
+            Bounds(20, 0, 20, 20),
+            Bounds(40, 0, 20, 20),
+            Bounds(60, 0, 20, 20),
+        )
+        context = ObservationOcrContext(image, _RecordingBackend(), _frame_ref(), "rapid-v1")
+
+        context.read_result(image, regions[0], required_fact="raw_fact")
+        context.read_lines(image, regions[1], required_fact="line_fact")
+        context.read_text(image, regions[2], required_fact="text_fact")
+        context.read_preprocessed_result(
+            image,
+            regions[3],
+            preprocessing_id="rgb-v1",
+            prepare=lambda full_image, region: full_image.crop(
+                (region.x, region.y, region.x + region.width, region.y + region.height)
+            ),
+            required_fact="preprocessed_fact",
+        )
+
+        self.assertEqual(
+            [diagnostic.required_fact for diagnostic in context.read_diagnostics],
+            ["raw_fact", "line_fact", "text_fact", "preprocessed_fact"],
+        )
 
     def test_bounded_raw_result_identity_and_diagnostic_reads_do_no_work(self) -> None:
         image = Image.new("RGB", (80, 60), (15, 28, 68))
@@ -231,6 +262,56 @@ class OcrDiagnosticSnapshotTests(unittest.TestCase):
         self.assertEqual([item.status for item in diagnostics], [OcrReadStatus.MISSING, OcrReadStatus.MISSING])
         self.assertTrue(all(item.result is None for item in diagnostics))
         self.assertEqual(after, before)
+
+    def test_required_field_parser_diagnostics_are_frame_scoped_and_do_no_ocr(self) -> None:
+        """Records parser misses separately when the bounded OCR crop had text."""
+
+        image = Image.new("RGB", (80, 60))
+        region = Bounds(5, 5, 20, 20)
+        backend = _RecordingBackend()
+        context = ObservationOcrContext(image, backend, _frame_ref(), "rapid-v1")
+
+        context.record_required_field_diagnostic(
+            required_fact="world_coordinate_pair",
+            status=OcrRequiredFieldStatus.INVALID,
+            region=region,
+            reason="invalid_value",
+            detail="parser:world_coordinate_dialog_field",
+        )
+
+        self.assertEqual(backend.calls, [])
+        diagnostics = context.required_field_diagnostics
+        self.assertEqual(len(diagnostics), 1)
+        self.assertEqual(diagnostics[0].required_fact, "world_coordinate_pair")
+        self.assertEqual(diagnostics[0].status, OcrRequiredFieldStatus.INVALID)
+        self.assertEqual(diagnostics[0].region, region)
+        self.assertEqual(diagnostics[0].reason, "invalid_value")
+        self.assertEqual(context.metrics.engine_calls, 0)
+
+    def test_required_field_parser_retry_keeps_latest_outcome(self) -> None:
+        """Allows a successful parser retry to clear an earlier parser miss."""
+
+        image = Image.new("RGB", (80, 60))
+        region = Bounds(5, 5, 20, 20)
+        context = ObservationOcrContext(image, _RecordingBackend(), _frame_ref(), "rapid-v1")
+
+        context.record_required_field_diagnostic(
+            required_fact="world_coordinate_pair",
+            status=OcrRequiredFieldStatus.INVALID,
+            region=region,
+            reason="invalid_value",
+        )
+        context.record_required_field_diagnostic(
+            required_fact="world_coordinate_pair",
+            status=OcrRequiredFieldStatus.PRESENT,
+            region=region,
+            reason="parsed",
+        )
+
+        self.assertEqual(
+            [diagnostic.status for diagnostic in context.required_field_diagnostics],
+            [OcrRequiredFieldStatus.INVALID, OcrRequiredFieldStatus.PRESENT],
+        )
 
 
 if __name__ == "__main__":

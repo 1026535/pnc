@@ -1,5 +1,242 @@
 # Non-YOLO recognition implementation
 
+## Current continuation — September 13, 2026
+
+The implementation resumes the handoff in the existing dirty worktree at
+`codex/non-yolo-recognition-continuation`, HEAD `93798a64de73538c8992c953b7394598468911f9`.
+Initial branch/HEAD and the expected 29 modified tracked files plus untracked
+implementation assets were verified. No reset, clean, checkout replacement or
+merge was performed. The user subsequently authorized the review corrections
+before pushing this existing branch. The historical first-slice results below
+do not describe this continuation's acceptance.
+
+The [reconciled checklist](PNC_NON_YOLO_RECOGNITION_REMAINING_CHECKLIST.md)
+records the producer contracts, captured positives/negatives, and outstanding
+consumer and independent-evidence gates. Implementation and offline verification
+must be distinguished from promotion or combined-main workflow acceptance.
+
+### Changed behavior
+
+- Both observation-publication paths resolve independent visual screen/layout
+  and foreground guards before ordinary semantic enrichment. Whole-capture OCR,
+  unsupported-viewport fallback, unowned OCR screen discovery and diagnostic OCR
+  are removed. Frame-bound OCR rejects full-capture requests; approved header,
+  field and list-body crops preserve native offsets and cache identity.
+- Measured visual controls retain current frame, source screen and layout.
+  Content publishes canonical non-actionable labels, fields and rows; it cannot
+  invent controls or replace independent identity. Missing or conflicting facts
+  abstain while preserving unrelated independent facts. Unknown/gap reports reuse
+  acquired OCR and also work when no OCR was performed.
+- Update, reconnect, Shield warning and safe generic negative controls require
+  current panel edges and measured button geometry. Their layout provenance is
+  published only after qualification. Missing panel/button is unresolved, with no
+  click rectangle recovered from OCR padding. Other known modal families require
+  their visual profile. Loading uses publisher/actual game-start anchors or
+  near-black pixels; the captured commercial offer is a loading negative despite
+  its filename. Once loading is proved and the foreground guard has run, Builder
+  now stops before unrelated selector OCR, matching Navigation's passive output.
+- Alliance compact/tabbed home, member/reinforce rows, leader/ordinary Manage,
+  Hall and remote Gear profile now have assets, annotations and captured tests.
+  Row parsers measure complete cards and their own actions, reject clipped rows,
+  and read names only in the owned fields. The remote exact name does not depend
+  on the Mail control remaining visible.
+- Farm detail/construction, centered Build Queue and Institute upgrade-detail
+  facts are qualified from saved captures in both paths. The Institute's actual
+  prerequisite Go is distinct from the lower Builder Set Go; satisfied or erased
+  prerequisite controls cannot publish unmet facts. APK 5.0.203/233 source confirms
+  that distinction in the updated building-upgrade reference note.
+- Selected-castle name refinement uses a bounded single-line field from the
+  existing roster locator. Both saved core replays publish exact `0 sticker NPC`
+  for selected K157, level 15. `0 stickerNPC` remains unequal. No fuzzy matching,
+  alias, target rewrite, account/castle switch or core-worktree edit was added.
+- Compose reads only its requested recipient/subject/body interiors after
+  independent layout proof. A bounded single-line body refinement preserves the
+  captured `Recognition validation - no action needed` exactly, including spaces
+  and punctuation. World Map reads its canonical coordinate crop and
+  the existing coordinate-rejection status field, without bottom-HUD/navigation
+  OCR. The measured magnifier now publishes the existing Search action
+  selector; coordinate text remains a label.
+- The final crop audit removes unused Campaign stage and Castle/Warehouse/Goddess
+  body scans. Castle's numeric field uses one named RGB enlargement within its
+  measured 97×40 reference crop; `17145` is never coerced into `17/45`.
+- A fresh `3xx_spies` roster exposed a complete selected eighth card below the
+  previous OCR viewport. The roster text-column crop now reaches that card's
+  name and level. Both production replays recover exact selected K303/level 5;
+  current-frame identity is still withheld when a required name is missing.
+- The actual wide Alliance invitation has independent portrait/message identity
+  and only a current measured Cancel control. The older invitation appearance
+  shares that footer layout and no longer uses Cancel as an identity anchor.
+  Erased identity, erased Cancel and foreign unresolved interruptions remain
+  explicit negative tests; compact-modal geometry was not widened.
+- The unjoined Alliance landing now has independent Odin/banner identity. It
+  publishes `PNC_ALLIANCE_JOIN` without controls or content OCR, restoring the
+  existing consumer's explicit not-joined stop.
+- Review corrections move coordinate K/X/Y reads into the accepted-layout
+  content stage shared by both paths. Passive navigation performs only the
+  foreground guard read. Missing visual identity prevents field acquisition;
+  a missing X field preserves the dialog, K/Y and measured controls.
+- Each castle-name diagnostic now identifies its own roster row, so a later
+  successful row cannot conceal an earlier missing name in the gap sidecar.
+  Compose propagates the caller's field set through acquisition and publication;
+  a subject-only request performs exactly the guard and subject backend reads.
+
+### Verification record
+
+The subsequent code review reproduced three defects: missing coordinate fields
+in Navigation content, castle-name diagnostic collisions between rows, and
+Compose reads exceeding the requested field set. All three corrections now pass
+focused and full portable validation. The 2,048-test result below is retained as
+the earlier pre-review gate; the final gate runs 2,052 tests.
+
+The repository Python is
+`C:/Users/lebel/AppData/Local/Programs/Python/Python313/python.exe` (`py` is not
+installed). Portable tests used `tools/run_tests.py`; named unittest modules
+were used only for focused regressions.
+
+- Post-review focused validation passed **25 tests, no skips**, in 57.342 seconds:
+  `python -m unittest tests.integration.vision.test_coordinate_dialog_local_fixtures
+  tests.integration.vision.test_coordinate_dialog_observation
+  tests.integration.vision.test_castle_identity_captured_fields
+  tests.integration.vision.test_mail_compose_captured_fields -v`.
+  The log is `.local-data/reports/non_yolo_review_fix_focused.log`.
+  Independent actual-RapidOCR replay also confirms both June 13/14 coordinate
+  captures through both paths. Subject-only Compose uses exactly two backend
+  crops. The row-gap replay passes with the production artifact collector
+  configured, preserving the missing first row despite later successful rows.
+  Its initial harness omitted that optional collector; the corrected probe and
+  regression now check the actual emitted sidecar, not absence from an
+  unconfigured exporter.
+- The final post-review `tools/run_tests.py affected --base origin/main
+  --explain --json .test-impact/non_yolo_review_fix_selection.json
+  --results .local-data/reports/non_yolo_review_fix_results.json` **passed**.
+  The required fallback selected **290/290 modules with 60 fallback reasons**:
+  **2,052 tests run, 2,046 passed, six skipped, zero failures/errors**, in
+  383.735 seconds (392.260 seconds including selection/reporting). The log is
+  `.local-data/reports/non_yolo_review_fix_full.log`. The six skips remain five
+  unavailable optional screenshots and one Windows symlink-privilege case.
+  The 58-profile catalog, packaged assets and packaging configuration were
+  unchanged by these review corrections; their installed-asset qualification
+  below remains applicable. No live validation was needed for these parser and
+  diagnostic corrections.
+- The handoff's 108 failures and 11 errors were triaged, not accepted as a
+  baseline. `.local-data/reports/vision_failure_triage_continuation.md` separates
+  captured production regressions, unfinished asset/interface wiring and obsolete
+  OCR-only identity setups. Parser assertions were preserved at explicit semantic
+  seams and actual captured tests prove production identity/control ownership.
+- Focused gates include 92 shared contract/navigation tests, 61 captured-overlay
+  tests, 56 core-vision tests, 18 building tests, 15 Alliance capture tests,
+  12 coordinate/Institute tests, and exact castle/profile/Compose regressions.
+  Individual command outputs are under `.local-data/reports/`.
+- The initial affected full fallback ran 2,025 tests with 15 failures, three
+  errors and six skips; it exposed remaining setup/contract migrations and was
+  not accepted. A later vision group ran 585 tests with one legacy Compose
+  parser-test error and five skips. The field assertions were preserved while
+  correcting that test's canonical parser invocation; the subsequent focused
+  World status/Compose/review-control gate passed 14 tests.
+- The pre-review offline gate **passed**: `tools/run_tests.py
+  affected --base origin/main --explain` selected its required full fallback
+  (**290/290 modules, 60 fallback reasons**). It ran **2,048 tests: 2,042 passed,
+  six skipped, zero failures/errors**, in 408.579 seconds (418.949 seconds
+  including selection/reporting). Results and selection are recorded in
+  `.local-data/reports/non_yolo_completion_verified_results.json` and
+  `.test-impact/non_yolo_completion_verified_selection.json`; the complete log
+  is `.local-data/reports/non_yolo_completion_verified.log`.
+  Five skips are optional unavailable local screenshot fixtures; one is the
+  host's missing Windows symlink privilege. No equivalent second full run was
+  needed for that source state. Saved real-RapidOCR reports cover both paths,
+  exact required fields and backend crop bounds; no broad-OCR comparison
+  baseline was rerun.
+- Before the final unjoined-Alliance identity addition, affected selection used
+  its required full fallback (**289/289 modules, 59 fallback reasons**) and ran
+  **2,045 tests: 2,039 passed, six skipped, zero failures/errors**, in 354.163
+  seconds (361.850 seconds including selection/reporting).
+  `.local-data/reports/non_yolo_integration_verified_results.json` preserves that
+  result. The final gate above includes the subsequent asset addition.
+- The pre-final-crop affected full fallback passed **2,033 tests, six skips,
+  zero failures/errors** in 329.027 seconds (336.261 seconds including selection).
+  `.local-data/reports/non_yolo_final_verified_results.json` records that result.
+  The subsequent Campaign unused-body regression passed 19 tests. These are
+  intermediate passing gates; the final gate above includes the later
+  numeric-field/roster corrections.
+- Final Loading/invitation/metadata focus: **15 tests passed** in 15.522 seconds.
+  The new captured bottom-roster tests and existing exact K157 tests also passed;
+  the combined interim run's only failures were the then-unreconciled invitation
+  layout identity, which the final focused gate resolves.
+- The final unjoined-Alliance landing profile restores the identity required by
+  the existing `open_alliance_home` consumer. Independent Odin/banner anchors
+  publish `PNC_ALLIANCE_JOIN` with no actions or content OCR. Both real-RapidOCR
+  paths use exactly one global guard crop, and the consumer produces its intended
+  not-joined error. Captured landing tests passed **3/3**, metadata tests **3/3**.
+- Real RapidOCR confirms **12/12 base-building records** (Castle/Warehouse/Goddess,
+  both viewports and both paths), and **12/12 postfix 3xx records** (six captures,
+  both paths). That earlier snapshot included onboarding abstention; the final
+  `independent_recognition_3xx_spies_alliance_landing_qualification.md` supersedes
+  it with **2/2 passed** exact landing identities and the existing consumer stop.
+  None of these correction references is independent accuracy promotion.
+  Reports: `building_base_profiles_replay_20260913.md` and
+  `independent_recognition_3xx_spies_postfix_qualification.md` under
+  `.local-data/reports/`.
+- Final installed-package qualification passed outside the checkout under Python 3.13:
+  **58 profiles, 58 source images, 200 anchor/control assets and six selector
+  assets**. Catalog/selector-registry bytes match checkout and wheel. The wheel
+  SHA-256 is `12264efdbd408fe999b3f7e41c4f634480e654e90235670b53471a95c720b9db`.
+  The fixture audit verifies **90 manifest samples and 43 manual annotations**,
+  including source hashes and dimensions. Detailed commands are in
+  `.local-data/reports/vision-wheel-qualification_final58.md`. The prior 57-profile
+  report is retained as an earlier snapshot.
+- The pre-review `git diff --check` passed. Branch and HEAD then remained the handoff values;
+  no navigation, automation-workflow or core-infrastructure production diff was
+  introduced. The post-review affected gate above covers the corrections.
+
+### Delivery scope
+
+The user authorized committing and pushing the corrected implementation on the
+existing feature branch. The audited delivery contains 209 files: the existing
+84 modified tracked files and 125 new implementation, asset and test files.
+Generated artifacts and test-selection output remain ignored. No worktree or
+branch was recreated and no merge was performed. The exact delivery commit and
+remote verification are recorded in `.local-data/reports/non_yolo_delivery.json`
+after push; the acceptance gates below remain open.
+
+### Remaining acceptance
+
+A owns the exact castle target/journal reconciliation, the World Map
+dialog-opening edge's Search selector, Research idle-queue eligibility and the
+documented Campaign/Gathering/receipt contracts. The existing navigation-core
+test adaptation was preserved and extended only for the bounded guard plan,
+layout-aware test doubles and actual captured update pixels; it requires
+integration review. No navigation/core/workflow production behavior was edited.
+
+The initial authorized independent-capture attempt failed at the launcher's
+`mCurrentFocus` parsing. A later canonical read-only capture proved the launcher
+state; opening the configured game through `session.launch_app()` allowed the
+normal foreground checks to succeed. No core runtime parser was relaxed. The
+final bounded session on `3xx_spies` completed 11 inputs (one launch and ten
+inspected navigation/dismiss inputs), returned to Home and released its lease.
+Including the earlier interactive scope, fourteen inputs were dispatched: two
+configured launches and twelve inspected navigation/dismiss inputs. Expired
+frame proof refused input; the harness required a fresh capture and review.
+No spending, joining an alliance, account/castle switch, send, dispatch, research
+start or upgrade occurred. Scope cleanup preserved pre-existing instances and
+closed the instance started by this phase.
+
+Fresh Settings pixels report build **5.2.77 / 5.0.201.227**; this is distinct
+from the source APK and earlier capture builds. The active K303 castle is level
+5 and has no Alliance membership. Independent member/Manage/Hall/profile
+holdouts therefore remain unavailable on that active target. Captures are under
+`.local-data/artifacts/independent_recognition/20260913T234148Z/`; actual replay
+results and the earlier failures are reported separately. The failed bottom-row
+case becomes regression/reference evidence after its correction; it is not
+relabelled a passing independent accuracy result. Combined-main workflow and
+the remaining independent-evidence acceptance gates remain open.
+
+A delegated agent accidentally created one untracked helper in the main
+checkout at `tests/support/pnc/capture_vision/modal_overlay.py`. Its intended
+implementation is in this worktree. Automatic approval review rejected deleting
+the misplaced main-checkout file because it is outside this task's worktree;
+specific cleanup permission has been requested. No other main-checkout edits or
+core-task worktree edits are part of this continuation.
+
 ## First remaining-plan slice — September 13, 2026
 
 The reviewed remaining-work plan was committed as `f3b88f774722a950ae3069a5a516adce9f78d051`

@@ -13,12 +13,19 @@ from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservatio
 from pnc_automation.app.pnc.vision.ocr_region_plan import (
     OcrRegionFailurePolicy,
     OcrRegionPurpose,
+    compile_guard_ocr_region_plans,
+    compile_screen_content_ocr_region_plans,
     compile_ocr_region_plans,
     execute_ocr_region_plans,
 )
 from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
 from pnc_automation.core.vision.image.models import Bounds
-from pnc_automation.core.vision.ocr.ocr_service import ObservationOcrContext, OcrLine, OcrResult
+from pnc_automation.core.vision.ocr.ocr_service import (
+    ObservationOcrContext,
+    OcrLine,
+    OcrRequiredFieldStatus,
+    OcrResult,
+)
 from PIL import Image
 
 
@@ -75,7 +82,7 @@ class OcrRegionPlanTests(unittest.TestCase):
         self.assertEqual(chat_plans[0].selector_id.value, "PNC_CHAT_INPUT_FIELD")
         self.assertEqual(home_plans, ())
 
-    def test_unsupported_aspect_reports_named_full_frame_fallback(self) -> None:
+    def test_unsupported_aspect_has_no_region_plan(self) -> None:
         plans = compile_ocr_region_plans(
             registry=self.registry,
             resolved_screen=ScreenType.PNC_CHAT,
@@ -83,10 +90,7 @@ class OcrRegionPlanTests(unittest.TestCase):
             image_size=(700, 960),
         )
 
-        self.assertEqual(len(plans), 1)
-        self.assertEqual(plans[0].purpose, OcrRegionPurpose.FULL_FRAME_FALLBACK)
-        self.assertEqual(plans[0].failure_policy, OcrRegionFailurePolicy.FULL_FRAME_FALLBACK)
-        self.assertEqual(plans[0].fallback_reason, "unsupported_aspect")
+        self.assertEqual(plans, ())
 
     def test_coordinate_only_plan_keeps_specialized_region_on_unlisted_resolution(self) -> None:
         plans = compile_ocr_region_plans(
@@ -100,9 +104,11 @@ class OcrRegionPlanTests(unittest.TestCase):
         self.assertEqual(plans[0].purpose, OcrRegionPurpose.WORLD_COORDINATE_BAR)
         self.assertNotEqual(plans[0].fallback_reason, "unsupported_aspect")
 
-    def test_execution_reuses_pinned_full_frame_without_second_backend_dispatch(self) -> None:
+    def test_execution_reads_bounded_region_without_full_frame_dispatch(self) -> None:
         image = Image.new("RGB", (540, 960), (0, 0, 0))
-        context = ObservationOcrContext(image, _EmptyBackend(), None, "test")
+        backend = _RegionAwareBackend(OcrResult(lines=(), words=()))
+        context = ObservationOcrContext(image, backend, None, "test")
+        context.require_bounded_regions()
         plan = compile_ocr_region_plans(
             registry=self.registry,
             resolved_screen=ScreenType.PNC_CHAT,
@@ -110,24 +116,34 @@ class OcrRegionPlanTests(unittest.TestCase):
             image_size=image.size,
         )
 
-        context.read_result(image)
         reads = execute_ocr_region_plans(image=image, plans=plan, ocr_context=context)
 
         self.assertEqual(context.metrics.engine_calls, 1)
-        self.assertGreaterEqual(context.metrics.fullframe_reuses, 1)
+        self.assertEqual(context.metrics.fullframe_reuses, 0)
         self.assertEqual(len(reads), 1)
         self.assertEqual(reads[0].status.value, "missing")
+        self.assertTrue(backend.regions)
+        self.assertTrue(all(region is not None for region in backend.regions))
+        self.assertTrue(all(region in {item.bounds for item in plan} for region in backend.regions))
+        self.assertTrue(all(diagnostic.region is not None for diagnostic in context.read_diagnostics))
+        self.assertTrue(
+            all(
+                diagnostic.region in {item.bounds for item in plan}
+                for diagnostic in context.read_diagnostics
+            )
+        )
 
-    def test_guard_and_unknown_content_reads_have_named_full_frame_reasons(self) -> None:
-        image = Image.new("RGB", (540, 960), (0, 0, 0))
+    def test_guard_and_content_reads_are_bounded_and_have_named_diagnostics(self) -> None:
+        image = Image.new("RGB", (540, 960), (15, 28, 68))
         context = ObservationOcrContext(image, _EmptyBackend(), None, "test")
+        context.require_bounded_regions()
         enricher = PncObservationEnricher()
         request = ObservationRequest.full_runtime_default()
 
         enricher.recognize_guards(image, request, ocr_context=context)
         enricher.enrich(
             image,
-            ScreenType.UNKNOWN,
+            ScreenType.PNC_MAIL_HUB,
             {},
             request,
             ocr_context=context,
@@ -135,8 +151,18 @@ class OcrRegionPlanTests(unittest.TestCase):
         )
 
         details = tuple(diagnostic.detail for diagnostic in context.read_diagnostics)
-        self.assertIn("global_guard;fallback=mandatory_global_guard", details)
-        self.assertIn("screen:unknown;fallback=identity_unresolved_requires_full_frame", details)
+        expected_plans = (
+            *compile_guard_ocr_region_plans(image.size),
+            *compile_screen_content_ocr_region_plans(
+                resolved_screen=ScreenType.PNC_MAIL_HUB,
+                request=request,
+                image_size=image.size,
+            ),
+        )
+        self.assertEqual({f"plan:{plan.required_fact}" for plan in expected_plans}, set(details))
+        expected_bounds = {plan.bounds for plan in expected_plans}
+        self.assertTrue(all(diagnostic.region is not None for diagnostic in context.read_diagnostics))
+        self.assertTrue(all(diagnostic.region in expected_bounds for diagnostic in context.read_diagnostics))
 
     def test_empty_coordinate_selector_scope_does_not_prepare_a_template_frame(self) -> None:
         image = Image.new("RGB", (700, 960), (0, 0, 0))
@@ -164,14 +190,14 @@ class OcrRegionPlanTests(unittest.TestCase):
 
         self.assertEqual(matcher.prepared_calls, 0)
 
-    def test_field_resegments_when_contained_full_frame_line_crosses_region(self) -> None:
+    def test_field_reads_dedicated_crop_when_planned_result_is_empty(self) -> None:
         image = Image.new("RGB", (540, 960), (0, 0, 0))
         region = Bounds(100, 100, 180, 50)
         backend = _RegionAwareBackend(
             OcrResult(lines=(OcrLine("Recovered value", Bounds(110, 112, 120, 22), 0.9),), words=())
         )
         context = ObservationOcrContext(image, backend, None, "test")
-        context.read_result(image)
+        context.require_bounded_regions()
         plan = OcrRegionPlan(
             family=ScreenType.PNC_CHAT,
             purpose=OcrRegionPurpose.TEXT_FIELD,
@@ -196,11 +222,9 @@ class OcrRegionPlanTests(unittest.TestCase):
 
         self.assertEqual(state.text, "Recovered value")
         self.assertFalse(state.empty)
-        self.assertEqual(backend.regions, [None, region])
-        self.assertIn(
-            "field:PNC_CHAT_INPUT_FIELD;fallback=field_segmentation_missing",
-            tuple(diagnostic.detail for diagnostic in context.read_diagnostics),
-        )
+        self.assertTrue(backend.regions)
+        self.assertTrue(all(read_region is not None for read_region in backend.regions))
+        self.assertTrue(all(read_region == region for read_region in backend.regions))
 
     def test_missing_field_remains_unknown_after_dedicated_crop(self) -> None:
         image = Image.new("RGB", (540, 960), (0, 0, 0))
@@ -264,6 +288,47 @@ class OcrRegionPlanTests(unittest.TestCase):
 
         self.assertIsNone(state.text)
         self.assertTrue(state.empty)
+
+    def test_coordinate_dialog_parser_records_invalid_required_field(self) -> None:
+        """Retains a parser-level miss when OCR returned a nonempty invalid value."""
+
+        image = Image.new("RGB", (540, 960), (0, 0, 0))
+        region = Bounds(100, 100, 180, 50)
+        context = ObservationOcrContext(image, _EmptyBackend(), None, "test")
+        plan = OcrRegionPlan(
+            family=ScreenType.PNC_WORLD_COORDINATE_DIALOG,
+            purpose=OcrRegionPurpose.TEXT_FIELD,
+            bounds=region,
+            required_fact=UiElementId.PNC_WORLD_COORDINATE_DIALOG_K_FIELD.value,
+            failure_policy=OcrRegionFailurePolicy.ABSTAIN,
+            selector_id=UiElementId.PNC_WORLD_COORDINATE_DIALOG_K_FIELD,
+        )
+        state = PncObservationEnricher()._build_world_map_coordinate_dialog_field_state(
+            image=image,
+            selector_id=UiElementId.PNC_WORLD_COORDINATE_DIALOG_K_FIELD,
+            ocr_context=context,
+            ocr_regions={
+                UiElementId.PNC_WORLD_COORDINATE_DIALOG_K_FIELD: OcrRegionRead(
+                    plan=plan,
+                    result=OcrResult(
+                        lines=(OcrLine("garbage", Bounds(110, 112, 120, 22), 0.9),),
+                        words=(),
+                    ),
+                    status=OcrRegionReadStatus.PRESENT,
+                )
+            },
+        )
+
+        self.assertIsNone(state)
+        self.assertEqual(
+            [diagnostic.status for diagnostic in context.required_field_diagnostics],
+            [OcrRequiredFieldStatus.PRESENT, OcrRequiredFieldStatus.INVALID],
+        )
+        diagnostic = context.required_field_diagnostics[-1]
+        self.assertEqual(diagnostic.required_fact, UiElementId.PNC_WORLD_COORDINATE_DIALOG_K_FIELD.value)
+        self.assertEqual(diagnostic.status, OcrRequiredFieldStatus.INVALID)
+        self.assertEqual(diagnostic.region, region)
+        self.assertEqual(diagnostic.reason, "invalid_value")
 
 
 if __name__ == "__main__":

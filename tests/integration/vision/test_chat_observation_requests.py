@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from tests.support.pnc.capture_vision.fake_screenshot_session import make_captured_frame
-
 import unittest
 from pathlib import Path
 
@@ -18,19 +16,25 @@ from pnc_automation.app.pnc.vision.observation_builder import (
     ImageSelectorEngine,
 )
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
-from pnc_automation.core.vision.ocr.ocr_service import UnavailableOcrService
 from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservationEnricher
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
 from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
 from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
 
 from tests.local_fixture_artifacts import require_local_fixture_artifact
-from tests.support.pnc.capture_vision.recording_ocr_service import _RecordingOcrService
-from tests.support.pnc.capture_vision.build_chat_observation_from_ocr_fallback import (
-    _build_chat_observation_from_ocr_fallback,
+from tests.integration.vision.test_chat_mail_captured_content import (
+    CHAT_BODY_REGION,
+    _ControlledOcrService,
+    _assert_bounded,
+    _builder,
+    _capture,
+    _line,
 )
 from tests.support.pnc.capture_vision.materialize_chat_region import _materialize_chat_region
 from tests.support.pnc.capture_vision.ocr_line import _ocr_line
+from tests.support.pnc.capture_vision.recording_ocr_service import _RecordingOcrService
+from tests.support.pnc.capture_vision.fake_screenshot_session import make_captured_frame
+from tests.support.pnc.mail.build_observation import _build_observation
 
 
 class ChatObservationRequestsTests(unittest.TestCase):
@@ -41,10 +45,26 @@ class ChatObservationRequestsTests(unittest.TestCase):
 
         for placeholder_text in ("Pleaseter content", "Please enter conteni"):
             with self.subTest(placeholder_text=placeholder_text):
-                observation, _ = _build_chat_observation_from_ocr_fallback(
+                image_size = (900, 1600)
+                registry = build_default_selector_registry()
+                input_region = _materialize_chat_region(
+                    registry,
+                    UiElementId.PNC_CHAT_INPUT_FIELD,
+                    image_size=image_size,
+                )
+                observation = _build_observation(
                     request=ObservationRequest.source_screen_retry(ScreenType.PNC_CHAT),
-                    active_channel=ChatChannel.WORLD,
-                    draft_ocr_text=placeholder_text,
+                    accepted_screen=ScreenType.PNC_CHAT,
+                    image_size=image_size,
+                    lines=(
+                        _ocr_line(
+                            placeholder_text,
+                            x=input_region.x + 18,
+                            y=input_region.y + max(8, input_region.height // 5),
+                            width=max(40, input_region.width - 36),
+                            height=max(20, input_region.height // 2),
+                        ),
+                    ),
                 )
 
                 self.assertTrue(observation.chat_draft_empty)
@@ -97,52 +117,30 @@ class ChatObservationRequestsTests(unittest.TestCase):
         self.assertEqual(ocr_service.read_text_calls, 0)
 
     def test_chat_transcript_observation_still_runs_ocr_after_geometry_proves_chat(self) -> None:
-        """Keeps transcript-row extraction enabled for chat transcript polls even when geometry already proves chat."""
+        """Keeps transcript extraction on the measured body crop after captured Chat identity is proven."""
 
-        registry = build_default_selector_registry()
-        image_size = (900, 1600)
-        image = Image.new("RGB", image_size, (15, 28, 68))
-        input_region = _materialize_chat_region(registry, UiElementId.PNC_CHAT_INPUT_FIELD, image_size=image_size)
-        kingdom_region = _materialize_chat_region(registry, UiElementId.PNC_CHAT_TAB_KINGDOM, image_size=image_size)
-        alliance_region = _materialize_chat_region(registry, UiElementId.PNC_CHAT_TAB_ALLIANCE, image_size=image_size)
-        image.paste((20, 20, 20), (input_region.x, input_region.y, input_region.x + input_region.width, input_region.y + input_region.height))
-        image.paste((228, 178, 48), (kingdom_region.x, kingdom_region.y, kingdom_region.x + kingdom_region.width, kingdom_region.y + kingdom_region.height))
-        image.paste((64, 68, 82), (alliance_region.x, alliance_region.y, alliance_region.x + alliance_region.width, alliance_region.y + alliance_region.height))
-        ocr_service = _RecordingOcrService(
-            lines=(
-                _ocr_line("Chat", x=181, y=20, width=113, height=49),
-                _ocr_line("Kingdom", x=202, y=117, width=143, height=40),
-                _ocr_line("Alliance", x=652, y=116, width=123, height=39),
-                _ocr_line("Enemy Bob", x=120, y=260, width=180, height=24),
-                _ocr_line("Hello there", x=160, y=292, width=200, height=24),
+        capture = _capture("chat_kingdom.png", session_id="captured-chat-transcript-request")
+        ocr_service = _ControlledOcrService(
+            (
+                _line("Chat", x=105, y=9, width=76, height=35),
+                _line("Kingdom", x=62, y=69, width=89, height=26),
+                _line("Alliance", x=217, y=70, width=77, height=20),
+                _line("Enemy Bob", x=108, y=145, width=150, height=20),
+                _line("Hello there", x=108, y=177, width=180, height=22),
             )
         )
-        builder = ObservationBuilder(
-            selector_registry=registry,
-            selector_engine=ImageSelectorEngine(
-                template_matcher=OpenCvTemplateMatcher(),
-
-            ),
-            screen_classifier=ScreenClassifier(),
-            enricher=PncObservationEnricher(
-
-                selector_registry=registry,
-            ),
-            ocr_service=ocr_service)
-        screenshot = type(
-            "Captured",
-            (),
-            {
-                "image": image,
-            "artifact": type("Artifact", (), {"path": Path("chat_transcript.png"), "captured_at": None})(),
-            "frame_ref": make_captured_frame(b"").frame_ref,
-            },
-        )()
-
-        observation = builder.build(screenshot, request=ObservationRequest.chat_transcript_observation())
+        builder = _builder(ocr_service)
+        ocr_service.bind(capture.image.size)
+        context = builder.create_ocr_context(capture)
+        observation = builder.build(
+            capture,
+            request=ObservationRequest.chat_transcript_observation(),
+            ocr_context=context,
+        )
 
         self.assertEqual(observation.screen_type, ScreenType.PNC_CHAT)
         self.assertEqual(observation.active_chat_channel, ChatChannel.WORLD)
         self.assertEqual(len(observation.entries(ListEntryKind.CHAT_MESSAGE)), 1)
         self.assertEqual(observation.entries(ListEntryKind.CHAT_MESSAGE)[0].title_text, "Enemy Bob")
-        self.assertEqual(ocr_service.read_result_calls, 2)
+        _assert_bounded(self, ocr_service, capture.image.size)
+        self.assertTrue(any(region == CHAT_BODY_REGION for region, _ in ocr_service.calls))

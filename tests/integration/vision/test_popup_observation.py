@@ -37,8 +37,8 @@ from tests.support.pnc.capture_vision.ocr_line import _ocr_line
 class PopupObservationTests(unittest.TestCase):
     """Proves popup observation."""
 
-    def test_observation_builder_classifies_blocking_popup_over_home_city_from_ocr(self) -> None:
-        """Promotes centered modal cancel buttons into the canonical blocking-popup selector."""
+    def test_popup_text_without_a_current_panel_cannot_publish_cancel(self) -> None:
+        """Unowned invitation text on a uniform image cannot publish an action."""
 
         with tempfile.TemporaryDirectory() as temp_directory:
             root = Path(temp_directory)
@@ -73,9 +73,9 @@ class PopupObservationTests(unittest.TestCase):
 
             observation = builder.build(screenshot)
 
-            self.assertEqual(observation.screen_type, ScreenType.PNC_POPUP)
-            self.assertTrue(observation.blocking_popup)
-            self.assertTrue(observation.has(UiElementId.PNC_POPUP_CLOSE_BUTTON))
+            self.assertEqual(observation.screen_type, ScreenType.UNKNOWN)
+            self.assertFalse(observation.decision.action_eligible)
+            self.assertFalse(observation.has(UiElementId.PNC_POPUP_CLOSE_BUTTON))
 
     def test_observation_builder_classifies_exit_game_popup_when_cancel_is_right_aligned(self) -> None:
         """Replays the live exit-game modal whose safe Cancel action sits to the right of Confirm."""
@@ -160,7 +160,8 @@ class PopupObservationTests(unittest.TestCase):
             self.assertTrue(observation.blocking_popup)
             close_button = observation.require(UiElementId.PNC_RECONNECT_CONFIRM_BUTTON)
             self.assertEqual(close_button.extracted_text, "Confirm")
-            self.assertEqual(close_button.action_point, (284, 550))
+            self.assertEqual(close_button.action_point, (270, 540))
+            self.assertEqual(close_button.source_kind.name, "GEOMETRY")
             additions = _build_reconnect_popup_additions(
                 image=image,
                 lines=(

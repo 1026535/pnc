@@ -253,34 +253,20 @@ class ObservationRequestScopingTests(unittest.TestCase):
         self.assertEqual(observation.screen_type, ScreenType.PNC_HOME_CITY)
         self.assertFalse(observation.has(UiElementId.PNC_HOME_BUILD_BUTTON))
 
-    def test_observation_builder_skips_ocr_for_base_requests(self) -> None:
-        """Leaves OCR idle when the caller requests only the cheap selector-and-geometry base pass."""
+    def test_observation_builder_base_request_reads_guards_without_content(self) -> None:
+        """A captured screen still runs global guards while base requests omit semantic OCR."""
 
-        ocr_service = _RecordingOcrService(lines=())
-        builder = ObservationBuilder(
-            selector_registry=_minimal_runtime_registry(),
-            selector_engine=ImageSelectorEngine(
-                template_matcher=OpenCvTemplateMatcher(),
+        from tests.integration.vision.test_alliance_remaining_visual_contracts import _builder, _capture, _BoundedOcrService
+        from pnc_automation.app.pnc.vision.ocr_region_plan import compile_guard_ocr_region_plans
+        with Image.open("tests/data/screen_recognition/institute_audit.png") as source:
+            image = source.convert("RGB")
+        ocr = _BoundedOcrService()
+        builder = _builder(ocr)
+        observation = builder.build(_capture(image, session_id="base-guards"), request=ObservationRequest.base())
+        self.assertEqual(observation.screen_type, ScreenType.PNC_INSTITUTE)
+        self.assertEqual(ocr.calls, [plan.bounds for plan in compile_guard_ocr_region_plans(image.size)])
+        self.assertFalse(observation.has(UiElementId.PNC_BUILDING_LEVEL_LABEL))
 
-            ),
-            screen_classifier=ScreenClassifier(),
-            enricher=PncObservationEnricher(),
-            ocr_service=ocr_service,
-            )
-        screenshot = type(
-            "Captured",
-            (),
-            {
-                "image": Image.new("RGB", (100, 100), (0, 0, 0)),
-                "artifact": type("Artifact", (), {"path": Path("synthetic.png"), "captured_at": None})(),
-                "frame_ref": make_captured_frame(b"").frame_ref,
-            },
-        )()
-
-        builder.build(screenshot, request=ObservationRequest.base())
-
-        self.assertEqual(ocr_service.read_result_calls, 1)
-        self.assertEqual(ocr_service.read_text_calls, 0)
 
     def test_observation_builder_rejects_missing_requested_ocr_selector(self) -> None:
         """Does not silently drop a requested OCR field from a reduced registry."""

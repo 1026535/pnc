@@ -8,6 +8,7 @@ from PIL import Image
 
 from pnc_automation.app.pnc.domain.chat import ChatEntryKind, visible_unsupported_chat_entries
 from pnc_automation.app.pnc.domain.observation import ListEntryKind
+from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 
 from tests.local_fixture_artifacts import require_local_fixture_artifact
@@ -26,6 +27,7 @@ class ChatFragmentObservationTests(MailWorkflowFixtures, unittest.TestCase):
 
         observation = _build_observation(
             request=ObservationRequest.chat_transcript_observation(),
+            accepted_screen=ScreenType.PNC_CHAT,
             lines=(
                 _ocr_line("Chat", x=250, y=40, width=120, height=24),
                 _ocr_line("Kingdom", x=180, y=96, width=120, height=24),
@@ -49,6 +51,7 @@ class ChatFragmentObservationTests(MailWorkflowFixtures, unittest.TestCase):
         _draw_chat_emoji(image, top=710, kind="generic")
         observation = _build_observation(
             request=ObservationRequest.chat_transcript_observation(),
+            accepted_screen=ScreenType.PNC_CHAT,
             image=image,
             lines=(
                 _ocr_line("Chat", x=250, y=40, width=120, height=24),
@@ -82,6 +85,7 @@ class ChatFragmentObservationTests(MailWorkflowFixtures, unittest.TestCase):
         )
         observation = _build_observation(
             request=ObservationRequest.chat_transcript_observation(),
+            accepted_screen=ScreenType.PNC_CHAT,
             image=image,
             image_size=image.size,
             lines=(

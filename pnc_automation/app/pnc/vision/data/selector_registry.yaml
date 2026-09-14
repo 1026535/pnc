@@ -323,9 +323,11 @@ selectors:
   - PNC_HERO_CURIO
   - PNC_ASCEND
   - PNC_ALLIANCE_HALL
+  - PNC_ALLIANCE_MEMBER_LIST
   - PNC_MARKET
   - PNC_ALLIANCE_MEMBER_REINFORCE
   - PNC_ALLIANCE_MEMBER_TRANSPORT
+  - PNC_PLAYER_PROFILE
   - PNC_INFANTRY_BARRACKS
   - PNC_CAVALRY_BARRACKS
   - PNC_RANGED_BARRACKS
@@ -346,7 +348,17 @@ selectors:
   - PNC_BUILDING_CONSTRUCTION
   - PNC_BUILDING_DETAILS
   - PNC_BUILD_SPEEDUP
+  - PNC_ALLIANCE_HOME
+  - PNC_CHAT
+  - PNC_MAIL_HUB
+  - PNC_MAILBOX_LIST
+  - PNC_MAIL_THREAD
+  - PNC_NOTIFICATIONS
+  - PNC_RANK_HUB
+  - PNC_RESEARCH_TREE
   - PNC_SETTINGS
+  - PNC_SETTINGS_PREFERENCES
+  - PNC_WORLD_KINGDOM_LIST
   - PNC_BAG
   - PNC_QUEST_MAIN
   - PNC_QUEST_DAILY
@@ -1389,12 +1401,12 @@ selectors:
   detection_kind: semantic
   interaction_kind: action
   relative_bounds:
-    x_ratio: 0.144444444444
-    y_ratio: 0.2925
-    width_ratio: 0.704444444444
-    height_ratio: 0.04375
-    action_x_ratio: 0.496666666667
-    action_y_ratio: 0.314375
+    x_ratio: 0.168888888889
+    y_ratio: 0.3025
+    width_ratio: 0.751111111111
+    height_ratio: 0.034375
+    action_x_ratio: 0.544444444444
+    action_y_ratio: 0.3196875
   materialize_relative_bounds: false
 - id: PNC_MAIL_COMPOSE_SUBJECT_FIELD
   screens:
@@ -1403,12 +1415,12 @@ selectors:
   detection_kind: semantic
   interaction_kind: action
   relative_bounds:
-    x_ratio: 0.144444444444
-    y_ratio: 0.3475
-    width_ratio: 0.704444444444
-    height_ratio: 0.045
-    action_x_ratio: 0.496666666667
-    action_y_ratio: 0.37
+    x_ratio: 0.168888888889
+    y_ratio: 0.3575
+    width_ratio: 0.751111111111
+    height_ratio: 0.034375
+    action_x_ratio: 0.544444444444
+    action_y_ratio: 0.3746875
   materialize_relative_bounds: false
 - id: PNC_MAIL_COMPOSE_BODY_FIELD
   screens:
@@ -1417,12 +1429,12 @@ selectors:
   detection_kind: semantic
   interaction_kind: action
   relative_bounds:
-    x_ratio: 0.077777777778
-    y_ratio: 0.40375
-    width_ratio: 0.8
-    height_ratio: 0.2575
-    action_x_ratio: 0.477777777778
-    action_y_ratio: 0.5325
+    x_ratio: 0.083333333333
+    y_ratio: 0.41875
+    width_ratio: 0.833333333333
+    height_ratio: 0.22625
+    action_x_ratio: 0.5
+    action_y_ratio: 0.531875
   materialize_relative_bounds: false
 - id: PNC_MAIL_COMPOSE_SEND_BUTTON
   screens:
@@ -2320,6 +2332,7 @@ selectors:
 - id: PNC_BUILDING_REQUIREMENT_GO_BUTTON
   screens:
   - PNC_BUILDING_DETAILS
+  - PNC_INSTITUTE
   status: interaction_validated
   detection_kind: semantic
   interaction_kind: action
@@ -2522,6 +2535,8 @@ selectors:
 - id: PNC_POPUP_CLOSE_BUTTON
   screens:
   - PNC_POPUP
+  - PNC_BUILD_QUEUE
+  - PNC_ALLIANCE_MEMBER_MANAGE_POPUP
   status: planned
   detection_kind: semantic
   materialize_relative_bounds: false
@@ -3726,6 +3741,7 @@ selectors:
 - id: PNC_BUILDING_LEVEL_LABEL
   screens:
   - PNC_BUILDING_DETAILS
+  - PNC_BUILDING_CONSTRUCTION
   status: planned
   detection_kind: semantic
   interaction_kind: label
@@ -3740,6 +3756,7 @@ selectors:
   - PNC_BUILDING_DETAILS
   status: planned
   detection_kind: semantic
+  interaction_kind: label
   materialize_relative_bounds: false
   notes:
   - Proposed semantic catalog metadata for producer _add_upgrade_requirement_controls;
@@ -3751,6 +3768,7 @@ selectors:
   - PNC_BUILDING_DETAILS
   status: planned
   detection_kind: semantic
+  interaction_kind: label
   materialize_relative_bounds: false
   notes:
   - Proposed semantic catalog metadata for producer _add_upgrade_requirement_controls;
@@ -3826,8 +3844,11 @@ selectors:
 - id: PNC_STATUS_BANNER
   screens:
   - PNC_HOME_CITY
+  - PNC_ALLIANCE_HOME
+  - PNC_WORLD_MAP
   status: planned
   detection_kind: semantic
+  interaction_kind: label
   materialize_relative_bounds: false
   notes:
   - Proposed semantic catalog metadata for producer _build_status_banner_additions_from_line;

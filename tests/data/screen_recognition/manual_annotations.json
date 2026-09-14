@@ -476,7 +476,40 @@
       "reviewed_at": "2026-09-10T23:51:05Z",
       "build": null,
       "locale": null,
-      "historical_only": true
+      "historical_only": true,
+      "layout_id": "alliance_home_compact",
+      "layout_revision": 1,
+      "boxes": {
+        "AllianceTitle": [
+          182,
+          25,
+          195,
+          46
+        ],
+        "MemberIdentity": [
+          454,
+          286,
+          59,
+          55
+        ],
+        "AllianceMail": [
+          299,
+          1416,
+          123,
+          110
+        ],
+        "Member": [
+          485,
+          1286,
+          263,
+          40
+        ]
+      },
+      "control_selector_ids": {
+        "AllianceMail": "PNC_ALLIANCE_BOTTOM_TAB_MAIL",
+        "Member": "PNC_ALLIANCE_TILE_MEMBER"
+      },
+      "correlation_note": "Independent compact layout holdout; its existing historical annotation is preserved and the reviewed static layout/control proof is added here."
     },
     {
       "image": "castle_aug25.png",
@@ -512,7 +545,2508 @@
         "Upgrade": "PNC_CASTLE_UPGRADE_BUTTON",
         "Back": "PNC_BACK_BUTTON_TOP_LEFT"
       }
+    },
+    {
+      "image": "building_variants/farm_upgrade_available.png",
+      "screen": "PNC_BUILDING_DETAILS",
+      "state": "upgrade_available",
+      "group": "2026-09-13/capture_gap_exploration/20260913T030954Z",
+      "source_artifact": ".local-data/artifacts/capture_gap_exploration/20260913T030954Z/0061_farm_upgrade_available.png",
+      "dimensions": [
+        900,
+        1600
+      ],
+      "decoded_sha256": "d5ae79922e313606f6dcc90255fca0437449b9181fb9a9d8e24e3ae7add81f8d",
+      "reviewed_at": "2026-09-13",
+      "build": null,
+      "locale": null,
+      "boxes": {
+        "FarmTitle": [
+          180,
+          20,
+          133,
+          55
+        ],
+        "FarmDescription": [
+          463,
+          238,
+          427,
+          68
+        ],
+        "Upgrade": [
+          636,
+          421,
+          218,
+          75
+        ]
+      },
+      "control_selector_ids": {
+        "Upgrade": "PNC_BUILDING_UPGRADE_BUTTON"
+      }
+    },
+    {
+      "image": "building_variants/farm_level_one_detail.png",
+      "screen": "PNC_BUILDING_DETAILS",
+      "state": "upgrade_available_level_one",
+      "group": "2026-09-13/capture_gap_exploration/20260913T030954Z",
+      "source_artifact": ".local-data/artifacts/capture_gap_exploration/20260913T030954Z/0242_new_farm_level_one_detail.png",
+      "dimensions": [
+        900,
+        1600
+      ],
+      "decoded_sha256": "f57c094eb7a0848fb8fd41bc0ff1ab6c3940210b386158188bd809469015574b",
+      "reviewed_at": "2026-09-13",
+      "build": null,
+      "locale": null,
+      "boxes": {
+        "FarmTitle": [
+          180,
+          20,
+          133,
+          55
+        ],
+        "FarmDescription": [
+          463,
+          238,
+          427,
+          68
+        ],
+        "Upgrade": [
+          638,
+          422,
+          216,
+          74
+        ]
+      },
+      "control_selector_ids": {
+        "Upgrade": "PNC_BUILDING_UPGRADE_BUTTON"
+      }
+    },
+    {
+      "image": "building_variants/farm_construction_available.png",
+      "screen": "PNC_BUILDING_CONSTRUCTION",
+      "state": "construction_available",
+      "group": "2026-09-13/capture_gap_exploration/20260913T030954Z",
+      "source_artifact": ".local-data/artifacts/capture_gap_exploration/20260913T030954Z/0239_farm_construction_available.png",
+      "dimensions": [
+        900,
+        1600
+      ],
+      "decoded_sha256": "e1cb4ee4ddc4325eed133b5e05f69807a9c5d838c5b30951e50603ec74b08e01",
+      "reviewed_at": "2026-09-13",
+      "build": null,
+      "locale": null,
+      "boxes": {
+        "FarmTitle": [
+          180,
+          20,
+          133,
+          55
+        ],
+        "FarmDescription": [
+          463,
+          228,
+          347,
+          94
+        ],
+        "Build": [
+          638,
+          419,
+          216,
+          75
+        ]
+      },
+      "control_selector_ids": {
+        "Build": "PNC_BUILDING_CONSTRUCTION_BUILD_BUTTON"
+      }
+    },
+    {
+      "image": "build_queue_variants/build_queue_idle.png",
+      "screen": "PNC_BUILD_QUEUE",
+      "state": "idle",
+      "group": "2026-09-13/capture_gap_exploration/20260913T030954Z",
+      "source_artifact": ".local-data/artifacts/capture_gap_exploration/20260913T030954Z/0057_building_queue_idle.png",
+      "dimensions": [
+        900,
+        1600
+      ],
+      "decoded_sha256": "92419f14b0acd034962cc1356ad632e1a0850caf35e6b06f6317991ee1c35c35",
+      "reviewed_at": "2026-09-13",
+      "build": null,
+      "locale": null,
+      "boxes": {
+        "BuildQueueTitle": [
+          330,
+          432,
+          248,
+          57
+        ],
+        "SecondQueueHammer": [
+          86,
+          693,
+          85,
+          102
+        ],
+        "Close": [
+          794,
+          426,
+          42,
+          45
+        ]
+      },
+      "control_selector_ids": {
+        "Close": "PNC_POPUP_CLOSE_BUTTON"
+      }
+    },
+    {
+      "image": "build_queue_variants/build_queue_active_infirmary.png",
+      "screen": "PNC_BUILD_QUEUE",
+      "state": "active_infirmary",
+      "group": "2026-09-13/capture_gap_exploration/20260913T030954Z",
+      "source_artifact": ".local-data/artifacts/capture_gap_exploration/20260913T030954Z/0076_building_queue_active_infirmary.png",
+      "dimensions": [
+        900,
+        1600
+      ],
+      "decoded_sha256": "8d9f97442fccd0ae8233e67a5691bf262871172900a836b0cafd12938fd99c58",
+      "reviewed_at": "2026-09-13",
+      "build": null,
+      "locale": null,
+      "boxes": {
+        "BuildQueueTitle": [
+          330,
+          432,
+          248,
+          57
+        ],
+        "SecondQueueHammer": [
+          86,
+          693,
+          85,
+          102
+        ],
+        "InfirmaryTitle": [
+          210,
+          543,
+          302,
+          40
+        ],
+        "InfirmaryTimer": [
+          327,
+          593,
+          120,
+          35
+        ],
+        "Speedup": [
+          618,
+          558,
+          215,
+          66
+        ],
+        "Close": [
+          794,
+          426,
+          42,
+          45
+        ]
+      },
+      "control_selector_ids": {
+        "Close": "PNC_POPUP_CLOSE_BUTTON"
+      }
+    },
+    {
+      "image": "build_queue_variants/build_queue_active_infirmary_fresh.png",
+      "screen": "PNC_BUILD_QUEUE",
+      "state": "active_infirmary_fresh",
+      "group": "2026-09-13/capture_gap_exploration/20260913T030954Z",
+      "source_artifact": ".local-data/artifacts/capture_gap_exploration/20260913T030954Z/0077_build_queue_fresh_before_close.png",
+      "dimensions": [
+        900,
+        1600
+      ],
+      "decoded_sha256": "a253d9ac9f00d0141406a43a534f073ae525fdd55b758fc2016d34b79760714d",
+      "reviewed_at": "2026-09-13",
+      "build": null,
+      "locale": null,
+      "boxes": {
+        "BuildQueueTitle": [
+          330,
+          432,
+          248,
+          57
+        ],
+        "SecondQueueHammer": [
+          86,
+          693,
+          85,
+          102
+        ],
+        "InfirmaryTitle": [
+          210,
+          543,
+          302,
+          40
+        ],
+        "InfirmaryTimer": [
+          327,
+          593,
+          120,
+          35
+        ],
+        "Speedup": [
+          618,
+          558,
+          215,
+          66
+        ],
+        "Close": [
+          794,
+          426,
+          42,
+          45
+        ]
+      },
+      "control_selector_ids": {
+        "Close": "PNC_POPUP_CLOSE_BUTTON"
+      }
+    },
+    {
+      "image": "alliance_variants/alliance_compact.png",
+      "screen": "PNC_ALLIANCE_HOME",
+      "state": "compact",
+      "group": "2026-09-13/capture_gap_exploration/20260913T030954Z/alliance_compact",
+      "source_artifact": ".local-data/artifacts/capture_gap_exploration/20260913T030954Z/0193_k290_alliance_without_faction.png",
+      "source_pixel_sha256": "dd5988060203b6eb5571d017b3f16f6c62a6eff4953f788267b333faaceabd41",
+      "dimensions": [
+        540,
+        960
+      ],
+      "decoded_sha256": "cac23413ff7d287035af7237ef7917bd4ced996eae5181be28bc1bc981f6f9bd",
+      "reviewed_at": "2026-09-13",
+      "boxes": {
+        "AllianceTitle": [
+          109,
+          15,
+          117,
+          28
+        ],
+        "MemberIdentity": [
+          272,
+          172,
+          35,
+          33
+        ],
+        "AllianceMail": [
+          179,
+          850,
+          74,
+          66
+        ],
+        "Member": [
+          291,
+          772,
+          158,
+          24
+        ]
+      },
+      "control_selector_ids": {
+        "AllianceMail": "PNC_ALLIANCE_BOTTOM_TAB_MAIL",
+        "Member": "PNC_ALLIANCE_TILE_MEMBER"
+      },
+      "correlation_note": "Independent compact layout source; dynamic names, might, announcement, badges, and Depose are sanitized from the tracked fixture.",
+      "source_dimensions": [
+        900,
+        1600
+      ]
+    },
+    {
+      "image": "alliance_variants/alliance_tabbed.png",
+      "screen": "PNC_ALLIANCE_HOME",
+      "state": "tabbed_alliance_selected",
+      "group": "2026-09-13/capture_gap_exploration/20260913T030954Z/alliance_tabbed",
+      "source_artifact": ".local-data/artifacts/capture_gap_exploration/20260913T030954Z/0166_alliance_member_back.png",
+      "source_pixel_sha256": "ca8a35749ae0b14e8434874b3b0add1705aafd7b06a4eb943fb268ba8121305a",
+      "dimensions": [
+        540,
+        960
+      ],
+      "decoded_sha256": "0751f749b77621e1b83b223d36e316c56df28574f4f58443e24f1294600bec26",
+      "reviewed_at": "2026-09-13",
+      "boxes": {
+        "AllianceTitle": [
+          109,
+          15,
+          117,
+          28
+        ],
+        "AllianceSelectedTab": [
+          60,
+          62,
+          162,
+          45
+        ],
+        "MemberIdentity": [
+          272,
+          223,
+          35,
+          35
+        ],
+        "AllianceMail": [
+          179,
+          850,
+          74,
+          66
+        ],
+        "Member": [
+          291,
+          814,
+          158,
+          19
+        ]
+      },
+      "control_selector_ids": {
+        "AllianceMail": "PNC_ALLIANCE_BOTTOM_TAB_MAIL",
+        "Member": "PNC_ALLIANCE_TILE_MEMBER"
+      },
+      "correlation_note": "Independent tabbed layout source; dynamic names, might, announcement, badges, and Depose are sanitized from the tracked fixture.",
+      "source_dimensions": [
+        900,
+        1600
+      ]
+    },
+    {
+      "image": "alliance_variants/alliance_tabbed_validation.png",
+      "screen": "PNC_ALLIANCE_HOME",
+      "state": "tabbed_alliance_selected_validation",
+      "group": "2026-09-13/capture_gap_exploration/20260913T030954Z/alliance_tabbed_correlated_0155",
+      "source_artifact": ".local-data/artifacts/capture_gap_exploration/20260913T030954Z/0155_alliance_member_home.png",
+      "source_pixel_sha256": "edf27af019bc34bdea7b19446208ec95b2af0b4bfb7a32e9bd3c0587f6963ba4",
+      "dimensions": [
+        540,
+        960
+      ],
+      "decoded_sha256": "214f4ca41da586b34b646a2f96fc5deca1ce9a4cd9c0feb2e4f341cd117e7677",
+      "reviewed_at": "2026-09-13",
+      "boxes": {
+        "AllianceTitle": [
+          109,
+          15,
+          117,
+          28
+        ],
+        "AllianceSelectedTab": [
+          60,
+          62,
+          162,
+          45
+        ],
+        "MemberIdentity": [
+          272,
+          223,
+          35,
+          35
+        ],
+        "AllianceMail": [
+          179,
+          850,
+          74,
+          66
+        ],
+        "Member": [
+          291,
+          814,
+          158,
+          19
+        ]
+      },
+      "control_selector_ids": {
+        "AllianceMail": "PNC_ALLIANCE_BOTTOM_TAB_MAIL",
+        "Member": "PNC_ALLIANCE_TILE_MEMBER"
+      },
+      "correlation_note": "Validation is same-session/correlated with 0166; it is not independent evidence.",
+      "source_dimensions": [
+        900,
+        1600
+      ]
+    },
+    {
+      "image": "mail_compose_variants/mail_compose_empty.png",
+      "screen": "PNC_MAIL_COMPOSE_POPUP",
+      "state": "empty",
+      "layout_id": "mail_compose_centered",
+      "layout_revision": 1,
+      "group": "2026-09-13/capture_gap_exploration/20260913T030954Z/mail_compose_empty",
+      "source_artifact": ".local-data/artifacts/capture_gap_exploration/20260913T030954Z/0012_mail_compose_empty.png",
+      "source_pixel_sha256": "3fdf4d4b37ad8b14a2aaa67145dc00835e5a7174f9f49c71a2eea2cc770fa7f1",
+      "dimensions": [
+        540,
+        960
+      ],
+      "decoded_sha256": "1d87ae9f142ddd1ced8026e65b6b1bcc71229f1d8a3c69134ef4f88be7cfa1b5",
+      "reviewed_at": "2026-09-13",
+      "boxes": {
+        "EditMailTitle": [
+          214,
+          226,
+          115,
+          28
+        ],
+        "RecipientIcon": [
+          48,
+          293,
+          24,
+          29
+        ],
+        "SubjectIcon": [
+          45,
+          348,
+          27,
+          30
+        ],
+        "Close": [
+          474,
+          225,
+          35,
+          31
+        ],
+        "Send": [
+          179,
+          653,
+          182,
+          53
+        ],
+        "RecipientFieldInterior": [
+          91,
+          290,
+          406,
+          33
+        ],
+        "SubjectFieldInterior": [
+          91,
+          343,
+          406,
+          33
+        ],
+        "BodyFieldInterior": [
+          45,
+          402,
+          450,
+          217
+        ]
+      },
+      "control_selector_ids": {
+        "Close": "PNC_MAIL_COMPOSE_CLOSE_BUTTON",
+        "Send": "PNC_MAIL_COMPOSE_SEND_BUTTON"
+      },
+      "correlation_note": "Reviewed centered Compose frame; only the neutralized popup, static identity, and measured controls are retained. Target and subject are absent; body placeholder is observable through bounded OCR.",
+      "source_dimensions": [
+        900,
+        1600
+      ]
+    },
+    {
+      "image": "mail_compose_variants/mail_compose_subject.png",
+      "screen": "PNC_MAIL_COMPOSE_POPUP",
+      "state": "subject_committed",
+      "layout_id": "mail_compose_centered",
+      "layout_revision": 1,
+      "group": "2026-09-13/capture_gap_exploration/20260913T030954Z/mail_compose_subject",
+      "source_artifact": ".local-data/artifacts/capture_gap_exploration/20260913T030954Z/0015_mail_subject_committed.png",
+      "source_pixel_sha256": "2a7b0d9e9e787a582edd5c37e9ab0a9fdabc10db2996f78207df275cb22bce8d",
+      "dimensions": [
+        540,
+        960
+      ],
+      "decoded_sha256": "a7412bee71a3bfac8492ffae9e1ded31b6f67f638ee99d410b3d75303088a7e3",
+      "reviewed_at": "2026-09-13",
+      "boxes": {
+        "EditMailTitle": [
+          214,
+          226,
+          115,
+          28
+        ],
+        "RecipientIcon": [
+          48,
+          293,
+          24,
+          29
+        ],
+        "SubjectIcon": [
+          45,
+          348,
+          27,
+          30
+        ],
+        "Close": [
+          474,
+          225,
+          35,
+          31
+        ],
+        "Send": [
+          179,
+          653,
+          182,
+          53
+        ],
+        "RecipientFieldInterior": [
+          91,
+          290,
+          406,
+          33
+        ],
+        "SubjectFieldInterior": [
+          91,
+          343,
+          406,
+          33
+        ],
+        "BodyFieldInterior": [
+          45,
+          402,
+          450,
+          217
+        ]
+      },
+      "control_selector_ids": {
+        "Close": "PNC_MAIL_COMPOSE_CLOSE_BUTTON",
+        "Send": "PNC_MAIL_COMPOSE_SEND_BUTTON"
+      },
+      "text_fields": {
+        "subject": "Recognition validation"
+      },
+      "correlation_note": "Reviewed centered Compose frame retaining only the authored subject text; target remains absent and body state is not claimed by this frame.",
+      "source_dimensions": [
+        900,
+        1600
+      ]
+    },
+    {
+      "image": "mail_compose_variants/mail_compose_body.png",
+      "screen": "PNC_MAIL_COMPOSE_POPUP",
+      "state": "body_committed",
+      "layout_id": "mail_compose_centered",
+      "layout_revision": 1,
+      "group": "2026-09-13/capture_gap_exploration/20260913T030954Z/mail_compose_body",
+      "source_artifact": ".local-data/artifacts/capture_gap_exploration/20260913T030954Z/0018_mail_body_committed.png",
+      "source_pixel_sha256": "9c16032dc1014d6df169d28f071d744dfe5367b87187079a0cd38bca23da8f8e",
+      "dimensions": [
+        540,
+        960
+      ],
+      "decoded_sha256": "9b5535841b18563a4cd8a96badf67a4d9c804f539fc3e93a2766ab24013cc384",
+      "reviewed_at": "2026-09-13",
+      "boxes": {
+        "EditMailTitle": [
+          214,
+          226,
+          115,
+          28
+        ],
+        "RecipientIcon": [
+          48,
+          293,
+          24,
+          29
+        ],
+        "SubjectIcon": [
+          45,
+          348,
+          27,
+          30
+        ],
+        "Close": [
+          474,
+          225,
+          35,
+          31
+        ],
+        "Send": [
+          179,
+          653,
+          182,
+          53
+        ],
+        "RecipientFieldInterior": [
+          91,
+          290,
+          406,
+          33
+        ],
+        "SubjectFieldInterior": [
+          91,
+          343,
+          406,
+          33
+        ],
+        "BodyFieldInterior": [
+          45,
+          402,
+          450,
+          217
+        ]
+      },
+      "control_selector_ids": {
+        "Close": "PNC_MAIL_COMPOSE_CLOSE_BUTTON",
+        "Send": "PNC_MAIL_COMPOSE_SEND_BUTTON"
+      },
+      "text_fields": {
+        "subject": "Recognition validation",
+        "body": "Recognition validation - no action needed"
+      },
+      "correlation_note": "Reviewed centered Compose frame retaining only authored subject and body text; target remains absent.",
+      "source_dimensions": [
+        900,
+        1600
+      ]
+    },
+    {
+      "image": "alliance_variants/alliance_remaining_member_list.png",
+      "screen": "PNC_ALLIANCE_MEMBER_LIST",
+      "state": "normal_member_list",
+      "layout_id": "alliance_remaining_member_list",
+      "layout_revision": 1,
+      "source_artifact": ".local-data/artifacts/capture_gap_exploration/20260913T030954Z/0156_alliance_member_list.png",
+      "source_pixel_sha256": "f0a6084a5f1464c15df7a115930dec2616738f817cbfd407bfb9d74d34fa90b4",
+      "dimensions": [
+        540,
+        960
+      ],
+      "decoded_sha256": "6e54abac52def0bd268853801857e2e826d1f30a85274b7fc2656411d5aa052d",
+      "reviewed_at": "2026-09-13",
+      "boxes": {
+        "HeaderIdentity": [
+          0,
+          0,
+          540,
+          54
+        ],
+        "OfficerBannerArtwork": [
+          30,
+          60,
+          99,
+          111
+        ],
+        "Back": [
+          20,
+          8,
+          60,
+          44
+        ]
+      },
+      "control_selector_ids": {
+        "Back": "PNC_BACK_BUTTON_TOP_LEFT"
+      },
+      "correlation_note": "Only static header, Back, and officer banner artwork are retained; names, counts, member rows, and Depose controls are neutralized.",
+      "source_dimensions": [
+        900,
+        1600
+      ]
+    },
+    {
+      "image": "alliance_variants/alliance_remaining_member_reinforce.png",
+      "screen": "PNC_ALLIANCE_MEMBER_REINFORCE",
+      "state": "reinforce_member_list",
+      "layout_id": "alliance_remaining_member_reinforce",
+      "layout_revision": 1,
+      "source_artifact": ".local-data/artifacts/capture_gap_exploration/20260913T030954Z/0182_alliance_hall_reinforce_members.png",
+      "source_pixel_sha256": "add465d8da8519c8e802ff93dc04487fae0ae0d5df87c95aa7507b793d9c2a80",
+      "dimensions": [
+        540,
+        960
+      ],
+      "decoded_sha256": "64c944f9b39d6877d92ffa747c7470b2089781c0599999249fee13535f1269a6",
+      "reviewed_at": "2026-09-13",
+      "boxes": {
+        "HeaderIdentity": [
+          0,
+          0,
+          540,
+          54
+        ],
+        "R5RankArtwork": [
+          8,
+          59,
+          64,
+          43
+        ],
+        "Back": [
+          20,
+          8,
+          60,
+          44
+        ]
+      },
+      "control_selector_ids": {
+        "Back": "PNC_BACK_BUTTON_TOP_LEFT"
+      },
+      "correlation_note": "Only static header, R5 rank artwork, and Back are retained; member rows, names, counts, and Reinforce actions are neutralized.",
+      "source_dimensions": [
+        900,
+        1600
+      ]
+    },
+    {
+      "image": "alliance_variants/member_rows/alliance_member_manage_rows.png",
+      "screen": "PNC_ALLIANCE_MEMBER_LIST",
+      "state": "clear",
+      "layout_id": "alliance_remaining_member_list",
+      "layout_revision": 1,
+      "group": "2026-09-13/capture_gap_exploration/20260913T030954Z/0156_member_list",
+      "source_artifact": ".local-data/artifacts/capture_gap_exploration/20260913T030954Z/0156_alliance_member_list.png",
+      "source_pixel_sha256": "f0a6084a5f1464c15df7a115930dec2616738f817cbfd407bfb9d74d34fa90b4",
+      "dimensions": [
+        900,
+        1600
+      ],
+      "decoded_sha256": "76f1372551db9c31bcc6b1e66b2342d895b8588059975065c222663910d2f345",
+      "reviewed_at": "2026-09-13",
+      "build": null,
+      "locale": null,
+      "reviewed_rows": [
+        {
+          "row_index": 0,
+          "card": [
+            17,
+            560,
+            866,
+            200
+          ],
+          "name_region": [
+            198,
+            576,
+            432,
+            80
+          ],
+          "action": [
+            642,
+            626,
+            217,
+            72
+          ],
+          "action_label": "Manage",
+          "action_point": [
+            750,
+            662
+          ],
+          "status": "complete"
+        },
+        {
+          "row_index": 1,
+          "card": [
+            17,
+            861,
+            866,
+            200
+          ],
+          "name_region": [
+            198,
+            877,
+            432,
+            80
+          ],
+          "action": [
+            642,
+            927,
+            217,
+            73
+          ],
+          "action_label": "Manage",
+          "action_point": [
+            750,
+            963
+          ],
+          "status": "complete"
+        },
+        {
+          "row_index": 2,
+          "card": [
+            17,
+            1079,
+            866,
+            200
+          ],
+          "name_region": [
+            198,
+            1095,
+            432,
+            80
+          ],
+          "action": [
+            642,
+            1145,
+            217,
+            73
+          ],
+          "action_label": "Manage",
+          "action_point": [
+            750,
+            1181
+          ],
+          "status": "complete"
+        },
+        {
+          "row_index": 3,
+          "card": [
+            17,
+            1297,
+            866,
+            200
+          ],
+          "name_region": [
+            198,
+            1313,
+            432,
+            80
+          ],
+          "action": [
+            642,
+            1363,
+            217,
+            73
+          ],
+          "action_label": "Manage",
+          "action_point": [
+            750,
+            1399
+          ],
+          "status": "complete"
+        }
+      ],
+      "negative_regions": [
+        {
+          "bounds": [
+            17,
+            1515,
+            866,
+            85
+          ],
+          "reason": "fifth card is clipped by the viewport and is omitted"
+        }
+      ],
+      "reviewed_regions": [
+        {
+          "label": "static_manage_identity_banner",
+          "bounds": [
+            50,
+            100,
+            215,
+            285
+          ]
+        }
+      ],
+      "sanitized_regions": [
+        {
+          "bounds": [
+            198,
+            576,
+            432,
+            921
+          ],
+          "reason": "member names and stats neutralized while the static Alliance banner icon was retained"
+        }
+      ],
+      "correlation_note": "Captured native row geometry is retained in this sanitized derived fixture; dynamic member names and stats are neutralized, while only the static Manage banner identity pixels from the same source capture remain. Four complete Manage rows and the clipped fifth-card negative were reviewed. This source group is reference evidence, not an independent holdout.",
+      "source_dimensions": [
+        900,
+        1600
+      ]
+    },
+    {
+      "image": "alliance_variants/member_rows/alliance_member_reinforce_rows.png",
+      "screen": "PNC_ALLIANCE_MEMBER_REINFORCE",
+      "state": "clear",
+      "layout_id": "alliance_remaining_member_reinforce",
+      "layout_revision": 1,
+      "group": "2026-09-13/capture_gap_exploration/20260913T030954Z/0182_member_reinforce",
+      "source_artifact": ".local-data/artifacts/capture_gap_exploration/20260913T030954Z/0182_alliance_hall_reinforce_members.png",
+      "source_pixel_sha256": "add465d8da8519c8e802ff93dc04487fae0ae0d5df87c95aa7507b793d9c2a80",
+      "dimensions": [
+        900,
+        1600
+      ],
+      "decoded_sha256": "80dff85c4ca6a03843646905bd464a4f51b2063c75e215a3c60bc45fe2db08bc",
+      "reviewed_at": "2026-09-13",
+      "build": null,
+      "locale": null,
+      "reviewed_rows": [
+        {
+          "row_index": 0,
+          "card": [
+            17,
+            185,
+            866,
+            200
+          ],
+          "name_region": [
+            198,
+            201,
+            432,
+            80
+          ],
+          "action": [
+            642,
+            251,
+            217,
+            74
+          ],
+          "action_label": "Reinforce",
+          "action_point": [
+            750,
+            288
+          ],
+          "status": "complete"
+        },
+        {
+          "row_index": 1,
+          "card": [
+            17,
+            488,
+            866,
+            200
+          ],
+          "name_region": [
+            198,
+            504,
+            432,
+            80
+          ],
+          "action": [
+            642,
+            554,
+            217,
+            73
+          ],
+          "action_label": "Reinforce",
+          "action_point": [
+            750,
+            590
+          ],
+          "status": "complete"
+        },
+        {
+          "row_index": 2,
+          "card": [
+            17,
+            706,
+            866,
+            200
+          ],
+          "name_region": [
+            198,
+            722,
+            432,
+            80
+          ],
+          "action": [
+            642,
+            771,
+            217,
+            74
+          ],
+          "action_label": "Reinforce",
+          "action_point": [
+            750,
+            808
+          ],
+          "status": "complete"
+        },
+        {
+          "row_index": 3,
+          "card": [
+            17,
+            924,
+            866,
+            200
+          ],
+          "name_region": [
+            198,
+            940,
+            432,
+            80
+          ],
+          "action": [
+            642,
+            989,
+            217,
+            74
+          ],
+          "action_label": "Reinforce",
+          "action_point": [
+            750,
+            1026
+          ],
+          "status": "complete"
+        },
+        {
+          "row_index": 4,
+          "card": [
+            17,
+            1141,
+            866,
+            201
+          ],
+          "name_region": [
+            198,
+            1157,
+            432,
+            80
+          ],
+          "action": [
+            642,
+            1206,
+            217,
+            74
+          ],
+          "action_label": "Reinforce",
+          "action_point": [
+            750,
+            1243
+          ],
+          "status": "complete"
+        },
+        {
+          "row_index": 5,
+          "card": [
+            17,
+            1359,
+            866,
+            201
+          ],
+          "name_region": [
+            198,
+            1375,
+            432,
+            80
+          ],
+          "action": [
+            642,
+            1424,
+            217,
+            74
+          ],
+          "action_label": "Reinforce",
+          "action_point": [
+            750,
+            1461
+          ],
+          "status": "complete"
+        }
+      ],
+      "negative_regions": [],
+      "reviewed_regions": [
+        {
+          "label": "static_reinforce_identity_rank_badge",
+          "bounds": [
+            13,
+            98,
+            120,
+            170
+          ]
+        }
+      ],
+      "sanitized_regions": [
+        {
+          "bounds": [
+            198,
+            201,
+            432,
+            1240
+          ],
+          "reason": "member names and stats neutralized while the static rank badge identity pixels were retained"
+        }
+      ],
+      "correlation_note": "Captured native row geometry is retained in this sanitized derived fixture; dynamic member names and stats are neutralized, while only the static Reinforce rank-badge identity pixels from the same source capture remain. Six complete Reinforce rows were reviewed. This source group is reference evidence, not an independent holdout.",
+      "source_dimensions": [
+        900,
+        1600
+      ]
+    },
+    {
+      "image": "alliance_variants/alliance_remaining_manage_leader.png",
+      "screen": "PNC_ALLIANCE_MEMBER_MANAGE_POPUP",
+      "state": "leader_manage",
+      "layout_id": "alliance_remaining_manage_leader",
+      "layout_revision": 1,
+      "source_artifact": ".local-data/artifacts/capture_gap_exploration/20260913T030954Z/0157_alliance_member_manage.png",
+      "source_pixel_sha256": "a8ebb20cb1e3579ef6861cf04b645859fa680ec9b98e661491972b823424eb22",
+      "dimensions": [
+        540,
+        960
+      ],
+      "decoded_sha256": "18635de0ad475a4e4c461344fe24810ca9ed2807002a24cd42a8747ad94cfe49",
+      "reviewed_at": "2026-09-13",
+      "boxes": {
+        "ManageTitle": [
+          220,
+          245,
+          100,
+          27
+        ],
+        "RulesIcon": [
+          60,
+          413,
+          63,
+          58
+        ],
+        "PersonalInfoLeaderThirdRow": [
+          30,
+          483,
+          480,
+          62
+        ],
+        "Close": [
+          474,
+          238,
+          35,
+          33
+        ]
+      },
+      "control_selector_ids": {
+        "Close": "PNC_POPUP_CLOSE_BUTTON",
+        "PersonalInfo": "PNC_ALLIANCE_MEMBER_MANAGE_PERSONAL_INFO_BUTTON"
+      },
+      "correlation_note": "Leader role/name and all mutation rows are neutralized. Personal Info is retained only at the measured third-row position.",
+      "source_dimensions": [
+        900,
+        1600
+      ]
+    },
+    {
+      "image": "alliance_variants/alliance_remaining_manage_ordinary.png",
+      "screen": "PNC_ALLIANCE_MEMBER_MANAGE_POPUP",
+      "state": "ordinary_manage",
+      "layout_id": "alliance_remaining_manage_ordinary",
+      "layout_revision": 1,
+      "source_artifact": ".local-data/artifacts/capture_gap_exploration/20260913T030954Z/0161_alliance_regular_member_manage.png",
+      "source_pixel_sha256": "16199cdbe95233d051d9cd3130b9194584c47668522a5853fdd0c4d4b35d4313",
+      "dimensions": [
+        540,
+        960
+      ],
+      "decoded_sha256": "3ee12a3e77db80bfcdcbaca8c9adebc641e4d8df13c9ab25a54449c06eb3f3a7",
+      "reviewed_at": "2026-09-13",
+      "boxes": {
+        "ManageTitle": [
+          220,
+          245,
+          100,
+          27
+        ],
+        "SendIcon": [
+          60,
+          413,
+          63,
+          58
+        ],
+        "PersonalInfoOrdinaryFirstRow": [
+          30,
+          339,
+          480,
+          69
+        ],
+        "Close": [
+          474,
+          238,
+          35,
+          33
+        ]
+      },
+      "control_selector_ids": {
+        "Close": "PNC_POPUP_CLOSE_BUTTON",
+        "PersonalInfo": "PNC_ALLIANCE_MEMBER_MANAGE_PERSONAL_INFO_BUTTON"
+      },
+      "correlation_note": "Ordinary role/name and Send action are neutralized. Personal Info is retained only at the measured first-row position.",
+      "source_dimensions": [
+        900,
+        1600
+      ]
+    },
+    {
+      "image": "alliance_variants/alliance_remaining_hall.png",
+      "screen": "PNC_ALLIANCE_HALL",
+      "state": "hall_empty_reinforcement",
+      "layout_id": "alliance_remaining_hall",
+      "layout_revision": 1,
+      "source_artifact": ".local-data/artifacts/capture_gap_exploration/20260913T030954Z/0181_alliance_hall_menu.png",
+      "source_pixel_sha256": "77ff2bcc2af2195508e57b84769336a86aad53400bf2072a2de3b0f98566f6c0",
+      "dimensions": [
+        540,
+        960
+      ],
+      "decoded_sha256": "188237122e0d7b65f8bf52a8506669368628253cd22bf768d487a0a6b5f8139e",
+      "reviewed_at": "2026-09-13",
+      "boxes": {
+        "HallTitle": [
+          105,
+          8,
+          225,
+          47
+        ],
+        "FacilityDescription": [
+          276,
+          141,
+          242,
+          45
+        ],
+        "Upgrade": [
+          372,
+          246,
+          144,
+          57
+        ],
+        "SendBack": [
+          54,
+          870,
+          195,
+          69
+        ],
+        "Reinforce": [
+          297,
+          870,
+          195,
+          69
+        ],
+        "Back": [
+          20,
+          8,
+          60,
+          44
+        ]
+      },
+      "control_selector_ids": {
+        "Upgrade": "PNC_ALLIANCE_HALL_UPGRADE_BUTTON",
+        "SendBack": "PNC_ALLIANCE_HALL_SEND_BACK_BUTTON",
+        "Reinforce": "PNC_ALLIANCE_HALL_REINFORCE_BUTTON",
+        "Back": "PNC_BACK_BUTTON_TOP_LEFT"
+      },
+      "correlation_note": "Timers, player names, levels, capacity and incoming rows are neutralized. Hall controls remain static visual dependencies; no delivery or mutation result is claimed.",
+      "source_dimensions": [
+        900,
+        1600
+      ]
+    },
+    {
+      "image": "alliance_variants/alliance_remaining_transport_negative.png",
+      "screen": "PNC_ALLIANCE_MEMBER_TRANSPORT",
+      "state": "zero_resources_disabled",
+      "layout_id": null,
+      "layout_revision": null,
+      "source_artifact": ".local-data/artifacts/capture_gap_exploration/20260913T030954Z/0171_allied_transport_form.png",
+      "source_pixel_sha256": "b6315334e34c9b18e852d078bdb9440988040085923540ff458790c0a15d4f57",
+      "dimensions": [
+        540,
+        960
+      ],
+      "decoded_sha256": "a24cbfd686eb138fb832db687f2b1550239687fb48fb16457a10dd3f7ca3ca36",
+      "reviewed_at": "2026-09-13",
+      "boxes": {
+        "TransportTitle": [
+          0,
+          0,
+          540,
+          54
+        ],
+        "DisabledTransport": [
+          174,
+          828,
+          195,
+          72
+        ]
+      },
+      "control_selector_ids": {},
+      "correlation_note": "Sanitized negative only; zero selected resources and disabled Transport do not establish a new form profile or actionable transport control.",
+      "source_dimensions": [
+        900,
+        1600
+      ]
+    },
+    {
+      "image": "player_profile_variants/remote_player_profile_gear.png",
+      "screen": "PNC_PLAYER_PROFILE",
+      "state": "remote_gear_profile",
+      "layout_id": "remote_player_profile_gear",
+      "layout_revision": 1,
+      "group": "2026-09-13/capture_gap_exploration/20260913T030954Z/0158_remote_player_profile_gear",
+      "source_artifact": ".local-data/artifacts/capture_gap_exploration/20260913T030954Z/0158_alliance_member_personal_info.png",
+      "source_pixel_sha256": "4d2be41e7921baa62199d43473a3f9f69972406411e9735b7c8e7f0ca6a45ca9",
+      "dimensions": [
+        540,
+        960
+      ],
+      "decoded_sha256": "ceeb5c23364f263d3687383dd55f140c3d0a606261f5ca916f2d9cb022349195",
+      "reviewed_at": "2026-09-13",
+      "build": null,
+      "locale": null,
+      "boxes": {
+        "Back": [
+          0,
+          0,
+          108,
+          54
+        ],
+        "GearTab": [
+          0,
+          54,
+          109,
+          52
+        ],
+        "AllianceInfoFooter": [
+          102,
+          846,
+          120,
+          114
+        ],
+        "SettingsFooter": [
+          210,
+          846,
+          120,
+          114
+        ],
+        "MailFooter": [
+          315,
+          846,
+          114,
+          114
+        ]
+      },
+      "control_selector_ids": {
+        "Back": "PNC_BACK_BUTTON_TOP_LEFT",
+        "Mail": "PNC_PLAYER_PROFILE_MAIL_BUTTON"
+      },
+      "correlation_note": "Sanitized remote Gear layout: static Gear tab and Alliance Info + Settings footer pair establish identity. Player name, gear art, stats, and account/alliance identity are neutralized; Mail remains a measured optional navigation control.",
+      "source_dimensions": [
+        900,
+        1600
+      ]
+    },
+    {
+      "image": "player_profile_variants/remote_player_profile_lord_negative.png",
+      "screen": "PNC_PLAYER_PROFILE",
+      "state": "lord_identity_negative",
+      "layout_id": null,
+      "layout_revision": null,
+      "group": "2026-09-13/capture_gap_exploration/20260913T030954Z/0005_lord_identity_negative",
+      "source_artifact": ".local-data/artifacts/capture_gap_exploration/20260913T030954Z/0005_lord_identity.png",
+      "source_pixel_sha256": "fc827f236636610e62361b6f2007b755037838bce9e4aec093ad55911a5bdb68",
+      "dimensions": [
+        540,
+        960
+      ],
+      "decoded_sha256": "2ba7d08aa9cda42b8ed1c1c1fe64e9507bc1e5ea3e6b650158da4ef140b7f66c",
+      "reviewed_at": "2026-09-13",
+      "build": null,
+      "locale": null,
+      "boxes": {
+        "Back": [
+          0,
+          0,
+          108,
+          54
+        ],
+        "GearTab": [
+          0,
+          54,
+          109,
+          52
+        ]
+      },
+      "control_selector_ids": {},
+      "correlation_note": "Explicit negative holdout: shares Back and selected Gear chrome with the remote profile but lacks the Alliance Info + Settings footer pair, so Gear alone must not publish remote profile identity.",
+      "source_dimensions": [
+        900,
+        1600
+      ]
+    },
+    {
+      "image": "android_launcher_june17.png",
+      "screen": "ANDROID_HOME",
+      "state": "clear",
+      "group": "2026-06-17/bluestacks/android_launcher",
+      "source_artifact": "tests/data/world_map/bluestacks_android_home_pnc_label_live_20260617.png",
+      "dimensions": [
+        540,
+        960
+      ],
+      "decoded_sha256": "bb650f5e39bf52052ddb8b6a749bae0cda8a3739fc7d12010f452733881a3152",
+      "reviewed_at": "2026-09-13",
+      "build": null,
+      "locale": null,
+      "boxes": {
+        "SearchBar": [
+          93,
+          49,
+          354,
+          28
+        ],
+        "SystemApps": [
+          238,
+          139,
+          64,
+          63
+        ],
+        "PncIcon": [
+          407,
+          146,
+          49,
+          50
+        ]
+      },
+      "control_selector_ids": {
+        "PncIcon": "ANDROID_HOME_PNC_ICON"
+      },
+      "correlation_note": "Template source; no independent holdout accuracy claim."
+    },
+    {
+      "image": "castle_identity_variants/castle_identity_0042.png",
+      "screen": "PNC_CASTLE_SELECTION",
+      "state": "clear",
+      "layout_id": "manage_char",
+      "layout_revision": 1,
+      "group": "2026-09-13/core_ports_foreground_fix_20260913/157_farm_foreground_fix",
+      "source_artifact": "C:/Users/lebel/pnc/.local-data/artifacts/core_ports_foreground_fix_20260913/2026-09-13/157_farm_foreground_fix/20260913T180452Z_core_20260913T175731Z_fc2f4b80_0042_active_castle_identity.png",
+      "source_file_sha256": "7dd6644d7dff179fcc073c9ace9b0d49be7167fcb1c266bbc98ce092fbc009d2",
+      "source_pixel_sha256": "f1f13ce1ec73e3961b59ad32187a7dcfa86969daeddf32c1af731a70a1d616b8",
+      "dimensions": [
+        900,
+        1600
+      ],
+      "decoded_sha256": "ea7a5efc8ae99d36301f81f381ade75d2a3b08a936587635c2165726836a0728",
+      "reviewed_at": "2026-09-13",
+      "build": null,
+      "locale": null,
+      "boxes": {
+        "Back": [
+          43,
+          20,
+          84,
+          50
+        ]
+      },
+      "control_selector_ids": {
+        "Back": "PNC_BACK_BUTTON_TOP_LEFT"
+      },
+      "reviewed_regions": [
+        {
+          "label": "roster",
+          "bounds": [
+            180,
+            112,
+            558,
+            1344
+          ]
+        },
+        {
+          "label": "selected_row",
+          "bounds": [
+            0,
+            497,
+            900,
+            126
+          ]
+        },
+        {
+          "label": "selected_name",
+          "bounds": [
+            201,
+            545,
+            165,
+            29
+          ]
+        },
+        {
+          "label": "selected_checkmark_scan",
+          "bounds": [
+            738,
+            497,
+            162,
+            126
+          ]
+        }
+      ],
+      "sanitized_regions": [
+        {
+          "bounds": [
+            195,
+            173,
+            253,
+            38
+          ],
+          "reason": "non-selected dynamic name neutralized"
+        },
+        {
+          "bounds": [
+            195,
+            355,
+            247,
+            43
+          ],
+          "reason": "non-selected dynamic name neutralized"
+        }
+      ],
+      "negative_regions": [],
+      "correlation_note": "Sanitized native Manage Char capture retains the selected row, exact current identity evidence, checkmark, and Back control. Non-selected dynamic names are neutralized. This source group is reference evidence from the captured workflow; no independent castle-selection holdout is available.",
+      "source_dimensions": [
+        900,
+        1600
+      ]
+    },
+    {
+      "image": "coordinate_dialog_variants/coordinate_dialog_20260613.png",
+      "screen": "PNC_WORLD_COORDINATE_DIALOG",
+      "state": "clear",
+      "layout_id": "coordinate_dialog_captured",
+      "layout_revision": 1,
+      "group": "2026-06-13/serious_stuff",
+      "source_artifact": "tests/data/world_map/world_coordinate_dialog_zero_fields_live_20260613.png",
+      "source_pixel_sha256": "25745e25fddadb217a620f039e4722f74b0f4e75271dcd8cc92ed001a5d6f665",
+      "dimensions": [
+        540,
+        960
+      ],
+      "decoded_sha256": "b6ca1d1530f187aaaa715c533ba0e8a131d3553ffcceb890f877a9ae7acd0821",
+      "reviewed_at": "2026-09-13",
+      "build": null,
+      "locale": "English",
+      "boxes": {
+        "Go": [
+          178,
+          520,
+          184,
+          53
+        ],
+        "Close": [
+          467,
+          307,
+          43,
+          44
+        ]
+      },
+      "control_selector_ids": {
+        "Go": "PNC_WORLD_COORDINATE_DIALOG_GO_BUTTON",
+        "Close": "PNC_WORLD_COORDINATE_DIALOG_CLOSE_BUTTON"
+      },
+      "reviewed_regions": [
+        {
+          "label": "panel_header",
+          "bounds": [
+            20,
+            307,
+            445,
+            44
+          ]
+        },
+        {
+          "label": "K_label",
+          "bounds": [
+            71,
+            394,
+            35,
+            34
+          ]
+        },
+        {
+          "label": "X_label",
+          "bounds": [
+            199,
+            394,
+            35,
+            34
+          ]
+        },
+        {
+          "label": "Y_label",
+          "bounds": [
+            327,
+            394,
+            35,
+            34
+          ]
+        }
+      ],
+      "negative_regions": [],
+      "correlation_note": "Captured coordinate dialog with zero-valued X/Y fields. Stable modal/header and K/X/Y labels are reviewed separately from mutable values; Go and Close are measured controls. Negative identity/button masking is covered by both builder and navigation fixture tests.",
+      "source_dimensions": [
+        540,
+        960
+      ]
+    },
+    {
+      "image": "coordinate_dialog_variants/coordinate_dialog_20260614.png",
+      "screen": "PNC_WORLD_COORDINATE_DIALOG",
+      "state": "clear",
+      "layout_id": "coordinate_dialog_captured",
+      "layout_revision": 1,
+      "group": "2026-06-14/serious_stuff",
+      "source_artifact": "tests/data/world_map/world_coordinate_dialog_missing_y_label_live_20260614.png",
+      "source_pixel_sha256": "d9089395d3e4d5cb6246015ed6b6cb7fc22ab9b37e82c32c78236f42ac3f27e0",
+      "dimensions": [
+        540,
+        960
+      ],
+      "decoded_sha256": "d201036e9cc3d4f042797876163a509ae45d6bf34cb1b78c7951928cb2bf0056",
+      "reviewed_at": "2026-09-13",
+      "build": null,
+      "locale": "English",
+      "boxes": {
+        "Go": [
+          178,
+          520,
+          184,
+          53
+        ],
+        "Close": [
+          467,
+          307,
+          43,
+          44
+        ]
+      },
+      "control_selector_ids": {
+        "Go": "PNC_WORLD_COORDINATE_DIALOG_GO_BUTTON",
+        "Close": "PNC_WORLD_COORDINATE_DIALOG_CLOSE_BUTTON"
+      },
+      "reviewed_regions": [
+        {
+          "label": "panel_header",
+          "bounds": [
+            20,
+            307,
+            445,
+            44
+          ]
+        },
+        {
+          "label": "K_label",
+          "bounds": [
+            71,
+            394,
+            35,
+            34
+          ]
+        },
+        {
+          "label": "X_label",
+          "bounds": [
+            199,
+            394,
+            35,
+            34
+          ]
+        },
+        {
+          "label": "Y_label",
+          "bounds": [
+            327,
+            394,
+            35,
+            34
+          ]
+        }
+      ],
+      "negative_regions": [],
+      "correlation_note": "Captured coordinate dialog with K226 and zero-valued X/Y fields where full-frame OCR omitted one label in the original run. Visual label anchors remain stable; mutable values are not identity anchors. This is a same-layout validation capture, not an independent holdout.",
+      "source_dimensions": [
+        540,
+        960
+      ]
+    },
+    {
+      "image": "castle_identity_variants/castle_identity_0108.png",
+      "screen": "PNC_CASTLE_SELECTION",
+      "state": "clear",
+      "layout_id": "manage_char",
+      "layout_revision": 1,
+      "group": "2026-09-13/core_ports_foreground_fix_20260913/157_farm_foreground_fix",
+      "source_artifact": "C:/Users/lebel/pnc/.local-data/artifacts/core_ports_foreground_fix_20260913/2026-09-13/157_farm_foreground_fix/20260913T181328Z_core_20260913T175731Z_fc2f4b80_0108_active_castle_identity.png",
+      "source_file_sha256": "83f97b9177c8c3c967538ef9176e9fabb9ed46052dcdc3803862d35321055ece",
+      "source_pixel_sha256": "281390d15ea418bb2cc1a8993db78929b4cf5a95b7856d2ed616362b3af8b669",
+      "dimensions": [
+        900,
+        1600
+      ],
+      "decoded_sha256": "3f369d1217ffa32aaba001abec6fcfb9355ac351850ba3ad6bd71164d6926acd",
+      "reviewed_at": "2026-09-13",
+      "build": null,
+      "locale": null,
+      "boxes": {
+        "Back": [
+          43,
+          20,
+          84,
+          50
+        ]
+      },
+      "control_selector_ids": {
+        "Back": "PNC_BACK_BUTTON_TOP_LEFT"
+      },
+      "reviewed_regions": [
+        {
+          "label": "roster",
+          "bounds": [
+            180,
+            112,
+            558,
+            1344
+          ]
+        },
+        {
+          "label": "selected_row",
+          "bounds": [
+            0,
+            497,
+            900,
+            126
+          ]
+        },
+        {
+          "label": "selected_name",
+          "bounds": [
+            201,
+            545,
+            165,
+            29
+          ]
+        },
+        {
+          "label": "selected_checkmark_scan",
+          "bounds": [
+            738,
+            497,
+            162,
+            126
+          ]
+        }
+      ],
+      "sanitized_regions": [
+        {
+          "bounds": [
+            195,
+            173,
+            253,
+            38
+          ],
+          "reason": "non-selected dynamic name neutralized"
+        },
+        {
+          "bounds": [
+            195,
+            355,
+            247,
+            43
+          ],
+          "reason": "non-selected dynamic name neutralized"
+        }
+      ],
+      "negative_regions": [],
+      "correlation_note": "Sanitized native Manage Char capture retains the selected row, exact current identity evidence, checkmark, and Back control. Non-selected dynamic names are neutralized. This source group is reference evidence from the captured workflow; no independent castle-selection holdout is available.",
+      "source_dimensions": [
+        900,
+        1600
+      ]
+    },
+    {
+      "image": "building_variants/institute_upgrade_blocked.png",
+      "screen": "PNC_INSTITUTE",
+      "state": "clear",
+      "layout_id": "institute_upgrade_detail",
+      "layout_revision": 1,
+      "group": "2026-09-13/capture_gap_exploration/20260913T030954Z",
+      "source_artifact": ".local-data/artifacts/capture_gap_exploration/20260913T030954Z/0055_institute_upgrade_blocked_settled.png",
+      "source_file_sha256": "4c5db4c6cb47efc5f7a199ea6d76fb25481cd23de4c791917592b6a869d25d88",
+      "source_pixel_sha256": "c7ab27094b721f38123024514cc6cbaa7fd54f9cb4f0c181f8d3533589f5d421",
+      "dimensions": [
+        900,
+        1600
+      ],
+      "decoded_sha256": "335992f0ae81f5fb889f48e592741a799ef4ff3f84be89a37d252da6399fead3",
+      "reviewed_at": "2026-09-13",
+      "build": null,
+      "locale": "English",
+      "boxes": {
+        "Back": [
+          35,
+          15,
+          105,
+          60
+        ],
+        "PrerequisiteGo": [
+          670,
+          753,
+          170,
+          55
+        ]
+      },
+      "control_selector_ids": {
+        "Back": "PNC_BACK_BUTTON_TOP_LEFT",
+        "PrerequisiteGo": "PNC_BUILDING_REQUIREMENT_GO_BUTTON"
+      },
+      "reviewed_regions": [
+        {
+          "label": "institute_title",
+          "bounds": [
+            0,
+            0,
+            900,
+            85
+          ]
+        },
+        {
+          "label": "building_art",
+          "bounds": [
+            55,
+            90,
+            370,
+            340
+          ]
+        },
+        {
+          "label": "upgrade_detail_panel",
+          "bounds": [
+            15,
+            390,
+            870,
+            1195
+          ]
+        },
+        {
+          "label": "prerequisite_go",
+          "bounds": [
+            670,
+            753,
+            170,
+            55
+          ]
+        }
+      ],
+      "negative_regions": [
+        {
+          "label": "paid_builder_set_go",
+          "bounds": [
+            670,
+            885,
+            170,
+            60
+          ]
+        },
+        {
+          "label": "upgrade_ineligible_controls",
+          "bounds": [
+            395,
+            420,
+            455,
+            80
+          ]
+        }
+      ],
+      "correlation_note": "Captured Institute upgrade detail retains stable title, building art, requirement panel, Back, and the prerequisite Go at native (670,753,170,55). The red Upgrade-ineligible and paid Builder Set controls remain explicit negatives; no independent same-layout holdout is available.",
+      "source_dimensions": [
+        900,
+        1600
+      ]
+    },
+    {
+      "image": "castle_identity_variants/castle_identity_3xx_holdout.png",
+      "screen": "PNC_CASTLE_SELECTION",
+      "state": "clear",
+      "layout_id": "manage_char",
+      "layout_revision": 1,
+      "group": "2026-09-13/independent_recognition/20260913T234148Z/3xx_spies",
+      "source_artifact": ".local-data/artifacts/independent_recognition/20260913T234148Z/2026-09-13/3xx_spies/20260913T234522Z_roster_holdout.png",
+      "source_file_sha256": "fd49bc4243cf1d9efc74e67d28fb953f161805e385004de54f085f0592c0a9d3",
+      "source_pixel_sha256": "a1fda932283190a70486177e58f2e642b4d088e436cd43dfccc878261088a5d7",
+      "dimensions": [
+        900,
+        1600
+      ],
+      "decoded_sha256": "e0c9ce0561bee5cbd165e98d69d2a7d477017ed75a2f36fd050a84897dcd162d",
+      "reviewed_at": "2026-09-13",
+      "build": "5.2.77 / AppVersion 5.0.201.227",
+      "locale": "English",
+      "boxes": {
+        "Back": [
+          43,
+          20,
+          84,
+          50
+        ],
+        "SelectedRow": [
+          18,
+          1410,
+          867,
+          167
+        ],
+        "SelectedKingdom": [
+          205,
+          1427,
+          195,
+          28
+        ],
+        "SelectedName": [
+          207,
+          1471,
+          199,
+          20
+        ],
+        "SelectedLevel": [
+          206,
+          1507,
+          164,
+          27
+        ],
+        "SelectedCheckmark": [
+          763,
+          1410,
+          122,
+          145
+        ]
+      },
+      "control_selector_ids": {
+        "Back": "PNC_BACK_BUTTON_TOP_LEFT"
+      },
+      "reviewed_regions": [
+        {
+          "label": "roster",
+          "bounds": [
+            18,
+            120,
+            868,
+            1458
+          ]
+        },
+        {
+          "label": "selected_row",
+          "bounds": [
+            18,
+            1410,
+            867,
+            167
+          ]
+        },
+        {
+          "label": "selected_kingdom",
+          "bounds": [
+            205,
+            1427,
+            195,
+            28
+          ]
+        },
+        {
+          "label": "selected_name",
+          "bounds": [
+            207,
+            1471,
+            199,
+            20
+          ]
+        },
+        {
+          "label": "selected_level",
+          "bounds": [
+            206,
+            1507,
+            164,
+            27
+          ]
+        },
+        {
+          "label": "selected_checkmark",
+          "bounds": [
+            763,
+            1410,
+            122,
+            145
+          ]
+        }
+      ],
+      "sanitized_regions": [
+        {
+          "label": "non_selected_avatar_art",
+          "bounds": [
+            53,
+            143,
+            116,
+            117
+          ],
+          "reason": "non-selected avatar art neutralized while the static frame remains"
+        },
+        {
+          "label": "non_selected_name",
+          "bounds": [
+            195,
+            175,
+            455,
+            47
+          ],
+          "reason": "non-selected dynamic name neutralized without replacement text"
+        },
+        {
+          "label": "non_selected_avatar_art",
+          "bounds": [
+            53,
+            327,
+            116,
+            117
+          ],
+          "reason": "non-selected avatar art neutralized while the static frame remains"
+        },
+        {
+          "label": "non_selected_name",
+          "bounds": [
+            195,
+            359,
+            455,
+            47
+          ],
+          "reason": "non-selected dynamic name neutralized without replacement text"
+        },
+        {
+          "label": "non_selected_avatar_art",
+          "bounds": [
+            53,
+            511,
+            116,
+            117
+          ],
+          "reason": "non-selected avatar art neutralized while the static frame remains"
+        },
+        {
+          "label": "non_selected_name",
+          "bounds": [
+            195,
+            543,
+            455,
+            47
+          ],
+          "reason": "non-selected dynamic name neutralized without replacement text"
+        },
+        {
+          "label": "non_selected_avatar_art",
+          "bounds": [
+            53,
+            695,
+            116,
+            117
+          ],
+          "reason": "non-selected avatar art neutralized while the static frame remains"
+        },
+        {
+          "label": "non_selected_name",
+          "bounds": [
+            195,
+            727,
+            455,
+            47
+          ],
+          "reason": "non-selected dynamic name neutralized without replacement text"
+        },
+        {
+          "label": "non_selected_avatar_art",
+          "bounds": [
+            53,
+            879,
+            116,
+            117
+          ],
+          "reason": "non-selected avatar art neutralized while the static frame remains"
+        },
+        {
+          "label": "non_selected_name",
+          "bounds": [
+            195,
+            911,
+            455,
+            47
+          ],
+          "reason": "non-selected dynamic name neutralized without replacement text"
+        },
+        {
+          "label": "non_selected_avatar_art",
+          "bounds": [
+            53,
+            1063,
+            116,
+            117
+          ],
+          "reason": "non-selected avatar art neutralized while the static frame remains"
+        },
+        {
+          "label": "non_selected_name",
+          "bounds": [
+            195,
+            1095,
+            455,
+            47
+          ],
+          "reason": "non-selected dynamic name neutralized without replacement text"
+        },
+        {
+          "label": "non_selected_avatar_art",
+          "bounds": [
+            53,
+            1247,
+            116,
+            117
+          ],
+          "reason": "non-selected avatar art neutralized while the static frame remains"
+        },
+        {
+          "label": "non_selected_name",
+          "bounds": [
+            195,
+            1279,
+            455,
+            47
+          ],
+          "reason": "non-selected dynamic name neutralized without replacement text"
+        }
+      ],
+      "negative_regions": [],
+      "correlation_note": "One independently captured 3xx_spies Manage Char frame retained the exact selected K303/K3033849ba8778/Lv5 identity and complete bottom card. Other seven avatar art and names are neutralized without replacement text. This fixture is a failure-driven parser reference for the bottom-row crop correction, not an aggregate accuracy claim.",
+      "source_dimensions": [
+        900,
+        1600
+      ]
+    },
+    {
+      "image": "commercial_offer_loading_negative.png",
+      "screen": "PNC_POPUP",
+      "state": "blocked",
+      "group": "2026-09-13/capture_gap_exploration/hero_offer",
+      "source_artifact": ".local-data/artifacts/capture_gap_exploration/20260913T030954Z/0249_original_castle_final_loading.png",
+      "dimensions": [
+        540,
+        960
+      ],
+      "decoded_sha256": "71d700c087dca28ace93a71ff9e50f409cb2f6abab11b67aea2615ac7aca7b2b",
+      "reviewed_at": "2026-09-13",
+      "build": null,
+      "locale": null,
+      "boxes": {
+        "OfferTitle": [
+          24,
+          64,
+          149,
+          39
+        ],
+        "Close": [
+          485,
+          63,
+          35,
+          33
+        ],
+        "Purchase": [
+          176,
+          790,
+          186,
+          55
+        ]
+      },
+      "control_selector_ids": {},
+      "notes": "Reviewed hero art, reward panel, price and One-time footer. Filename is not a label. Negative loading evidence; no purchase action is published."
+    },
+    {
+      "image": "loading_variants/configured_game_launch.png",
+      "screen": "PNC_LOADING",
+      "state": "blocked",
+      "layout_id": "loading_configured_game_launch",
+      "layout_revision": 1,
+      "group": "2026-09-13/independent_recognition/20260913T234148Z/3xx_spies",
+      "source_artifact": ".local-data/artifacts/independent_recognition/20260913T234148Z/2026-09-13/3xx_spies/20260913T234230Z_configured_game_launch.png",
+      "source_file_sha256": "121465e0b58b88fb566484650751ac69ec8b9ae8da6eb06dbc01e4770c7e2d55",
+      "source_pixel_sha256": "40ebc3daf0b1aa96eb27324ff9edd79910dd961157db79e2802a17480f4669af",
+      "dimensions": [
+        900,
+        1600
+      ],
+      "source_dimensions": [
+        900,
+        1600
+      ],
+      "decoded_sha256": "bbe6f46101857236ad709429ad495f6d84db4c426e8c6c1759db32f4d655abd1",
+      "reviewed_at": "2026-09-13",
+      "build": "5.2.77 / AppVersion 5.0.201.227",
+      "locale": "English",
+      "boxes": {
+        "GameLogo": [
+          236,
+          0,
+          428,
+          113
+        ],
+        "ToolsButton": [
+          705,
+          27,
+          181,
+          56
+        ]
+      },
+      "control_selector_ids": {},
+      "reviewed_regions": [
+        {
+          "label": "game_logo",
+          "bounds": [
+            236,
+            0,
+            428,
+            113
+          ]
+        },
+        {
+          "label": "tools_spanner_surface",
+          "bounds": [
+            705,
+            27,
+            181,
+            56
+          ]
+        }
+      ],
+      "sanitized_regions": [],
+      "negative_regions": [],
+      "correlation_note": "One independently captured 3xx_spies configured game-launch frame retains the static title/logo and tools/spanner chrome used as two independent visual anchors. No controls, progress fill, account text, or OCR fields are qualified; the loading profile is guarded reference-only evidence, not an aggregate accuracy claim."
+    },
+    {
+      "image": "alliance_variants/alliance_invitation_portrait.png",
+      "screen": "PNC_POPUP",
+      "state": "blocked",
+      "layout_id": "alliance_invitation_footer",
+      "layout_revision": 1,
+      "group": "2026-09-13/independent_recognition/20260913T234148Z/3xx_spies",
+      "source_artifact": ".local-data/artifacts/independent_recognition/20260913T234148Z/2026-09-13/3xx_spies/20260913T234250Z_settled_city.png",
+      "source_file_sha256": "f9f62da531c53f5ffa0bde8f5138a37651bb5b00f667028f76cdefd5a2c9f6fd",
+      "dimensions": [
+        900,
+        1600
+      ],
+      "source_dimensions": [
+        900,
+        1600
+      ],
+      "decoded_sha256": "ca53f18677edc4dfb1d9128c7bb22383469f5b142a33734381d05e71aafb65db",
+      "reviewed_at": "2026-09-13",
+      "build": "5.2.77 / AppVersion 5.0.201.227",
+      "locale": "English",
+      "boxes": {
+        "Portrait": [
+          8,
+          550,
+          275,
+          310
+        ],
+        "Message": [
+          315,
+          638,
+          550,
+          90
+        ],
+        "Cancel": [
+          326,
+          874,
+          217,
+          72
+        ]
+      },
+      "control_selector_ids": {
+        "Cancel": "PNC_POPUP_CLOSE_BUTTON"
+      },
+      "reviewed_regions": [
+        {
+          "label": "Portrait",
+          "bounds": [
+            8,
+            550,
+            275,
+            310
+          ]
+        },
+        {
+          "label": "Message",
+          "bounds": [
+            315,
+            638,
+            550,
+            90
+          ]
+        },
+        {
+          "label": "Cancel",
+          "bounds": [
+            326,
+            874,
+            217,
+            72
+          ]
+        }
+      ],
+      "sanitized_regions": [
+        {
+          "label": "background_above",
+          "bounds": [
+            0,
+            0,
+            900,
+            544
+          ]
+        },
+        {
+          "label": "background_below",
+          "bounds": [
+            0,
+            970,
+            900,
+            630
+          ]
+        },
+        {
+          "label": "inviter_identity",
+          "bounds": [
+            520,
+            768,
+            345,
+            59
+          ]
+        }
+      ],
+      "negative_regions": [],
+      "correlation_note": "Correction reference from one 3xx_spies session. Portrait and static message establish identity independently of Cancel. Private inviter and unrelated background are masked; no text or control is invented. Join/Apply is retained as negative visual context and is never published. This is not independent holdout accuracy."
+    },
+    {
+      "image": "alliance_variants/alliance_join_landing.png",
+      "screen": "PNC_ALLIANCE_JOIN",
+      "state": "clear",
+      "layout_id": "alliance_join_landing",
+      "layout_revision": 1,
+      "group": "2026-09-13/independent_recognition/20260913T234148Z/3xx_spies",
+      "source_artifact": ".local-data/artifacts/independent_recognition/20260913T234148Z/2026-09-13/3xx_spies/20260913T234741Z_alliance_availability.png",
+      "source_file_sha256": "77f4af9d99a97fbb05e29829fb7be230dbc26e0dc312ccec101f89677ecf029d",
+      "source_pixel_sha256": "a22129ffba2ab49839ce4888cc1489de4269880015839d373a6cd7cac31a7082",
+      "dimensions": [
+        900,
+        1600
+      ],
+      "source_dimensions": [
+        900,
+        1600
+      ],
+      "decoded_sha256": "949922560e3607bd020fa07a23369f547ca20a4787fc107992d0810e55d78867",
+      "reviewed_at": "2026-09-13",
+      "build": "5.2.77 / AppVersion 5.0.201.227",
+      "locale": "English",
+      "boxes": {
+        "OdinPortrait": [
+          285,
+          100,
+          340,
+          420
+        ],
+        "JoinAllianceBanner": [
+          280,
+          620,
+          350,
+          70
+        ]
+      },
+      "control_selector_ids": {},
+      "reviewed_regions": [
+        {
+          "label": "odin_portrait_identity",
+          "bounds": [
+            285,
+            100,
+            340,
+            420
+          ]
+        },
+        {
+          "label": "join_alliance_banner_identity",
+          "bounds": [
+            280,
+            620,
+            350,
+            70
+          ]
+        }
+      ],
+      "sanitized_regions": [
+        {
+          "label": "background_outside_identity_crops",
+          "bounds": [
+            0,
+            0,
+            900,
+            1600
+          ],
+          "reason": "background neutralized except the retained Odin portrait and Join Alliance banner crops"
+        }
+      ],
+      "negative_regions": [
+        {
+          "label": "create_alliance_excluded",
+          "bounds": [
+            106,
+            1194,
+            306,
+            89
+          ],
+          "reason": "source action is not retained or published by this identity profile"
+        },
+        {
+          "label": "join_alliance_excluded",
+          "bounds": [
+            488,
+            1194,
+            306,
+            89
+          ],
+          "reason": "source action is not retained or published by this identity profile"
+        }
+      ],
+      "correlation_note": "One independently captured 3xx_spies Alliance availability frame retains only the static Odin portrait and Join Alliance banner as independent identity evidence. The source Create/Join actions and unrelated background are omitted; no controls or OCR fields are qualified. This is guarded reference-only evidence, not an independent action or aggregate accuracy claim."
+    },
+    {
+      "image": "alliance_invitation.png",
+      "screen": "PNC_POPUP",
+      "state": "blocked",
+      "layout_id": "alliance_invitation_footer",
+      "layout_revision": 2,
+      "group": "2026-09-10/testing",
+      "source_artifact": "tests/data/screen_recognition/alliance_invitation.png",
+      "dimensions": [
+        540,
+        960
+      ],
+      "decoded_sha256": "5840f6be2d5a45a5f9222e931d7b2536db5568e5d2ce0ffc1c53bbdaeccdc305",
+      "reviewed_at": "2026-09-13",
+      "build": null,
+      "locale": null,
+      "boxes": {
+        "Portrait": [
+          5,
+          330,
+          165,
+          186
+        ],
+        "Message": [
+          192,
+          391,
+          291,
+          43
+        ],
+        "Cancel": [
+          196,
+          524,
+          130,
+          44
+        ]
+      },
+      "control_selector_ids": {
+        "Cancel": "PNC_POPUP_CLOSE_BUTTON"
+      },
+      "notes": "Existing tracked September 10 capture reviewed for the same portrait/footer layout. Message and portrait own identity; the old Cancel patch is now a control, not an identity anchor. Original fixture pixels and original unknown-build provenance are retained. The current 3xx reference is a separate source, not an independent success claim."
     }
   ],
-  "semantic_annotation_note": "Canonical identifiers attached to the already manually reviewed labels; image groups, hashes, labels and intended boxes unchanged."
+  "semantic_annotation_note": "Canonical identifiers attached to the already manually reviewed labels; existing boxes remain unchanged and captured Alliance row/castle provenance is recorded in reviewed_regions and reviewed_rows."
 }

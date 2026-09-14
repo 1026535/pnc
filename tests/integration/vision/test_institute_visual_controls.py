@@ -21,6 +21,10 @@ from pnc_automation.core.vision.ocr.ocr_service import OcrLine
 from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
 
 from tests.support.paths import TEST_DATA_ROOT
+from tests.support.pnc.capture_vision.modal_overlay import (
+    update_modal_lines,
+    with_update_modal,
+)
 from tests.support.pnc.capture_vision.recording_ocr_service import _RecordingOcrService
 
 
@@ -135,28 +139,24 @@ class InstituteVisualControlTests(unittest.TestCase):
     def test_blocking_popup_suppresses_institute_background_controls(self) -> None:
         """A blocking update popup owns the frame even when Institute anchors remain visible."""
 
-        popup_lines = (
-            OcrLine(
-                "New version detected. Tap Confirm to update.",
-                Bounds(58, 380, 420, 28),
-                1.0,
-            ),
-            OcrLine("Confirm", Bounds(221, 531, 90, 27), 1.0),
-        )
-        observation = _observation_builder(popup_lines).build(
-            _capture(_load_fixture()),
-            request=ObservationRequest.base(),
-        )
+        for size in ((540, 960), (900, 1600)):
+            with self.subTest(size=size):
+                image = with_update_modal(_load_fixture().resize(size))
+                popup_lines = update_modal_lines(image.size)
+                observation = _observation_builder(popup_lines).build(
+                    _capture(image),
+                    request=ObservationRequest.base(),
+                )
 
-        self.assertEqual(observation.screen_type, ScreenType.PNC_POPUP)
-        self.assertTrue(observation.blocking_popup)
-        self.assertTrue(observation.has(UiElementId.PNC_UPDATE_CONFIRM_BUTTON))
-        self.assertFalse(
-            any(
-                selector_id in observation.visible_elements
-                for selector_id in EXPECTED_CONTROLS
-            )
-        )
+                self.assertEqual(observation.screen_type, ScreenType.PNC_POPUP)
+                self.assertTrue(observation.blocking_popup)
+                self.assertTrue(observation.has(UiElementId.PNC_UPDATE_CONFIRM_BUTTON))
+                self.assertFalse(
+                    any(
+                        selector_id in observation.visible_elements
+                        for selector_id in EXPECTED_CONTROLS
+                    )
+                )
 
 
 if __name__ == "__main__":
