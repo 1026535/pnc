@@ -746,3 +746,169 @@ After this proof, the user clarified that computer/BlueStacks manipulation must
 be left to them. Future needed clicks or navigation are requested from the user;
 the workflow task continues code work and offline validation without desktop or
 game input. No further live input was sent after that clarification.
+
+### Published checkpoint and Resource edge investigation
+
+The user then requested a checkpoint push before continuing and authorized
+needed evidence through the canonical BlueStacks API. Desktop mouse/keyboard
+control remains with the user; request manual interaction for unsupported or
+unresponsive controls. No new live input or spending occurred in this phase.
+
+Before continuation, HEAD and the remote feature branch were both verified at
+`4f332027e924a9f73e3e3740d92980d8950ddae1`, with a clean worktree. The explicit
+exact-commit push returned `Everything up-to-date`. This publishes the completed
+Daily checkpoint/readiness and popup integration with its already-recorded
+2,010-pass/six-skip gate; no mainline merge occurred. The evidence notes below
+are subsequent documentation work, not a new production-code validation claim.
+
+Visual inspection of settled Resource frame `..._0043_resource_scroll_settled.png`
+showed an additional top card fragment with `Owned: 727` that was absent from
+the published rows. An offline geometry diagnostic used the unchanged canonical
+card detector on the three saved frames and retained the prior real-OCR results
+from both production observation paths. It confirmed:
+
+- At 900 by 1600, the detector requires a 120-pixel card band. Frame 0041's
+  60-pixel bottom fragment and frames 0042/0043's 66-pixel top fragment are
+  omitted. Thus the dependency includes missing rows, not only unreadable rows.
+- The taller partial cards already reported as UNREADABLE are not classified
+  as CLIPPED. The bottom band ends at exclusive y=1599, short of the current
+  y=1600 clipping check; the top band begins at y=278, below the y=272 body
+  boundary. All three frames produce zero CLIPPED cards.
+- A consumer sees neither complete evidence for those cards nor a reliable
+  published distinction between edge clipping and unreadable interior content.
+  Ignoring unresolved rows or adding generic UNKNOWN retries would not repair
+  full-inventory proof. No scanner or perception code was changed.
+
+The diagnostic command passed using the installed Python 3.13 executable and
+`.local-data/artifacts/core_resume/inspect_resource_edges.py`; its result is
+`resource_edge_geometry.json` beside it. This replay needs no device, fresh
+mutation or repeated OCR run. B's qualification must retain visible edge
+fragments and correctly distinguish clipping through both production paths;
+then A can implement bounded traversal without discarding unknown inventory.
+The existing Hero result-state/control and exact selected-castle name
+dependencies remain unchanged.
+
+The bounded package investigation also verified the selected Bag page's stored
+item list, recycled cells with partial viewport intersection, and distinct
+single/bulk Use handlers. The [Resource reference](../docs/game-reference/workflows/resource-inventory.md)
+owns the source paths, symbols, build limits and automation implications.
+This adds explanatory evidence without publishing new recognition facts or
+accepting a mutation/caller path. No additional portable test run was needed
+for the documentation-only continuation; `git diff --check` passed.
+
+### September 13 independent A caller execution
+
+The user requested execution of the independent portion of
+`PNC_CORE_WORKFLOW_PORTING_PLAN.md`, with A/B coordinated work deferred until B
+finishes. Work continued in the existing integration worktree at
+`4f332027e924a9f73e3e3740d92980d8950ddae1`; prior documentation changes were retained.
+No B worktree or unfinished recognition edits were imported.
+
+Implemented Development Research direct/application/session and authored caller
+wiring with an explicit exact `CoreMutationBoundary`. Caller target, journal root,
+durable checkpoint, one-Start/zero-diamond authority, Development-only priority and
+`DAILY_CANARY` role are checked before connection. Typed results and existing lease/
+cleanup ownership are retained; unscoped generic Research cannot enter legacy
+execution. Existing committed Hero receipts remain in the loaded Research checkpoint.
+
+Implemented public Hero `reconcile_existing` and a named-operation core workflow.
+The canary's reconcile-only branch exits through that workflow without entering
+`execute` or accepting a new-spend acknowledgement. Durable state and exact identity
+remain canonical. Dedicated read-only review found a local-midnight date mismatch;
+the scope now uses the journal's maintenance date. A real-journal CLI regression
+covers one UTC reset spanning Toronto midnight and the absence of new authority.
+The final Research/Hero review reported no actionable findings.
+
+A11's finite inventory is complete: six supported endpoints out of the 25 original
+smoke targets, 16 mapped endpoints lacking independent profiles and return edges,
+Arena lacking mapping/profile/Versus-to-Home proof, and two unmapped requirements
+(Bank and Dragondom Conquest). Campaign is the sixth currently modeled endpoint;
+earlier five-endpoint notes predate that route. No additional route was justified.
+The plan records every remaining identity; the diagnostic mapping is
+`.local-data/artifacts/core_resume/a11_endpoint_inventory.json`.
+
+Actual offline validation used the installed Python 3.13.5 executable and
+`tools/run_tests.py`, with no live flags:
+
+- Focused groups passed during implementation: Daily maintenance unit 118,
+  workflow contracts 59, script runner 106, API 72, entrypoints unit 4, architecture
+  22 and tools unit 44. These are component results, not added to the final count.
+- The first affected full fallback exposed two obsolete fixture expectations after
+  typed Research promotion: a missing explicit `mutation_boundary=None` argument
+  and an end-to-end fixture still modeling legacy Research. The fixtures now assert
+  typed dispatch and omit its four old legacy taps/observations. The intermediate
+  workflow-group failure was the remaining old tap-count assertion, also corrected.
+- Final `tools/run_tests.py affected --base origin/main --explain --json
+  .test-impact/a_independent_selection_final.json --results
+  .test-impact/a_independent_results_final.json` **passed**. Shared contracts and
+  test infrastructure caused the full portable fallback: **2,033 tests, 2,027
+  passed, six skipped**, 194.493 seconds test execution / 208.577 seconds overall.
+  Skips are optional local screenshots and the existing Windows symlink-privilege
+  limitation. Run ID `c467de4a5dcb42809cef0545c3aa43e6`, completion
+  `2026-09-13T23:18:18.415109+00:00`. The subsequent completion edits are documentation
+  only; no production changes followed this passing gate.
+
+The bounded live Research proof was prepared with the approved plan's one normal
+Development Start and zero diamonds on configured `mega_old_acc` / K157 / NPC 2,
+level 22. The local canary config lacks Research; the probe supplies the plan's
+exact runtime policy without editing local configuration. It binds the canonical
+journal root `C:/Users/lebel/pnc/artifacts`, which still contains the committed
+`hero-hall-recruit-001` receipt and no Research intent.
+
+The canonical API reservation and runtime readiness probe confirmed Home at
+23:12 UTC. It performed no Research call, Start, resource spending, account/castle
+switch or desktop manipulation. The known More-to-Settings tap defect remains with
+B, so manual Settings entry was requested before the caller's fresh exact-identity
+preflight. The initial lease was released while awaiting the response. The user
+then confirmed Settings and a new scoped phase ran the production caller.
+
+Evidence is under
+`.local-data/artifacts/core_resume/research_caller_20260913T231220Z/`:
+`prepared.json`, `baseline.json`, `closed.json`, and the readiness screenshots.
+The sanitized runtime trace is referenced by `baseline.json`. The prepared probe
+is `core_resume/research_caller_live.py`; resume it with the installed Python using
+`PYTHON_BASIC_REPL=1` and an interactive terminal, call `connect()`, verify the user's
+manual Settings state with `capture()`, then invoke `run()` once and `close()`.
+`run()` calls the production `AutomationApi.research` with the exact scope; no test
+double or alternate dispatcher is used. If the active identity, eligible detail or
+receipt is unproved, stop and retain evidence without retrying Start.
+
+The second phase, `research_caller_20260913T232029Z/`, confirmed Settings,
+passed the exact K157 / NPC 2 / level-22 preflight, returned Home and used the
+reviewed Research Queue Go route. `AutomationApi.research` stopped at
+`open_visible_building`: **the visible Institute was absent from published Home
+spatial content**. No Institute tap or Research Start occurred. `summary.json`
+confirms zero Starts/diamonds and an unchanged canonical checkpoint; `closed.json`
+confirms lease release with the pre-existing game preserved. Home was the last
+confirmed screen. Trace: `C:/Users/lebel/pnc/artifacts/2026-09-13/mega_old_acc/`
+`20260913T232104Z_db7df270_core_trace.jsonl`.
+
+The actual RapidOCR replay of saved frame
+`..._0026_core_7_building_source.png` through both production paths reported CLEAR
+Home with Castle, Warehouse, Goddess Statue and Trap Workshop objects, but zero
+Institute candidates and no Institute OCR line. The exact A resolver correctly
+returned `None`; the focus arrow is not published as an authoritative target.
+`research_replay_20260913T232029Z_observation_diagnostic.json` owns the replay.
+This is a B producer dependency, not an A selection defect. Existing caller code
+does not infer a coordinate from the focus route or ignore missing identity.
+
+The user subsequently clarified that API-based evidence navigation should handle
+unsupported controls, with manual clicks requested only when BlueStacks is
+unresponsive. This supersedes the earlier manual-only handling of unsupported
+Settings. Inspection input is separate from production caller acceptance; an
+inspection workaround does not qualify the defective production selector.
+
+The user then requested `serious_stuff`. It resolves to `bs-main`, with the
+`live_testing` role and no configured canary target. A scoped read-only API phase
+was started there; its eight initial captures were all black/PNC_LOADING and the
+canonical readiness budget expired. The user was asked to bring the window forward
+and report whether the game is visible. Evidence is under
+`core_resume/serious_inspection_20260913T232758Z/`. No identity, mutation or spending
+is claimed there. Research mutation additionally requires the configured
+`DAILY_CANARY` role, which is absent; local roles/configuration have not been changed.
+`stop.json` and `closed.json` record the readiness stop and released lease; the
+pre-existing instance was preserved while awaiting the user's window check.
+
+All other remaining original execution paths keep the explicit B/target/message/
+login dependencies in the plan. A/B integration waits for B to finish. No new commit,
+push, merge or automatic Daily activation occurred in this execution.

@@ -9,6 +9,7 @@ from typing import Generic, Literal, Protocol, TypeVar
 from pnc_automation.app.automation.daily_maintenance.coordinator import (
     DailyMaintenanceCoordinator, DailyMaintenanceResult, DailyReadOnlySurvey,
 )
+from pnc_automation.app.automation.daily_maintenance.mutation_dispatcher import JournaledMutationResult
 from pnc_automation.app.automation.engine.core_runtime import CoreRuntime
 from pnc_automation.app.automation.engine.core_daily_mutation import CoreMutationBoundary
 from pnc_automation.app.automation.engine.navigation_core import require_resource_inventory_surface
@@ -48,6 +49,7 @@ class WorkflowSpec:
     exit_screen: ScreenType
     effect: WorkflowEffect
     mutation_capability: DailyQuestId | None = None
+    reconciliation_operation_id: str | None = None
 
     def __post_init__(self) -> None:
         """Rejects malformed workflow identity, endpoints, or effect declarations."""
@@ -63,8 +65,15 @@ class WorkflowSpec:
         if self.mutation_capability is not None:
             if not isinstance(self.mutation_capability, DailyQuestId):
                 raise TypeError("WorkflowSpec.mutation_capability must be a DailyQuestId.")
-            if self.effect != WorkflowEffect.RESOURCE_CHANGING:
+            if self.effect != WorkflowEffect.RESOURCE_CHANGING and self.reconciliation_operation_id is None:
                 raise ValueError("A mutation capability requires the RESOURCE_CHANGING effect.")
+        if self.reconciliation_operation_id is not None and (
+            not isinstance(self.reconciliation_operation_id, str)
+            or not self.reconciliation_operation_id.strip()
+            or self.effect != WorkflowEffect.NONSPENDING_STATE_CHANGE
+            or self.mutation_capability != DailyQuestId.HERO_HALL
+        ):
+            raise ValueError("Reconciliation requires one named Hero intent and the non-spending effect.")
 
 
 T = TypeVar("T")
@@ -95,7 +104,7 @@ class CoreWorkflowResult(Generic[T]):
 class WorkflowContext:
     """Exposes only reviewed navigation and fresh, expected-screen content capture."""
 
-    __slots__ = ("_runtime", "_last_navigation_count", "_last_observation", "_effect", "_mutation_boundary", "_research_node")
+    __slots__ = ("_runtime", "_last_navigation_count", "_last_observation", "_effect", "_mutation_boundary", "_research_node", "_reconciliation_operation_id")
 
     def __init__(
         self,
@@ -104,6 +113,7 @@ class WorkflowContext:
         last_observation: Observation,
         effect: WorkflowEffect = WorkflowEffect.READ_ONLY,
         mutation_boundary: CoreMutationBoundary | None = None,
+        reconciliation_operation_id: str | None = None,
     ) -> None:
         """Starts a context after the runner has confirmed the workflow entry screen."""
 
@@ -115,6 +125,24 @@ class WorkflowContext:
         self._effect = effect
         self._mutation_boundary = mutation_boundary
         self._research_node: str | None = None
+        self._reconciliation_operation_id = reconciliation_operation_id
+
+    def reconcile_hero_hall(self, checkpoint: DailyTaskCheckpoint) -> JournaledMutationResult:
+        """Read only the Hero receipt named by this non-spending workflow's contract."""
+
+        if (
+            self._effect != WorkflowEffect.NONSPENDING_STATE_CHANGE
+            or self._mutation_boundary is None or self._reconciliation_operation_id is None
+        ):
+            raise PermissionError("Hero reconciliation requires an exact existing-intent scope.")
+        try:
+            return self._mutation_boundary.reconcile_hero_hall(
+                runtime=self._runtime, observe=self._observe_hero_hall,
+                daily_survey=self._survey_daily_requirements, checkpoint=checkpoint,
+                operation_id=self._reconciliation_operation_id,
+            )
+        finally:
+            self._sync_from_runtime()
 
     def recruit_hero_hall(
         self, checkpoint: DailyTaskCheckpoint,
@@ -481,7 +509,9 @@ class CoreWorkflowRunner(Generic[T]):
         if not isinstance(spec, WorkflowSpec):
             raise TypeError("Core workflows must expose a validated WorkflowSpec.")
         mutating = spec.effect == WorkflowEffect.RESOURCE_CHANGING
-        if mutating and (
+        reconciling = spec.reconciliation_operation_id is not None
+        scoped = mutating or reconciling
+        if scoped and (
             self.mutation_boundary is None or spec.mutation_capability != self.mutation_boundary.policy.quest_id
         ):
             self.runtime.record(
@@ -496,14 +526,21 @@ class CoreWorkflowRunner(Generic[T]):
             )
         if mutating:
             self.mutation_boundary.authorize()
+        elif reconciling:
+            self.mutation_boundary.require_hero_reconciliation(spec.reconciliation_operation_id)
         self.runtime.record({"event": "workflow_started", "workflow": spec.name, "effect": spec.effect.value})
         try:
             if mutating:
                 self.mutation_boundary.verify_active_castle(self.runtime)
+            elif reconciling:
+                self.mutation_boundary.verify_hero_reconciliation_target(
+                    self.runtime, spec.reconciliation_operation_id,
+                )
             entry = self.runtime.navigation.navigate(spec.entry_screen)
             context = WorkflowContext(
                 self.runtime, last_observation=entry, effect=spec.effect,
-                mutation_boundary=self.mutation_boundary if mutating else None,
+                mutation_boundary=self.mutation_boundary if scoped else None,
+                reconciliation_operation_id=spec.reconciliation_operation_id,
             )
             value = workflow.execute(context)
             exit_observation = self.runtime.navigation.navigate(spec.exit_screen)

@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import ClassVar
 
+from pnc_automation.app.automation.daily_maintenance.mutation_dispatcher import JournaledMutationResult
+
 from pnc_automation.app.automation.engine.core_workflow import (
     CoreWorkflow,
     WorkflowContext,
@@ -54,3 +56,36 @@ class CoreHeroHallWorkflow(CoreWorkflow[tuple[DailyTaskCheckpoint, DailyTargetOu
         if outcome.quest_id != DailyQuestId.HERO_HALL:
             raise ValueError("WorkflowContext.recruit_hero_hall returned an unrelated mutation outcome.")
         return checkpoint, outcome
+
+
+@dataclass(frozen=True, slots=True)
+class CoreHeroHallReconciliationWorkflow(CoreWorkflow[JournaledMutationResult]):
+    """Return Home after reconciling one previously dispatched Hero single."""
+
+    checkpoint: DailyTaskCheckpoint
+    operation_id: str
+
+    def __post_init__(self) -> None:
+        """Validate the requested operation and lifecycle before acquiring a device."""
+
+        if not isinstance(self.checkpoint, DailyTaskCheckpoint):
+            raise TypeError("Hero reconciliation requires a DailyTaskCheckpoint.")
+        _ = self.spec
+
+    @property
+    def spec(self) -> WorkflowSpec:
+        """Expose only the named receipt operation, without new mutation authority."""
+
+        return WorkflowSpec(
+            name="hero_hall_reconciliation",
+            entry_screen=ScreenType.PNC_HOME_CITY, exit_screen=ScreenType.PNC_HOME_CITY,
+            effect=WorkflowEffect.NONSPENDING_STATE_CHANGE,
+            mutation_capability=DailyQuestId.HERO_HALL,
+            reconciliation_operation_id=self.operation_id,
+        )
+
+    def execute(self, context: WorkflowContext) -> JournaledMutationResult:
+        """Open the supported Hero surface and reconcile without entering recruitment."""
+
+        context.open_building(HomeCityObjectId.HERO_HALL)
+        return context.reconcile_hero_hall(self.checkpoint)

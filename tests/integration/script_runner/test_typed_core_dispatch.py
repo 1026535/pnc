@@ -573,6 +573,7 @@ class TypedCoreDispatchTests(unittest.TestCase):
             account=_account(),
             connected_runtime=connected_runtime,
             required_role=LiveAutomationRole.LIVE_TESTING,
+            mutation_boundary=None,
         )
         self.assertEqual(["observe:ensure_game_running_before", "legacy", "core", "close"], events)
         connected_runtime.require_observed_action_executor.assert_called_once()
@@ -1324,6 +1325,7 @@ class TypedCoreDispatchTests(unittest.TestCase):
                 account,
                 required_role=LiveAutomationRole.SMOKE_TEST,
                 session_cleanup_policy=policy,
+                mutation_boundary=None,
             )
 
             invalid = _minimal_script_runner(

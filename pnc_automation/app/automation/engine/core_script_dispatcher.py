@@ -22,6 +22,8 @@ from pnc_automation.app.automation.refresh_castle_roster import (
 from pnc_automation.app.automation.select_castle import SelectCastleResult, SelectCastleWorkflow
 from pnc_automation.app.automation.engine.task import TaskId
 from pnc_automation.app.automation.engine.core_runtime import CoreRuntime
+from pnc_automation.app.automation.engine.core_daily_mutation import CoreMutationBoundary
+from pnc_automation.app.automation.research import ResearchResult, prepare_research_workflow
 from pnc_automation.app.automation.engine.core_workflow import (
     CoreWorkflowResult,
     CoreWorkflowRunner,
@@ -32,7 +34,7 @@ from pnc_automation.app.authoring.scripts.models import PreparedScriptStep
 from pnc_automation.app.pnc.domain.chat import ChatChannel, ChatMessageTaskParams
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.domain.mail import CollectMailParams
-from pnc_automation.app.pnc.domain.policy_models import OpenBuildingPolicy
+from pnc_automation.app.pnc.domain.policy_models import OpenBuildingPolicy, ResearchPolicy
 from pnc_automation.app.pnc.domain.observation import (
     CurrentCastleEvidenceKind,
     CurrentCastleMatchStatus,
@@ -63,6 +65,7 @@ class CoreScriptDispatcher:
     mail_archive_store: MailArchiveStore | None = None
     castle_roster_store: CastleRosterStore | None = None
     required_role: LiveAutomationRole = LiveAutomationRole.LIVE_TESTING
+    mutation_boundary: CoreMutationBoundary | None = None
     _core_runtime: CoreRuntime | None = field(default=None, init=False, repr=False)
     _workflow_runner: CoreWorkflowRunner[Any] | None = field(default=None, init=False, repr=False)
 
@@ -78,10 +81,17 @@ class CoreScriptDispatcher:
         | RefreshCastleRosterResult
         | SelectCastleResult
         | SendChatResult
+        | ResearchResult
     ]:
         """Runs one supported typed step without closing the shared connected runtime."""
 
         self._validate_step(step)
+        if step.task == TaskId.RESEARCH:
+            workflow = prepare_research_workflow(
+                policy=cast(ResearchPolicy, step.parsed_params),
+                mutation_boundary=self.mutation_boundary,
+            )
+            return CoreWorkflowRunner(self._require_core_runtime(), self.mutation_boundary).run(workflow)
         core_runtime = self._require_core_runtime()
         if step.task in {TaskId.ENSURE_GAME_RUNNING, TaskId.POPUP_RECOVERY}:
             return self._execute_lifecycle_step(core_runtime, step.task)
@@ -202,14 +212,16 @@ class CoreScriptDispatcher:
     def _validate_step(self, step: PreparedScriptStep) -> None:
         """Rejects unsupported definitions and malformed parsed parameters before navigation."""
 
+        if not isinstance(self.account, AccountConfig):
+            raise TypeError("Typed core dispatch requires a configured AccountConfig binding.")
         validate_core_script_step(
             step,
             chat_archive_store=self.chat_archive_store,
             mail_archive_store=self.mail_archive_store,
             castle_roster_store=self.castle_roster_store,
+            mutation_boundary=self.mutation_boundary,
+            account_id=self.account.id,
         )
-        if not isinstance(self.account, AccountConfig):
-            raise TypeError("Typed core dispatch requires a configured AccountConfig binding.")
         self.account.require_live_role(self.required_role)
 
     def _require_core_runtime(self) -> CoreRuntime:
@@ -226,9 +238,17 @@ def validate_core_script_step(
     chat_archive_store: ChatArchiveStore | None = None,
     mail_archive_store: MailArchiveStore | None = None,
     castle_roster_store: CastleRosterStore | None = None,
+    mutation_boundary: CoreMutationBoundary | None = None,
+    account_id: str | None = None,
 ) -> None:
     """Validates one supported typed binding before connect and before navigation."""
 
+    if step.task == TaskId.RESEARCH:
+        if not isinstance(step.parsed_params, ResearchPolicy):
+            raise TypeError("Typed Research dispatch requires parsed ResearchPolicy.")
+        prepare_research_workflow(policy=step.parsed_params, mutation_boundary=mutation_boundary)
+        mutation_boundary.require_caller(account_id=account_id or "", castle=step.castle)
+        return
     if step.task in {TaskId.ENSURE_GAME_RUNNING, TaskId.POPUP_RECOVERY}:
         if step.parsed_params is not None:
             raise RuntimeError(

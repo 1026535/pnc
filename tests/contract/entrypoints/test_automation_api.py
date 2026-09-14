@@ -63,10 +63,17 @@ class AutomationApiTests(RuntimeCastleTargetingFixtures, unittest.TestCase):
         fake_runner = _FakeApplicationRunner()
         api = AutomationApi(application=fake_runner)
 
-        result = api.research(account_id="account_a", priority=["economy"])
+        result = api.research(
+            account_id="account_a",
+            priority=["economy"],
+            mutation_boundary=self.mutation_boundary,
+        )
 
-        self.assertEqual(result.task_id, TaskId.RESEARCH)
-        self.assertEqual(fake_runner.task_calls, [(TaskId.RESEARCH, "account_a", {"priority": ["economy"]})])
+        self.assertIs(result, fake_runner.research_result)
+        self.assertEqual(
+            fake_runner.research_calls,
+            [("account_a", {"priority": ["economy"]}, self.mutation_boundary)],
+        )
         self.assertEqual(fake_runner.prepare_calls, [])
 
     def test_python_generic_run_task_no_longer_accepts_castle_targeting(self) -> None:
@@ -122,6 +129,7 @@ class AutomationApiTests(RuntimeCastleTargetingFixtures, unittest.TestCase):
         api = AutomationApi(application=fake_runner)
 
         with api.use_account("account_a"):
-            api.run_task(task_id=TaskId.RESEARCH, params={"priority": ["economy"]})
+            with self.assertRaisesRegex(PermissionError, "explicit CoreMutationBoundary"):
+                api.run_task(task_id=TaskId.RESEARCH, params={"priority": ["economy"]})
 
-        self.assertEqual(fake_runner.task_calls, [(TaskId.RESEARCH, "account_a", {"priority": ["economy"]})])
+        self.assertEqual(fake_runner.task_calls, [])

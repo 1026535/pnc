@@ -66,6 +66,21 @@ class _RealLeaseApplicationRunner:
         self.assert_competitor_blocked()
         return StepRunResult(task_id=task_id, status=TaskStatus.SUCCESS, attempts=1, message="ok")
 
+    def run_research(
+        self,
+        *,
+        account_id: str,
+        params: dict[str, object],
+        mutation_boundary: object,
+        session_cleanup_policy: object = None,
+    ) -> object:
+        """Probes lease ownership while the typed Research action is running."""
+
+        del params, mutation_boundary, session_cleanup_policy
+        self.assertEqual_account_ids((account_id,))
+        self.assert_competitor_blocked()
+        return object()
+
     def assert_competitor_blocked(self) -> None:
         """Requires a separate registry to remain excluded during the public API scope."""
 

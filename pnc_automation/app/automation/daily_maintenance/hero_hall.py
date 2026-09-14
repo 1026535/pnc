@@ -10,6 +10,7 @@ from typing import Protocol
 
 from pnc_automation.app.automation.daily_maintenance.mutation_dispatcher import (
     JournaledMutationDispatcher,
+    JournaledMutationResult,
     MutationOperation,
     MutationReconciliation,
 )
@@ -132,10 +133,11 @@ class HeroHallRecruitmentExecutor:
         if len(unresolved) > 1:
             return checkpoint, self._pending("Multiple Hero Hall singles are unresolved; no replay.", intents)
         if unresolved:
-            checkpoint, result = self._reconcile_existing(
+            result = self.reconcile_existing(
                 checkpoint=checkpoint,
-                intent=unresolved[0],
+                operation_id=unresolved[0].operation_id,
             )
+            checkpoint = result.checkpoint
             if result.pending_clarification:
                 return checkpoint, self._pending("Hero Hall single result is ambiguous; no replay.", intents)
             if result.committed:
@@ -238,14 +240,29 @@ class HeroHallRecruitmentExecutor:
             artifact_paths=result.artifact_paths,
         )
 
-    def _reconcile_existing(
+    def reconcile_existing(
         self,
         *,
         checkpoint: DailyTaskCheckpoint,
-        intent: MutationIntent,
-    ):
-        """Reconciles one dispatched Hero Hall single without sending a second tap."""
+        operation_id: str,
+    ) -> JournaledMutationResult:
+        """Reconciles one existing Hero Hall intent without dispatching a new action.
 
+        The operation is resolved from the durable checkpoint so callers cannot
+        substitute an intent from another quest or fabricate reconciliation
+        preconditions. Committed operations are already fully reconciled and are
+        therefore returned idempotently without another observation.
+        """
+
+        intent = self.require_reconciliation_intent(checkpoint=checkpoint, operation_id=operation_id)
+        if intent.state == MutationIntentState.COMMITTED:
+            return JournaledMutationResult(
+                checkpoint=checkpoint,
+                committed=True,
+                retry_permitted=False,
+                pending_clarification=False,
+                artifact_paths=self._persisted_artifacts(intent),
+            )
         def reconcile() -> MutationReconciliation:
             """Uses one fresh Hero Hall state to distinguish consumed from unchanged."""
 
@@ -267,17 +284,38 @@ class HeroHallRecruitmentExecutor:
             )
             return MutationReconciliation(
                 postcondition_proven=consumed,
-                original_precondition_proven=not consumed,
+                original_precondition_proven=_single_not_consumed(
+                    before_remaining=before_remaining,
+                    after=after,
+                ),
                 artifact_paths=self._artifacts((intent,), after.artifact_path),
                 metadata={"next_ready_at": ready_at.isoformat()},
             )
 
-        result = self.dispatcher.reconcile_existing(
+        return self.dispatcher.reconcile_existing(
             checkpoint=checkpoint,
-            operation_id=intent.operation_id,
+            operation_id=operation_id,
             reconcile=reconcile,
         )
-        return result.checkpoint, result
+
+    @staticmethod
+    def require_reconciliation_intent(
+        *, checkpoint: DailyTaskCheckpoint, operation_id: str,
+    ) -> MutationIntent:
+        """Validate the existing Hero operation before a caller acquires device evidence."""
+
+        intent = next(
+            (item for item in checkpoint.mutation_intents if item.operation_id == operation_id), None,
+        )
+        if intent is None:
+            raise KeyError(f"Hero Hall mutation operation '{operation_id}' does not exist.")
+        if intent.quest_id != DailyQuestId.HERO_HALL:
+            raise ValueError(f"Hero Hall reconciliation requires a Hero Hall intent: '{operation_id}'.")
+        if intent.state not in {
+            MutationIntentState.DISPATCHED, MutationIntentState.RECONCILED, MutationIntentState.COMMITTED,
+        }:
+            raise ValueError(f"Hero Hall mutation operation '{operation_id}' is in invalid state '{intent.state}'.")
+        return intent
 
     def _finish_if_daily_complete(
         self,
@@ -322,6 +360,19 @@ class HeroHallRecruitmentExecutor:
                 paths.append(path)
         return tuple(paths)
 
+    @staticmethod
+    def _persisted_artifacts(intent: MutationIntent) -> tuple[str, ...]:
+        """Returns only durable evidence when a committed intent needs no refresh."""
+
+        paths = intent.metadata.get("artifact_paths", ())
+        if not isinstance(paths, (list, tuple)):
+            return ()
+        unique: list[str] = []
+        for path in paths:
+            if isinstance(path, str) and path not in unique:
+                unique.append(path)
+        return tuple(unique)
+
 
 def _single_consumed(*, before: HeroHallState, after: HeroHallState) -> bool:
     """Returns whether one free single is proven consumed by typed transition evidence."""
@@ -332,6 +383,17 @@ def _single_consumed(*, before: HeroHallState, after: HeroHallState) -> bool:
         before.free_single_available and not after.free_single_available
         and after.cooldown_seconds_remaining is not None
         and after.cooldown_seconds_remaining > 0
+    )
+
+
+def _single_not_consumed(*, before_remaining: object, after: HeroHallState) -> bool:
+    """Returns whether fresh typed facts prove the interrupted single stayed available."""
+
+    return (
+        isinstance(before_remaining, int)
+        and after.daily_attempts_remaining == before_remaining
+        and after.free_single_available
+        and (after.cooldown_seconds_remaining is None or after.cooldown_seconds_remaining <= 0)
     )
 
 

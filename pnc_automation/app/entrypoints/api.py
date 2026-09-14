@@ -14,7 +14,9 @@ from pnc_automation.app import ApplicationRunner, build_application_runner
 from pnc_automation.app.automation.collect_mail import CollectMailResult
 from pnc_automation.app.automation.collect_kingdom_chat import CollectKingdomChatResult
 from pnc_automation.app.automation.refresh_castle_roster import RefreshCastleRosterResult
+from pnc_automation.app.automation.research import ResearchResult
 from pnc_automation.app.automation.engine.core_workflow import CoreWorkflowResult
+from pnc_automation.app.automation.engine.core_daily_mutation import CoreMutationBoundary
 from pnc_automation.app.automation.engine.runner import RunResult, StepRunResult
 from pnc_automation.app.automation.engine.script_runner import require_successful_preparation
 from pnc_automation.app.automation.engine.task import TaskId
@@ -218,10 +220,19 @@ class AutomationSession:
 
         return self.api.open_building(account_id=self.account_id, building=building)
 
-    def research(self, *, priority: list[str] | None = None) -> StepRunResult:
+    def research(
+        self,
+        *,
+        priority: list[str] | None = None,
+        mutation_boundary: CoreMutationBoundary,
+    ) -> CoreWorkflowResult[ResearchResult]:
         """Runs one direct research step against the prepared session."""
 
-        return self.api.research(account_id=self.account_id, priority=priority)
+        return self.api.research(
+            account_id=self.account_id,
+            priority=priority,
+            mutation_boundary=mutation_boundary,
+        )
 
     def gathering(
         self,
@@ -475,13 +486,23 @@ class AutomationApi:
         *,
         account_id: str | None = None,
         priority: list[str] | None = None,
-    ) -> StepRunResult:
+        mutation_boundary: CoreMutationBoundary,
+    ) -> CoreWorkflowResult[ResearchResult]:
         """Runs one direct research step using current-castle semantics."""
 
-        return self.run_task(
-            account_id=self._resolve_account_id(account_id),
-            task_id=TaskId.RESEARCH,
-            params={"priority": ["economy", "development", "military"] if priority is None else list(priority)},
+        resolved_account_id = self._resolve_account_id(account_id)
+        return self._run_with_account_reservation(
+            resolved_account_id,
+            lambda: self.application.run_research(
+                account_id=resolved_account_id,
+                params={
+                    "priority": ["economy", "development", "military"]
+                    if priority is None
+                    else list(priority),
+                },
+                mutation_boundary=mutation_boundary,
+                session_cleanup_policy=self._cleanup_policy_for(resolved_account_id),
+            ),
         )
 
     def gathering(
@@ -847,10 +868,19 @@ def open_building(
     return _default_api().open_building(account_id=account_id, building=building)
 
 
-def research(*, account_id: str | None = None, priority: list[str] | None = None) -> StepRunResult:
+def research(
+    *,
+    account_id: str | None = None,
+    priority: list[str] | None = None,
+    mutation_boundary: CoreMutationBoundary,
+) -> CoreWorkflowResult[ResearchResult]:
     """Runs one direct research step through the default application facade."""
 
-    return _default_api().research(account_id=account_id, priority=priority)
+    return _default_api().research(
+        account_id=account_id,
+        priority=priority,
+        mutation_boundary=mutation_boundary,
+    )
 
 
 def gathering(

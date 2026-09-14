@@ -7,6 +7,25 @@ It supersedes the historical pause and parallel-period sequencing below. Whole-f
 component ownership remains in effect. The user requested this plan update; publication
 does not itself resume A or B.
 
+The subsequent authorized A continuation is now published at `4f33202` on the
+existing integration branch; the earlier merge instruction and baseline below
+are historical. Current completion, exact live receipts and remaining producer
+dependencies are maintained in A's linked plan and validation ledger. This
+checkpoint does not resume B or transfer its recognition ownership to A.
+
+The [remaining-work dependency split](PNC_CORE_WORKFLOW_PORTING_PLAN.md#remaining-original-work-separated-by-dependency)
+distinguishes independently implementable A caller/reconciliation work from
+producer-blocked execution and separate user/live prerequisites. Use that split
+instead of treating every remaining A port as blocked on B.
+
+The user subsequently requested a queued
+[B recognition follow-up handoff](PNC_B_FOLLOWUP_RECOGNITION_HANDOFF.md). After
+finishing its current work, B takes complete producer implementation and
+qualification ownership of Resource partial-card handling, Hero summon/result
+recognition and broader Research facts. The handoff includes the saved evidence,
+acceptance criteria and consumer handback. A retains workflow/navigation/mutation
+integration. This queues the follow-up without interrupting B or editing its worktree.
+
 B published `93798a6` on top of main `850bdb7`; its latest reviewed slice is complete,
 not its full vision plan. A's candidate `1994020` separately preserves `291f049` Daily
 claims and `9e34d14` Research. Merge the histories as specified in A's plan; do not replace

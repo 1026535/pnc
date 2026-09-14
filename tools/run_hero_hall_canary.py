@@ -7,8 +7,8 @@ import base64
 import hashlib
 import json
 import logging
-from dataclasses import asdict
-from datetime import UTC, datetime
+from dataclasses import asdict, replace
+from datetime import UTC, date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -29,6 +29,12 @@ from pnc_automation.app.automation.daily_maintenance.canary_runtime import (
     verify_canary_identity,
 )
 from pnc_automation.app.automation.daily_maintenance.connected_hero_hall import ConnectedHeroHallSession
+from pnc_automation.app.automation.daily_maintenance.application_service import DailyRunBoundary
+from pnc_automation.app.automation.daily_maintenance.authorization import DailyMutationAuthorizer
+from pnc_automation.app.automation.daily_maintenance.core_hero_hall import CoreHeroHallReconciliationWorkflow
+from pnc_automation.app.automation.engine.core_daily_mutation import CoreMutationBoundary
+from pnc_automation.app.automation.engine.core_runtime import build_core_runtime
+from pnc_automation.app.automation.engine.core_workflow import CoreWorkflowRunner
 from pnc_automation.app.automation.daily_maintenance.coordinator import DailyMaintenanceCoordinator
 from pnc_automation.app.automation.daily_maintenance.hero_hall import (
     HeroHallRecruitmentExecutor,
@@ -131,6 +137,38 @@ def main() -> int:
 
     logging.disable(logging.CRITICAL)
     application = build_application_runner(arguments.config)
+    if arguments.reconcile_only:
+        scope = CoreMutationBoundary(
+            replace(target, capabilities=(policy,)),
+            DailyRunBoundary(date.fromisoformat(checkpoint.maintenance_date), reset_id),
+            DailyMutationAuthorizer(), store,
+        )
+        scope.require_caller(account_id=account.id, journal_root=application.script_runner.config.artifact_root)
+        unresolved = tuple(
+            intent for intent in checkpoint.mutation_intents
+            if intent.quest_id == DailyQuestId.HERO_HALL and intent.state != MutationIntentState.COMMITTED
+        )
+        if len(unresolved) != 1:
+            parser.error("Reconciliation requires exactly one unresolved Hero Hall operation.")
+        operation_id = unresolved[0].operation_id
+        checkpoint = scope.require_hero_reconciliation(operation_id)
+        workflow = CoreHeroHallReconciliationWorkflow(checkpoint, operation_id)
+        with application.script_runner.reserve_accounts((target.account_id,)):
+            with build_core_runtime(
+                application.script_runner, account, account.artifact_directory_name,
+                required_role=LiveAutomationRole.DAILY_CANARY,
+            ) as core:
+                result = CoreWorkflowRunner(core, scope).run(workflow)
+        _write_report(config.artifact_root, target.account_id, {
+            "mode": "reconcile_only", "account_id": target.account_id,
+            "castle_ref": target.castle_ref, "castle": asdict(target.castle),
+            "game_reset_id": reset_id, "operation_id": operation_id,
+            "result": asdict(result), "live_canary_passed": False,
+            "journal_path": str(store.checkpoint_path(
+                game_reset_id=reset_id, account_id=target.account_id, castle=target.castle,
+            )),
+        })
+        return 0 if result.value.committed else 2
     with application.script_runner.reserve_accounts((target.account_id,)):
         with application.script_runner.build_connected_runtime_bundle(
             account=account,
@@ -168,7 +206,7 @@ def main() -> int:
             )
             hero_session.open_hero_hall()
             state = HeroHallState.from_observation(hero_session.observe_hero_hall("hero_hall_canary_state"))
-            if not arguments.execute and not arguments.reconcile_only:
+            if not arguments.execute:
                 report = {
                     "mode": "read_only",
                     "account_id": target.account_id,
@@ -208,7 +246,7 @@ def main() -> int:
             )
             evidence_path = persist_canary_result(artifact_root=config.artifact_root, result=result)
             report = {
-                "mode": "reconcile_only" if arguments.reconcile_only else "execute_increment",
+                "mode": "execute_increment",
                 "account_id": target.account_id,
                 "castle_ref": target.castle_ref,
                 "castle": asdict(target.castle),

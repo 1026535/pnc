@@ -100,7 +100,7 @@ Supported offscreen buildings now use the canonical bounded Home camera scan. `N
 
 The shared building tap area is x `[0.18w, 0.82w]`, y `[0.18h, 0.58h]`, excluding the fixed shortcut panels and quest tracker seen during live exploration. A valid target outside that area needs further focus; an absent or malformed point cannot authorize a tap. The canonical final upward scan starts at `(0.45w, 0.54h)` and ends at `(0.45w, 0.26h)` to avoid beginning inside the quest tracker.
 
-Castle now has an independent visual profile requiring both the measured `Castle` title and body description, with only the template-backed top-left Back control exposed. Fresh game exploration and the automated core workflow both confirmed Castle opening and return Home. Portable checks cover both anchors, scaled recognition, Back-only controls, and the observed open/return route. The authored binding supports the five modeled endpoints with reviewed profiles and return edges: Castle, Institute, Warehouse, Goddess Statue, and Hero Hall. Legacy successes based on generic details, unknown Sanctum controls, or unbuilt build menus remain intentionally unsupported. Unmodeled targets without a primary screen fail before connection; mapped targets without a reviewed profile or return edge fail at the existing core route guard.
+Castle now has an independent visual profile requiring both the measured `Castle` title and body description, with only the template-backed top-left Back control exposed. Fresh game exploration and the automated core workflow both confirmed Castle opening and return Home. Portable checks cover both anchors, scaled recognition, Back-only controls, and the observed open/return route. The authored binding supports six modeled endpoints with reviewed profiles and return edges: Castle, Institute, Warehouse, Goddess Statue, Hero Hall, and Campaign. Campaign entry is distinct from stage-selection or battle-preparation support. Legacy successes based on generic details, unknown Sanctum controls, or unbuilt build menus remain intentionally unsupported. Unmodeled targets without a primary screen fail before connection; mapped targets without a reviewed profile or return edge fail at the existing core route guard.
 
 `DailyQuestStatusWorkflow` reports one `visible_viewport` from the fresh Daily screen. It does not scroll, claim, acknowledge, select a castle, infer unseen rows, or claim full-screen coverage. It fails when both recognized rows and unknown titles are absent. Known safe popup recovery belongs to the connected runtime and shared observed-action executor; the workflow has no generic popup dismissal policy. Navigation does not retry a tap, replay a failed workflow, or use the legacy observer as a fallback. A task-owned dialog or popup without an explicit safe selector still stops the route.
 
@@ -120,11 +120,11 @@ The full workflow migration is incomplete. A direct API port does not migrate an
 | Kingdom Chat collection | Integrated direct Python port and typed authored `TaskId.COLLECT_KINGDOM_CHAT` dispatch. |
 | Session readiness | `TaskId.ENSURE_GAME_RUNNING` is a typed lifecycle step backed by `CoreRuntime.ensure_game_ready`; it proves a stable known P&C screen and does not prove login or account identity. |
 | Popup recovery | `TaskId.POPUP_RECOVERY` is a typed lifecycle step backed by `CoreRuntime.recover_popup`; it reuses the canonical bounded observation settle and does not own foregrounding, navigation, or a second popup policy. |
-| Authored scripts | `TaskId.ENSURE_GAME_RUNNING`, `TaskId.POPUP_RECOVERY`, `TaskId.SELECT_CASTLE`, `TaskId.COLLECT_KINGDOM_CHAT`, `TaskId.SEND_WORLD_CHAT_MESSAGE`, `TaskId.SEND_ALLIANCE_CHAT_MESSAGE`, `TaskId.COLLECT_MAIL`, `TaskId.OPEN_BUILDING`, and `TaskId.REFRESH_CASTLE_ROSTER` use the typed core dispatcher; other registered `TaskId`/YAML steps remain on legacy dispatch. |
+| Authored scripts | `TaskId.ENSURE_GAME_RUNNING`, `TaskId.POPUP_RECOVERY`, `TaskId.SELECT_CASTLE`, `TaskId.COLLECT_KINGDOM_CHAT`, `TaskId.SEND_WORLD_CHAT_MESSAGE`, `TaskId.SEND_ALLIANCE_CHAT_MESSAGE`, `TaskId.COLLECT_MAIL`, `TaskId.OPEN_BUILDING`, `TaskId.REFRESH_CASTLE_ROSTER`, and scoped Development `TaskId.RESEARCH` use the typed core dispatcher; other registered `TaskId`/YAML steps remain on legacy dispatch. |
 | Bootstrap and roster workflows | Roster refresh and castle selection have typed direct/authored implementations; the active-castle no-op proof passed, while alternate-castle switching remains unproven and the selection binding is not yet accepted or landed as a full switch proof. Login remains legacy. Core preflight reuses foreground/bootstrap behavior; safe popup recovery belongs to the canonical runtime. Neither is an empty workflow to recreate. |
 | Chat and mail sending | Authored `SEND_WORLD_CHAT_MESSAGE` and `SEND_ALLIANCE_CHAT_MESSAGE` use the shared typed `SendChatWorkflow` and chat-send operation. Mail sending remains legacy. Live messages need an authorized destination and exact content. |
-| Research | `ResearchWorkflow` and `CoreMutationBoundary` support only the typed Development route with one normal Start and zero diamond spend. Direct/authored migration, the remaining research categories, and live proof are pending; this is a partial typed workflow/boundary slice. |
-| Hero Hall and Resource Item | Typed workflows adapt the existing executors through the core's exact mutation boundary. Hero Hall uses the distinct free-single control; Resource Item requires the selected Resource tab and a complete inventory. Canary/direct caller migration and live acceptance remain pending. |
+| Research | `ResearchWorkflow` and `CoreMutationBoundary` support only the typed Development route with one normal Start and zero diamond spend. Direct/authored bindings require an explicit exact mutation scope. The changed caller still needs its live acceptance; other categories remain unsupported. |
+| Hero Hall and Resource Item | Typed workflows adapt the existing executors through the core's exact mutation boundary. Hero Hall uses the distinct free-single control; Resource Item requires the selected Resource tab and a complete inventory. Hero reconciliation-only canary uses the core with no new-spend authority; automatic execution/caller promotion and Resource live acceptance remain pending. |
 | Resource-changing workflows | Construction, upgrade, gathering, campaign actions, and other Daily maintenance capabilities still need reviewed typed operations and the existing authorizer/executor/journal bridge. Live spending needs an exact action, target, and budget. |
 
 Generated session preparation runs the typed readiness step before the existing legacy Login step. Readiness foregrounds the configured app, passively waits through bounded loading, and returns only a stable known P&C screen; Android Home, unknown screens, stale captures, unresolved blocking popups, and exhausted time budgets fail closed. When this call actually launches the app, transient UNKNOWN or Android Home frames are tolerated within the existing settle budget; an already-foreground app still fails immediately on UNKNOWN. The canonical runtime observation boundary may dismiss an explicitly safe popup during this check. Authored `POPUP_RECOVERY` dispatch reuses that bounded settle boundary on the current app and does not foreground, navigate, or add another popup policy. Unknown frames do not use the legacy Back or relaunch fallback, and a known login screen is only a game-ready endpoint, not account or login verification.
@@ -273,8 +273,30 @@ selected Resource checks still apply afterward. Ordinary `observe`, navigation
 post-action confirmation and Chat captures retain their existing behavior; UNKNOWN
 is not a generic retry condition. Resource scroll completion retains its outer deadline.
 
-The connected Daily maintenance runner remains claim-only. Research, Hero Hall and
-Resource Item have typed adapter slices; direct/authored or canary caller migration and
-live acceptance remain pending. Other research categories and action capabilities remain
-unsupported. Existing automatic-execution and promotion restrictions remain in force.
-Offline integration does not renew a live budget or prove a live mutation.
+Development Research now has direct application/Python API and authored
+`TaskId.RESEARCH` bindings. Both require an explicit `CoreMutationBoundary` with
+the exact one-Start, zero-diamond policy. Caller composition validates account,
+optional authored castle and the configured durable journal root before connection,
+and loads existing receipts through the boundary. The direct API uses
+`research(priority=["development"], mutation_boundary=scope)`; authored application
+calls pass the same scope to `run(..., mutation_boundary=scope)`. Unsupported broad
+priorities and missing scope fail before connection; there is no legacy fallback.
+Research callers require `DAILY_CANARY`; the authored dispatcher borrows its existing
+connected graph and the outer runner owns cleanup. Live caller acceptance is recorded
+separately in the validation ledger.
+
+Hero reconciliation is a distinct nonspending operation. A
+`CoreHeroHallReconciliationWorkflow(checkpoint, operation_id)` names one existing
+Hero receipt in its spec; `WorkflowContext.reconcile_hero_hall` and the boundary
+validate that same durable operation and exact active identity. This context cannot
+call any resource-changing operation. `HeroHallRecruitmentExecutor.reconcile_existing`
+never enters its new-increment path, even after cooldown expires; committed intents
+are idempotent, and ambiguous evidence stays pending. The canary's `--reconcile-only`
+path uses this workflow, retains the persisted local maintenance date, and accepts
+no new-spend acknowledgement. Summon/result dismissal remains recognition-dependent.
+
+The connected Daily maintenance runner remains claim-only. Hero automatic execution,
+Resource Item caller migration, other Research categories and action capabilities
+remain unsupported or unaccepted as recorded in the plan. Existing automatic-execution
+and promotion restrictions remain in force. Offline integration does not renew a live
+budget or prove a live mutation.
