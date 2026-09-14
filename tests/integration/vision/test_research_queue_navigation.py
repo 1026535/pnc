@@ -35,16 +35,21 @@ from tests.support.pnc.capture_vision.fake_ocr_service import _FakeOcrService
 from tests.support.pnc.capture_vision.encode_png import _encode_png
 from tests.support.pnc.capture_vision.fake_screenshot_session import make_captured_frame
 from tests.support.pnc.capture_vision.ocr_line import _ocr_line
+from tests.support.pnc.capture_vision.modal_overlay import (
+    compose_update_modal,
+    update_modal_ocr_lines,
+)
 
 
 FIXTURE = TEST_DATA_ROOT / "screen_recognition" / "research_queue_core.png"
 
 
-def _capture(*, with_provenance: bool = False) -> CapturedScreenshot:
+def _capture(image: Image.Image | None = None, *, with_provenance: bool = False) -> CapturedScreenshot:
     """Load the reviewed Research Queue frame into an ephemeral capture."""
 
-    with Image.open(FIXTURE) as source:
-        image = source.convert("RGB")
+    if image is None:
+        with Image.open(FIXTURE) as source:
+            image = source.convert("RGB")
     frame = make_captured_frame(_encode_png(image)) if with_provenance else None
     return CapturedScreenshot(
         artifact=None,
@@ -164,20 +169,32 @@ class ResearchQueueNavigationTests(unittest.TestCase):
         self.assertEqual(VisibleElementSourceKind.TEMPLATE, go.source_kind)
         self.assertEqual(VisibleElementSourceKind.TEMPLATE, close.source_kind)
 
-    def test_update_popup_above_queue_stays_blocking_and_hides_queue_controls(self) -> None:
-        """Keeps an exact update modal as the foreground owner over Queue evidence."""
+    def test_update_popup_surface_owns_composed_queue_frame(self) -> None:
+        """Keeps an exact update modal as the foreground owner over a Queue frame."""
 
-        lines = _queue_lines() + (
-            _ocr_line(
-                "New version detected. Tap Confirm to update.",
-                x=58,
-                y=380,
-                width=420,
-                height=28,
-            ),
-            _ocr_line("Confirm", x=221, y=531, width=90, height=27),
+        image = compose_update_modal(_capture().image)
+        observation = _perception(
+            _FakeOcrService(lines=update_modal_ocr_lines(image.size))
+        ).build(_capture(image))
+
+        self.assertEqual(ScreenType.PNC_POPUP, observation.screen_type)
+        self.assertEqual(ScreenType.UNKNOWN, observation.decision.base_screen)
+        self.assertTrue(observation.blocking_popup)
+        self.assertEqual(GuardVerdict.BLOCKED, observation.decision.guard)
+        self.assertTrue(observation.has(UiElementId.PNC_UPDATE_CONFIRM_BUTTON))
+
+    def test_update_ocr_guard_suppresses_visually_matched_queue_controls(self) -> None:
+        """Inject update OCR to isolate publication filtering of real Queue controls."""
+
+        image = _capture().image
+        background = load_visual_screen_recognizer().recognize(image)
+        self.assertEqual(background.profile_ids, ("research_queue",))
+        self.assertEqual(
+            {UiElementId.PNC_RESEARCH_QUEUE_GO, UiElementId.PNC_RESEARCH_QUEUE_CLOSE},
+            {control.selector_id for control in background.controls},
         )
-        observation = _perception(_FakeOcrService(lines=lines)).build(_capture())
+        lines = _queue_lines() + update_modal_ocr_lines(image.size)
+        observation = _perception(_FakeOcrService(lines=lines)).build(_capture(image))
 
         self.assertEqual(ScreenType.PNC_POPUP, observation.screen_type)
         self.assertEqual(ScreenType.PNC_RESEARCH_QUEUE, observation.decision.base_screen)

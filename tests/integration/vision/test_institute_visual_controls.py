@@ -21,6 +21,10 @@ from pnc_automation.core.vision.ocr.ocr_service import OcrLine
 from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
 
 from tests.support.paths import TEST_DATA_ROOT
+from tests.support.pnc.capture_vision.modal_overlay import (
+    compose_update_modal,
+    update_modal_ocr_lines,
+)
 from tests.support.pnc.capture_vision.recording_ocr_service import _RecordingOcrService
 
 
@@ -135,22 +139,23 @@ class InstituteVisualControlTests(unittest.TestCase):
     def test_blocking_popup_suppresses_institute_background_controls(self) -> None:
         """A blocking update popup owns the frame even when Institute anchors remain visible."""
 
-        popup_lines = (
-            OcrLine(
-                "New version detected. Tap Confirm to update.",
-                Bounds(58, 380, 420, 28),
-                1.0,
-            ),
-            OcrLine("Confirm", Bounds(221, 531, 90, 27), 1.0),
+        image = compose_update_modal(_load_fixture())
+        popup_lines = update_modal_ocr_lines(image.size)
+        background = load_visual_screen_recognizer().recognize(image)
+        self.assertEqual(background.profile_ids, ("institute",))
+        self.assertIn(
+            UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+            {control.selector_id for control in background.controls},
         )
         observation = _observation_builder(popup_lines).build(
-            _capture(_load_fixture()),
+            _capture(image),
             request=ObservationRequest.base(),
         )
 
         self.assertEqual(observation.screen_type, ScreenType.PNC_POPUP)
         self.assertTrue(observation.blocking_popup)
         self.assertTrue(observation.has(UiElementId.PNC_UPDATE_CONFIRM_BUTTON))
+        self.assertFalse(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
         self.assertFalse(
             any(
                 selector_id in observation.visible_elements

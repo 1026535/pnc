@@ -45,6 +45,10 @@ from tests.support.paths import TEST_DATA_ROOT
 from tests.support.pnc.capture_vision.encode_png import _encode_png
 from tests.support.pnc.capture_vision.fake_ocr_service import _FakeOcrService
 from tests.support.pnc.capture_vision.fake_screenshot_session import make_captured_frame
+from tests.support.pnc.capture_vision.modal_overlay import (
+    compose_update_modal,
+    update_modal_ocr_lines,
+)
 from tests.support.pnc.observations import make_entry, make_observation
 
 
@@ -340,23 +344,23 @@ class ResearchTreeVisualControlTests(unittest.TestCase):
         self.assertFalse(observation.has(UiElementId.PNC_RESEARCH_START_BUTTON))
 
     def test_active_detail_required_update_still_owns_popup(self) -> None:
-        """Keeps the required-update modal guard ahead of active-detail ownership."""
+        """Inject update OCR to test precedence over visually proved active detail."""
 
+        image = _load_active_detail_fixture()
+        background = load_visual_screen_recognizer().recognize(image)
+        self.assertIn("research_tree_node_detail_active", background.profile_ids)
         popup_lines = (
             *_active_detail_ocr_lines(),
-            OcrLine(
-                "New version detected. Tap Confirm to update.",
-                Bounds(58, 380, 420, 28),
-                1.0,
-            ),
-            OcrLine("Confirm", Bounds(221, 531, 90, 27), 1.0),
+            *update_modal_ocr_lines(image.size),
         )
         observation = _perception(popup_lines).build(
-            _capture(_load_active_detail_fixture())
+            _capture(image)
         )
 
         self.assertEqual(observation.screen_type, ScreenType.PNC_POPUP)
+        self.assertEqual(observation.decision.base_screen, ScreenType.PNC_RESEARCH_TREE)
         self.assertTrue(observation.blocking_popup)
+        self.assertTrue(observation.has(UiElementId.PNC_UPDATE_CONFIRM_BUTTON))
         self.assertFalse(observation.has(UiElementId.PNC_RESEARCH_START_BUTTON))
 
     def test_research_detail_observation_binds_start_to_shared_tree_layout(self) -> None:
@@ -417,23 +421,26 @@ class ResearchTreeVisualControlTests(unittest.TestCase):
         self.assertTrue(task.verify(context, before, result.observation).succeeded)
 
     def test_production_builder_blocks_start_behind_required_update(self) -> None:
-        """Keeps the measured background Start unavailable when an update owns the frame."""
+        """Inject update OCR to test builder filtering of a visually matched Start."""
 
+        image = _load_detail_fixture()
         popup_lines = (
             *_detail_ocr_lines(),
-            OcrLine(
-                "New version detected. Tap Confirm to update.",
-                Bounds(58, 380, 420, 28),
-                1.0,
-            ),
-            OcrLine("Confirm", Bounds(221, 531, 90, 27), 1.0),
+            *update_modal_ocr_lines(image.size),
+        )
+        background = load_visual_screen_recognizer().recognize(image)
+        self.assertIn(
+            UiElementId.PNC_RESEARCH_START_BUTTON,
+            {control.selector_id for control in background.controls},
         )
         observation = _observation_builder(popup_lines).build(
-            _capture(_load_detail_fixture())
+            _capture(image)
         )
 
         self.assertEqual(observation.screen_type, ScreenType.PNC_POPUP)
+        self.assertEqual(observation.decision.base_screen, ScreenType.PNC_RESEARCH_TREE)
         self.assertTrue(observation.blocking_popup)
+        self.assertTrue(observation.has(UiElementId.PNC_UPDATE_CONFIRM_BUTTON))
         self.assertFalse(observation.has(UiElementId.PNC_RESEARCH_START_BUTTON))
 
     def test_research_detail_owns_frame_before_generic_popup_fallback(self) -> None:
@@ -518,22 +525,31 @@ class ResearchTreeVisualControlTests(unittest.TestCase):
         self.assertEqual(session.taps, [])
 
     def test_research_detail_popup_suppresses_start(self) -> None:
-        """Keeps a required update popup as the owner even when detail anchors remain visible."""
+        """Inject update OCR to test navigation filtering of a visually matched Start."""
 
+        image = _load_detail_fixture()
+        background = load_visual_screen_recognizer().recognize(image)
+        self.assertIn(
+            UiElementId.PNC_RESEARCH_START_BUTTON,
+            {control.selector_id for control in background.controls},
+        )
         popup_lines = (
             *_detail_ocr_lines(),
-            OcrLine(
-                "New version detected. Tap Confirm to update.",
-                Bounds(58, 380, 420, 28),
-                1.0,
-            ),
-            OcrLine("Confirm", Bounds(221, 531, 90, 27), 1.0),
+            *update_modal_ocr_lines(image.size),
         )
-        observation = _perception(popup_lines).build(_capture(_load_detail_fixture()))
+        observation = _perception(popup_lines).build(_capture(image))
 
         self.assertEqual(observation.screen_type, ScreenType.PNC_POPUP)
+        self.assertEqual(observation.decision.base_screen, ScreenType.PNC_RESEARCH_TREE)
         self.assertTrue(observation.blocking_popup)
+        self.assertTrue(observation.has(UiElementId.PNC_UPDATE_CONFIRM_BUTTON))
         self.assertFalse(observation.has(UiElementId.PNC_RESEARCH_START_BUTTON))
+        session = FakeSession()
+        with self.assertRaises(SelectorResolutionError):
+            _action_executor(session).execute_action(
+                TapAction(selector_id=UiElementId.PNC_RESEARCH_START_BUTTON), observation,
+            )
+        self.assertEqual(session.taps, [])
 
     def test_research_detail_requires_both_identity_anchors(self) -> None:
         """Abstains from the detail profile when either independent identity anchor is absent."""
@@ -566,15 +582,13 @@ class ResearchTreeVisualControlTests(unittest.TestCase):
     def test_blocking_popup_suppresses_research_tree_back(self) -> None:
         """A blocking update prompt owns the frame even when tree anchors remain visible."""
 
-        popup_lines = (
-            OcrLine(
-                "New version detected. Tap Confirm to update.",
-                Bounds(58, 380, 420, 28),
-                1.0,
-            ),
-            OcrLine("Confirm", Bounds(221, 531, 90, 27), 1.0),
+        image = compose_update_modal(_load_fixture())
+        background = load_visual_screen_recognizer().recognize(image)
+        self.assertIn(
+            UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+            {control.selector_id for control in background.controls},
         )
-        observation = _perception(popup_lines).build(_capture(_load_fixture()))
+        observation = _perception(update_modal_ocr_lines(image.size)).build(_capture(image))
 
         self.assertEqual(observation.screen_type, ScreenType.PNC_POPUP)
         self.assertTrue(observation.blocking_popup)
