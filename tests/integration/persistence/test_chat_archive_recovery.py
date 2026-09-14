@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -93,37 +94,49 @@ class ChatArchiveRecoveryTests(unittest.TestCase):
         """Recovery accepts valid partial byte tails, including a split UTF-8 sequence."""
 
         snapshot = self._snapshot("multibyte é row")
-        for cut in range(len("[2026-01-01T23:59:58Z] Bób: multibyte é row\n".encode("utf-8"))):
-            with self.subTest(cut=cut), tempfile.TemporaryDirectory() as temporary_directory:
-                root = Path(temporary_directory)
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            suite_root = Path(temporary_directory)
+            seed_root = suite_root / "interrupted"
 
-                def fault(stage: str) -> None:
-                    if stage == "after_pending_publish":
-                        raise SystemExit(stage)
+            def fault(stage: str) -> None:
+                if stage == "after_pending_publish":
+                    raise SystemExit(stage)
 
-                with self.assertRaises(SystemExit):
-                    ChatArchiveStore(root, fault_injector=fault).persist_heartbeat(
-                        account_id="account",
-                        castle=self.castle,
-                        channel=ChatChannel.WORLD,
-                        captured_at=self.captured_at,
-                        snapshot=snapshot,
-                        screenshot_payload=b"screenshot",
-                    )
-                pending_path = next((root / ".archive-control").rglob("pending.json"))
-                transaction = decode_pending_bytes(pending_path.read_bytes())
-                transcript_path = root / "2026-01-01" / "account" / "k1_castle" / "kingdom" / "transcript.log"
-                transcript_path.parent.mkdir(parents=True, exist_ok=True)
-                transcript_path.write_bytes(transaction.append_bytes[:cut])
-                ChatArchiveStore(root).persist_heartbeat(
+            with self.assertRaises(SystemExit):
+                ChatArchiveStore(seed_root, fault_injector=fault).persist_heartbeat(
                     account_id="account",
                     castle=self.castle,
                     channel=ChatChannel.WORLD,
                     captured_at=self.captured_at,
                     snapshot=snapshot,
-                    screenshot_payload=b"ignored",
+                    screenshot_payload=b"screenshot",
                 )
-                self.assertEqual(transaction.append_bytes, transcript_path.read_bytes())
+            pending_path = next((seed_root / ".archive-control").rglob("pending.json"))
+            transaction = decode_pending_bytes(pending_path.read_bytes())
+
+            for cut in range(len(transaction.append_bytes)):
+                with self.subTest(cut=cut):
+                    root = suite_root / f"cut-{cut}"
+                    shutil.copytree(seed_root, root)
+                    transcript_path = (
+                        root
+                        / "2026-01-01"
+                        / "account"
+                        / "k1_castle"
+                        / "kingdom"
+                        / "transcript.log"
+                    )
+                    transcript_path.parent.mkdir(parents=True, exist_ok=True)
+                    transcript_path.write_bytes(transaction.append_bytes[:cut])
+                    ChatArchiveStore(root).persist_heartbeat(
+                        account_id="account",
+                        castle=self.castle,
+                        channel=ChatChannel.WORLD,
+                        captured_at=self.captured_at,
+                        snapshot=snapshot,
+                        screenshot_payload=b"ignored",
+                    )
+                    self.assertEqual(transaction.append_bytes, transcript_path.read_bytes())
 
     def test_equal_short_fingerprint_does_not_suppress_different_entries(self) -> None:
         """The compatibility fingerprint is diagnostic; content equality owns overlap."""

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import cache
 import json
 from pathlib import Path
 import string
@@ -186,7 +187,10 @@ def load_visual_screen_recognizer(
     *,
     matcher: OpenCvTemplateMatcher | None = None,
 ) -> VisualScreenRecognizer:
-    """Load packaged anchor metadata, rejecting malformed or missing assets eagerly."""
+    """Load anchor metadata, caching the immutable packaged default recognizer."""
+
+    if catalog_path is None and matcher is None:
+        return _load_default_visual_screen_recognizer()
     path = catalog_path or Path(__file__).parent / "data" / "screen_anchors.json"
     document = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(document, dict) or set(document) != {"version", "reference_size", "profiles"}:
@@ -265,6 +269,13 @@ def load_visual_screen_recognizer(
             raise ValueError(f"Visual profile {identifier} has invalid occluded screen types.") from error
         profiles.append(VisualScreenProfile(identifier, layout_id, screen, revision, source, review, anchors, tuple(controls), occludes))
     return VisualScreenRecognizer(tuple(profiles), tuple(size), matcher or OpenCvTemplateMatcher())
+
+
+@cache
+def _load_default_visual_screen_recognizer() -> VisualScreenRecognizer:
+    """Validate and construct the packaged recognizer once per process."""
+
+    return load_visual_screen_recognizer(matcher=OpenCvTemplateMatcher())
 
 
 def _load_anchor(entry: object, *, root: Path, reference_size: tuple[int, int]) -> VisualAnchor:

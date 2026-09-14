@@ -16,6 +16,7 @@ from pnc_automation.app.pnc.vision.observation_builder import (
     ObservationBuilder,
     ImageSelectorEngine,
 )
+from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservationEnricher
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
 from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
@@ -61,7 +62,10 @@ class CoordinateBarLocalFixturesTests(unittest.TestCase):
                 ),
             ocr_service=ocr_service)
 
-            observation = builder.build(screenshot)
+            observation = builder.build(
+                screenshot,
+                request=ObservationRequest.world_map_movement_proof_follow_up(),
+            )
 
             self.assertEqual(observation.screen_type, ScreenType.PNC_WORLD_MAP)
             self.assertIsNotNone(observation.spatial_surface)
@@ -106,7 +110,10 @@ class CoordinateBarLocalFixturesTests(unittest.TestCase):
                 ),
             ocr_service=ocr_service)
 
-            observation = builder.build(screenshot)
+            observation = builder.build(
+                screenshot,
+                request=ObservationRequest.world_map_movement_proof_follow_up(),
+            )
 
             self.assertEqual(observation.screen_type, ScreenType.PNC_WORLD_MAP)
             self.assertIsNotNone(observation.spatial_surface)
