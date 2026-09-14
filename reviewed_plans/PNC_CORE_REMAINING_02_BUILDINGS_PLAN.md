@@ -11,8 +11,13 @@ building action identities, authorization/receipt/journal integration, direct an
 Daily-Go callers, feature fixtures, tests, and any live proof needed by those
 contracts.
 
-The execution base is the clean merged checkpoint
-6bc27585fbac1244672cf4a653ea6248955a4aca. Do not reset, clean, branch from an
+The execution base is the assignment's pinned checkpoint containing merged
+6bc27585fbac1244672cf4a653ea6248955a4aca and this planning revision. Reuse a
+suitable existing isolated task worktree and create/use the feature branch there;
+do not create a second worktree merely for a preferred path. Preserve resumed
+feature work; use a new worktree only if the current checkout is shared or
+unsuitable. Follow the [common starting-checkpoint rules](PNC_CORE_WORKFLOW_PORTING_PLAN.md#common-starting-checkpoint-and-evidence-rules).
+Do not reset, clean, branch from an
 older checkpoint, or wait for a dirty historical 4f33202 snapshot. Shared files may
 contain A02-owned methods and keys beside other feature slices. Ownership is by the
 exact symbols below; a coordinator lock or routine B handback is not part of this

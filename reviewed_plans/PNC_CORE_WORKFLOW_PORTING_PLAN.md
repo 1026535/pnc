@@ -318,9 +318,27 @@ feature agent to finish, hand back files, approve tests or run its live proof.
 
 ### Common starting checkpoint and evidence rules
 
-Start each implementation in its own worktree on a `codex/` feature branch from
-`6bc27585fbac1244672cf4a653ea6248955a4aca`, or a verified descendant that contains
-it and this plan revision. Record the immutable code base and plan revision.
+Use one isolated checkout and one `codex/` feature branch per concurrently active
+feature. Prefer the task's existing worktree, including an already-created
+app-managed worktree; do not create a second worktree just to satisfy a suggested
+directory name. A feature branch names commit history, not a separate copy of the
+working files, so different branch names do not isolate writers sharing a folder.
+
+For a fresh assignment, inspect the current absolute repository root, branch/HEAD,
+status and ownership. If the checkout is dedicated to this task and clean, create
+or use the assigned feature branch there from the assignment's exact `START_COMMIT`.
+That commit must contain merged `6bc27585fbac1244672cf4a653ea6248955a4aca` and the
+specified planning revision. A detached HEAD in a suitable task worktree is not a
+reason to allocate another directory; create the feature branch in place.
+
+For a resumed feature, preserve its existing branch, commits and task-owned edits.
+Record its actual code base and the applicable documentation revision separately;
+do not reset, rebase or relocate ongoing implementation merely to adopt newer
+documentation. Create a new worktree only if the current checkout is shared,
+contains unrelated work, or otherwise cannot safely serve this assignment. Resolve
+and record a suitable existing absolute path automatically; a missing path in the
+prompt alone is not a blocker. Ask only for a material ownership/base conflict.
+
 Do not create six checkouts from the obsolete bare `4f33202`, copy dirty work,
 reset another checkout, or place six writers in the integration worktree. The
 merge has already incorporated B; there is no producer-import gate to repeat.

@@ -6,9 +6,14 @@ feature-specific producer and consumer work needed by Campaign, and does not
 include battle execution. Read the
 [independent package contract](PNC_CORE_WORKFLOW_PORTING_PLAN.md#six-remaining-agent-packages)
 for shared scope only; this plan's named Campaign partitions govern its feature
-files and symbols. The execution base is the immutable merged revision
-`6bc27585fbac1244672cf4a653ea6248955a4aca`; do not rely on a dirty predecessor
-or wait for a peer release. Status: implementation may proceed; acceptance still
+files and symbols. Use the assignment's pinned checkpoint containing merged
+`6bc27585fbac1244672cf4a653ea6248955a4aca` and this planning revision. Reuse a
+suitable existing isolated task worktree and create/use the feature branch there;
+do not create a second worktree merely for a preferred path. Preserve resumed
+feature work; use a new worktree only if the current checkout is shared or
+unsuitable. Follow the [common starting-checkpoint rules](PNC_CORE_WORKFLOW_PORTING_PLAN.md#common-starting-checkpoint-and-evidence-rules).
+Do not rely on a dirty predecessor or wait for a peer release.
+Status: implementation may proceed; acceptance still
 needs qualified mode/eligibility, Hero Formation and safe-return evidence.
 
 ### Saved evidence locations

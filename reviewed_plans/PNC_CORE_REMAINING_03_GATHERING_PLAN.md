@@ -11,9 +11,13 @@ authority and receipt/journal integration, direct and Daily-Go adapters, both
 production observation paths, focused fixtures and tests, and the live evidence
 needed by those contracts.
 
-The execution base is the clean merged checkpoint
-6bc27585fbac1244672cf4a653ea6248955a4aca. Each worker uses its own isolated
-worktree. Do not use the dirty historical 4f33202 snapshot, wait for another
+The execution base is the assignment's pinned checkpoint containing merged
+6bc27585fbac1244672cf4a653ea6248955a4aca and this planning revision. Reuse a
+suitable existing isolated task worktree and create/use the feature branch there;
+do not create a second worktree merely for a preferred path. Preserve resumed
+feature work; use a new worktree only if the current checkout is shared or
+unsuitable. Follow the [common starting-checkpoint rules](PNC_CORE_WORKFLOW_PORTING_PLAN.md#common-starting-checkpoint-and-evidence-rules).
+Do not use the dirty historical 4f33202 snapshot, wait for another
 feature worker, or take a whole-file coordinator lock. Shared files may contain
 semantic slices for other features; ownership is by the exact methods, task ids,
 screen profiles, and data keys in this plan. Physical same-file edits can merge
@@ -474,8 +478,11 @@ independently of peer completion or final merge.
 
 ## Copyable worker kickoff
 
-Work in an isolated worktree based on clean checkpoint
-6bc27585fbac1244672cf4a653ea6248955a4aca. Implement only the A03 gathering slice:
+Reuse a suitable existing isolated task worktree and feature branch; create
+another worktree only if the current checkout is shared or unsuitable. Preserve
+ongoing task work. For a fresh start use the assignment's pinned checkpoint
+containing merged 6bc27585fbac1244672cf4a653ea6248955a4aca and this plan revision.
+Implement only the A03 gathering slice:
 world resource/node and occupancy facts, independent available slots and active
 march count, observed formation and exact Gather/march-confirm/Dispatch controls,
 typed GatheringWorkflow, canonical gathering action identity and operation_id,

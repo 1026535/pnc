@@ -11,6 +11,11 @@ reservations, shared coordinator edits and cross-package acceptance sequencing
 for those six packages. Each owns its producers, consumers and proof. Continue
 core/Continue non-YOLO are rare consultants for a concrete generic-service question.
 
+Reuse a suitable existing isolated task worktree and create/use its feature branch
+there. The [common starting-checkpoint rules](PNC_CORE_WORKFLOW_PORTING_PLAN.md#common-starting-checkpoint-and-evidence-rules)
+require separate working files for concurrent features, not an additional worktree
+for a task that already has one. Preserve resumed task work and unrelated changes.
+
 Institute Home acquisition/Development belongs to 01; Buildings to 02; Gathering
 and World Search/dialog to 03; Campaign preparation to 04; Mail/Login and
 preparation order to 05; Castle/roster/More/Settings to 06. Building and Gathering

@@ -10,8 +10,12 @@ this package.
 Execution base: merged `6bc27585fbac1244672cf4a653ea6248955a4aca` or a
 verified descendant containing it, plus this plan revision. The Research caller
 and Hero reconciliation are already committed in `5c1cb92`; B's `10740eb` is
-already merged. Use a separate feature worktree; never execute six agents in
-the integration checkout. Record the exact starting commit and plan revision.
+already merged. Reuse a suitable existing isolated task worktree and create/use
+the feature branch there; do not create a second worktree merely for a preferred
+path. Preserve resumed feature work; use a new worktree only if the current
+checkout is shared or unsuitable. Follow the [common starting-checkpoint rules](PNC_CORE_WORKFLOW_PORTING_PLAN.md#common-starting-checkpoint-and-evidence-rules).
+Never execute six agents in the integration checkout. Record the exact starting
+commit and plan revision.
 Read the [independent package contract](PNC_CORE_WORKFLOW_PORTING_PLAN.md#six-remaining-agent-packages).
 
 ### Saved evidence locations
@@ -403,9 +407,10 @@ files. The existing general Home-building collector and typed object output are
 shared support: 02 may repair general acquisition for its own routes, including
 baseline Institute support, without waiting for this plan. This plan owns the
 Institute-specific Research focus/qualification and preserves that output contract;
-neither feature creates a second parser. Use a separate worktree, keep edits scoped, and preserve other feature
-branches. Continue non-YOLO is consulted only for a demonstrated generic vision
-engine/guard question; Continue core only for a demonstrated generic runtime or
+neither feature creates a second parser. Reuse the suitable isolated task worktree,
+keep edits scoped, and preserve other feature branches. Continue non-YOLO is
+consulted only for a demonstrated generic vision engine/guard question;
+Continue core only for a demonstrated generic runtime or
 journal contract question. Missing Institute facts and normal Research caller
 adaptations are this agent's work, not consultation gates.
 
@@ -424,9 +429,11 @@ do not repeat the Start or relabel setup/manual work as production acceptance.
 
 ## Copyable worker kickoff
 
-> Execute only the remaining work in this plan in your own feature worktree from
-> merged `6bc27585fbac1244672cf4a653ea6248955a4aca` or a verified descendant,
-> recording the code base and this plan revision. Read AGENTS, the porting guide,
+> Reuse your suitable existing isolated task worktree and feature branch; create
+> another worktree only if the current checkout is shared or unsuitable. Preserve
+> ongoing task work. For a fresh start use the assignment's pinned commit containing
+> merged `6bc27585fbac1244672cf4a653ea6248955a4aca` and this plan revision,
+> recording both bases. Read AGENTS, the porting guide,
 > the independent package contract and the scoped evidence. You own Institute
 > Home acquisition, Development-specific producer corrections in both observers,
 > the Research route/caller tests and one-Start live acceptance. Do not wait for B,

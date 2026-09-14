@@ -15,9 +15,13 @@ visual facts/controls and bounded OCR, both-observer publication, navigation,
 policy/operations, direct/authored entrypoints, relevant tests and its own live
 acceptance. Shared files are partitioned by the methods, screen/profile/model
 fields, selector/data keys and TaskId branches in the linked ownership table.
-Agents work in separate feature worktrees; they do not reserve whole shared files
-or wait for B to implement an ordinary feature producer. Generic capture/OCR,
-guards, freshness/recovery, lease and persistence mechanics retain canonical
+Agents use one isolated checkout per active feature. Reuse a suitable existing
+task worktree and create/use the feature branch there; no second directory is
+required just because the prompt suggests another path. Preserve resumed task
+work and use a new worktree only when the current checkout is shared or unsuitable.
+Follow the linked plan's common starting-checkpoint rules. Agents do not reserve
+whole shared files or wait for B to implement an ordinary feature producer.
+Generic capture/OCR, guards, freshness/recovery, lease and persistence mechanics retain canonical
 ownership and invariants. A concrete generic-service question may prompt rare
 Continue core/Continue non-YOLO consultation, not routine handoffs or approvals.
 

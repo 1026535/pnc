@@ -7,7 +7,11 @@ facts are this agent's implementation work. Continue core and Continue non-YOLO
 are occasional consultants for a generic-service question, not delivery gates.
 
 Execution base: merged `6bc27585fbac1244672cf4a653ea6248955a4aca` or a verified
-descendant containing it and this plan revision. Use a separate feature worktree;
+descendant containing it and this plan revision. Reuse a suitable existing
+isolated task worktree and create/use the feature branch there; do not create a
+second worktree merely for a preferred path. Preserve resumed feature work; use
+a new worktree only if the current checkout is shared or unsuitable. Follow the
+[common starting-checkpoint rules](PNC_CORE_WORKFLOW_PORTING_PLAN.md#common-starting-checkpoint-and-evidence-rules).
 A's caller changes and B's recognition are already committed and merged. Record
 that exact base and plan revision; never import dirty peer work or run multiple
 feature writers in the integration checkout. Read the
@@ -422,9 +426,11 @@ methods and their tests belong to this worker and do not require consultation.
 
 ## Copyable worker kickoff
 
-> Implement and accept this Castle/navigation feature in your own worktree from
-> merged `6bc27585fbac1244672cf4a653ea6248955a4aca` or a verified descendant,
-> recording the code base and this plan revision. Own the castle/selected-roster
+> Reuse your suitable existing isolated task worktree and feature branch; create
+> another worktree only if the current checkout is shared or unsuitable. Preserve
+> ongoing task work. For a fresh start use the assignment's pinned commit containing
+> merged `6bc27585fbac1244672cf4a653ea6248955a4aca` and this plan revision,
+> recording both bases. Own the castle/selected-roster
 > and More/Settings/Manage producers, both-observer fixtures/qualification, exact
 > selection/preflight/navigation/caller semantics and tests. Do not wait for B or
 > the Login task, reserve whole shared files, or import dirty peer work. Start
