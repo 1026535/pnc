@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import ClassVar
 
+from pnc_automation.app.automation.engine.core_daily_mutation import CoreMutationBoundary
+
 from pnc_automation.app.automation.engine.core_workflow import (
     CoreWorkflow,
     WorkflowContext,
@@ -38,6 +40,19 @@ class ResearchDisposition(StrEnum):
     NO_VISIBLE_SUPPORTED_NODE = "no_visible_supported_node"
     PENDING_CLARIFICATION = "pending_clarification"
     FAILED = "failed"
+
+
+def prepare_research_workflow(
+    *, policy: ResearchPolicy, mutation_boundary: CoreMutationBoundary | None,
+) -> ResearchWorkflow:
+    """Require the existing exact Research scope and current journal before connection."""
+
+    if not isinstance(mutation_boundary, CoreMutationBoundary):
+        raise PermissionError("Research callers require an explicit CoreMutationBoundary.")
+    if mutation_boundary.policy.quest_id != DailyQuestId.UPGRADE_RESEARCH:
+        raise PermissionError("Research caller requires the exact one-Start research capability.")
+    mutation_boundary.authorize()
+    return ResearchWorkflow(policy=policy, checkpoint=mutation_boundary.load_checkpoint())
 
 
 @dataclass(frozen=True, slots=True)

@@ -8,6 +8,7 @@ import unittest
 
 from pnc_automation.app.automation.daily_maintenance.application_service import DailyRunBoundary
 from pnc_automation.app.automation.daily_maintenance.authorization import DailyMutationAuthorizer
+from pnc_automation.app.automation.daily_maintenance.core_hero_hall import CoreHeroHallReconciliationWorkflow
 from pnc_automation.app.automation.engine.core_daily_mutation import CoreMutationBoundary
 from pnc_automation.app.automation.engine.core_workflow import CoreWorkflowRunner, WorkflowEffect, WorkflowSpec
 from pnc_automation.app.automation.engine.task import TaskId
@@ -113,6 +114,73 @@ class CoreHeroHallMutationTests(unittest.TestCase):
             CoreWorkflowRunner(runtime, self.scope).run(Increment(self.checkpoint))
         runtime.actuator.execute_action.assert_not_called()
         self.assertEqual(MutationIntentState.DISPATCHED, self.load().mutation_intents[0].state)
+
+    def pending_single(self):
+        runtime = Runtime(self.castle, (hero(), hero(), hero(attempts=None, free=False)))
+        runtime.actuator.execute_action.return_value = True
+        checkpoint, _ = CoreWorkflowRunner(runtime, self.scope).run(Increment(self.checkpoint)).value
+        intent = checkpoint.mutation_intents[0]
+        checkpoint = replace(checkpoint, mutation_intents=(replace(
+            intent, metadata={**intent.metadata, "next_ready_at": "2000-01-01T00:00:00+00:00"},
+        ),))
+        self.store.save(checkpoint)
+        return checkpoint
+
+    def test_reconciliation_without_new_authority_commits_exact_receipt_and_returns_home(self):
+        checkpoint = self.pending_single()
+        runtime = Runtime(self.castle, (hero(attempts=4),))
+        runtime.navigation.open_building = lambda target, **kwargs: runtime.navigate(ScreenType.PNC_HERO_HALL)
+        scope = replace(self.scope, authorizer=DailyMutationAuthorizer())
+        workflow = CoreHeroHallReconciliationWorkflow(checkpoint, checkpoint.mutation_intents[0].operation_id)
+
+        result = CoreWorkflowRunner(runtime, scope).run(workflow)
+
+        self.assertTrue(result.value.committed)
+        self.assertEqual(ScreenType.PNC_HOME_CITY, result.exit_screen)
+        self.assertEqual(1, len(self.load().mutation_intents))
+        self.assertEqual(MutationIntentState.COMMITTED, self.load().mutation_intents[0].state)
+        runtime.actuator.execute_action.assert_not_called()
+
+    def test_reconciliation_rejects_missing_journal_and_wrong_castle_before_navigation(self):
+        runtime = Runtime(self.castle, ())
+        workflow = CoreHeroHallReconciliationWorkflow(self.checkpoint, "hero-hall-recruit-001")
+        scope = replace(self.scope, authorizer=DailyMutationAuthorizer())
+        with self.assertRaisesRegex(PermissionError, "existing durable checkpoint"):
+            CoreWorkflowRunner(runtime, scope).run(workflow)
+        runtime.preflight_active_castle_identity.assert_not_called()
+        checkpoint = self.pending_single()
+        runtime = Runtime(CastleIdentity("K2", "Other", 20), ())
+        with self.assertRaisesRegex(PermissionError, "active castle"):
+            CoreWorkflowRunner(runtime, scope).run(CoreHeroHallReconciliationWorkflow(
+                checkpoint, checkpoint.mutation_intents[0].operation_id,
+            ))
+        self.assertEqual([], runtime.targets)
+        runtime.actuator.execute_action.assert_not_called()
+
+    def test_reconciliation_scope_cannot_invoke_a_new_recruit(self):
+        checkpoint = self.pending_single()
+        contract = CoreHeroHallReconciliationWorkflow(checkpoint, checkpoint.mutation_intents[0].operation_id)
+        attempted_recruit = Increment(checkpoint)
+        attempted_recruit.spec = contract.spec
+        runtime = Runtime(self.castle, ())
+        scope = replace(self.scope, authorizer=DailyMutationAuthorizer())
+        with self.assertRaisesRegex(PermissionError, "resource-changing boundary"):
+            CoreWorkflowRunner(runtime, scope).run(attempted_recruit)
+        runtime.actuator.execute_action.assert_not_called()
+        self.assertEqual(checkpoint, self.load())
+
+    def test_reconciliation_stale_checkpoint_cannot_overwrite_a_committed_receipt(self):
+        stale = self.pending_single()
+        runtime = Runtime(self.castle, (hero(attempts=4),))
+        runtime.navigation.open_building = lambda target, **kwargs: runtime.navigate(ScreenType.PNC_HERO_HALL)
+        scope = replace(self.scope, authorizer=DailyMutationAuthorizer())
+        workflow = CoreHeroHallReconciliationWorkflow(stale, stale.mutation_intents[0].operation_id)
+        CoreWorkflowRunner(runtime, scope).run(workflow)
+        committed = self.load()
+        with self.assertRaisesRegex(RuntimeError, "stale"):
+            CoreWorkflowRunner(runtime, scope).run(workflow)
+        self.assertEqual(committed, self.load())
+        runtime.actuator.execute_action.assert_not_called()
 
 
 if __name__ == "__main__":

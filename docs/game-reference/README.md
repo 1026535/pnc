@@ -17,6 +17,8 @@ The packaged PNC **5.0.203 / version code 233** yielded **6,276 gameplay Lua fil
 | [Seasonal Alliance layouts](workflows/seasonal-alliance-layout.md) | Recovered Faction eligibility/layout gate and live participating/nonparticipating comparison |
 | [Neutral gathering](workflows/neutral-gathering.md) | Target/occupancy shield predicate, army-count semantics, and one correlated live collection receipt |
 | [Hero Hall recruitment](workflows/hero-hall-recruitment.md) | Free-single animation, Confirm/Close result flow, subsequent paid draw, and reconciliation limits |
+| [Resource inventory](workflows/resource-inventory.md) | Recycled Bag rows, partial edge visibility, single versus bulk Use, and full-inventory proof limits |
+| [Mail sending](workflows/mail-sending.md) | Player versus alliance send branches, client eligibility checks, and correlated receipt requirements |
 | [Provenance and reproduction](PROVENANCE.md) | Build, hashes, artifact locations, and offline reconstruction |
 
 Detailed coverage should grow with scoped work. A complete behavioral reference for every UI, event, server rule, and account state cannot be inferred from a source inventory. Start with the workflow affected by the current task, following its callers and state owners only as far as needed to resolve the question.

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 
 from pnc_automation.app.automation.daily_maintenance.application_service import DailyRunBoundary
 from pnc_automation.app.automation.daily_maintenance.authorization import DailyMutationAuthorizer
@@ -12,6 +13,7 @@ from pnc_automation.app.automation.daily_maintenance.claim_executor import (
 )
 from pnc_automation.app.automation.daily_maintenance.mutation_dispatcher import (
     JournaledMutationDispatcher,
+    JournaledMutationResult,
     MutationOperation,
     MutationReconciliation,
 )
@@ -35,6 +37,7 @@ from pnc_automation.app.authoring.config.daily_maintenance import (
     DailyMaintenanceTargetConfig,
 )
 from pnc_automation.app.pnc.domain.action_requests import TapAction
+from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.domain.daily_maintenance import (
     DailyQuestId,
     DailyQuestRow,
@@ -71,6 +74,38 @@ class CoreMutationBoundary:
     boundary: DailyRunBoundary
     authorizer: DailyMutationAuthorizer
     journal_store: DailyRunJournalStore
+
+    def require_caller(
+        self, *, account_id: str, journal_root: Path | None = None,
+        castle: CastleIdentity | None = None,
+    ) -> None:
+        """Bind an external caller to this target and the configured durable journal."""
+
+        if account_id != self.target.account_id or (castle is not None and castle != self.target.castle):
+            raise PermissionError("Caller account/castle does not match the mutation scope.")
+        if journal_root is not None and self.journal_store.root != journal_root.resolve():
+            raise PermissionError("Caller mutation scope must use the configured durable journal root.")
+
+    def load_checkpoint(
+        self, *, require_existing: bool = False,
+        reconcilable_quest: DailyQuestId | None = None,
+    ) -> DailyTaskCheckpoint:
+        """Load current durable state without writing or replacing existing receipts."""
+
+        checkpoint = self.journal_store.load(
+            game_reset_id=self.boundary.game_reset_id,
+            account_id=self.target.account_id,
+            castle=self.target.castle,
+        )
+        if checkpoint is None:
+            if require_existing:
+                raise PermissionError("Reconciliation requires an existing durable checkpoint.")
+            checkpoint = DailyTaskCheckpoint(
+                self.boundary.maintenance_date.isoformat(), self.boundary.game_reset_id,
+                self.target.account_id, self.target.castle,
+            )
+        self._require_checkpoint(checkpoint, reconcilable_quest=reconcilable_quest)
+        return checkpoint
 
     @property
     def policy(self) -> DailyCapabilityPolicy:
@@ -121,10 +156,46 @@ class CoreMutationBoundary:
         """Require the canonical nonselecting preflight before executing a mutation."""
 
         self.authorize()
+        self._verify_active_castle_identity(runtime)
+
+    def _verify_active_castle_identity(self, runtime: CoreRuntime) -> None:
+        """Share the exact nonselecting identity proof for dispatch and reconciliation."""
+
         if runtime.preflight_active_castle_identity() != self.target.castle:
             raise PermissionError(
                 "The active castle does not match the authorized mutation target."
             )
+
+    def require_hero_reconciliation(self, operation_id: str) -> DailyTaskCheckpoint:
+        """Validate an existing receipt scope without granting authority for a new action."""
+
+        if self.policy.quest_id != DailyQuestId.HERO_HALL:
+            raise PermissionError("Only the exact Hero Hall scope supports this reconciliation.")
+        checkpoint = self.load_checkpoint(require_existing=True, reconcilable_quest=DailyQuestId.HERO_HALL)
+        HeroHallRecruitmentExecutor.require_reconciliation_intent(
+            checkpoint=checkpoint, operation_id=operation_id,
+        )
+        return checkpoint
+
+    def verify_hero_reconciliation_target(self, runtime: CoreRuntime, operation_id: str) -> None:
+        """Require durable authority for this old intent and a freshly proved target."""
+
+        self.require_hero_reconciliation(operation_id)
+        self._verify_active_castle_identity(runtime)
+
+    def reconcile_hero_hall(
+        self, *, runtime: CoreRuntime, observe: Callable[[str], Observation],
+        daily_survey: Callable[[], DailyReadOnlySurvey], checkpoint: DailyTaskCheckpoint,
+        operation_id: str,
+    ) -> JournaledMutationResult:
+        """Reconcile only the named durable Hero intent through its existing executor."""
+
+        self.require_hero_reconciliation(operation_id)
+        self._require_checkpoint(checkpoint, reconcilable_quest=DailyQuestId.HERO_HALL)
+        return HeroHallRecruitmentExecutor(
+            session=CoreHeroHallSession(runtime, observe, daily_survey),
+            dispatcher=JournaledMutationDispatcher(self.journal_store),
+        ).reconcile_existing(checkpoint=checkpoint, operation_id=operation_id)
 
     def run_daily_maintenance(
         self, *, session: DailyQuestSession, claim_executor: DailyRowClaimExecutor,

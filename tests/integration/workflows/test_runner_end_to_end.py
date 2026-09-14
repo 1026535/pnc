@@ -33,7 +33,6 @@ from pnc_automation.app.pnc.domain.observation import (
     SpatialObjectKind,
     SpatialSurfaceType,
 )
-from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict, ScreenDecision, ScreenEvidence
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
@@ -92,7 +91,7 @@ class RunnerEndToEndTests(unittest.TestCase):
                 ScriptStep(task=TaskId.LOGIN),
                 ScriptStep(task=TaskId.SELECT_CASTLE, castle=target_castle),
                 ScriptStep(task=TaskId.BUILDING_UPGRADE, params={"priority": ["castle", "institute"], "allow_speedups": False}),
-                ScriptStep(task=TaskId.RESEARCH, params={"priority": ["economy", "development"]}),
+                ScriptStep(task=TaskId.RESEARCH, params={"priority": ["development"]}),
                 ScriptStep(task=TaskId.GATHERING, params={"preferred_resources": ["food", "wood"], "max_parallel_marches": 2}),
                 ScriptStep(task=TaskId.CAMPAIGN, params={"enabled_modes": ["standard"]}),
             ),
@@ -216,46 +215,6 @@ class RunnerEndToEndTests(unittest.TestCase):
                 current_castle_name="Main",
             ),
             make_observation(
-                ScreenType.PNC_INSTITUTE,
-                visible_ids=(UiElementId.PNC_INSTITUTE_ECONOMY_BUTTON, UiElementId.PNC_INSTITUTE_DEVELOPMENT_BUTTON),
-            ),
-            make_observation(
-                ScreenType.PNC_RESEARCH_TREE,
-                visible_ids=(UiElementId.PNC_RESEARCH_START_BUTTON,),
-                list_entries=(
-                    make_entry(ListEntryKind.RESEARCH, title="Economy I", metadata={"category": "economy"}),
-                    make_entry(ListEntryKind.RESEARCH, title="Development I", metadata={"category": "development"}),
-                ),
-            ),
-            make_observation(ScreenType.PNC_RESEARCH_TREE, visible_ids=(UiElementId.PNC_RESEARCH_START_BUTTON,)),
-            make_observation(
-                ScreenType.PNC_RESEARCH_TREE,
-                decision=ScreenDecision(
-                    base_screen=ScreenType.PNC_RESEARCH_TREE,
-                    effective_screen=ScreenType.PNC_RESEARCH_TREE,
-                    guard=GuardVerdict.CLEAR,
-                    evidence=(
-                        ScreenEvidence(
-                            ScreenType.PNC_RESEARCH_TREE,
-                            "visual_anchor:research_tree_node_detail_active",
-                            layout_id="research_tree_development",
-                        ),
-                    ),
-                ),
-            ),
-            make_observation(
-                ScreenType.PNC_HOME_CITY,
-                visible_ids=(
-                    UiElementId.PNC_HOME_WORLD_SWITCH,
-                    UiElementId.PNC_BOTTOM_NAV_MORE,
-                    UiElementId.PNC_HOME_LORD_INFO_SHORTCUT,
-                    UiElementId.PNC_HOME_BUILD_BUTTON,
-                    UiElementId.PNC_HOME_RESEARCH_BUTTON,
-                    UiElementId.PNC_HOME_CAMPAIGN_ENTRY,
-                ),
-                current_castle_name="Main",
-            ),
-            make_observation(
                 ScreenType.PNC_WORLD_MAP,
                 visible_ids=(UiElementId.PNC_WORLD_HOME_NAV, UiElementId.PNC_WORLD_SEARCH_BUTTON),
                 spatial_surface=make_spatial_surface(
@@ -349,18 +308,17 @@ class RunnerEndToEndTests(unittest.TestCase):
             )
 
         self.assertEqual(raised.exception.details["selector_id"], UiElementId.PNC_GATHER_BUTTON)
-        # Earlier steps in the script are still allowed to complete.  The
-        # registry rejects the next unsupported selector after the proved
-        # research detail action has been dispatched.
+        # Earlier steps complete through their current owners. Research is
+        # delegated to the core; its mutation contract has separate coverage.
         self.assertEqual(fake_session.launches, 0)
-        self.assertEqual(core_step_executor.execute.call_count, 2)
+        self.assertEqual(core_step_executor.execute.call_count, 3)
         self.assertEqual(
             [call.kwargs["step"].task for call in core_step_executor.execute.call_args_list],
-            [TaskId.ENSURE_GAME_RUNNING, TaskId.SELECT_CASTLE],
+            [TaskId.ENSURE_GAME_RUNNING, TaskId.SELECT_CASTLE, TaskId.RESEARCH],
         )
         self.assertIn("user@example.com", fake_session.texts)
         self.assertIn("secret", fake_session.texts)
-        self.assertEqual(len(fake_session.taps), 11)
+        self.assertEqual(len(fake_session.taps), 7)
 
     def test_runner_dispatches_world_chat_task_to_typed_core_executor(self) -> None:
         """Routes the registered World Chat task without entering the legacy action loop."""

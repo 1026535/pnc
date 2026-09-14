@@ -17,3 +17,28 @@ The visual profiles independently identify the map, Chapter 10, and stage 10-3 l
 The saved frames prove no mode label or mode-specific eligibility. Producers therefore omit `mode`, locked nodes, unobserved stages, and any inferred battle-prep transition. The generic Campaign map entry selector remains unsupported until an independent producer is reviewed.
 
 **Confidence:** high for the three saved visual identities and the measured Chapter 10/stage 3 geometry; medium for mapping the visible labels to the recovered `CopyZones` source because the source build and saved transitions are separate evidence layers. **Remaining uncertainty:** current account progress, mode variants, disabled or locked state changes, server-side prerequisites, and the exact post-Challenge flow require separate evidence.
+
+## Formation and attack boundary inspected September 13
+
+**Client source verified, same packaged build:**
+`uis/copyzones/copyzonesfightwin.lua`,
+`CopyZonesFightWin:openHeroBattlePosWin`, opens
+`CommonSelectHeroBattlePosPanel` with the selected `passId` and a selection
+callback. That callback invokes `sendChanegeCmdFunc`, which checks current power,
+builds the hero positions and calls `CopyzonesSend.RequireAttack`. The request
+wrapper supplies the pass and heroes; `command.Attack` updates stage data and
+starts the battle from the response. Opening formation and requesting an attack
+are distinct client operations.
+
+This supports a bounded automation contract ending at independently recognized
+hero formation. It does not identify the current pixels of either Challenge
+control. The saved live sequence in the
+[capture findings](../../../reviewed_plans/PNC_NON_YOLO_CAPTURE_FINDINGS_20260913.md)
+separates stage 6-5, Hero Formation, battle and Victory; its formation frame has no
+current stage/mode/AP labels. Preserve prior stage identity as transition context,
+never as content observed on formation. The recorded 20 AP battle is one historic
+receipt, not a global cost or a reason to repeat a battle for a navigation port.
+
+**Confidence:** high for the inspected packaged client call boundary; current
+control recognition, mode/eligibility and the selected live route still need
+qualification. The later live build differs from the recovered package.

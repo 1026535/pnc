@@ -28,6 +28,11 @@ class _FakeApplicationRunner:
     task_cleanup_policies: list[BlueStacksSessionCleanupPolicy | None] = field(
         default_factory=list,
     )
+    research_calls: list[tuple[str, dict[str, object], object]] = field(default_factory=list)
+    research_cleanup_policies: list[BlueStacksSessionCleanupPolicy | None] = field(
+        default_factory=list,
+    )
+    research_result: object = field(default_factory=object)
     preparation_result: RunResult | None = None
     reservations: list["_FakeReservation"] = field(default_factory=list)
     script_runner: object = field(init=False)
@@ -83,6 +88,8 @@ class _FakeApplicationRunner:
     ) -> StepRunResult:
         """Records one direct task call and returns a synthetic success result."""
 
+        if task_id == TaskId.RESEARCH:
+            raise PermissionError("Research callers require an explicit CoreMutationBoundary.")
         self.task_calls.append((task_id, account_id, params))
         self.task_cleanup_policies.append(session_cleanup_policy)
         return StepRunResult(
@@ -91,3 +98,17 @@ class _FakeApplicationRunner:
             attempts=1,
             message="ok",
         )
+
+    def run_research(
+        self,
+        *,
+        account_id: str,
+        params: dict[str, object],
+        mutation_boundary: object,
+        session_cleanup_policy: BlueStacksSessionCleanupPolicy | None = None,
+    ) -> object:
+        """Records one typed Research call and returns its synthetic typed result."""
+
+        self.research_calls.append((account_id, params, mutation_boundary))
+        self.research_cleanup_policies.append(session_cleanup_policy)
+        return self.research_result
