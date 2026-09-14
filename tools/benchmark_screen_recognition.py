@@ -641,6 +641,7 @@ class _TimedEnricher:
         *,
         ocr_context: ObservationOcrContext,
         ocr_regions: Mapping[Any, Any],
+        layout_id: str | None = None,
     ) -> Any:
         value, elapsed = _timed(
             lambda: self._inner.enrich(
@@ -650,6 +651,7 @@ class _TimedEnricher:
                 request,
                 ocr_context=ocr_context,
                 ocr_regions=ocr_regions,
+                layout_id=layout_id,
             )
         )
         self._probe.content_seconds += elapsed / 1000.0

@@ -15,10 +15,12 @@ from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.observation_builder import (
     ObservationAdditions, ObservationEnricher,
+    allows_guarded_field_enrichment,
+    reconcile_visual_modal_guard,
 )
 from pnc_automation.app.pnc.vision.observation_diagnostics import ObservationDebugArtifactCollector
 from pnc_automation.app.pnc.vision.observation_provenance import bind_list_entry, bind_visible_elements
-from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
+from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier, partition_guard_evidence
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.app.pnc.vision.visual_screen_recognizer import (
     VisualScreenRecognizer,
@@ -73,6 +75,7 @@ class NavigationPerception:
         visual = self.recognizer.recognize(image)
         ocr_context = self.create_ocr_context(screenshot)
         ocr_context.validate_capture(image, screenshot.frame_ref)
+        ocr_context.require_bounded_regions()
         matched_profiles = set(visual.profile_ids)
         matched_screens = {item.screen_type for item in visual.evidence}
         research_detail_owned = (
@@ -112,13 +115,16 @@ class NavigationPerception:
                 else None
             ),
         )
-        evidence = tuple(visual.evidence) + tuple(interruption.screen_evidence)
+        interruption = reconcile_visual_modal_guard(visual, interruption)
+        evidence, background_evidence = partition_guard_evidence(
+            visual.evidence, interruption.screen_evidence,
+        )
         if not evidence and _is_near_black_frame(image):
             evidence = (ScreenEvidence(ScreenType.PNC_LOADING, "near_black_startup_frame"),)
         interrupted = bool(interruption.screen_evidence)
         decision = self.screen_classifier.decide(
-            {}, evidence=interruption.screen_evidence if interrupted else evidence,
-            background_evidence=visual.evidence if interrupted else (),
+            {}, evidence=evidence,
+            background_evidence=background_evidence,
             guard=interruption.guard_verdict,
             viewport_reviewed=is_reviewed_viewport(image.size),
         )
@@ -153,16 +159,21 @@ class NavigationPerception:
             frame_fingerprint=hashlib.sha256(image.tobytes()).hexdigest(),
             frame_ref=screenshot.frame_ref,
         )
-        if not include_content or interrupted or not decision.action_eligible:
-            return self._finish(screenshot, observation, ocr_context, visual.profile_ids)
         content_request = (
             ObservationRequest.chat_transcript_observation()
             if screen == ScreenType.PNC_CHAT
-            else ObservationRequest(ocr_screen_types=frozenset({screen}))
+            else ObservationRequest.source_screen_retry(screen)
         )
+        if (
+            not include_content
+            or not decision.action_eligible
+            or (interrupted and not allows_guarded_field_enrichment(content_request, interruption))
+        ):
+            return self._finish(screenshot, observation, ocr_context, visual.profile_ids)
         content = self.guard.enrich(
             image, screen, controls, content_request,
             ocr_context=ocr_context, ocr_regions={},
+            layout_id=decision.layout_id,
         )
         if any(item.screen_type != screen for item in content.screen_evidence):
             raise ValueError("Content parser contradicted independent screen identity.")
@@ -177,7 +188,7 @@ class NavigationPerception:
         # transition. Keep the existing typed content parsers during migration.
         observation = replace(
             observation,
-            visible_elements={**content_labels, **observation.visible_elements},
+            visible_elements={**observation.visible_elements, **content_labels},
             list_entries=tuple(
                 bind_list_entry(entry, frame_ref=screenshot.frame_ref, source_screen=screen,
                                      source_layout_id=decision.layout_id)
@@ -188,6 +199,8 @@ class NavigationPerception:
             current_castle_evidence=content.current_castle_evidence,
             mailbox_type=content.mailbox_type,
             mailbox_empty=content.mailbox_empty,
+            empty_mailboxes=content.empty_mailboxes,
+            profile_player_name=content.profile_player_name,
             text_field_states=content.text_field_states,
             available_march_slots=content.available_march_slots,
             active_chat_channel=content.active_chat_channel,

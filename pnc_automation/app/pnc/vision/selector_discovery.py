@@ -22,6 +22,8 @@ from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.core.text.normalization import normalize_ocr_text
 from pnc_automation.app.pnc.vision.observation_builder import CapturedObservation, ObservationBuilder
+from pnc_automation.app.pnc.vision.observation_diagnostics import recorded_ocr_result
+from pnc_automation.core.vision.image.models import Bounds
 from pnc_automation.core.vision.ocr.ocr_service import (
     ObservationOcrContext,
     OcrLine,
@@ -317,30 +319,47 @@ class SelectorDiscoveryAnalyzer:
         """Builds reviewed draft updates from selectors already visible in one live observation."""
 
         ocr_lines = None
-        if image is not None:
-            if ocr_context is None:
-                # Artifact-only callers may provide an image without a
-                # CapturedObservation. Bind a fresh context through the
-                # canonical builder owner rather than reaching into a
-                # selector or enricher backend.
+        self._validate_requested_catalog_entries(selector_ids=selector_ids, observation=observation)
+        if ocr_context is not None:
+            _validate_observation_ocr_context(
+                observation=observation,
+                image=image,
+                ocr_context=ocr_context,
+            )
+            ocr_lines = tuple(sorted(
+                recorded_ocr_result(ocr_context).lines,
+                key=lambda line: (line.bounds.y, line.bounds.x),
+            ))
+        elif image is not None:
+            if observation.image_size is not None and image.size != observation.image_size:
+                raise ValueError("Selector discovery used an observation from a different capture image.")
+            collection_bounds = self._collection_region_bounds(
+                observation=observation,
+                selector_ids=selector_ids,
+            )
+            if collection_bounds:
+                if observation.frame_ref is not None:
+                    raise ValueError("Frame-bound selector discovery requires its recorded OCR context.")
+                # Artifact-only callers have no recorded context. Bind a
+                # temporary context through the canonical builder owner, but
+                # execute only the observed row regions needed by the request.
                 synthetic_screenshot = CapturedScreenshot(
                     artifact=None,
                     image=image,
                     image_format="PNG",
                 )
                 ocr_context = self.observation_builder.create_ocr_context(synthetic_screenshot)
-                ocr_result = ocr_context.read_result(
-                    image,
-                    purpose=OcrReadPurpose.DEBUG,
-                    detail="selector_discovery_visible_drafts",
-                )
-            else:
-                ocr_result = ocr_context.read_result(
-                    image,
-                    purpose=OcrReadPurpose.DEBUG,
-                    detail="selector_discovery_visible_drafts",
-                )
-            ocr_lines = tuple(sorted(ocr_result.lines, key=lambda line: (line.bounds.y, line.bounds.x)))
+                for bounds in collection_bounds:
+                    ocr_context.read_result(
+                        image,
+                        bounds,
+                        purpose=OcrReadPurpose.DEBUG,
+                        detail="selector_discovery_visible_drafts",
+                    )
+                ocr_lines = tuple(sorted(
+                    recorded_ocr_result(ocr_context).lines,
+                    key=lambda line: (line.bounds.y, line.bounds.x),
+                ))
         drafts = [
             draft
             for selector_id in selector_ids
@@ -373,15 +392,19 @@ class SelectorDiscoveryAnalyzer:
         *,
         screenshot: CapturedScreenshot,
         observation: Observation,
-        ocr_context: ObservationOcrContext,
+        ocr_context: ObservationOcrContext | None,
     ) -> SelectorDiscoverySnapshot:
         """Builds one discovery snapshot from one screenshot and its already-built observation."""
 
-        ocr_result = ocr_context.read_result(
-            screenshot.image,
-            purpose=OcrReadPurpose.DEBUG,
-            detail="selector_discovery_snapshot",
+        _validate_captured_observation(
+            screenshot=screenshot,
+            observation=observation,
+            ocr_context=ocr_context,
         )
+        if ocr_context is None:
+            ocr_result = OcrResult(lines=(), words=())
+        else:
+            ocr_result = recorded_ocr_result(ocr_context)
         drafts = self._discover_snapshot_drafts(
             screenshot=screenshot,
             observation=observation,
@@ -396,6 +419,44 @@ class SelectorDiscoveryAnalyzer:
             ocr_lines=ocr_result.lines,
             draft_selectors=drafts,
         )
+
+    def _validate_requested_catalog_entries(
+        self,
+        *,
+        selector_ids: Sequence[UiElementId],
+        observation: Observation,
+    ) -> None:
+        """Rejects requested selector ids that are absent from the reviewed catalog."""
+
+        for selector_id in selector_ids:
+            if self._find_catalog_entry(selector_id.value) is None:
+                raise SelectorResolutionError(
+                    "Live selector staging requires a catalog-backed selector id.",
+                    selector_id=selector_id.value,
+                    source_screen=observation.screen_type.name,
+                )
+
+    def _collection_region_bounds(
+        self,
+        *,
+        observation: Observation,
+        selector_ids: Sequence[UiElementId],
+    ) -> tuple[Bounds, ...]:
+        """Returns distinct observed row bounds required by requested collection selectors."""
+
+        bounds: list[Bounds] = []
+        for selector_id in selector_ids:
+            rule = _find_collection_region_rule(
+                selector_id=selector_id,
+                screen_type=observation.screen_type,
+            )
+            if rule is None:
+                continue
+            row_element = observation.get(rule.row_selector_id)
+            if row_element is None or row_element.bounds in bounds:
+                continue
+            bounds.append(row_element.bounds)
+        return tuple(bounds)
 
     def _build_line_rule_drafts(
         self,
@@ -652,6 +713,41 @@ class SelectorDiscoveryAnalyzer:
             if selector.id == selector_id:
                 return selector
         return None
+
+
+def _validate_captured_observation(
+    *,
+    screenshot: CapturedScreenshot,
+    observation: Observation,
+    ocr_context: ObservationOcrContext | None,
+) -> None:
+    """Rejects discovery evidence that does not belong to the supplied capture."""
+
+    if ocr_context is not None:
+        ocr_context.validate_capture(screenshot.image, screenshot.frame_ref)
+    if observation.frame_ref != screenshot.frame_ref:
+        raise ValueError("Selector discovery used an observation from a different capture frame.")
+    if observation.image_size is not None and screenshot.image.size != observation.image_size:
+        raise ValueError("Selector discovery used an observation from a different capture image.")
+
+
+def _validate_observation_ocr_context(
+    *,
+    observation: Observation,
+    image: Image.Image | None,
+    ocr_context: ObservationOcrContext,
+) -> None:
+    """Rejects a context, image, or frame that is foreign to the observation."""
+
+    if image is not None:
+        ocr_context.validate_capture(image, ocr_context.frame_ref)
+        actual_image_size = image.size
+    else:
+        actual_image_size = ocr_context.image.size
+    if observation.frame_ref != ocr_context.frame_ref:
+        raise ValueError("Selector discovery used a context from a different capture frame.")
+    if observation.image_size is not None and actual_image_size != observation.image_size:
+        raise ValueError("Selector discovery used an observation from a different capture image.")
 
 
 def load_artifact_paths(*, artifact_paths: Sequence[Path] = (), artifact_directory: Path | None = None) -> tuple[Path, ...]:

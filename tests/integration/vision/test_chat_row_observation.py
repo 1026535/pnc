@@ -28,7 +28,8 @@ class ChatRowObservationTests(MailWorkflowFixtures, unittest.TestCase):
         """Builds visible chat sender entries so the chat-message profile route can stay inside shared flow planning."""
 
         observation = _build_observation(
-            request=ObservationRequest.full_runtime_default(),
+            request=ObservationRequest.chat_transcript_observation(),
+            accepted_screen=ScreenType.PNC_CHAT,
             lines=(
                 _ocr_line("Chat", x=250, y=40, width=120, height=24),
                 _ocr_line("Kingdom", x=180, y=96, width=120, height=24),
@@ -51,6 +52,7 @@ class ChatRowObservationTests(MailWorkflowFixtures, unittest.TestCase):
 
         observation = _build_observation(
             request=ObservationRequest.chat_transcript_observation(),
+            accepted_screen=ScreenType.PNC_CHAT,
             lines=(
                 _ocr_line("Chat", x=250, y=40, width=120, height=24),
                 _ocr_line("Kingdom", x=180, y=96, width=120, height=24),
@@ -74,6 +76,7 @@ class ChatRowObservationTests(MailWorkflowFixtures, unittest.TestCase):
 
         observation = _build_observation(
             request=ObservationRequest.chat_transcript_observation(),
+            accepted_screen=ScreenType.PNC_CHAT,
             lines=(
                 _ocr_line("Chat", x=250, y=40, width=120, height=24),
                 _ocr_line("Kingdom", x=180, y=96, width=120, height=24),
@@ -93,6 +96,7 @@ class ChatRowObservationTests(MailWorkflowFixtures, unittest.TestCase):
 
         observation = _build_observation(
             request=ObservationRequest.chat_transcript_observation(),
+            accepted_screen=ScreenType.PNC_CHAT,
             lines=(
                 _ocr_line("Chat", x=250, y=40, width=120, height=24),
                 _ocr_line("Kingdom", x=180, y=96, width=120, height=24),
@@ -112,6 +116,7 @@ class ChatRowObservationTests(MailWorkflowFixtures, unittest.TestCase):
 
         observation = _build_observation(
             request=ObservationRequest.chat_transcript_observation(),
+            accepted_screen=ScreenType.PNC_CHAT,
             lines=(
                 _ocr_line("Chat", x=250, y=40, width=120, height=24),
                 _ocr_line("Kingdom", x=180, y=96, width=120, height=24),
@@ -133,6 +138,7 @@ class ChatRowObservationTests(MailWorkflowFixtures, unittest.TestCase):
 
         observation = _build_observation(
             request=ObservationRequest.chat_transcript_observation(),
+            accepted_screen=ScreenType.PNC_CHAT,
             lines=(
                 _ocr_line("Chat", x=250, y=40, width=120, height=24),
                 _ocr_line("Kingdom", x=180, y=96, width=120, height=24),
@@ -150,6 +156,7 @@ class ChatRowObservationTests(MailWorkflowFixtures, unittest.TestCase):
 
         observation = _build_observation(
             request=ObservationRequest.chat_transcript_observation(),
+            accepted_screen=ScreenType.PNC_CHAT,
             lines=(
                 _ocr_line("Chat", x=250, y=40, width=120, height=24),
                 _ocr_line("Kingdom", x=180, y=96, width=120, height=24),
@@ -171,6 +178,7 @@ class ChatRowObservationTests(MailWorkflowFixtures, unittest.TestCase):
 
         observation = _build_observation(
             request=ObservationRequest.chat_transcript_observation(),
+            accepted_screen=ScreenType.PNC_CHAT,
             lines=(
                 _ocr_line("Chat", x=250, y=40, width=120, height=24),
                 _ocr_line("Kingdom", x=180, y=96, width=120, height=24),
@@ -192,6 +200,7 @@ class ChatRowObservationTests(MailWorkflowFixtures, unittest.TestCase):
 
         observation = _build_observation(
             request=ObservationRequest.chat_transcript_observation(),
+            accepted_screen=ScreenType.PNC_CHAT,
             lines=(
                 _ocr_line("Chat", x=250, y=40, width=120, height=24),
                 _ocr_line("Kingdom", x=180, y=96, width=120, height=24),
@@ -213,6 +222,7 @@ class ChatRowObservationTests(MailWorkflowFixtures, unittest.TestCase):
 
         observation = _build_observation(
             request=ObservationRequest.chat_transcript_observation(),
+            accepted_screen=ScreenType.PNC_CHAT,
             lines=(
                 _ocr_line("Chat", x=250, y=40, width=120, height=24),
                 _ocr_line("Kingdom", x=180, y=96, width=120, height=24),
@@ -235,6 +245,7 @@ class ChatRowObservationTests(MailWorkflowFixtures, unittest.TestCase):
 
         observation = _build_observation(
             request=ObservationRequest.chat_transcript_observation(),
+            accepted_screen=ScreenType.PNC_CHAT,
             lines=(
                 _ocr_line("Chat", x=250, y=40, width=120, height=24),
                 _ocr_line("Kingdom", x=180, y=96, width=120, height=24),
@@ -269,6 +280,7 @@ class ChatRowObservationTests(MailWorkflowFixtures, unittest.TestCase):
         )
         observation = _build_observation(
             request=ObservationRequest.chat_transcript_observation(),
+            accepted_screen=ScreenType.PNC_CHAT,
             image=image,
             image_size=image.size,
             lines=(

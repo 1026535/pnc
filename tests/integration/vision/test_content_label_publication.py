@@ -31,6 +31,7 @@ from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateM
 from tests.support.automation.session import FakeSession
 from tests.support.core.logging import build_logger
 from tests.support.paths import TEST_DATA_ROOT
+from tests.support.pnc.capture_vision.modal_overlay import with_update_modal
 from tests.support.pnc.capture_vision.encode_png import _encode_png
 from tests.support.pnc.capture_vision.fake_ocr_service import _FakeOcrService
 from tests.support.pnc.capture_vision.fake_screenshot_session import make_captured_frame
@@ -195,7 +196,7 @@ class ContentLabelPublicationTests(unittest.TestCase):
         )
         _registry, _builder, blocked_perception = _production_components(blocked_lines)
         blocked = blocked_perception.build(
-            _capture(image, session_id="content-label-blocked"),
+            _capture(with_update_modal(image), session_id="content-label-blocked"),
             include_content=True,
         )
         self.assertEqual(blocked.screen_type, ScreenType.PNC_POPUP)

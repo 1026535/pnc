@@ -16,6 +16,26 @@ from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 
 
+def partition_guard_evidence(
+    visual_evidence: Sequence[ScreenEvidence],
+    guard_evidence: Sequence[ScreenEvidence],
+) -> tuple[tuple[ScreenEvidence, ...], tuple[ScreenEvidence, ...]]:
+    """Separate a proved foreground guard from visible background anchors.
+
+    A dialog can cover another dialog. Retain same-screen visual layout proof,
+    but let only the foreground guard compete for actionable surface ownership.
+    Conflicts within the guard evidence are preserved for the classifier.
+    """
+
+    if not guard_evidence:
+        return tuple(visual_evidence), ()
+    foreground_screens = {item.screen_type for item in guard_evidence}
+    return (
+        (*guard_evidence, *(item for item in visual_evidence if item.screen_type in foreground_screens)),
+        tuple(item for item in visual_evidence if item.screen_type not in foreground_screens),
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class ClassificationRule:
     """Defines anchor selectors that imply one screen type."""

@@ -35,16 +35,25 @@ from tests.support.pnc.capture_vision.fake_ocr_service import _FakeOcrService
 from tests.support.pnc.capture_vision.encode_png import _encode_png
 from tests.support.pnc.capture_vision.fake_screenshot_session import make_captured_frame
 from tests.support.pnc.capture_vision.ocr_line import _ocr_line
+from tests.support.pnc.capture_vision.modal_overlay import (
+    update_modal_lines,
+    with_update_modal,
+)
 
 
 FIXTURE = TEST_DATA_ROOT / "screen_recognition" / "research_queue_core.png"
 
 
-def _capture(*, with_provenance: bool = False) -> CapturedScreenshot:
+def _capture(
+    image: Image.Image | None = None,
+    *,
+    with_provenance: bool = False,
+) -> CapturedScreenshot:
     """Load the reviewed Research Queue frame into an ephemeral capture."""
 
-    with Image.open(FIXTURE) as source:
-        image = source.convert("RGB")
+    if image is None:
+        with Image.open(FIXTURE) as source:
+            image = source.convert("RGB")
     frame = make_captured_frame(_encode_png(image)) if with_provenance else None
     return CapturedScreenshot(
         artifact=None,
@@ -167,20 +176,17 @@ class ResearchQueueNavigationTests(unittest.TestCase):
     def test_update_popup_above_queue_stays_blocking_and_hides_queue_controls(self) -> None:
         """Keeps an exact update modal as the foreground owner over Queue evidence."""
 
-        lines = _queue_lines() + (
-            _ocr_line(
-                "New version detected. Tap Confirm to update.",
-                x=58,
-                y=380,
-                width=420,
-                height=28,
-            ),
-            _ocr_line("Confirm", x=221, y=531, width=90, height=27),
-        )
-        observation = _perception(_FakeOcrService(lines=lines)).build(_capture())
+        image = with_update_modal(_capture().image)
+        # The actual panel covers the queue-row anchor. The popup guard still
+        # owns the frame from its bounded modal read, so queue OCR must not be
+        # reused as a second competing guard identity.
+        lines = update_modal_lines(image.size)
+        observation = _perception(_FakeOcrService(lines=lines)).build(_capture(image))
 
         self.assertEqual(ScreenType.PNC_POPUP, observation.screen_type)
-        self.assertEqual(ScreenType.PNC_RESEARCH_QUEUE, observation.decision.base_screen)
+        # The captured panel covers the queue-row identity anchor, so the
+        # foreground guard owns the frame without guessing its background.
+        self.assertEqual(ScreenType.UNKNOWN, observation.decision.base_screen)
         self.assertTrue(observation.blocking_popup)
         self.assertEqual(GuardVerdict.BLOCKED, observation.decision.guard)
         self.assertTrue(observation.has(UiElementId.PNC_UPDATE_CONFIRM_BUTTON))

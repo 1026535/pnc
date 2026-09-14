@@ -16,6 +16,13 @@ from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.navigation_perception import NavigationPerception
 from pnc_automation.app.pnc.vision.observation_builder import ImageSelectorEngine, ObservationBuilder
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
+from pnc_automation.app.pnc.vision.campaign_ocr_regions import (
+    CAMPAIGN_CHAPTER_STAGE_THREE_ROW,
+    CAMPAIGN_CHAPTER_TITLE_REGION,
+    CAMPAIGN_MAP_CHAPTER_ROW,
+    CAMPAIGN_REFERENCE_SIZE,
+    scale_campaign_bounds,
+)
 from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservationEnricher
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
 from pnc_automation.app.pnc.vision.selector_interaction_kind import SelectorInteractionKind
@@ -23,19 +30,21 @@ from pnc_automation.app.pnc.vision.selectors import DetectionKind, build_default
 from pnc_automation.app.pnc.vision.visual_screen_recognizer import load_visual_screen_recognizer
 from pnc_automation.core.infra.capture.screenshot_service import CapturedScreenshot
 from pnc_automation.core.vision.image.models import Bounds
-from pnc_automation.core.vision.ocr.ocr_service import ObservationOcrContext, OcrLine
+from pnc_automation.core.vision.ocr.ocr_service import ObservationOcrContext, OcrLine, OcrResult
 from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
 
 from tests.support.paths import TEST_DATA_ROOT
 from tests.support.pnc.capture_vision.encode_png import _encode_png
 from tests.support.pnc.capture_vision.fake_ocr_service import _FakeOcrService
 from tests.support.pnc.capture_vision.fake_screenshot_session import make_captured_frame
+from tests.support.pnc.capture_vision.modal_overlay import (
+    update_modal_lines,
+    with_update_modal,
+)
 from tests.support.pnc.capture_vision.recording_ocr_service import _RecordingOcrService
 
 
 FIXTURES = TEST_DATA_ROOT / "screen_recognition"
-CAMPAIGN_CHAPTER_ROW = Bounds(194, 454, 151, 50)
-CAMPAIGN_STAGE_THREE_ROW = Bounds(293, 576, 59, 74)
 CAMPAIGN_CHALLENGE_BOX = Bounds(178, 643, 184, 54)
 
 
@@ -91,8 +100,109 @@ def _navigation_perception(ocr_lines: tuple[OcrLine, ...] = ()) -> NavigationPer
     )
 
 
+class _CampaignCropOcrService:
+    """Honors requested regions while retaining every backend crop for assertions."""
+
+    def __init__(self, lines: tuple[OcrLine, ...]) -> None:
+        """Initialize one fixture-backed OCR response set."""
+
+        self.lines = lines
+        self.regions: list[Bounds | None] = []
+
+    def read_result(self, image: Image.Image, region: Bounds | None = None) -> OcrResult:
+        """Return only lines wholly contained by the requested native region."""
+
+        self.regions.append(region)
+        if region is None:
+            return OcrResult(lines=self.lines, words=())
+        lines = tuple(line for line in self.lines if region.contains_bounds(line.bounds))
+        return OcrResult(lines=lines, words=())
+
+    def read_lines(self, image: Image.Image, region: Bounds | None = None) -> tuple[OcrLine, ...]:
+        """Return crop-filtered lines through the backend protocol."""
+
+        return self.read_result(image, region).lines
+
+    def read_text(self, image: Image.Image, region: Bounds) -> str:
+        """Return newline-joined crop-filtered text through the backend protocol."""
+
+        return "\n".join(line.text for line in self.read_lines(image, region))
+
+
+def _builder_with_backend(ocr_service: _CampaignCropOcrService) -> ObservationBuilder:
+    """Wire the production builder to one crop-aware OCR backend."""
+
+    registry = build_default_selector_registry()
+    matcher = OpenCvTemplateMatcher()
+    return ObservationBuilder(
+        selector_registry=registry,
+        selector_engine=ImageSelectorEngine(matcher),
+        screen_classifier=ScreenClassifier(),
+        enricher=PncObservationEnricher(selector_registry=registry),
+        ocr_service=ocr_service,
+        visual_recognizer=load_visual_screen_recognizer(matcher=matcher),
+    )
+
+
+def _navigation_perception_with_backend(ocr_service: _CampaignCropOcrService) -> NavigationPerception:
+    """Wire replacement perception to one crop-aware OCR backend."""
+
+    registry = build_default_selector_registry()
+    return NavigationPerception(
+        load_visual_screen_recognizer(),
+        PncObservationEnricher(selector_registry=registry),
+        ScreenClassifier(),
+        lambda capture: ObservationOcrContext(
+            capture.image,
+            ocr_service,
+            capture.frame_ref,
+            "campaign-visual-test",
+        ),
+    )
+
+
 class CampaignVisualProfileTests(unittest.TestCase):
     """Require campaign identity and controls to remain evidence-backed and scoped."""
+
+    def test_stage_content_request_preserves_controls_without_unused_body_ocr(self) -> None:
+        """The captured stage needs foreground guarding, not an unused body scan."""
+        capture = _capture(_image("campaign_stage_10_3.png"))
+        for path in ("builder", "navigation"):
+            with self.subTest(path=path):
+                backend = _CampaignCropOcrService(())
+                observation = (
+                    _builder_with_backend(backend).build(
+                        capture, request=ObservationRequest.campaign_map_follow_up()
+                    )
+                    if path == "builder"
+                    else _navigation_perception_with_backend(backend).build(
+                        capture, include_content=True
+                    )
+                )
+                self.assertEqual(observation.screen_type, ScreenType.PNC_CAMPAIGN_STAGE)
+                for selector in (
+                    UiElementId.PNC_CAMPAIGN_BATTLE_BUTTON,
+                    UiElementId.PNC_CAMPAIGN_CLOSE_BUTTON,
+                ):
+                    self.assertTrue(observation.has(selector))
+                    self.assertEqual(observation.visible_elements[selector].frame_ref, capture.frame_ref)
+                self.assertFalse(observation.list_entries)
+                self.assertEqual(backend.regions, [Bounds(16, 240, 508, 480)])
+
+    def test_campaign_ocr_regions_scale_reference_geometry(self) -> None:
+        """Scale the reviewed Campaign regions without changing their native reference geometry."""
+
+        self.assertEqual(CAMPAIGN_REFERENCE_SIZE, (540, 960))
+        self.assertEqual(
+            scale_campaign_bounds(CAMPAIGN_MAP_CHAPTER_ROW, (900, 1600)),
+            Bounds(323, 757, 252, 83),
+        )
+        self.assertEqual(
+            scale_campaign_bounds(CAMPAIGN_CHAPTER_TITLE_REGION, CAMPAIGN_REFERENCE_SIZE),
+            CAMPAIGN_CHAPTER_TITLE_REGION,
+        )
+        with self.assertRaisesRegex(ValueError, "positive image dimensions"):
+            scale_campaign_bounds(CAMPAIGN_MAP_CHAPTER_ROW, (0, 960))
 
     def test_benchmark_wrapper_preserves_owned_detail_close(self) -> None:
         """Timing instrumentation must retain the production guard contract."""
@@ -241,9 +351,9 @@ class CampaignVisualProfileTests(unittest.TestCase):
         self.assertEqual(chapter.title_text, "10 Grandia Ruins")
         self.assertEqual(chapter.metadata, {"chapter_number": 10})
         self.assertNotIn("mode", chapter.metadata)
-        self.assertEqual(chapter.bounds, CAMPAIGN_CHAPTER_ROW)
-        self.assertEqual(chapter.action_bounds, CAMPAIGN_CHAPTER_ROW)
-        self.assertEqual(chapter.action_point, CAMPAIGN_CHAPTER_ROW.center())
+        self.assertEqual(chapter.bounds, CAMPAIGN_MAP_CHAPTER_ROW)
+        self.assertEqual(chapter.action_bounds, CAMPAIGN_MAP_CHAPTER_ROW)
+        self.assertEqual(chapter.action_point, CAMPAIGN_MAP_CHAPTER_ROW.center())
         self.assertEqual(chapter.source_screen, ScreenType.PNC_CAMPAIGN_MAP)
         self.assertEqual(chapter.source_layout_id, "campaign_map")
         self.assertEqual(chapter.frame_ref, map_observation.frame_ref)
@@ -261,9 +371,9 @@ class CampaignVisualProfileTests(unittest.TestCase):
         self.assertEqual(stage.title_text, "3")
         self.assertEqual(stage.metadata, {"chapter_number": 10, "stage_number": 3})
         self.assertNotIn("mode", stage.metadata)
-        self.assertEqual(stage.bounds, CAMPAIGN_STAGE_THREE_ROW)
-        self.assertEqual(stage.action_bounds, CAMPAIGN_STAGE_THREE_ROW)
-        self.assertEqual(stage.action_point, CAMPAIGN_STAGE_THREE_ROW.center())
+        self.assertEqual(stage.bounds, CAMPAIGN_CHAPTER_STAGE_THREE_ROW)
+        self.assertEqual(stage.action_bounds, CAMPAIGN_CHAPTER_STAGE_THREE_ROW)
+        self.assertEqual(stage.action_point, CAMPAIGN_CHAPTER_STAGE_THREE_ROW.center())
         self.assertEqual(stage.source_screen, ScreenType.PNC_CAMPAIGN_CHAPTER)
         self.assertEqual(stage.source_layout_id, "campaign_chapter_10")
         self.assertEqual(stage.frame_ref, chapter_observation.frame_ref)
@@ -273,6 +383,89 @@ class CampaignVisualProfileTests(unittest.TestCase):
         self.assertEqual(chapter_control.source_screen, ScreenType.PNC_CAMPAIGN_CHAPTER)
         self.assertEqual(chapter_control.source_layout_id, "campaign_chapter_10")
         self.assertEqual(chapter_control.frame_ref, chapter_observation.frame_ref)
+
+    def test_campaign_paths_use_bounded_ocr_and_retain_native_rows(self) -> None:
+        """Both observation paths keep Campaign rows while using only their semantic OCR crops."""
+
+        cases = (
+            (
+                "campaign_map.png",
+                (
+                    OcrLine("10", Bounds(205, 473, 22, 14), 1.0),
+                    OcrLine("Grandia Ruins", Bounds(236, 472, 106, 17), 1.0),
+                ),
+                ScreenType.PNC_CAMPAIGN_MAP,
+                ListEntryKind.CAMPAIGN_CHAPTER,
+                CAMPAIGN_MAP_CHAPTER_ROW,
+                "campaign_map",
+            ),
+            (
+                "campaign_chapter_10.png",
+                (OcrLine("Ch.10 Grandia Ruins", Bounds(230, 55, 295, 30), 1.0),),
+                ScreenType.PNC_CAMPAIGN_CHAPTER,
+                ListEntryKind.CAMPAIGN_STAGE,
+                CAMPAIGN_CHAPTER_STAGE_THREE_ROW,
+                "campaign_chapter_10",
+            ),
+        )
+        for name, lines, expected_screen, entry_kind, expected_row, layout_id in cases:
+            with self.subTest(path="builder", name=name):
+                backend = _CampaignCropOcrService(lines)
+                builder = _builder_with_backend(backend)
+                capture = _capture(_image(name))
+                context = ObservationOcrContext(
+                    capture.image,
+                    backend,
+                    capture.frame_ref,
+                    "campaign-visual-test",
+                )
+                observation = builder.build(
+                    capture,
+                    request=ObservationRequest.campaign_map_follow_up(),
+                    ocr_context=context,
+                )
+                self.assertEqual(observation.screen_type, expected_screen)
+                entries = observation.entries(entry_kind)
+                self.assertEqual(len(entries), 1)
+                entry = entries[0]
+                self.assertEqual(entry.bounds, expected_row)
+                self.assertEqual(entry.action_bounds, expected_row)
+                self.assertEqual(entry.source_screen, expected_screen)
+                self.assertEqual(entry.source_layout_id, layout_id)
+                self.assertEqual(entry.frame_ref, capture.frame_ref)
+                self.assertTrue(backend.regions)
+                self.assertTrue(all(region is not None for region in backend.regions))
+                expected_ocr_region = (
+                    CAMPAIGN_MAP_CHAPTER_ROW
+                    if expected_screen is ScreenType.PNC_CAMPAIGN_MAP
+                    else CAMPAIGN_CHAPTER_TITLE_REGION
+                )
+                self.assertIn(expected_ocr_region, backend.regions)
+
+            with self.subTest(path="navigation", name=name):
+                backend = _CampaignCropOcrService(lines)
+                capture = _capture(_image(name))
+                observation = _navigation_perception_with_backend(backend).build(
+                    capture,
+                    include_content=True,
+                )
+                self.assertEqual(observation.screen_type, expected_screen)
+                entries = observation.entries(entry_kind)
+                self.assertEqual(len(entries), 1)
+                entry = entries[0]
+                self.assertEqual(entry.bounds, expected_row)
+                self.assertEqual(entry.action_bounds, expected_row)
+                self.assertEqual(entry.source_screen, expected_screen)
+                self.assertEqual(entry.source_layout_id, layout_id)
+                self.assertEqual(entry.frame_ref, capture.frame_ref)
+                self.assertTrue(backend.regions)
+                self.assertTrue(all(region is not None for region in backend.regions))
+                expected_ocr_region = (
+                    CAMPAIGN_MAP_CHAPTER_ROW
+                    if expected_screen is ScreenType.PNC_CAMPAIGN_MAP
+                    else CAMPAIGN_CHAPTER_TITLE_REGION
+                )
+                self.assertIn(expected_ocr_region, backend.regions)
 
     def test_campaign_chapter_is_in_the_narrow_and_full_runtime_ocr_scopes(self) -> None:
         follow_up = ObservationRequest.campaign_map_follow_up()
@@ -383,11 +576,9 @@ class CampaignVisualProfileTests(unittest.TestCase):
         self.assertFalse(foreign_stage_content.entries(ListEntryKind.CAMPAIGN_STAGE))
 
     def test_campaign_blocking_overlay_suppresses_background_controls_and_rows(self) -> None:
-        popup_lines = (
-            OcrLine("New version detected. Tap Confirm to update.", Bounds(58, 380, 420, 28), 1.0),
-            OcrLine("Confirm", Bounds(221, 531, 90, 27), 1.0),
-        )
-        stage_capture = _capture(_image("campaign_stage_10_3.png"))
+        image = with_update_modal(_image("campaign_stage_10_3.png"))
+        popup_lines = update_modal_lines(image.size)
+        stage_capture = _capture(image)
         blocked_builder = _builder(popup_lines).build(
             stage_capture,
             request=ObservationRequest.campaign_map_follow_up(),
