@@ -9,8 +9,18 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from tools.test_selection.contexts import add_contexts, fingerprint, seed_contexts
-from tools.test_selection.models import POLICY_VERSION, SelectionPlan, inventory
+from tools.test_selection.contexts import (
+    COLLECTION_CONTEXT,
+    add_contexts,
+    fingerprint,
+    seed_contexts,
+)
+from tools.test_selection.models import (
+    COVERAGE_SELECTED_TIERS,
+    POLICY_VERSION,
+    SelectionPlan,
+    inventory,
+)
 from tools.test_selection.reporting import write_json
 from tests.unit.test_harness.test_reporting import run_cases
 
@@ -210,6 +220,73 @@ class ContextSelectionTests(unittest.TestCase):
         add_contexts(plan, self.path, self.sources, self.tests)
         self.assertEqual(plan.reasons, previous)
         self.assertEqual(plan.fallbacks, [])
+
+    def test_high_level_filter_keeps_units_static_and_adds_covered_feature_tests(self) -> None:
+        tests = inventory([
+            "tests/unit/alpha/test_alpha.py",
+            "tests/unit/beta/test_beta.py",
+            "tests/contract/api/test_api.py",
+            "tests/integration/workflows/test_feature_end_to_end.py",
+            "tests/architecture/test_layers.py",
+        ])
+        modules = {test.tier: test.module for test in tests if test.tier != "unit"}
+        unit_modules = [test.module for test in tests if test.tier == "unit"]
+        seed = {
+            "version": POLICY_VERSION,
+            "head": "base-sha",
+            "fingerprint": fingerprint(self.sources),
+            "environment": self.env,
+            "inventory": sorted(test.module for test in tests),
+            "owners": {
+                "pnc_automation/alpha.py": sorted(test.module for test in tests),
+            },
+        }
+        write_json(self.path, seed)
+        plan = SelectionPlan(
+            "affected", "base-sha", "candidate-sha", ["pnc_automation/alpha.py"]
+        )
+        plan.add(unit_modules[0], "component owner")
+
+        add_contexts(
+            plan,
+            self.path,
+            self.sources,
+            tests,
+            tiers=COVERAGE_SELECTED_TIERS,
+        )
+
+        self.assertEqual(
+            set(plan.reasons),
+            {unit_modules[0], modules["contract"], modules["integration"]},
+        )
+        self.assertNotIn(unit_modules[1], plan.reasons)
+        self.assertNotIn(modules["architecture"], plan.reasons)
+
+    def test_collection_coverage_does_not_claim_high_level_ownership(self) -> None:
+        source = str(self.root / "pnc_automation" / "alpha.py")
+        data = Mock()
+        data.measured_files.return_value = [source]
+        data.contexts_by_lineno.return_value = {
+            1: [COLLECTION_CONTEXT],
+            2: ["tests.unit.beta.test_beta.Case.test_ok"],
+        }
+        coverage = Mock()
+        coverage.get_data.return_value = data
+
+        seed_contexts(
+            self.path,
+            coverage,
+            self.root,
+            self.sources,
+            self.tests,
+            "base-sha",
+        )
+
+        document = json.loads(self.path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            document["owners"]["pnc_automation/alpha.py"],
+            ["tests.unit.beta.test_beta"],
+        )
 
     def test_seed_round_trip_attributes_shared_fixtures_to_all_modules(self) -> None:
         shared = str(self.root / "pnc_automation" / "shared.py")

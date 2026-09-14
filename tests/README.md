@@ -45,7 +45,7 @@ missing defaults skip without reading machine-local fixture configuration.
 # Full measurement with opt-in per-test contexts and empirical seed publication.
 .venv/Scripts/python.exe tools/run_tests.py measure --contexts --csv .test-impact/measurement-timings.csv
 
-# Optional context evidence can add tests to the static selection.
+# Hybrid selection: component-owned units plus covered contract/integration tests.
 .venv/Scripts/python.exe tools/run_tests.py affected --base origin/main --contexts --explain
 
 # Direct unittest execution for one isolated regression package.
@@ -84,10 +84,14 @@ the comparison revision; when omitted the runner attempts its upstream merge
 base. Local tracked and untracked changes participate in selection. Use an
 explicit base SHA for reproducible CI evidence.
 
-For code changes the runner adds mandatory contract and architecture modules.
-Only unchanged or explicitly documented documentation-only changes may select
-no tests. Unknown groups and unexpectedly empty collection are errors.
-`--dry-run` proves selection only and produces no execution result.
+Without `--contexts`, code changes add mandatory contract and architecture
+modules. With `--contexts`, low-level unit modules retain directory-derived
+component ownership, architecture checks remain mandatory, and contract plus
+integration modules (including end-to-end workflow cases) are selected from
+the coverage seed. A directly changed test module always runs. Only unchanged
+or explicitly documented documentation-only changes may select no tests.
+Unknown groups and unexpectedly empty collection are errors. `--dry-run`
+proves selection only and produces no execution result.
 
 Selection broadens to the full portable suite when it cannot establish safe
 ownership: shared test infrastructure, packaging/dependencies, public contract
@@ -99,26 +103,33 @@ affected success is fast feedback and cannot replace the pre-merge full check.
 
 `measure` always runs the full portable inventory and writes branch coverage and
 timing evidence. It does not switch per-test Coverage contexts or manipulate
-`.test-impact/contexts.json`. `measure --contexts` additionally switches
-contexts and writes `.test-impact/contexts.json` only after a successful,
-complete run; stale or incomplete context-learning state is removed.
-Dynamic test contexts begin before per-test setup and reset after cleanup;
-unattributed import/class/module-fixture execution belongs conservatively to
-every module. With `--contexts`, observed dependencies are unioned with the
-static selection and mandatory guards; they never remove tests. Missing,
-corrupt, stale, or incompatible seeds force a full run. Compatibility requires
-the base SHA, Python-source fingerprint, policy version, complete test module
-inventory, Python/platform, and installed package versions to match. These
-checks deliberately make evidence from a different environment ineligible.
-Runtime observations do not establish dependencies on unexecuted branches or
-non-Python files. Resource ownership and full fallbacks still apply.
+`.test-impact/contexts.json`. `measure --contexts` additionally records which
+test module executes each production file and writes `.test-impact/contexts.json`
+only after a successful, complete run; stale or incomplete context-learning
+state is removed. Test collection uses a separate context and does not make an
+imported production module appear covered by every feature test. Dynamic test
+contexts begin before per-test setup and reset after cleanup; unattributed
+class/module-fixture execution remains conservatively owned by every module.
 
-The context store is generated evidence, not a trusted shared CI cache. PR and
-ordinary local runs do not restore or publish context seeds; the nightly
-`measure --contexts` job publishes its empirical seed alongside the other
-measurement artifacts. Use separate output paths for independent concurrent
-runs; atomic replacement prevents partial files but does not combine competing
-reports.
+For `affected --contexts`, coverage selects only contract and integration
+modules. It does not add unrelated unit modules: low-level units continue to run
+by component ownership. Architecture checks remain static because they inspect
+source rather than execute it. Explicit non-Python resource ownership, a
+directly changed test, and full-suite safety fallbacks also remain authoritative.
+Missing, corrupt, stale, or incompatible seeds force a full run. Compatibility
+requires the base SHA, Python-source fingerprint, policy version, complete test
+module inventory, Python/platform, and installed package versions to match.
+Runtime observations do not establish dependencies on unexecuted branches or
+non-Python files.
+
+The context store is generated evidence, not release evidence. Pushes to `main`
+and nightly runs create it from a successful full measurement and save it under
+an exact commit-SHA cache key. Pull requests restore only the key for their base
+SHA; the runner independently revalidates every provenance field and falls back
+to the full suite on a cache miss or mismatch. Pull requests never publish a
+seed. Ordinary local runs use their local `.test-impact/contexts.json`. Use
+separate output paths for independent concurrent runs; atomic replacement
+prevents partial files but does not combine competing reports.
 
 ## Evidence and exit status
 
@@ -150,12 +161,12 @@ selection), `1` for test failures/errors, and `2` for runner/configuration error
 ## CI and the external merge gate
 
 `.github/workflows/tests.yml` uses hosted Windows and Python 3.13. It has no path
-filters. PR events run `affected` against the event's base SHA on GitHub's merge
-candidate, with mandatory guards owned by the runner. Superseded PR runs cancel.
-Merge groups, pushes to `main`, and manual dispatches run `full`. Nightly runs
-at 07:23 UTC run `measure --contexts` over the full portable inventory for
-branch coverage, timing evidence, and the empirical context map. Before
-measuring, the nightly job records a separate
+filters. PR events restore the exact-base coverage map and run `affected
+--contexts` on GitHub's merge candidate. Superseded PR runs cancel. A missing or
+invalid map makes the selector run the full suite. Pushes to `main` and nightly
+runs execute `measure --contexts` over the full portable inventory and publish
+the trusted SHA-keyed map. Merge groups and manual dispatches run `full`.
+Before its measurement, the nightly job records a separate
 `affected --base HEAD^ --dry-run` plan in `.test-impact/audit-selection.json`.
 Recording that plan is informational: a failure is visible but does not suppress
 the independent full measurement. The full measurement's exit status remains

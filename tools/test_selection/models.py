@@ -5,8 +5,9 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from pathlib import PurePosixPath
 
-POLICY_VERSION = 1
+POLICY_VERSION = 2
 TIERS = ("unit", "contract", "integration", "architecture")
+COVERAGE_SELECTED_TIERS = frozenset({"contract", "integration"})
 
 
 @dataclass(frozen=True)

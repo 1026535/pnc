@@ -19,9 +19,14 @@ if __package__ in {None, ""}:
     from _script_bootstrap import ensure_repo_root_on_path
     ensure_repo_root_on_path()
 
-from tools.test_selection.contexts import add_contexts, fingerprint, seed_contexts
+from tools.test_selection.contexts import (
+    COLLECTION_CONTEXT,
+    add_contexts,
+    fingerprint,
+    seed_contexts,
+)
 from tools.test_selection.git_changes import base_revision, changed_paths, python_snapshot, resolve, working_paths
-from tools.test_selection.models import SelectionPlan, inventory
+from tools.test_selection.models import COVERAGE_SELECTED_TIERS, SelectionPlan, inventory
 from tools.test_selection.ownership import group_matches, load_rules
 from tools.test_selection.planner import affected_plan
 from tools.test_selection.reporting import TimingResult, describe_tests, environment, write_json, write_timings
@@ -61,7 +66,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--contexts",
         action="store_true",
-        help="Mode-dependent coverage context evidence: affected consumes a seed; measure produces one; ignored by full/group",
+        help=("Mode-dependent coverage evidence: affected selects contract/integration "
+              "tests by measured production coverage while retaining component-owned "
+              "unit and architecture tests; measure produces the seed"),
     )
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args(argv)
@@ -90,9 +97,26 @@ def main(argv: list[str] | None = None) -> int:
                 changed = changed_paths(ROOT, base)
                 old = python_snapshot(ROOT, base)
                 rules = load_rules(ROOT / "tests/selection_rules.yaml", tests)
-                plan = affected_plan(tests, rules, changed, old, new, base, head)
+                plan = affected_plan(
+                    tests,
+                    rules,
+                    changed,
+                    old,
+                    new,
+                    base,
+                    head,
+                    coverage_selected_tiers=(
+                        COVERAGE_SELECTED_TIERS if args.contexts else frozenset()
+                    ),
+                )
                 if args.contexts:
-                    add_contexts(plan, ROOT / ".test-impact/contexts.json", old, tests)
+                    add_contexts(
+                        plan,
+                        ROOT / ".test-impact/contexts.json",
+                        old,
+                        tests,
+                        tiers=COVERAGE_SELECTED_TIERS,
+                    )
             except (ValueError, OSError, UnicodeError, yaml.YAMLError) as error:
                 plan = SelectionPlan("affected", args.base or "unresolved", head)
                 plan.full(tests, f"selection analysis unavailable: {error}")
@@ -124,12 +148,16 @@ def main(argv: list[str] | None = None) -> int:
             coverage = Coverage(branch=True, source=["pnc_automation"], config_file=False,
                                 data_file=str(ROOT / ".test-impact" / f"coverage-{uuid4().hex}"))
             coverage.start()
+            if args.contexts:
+                coverage.switch_context(COLLECTION_CONTEXT)
         loader = unittest.TestLoader()
         selected = unittest.TestSuite(loader.loadTestsFromName(name) for name in sorted(plan.reasons))
         discovered = describe_tests(flatten(selected))
         ids = [test["test_id"] for test in discovered]
         if len(ids) != len(set(ids)) or not ids:
             raise ValueError("Selected inventory contains duplicate tests or is unexpectedly empty")
+        if coverage and args.contexts:
+            coverage.switch_context("")
         runner = unittest.TextTestRunner(verbosity=2 if args.verbose else 1,
             resultclass=lambda *a, **kw: TimingResult(
                 *a,

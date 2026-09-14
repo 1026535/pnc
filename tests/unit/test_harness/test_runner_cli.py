@@ -14,6 +14,8 @@ from types import ModuleType
 from unittest.mock import Mock, call, patch
 
 from tools import run_tests
+from tools.test_selection.contexts import COLLECTION_CONTEXT
+from tools.test_selection.models import COVERAGE_SELECTED_TIERS
 
 
 class RunnerCliTests(unittest.TestCase):
@@ -114,6 +116,29 @@ class RunnerCliTests(unittest.TestCase):
         self.assertEqual(plan["changed_paths"], ["README.md"])
         self.assertFalse((self.root / ".test-impact/results.json").exists())
 
+    def test_affected_contexts_wires_hybrid_coverage_selection(self) -> None:
+        with (
+            patch.object(
+                run_tests,
+                "affected_plan",
+                wraps=run_tests.affected_plan,
+            ) as build_plan,
+            patch.object(run_tests, "add_contexts") as add_coverage,
+        ):
+            self.assertEqual(
+                self.invoke("affected", "--base", "base", "--contexts", "--dry-run"),
+                0,
+            )
+
+        self.assertEqual(
+            build_plan.call_args.kwargs["coverage_selected_tiers"],
+            COVERAGE_SELECTED_TIERS,
+        )
+        self.assertEqual(
+            add_coverage.call_args.kwargs["tiers"],
+            COVERAGE_SELECTED_TIERS,
+        )
+
     def test_missing_base_falls_back_and_executes_available_suite(self) -> None:
         self.base.side_effect = ValueError("missing requested base")
         self.assertEqual(self.invoke("affected", "--base", "missingbase"), 0)
@@ -182,7 +207,12 @@ class RunnerCliTests(unittest.TestCase):
         ))
         self.assertEqual(
             coverage_factory.return_value.switch_context.call_args_list,
-            [call("tests.unit.sample.test_available.AvailableCase.test_available"), call("")],
+            [
+                call(COLLECTION_CONTEXT),
+                call(""),
+                call("tests.unit.sample.test_available.AvailableCase.test_available"),
+                call(""),
+            ],
         )
         self.python_snapshot.assert_called_once_with(self.root, None)
 

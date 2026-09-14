@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 import unittest
 
-from tools.test_selection.models import inventory
+from tools.test_selection.models import COVERAGE_SELECTED_TIERS, inventory
 from tools.test_selection.ownership import OwnershipRules, ResourceRule
 from tools.test_selection.planner import affected_plan
 
@@ -227,6 +227,50 @@ class AffectedPlanMatrixTests(unittest.TestCase):
         self.assertIn(f"component owner: {WORKER}", reasons)
         self.assertIn(f"reverse import dependency: {WORKER}", reasons)
         self.assertNotIn(MODULES["vision"], plan.reasons)
+
+    def test_coverage_policy_keeps_component_units_and_defers_high_level_tests(self) -> None:
+        old, new = sources(), sources()
+        new[WORKER] = PRIVATE_EDIT
+
+        plan = affected_plan(
+            TESTS,
+            RULES,
+            [WORKER],
+            old,
+            new,
+            "base",
+            "head",
+            coverage_selected_tiers=COVERAGE_SELECTED_TIERS,
+        )
+
+        self.assertEqual(
+            set(plan.reasons),
+            {MODULES["engine"], MODULES["sibling"], MODULES["architecture"]},
+        )
+        self.assertNotIn(MODULES["api"], plan.reasons)
+        self.assertNotIn(MODULES["runner"], plan.reasons)
+        self.assertEqual(plan.fallbacks, [])
+
+    def test_coverage_policy_always_runs_a_changed_high_level_test_module(self) -> None:
+        old, new = sources(), sources()
+        new[TEST_PATHS["workflow"]] = "# Changed feature test.\n"
+
+        plan = affected_plan(
+            TESTS,
+            RULES,
+            [TEST_PATHS["workflow"]],
+            old,
+            new,
+            "base",
+            "head",
+            coverage_selected_tiers=COVERAGE_SELECTED_TIERS,
+        )
+
+        self.assertIn(MODULES["workflow"], plan.reasons)
+        self.assertIn(
+            f"changed test module: {TEST_PATHS['workflow']}",
+            plan.reasons[MODULES["workflow"]],
+        )
 
     def test_missing_graph_cannot_authorize_partial_test_run(self) -> None:
         for old, new in (({}, {}), ({}, sources()), (sources(), {})):

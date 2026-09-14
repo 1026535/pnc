@@ -33,6 +33,8 @@ def public_contract(source: str) -> tuple[str, ...]:
 def affected_plan(
     tests: tuple[TestModule, ...], rules: OwnershipRules, changed: list[str],
     old: dict[str, str], new: dict[str, str], base: str, head: str,
+    *,
+    coverage_selected_tiers: frozenset[str] = frozenset(),
 ) -> SelectionPlan:
     plan = SelectionPlan("affected", base, head, changed)
     if not tests:
@@ -50,7 +52,9 @@ def affected_plan(
         plan.full(tests, "missing source snapshot")
     if code_change:
         for test in tests:
-            if test.tier in {"architecture", "contract"}:
+            if test.tier == "architecture" or (
+                    test.tier == "contract"
+                    and test.tier not in coverage_selected_tiers):
                 plan.add(test.module, "mandatory architecture/public contract checks")
     if changed_python:
         # Unknown application dynamic loading may connect any two components.
@@ -61,7 +65,8 @@ def affected_plan(
         # Include them and their callers even when another static consumer exists.
         uncertain_consumers = graph.consumers(graph.uncertain)
         for test in tests:
-            if test.module in uncertain_consumers:
+            if (test.module in uncertain_consumers
+                    and test.tier not in coverage_selected_tiers):
                 plan.add(test.module, "conservative unresolved dynamic dependency")
     for path in changed:
         if any(fnmatchcase(path, pattern) for pattern in rules.full):
@@ -78,6 +83,9 @@ def affected_plan(
                 plan.full(tests, f"unknown non-Python dependency: {path}")
             continue
         name = module_name(path)
+        changed_test = next((test for test in tests if test.path == path), None)
+        if changed_test is not None:
+            plan.add(changed_test.module, f"changed test module: {path}")
         if path not in old and path not in new:
             plan.full(tests, f"changed Python path missing from snapshots: {path}")
         if path.startswith("pnc_automation/"):
@@ -91,17 +99,29 @@ def affected_plan(
                     plan.full(tests, f"cannot parse changed source: {path}")
             owner = path.removeprefix("pnc_automation/").rsplit("/", 1)[0].replace("/", ".")
             for test in tests:
-                if test.component == owner or test.component.startswith(owner + "."):
+                if (test.tier not in coverage_selected_tiers
+                        and (test.component == owner
+                             or test.component.startswith(owner + "."))):
                     plan.add(test.module, f"component owner: {path}")
         elif not path.startswith(("tests/", "tools/")):
             plan.full(tests, f"unknown Python owner: {path}")
         dependents = graph.consumers({name})
-        matches = [test for test in tests if test.module in dependents]
+        matches = [
+            test for test in tests
+            if test.module in dependents
+            and test.tier not in coverage_selected_tiers
+        ]
         for test in matches:
             plan.add(test.module, f"reverse import dependency: {path}")
         if name in graph.uncertain:
             plan.full(tests, f"unmodeled changed source: {path}")
-        if not matches and not groups:
+        owner_matches = [
+            test for test in tests
+            if path.startswith("pnc_automation/")
+            and test.tier not in coverage_selected_tiers
+            and (test.component == owner or test.component.startswith(owner + "."))
+        ] if path.startswith("pnc_automation/") else []
+        if not matches and not owner_matches and changed_test is None and not groups:
             plan.full(tests, f"no test dependency established: {path}")
     if changed and code_change and not plan.reasons:
         plan.full(tests, "changed files have no established test mapping")

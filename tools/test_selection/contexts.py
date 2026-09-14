@@ -1,4 +1,4 @@
-"""Optional additive execution dependencies; invalid evidence always fails closed."""
+"""Coverage-derived execution dependencies; invalid evidence always fails closed."""
 
 from __future__ import annotations
 
@@ -8,6 +8,8 @@ from pathlib import Path
 
 from tools.test_selection.models import POLICY_VERSION, SelectionPlan, TestModule
 from tools.test_selection.reporting import environment, write_json
+
+COLLECTION_CONTEXT = "__test_collection__"
 
 
 def fingerprint(sources: dict[str, str]) -> str:
@@ -24,18 +26,31 @@ def seed_contexts(path: Path, coverage, root: Path, sources: dict[str, str], tes
             relative = Path(filename).resolve().relative_to(root.resolve()).as_posix()
         except ValueError:
             continue
-        contexts = {context for values in data.contexts_by_lineno(filename).values() for context in values}
+        contexts = {
+            context
+            for values in data.contexts_by_lineno(filename).values()
+            for context in values
+            if context != COLLECTION_CONTEXT
+        }
         modules = {context.rsplit(".", 2)[0] for context in contexts if context}
         owners[relative] = sorted(known if "" in contexts else modules & known)
     write_json(path, {"version": POLICY_VERSION, "head": head, "fingerprint": fingerprint(sources),
                       "environment": environment(), "inventory": sorted(known), "owners": owners})
 
 
-def add_contexts(plan: SelectionPlan, path: Path, old: dict[str, str], tests: tuple[TestModule, ...]) -> None:
-    """Only a complete seed matching the requested base can augment a plan."""
+def add_contexts(
+    plan: SelectionPlan,
+    path: Path,
+    old: dict[str, str],
+    tests: tuple[TestModule, ...],
+    *,
+    tiers: frozenset[str] | None = None,
+) -> None:
+    """Add covered test owners from a complete seed matching the requested base."""
     try:
         document = json.loads(path.read_text(encoding="utf-8"))
-        known = {t.module for t in tests}
+        known_tests = {test.module: test for test in tests}
+        known = set(known_tests)
         if (set(document) != {"version", "head", "fingerprint", "environment", "inventory", "owners"}
                 or document["version"] != POLICY_VERSION or document["head"] != plan.base
                 or document["fingerprint"] != fingerprint(old)
@@ -48,6 +63,7 @@ def add_contexts(plan: SelectionPlan, path: Path, old: dict[str, str], tests: tu
                 raise ValueError("malformed context ownership")
         for source in plan.changed_paths:
             for module in document["owners"].get(source, []):
-                plan.add(module, f"observed execution dependency: {source}")
+                if tiers is None or known_tests[module].tier in tiers:
+                    plan.add(module, f"observed execution dependency: {source}")
     except (OSError, ValueError, TypeError, KeyError):
         plan.full(tests, "missing, corrupt, or incompatible coverage context seed")
