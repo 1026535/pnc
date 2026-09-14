@@ -9,6 +9,11 @@ from pnc_automation.app.pnc.domain.observation import ListEntryKind
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
+from pnc_automation.app.pnc.vision.pnc_observation_enricher import (
+    _build_alliance_member_list_additions,
+    _build_alliance_member_manage_popup_additions,
+    _build_mailbox_additions,
+)
 
 from tests.support.pnc.mail.mail_workflow_fixtures import MailWorkflowFixtures
 from tests.support.pnc.mail.build_observation import _build_observation
@@ -23,6 +28,9 @@ class MailboxMemberObservationTests(MailWorkflowFixtures, unittest.TestCase):
 
         observation = _build_observation(
             request=ObservationRequest.source_screen_retry(ScreenType.PNC_ALLIANCE_MEMBER_LIST),
+            accepted_screen=ScreenType.PNC_ALLIANCE_MEMBER_LIST,
+            layout_id="synthetic_alliance_member_list",
+            semantic_parser=_build_alliance_member_list_additions,
             lines=(
                 _ocr_line("Alliance Member", x=240, y=42, width=220, height=24),
                 _ocr_line("Enemy Bob", x=130, y=320, width=180, height=26),
@@ -45,6 +53,9 @@ class MailboxMemberObservationTests(MailWorkflowFixtures, unittest.TestCase):
 
         observation = _build_observation(
             request=ObservationRequest.mail_navigation_follow_up(ScreenType.PNC_ALLIANCE_MEMBER_MANAGE_POPUP),
+            accepted_screen=ScreenType.PNC_ALLIANCE_MEMBER_MANAGE_POPUP,
+            layout_id="synthetic_alliance_member_manage_popup",
+            semantic_parser=_build_alliance_member_manage_popup_additions,
             lines=(
                 _ocr_line("Manage", x=360, y=408, width=170, height=48),
                 _ocr_line("Cutie Voj", x=392, y=496, width=130, height=38),
@@ -61,6 +72,13 @@ class MailboxMemberObservationTests(MailWorkflowFixtures, unittest.TestCase):
 
         observation = _build_observation(
             request=ObservationRequest.mailbox_observation(MailboxType.PLAYER),
+            accepted_screen=ScreenType.PNC_MAILBOX_LIST,
+            layout_id="synthetic_player_mailbox",
+            semantic_parser=lambda image, lines: _build_mailbox_additions(
+                image=image,
+                lines=lines,
+                request=ObservationRequest.mailbox_observation(MailboxType.PLAYER),
+            ),
             lines=(
                 _ocr_line("Player Mail", x=310, y=42, width=170, height=24),
                 _ocr_line("Manage", x=720, y=44, width=90, height=22),
@@ -78,6 +96,13 @@ class MailboxMemberObservationTests(MailWorkflowFixtures, unittest.TestCase):
 
         observation = _build_observation(
             request=ObservationRequest.mailbox_observation(MailboxType.ALLIANCE),
+            accepted_screen=ScreenType.PNC_MAILBOX_LIST,
+            layout_id="synthetic_alliance_mailbox",
+            semantic_parser=lambda image, lines: _build_mailbox_additions(
+                image=image,
+                lines=lines,
+                request=ObservationRequest.mailbox_observation(MailboxType.ALLIANCE),
+            ),
             lines=(
                 _ocr_line("Alliance Mail", x=183, y=17, width=292, height=52),
                 _ocr_line("2026/03/22 14:46:46", x=617, y=130, width=257, height=26),

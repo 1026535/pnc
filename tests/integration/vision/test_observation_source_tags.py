@@ -43,33 +43,18 @@ from tests.support.pnc.capture_vision.ocr_line import _ocr_line
 class ObservationSourceTagsTests(unittest.TestCase):
     """Proves observation source tags."""
 
-    def test_observation_builder_runs_ocr_when_requested(self) -> None:
-        """Invokes OCR when the observation request explicitly asks for OCR-backed facts."""
+    def test_observation_builder_runs_requested_bounded_content_reads(self) -> None:
+        """Read the requested building level only after captured Institute identity."""
 
-        ocr_service = _RecordingOcrService(lines=())
-        builder = ObservationBuilder(
-            selector_registry=_minimal_runtime_registry(),
-            selector_engine=ImageSelectorEngine(
-                template_matcher=OpenCvTemplateMatcher(),
+        from tests.integration.vision.test_building_level_publication import _wire, _capture, _institute_lines
+        builder, _, contexts = _wire(_institute_lines())
+        screenshot = _capture("institute_audit.png", session_id="requested-source-tags")
+        context = builder.create_ocr_context(screenshot)
+        observation = builder.build(screenshot, request=ObservationRequest.source_screen_retry(ScreenType.PNC_INSTITUTE), ocr_context=context)
+        self.assertEqual(observation.screen_type, ScreenType.PNC_INSTITUTE)
+        self.assertTrue(any(read.required_fact == "building_level_and_actions" for read in context.read_diagnostics))
+        self.assertTrue(all(read.region is not None for read in context.read_diagnostics))
 
-            ),
-            screen_classifier=ScreenClassifier(),
-            enricher=PncObservationEnricher(),
-            ocr_service=ocr_service,
-            )
-        screenshot = type(
-            "Captured",
-            (),
-            {
-                "image": Image.new("RGB", (100, 100), (0, 0, 0)),
-                "artifact": type("Artifact", (), {"path": Path("synthetic.png"), "captured_at": None})(),
-                "frame_ref": make_captured_frame(b"").frame_ref,
-            },
-        )()
-
-        builder.build(screenshot, request=ObservationRequest.full_runtime_default())
-
-        self.assertEqual(ocr_service.read_result_calls, 1)
 
     def test_observation_builder_tags_template_and_geometry_sources(self) -> None:
         """Carries template and geometry provenance onto the final visible-element map."""
@@ -161,94 +146,17 @@ class ObservationSourceTagsTests(unittest.TestCase):
             VisibleElementSourceKind.GEOMETRY,
         )
 
-    def test_observation_builder_tags_ocr_sources(self) -> None:
-        """Keeps OCR-synthesized selectors distinct from geometry-backed visibility."""
+    def test_observation_builder_tags_captured_ocr_labels_with_frame_provenance(self) -> None:
+        """Parsed level labels retain OCR provenance and cannot become controls."""
 
-        registry = SelectorRegistry(
-            selectors=(
-                SelectorDefinition(
-                    id=UiElementId.PNC_HOME_WORLD_SWITCH,
-                    screens=(ScreenType.PNC_HOME_CITY,),
-                    detection_kind=DetectionKind.TEMPLATE,
-                    status=SelectorStatus.SCREENSHOT_SEEDED,
-                    click=ClickDefinition(),
-                ),
-                SelectorDefinition(
-                    id=UiElementId.PNC_HOME_CHARACTER_PANEL,
-                    screens=(ScreenType.PNC_HOME_CITY,),
-                    detection_kind=DetectionKind.TEMPLATE,
-                    status=SelectorStatus.SCREENSHOT_SEEDED,
-                    click=ClickDefinition(),
-                ),
-                SelectorDefinition(
-                    id=UiElementId.PNC_HOME_BUILD_BUTTON,
-                    screens=(ScreenType.PNC_HOME_CITY,),
-                    detection_kind=DetectionKind.TEMPLATE,
-                    status=SelectorStatus.SCREENSHOT_SEEDED,
-                    click=ClickDefinition(),
-                ),
-                SelectorDefinition(
-                    id=UiElementId.PNC_BOTTOM_NAV_MORE,
-                    screens=(ScreenType.PNC_HOME_CITY,),
-                    detection_kind=DetectionKind.GUARDED_GEOMETRY,
-                    status=SelectorStatus.CLICK_MAPPED,
-                    click=ClickDefinition(),
-                    relative_bounds=None,
-                ),
-            )
-        )
-        selector_engine = _RecordingSelectorEngine(
-            responses=[
-                (
-                    SelectorMatch(
-                        selector_id=UiElementId.PNC_HOME_WORLD_SWITCH,
-                        bounds=Region(x=10, y=10, width=20, height=20),
-                        confidence=1.0,
-                    ),
-                    SelectorMatch(
-                        selector_id=UiElementId.PNC_HOME_CHARACTER_PANEL,
-                        bounds=Region(x=40, y=10, width=20, height=20),
-                        confidence=1.0,
-                    ),
-                    SelectorMatch(
-                        selector_id=UiElementId.PNC_HOME_BUILD_BUTTON,
-                        bounds=Region(x=70, y=10, width=20, height=20),
-                        confidence=1.0,
-                    ),
-                ),
-                (),
-            ]
-        )
-        builder = ObservationBuilder(
-            selector_registry=registry,
-            selector_engine=selector_engine,
-            screen_classifier=ScreenClassifier(),
-            enricher=PncObservationEnricher(
-
-            ),
-            ocr_service=_FakeOcrService(
-                    lines=(
-                        _ocr_line("Alliance", x=108, y=883, width=124, height=8),
-                        _ocr_line("More", x=360, y=883, width=74, height=8),
-                    )
-                )
-            )
-        screenshot = type(
-            "Captured",
-            (),
-            {
-                "image": Image.new("RGB", (540, 960), (0, 0, 0)),
-                "artifact": type("Artifact", (), {"path": Path("synthetic.png"), "captured_at": None})(),
-                "frame_ref": make_captured_frame(b"").frame_ref,
-            },
-        )()
-
-        observation = builder.build(
-            screenshot,
-            request=ObservationRequest.source_screen_retry(ScreenType.PNC_HOME_CITY),
-        )
-
-        self.assertEqual(
-            observation.require(UiElementId.PNC_BOTTOM_NAV_MORE).source_kind,
-            VisibleElementSourceKind.OCR,
-        )
+        from tests.integration.vision.test_building_level_publication import _wire, _capture, _institute_lines
+        builder, _, _ = _wire(_institute_lines())
+        capture = _capture("institute_audit.png", session_id="label-source-tags")
+        observation = builder.build(capture)
+        label = observation.require(UiElementId.PNC_BUILDING_LEVEL_LABEL)
+        self.assertEqual(label.source_kind, VisibleElementSourceKind.OCR)
+        self.assertEqual(label.frame_ref, capture.frame_ref)
+        self.assertEqual(label.source_screen, ScreenType.PNC_INSTITUTE)
+        self.assertEqual(label.extracted_text, "8/45")
+        self.assertFalse(label.identity_evidence)
+        self.assertIsNone(label.action_point)

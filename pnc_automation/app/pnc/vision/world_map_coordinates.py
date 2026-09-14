@@ -15,6 +15,7 @@ from pnc_automation.core.vision.ocr.ocr_service import (
     ObservationOcrContext,
     OcrLine,
     OcrReadPurpose,
+    OcrRequiredFieldStatus,
 )
 
 _WORLD_X_COORDINATE_LABEL_PATTERN = re.compile(r"X\s*[:\uff1a]?", re.IGNORECASE)
@@ -74,7 +75,7 @@ def parse_world_viewport(
 def read_world_coordinate_bar_viewport(
     *,
     image: Image.Image,
-    bounds: object,
+    bounds: Bounds,
     ocr_context: ObservationOcrContext,
 ) -> ParsedWorldViewport | None:
     """Returns the parsed coordinate-bar viewport from cheap focused OCR passes."""
@@ -89,20 +90,58 @@ def read_world_coordinate_bar_viewport(
                 reuse_full_frame=False,
                 purpose=OcrReadPurpose.IDENTITY,
                 detail="world_coordinate_bar_lines",
+                required_fact="world_coordinate_pair",
             )
         )
         if parsed is not None:
+            ocr_context.record_required_field_diagnostic(
+                required_fact="world_coordinate_pair",
+                status=OcrRequiredFieldStatus.PRESENT,
+                region=bounds,
+                reason="parsed_lines_fallback",
+                detail="parser:world_coordinate_bar",
+            )
             return parsed
-        return parse_world_viewport(
+        top_hud_region = _world_coordinate_top_hud_region(image=image)
+        parsed = parse_world_viewport(
             image=image,
             lines=ocr_context.read_lines(
                 image,
-                _world_coordinate_top_hud_region(image=image),
+                top_hud_region,
                 reuse_full_frame=False,
                 purpose=OcrReadPurpose.IDENTITY,
                 detail="world_coordinate_top_hud_fallback",
+                required_fact="world_coordinate_pair",
             ),
         )
+        if parsed is not None:
+            ocr_context.record_required_field_diagnostic(
+                required_fact="world_coordinate_pair",
+                status=OcrRequiredFieldStatus.PRESENT,
+                region=top_hud_region,
+                reason="parsed_top_hud_fallback",
+                detail="parser:world_coordinate_bar",
+            )
+            return parsed
+        ocr_context.record_required_field_diagnostic(
+            required_fact="world_coordinate_pair",
+            status=(
+                OcrRequiredFieldStatus.INVALID
+                if text.strip()
+                else OcrRequiredFieldStatus.MISSING
+            ),
+            region=bounds,
+            reason="invalid_value" if text.strip() else "missing_text",
+            detail="parser:world_coordinate_bar",
+        )
+        return None
+    ocr_context.record_required_field_diagnostic(
+        required_fact="world_coordinate_pair",
+        status=OcrRequiredFieldStatus.PRESENT,
+        region=bounds,
+        reason="parsed",
+        detail="parser:world_coordinate_bar",
+    )
     return _build_parsed_world_viewport(
         x=pair[0],
         y=pair[1],
@@ -128,6 +167,7 @@ def read_world_coordinate_bar_text(
         ),
         purpose=OcrReadPurpose.IDENTITY,
         detail="world_coordinate_bar_blue_filtered",
+        required_fact="world_coordinate_pair",
     )
     if result is None:
         return ""

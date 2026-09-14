@@ -1,203 +1,110 @@
-"""Building requirements observation: verifies the named internal boundary with offline fixtures."""
+"""Canonical building-requirement parser qualifications."""
 
 from __future__ import annotations
 
-from tests.support.pnc.capture_vision.minimal_runtime_registry import _minimal_runtime_registry
-
-import tempfile
 import unittest
-from pathlib import Path
 
 from PIL import Image
 
-from pnc_automation.core.infra.storage.artifact_store import ArtifactStore
-from pnc_automation.core.infra.capture.screenshot_service import ScreenshotService
+from pnc_automation.app.pnc.domain.observation import VisibleElementSourceKind
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
-from pnc_automation.app.pnc.vision.observation_builder import (
-    ObservationBuilder,
-    ImageSelectorEngine,
+from pnc_automation.app.pnc.vision.pnc_observation_enricher import (
+    _add_upgrade_requirement_controls,
+    _find_building_requirement_go_line,
+    _find_building_requirement_header_line,
+    _find_building_requirement_target_line,
 )
-from pnc_automation.core.vision.ocr.ocr_service import UnavailableOcrService
-from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservationEnricher
-from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
-from pnc_automation.app.pnc.vision.selectors import SelectorRegistry
-from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
-
-from tests.support.pnc.capture_vision.fake_ocr_service import _FakeOcrService
-from tests.support.pnc.capture_vision.fake_screenshot_session import _FakeScreenshotSession
-from tests.support.pnc.capture_vision.encode_png import _encode_png
-from tests.support.pnc.capture_vision.ocr_line import _ocr_line
+from pnc_automation.core.vision.image.models import Bounds
+from pnc_automation.core.vision.ocr.ocr_service import OcrLine
 
 
-class BuildingRequirementsObservationTests(unittest.TestCase):
-    """Proves building requirements observation."""
+VIEWPORT = (900, 1600)
 
-    def test_observation_builder_classifies_building_detail_and_exposes_back_click_target(self) -> None:
-        """Recognizes a building-detail screen from OCR and surfaces tappable controls."""
 
-        with tempfile.TemporaryDirectory() as temp_directory:
-            root = Path(temp_directory)
-            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
-            screenshot = screenshot_service.capture(
-                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
-                artifact_directory="k313_colddukeofthenorth",
-                label="building_detail",
-            )
-            builder = ObservationBuilder(
-                selector_registry=_minimal_runtime_registry(),
-                selector_engine=ImageSelectorEngine(
-                    template_matcher=OpenCvTemplateMatcher(),
+def _line(text: str, *, x: int, y: int, width: int, height: int) -> OcrLine:
+    """Create one localized OCR line for the canonical requirement parser."""
 
-                ),
-                screen_classifier=ScreenClassifier(),
-                enricher=PncObservationEnricher(
+    return OcrLine(text=text, bounds=Bounds(x, y, width, height), confidence=1.0)
 
-                ),
-            ocr_service=_FakeOcrService(
-                        lines=(
-                            _ocr_line("Castle", x=88, y=16, width=120, height=30),
-                            _ocr_line("Upgrade", x=682, y=308, width=120, height=40),
-                            _ocr_line("ColdDukeOfTheNorth", x=101, y=465, width=256, height=32),
-                        )
-                    )
+
+def _requirement_lines(*, include_go: bool) -> tuple[OcrLine, ...]:
+    """Return one satisfied row and one optionally actionable unmet row."""
+
+    lines = [
+        _line("Requirement", x=62, y=713, width=177, height=27),
+        _line("Castle: Lv.8", x=154, y=768, width=147, height=24),
+        _line("Warehouse: Lv.9", x=154, y=834, width=210, height=24),
+        _line("Materials required", x=61, y=931, width=251, height=26),
+    ]
+    if include_go:
+        lines.append(_line("Go", x=732, y=832, width=47, height=31))
+    return tuple(lines)
+
+
+class BuildingRequirementParserTests(unittest.TestCase):
+    """Prove labels are tied to an unmet row after the visual screen is owned."""
+
+    def test_parser_publishes_header_and_target_for_actionable_unmet_row(self) -> None:
+        """The requirement label follows the row aligned with the parsed Go affordance."""
+
+        image = Image.new("RGB", VIEWPORT)
+        lines = _requirement_lines(include_go=True)
+        header = _find_building_requirement_header_line(image=image, lines=lines)
+        self.assertIsNotNone(header)
+        assert header is not None
+        go_line = _find_building_requirement_go_line(image=image, lines=lines, header=header)
+        self.assertIsNotNone(go_line)
+        assert go_line is not None
+        target_line = _find_building_requirement_target_line(
+            image=image,
+            lines=lines,
+            header=header,
+            go_line=go_line,
+        )
+        self.assertIsNotNone(target_line)
+        assert target_line is not None
+        self.assertEqual(target_line.text, "Warehouse: Lv.9")
+
+        visible_elements = {}
+        _add_upgrade_requirement_controls(
+            image=image,
+            lines=lines,
+            screen_type=ScreenType.PNC_INSTITUTE,
+            visible_elements=visible_elements,
+        )
+
+        self.assertEqual(
+            visible_elements[UiElementId.PNC_BUILDING_REQUIREMENT_HEADER].extracted_text,
+            "Requirement",
+        )
+        self.assertEqual(
+            visible_elements[UiElementId.PNC_BUILDING_REQUIREMENT_TARGET_LABEL].extracted_text,
+            "Warehouse: Lv.9",
+        )
+        self.assertTrue(
+            all(
+                visible_elements[selector_id].source_kind == VisibleElementSourceKind.OCR
+                for selector_id in (
+                    UiElementId.PNC_BUILDING_REQUIREMENT_HEADER,
+                    UiElementId.PNC_BUILDING_REQUIREMENT_TARGET_LABEL,
                 )
-
-            observation = builder.build(screenshot)
-
-            self.assertEqual(observation.screen_type, ScreenType.PNC_BUILDING_DETAILS)
-            self.assertFalse(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
-            self.assertTrue(observation.has(UiElementId.PNC_BUILDING_UPGRADE_BUTTON))
-
-    def test_observation_builder_exposes_shared_building_requirement_controls_on_exact_building_screens(self) -> None:
-        """Recognizes unmet upgrade prerequisites on exact building-owned screens through shared OCR controls."""
-
-        with tempfile.TemporaryDirectory() as temp_directory:
-            root = Path(temp_directory)
-            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
-            screenshot = screenshot_service.capture(
-                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
-                artifact_directory="k287_infantry_requirement",
-                label="infantry_requirement",
             )
-            builder = ObservationBuilder(
-                selector_registry=_minimal_runtime_registry(),
-                selector_engine=ImageSelectorEngine(
-                    template_matcher=OpenCvTemplateMatcher(),
+        )
 
-                ),
-                screen_classifier=ScreenClassifier(),
-                enricher=PncObservationEnricher(
+    def test_parser_omits_requirement_labels_when_no_actionable_row_exists(self) -> None:
+        """A heading with no Go row cannot publish an unmet prerequisite label."""
 
-                ),
-            ocr_service=_FakeOcrService(
-                        lines=(
-                            _ocr_line("Infantry Barracks", x=88, y=16, width=240, height=30),
-                            _ocr_line("Glory Level", x=588, y=142, width=154, height=32),
-                            _ocr_line("9/45", x=201, y=410, width=67, height=29),
-                            _ocr_line("Upgrade", x=734, y=308, width=120, height=40),
-                            _ocr_line("Requirement", x=59, y=714, width=177, height=32),
-                            _ocr_line("Recruiting Center : Lv.7", x=152, y=769, width=278, height=28),
-                            _ocr_line("Go", x=732, y=766, width=47, height=31),
-                            _ocr_line("Materials required", x=58, y=866, width=246, height=33),
-                        )
-                    )
-                )
+        visible_elements = {}
+        _add_upgrade_requirement_controls(
+            image=Image.new("RGB", VIEWPORT),
+            lines=_requirement_lines(include_go=False),
+            screen_type=ScreenType.PNC_INSTITUTE,
+            visible_elements=visible_elements,
+        )
 
-            observation = builder.build(screenshot)
+        self.assertEqual(visible_elements, {})
 
-            self.assertEqual(observation.screen_type, ScreenType.PNC_INFANTRY_BARRACKS)
-            self.assertTrue(observation.has(UiElementId.PNC_BUILDING_UPGRADE_BUTTON))
-            self.assertTrue(observation.has(UiElementId.PNC_BUILDING_REQUIREMENT_HEADER))
-            self.assertTrue(observation.has(UiElementId.PNC_BUILDING_REQUIREMENT_TARGET_LABEL))
-            self.assertTrue(observation.has(UiElementId.PNC_BUILDING_REQUIREMENT_GO_BUTTON))
-            self.assertEqual(
-                observation.require(UiElementId.PNC_BUILDING_LEVEL_LABEL).extracted_text,
-                "9/45",
-            )
-            self.assertEqual(
-                observation.require(UiElementId.PNC_BUILDING_REQUIREMENT_TARGET_LABEL).extracted_text,
-                "Recruiting Center : Lv.7",
-            )
 
-    def test_observation_builder_pairs_requirement_label_with_actionable_go_row(self) -> None:
-        """Selects the unmet row aligned with Go when a satisfied prerequisite is listed above it."""
-
-        with tempfile.TemporaryDirectory() as temp_directory:
-            root = Path(temp_directory)
-            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
-            screenshot = screenshot_service.capture(
-                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
-                artifact_directory="castle_multi_requirement",
-                label="castle_multi_requirement",
-            )
-            builder = ObservationBuilder(
-                selector_registry=_minimal_runtime_registry(),
-                selector_engine=ImageSelectorEngine(
-                    template_matcher=OpenCvTemplateMatcher(),
-
-                ),
-                screen_classifier=ScreenClassifier(),
-                enricher=PncObservationEnricher(
-
-                ),
-            ocr_service=_FakeOcrService(
-                        lines=(
-                            _ocr_line("Castle", x=88, y=16, width=120, height=30),
-                            _ocr_line("Territory Overview", x=620, y=130, width=220, height=32),
-                            _ocr_line("Upgrade", x=680, y=420, width=150, height=45),
-                            _ocr_line("Requirement", x=60, y=714, width=177, height=32),
-                            _ocr_line("Wall : Lv.9", x=154, y=768, width=150, height=28),
-                            _ocr_line("Warehouse : Lv.9", x=154, y=834, width=210, height=28),
-                            _ocr_line("Go", x=732, y=832, width=47, height=31),
-                            _ocr_line("Materials required", x=58, y=931, width=246, height=33),
-                        )
-                    )
-                )
-
-            observation = builder.build(screenshot)
-
-            self.assertEqual(observation.screen_type, ScreenType.PNC_CASTLE)
-            self.assertEqual(
-                observation.require(UiElementId.PNC_BUILDING_REQUIREMENT_TARGET_LABEL).extracted_text,
-                "Warehouse : Lv.9",
-            )
-
-    def test_observation_builder_classifies_castle_screen_when_territory_overview_wraps_across_two_ocr_lines(self) -> None:
-        """Keeps Castle on its exact screen when OCR splits `Territory Overview` into stacked fragments."""
-
-        with tempfile.TemporaryDirectory() as temp_directory:
-            root = Path(temp_directory)
-            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
-            screenshot = screenshot_service.capture(
-                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
-                artifact_directory="k287_castle_split_overview",
-                label="castle_split_overview",
-            )
-            builder = ObservationBuilder(
-                selector_registry=_minimal_runtime_registry(),
-                selector_engine=ImageSelectorEngine(
-                    template_matcher=OpenCvTemplateMatcher(),
-
-                ),
-                screen_classifier=ScreenClassifier(),
-                enricher=PncObservationEnricher(
-
-                ),
-            ocr_service=_FakeOcrService(
-                        lines=(
-                            _ocr_line("Castle", x=181, y=18, width=144, height=51),
-                            _ocr_line("Territory", x=691, y=129, width=108, height=32),
-                            _ocr_line("Overview", x=691, y=157, width=115, height=27),
-                            _ocr_line("Glory Level", x=655, y=346, width=183, height=44),
-                            _ocr_line("Upgrade", x=673, y=438, width=146, height=41),
-                        )
-                    )
-                )
-
-            observation = builder.build(screenshot)
-
-            self.assertEqual(observation.screen_type, ScreenType.PNC_CASTLE)
-            self.assertTrue(observation.has(UiElementId.PNC_CASTLE_TERRITORY_OVERVIEW_BUTTON))
-            self.assertTrue(observation.has(UiElementId.PNC_CASTLE_GLORY_LEVEL_BUTTON))
-            self.assertTrue(observation.has(UiElementId.PNC_BUILDING_UPGRADE_BUTTON))
+if __name__ == "__main__":
+    unittest.main()

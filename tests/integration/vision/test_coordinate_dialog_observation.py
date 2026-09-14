@@ -21,15 +21,14 @@ from pnc_automation.core.vision.ocr.ocr_service import UnavailableOcrService
 from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservationEnricher
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
 from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
+from pnc_automation.app.pnc.vision.visual_screen_recognizer import load_visual_screen_recognizer
 from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
 
+from tests.support.paths import TEST_DATA_ROOT
 from tests.support.pnc.capture_vision.fake_ocr_service import _FakeOcrService
 from tests.support.pnc.capture_vision.fake_screenshot_session import _FakeScreenshotSession
 from tests.support.pnc.capture_vision.encode_png import _encode_png
 from tests.support.pnc.capture_vision.ocr_line import _ocr_line
-from tests.support.pnc.capture_vision.paint_coordinate_dialog_zero_glyph import (
-    _paint_coordinate_dialog_zero_glyph,
-)
 
 
 class CoordinateDialogObservationTests(unittest.TestCase):
@@ -41,8 +40,13 @@ class CoordinateDialogObservationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_directory:
             root = Path(temp_directory)
             screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
+            with Image.open(
+                TEST_DATA_ROOT
+                / "screen_recognition/coordinate_dialog_variants/coordinate_dialog_20260614.png"
+            ) as source:
+                image = source.convert("RGB")
             screenshot = screenshot_service.capture(
-                _FakeScreenshotSession(_encode_png(Image.new("RGB", (540, 960), (15, 28, 68)))),
+                _FakeScreenshotSession(_encode_png(image)),
                 artifact_directory="live_like_world_coordinate_dialog",
                 label="world_coordinate_dialog_live_like",
             )
@@ -54,6 +58,7 @@ class CoordinateDialogObservationTests(unittest.TestCase):
 
                 ),
                 screen_classifier=ScreenClassifier(),
+                visual_recognizer=load_visual_screen_recognizer(),
                 enricher=PncObservationEnricher(
 
                     selector_registry=registry,
@@ -74,16 +79,27 @@ class CoordinateDialogObservationTests(unittest.TestCase):
                 screenshot,
                 request=ObservationRequest.world_map_coordinate_dialog_follow_up(),
             )
-
             self.assertEqual(observation.screen_type, ScreenType.PNC_WORLD_COORDINATE_DIALOG)
-            self.assertTrue(observation.has(UiElementId.PNC_WORLD_COORDINATE_DIALOG_K_FIELD))
-            self.assertTrue(observation.has(UiElementId.PNC_WORLD_COORDINATE_DIALOG_X_FIELD))
-            self.assertTrue(observation.has(UiElementId.PNC_WORLD_COORDINATE_DIALOG_Y_FIELD))
+            self.assertEqual(
+                observation.require_text_field_state(
+                    UiElementId.PNC_WORLD_COORDINATE_DIALOG_K_FIELD
+                ).text,
+                "226",
+            )
+            self.assertEqual(
+                observation.require_text_field_state(
+                    UiElementId.PNC_WORLD_COORDINATE_DIALOG_X_FIELD
+                ).text,
+                "262",
+            )
+            self.assertEqual(
+                observation.require_text_field_state(
+                    UiElementId.PNC_WORLD_COORDINATE_DIALOG_Y_FIELD
+                ).text,
+                "436",
+            )
             self.assertTrue(observation.has(UiElementId.PNC_WORLD_COORDINATE_DIALOG_GO_BUTTON))
             self.assertTrue(observation.has(UiElementId.PNC_WORLD_COORDINATE_DIALOG_CLOSE_BUTTON))
-            self.assertEqual(observation.require_text_field_state(UiElementId.PNC_WORLD_COORDINATE_DIALOG_K_FIELD).text, "226")
-            self.assertEqual(observation.require_text_field_state(UiElementId.PNC_WORLD_COORDINATE_DIALOG_X_FIELD).text, "262")
-            self.assertEqual(observation.require_text_field_state(UiElementId.PNC_WORLD_COORDINATE_DIALOG_Y_FIELD).text, "436")
 
     def test_observation_builder_reads_coordinate_dialog_zero_fields_when_ocr_drops_zero_lines(self) -> None:
         """Keeps live coordinate-jump proof stable when OCR omits single zero-value X/Y field lines."""
@@ -91,17 +107,11 @@ class CoordinateDialogObservationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_directory:
             root = Path(temp_directory)
             registry = build_default_selector_registry()
-            image = Image.new("RGB", (540, 960), (15, 28, 68))
-            for selector_id in (
-                UiElementId.PNC_WORLD_COORDINATE_DIALOG_X_FIELD,
-                UiElementId.PNC_WORLD_COORDINATE_DIALOG_Y_FIELD,
-            ):
-                relative_bounds = registry.require(selector_id).relative_bounds
-                assert relative_bounds is not None
-                _paint_coordinate_dialog_zero_glyph(
-                    image,
-                    bounds=relative_bounds.materialize_region(image_size=image.size),
-                )
+            with Image.open(
+                TEST_DATA_ROOT
+                / "screen_recognition/coordinate_dialog_variants/coordinate_dialog_20260613.png"
+            ) as source:
+                image = source.convert("RGB")
             screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
             screenshot = screenshot_service.capture(
                 _FakeScreenshotSession(_encode_png(image)),
@@ -115,6 +125,7 @@ class CoordinateDialogObservationTests(unittest.TestCase):
 
                 ),
                 screen_classifier=ScreenClassifier(),
+                visual_recognizer=load_visual_screen_recognizer(),
                 enricher=PncObservationEnricher(
 
                     selector_registry=registry,
@@ -147,17 +158,11 @@ class CoordinateDialogObservationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_directory:
             root = Path(temp_directory)
             registry = build_default_selector_registry()
-            image = Image.new("RGB", (540, 960), (15, 28, 68))
-            for selector_id in (
-                UiElementId.PNC_WORLD_COORDINATE_DIALOG_X_FIELD,
-                UiElementId.PNC_WORLD_COORDINATE_DIALOG_Y_FIELD,
-            ):
-                relative_bounds = registry.require(selector_id).relative_bounds
-                assert relative_bounds is not None
-                _paint_coordinate_dialog_zero_glyph(
-                    image,
-                    bounds=relative_bounds.materialize_region(image_size=image.size),
-                )
+            with Image.open(
+                TEST_DATA_ROOT
+                / "screen_recognition/coordinate_dialog_variants/coordinate_dialog_20260614.png"
+            ) as source:
+                image = source.convert("RGB")
             screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
             screenshot = screenshot_service.capture(
                 _FakeScreenshotSession(_encode_png(image)),
@@ -171,6 +176,7 @@ class CoordinateDialogObservationTests(unittest.TestCase):
 
                 ),
                 screen_classifier=ScreenClassifier(),
+                visual_recognizer=load_visual_screen_recognizer(),
                 enricher=PncObservationEnricher(
 
                     selector_registry=registry,

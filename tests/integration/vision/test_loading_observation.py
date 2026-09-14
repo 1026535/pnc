@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from pnc_automation.core.infra.storage.artifact_store import ArtifactStore
 from pnc_automation.core.infra.capture.screenshot_service import ScreenshotService
@@ -18,6 +18,7 @@ from pnc_automation.app.automation.engine.runner import AutomationRunner
 from pnc_automation.app.authoring.config.models import DefaultsConfig
 from pnc_automation.app.authoring.scripts.registry import TaskRegistry
 from pnc_automation.app.pnc.domain.action_requests import TapPointAction, WaitAction
+from pnc_automation.app.pnc.domain.observation import Observation
 from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
@@ -26,11 +27,13 @@ from pnc_automation.app.pnc.vision.observation_builder import (
     ObservationBuilder,
     ImageSelectorEngine,
 )
+from pnc_automation.app.pnc.vision.ocr_region_plan import compile_guard_ocr_region_plans
 from pnc_automation.core.vision.ocr.ocr_service import UnavailableOcrService
 from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservationEnricher
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
 from pnc_automation.app.pnc.vision.selectors import SelectorRegistry, build_default_selector_registry
 from pnc_automation.core.errors import SelectorResolutionError
+from pnc_automation.core.infra.capture.screenshot_service import CapturedScreenshot
 from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
 
 from tests.support.pnc.capture_vision.fake_ocr_service import _FakeOcrService
@@ -47,74 +50,126 @@ from tests.support.pnc.observations import make_observation
 class LoadingObservationTests(unittest.TestCase):
     """Proves loading observation."""
 
-    def test_observation_builder_classifies_loading_reconnect_from_live_like_ocr(self) -> None:
-        """Recognizes reconnect prompts as loading-state bootstrap screens."""
+    def test_captured_configured_game_loading_is_passive_in_both_paths(self) -> None:
+        """The actual title and tools chrome establish startup without progress OCR."""
+        from tests.integration.vision.test_alliance_remaining_visual_contracts import (
+            _BoundedOcrService, _builder, _capture, _perception,
+        )
+        with Image.open("tests/data/screen_recognition/loading_variants/configured_game_launch.png") as source:
+            image = source.convert("RGB")
+        for size in ((540, 960), (900, 1600)):
+            for path in ("builder", "navigation"):
+                with self.subTest(size=size, path=path):
+                    ocr = _BoundedOcrService()
+                    builder = _builder(ocr)
+                    capture = _capture(image.resize(size, Image.Resampling.LANCZOS), session_id=f"game-loading-{path}")
+                    observation = builder.build(capture) if path == "builder" else _perception(builder).build(capture)
+                    self.assertEqual(observation.screen_type, ScreenType.PNC_LOADING)
+                    self.assertEqual(observation.decision.guard, GuardVerdict.BLOCKED)
+                    self.assertEqual(observation.decision.layout_id, "loading_configured_game_launch")
+                    self.assertFalse(observation.decision.action_eligible)
+                    self.assertFalse(observation.visible_elements)
+                    self.assertLessEqual(len(ocr.calls), 1)
 
-        with tempfile.TemporaryDirectory() as temp_directory:
-            root = Path(temp_directory)
-            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
-            screenshot = screenshot_service.capture(
-                _FakeScreenshotSession(_encode_png(Image.new("RGB", (540, 960), (15, 28, 68)))),
-                artifact_directory="k230_loading",
-                label="loading_reconnect_live_like",
-            )
-            builder = ObservationBuilder(
-                selector_registry=_minimal_runtime_registry(),
-                selector_engine=ImageSelectorEngine(
-                    template_matcher=OpenCvTemplateMatcher(),
+    def test_captured_loading_requires_both_anchors_and_yields_to_foreground_update(self) -> None:
+        """A lone game logo cannot prove loading or hide a current Update popup."""
+        from tests.integration.vision.test_alliance_remaining_visual_contracts import (
+            _BoundedOcrService, _builder, _capture, _perception,
+        )
+        from tests.support.pnc.capture_vision.modal_overlay import update_modal_lines, with_update_modal
+        with Image.open("tests/data/screen_recognition/loading_variants/configured_game_launch.png") as source:
+            image = source.convert("RGB")
+        missing = image.copy()
+        ImageDraw.Draw(missing).rectangle((695, 15, 898, 95), fill=(9, 18, 33))
+        for path in ("builder", "navigation"):
+            for case, view, lines in (
+                ("missing_anchor", missing, ()),
+                ("foreground_update", with_update_modal(image), update_modal_lines(image.size)),
+            ):
+                with self.subTest(path=path, case=case):
+                    ocr = _BoundedOcrService(lines=lines)
+                    builder = _builder(ocr)
+                    capture = _capture(view, session_id=f"loading-negative-{path}-{case}")
+                    observation = builder.build(capture) if path == "builder" else _perception(builder).build(capture)
+                    self.assertNotEqual(observation.screen_type, ScreenType.PNC_LOADING)
+                    if case == "missing_anchor":
+                        self.assertEqual(observation.screen_type, ScreenType.UNKNOWN)
+                        self.assertFalse(observation.visible_elements)
+                    else:
+                        self.assertEqual(observation.screen_type, ScreenType.PNC_POPUP)
+                        self.assertEqual(set(observation.visible_elements), {UiElementId.PNC_UPDATE_CONFIRM_BUTTON})
+                    self.assertLessEqual(len(ocr.calls), 1)
 
-                ),
-                screen_classifier=ScreenClassifier(),
-                enricher=PncObservationEnricher(
+    def _build_with_bounded_ocr(
+        self,
+        builder: ObservationBuilder,
+        screenshot: CapturedScreenshot,
+    ) -> Observation:
+        """Build one loading fixture and verify guard diagnostics stay regional."""
 
-                ),
-            ocr_service=_FakeOcrService(
-                        lines=(
-                            _ocr_line("Connecting", x=188, y=108, width=116, height=28),
-                            _ocr_line("Network unstable", x=142, y=342, width=170, height=24),
-                            _ocr_line("Reconnect", x=195, y=668, width=112, height=30),
-                        )
-                    )
-                )
+        ocr_context = builder.create_ocr_context(screenshot)
+        observation = builder.build(screenshot, ocr_context=ocr_context)
+        diagnostics = ocr_context.read_diagnostics
+        allowed_regions = {plan.bounds for plan in compile_guard_ocr_region_plans(screenshot.image.size)}
+        self.assertEqual(diagnostics, ())
+        self.assertTrue(all(diagnostic.region is not None for diagnostic in diagnostics))
+        self.assertTrue(all(diagnostic.region in allowed_regions for diagnostic in diagnostics))
+        return observation
 
-            observation = builder.build(screenshot)
+    def test_loading_reconnect_parser_preserves_legacy_text_contract(self) -> None:
+        """Parse recorded reconnect wording without claiming an independently captured layout."""
 
-            self.assertEqual(observation.screen_type, ScreenType.PNC_LOADING)
-            self.assertTrue(observation.has(UiElementId.PNC_LOADING_RECONNECT_BUTTON))
+        from pnc_automation.app.pnc.vision.pnc_observation_enricher import _build_loading_additions
+        additions = _build_loading_additions(
+            image=Image.new("RGB", (540, 960), (15, 28, 68)),
+            lines=(
+                _ocr_line("Connecting", x=188, y=108, width=116, height=28),
+                _ocr_line("Network unstable", x=142, y=342, width=170, height=24),
+                _ocr_line("Reconnect", x=195, y=668, width=112, height=30),
+            ),
+        )
+        self.assertEqual(additions.screen_evidence[0].screen_type, ScreenType.PNC_LOADING)
+        self.assertIn(UiElementId.PNC_LOADING_RECONNECT_BUTTON, additions.visible_elements)
 
-    def test_observation_builder_classifies_loading_splash_from_live_like_ocr(self) -> None:
-        """Recognizes the branded game splash as a loading transition during castle switching or launch."""
+    def test_captured_publisher_and_black_frames_are_passive_through_both_paths(self) -> None:
+        """Visual startup evidence requires no speculative title or progress OCR."""
 
-        with tempfile.TemporaryDirectory() as temp_directory:
-            root = Path(temp_directory)
-            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
-            screenshot = screenshot_service.capture(
-                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
-                artifact_directory="k230_loading_splash",
-                label="loading_splash_live_like",
-            )
-            builder = ObservationBuilder(
-                selector_registry=_minimal_runtime_registry(),
-                selector_engine=ImageSelectorEngine(
-                    template_matcher=OpenCvTemplateMatcher(),
+        from tests.integration.vision.test_alliance_remaining_visual_contracts import (
+            _BoundedOcrService, _builder, _capture, _perception,
+        )
+        with Image.open("tests/data/screen_recognition/loading_publisher_splash.png") as source:
+            publisher = source.convert("RGB")
+        for image in (publisher, Image.new("RGB", (900, 1600))):
+            for path in ("builder", "navigation"):
+                with self.subTest(path=path, size=image.size):
+                    ocr = _BoundedOcrService()
+                    builder = _builder(ocr)
+                    capture = _capture(image, session_id=f"startup-{path}-{image.size}")
+                    observation = builder.build(capture) if path == "builder" else _perception(builder).build(capture)
+                    self.assertEqual(observation.screen_type, ScreenType.PNC_LOADING)
+                    self.assertFalse(observation.decision.action_eligible)
+                    self.assertFalse(observation.blocking_popup)
+                    self.assertFalse(observation.visible_elements)
+                    if image.getextrema() == ((0, 0), (0, 0), (0, 0)):
+                        self.assertEqual(ocr.calls, [])
 
-                ),
-                screen_classifier=ScreenClassifier(),
-                enricher=PncObservationEnricher(
+    def test_captured_commercial_offer_is_not_loading(self) -> None:
+        """The source filename said loading; reviewed pixels show a priced hero offer."""
 
-                ),
-            ocr_service=_FakeOcrService(
-                        lines=(
-                            _ocr_line("CONQUEST", x=310, y=41, width=190, height=34),
-                            _ocr_line("8%", x=430, y=1390, width=42, height=20),
-                        )
-                    )
-                )
-
-            observation = builder.build(screenshot)
-
-            self.assertEqual(observation.screen_type, ScreenType.PNC_LOADING)
-            self.assertFalse(observation.has(UiElementId.PNC_LOADING_RECONNECT_BUTTON))
+        from tests.integration.vision.test_alliance_remaining_visual_contracts import (
+            _BoundedOcrService, _builder, _capture, _perception,
+        )
+        with Image.open("tests/data/screen_recognition/commercial_offer_loading_negative.png") as source:
+            image = source.convert("RGB")
+        for path in ("builder", "navigation"):
+            with self.subTest(path=path):
+                builder = _builder(_BoundedOcrService())
+                capture = _capture(image, session_id=f"offer-loading-negative-{path}")
+                observation = builder.build(capture) if path == "builder" else _perception(builder).build(capture)
+                self.assertNotEqual(observation.screen_type, ScreenType.PNC_LOADING)
+                self.assertNotEqual(observation.decision.guard, GuardVerdict.CLEAR)
+                self.assertTrue(set(observation.visible_elements) <= {UiElementId.PNC_POPUP_CLOSE_BUTTON})
+                self.assertNotIn(UiElementId.PNC_LOADING_RECONNECT_BUTTON, observation.visible_elements)
 
     def test_loading_builder_output_is_passive_for_recovery_and_ineligible_for_input(self) -> None:
         """Keeps production loading guards out of popup dismissal while denying input."""
@@ -123,7 +178,7 @@ class LoadingObservationTests(unittest.TestCase):
             root = Path(temp_directory)
             screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
             screenshot = screenshot_service.capture(
-                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600)))),
                 artifact_directory="k230_loading_guarded",
                 label="loading_guarded",
             )
@@ -139,7 +194,7 @@ class LoadingObservationTests(unittest.TestCase):
                 ),
             )
 
-            observation = builder.build(screenshot)
+            observation = self._build_with_bounded_ocr(builder, screenshot)
 
             self.assertEqual(observation.screen_type, ScreenType.PNC_LOADING)
             self.assertEqual(observation.decision.guard, GuardVerdict.BLOCKED)
@@ -188,7 +243,7 @@ class LoadingObservationTests(unittest.TestCase):
             root = Path(temp_directory)
             screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
             screenshot = screenshot_service.capture(
-                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
+                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600)))),
                 artifact_directory="k230_loading_runner_settle",
                 label="loading_runner_settle",
             )
@@ -203,7 +258,7 @@ class LoadingObservationTests(unittest.TestCase):
                     lines=(_ocr_line("Loading", x=100, y=100, width=120, height=32),)
                 ),
             )
-            loading = builder.build(screenshot)
+            loading = self._build_with_bounded_ocr(builder, screenshot)
             self.assertEqual(loading.screen_type, ScreenType.PNC_LOADING)
             self.assertEqual(loading.decision.guard, GuardVerdict.BLOCKED)
 

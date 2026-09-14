@@ -41,6 +41,13 @@ from pnc_automation.app.pnc.domain.popup import (
 from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
+from pnc_automation.app.pnc.vision.alliance_member_rows import parse_alliance_member_rows
+from pnc_automation.app.pnc.vision.campaign_ocr_regions import (
+    CAMPAIGN_CHAPTER_STAGE_THREE_ROW,
+    CAMPAIGN_CHAPTER_TITLE_REGION,
+    CAMPAIGN_MAP_CHAPTER_ROW,
+    scale_campaign_bounds,
+)
 from pnc_automation.app.pnc.navigation.world_map_coordinate_domain import WorldMapCoordinateDomain
 from pnc_automation.app.pnc.navigation.world_map_overview_projection import (
     project_world_coordinate_to_overview_point,
@@ -55,6 +62,8 @@ from pnc_automation.app.pnc.vision.ocr_region_plan import (
     OcrRegionPlan,
     OcrRegionPreprocessing,
     OcrRegionPurpose,
+    compile_guard_ocr_region_plans,
+    compile_screen_content_ocr_region_plans,
     compile_ocr_region_plans,
     execute_ocr_region_plans,
 )
@@ -65,6 +74,9 @@ from pnc_automation.app.pnc.vision.daily_quest_rows import (
     quest_screen_chrome_proven,
 )
 from pnc_automation.app.pnc.vision.resource_inventory import (
+    detect_button_runs,
+    is_blue_button_pixel,
+    is_gold_button_pixel,
     parse_resource_inventory,
     resource_inventory_chrome_proven,
     resource_inventory_tab_is_selected,
@@ -78,12 +90,11 @@ from pnc_automation.core.vision.ocr.ocr_service import (
     ObservationOcrContext,
     OcrLine,
     OcrReadPurpose,
+    OcrRequiredFieldStatus,
+    OcrResult,
 )
 from pnc_automation.app.pnc.vision.pnc_ocr_capabilities import (
-    ScreenFamilyOcrStrategy,
     can_attempt_screen_family_ocr,
-    screen_family_ocr_capability,
-    runtime_screen_family_ocr_types,
 )
 from pnc_automation.app.pnc.domain.screen_decision import ScreenEvidence
 from pnc_automation.app.pnc.vision.selectors import Region, SelectorRegistry
@@ -299,12 +310,8 @@ _RESEARCH_TREE_HEADER_TEXTS = frozenset(
         "COMBAT",
     }
 )
-_CAMPAIGN_REFERENCE_SIZE = (540, 960)
 _CAMPAIGN_MAP_CHAPTER_TITLE = "10GRANDIARUINS"
 _CAMPAIGN_CHAPTER_TITLE = "CH10GRANDIARUINS"
-_CAMPAIGN_MAP_CHAPTER_ROW = Bounds(x=194, y=454, width=151, height=50)
-_CAMPAIGN_CHAPTER_STAGE_THREE_ROW = Bounds(x=293, y=576, width=59, height=74)
-_CAMPAIGN_CHAPTER_TITLE_REGION = Bounds(x=205, y=38, width=325, height=60)
 _DAILY_TO_DO_SECTION_TEXTS = frozenset(
     {
         "CAMP",
@@ -1413,12 +1420,6 @@ def _build_text_screen_additions(
         screen_type=definition.screen_type,
         visible_elements=visible_elements,
     )
-    _add_shared_building_level_label(
-        image=image,
-        lines=lines,
-        screen_type=definition.screen_type,
-        visible_elements=visible_elements,
-    )
     suppressed_geometry_selector_ids = frozenset(
         control.selector_id
         for control in definition.controls
@@ -1777,25 +1778,43 @@ def _add_shared_building_speedup_control(
 def _add_shared_building_level_label(
     *,
     image: Image.Image,
-    lines: tuple[OcrLine, ...],
-    screen_type: ScreenType,
+    read: OcrRegionRead,
+    ocr_context: ObservationOcrContext,
     visible_elements: dict[UiElementId, VisibleElement],
 ) -> None:
-    """Adds the current building level from labels such as `8/45` on exact building screens."""
+    """Publish the level from its owned crop independently of title/control OCR."""
 
-    if screen_type != ScreenType.PNC_BUILDING_DETAILS and not is_upgradeable_primary_screen(screen_type):
-        return
+    lines = () if read.result is None else read.result.lines
     level_line = _find_line_matching(
         lines=lines,
         predicate=lambda line: re.fullmatch(r"\s*\d+\s*/\s*\d+\s*", line.text) is not None,
         min_x=int(image.width * 0.08),
         max_y=int(image.height * 0.38),
     )
-    if level_line is None or level_line.bounds.x > int(image.width * 0.45):
-        return
-    visible_elements[UiElementId.PNC_BUILDING_LEVEL_LABEL] = _make_visible_from_line(
-        selector_id=UiElementId.PNC_BUILDING_LEVEL_LABEL,
-        line=level_line,
+    if level_line is not None and level_line.bounds.x > int(image.width * 0.45):
+        level_line = None
+    if level_line is not None:
+        visible_elements[UiElementId.PNC_BUILDING_LEVEL_LABEL] = _make_visible_from_line(
+            selector_id=UiElementId.PNC_BUILDING_LEVEL_LABEL,
+            line=level_line,
+        )
+    # The left-hand label is distinct from the Upgrade text on the right.
+    has_level_text = any(
+        int(image.width * 0.08) <= line.bounds.x <= int(image.width * 0.45)
+        and line.text.strip()
+        for line in lines
+    )
+    status = (
+        OcrRequiredFieldStatus.PRESENT if level_line is not None
+        else OcrRequiredFieldStatus.INVALID if has_level_text
+        else OcrRequiredFieldStatus.MISSING
+    )
+    ocr_context.record_required_field_diagnostic(
+        required_fact="building_level",
+        status=status,
+        region=read.plan.bounds,
+        reason=("parsed" if level_line is not None else "invalid_value" if has_level_text else "missing_text"),
+        detail="parser:building_level",
     )
 
 
@@ -1863,33 +1882,29 @@ class PncObservationEnricher:
     ) -> ObservationAdditions:
         """Measure navigation interruptions using the capture's shared OCR context."""
 
-        result = ocr_context.read_result(
-            image, purpose=OcrReadPurpose.GUARD,
-            detail="navigation_guard;fallback=mandatory_global_guard",
-        )
-        lines = tuple(sorted(result.lines, key=lambda line: (line.bounds.y, line.bounds.x)))
-        anchors = self.text_anchor_detector.detect(result)
-        modal_guard = self._recognize_modal_guards(
-            image=image, lines=lines, ocr_context=ocr_context,
+        return self._recognize_frame_guards(
+            image, ocr_context=ocr_context,
+            owned_dismiss_bounds=owned_dismiss_bounds,
             owned_navigation_screen=owned_navigation_screen,
+            navigation_dismiss=True,
         )
-        if modal_guard is not None:
-            return modal_guard
-        if owned_navigation_screen != ScreenType.PNC_RESEARCH_TREE:
-            popup = _build_popup_additions(image=image, lines=lines, anchors=anchors)
-            if popup is not None:
-                return replace(
-                    popup,
-                    guard_verdict=(GuardVerdict.UNRESOLVED if any(
-                        evidence.reason.startswith("weak_") for evidence in popup.screen_evidence
-                    ) else GuardVerdict.BLOCKED),
-                )
-        visual = _build_visual_popup_close_additions(
-            image=image, excluded_bounds=owned_dismiss_bounds,
+
+    def _read_guard_regions(
+        self, image: Image.Image, *, ocr_context: ObservationOcrContext,
+    ) -> OcrResult | None:
+        """Acquire foreground evidence once through the shared semantic plans."""
+
+        reads = execute_ocr_region_plans(
+            image=image,
+            plans=compile_guard_ocr_region_plans(image.size),
+            ocr_context=ocr_context,
         )
-        if visual is not None:
-            return replace(visual, guard_verdict=GuardVerdict.BLOCKED)
-        return ObservationAdditions(guard_verdict=GuardVerdict.CLEAR)
+        if not reads or any(read.result is None for read in reads):
+            return None
+        lines = tuple(dict.fromkeys(
+            line for read in reads if read.result is not None for line in read.result.lines
+        ))
+        return OcrResult(lines=lines, words=tuple(word for line in lines for word in line.words))
 
     def _recognize_modal_guards(
         self, *, image: Image.Image, lines: tuple[OcrLine, ...],
@@ -1911,21 +1926,11 @@ class PncObservationEnricher:
         reconnect_popup = _build_reconnect_popup_additions(image=image, lines=lines)
         if reconnect_popup is not None:
             strong.append(reconnect_popup)
-        # The retry dialog is rendered over the publisher splash and can share
-        # its Conquest/progress OCR.  The modal owns the frame whenever its
-        # exact update evidence is present; do not turn that overlap into an
-        # unresolved loading/update conflict.
-        loading = (
-            None
-            if update_required is not None
-            else _build_loading_additions(image=image, lines=lines)
-        )
-        if loading is not None:
-            strong.append(loading)
+        # Loading identity is visual. Splash OCR must not compete with a
+        # foreground update/retry dialog as a second modal guard.
         coordinate_dialog = self._build_world_map_coordinate_dialog_additions(
             image=image,
             lines=lines,
-            ocr_context=ocr_context,
         )
         if coordinate_dialog is not None:
             strong.append(coordinate_dialog)
@@ -1977,17 +1982,12 @@ class PncObservationEnricher:
                 guard_verdict=GuardVerdict.UNRESOLVED,
             )
         if strong:
-            guarded = strong[0]
+            guarded = _qualify_modal_action_geometry(image=image, additions=strong[0])
             return replace(
                 guarded,
-                screen_evidence=tuple(
-                    replace(
-                        evidence,
-                        layout_id=evidence.layout_id or f"guard:{evidence.reason}",
-                    )
-                    for evidence in guarded.screen_evidence
-                ),
-                guard_verdict=GuardVerdict.BLOCKED,
+                guard_verdict=(GuardVerdict.UNRESOLVED
+                               if guarded.guard_verdict == GuardVerdict.UNRESOLVED
+                               else GuardVerdict.BLOCKED),
             )
         if weak_modal is not None:
             return replace(weak_modal, guard_verdict=GuardVerdict.UNRESOLVED)
@@ -2003,18 +2003,44 @@ class PncObservationEnricher:
     ) -> ObservationAdditions:
         """Runs independent global guard recognizers before semantic enrichment."""
 
-        ocr_result = ocr_context.read_result(
-            image,
-            purpose=OcrReadPurpose.GUARD,
-            detail="global_guard;fallback=mandatory_global_guard",
+        return self._recognize_frame_guards(
+            image, ocr_context=ocr_context, owned_dismiss_bounds=owned_dismiss_bounds,
         )
+
+    def _recognize_frame_guards(
+        self, image: Image.Image, *, ocr_context: ObservationOcrContext,
+        owned_dismiss_bounds: tuple[Bounds, ...] = (),
+        owned_navigation_screen: ScreenType | None = None,
+        navigation_dismiss: bool = False,
+    ) -> ObservationAdditions:
+        """Resolve one foreground guard from shared acquisition and modal rules.
+
+        The replacement navigator can consume a measured generic dismiss target;
+        the legacy builder retains its unresolved result for that weak identity.
+        """
+
+        if image.convert("L").getextrema()[1] <= 12:
+            return ObservationAdditions(
+                screen_evidence=(ScreenEvidence(ScreenType.PNC_LOADING, "near_black_startup_frame"),),
+                guard_verdict=GuardVerdict.BLOCKED,
+            )
+        ocr_result = self._read_guard_regions(image, ocr_context=ocr_context)
+        if ocr_result is None:
+            return ObservationAdditions(guard_verdict=GuardVerdict.UNRESOLVED)
         lines = tuple(sorted(ocr_result.lines, key=lambda line: (line.bounds.y, line.bounds.x)))
         anchors = self.text_anchor_detector.detect(ocr_result)
-        modal_guard = self._recognize_modal_guards(image=image, lines=lines, ocr_context=ocr_context)
+        modal_guard = self._recognize_modal_guards(
+            image=image, lines=lines, ocr_context=ocr_context,
+            owned_navigation_screen=owned_navigation_screen,
+        )
         if modal_guard is not None:
             return modal_guard
-        popup = _build_popup_additions(image=image, lines=lines, anchors=anchors)
+        popup = (
+            None if owned_navigation_screen == ScreenType.PNC_RESEARCH_TREE
+            else _build_popup_additions(image=image, lines=lines, anchors=anchors)
+        )
         if popup is not None:
+            popup = _qualify_modal_action_geometry(image=image, additions=popup)
             weak_popup = any(
                 evidence.reason.startswith("weak_")
                 for evidence in popup.screen_evidence
@@ -2036,6 +2062,8 @@ class PncObservationEnricher:
             excluded_bounds=excluded_close_bounds,
         )
         if visual_popup is not None:
+            if navigation_dismiss:
+                return replace(visual_popup, guard_verdict=GuardVerdict.BLOCKED)
             if lines:
                 return replace(
                     visual_popup,
@@ -2074,23 +2102,10 @@ class PncObservationEnricher:
         *,
         ocr_context: ObservationOcrContext,
         ocr_regions: Mapping[UiElementId, OcrRegionRead],
+        layout_id: str | None = None,
     ) -> ObservationAdditions:
-        """Builds OCR-backed bootstrap, fallback-classification, and castle-roster observations."""
+        """Read semantic facts for the independently established screen and layout."""
 
-        chat_geometry = self._build_chat_geometry_additions(
-            image=image,
-            screen_type=screen_type,
-            request=request,
-            ocr_context=ocr_context,
-            ocr_regions=ocr_regions,
-        )
-        if (
-            chat_geometry is not None
-            and not request.include_popup_guard
-            and not request.include_loading_guard
-            and not request.include_chat_entries
-        ):
-            return chat_geometry
         if (
             request.world_map_coordinate_only
             and request.allows_screen(ScreenType.PNC_WORLD_MAP)
@@ -2109,19 +2124,67 @@ class PncObservationEnricher:
             return ObservationAdditions()
         if not request.requires_ocr(screen_type):
             return ObservationAdditions()
-        if screen_type == ScreenType.UNKNOWN or screen_type not in runtime_screen_family_ocr_types():
-            content_detail = f"screen:{screen_type.value};fallback=identity_unresolved_requires_full_frame"
-        else:
-            capability = screen_family_ocr_capability(screen_type)
-            content_detail = (
-                f"screen:{screen_type.value};reason=identity_header_reuses_guard"
-                if capability.strategy == ScreenFamilyOcrStrategy.REVIEWED_REGION_PLAN
-                else f"screen:{screen_type.value};fallback={capability.fallback_reason}"
+        if screen_type == ScreenType.PNC_WORLD_COORDINATE_DIALOG:
+            return self._build_world_map_coordinate_dialog_content_additions(
+                image=image,
+                request=request,
+                ocr_context=ocr_context,
+                ocr_regions=ocr_regions,
             )
-        ocr_result = ocr_context.read_result(
-            image,
-            purpose=OcrReadPurpose.CONTENT,
-            detail=content_detail,
+        if screen_type == ScreenType.PNC_WORLD_MAP:
+            status_reads = execute_ocr_region_plans(
+                image=image, ocr_context=ocr_context,
+                plans=compile_screen_content_ocr_region_plans(
+                    resolved_screen=screen_type, request=request,
+                    image_size=image.size, layout_id=layout_id,
+                ),
+            )
+            status_lines = tuple(
+                line for read in status_reads if read.result is not None
+                for line in read.result.lines
+            )
+            world = _build_world_map_additions(
+                image=image, lines=(), anchors=(), selector_registry=self.selector_registry,
+                ocr_context=ocr_context, expected_coordinate=request.expected_world_coordinate,
+            ) or ObservationAdditions()
+            return _with_status_banner(world, _build_status_banner_additions(
+                image=image, lines=status_lines, request=request,
+            ))
+        if screen_type == ScreenType.PNC_MAIL_COMPOSE_POPUP and layout_id == "mail_compose_centered":
+            if not request.text_field_selectors.intersection(compose_text_field_selector_ids()):
+                return ObservationAdditions()
+            return self._build_mail_compose_additions(
+                image=image, lines=(), include_fields=True, ocr_context=ocr_context,
+                ocr_regions=ocr_regions, proved_layout=layout_id,
+                requested_fields=frozenset(request.text_field_selectors),
+            ) or ObservationAdditions()
+        if screen_type in {
+            ScreenType.PNC_ALLIANCE_MEMBER_LIST,
+            ScreenType.PNC_ALLIANCE_MEMBER_REINFORCE,
+        }:
+            return ObservationAdditions(
+                list_entries=parse_alliance_member_rows(
+                    image=image,
+                    screen_type=screen_type,
+                    layout_id=layout_id,
+                    ocr_context=ocr_context,
+                ) if layout_id else (),
+            )
+        content_plans = compile_screen_content_ocr_region_plans(
+            resolved_screen=screen_type, request=request, image_size=image.size,
+            layout_id=layout_id,
+        )
+        if not content_plans and screen_type != ScreenType.PNC_CHAT:
+            return ObservationAdditions()
+        content_reads = execute_ocr_region_plans(
+            image=image, plans=content_plans, ocr_context=ocr_context,
+        )
+        content_lines = tuple(dict.fromkeys(
+            line for read in content_reads if read.result is not None for line in read.result.lines
+        ))
+        ocr_result = OcrResult(
+            lines=content_lines,
+            words=tuple(word for line in content_lines for word in line.words),
         )
         lines = tuple(sorted(ocr_result.lines, key=lambda line: (line.bounds.y, line.bounds.x)))
         anchors = self.text_anchor_detector.detect(ocr_result)
@@ -2135,6 +2198,7 @@ class PncObservationEnricher:
                 include_fields=True,
                 ocr_context=ocr_context,
                 ocr_regions=ocr_regions,
+                requested_fields=frozenset(request.text_field_selectors),
             )
             if mail_fields is not None:
                 return mail_fields
@@ -2200,9 +2264,16 @@ class PncObservationEnricher:
             request_screen=ScreenType.PNC_PLAYER_PROFILE,
             observed_screen=screen_type,
         ):
-            player_profile = _build_player_profile_additions(image=image, lines=lines)
-            if player_profile is not None:
-                return player_profile
+            player_profile = _build_player_profile_additions(
+                image=image, lines=lines, layout_id=layout_id,
+            )
+            ocr_context.record_required_field_diagnostic(
+                required_fact="profile_player_name",
+                status=OcrRequiredFieldStatus.PRESENT if player_profile is not None else OcrRequiredFieldStatus.MISSING,
+                region=content_plans[0].bounds,
+                reason="parsed" if player_profile is not None else "missing_or_ambiguous_name",
+            )
+            return player_profile or ObservationAdditions()
         if request.allows_screen(ScreenType.PNC_VIP) and can_attempt_screen_family_ocr(
             request_screen=ScreenType.PNC_VIP,
             observed_screen=screen_type,
@@ -2249,9 +2320,32 @@ class PncObservationEnricher:
             request_screen=ScreenType.PNC_BUILDING_CONSTRUCTION,
             observed_screen=screen_type,
         ):
-            building_construction = _build_building_construction_additions(image=image, lines=lines)
+            target_read = next(
+                (read for read in content_reads if read.plan.required_fact == "construction_target_name"),
+                None,
+            )
+            building_construction = _build_building_construction_additions(
+                image=image,
+                lines=lines,
+                proved_screen=(
+                    screen_type
+                    if screen_type == ScreenType.PNC_BUILDING_CONSTRUCTION
+                    else None
+                ),
+                ocr_context=ocr_context,
+                target_read=target_read,
+            )
             if building_construction is not None:
-                return building_construction
+                building_elements = dict(building_construction.visible_elements)
+                for read in content_reads:
+                    if read.plan.purpose == OcrRegionPurpose.BUILDING_LEVEL:
+                        _add_shared_building_level_label(
+                            image=image,
+                            read=read,
+                            ocr_context=ocr_context,
+                            visible_elements=building_elements,
+                        )
+                return replace(building_construction, visible_elements=building_elements)
         if request.allows_screen(ScreenType.PNC_BUILD_SPEEDUP) and can_attempt_screen_family_ocr(
             request_screen=ScreenType.PNC_BUILD_SPEEDUP,
             observed_screen=screen_type,
@@ -2274,6 +2368,39 @@ class PncObservationEnricher:
             observed_screen=screen_type,
             selector_registry=self.selector_registry,
         )
+        if request.allows_screen(screen_type) and (
+            screen_type == ScreenType.PNC_BUILDING_DETAILS
+            or is_upgradeable_primary_screen(screen_type)
+        ):
+            additions = text_screen
+            if additions is None and screen_type == ScreenType.PNC_BUILDING_DETAILS:
+                additions = _build_building_detail_additions(image=image, lines=lines, anchors=anchors)
+            if additions is None:
+                additions = ObservationAdditions()
+            building_elements = dict(additions.visible_elements)
+            _add_upgrade_requirement_controls(
+                image=image, lines=lines, screen_type=screen_type,
+                visible_elements=building_elements,
+            )
+            if (layout_id == "institute_upgrade_detail"
+                    and UiElementId.PNC_BUILDING_REQUIREMENT_GO_BUTTON not in visible_elements):
+                # This legacy label means an unmet, actionable prerequisite to
+                # its consumer. Text cannot replace the missing measured Go.
+                for selector_id in (
+                    UiElementId.PNC_BUILDING_REQUIREMENT_HEADER,
+                    UiElementId.PNC_BUILDING_REQUIREMENT_TARGET_LABEL,
+                    UiElementId.PNC_BUILDING_REQUIREMENT_GO_BUTTON,
+                ):
+                    building_elements.pop(selector_id, None)
+            for read in content_reads:
+                if read.plan.purpose == OcrRegionPurpose.BUILDING_LEVEL:
+                    _add_shared_building_level_label(
+                        image=image,
+                        read=read,
+                        ocr_context=ocr_context,
+                        visible_elements=building_elements,
+                    )
+            return replace(additions, visible_elements=building_elements)
         if text_screen is not None:
             return text_screen
         if request.allows_screen(ScreenType.PNC_BUILDING_DETAILS) and can_attempt_screen_family_ocr(
@@ -2287,7 +2414,21 @@ class PncObservationEnricher:
             request_screen=ScreenType.PNC_BUILD_QUEUE,
             observed_screen=screen_type,
         ):
-            build_queue = _build_build_queue_additions(image=image, lines=lines)
+            row_regions = tuple(
+                read.plan.bounds
+                for read in content_reads
+                if read.plan.purpose == OcrRegionPurpose.ROW_BODY
+            )
+            build_queue = _build_build_queue_additions(
+                image=image,
+                lines=lines,
+                proved_screen=(
+                    screen_type
+                    if screen_type == ScreenType.PNC_BUILD_QUEUE
+                    else None
+                ),
+                row_regions=row_regions,
+            )
             if build_queue is not None:
                 return build_queue
         if request.allows_screen(ScreenType.PNC_WORLD_MAP) and can_attempt_screen_family_ocr(
@@ -2363,6 +2504,18 @@ class PncObservationEnricher:
             observed_screen=screen_type,
         ):
             mailbox = _build_mailbox_additions(image=image, lines=lines, request=request)
+            header_read = next(
+                (read for read in content_reads if read.plan.purpose == OcrRegionPurpose.HEADER),
+                None,
+            )
+            if header_read is not None:
+                ocr_context.record_required_field_diagnostic(
+                    required_fact="mailbox_type",
+                    status=(OcrRequiredFieldStatus.PRESENT if mailbox is not None else OcrRequiredFieldStatus.MISSING),
+                    region=header_read.plan.bounds,
+                    reason="parsed" if mailbox is not None else "missing_or_unexpected_mailbox_header",
+                    detail="parser:mailbox_type",
+                )
             if mailbox is not None:
                 return mailbox
         if request.allows_screen(ScreenType.PNC_ALLIANCE_HOME) and can_attempt_screen_family_ocr(
@@ -2389,6 +2542,7 @@ class PncObservationEnricher:
                 request=request,
                 ocr_context=ocr_context,
                 ocr_regions=ocr_regions,
+                proved_controls=visible_elements if screen_type == ScreenType.PNC_CHAT else None,
             )
             if chat is not None:
                 return chat
@@ -2451,89 +2605,9 @@ class PncObservationEnricher:
             observed_screen=screen_type,
         ):
             return ObservationAdditions() if status_banner is None else status_banner
-        entries = _extract_castle_entries(image=image, lines=lines, anchors=anchors)
-        if not _looks_like_castle_selection(anchors, entries):
-            return ObservationAdditions() if status_banner is None else status_banner
-
-        visible_elements_by_id: dict[UiElementId, VisibleElement] = {}
-        if entries:
-            visible_elements_by_id[UiElementId.PNC_CASTLE_LIST_ENTRY] = _make_visible_from_entry(
-                selector_id=UiElementId.PNC_CASTLE_LIST_ENTRY,
-                entry=entries[0],
-            )
-        selected_entry = next((entry for entry in entries if entry.selected), None)
-        if selected_entry is not None:
-            visible_elements_by_id[UiElementId.PNC_CASTLE_SELECTED_CHECKMARK] = _make_visible(
-                selector_id=UiElementId.PNC_CASTLE_SELECTED_CHECKMARK,
-                x=max(0, selected_entry.bounds.x + int(selected_entry.bounds.width * 0.82)),
-                y=selected_entry.bounds.y,
-                width=max(1, int(selected_entry.bounds.width * 0.18)),
-                height=selected_entry.bounds.height,
-            )
-        return ObservationAdditions(
-            visible_elements=visible_elements_by_id,
-            list_entries=entries,
-            screen_evidence=(ScreenEvidence(ScreenType.PNC_CASTLE_SELECTION, "manage_char_roster"),),
-            current_castle=_entry_to_current_castle(selected_entry),
-            current_castle_evidence=None if selected_entry is None else CurrentCastleEvidenceKind.EXACT,
-        )
-
-    def _build_chat_geometry_additions(
-        self,
-        *,
-        image: Image.Image,
-        screen_type: ScreenType,
-        request: ObservationRequest,
-        ocr_context: ObservationOcrContext,
-        ocr_regions: Mapping[UiElementId, OcrRegionRead],
-    ) -> ObservationAdditions | None:
-        """Returns geometry-first chat evidence when the shared tab and footer chrome is visible."""
-
-        if not request.allows_candidate_screen(ScreenType.PNC_CHAT) and not request.allows_screen(ScreenType.PNC_CHAT):
-            return None
-        if screen_type not in {ScreenType.UNKNOWN, ScreenType.PNC_CHAT, ScreenType.PNC_HOME_CITY, ScreenType.PNC_WORLD_MAP}:
-            return None
-        if self.selector_registry is None:
-            return None
-        input_region = self._require_chat_region(UiElementId.PNC_CHAT_INPUT_FIELD, image=image)
-        if _region_brightness(image, input_region) > 60:
-            return None
-        kingdom_region = self._require_chat_region(UiElementId.PNC_CHAT_TAB_KINGDOM, image=image)
-        alliance_region = self._require_chat_region(UiElementId.PNC_CHAT_TAB_ALLIANCE, image=image)
-        active_chat_channel = _resolve_active_chat_channel(
-            image=image,
-            kingdom_region=kingdom_region,
-            alliance_region=alliance_region,
-        )
-        if active_chat_channel is None:
-            return None
-        # Appearance settings reuse gold tabs and a dark footer, so those
-        # pixels cannot overrule its explicit non-chat title and tab label.
-        header_lines = ocr_context.read_lines(
-            image, purpose=OcrReadPurpose.CONTENT, detail="chat_geometry_conflicting_header"
-        )
-        if (
-            _find_header_line(lines=header_lines, header_texts=frozenset({"CHANGE"}), max_y=int(image.height * 0.08))
-            is not None
-            and _find_line_with_normalized_text(
-                lines=header_lines, normalized_text="CHATDECORATION", max_y=int(image.height * 0.14)
-            ) is not None
-        ):
-            return None
-        chat_state = self._build_proven_chat_state_additions(
-            image=image,
-            request=request,
-            active_chat_channel=active_chat_channel,
-            ocr_context=ocr_context,
-            ocr_regions=ocr_regions,
-        )
-        return ObservationAdditions(
-            screen_evidence=(ScreenEvidence(ScreenType.PNC_CHAT, "geometry_chat_overlay"),),
-            active_chat_channel=chat_state.active_chat_channel,
-            text_field_states=chat_state.text_field_states,
-            chat_draft_empty=chat_state.chat_draft_empty,
-            chat_draft_text=chat_state.chat_draft_text,
-        )
+        return _build_castle_roster_additions(
+            image=image, lines=lines, anchors=anchors, ocr_context=ocr_context,
+        ) or (ObservationAdditions() if status_banner is None else status_banner)
 
     def _build_chat_additions(
         self,
@@ -2543,23 +2617,37 @@ class PncObservationEnricher:
         request: ObservationRequest,
         ocr_context: ObservationOcrContext,
         ocr_regions: Mapping[UiElementId, OcrRegionRead],
+        proved_controls: Mapping[UiElementId, VisibleElement] | None = None,
     ) -> ObservationAdditions | None:
         """Returns OCR-proven chat evidence plus shared chat state when the request requires it."""
 
-        chat = _build_chat_overlay_additions(image=image, lines=lines)
+        chat = (
+            ObservationAdditions() if proved_controls is not None
+            else _build_chat_overlay_additions(image=image, lines=lines)
+        )
         if chat is None:
             return None
+        controls = chat.visible_elements if proved_controls is None else proved_controls
+        kingdom = controls.get(UiElementId.PNC_CHAT_TAB_KINGDOM)
+        alliance = controls.get(UiElementId.PNC_CHAT_TAB_ALLIANCE)
+        tab_regions = (
+            (kingdom.bounds, alliance.bounds)
+            if kingdom is not None and alliance is not None else None
+        )
         chat_state = self._build_proven_chat_state_additions(
             image=image,
             request=request,
-            kingdom_region=chat.visible_elements[UiElementId.PNC_CHAT_TAB_KINGDOM].bounds,
-            alliance_region=chat.visible_elements[UiElementId.PNC_CHAT_TAB_ALLIANCE].bounds,
+            kingdom_region=None if kingdom is None else kingdom.bounds,
+            alliance_region=None if alliance is None else alliance.bounds,
             ocr_context=ocr_context,
             ocr_regions=ocr_regions,
         )
         return ObservationAdditions(
             visible_elements=chat.visible_elements,
-            list_entries=self._extract_chat_message_entries(image=image, lines=lines),
+            list_entries=(
+                self._extract_chat_message_entries(image=image, lines=lines, tab_regions=tab_regions)
+                if request.include_chat_entries else ()
+            ),
             screen_evidence=chat.screen_evidence,
             active_chat_channel=chat_state.active_chat_channel,
             text_field_states=chat_state.text_field_states,
@@ -2572,10 +2660,11 @@ class PncObservationEnricher:
         *,
         image: Image.Image,
         lines: tuple[OcrLine, ...],
+        tab_regions: tuple[Bounds, Bounds] | None = None,
     ) -> tuple[DetectedListEntry, ...]:
         """Extracts normalized chat rows using the trusted chat viewport and one canonical candidate pipeline."""
 
-        viewport = self._resolve_chat_transcript_viewport(image=image, lines=lines)
+        viewport = self._resolve_chat_transcript_viewport(image=image, lines=lines, tab_regions=tab_regions)
         candidate_lines = [line for line in lines if _is_chat_message_candidate_line(line=line, viewport=viewport)]
         grouped_rows: list[_ChatRowCandidate] = []
         for row_lines in _group_lines_by_vertical_gap(candidate_lines, gap=max(24, image.height // 36)):
@@ -2600,6 +2689,7 @@ class PncObservationEnricher:
         *,
         image: Image.Image,
         lines: tuple[OcrLine, ...] = (),
+        tab_regions: tuple[Bounds, Bounds] | None = None,
     ) -> _ChatTranscriptViewport:
         """Returns the trusted transcript viewport bounded by observed tabs and the input field."""
 
@@ -2615,7 +2705,8 @@ class PncObservationEnricher:
         observed_tab_bottoms = [line.bounds.y + line.bounds.height for line in observed_tab_lines]
         observed_tab_texts = {normalize_ocr_text(line.text) for line in observed_tab_lines}
         tab_bottom = (
-            max(observed_tab_bottoms)
+            max(region.y + region.height for region in tab_regions)
+            if tab_regions is not None else max(observed_tab_bottoms)
             if {_CHAT_KINGDOM_TEXT, _CHAT_ALLIANCE_TEXT}.issubset(observed_tab_texts)
             else max(kingdom_region.y + kingdom_region.height, alliance_region.y + alliance_region.height)
         )
@@ -2643,19 +2734,27 @@ class PncObservationEnricher:
             return ObservationAdditions()
         if self.selector_registry is None:
             return ObservationAdditions()
-        if active_chat_channel is None:
-            if kingdom_region is None:
-                kingdom_region = self._require_chat_region(UiElementId.PNC_CHAT_TAB_KINGDOM, image=image)
-            if alliance_region is None:
-                alliance_region = self._require_chat_region(UiElementId.PNC_CHAT_TAB_ALLIANCE, image=image)
+        if active_chat_channel is None and kingdom_region is not None and alliance_region is not None:
             active_chat_channel = _resolve_active_chat_channel(
                 image=image,
                 kingdom_region=kingdom_region,
                 alliance_region=alliance_region,
             )
+        ocr_context.record_required_field_diagnostic(
+            required_fact="active_chat_channel",
+            status=(OcrRequiredFieldStatus.PRESENT if active_chat_channel is not None else OcrRequiredFieldStatus.MISSING),
+            region=(
+                _union_bounds(kingdom_region, alliance_region)
+                if kingdom_region is not None and alliance_region is not None else None
+            ),
+            reason="selected_tab_appearance" if active_chat_channel is not None else "unresolved_tab_selection",
+            detail="visual:active_chat_channel",
+        )
         requested_fields = request.text_field_selectors.intersection(
             {UiElementId.PNC_CHAT_INPUT_FIELD}
         )
+        if not requested_fields:
+            return ObservationAdditions(active_chat_channel=active_chat_channel)
         if requested_fields and any(selector_id not in ocr_regions for selector_id in requested_fields):
             chat_plan_request = replace(request, text_field_selectors=frozenset(requested_fields))
             chat_plans = compile_ocr_region_plans(
@@ -2699,22 +2798,32 @@ class PncObservationEnricher:
         include_fields: bool,
         ocr_context: ObservationOcrContext,
         ocr_regions: Mapping[UiElementId, OcrRegionRead],
+        proved_layout: str | None = None,
+        requested_fields: frozenset[UiElementId] | None = None,
     ) -> ObservationAdditions | None:
         """Returns OCR-backed compose-popup evidence plus shared text-field state."""
 
         if self.selector_registry is None:
             return None
+        compose_fields = frozenset(compose_text_field_selector_ids())
+        requested_fields = (
+            compose_fields
+            if requested_fields is None
+            else frozenset(requested_fields).intersection(compose_fields)
+        )
         header_line = _find_header_line(lines=lines, header_texts=_MAIL_COMPOSE_HEADER_TEXTS, max_y=int(image.height * 0.35))
         send_line = _find_first_line_in_texts(lines=lines, texts=_SEND_TEXTS, min_y=int(image.height * 0.6))
-        if header_line is None:
+        if header_line is None and proved_layout != "mail_compose_centered":
             return None
         if include_fields:
-            requested_fields = frozenset(compose_text_field_selector_ids())
             if any(selector_id not in ocr_regions for selector_id in requested_fields):
                 mail_plans = compile_ocr_region_plans(
                     registry=self.selector_registry,
                     resolved_screen=ScreenType.PNC_MAIL_COMPOSE_POPUP,
-                    request=ObservationRequest.source_screen_retry(ScreenType.PNC_MAIL_COMPOSE_POPUP),
+                    request=replace(
+                        ObservationRequest.source_screen_retry(ScreenType.PNC_MAIL_COMPOSE_POPUP),
+                        text_field_selectors=requested_fields,
+                    ),
                     image_size=image.size,
                     read_purpose=OcrReadPurpose.CONTENT,
                 )
@@ -2734,6 +2843,8 @@ class PncObservationEnricher:
         text_field_states: dict[UiElementId, ObservedTextFieldState] = {}
         if include_fields:
             for selector_id in compose_text_field_selector_ids():
+                if selector_id not in requested_fields:
+                    continue
                 text_field_states[selector_id] = self._build_observed_text_field_state(
                     image=image,
                     selector_id=selector_id,
@@ -2802,6 +2913,13 @@ class PncObservationEnricher:
             # Field ownership must come from the canonical frame-local plan.
             # A caller that has not yet proved this family receives an explicit
             # unknown state; it may re-enter enrichment after identity proof.
+            ocr_context.record_required_field_diagnostic(
+                required_fact=selector_id.value,
+                status=OcrRequiredFieldStatus.MISSING,
+                region=None,
+                reason="no_owned_region",
+                detail="parser:text_field",
+            )
             return ObservedTextFieldState(selector_id=selector_id, text=None, empty=None)
         region = planned.plan.bounds
         result = planned.result
@@ -2810,31 +2928,64 @@ class PncObservationEnricher:
                 result = ocr_context.read_result(
                     image,
                     region,
-                    reuse_full_frame=True,
+                    reuse_full_frame=False,
                     purpose=OcrReadPurpose.REGION_RESEGMENTATION,
                     detail=f"field:{selector_id.value}",
+                    required_fact=planned.plan.required_fact,
                 )
-                if not result.lines:
-                    result = ocr_context.read_result(
-                        image,
-                        region,
-                        reuse_full_frame=False,
-                        purpose=OcrReadPurpose.REGION_RESEGMENTATION,
-                        detail=f"field:{selector_id.value};fallback=field_segmentation_missing",
-                    )
             except ValueError:
                 raise
             except ScreenClassificationError:
                 result = None
+        if (
+            selector_id == UiElementId.PNC_MAIL_COMPOSE_BODY_FIELD
+            and result is not None and len(result.lines) == 1
+        ):
+            line = result.lines[0]
+            if 2 * line.bounds.height < region.height:
+                # The full body locates the row. Its tall, mostly empty crop
+                # loses word spaces in the captured one-line draft. Read that
+                # row at native scale, keeping the field width and punctuation.
+                top = max(region.y, line.bounds.y - line.bounds.height // 2)
+                line_region = Bounds(
+                    region.x, top, region.width,
+                    min(2 * line.bounds.height, region.y + region.height - top),
+                )
+                try:
+                    refined = ocr_context.read_result(
+                        image, line_region, purpose=OcrReadPurpose.REGION_RESEGMENTATION,
+                        detail=f"field_line:{selector_id.value}",
+                        required_fact=planned.plan.required_fact,
+                    )
+                    result = refined if len(refined.lines) == 1 else None
+                except ValueError:
+                    raise
+                except ScreenClassificationError:
+                    result = None
         raw_text = "" if result is None else "\n".join(line.text for line in result.lines).strip()
         normalized_text = normalize_ocr_text(raw_text)
         if normalized_text in empty_placeholders or (
             normalized_text and _is_empty_chat_draft_text(normalized_text)
         ):
-            return ObservedTextFieldState(selector_id=selector_id, text=None, empty=True)
-        if normalized_text == "":
-            return ObservedTextFieldState(selector_id=selector_id, text=None, empty=None)
-        return ObservedTextFieldState(selector_id=selector_id, text=raw_text, empty=False)
+            state = ObservedTextFieldState(selector_id=selector_id, text=None, empty=True)
+            reason = "empty_placeholder"
+        elif normalized_text == "":
+            state = ObservedTextFieldState(selector_id=selector_id, text=None, empty=None)
+            reason = "missing_text"
+        else:
+            state = ObservedTextFieldState(selector_id=selector_id, text=raw_text, empty=False)
+            reason = "parsed"
+        ocr_context.record_required_field_diagnostic(
+            required_fact=planned.plan.required_fact,
+            status=(
+                OcrRequiredFieldStatus.MISSING if state.empty is None
+                else OcrRequiredFieldStatus.PRESENT
+            ),
+            region=region,
+            reason=reason,
+            detail="parser:text_field",
+        )
+        return state
 
     def _materialize_selector_visible(self, *, selector_id: UiElementId, image: Image.Image) -> VisibleElement:
         """Materializes one geometry-backed visible selector from the shared registry."""
@@ -2878,10 +3029,8 @@ class PncObservationEnricher:
         *,
         image: Image.Image,
         lines: tuple[OcrLine, ...],
-        ocr_context: ObservationOcrContext,
-        ocr_regions: Mapping[UiElementId, OcrRegionRead] | None = None,
     ) -> ObservationAdditions | None:
-        """Returns OCR-backed coordinate-dialog identity plus any proven committed field state."""
+        """Return guard candidates without acquiring coordinate-field content."""
 
         if self.selector_registry is None:
             return None
@@ -2900,45 +3049,13 @@ class PncObservationEnricher:
         )
         if go_line is None:
             return None
-        # Reject an ordinary GO label before any coordinate-field crops.  The
-        # existing identity contract requires K plus two labels, or all three
-        # labels; only the two-label case needs field OCR to complete proof.
+        # These labels may propose a guard, but independent visual evidence
+        # must establish its layout before fields or controls are published.
         if len(label_texts) < 2 or "K" not in label_texts:
             return None
-        if not ocr_regions:
-            bootstrap_plans = compile_ocr_region_plans(
-                registry=self.selector_registry,
-                resolved_screen=ScreenType.PNC_WORLD_COORDINATE_DIALOG,
-                request=ObservationRequest.world_map_coordinate_dialog_follow_up(),
-                image_size=image.size,
-                read_purpose=OcrReadPurpose.IDENTITY,
-            )
-            ocr_regions = {
-                read.plan.selector_id: read
-                for read in execute_ocr_region_plans(
-                    image=image,
-                    plans=bootstrap_plans,
-                    ocr_context=ocr_context,
-                )
-                if read.plan.selector_id is not None
-            }
         visible_elements: dict[UiElementId, VisibleElement] = {}
-        text_field_states: dict[UiElementId, ObservedTextFieldState] = {}
         for selector_id in world_map_coordinate_dialog_text_field_selector_ids():
             visible_elements[selector_id] = self._materialize_selector_visible(selector_id=selector_id, image=image)
-            state = self._build_world_map_coordinate_dialog_field_state(
-                image=image,
-                selector_id=selector_id,
-                ocr_context=ocr_context,
-                ocr_regions={} if ocr_regions is None else ocr_regions,
-            )
-            if state is not None:
-                text_field_states[selector_id] = state
-        if not _world_map_coordinate_dialog_identity_proven(
-            label_texts=label_texts,
-            text_field_states=text_field_states,
-        ):
-            return None
         for selector_id in (
             UiElementId.PNC_WORLD_COORDINATE_DIALOG_CLOSE_BUTTON,
             UiElementId.PNC_WORLD_COORDINATE_DIALOG_KEYBOARD_OK_BUTTON,
@@ -2951,8 +3068,61 @@ class PncObservationEnricher:
         return ObservationAdditions(
             visible_elements=visible_elements,
             screen_evidence=(ScreenEvidence(ScreenType.PNC_WORLD_COORDINATE_DIALOG, "ocr_world_coordinate_dialog"),),
-            text_field_states=text_field_states,
         )
+
+    def _build_world_map_coordinate_dialog_content_additions(
+        self,
+        *,
+        image: Image.Image,
+        request: ObservationRequest,
+        ocr_context: ObservationOcrContext,
+        ocr_regions: Mapping[UiElementId, OcrRegionRead],
+    ) -> ObservationAdditions:
+        """Read requested coordinate fields after the dialog identity is accepted."""
+
+        if self.selector_registry is None:
+            return ObservationAdditions()
+        coordinate_fields = frozenset(world_map_coordinate_dialog_text_field_selector_ids())
+        requested_fields = frozenset(request.text_field_selectors).intersection(coordinate_fields)
+        if not requested_fields:
+            return ObservationAdditions()
+        if any(selector_id not in ocr_regions for selector_id in requested_fields):
+            field_request = replace(
+                ObservationRequest.source_screen_retry(ScreenType.PNC_WORLD_COORDINATE_DIALOG),
+                text_field_selectors=requested_fields,
+            )
+            field_plans = compile_ocr_region_plans(
+                registry=self.selector_registry,
+                resolved_screen=ScreenType.PNC_WORLD_COORDINATE_DIALOG,
+                request=field_request,
+                image_size=image.size,
+                read_purpose=OcrReadPurpose.CONTENT,
+            )
+            ocr_regions = {
+                **ocr_regions,
+                **{
+                    read.plan.selector_id: read
+                    for read in execute_ocr_region_plans(
+                        image=image,
+                        plans=field_plans,
+                        ocr_context=ocr_context,
+                    )
+                    if read.plan.selector_id is not None
+                },
+            }
+        text_field_states: dict[UiElementId, ObservedTextFieldState] = {}
+        for selector_id in world_map_coordinate_dialog_text_field_selector_ids():
+            if selector_id not in requested_fields:
+                continue
+            state = self._build_world_map_coordinate_dialog_field_state(
+                image=image,
+                selector_id=selector_id,
+                ocr_context=ocr_context,
+                ocr_regions=ocr_regions,
+            )
+            if state is not None:
+                text_field_states[selector_id] = state
+        return ObservationAdditions(text_field_states=text_field_states)
 
     def _build_world_map_coordinate_dialog_field_state(
         self,
@@ -2970,13 +3140,64 @@ class PncObservationEnricher:
             ocr_context=ocr_context,
             ocr_regions=ocr_regions,
         )
+        planned = ocr_regions.get(selector_id)
+        region = (
+            planned.plan.bounds
+            if planned is not None
+            else self._require_selector_region(selector_id, image=image)
+        )
+        required_fact = (
+            planned.plan.required_fact
+            if planned is not None
+            else selector_id.value
+        )
+        detail = "parser:world_coordinate_dialog_field"
         if parse_world_coordinate_dialog_field_text(selector_id=selector_id, text=state.text) is not None:
+            ocr_context.record_required_field_diagnostic(
+                required_fact=required_fact,
+                status=OcrRequiredFieldStatus.PRESENT,
+                region=region,
+                reason="parsed",
+                detail=detail,
+            )
             return state
         if selector_id not in _WORLD_COORDINATE_DIALOG_FIELD_ZERO_SELECTOR_IDS:
+            ocr_context.record_required_field_diagnostic(
+                required_fact=required_fact,
+                status=(
+                    OcrRequiredFieldStatus.MISSING
+                    if state.text is None
+                    else OcrRequiredFieldStatus.INVALID
+                ),
+                region=region,
+                reason="missing_text" if state.text is None else "invalid_value",
+                detail=detail,
+            )
             return None
-        region = self._require_selector_region(selector_id, image=image)
         if not _coordinate_dialog_field_contains_zero_glyph(image=image, region=region):
+            ocr_context.record_required_field_diagnostic(
+                required_fact=required_fact,
+                status=(
+                    OcrRequiredFieldStatus.MISSING
+                    if state.text is None
+                    else OcrRequiredFieldStatus.INVALID
+                ),
+                region=region,
+                reason=(
+                    "missing_text_and_zero_glyph"
+                    if state.text is None
+                    else "invalid_value_and_zero_glyph_absent"
+                ),
+                detail=detail,
+            )
             return None
+        ocr_context.record_required_field_diagnostic(
+            required_fact=required_fact,
+            status=OcrRequiredFieldStatus.PRESENT,
+            region=region,
+            reason="zero_glyph_fallback",
+            detail=detail,
+        )
         return ObservedTextFieldState(selector_id=selector_id, text="0", empty=False)
 
     def _build_world_map_overview_additions(
@@ -3055,8 +3276,21 @@ def _build_player_profile_additions(
     *,
     image: Image.Image,
     lines: tuple[OcrLine, ...],
+    layout_id: str | None = None,
 ) -> ObservationAdditions | None:
-    """Returns the remote player-profile screen and visible profile name when OCR matches the layout."""
+    """Read a profile name without asking its optional controls to prove identity."""
+
+    if layout_id == "remote_player_profile_gear":
+        # The Gear tab and remote-only footer pair independently own this layout.
+        # Only the title between Back and Stats is the displayed remote name.
+        name_bounds = Bounds(round(image.width * 0.18), 0,
+                             round(image.width * 0.70), round(image.height * 0.055))
+        names = tuple(line for line in lines if name_bounds.contains_bounds(line.bounds)
+                      and line.text.strip())
+        if len(names) != 1:
+            return None
+        name_line = names[0]
+        return ObservationAdditions(profile_player_name=name_line.text.strip())
 
     header = _find_header_line(lines=lines, header_texts=_PLAYER_PROFILE_HEADER_TEXTS, max_y=int(image.height * 0.18))
     if header is None and not _has_remote_profile_layout_support(lines):
@@ -3334,7 +3568,7 @@ def _build_mailbox_additions(
             else frozenset({UiElementId.PNC_MAIL_COMPOSE_BUTTON})
         ),
         mailbox_type=mailbox_type,
-        mailbox_empty=empty_line is not None,
+        mailbox_empty=True if empty_line is not None else False if thread_entries else None,
     )
 
 
@@ -3370,6 +3604,42 @@ def _build_mail_thread_additions(
         mailbox_type=mailbox_type,
     )
 
+
+
+def _build_castle_roster_additions(
+    *, image: Image.Image, lines: tuple[OcrLine, ...],
+    anchors: tuple[DetectedTextAnchor, ...], ocr_context: ObservationOcrContext,
+) -> ObservationAdditions | None:
+    """Parse exact roster rows and selection after independent screen identity."""
+
+    entries = _extract_castle_entries(
+        image=image, lines=lines, anchors=anchors, ocr_context=ocr_context,
+    )
+    if not _looks_like_castle_selection(anchors, entries):
+        return None
+
+    visible_elements_by_id: dict[UiElementId, VisibleElement] = {}
+    if entries:
+        visible_elements_by_id[UiElementId.PNC_CASTLE_LIST_ENTRY] = _make_visible_from_entry(
+            selector_id=UiElementId.PNC_CASTLE_LIST_ENTRY,
+            entry=entries[0],
+        )
+    selected_entry = next((entry for entry in entries if entry.selected), None)
+    if selected_entry is not None:
+        visible_elements_by_id[UiElementId.PNC_CASTLE_SELECTED_CHECKMARK] = _make_visible(
+            selector_id=UiElementId.PNC_CASTLE_SELECTED_CHECKMARK,
+            x=max(0, selected_entry.bounds.x + int(selected_entry.bounds.width * 0.82)),
+            y=selected_entry.bounds.y,
+            width=max(1, int(selected_entry.bounds.width * 0.18)),
+            height=selected_entry.bounds.height,
+        )
+    return ObservationAdditions(
+        visible_elements=visible_elements_by_id,
+        list_entries=entries,
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_CASTLE_SELECTION, "manage_char_roster"),),
+        current_castle=_entry_to_current_castle(selected_entry),
+        current_castle_evidence=None if selected_entry is None else CurrentCastleEvidenceKind.EXACT,
+    )
 
 def _build_chat_player_action_popup_additions(
     *,
@@ -3643,20 +3913,53 @@ def _build_building_construction_additions(
     *,
     image: Image.Image,
     lines: tuple[OcrLine, ...],
+    proved_screen: ScreenType | None = None,
+    ocr_context: ObservationOcrContext | None = None,
+    target_read: OcrRegionRead | None = None,
 ) -> ObservationAdditions | None:
-    """Recognizes the resource-funded confirmation shown after selecting a build-menu option."""
+    """Recognizes a resource-funded confirmation after a build-menu selection.
+
+    The legacy path requires the complete OCR confirmation. Once a visual
+    construction profile has proved the surface, the title crop owns identity
+    and OCR contributes only the target label and controls that it actually
+    read.
+    """
+
+    if proved_screen is not None and proved_screen != ScreenType.PNC_BUILDING_CONSTRUCTION:
+        return None
+    if proved_screen is None or target_read is None:
+        target_lines = lines
+    elif target_read.result is None:
+        target_lines = ()
+    else:
+        target_lines = target_read.result.lines
 
     header = _find_line_matching(
-        lines=lines,
+        lines=target_lines,
         predicate=lambda line: (
             (definition := home_city_object_definition_for_label(line.text)) is not None
             and building_construction_source(definition.id) is not None
         ),
         max_y=int(image.height * 0.15),
     )
+    if proved_screen is not None and ocr_context is not None:
+        ocr_context.record_required_field_diagnostic(
+            required_fact="construction_target_name",
+            status=(
+                OcrRequiredFieldStatus.PRESENT
+                if header is not None
+                else OcrRequiredFieldStatus.MISSING
+            ),
+            region=None if target_read is None else target_read.plan.bounds,
+            reason="parsed" if header is not None else "missing_text",
+            detail="parser:construction_target_name",
+        )
     build_line = _find_line_matching(
         lines=lines,
-        predicate=lambda line: normalize_ocr_text(line.text) == "BUILD" and line.bounds.x >= image.width * 0.6,
+        predicate=lambda line: (
+            normalize_ocr_text(line.text) == "BUILD"
+            and line.bounds.x >= image.width * 0.6
+        ),
         min_y=int(image.height * 0.2),
         max_y=int(image.height * 0.4),
     )
@@ -3667,7 +3970,7 @@ def _build_building_construction_additions(
         max_y=int(image.height * 0.4),
     )
     normalized_texts = {normalize_ocr_text(line.text) for line in lines}
-    if (
+    if proved_screen is None and (
         header is None
         or build_line is None
         or build_now_line is None
@@ -3675,23 +3978,32 @@ def _build_building_construction_additions(
         or "MATERIALSREQUIRED" not in normalized_texts
     ):
         return None
+    if proved_screen is not None and header is None:
+        # The visual profile can retain screen identity, but OCR controls are
+        # withheld until the owned title crop names the target building.
+        return ObservationAdditions()
+    visible_elements: dict[UiElementId, VisibleElement] = {}
+    if header is not None:
+        visible_elements[UiElementId.PNC_BUILDING_CONSTRUCTION_HEADER] = _make_visible_from_line(
+            selector_id=UiElementId.PNC_BUILDING_CONSTRUCTION_HEADER,
+            line=header,
+        )
+    if build_line is not None:
+        visible_elements[UiElementId.PNC_BUILDING_CONSTRUCTION_BUILD_BUTTON] = _make_visible_from_line(
+            selector_id=UiElementId.PNC_BUILDING_CONSTRUCTION_BUILD_BUTTON,
+            line=build_line,
+        )
+    if build_now_line is not None:
+        visible_elements[UiElementId.PNC_BUILDING_CONSTRUCTION_BUILD_NOW_BUTTON] = _make_visible_from_line(
+            selector_id=UiElementId.PNC_BUILDING_CONSTRUCTION_BUILD_NOW_BUTTON,
+            line=build_now_line,
+        )
     return ObservationAdditions(
-        visible_elements={
-            UiElementId.PNC_BUILDING_CONSTRUCTION_HEADER: _make_visible_from_line(
-                selector_id=UiElementId.PNC_BUILDING_CONSTRUCTION_HEADER,
-                line=header,
-            ),
-            UiElementId.PNC_BUILDING_CONSTRUCTION_BUILD_BUTTON: _make_visible_from_line(
-                selector_id=UiElementId.PNC_BUILDING_CONSTRUCTION_BUILD_BUTTON,
-                line=build_line,
-            ),
-            UiElementId.PNC_BUILDING_CONSTRUCTION_BUILD_NOW_BUTTON: _make_visible_from_line(
-                selector_id=UiElementId.PNC_BUILDING_CONSTRUCTION_BUILD_NOW_BUTTON,
-                line=build_now_line,
-            ),
-        },
+        visible_elements=visible_elements,
         screen_evidence=(
-            ScreenEvidence(ScreenType.PNC_BUILDING_CONSTRUCTION, "ocr_building_construction_confirmation"),
+            ()
+            if proved_screen is not None
+            else (ScreenEvidence(ScreenType.PNC_BUILDING_CONSTRUCTION, "ocr_building_construction_confirmation"),)
         ),
     )
 
@@ -5750,6 +6062,96 @@ def _build_reconnect_popup_additions(
     )
 
 
+def _qualify_modal_action_geometry(
+    *, image: Image.Image, additions: ObservationAdditions,
+) -> ObservationAdditions:
+    """Require current panel edges and the layout's measured Confirm button.
+
+    OCR identifies the exact warning/update/reconnect message. It cannot supply
+    the padded click rectangle formerly returned by those text parsers.
+    """
+
+    selectors = {
+        UiElementId.PNC_UPDATE_CONFIRM_BUTTON,
+        UiElementId.PNC_RECONNECT_CONFIRM_BUTTON,
+        UiElementId.PNC_BUILDING_UPGRADE_WARNING_CONFIRM_BUTTON,
+    }
+    close = additions.visible_elements.get(UiElementId.PNC_POPUP_CLOSE_BUTTON)
+    if close is not None and close.source_kind == VisibleElementSourceKind.OCR:
+        selectors.add(UiElementId.PNC_POPUP_CLOSE_BUTTON)
+    candidates = selectors.intersection(additions.visible_elements)
+    if not candidates:
+        return additions
+    rgb = image.convert("RGB")
+    width, height = image.size
+    panel_present = all(
+        _vertical_surface_edge_contrast(
+            rgb_image=rgb, start=round(width * left), end=round(width * right),
+            top=round(height * .36), bottom=round(height * .52), direction=direction,
+        ) >= 8
+        for left, right, direction in ((.02, .14, 1), (.86, .98, -1))
+    )
+    measured = dict(additions.visible_elements)
+    for selector in candidates:
+        candidate = measured.pop(selector)
+        point = candidate.action_point or candidate.bounds.center()
+        half_width = round(width * .28)
+        half_height = round(height * .065)
+        left, right = max(0, point[0] - half_width), min(width, point[0] + half_width)
+        if selector == UiElementId.PNC_POPUP_CLOSE_BUTTON:
+            # A paired footer owns separate left/right buttons. Exclude its
+            # affirmative neighbour before measuring the negative action.
+            if point[0] > width * .6:
+                left = max(left, width // 2)
+            elif point[0] < width * .4:
+                right = min(right, width // 2)
+        top, bottom = max(0, point[1] - half_height), min(height, point[1] + half_height)
+        buttons = () if not panel_present else detect_button_runs(
+            rgb, bounds=Bounds(left, top, right - left, bottom - top),
+            x_start=left, x_end=right,
+            predicate=(
+                (lambda pixel: is_blue_button_pixel(pixel) or is_gold_button_pixel(pixel))
+                if selector == UiElementId.PNC_POPUP_CLOSE_BUTTON
+                else is_blue_button_pixel if selector == UiElementId.PNC_UPDATE_CONFIRM_BUTTON
+                else is_gold_button_pixel
+            ),
+            minimum_height=max(6, round(height * .02)),
+        )
+        owned = tuple(button for button in buttons if button.contains_point(point))
+        if len(owned) == 1:
+            measured[selector] = replace(
+                candidate, bounds=owned[0], action_point=owned[0].center(),
+                source_kind=VisibleElementSourceKind.GEOMETRY, identity_evidence=False,
+            )
+    if not candidates.issubset(measured):
+        return replace(
+            additions, visible_elements={}, popup_overlay=None,
+            screen_evidence=tuple(replace(item, reason=f"weak_unmeasured_{item.reason}")
+                                  for item in additions.screen_evidence),
+            guard_verdict=GuardVerdict.UNRESOLVED,
+        )
+    overlay = additions.popup_overlay
+    if overlay is not None:
+        element = measured[next(iter(candidates))]
+        overlay = replace(
+            overlay,
+            candidates=tuple(replace(item, bounds=element.bounds, action_point=element.action_point,
+                                     evidence_kind=PopupEvidenceKind.GEOMETRY)
+                             for item in overlay.candidates),
+        )
+    # Publish the layout only after its current panel and action geometry pass.
+    # Semantic text alone must not lend layout provenance to an action.
+    layout_id = (
+        overlay.layout_id if overlay is not None else "building_upgrade_shield_warning"
+        if UiElementId.PNC_BUILDING_UPGRADE_WARNING_CONFIRM_BUTTON in candidates
+        else "generic_modal_negative"
+    )
+    return replace(
+        additions, visible_elements=measured, popup_overlay=overlay,
+        screen_evidence=tuple(replace(item, layout_id=layout_id) for item in additions.screen_evidence),
+    )
+
+
 def _popup_text_lines_are_grouped(*, image: Image.Image, first: OcrLine, second: OcrLine) -> bool:
     """Require modal-like proximity before pairing a message with an affirmative control."""
 
@@ -6302,12 +6704,6 @@ def _build_building_detail_additions(
             ),
         ),
     }
-    _add_shared_building_level_label(
-        image=image,
-        lines=lines,
-        screen_type=ScreenType.PNC_BUILDING_DETAILS,
-        visible_elements=visible_elements,
-    )
     confirm_line = _find_building_upgrade_confirm_line(image=image, lines=lines)
     required_section_lines = _find_text_lines_in_texts(
         lines=lines,
@@ -6428,30 +6824,50 @@ def _build_build_queue_additions(
     *,
     image: Image.Image,
     lines: tuple[OcrLine, ...],
+    proved_screen: ScreenType | None = None,
+    row_regions: tuple[Bounds, ...] = (),
 ) -> ObservationAdditions | None:
-    """Returns the build-queue overlay when OCR exposes its header plus queue-row support."""
+    """Returns queue entries from the queue's owned header and row crops."""
 
     header = _find_header_line(
         lines=lines,
         header_texts=_BUILD_QUEUE_HEADER_TEXTS,
         max_y=int(image.height * _BUILD_QUEUE_HEADER_MAX_Y_RATIO),
     )
-    if header is None:
+    if proved_screen is not None and proved_screen != ScreenType.PNC_BUILD_QUEUE:
+        return None
+    if proved_screen is None and header is None:
         return None
     entries: list[DetectedListEntry] = []
-    active_entry = _extract_build_queue_active_entry(image=image, lines=lines)
-    if active_entry is not None:
-        entries.append(active_entry)
+    if proved_screen is not None:
+        for row_region in row_regions:
+            active_entry = _extract_build_queue_active_entry(
+                image=image,
+                lines=tuple(line for line in lines if row_region.contains_bounds(line.bounds)),
+                row_region=row_region,
+            )
+            if active_entry is not None:
+                entries.append(active_entry)
+                break
+    else:
+        active_entry = _extract_build_queue_active_entry(image=image, lines=lines)
+        if active_entry is not None:
+            entries.append(active_entry)
     support_count = sum(
         1
         for line in lines
-        if line.bounds.y >= header.bounds.y and normalize_ocr_text(line.text) in _BUILD_QUEUE_SUPPORT_TEXTS
+        if (header is None or line.bounds.y >= header.bounds.y)
+        and normalize_ocr_text(line.text) in _BUILD_QUEUE_SUPPORT_TEXTS
     )
-    if active_entry is None and support_count < 2:
+    if proved_screen is None and not entries and support_count < 2:
         return None
     return ObservationAdditions(
         list_entries=tuple(entries),
-        screen_evidence=(ScreenEvidence(ScreenType.PNC_BUILD_QUEUE, "ocr_build_queue"),),
+        screen_evidence=(
+            ()
+            if proved_screen is not None
+            else (ScreenEvidence(ScreenType.PNC_BUILD_QUEUE, "ocr_build_queue"),)
+        ),
     )
 
 
@@ -6459,26 +6875,27 @@ def _extract_build_queue_active_entry(
     *,
     image: Image.Image,
     lines: tuple[OcrLine, ...],
+    row_region: Bounds | None = None,
 ) -> DetectedListEntry | None:
     """Returns the visible active construction row from the build queue when OCR proves one exists."""
 
     title_line = _find_line_matching(
         lines=lines,
         predicate=lambda line: _BUILD_QUEUE_ACTIVE_TITLE_PATTERN.match(line.text.strip()) is not None,
-        min_y=int(image.height * 0.14),
-        max_y=int(image.height * 0.55),
+        min_y=(int(image.height * 0.14) if row_region is None else row_region.y),
+        max_y=(int(image.height * 0.55) if row_region is None else row_region.y + row_region.height),
     )
     timer_line = _find_line_matching(
         lines=lines,
         predicate=lambda line: _QUEUE_TIMER_PATTERN.match(line.text.strip()) is not None,
-        min_y=int(image.height * 0.18),
-        max_y=int(image.height * 0.65),
+        min_y=(int(image.height * 0.18) if row_region is None else row_region.y),
+        max_y=(int(image.height * 0.65) if row_region is None else row_region.y + row_region.height),
     )
     speedup_line = _find_first_line_in_texts(
         lines=lines,
         texts=frozenset({"SPEEDUP"}),
-        min_y=int(image.height * 0.18),
-        max_y=int(image.height * 0.65),
+        min_y=(int(image.height * 0.18) if row_region is None else row_region.y),
+        max_y=(int(image.height * 0.65) if row_region is None else row_region.y + row_region.height),
     )
     if title_line is None and timer_line is None:
         return None
@@ -6488,11 +6905,15 @@ def _extract_build_queue_active_entry(
         if title_match is not None:
             title_text = title_match.group("title").strip() or None
     row_lines = [line for line in (title_line, timer_line, speedup_line) if line is not None]
-    top = max(0, min(line.bounds.y for line in row_lines) - 12)
-    bottom = min(image.height, max(line.bounds.y + line.bounds.height for line in row_lines) + 12)
+    if row_region is None:
+        top = max(0, min(line.bounds.y for line in row_lines) - 12)
+        bottom = min(image.height, max(line.bounds.y + line.bounds.height for line in row_lines) + 12)
+        entry_bounds = Bounds(x=0, y=top, width=image.width, height=max(1, bottom - top))
+    else:
+        entry_bounds = row_region
     return DetectedListEntry(
         kind=ListEntryKind.BUILDING,
-        bounds=Bounds(x=0, y=top, width=image.width, height=max(1, bottom - top)),
+        bounds=entry_bounds,
         title_text=title_text,
         timer_text=None if timer_line is None else timer_line.text.strip(),
         metadata={"queue_state": "upgrading"},
@@ -7327,7 +7748,7 @@ def _build_campaign_additions(
     """Returns only the Campaign facts proved by the reviewed screen profile."""
 
     if screen_type == ScreenType.PNC_CAMPAIGN_MAP:
-        title_region = _scale_campaign_bounds(_CAMPAIGN_MAP_CHAPTER_ROW, image=image)
+        title_region = scale_campaign_bounds(CAMPAIGN_MAP_CHAPTER_ROW, image.size)
         # The numbered badge and name are separate OCR lines on the real frame.
         title = "".join(
             normalize_ocr_text(line.text)
@@ -7352,8 +7773,8 @@ def _build_campaign_additions(
             lines=lines,
             predicate=lambda line: normalize_ocr_text(line.text) == _CAMPAIGN_CHAPTER_TITLE,
         )
-        header_region = _scale_campaign_bounds(_CAMPAIGN_CHAPTER_TITLE_REGION, image=image)
-        row_region = _scale_campaign_bounds(_CAMPAIGN_CHAPTER_STAGE_THREE_ROW, image=image)
+        header_region = scale_campaign_bounds(CAMPAIGN_CHAPTER_TITLE_REGION, image.size)
+        row_region = scale_campaign_bounds(CAMPAIGN_CHAPTER_STAGE_THREE_ROW, image.size)
         stage = visible_elements.get(UiElementId.PNC_CAMPAIGN_MAP_REGION_NODE)
         if (
             header is None
@@ -7375,18 +7796,6 @@ def _build_campaign_additions(
         return ObservationAdditions(list_entries=(entry,))
 
     return None
-
-
-def _scale_campaign_bounds(bounds: Bounds, *, image: Image.Image) -> Bounds:
-    """Scales measured 540x960 Campaign geometry to the current viewport."""
-
-    reference_width, reference_height = _CAMPAIGN_REFERENCE_SIZE
-    return Bounds(
-        x=round(bounds.x * image.width / reference_width),
-        y=round(bounds.y * image.height / reference_height),
-        width=max(1, round(bounds.width * image.width / reference_width)),
-        height=max(1, round(bounds.height * image.height / reference_height)),
-    )
 
 
 def _build_research_tree_additions(
@@ -7835,6 +8244,7 @@ def _extract_castle_entries(
     image: Image.Image,
     lines: tuple[OcrLine, ...],
     anchors: tuple[DetectedTextAnchor, ...],
+    ocr_context: ObservationOcrContext,
 ) -> tuple[DetectedListEntry, ...]:
     """Extracts typed castle rows from OCR lines on the Manage Char screen."""
 
@@ -7847,6 +8257,7 @@ def _extract_castle_entries(
             row_lines=lines[start:end],
             row_anchors=tuple(anchor for anchor in anchors if _anchor_in_line_range(anchor, lines[start:end])),
             next_row_top=None if end >= len(lines) else lines[end].bounds.y,
+            ocr_context=ocr_context,
         )
         if entry is not None:
             entries.append(entry)
@@ -7859,6 +8270,7 @@ def _build_castle_entry(
     row_lines: tuple[OcrLine, ...],
     row_anchors: tuple[DetectedTextAnchor, ...],
     next_row_top: int | None,
+    ocr_context: ObservationOcrContext,
 ) -> DetectedListEntry | None:
     """Builds one detected castle entry from the OCR lines belonging to a row."""
 
@@ -7874,6 +8286,11 @@ def _build_castle_entry(
     level_anchor = next((anchor for anchor in row_anchors if anchor.id == TextAnchorId.CASTLE_LEVEL), None)
     level_line = next((line for line in row_lines if level_anchor is not None and line.bounds == level_anchor.bounds), None)
     castle_name_line = _find_castle_name_line(row_lines, row_anchors=row_anchors, level_line=level_line)
+    if castle_name_line is None:
+        return None
+    castle_name_line = _read_castle_name_field(
+        image=image, line=castle_name_line, ocr_context=ocr_context,
+    )
     if castle_name_line is None:
         return None
 
@@ -7894,8 +8311,61 @@ def _build_castle_entry(
         metadata={
             "kingdom": kingdom,
             "castle_level": castle_level,
+            "name_bounds": (castle_name_line.bounds.x, castle_name_line.bounds.y,
+                            castle_name_line.bounds.width, castle_name_line.bounds.height),
         },
     )
+
+
+def _read_castle_name_field(
+    *, image: Image.Image, line: OcrLine, ocr_context: ObservationOcrContext,
+) -> OcrLine | None:
+    """Read one located roster name at native scale, preserving exact spelling.
+
+    The roster viewport locates the field; its downscaled line OCR can drop
+    spaces. A padded field read is authoritative for every row, irrespective of
+    selection or caller expectations. Extra trailing padding retains characters
+    underestimated by the initial detector. There is no broad-read fallback.
+    """
+
+    padding = max(1, round(line.bounds.height * 0.6))
+    left = max(0, line.bounds.x - padding)
+    top = max(0, line.bounds.y - line.bounds.height)
+    right = min(image.width, line.bounds.x + line.bounds.width + 3 * padding)
+    bottom = min(image.height, line.bounds.y + 2 * line.bounds.height)
+    region = Bounds(left, top, right - left, bottom - top)
+    required_fact = _castle_row_name_required_fact(region)
+    plan = OcrRegionPlan(
+        family=ScreenType.PNC_CASTLE_SELECTION, purpose=OcrRegionPurpose.TEXT_FIELD,
+        bounds=region, required_fact=required_fact,
+        failure_policy=OcrRegionFailurePolicy.ABSTAIN,
+    )
+    read = execute_ocr_region_plans(image=image, plans=(plan,), ocr_context=ocr_context)[0]
+    candidates = () if read.result is None else tuple(
+        candidate for candidate in read.result.lines
+        if region.contains_bounds(candidate.bounds)
+        and line.bounds.y <= candidate.bounds.center()[1] < line.bounds.y + line.bounds.height
+        and candidate.text.strip()
+    )
+    # A fragmented or partially detected label cannot become an exact identity.
+    name = candidates[0] if len(candidates) == 1 else None
+    if name is not None and (
+        name.bounds.x > line.bounds.x + padding
+        or name.bounds.x + name.bounds.width < line.bounds.x + line.bounds.width - padding
+    ):
+        name = None
+    ocr_context.record_required_field_diagnostic(
+        required_fact=required_fact,
+        status=OcrRequiredFieldStatus.PRESENT if name is not None else OcrRequiredFieldStatus.MISSING,
+        region=region, reason="parsed" if name is not None else "missing_or_fragmented_name",
+    )
+    return name
+
+
+def _castle_row_name_required_fact(region: Bounds) -> str:
+    """Identify one roster row's name field while retaining retry ownership."""
+
+    return f"castle_row_name[row_y={region.y}]"
 
 
 def _entry_to_current_castle(entry: DetectedListEntry | None) -> CastleIdentity | None:
@@ -8314,20 +8784,6 @@ def _find_world_map_coordinate_dialog_label_texts(
         is not None
     }
     return frozenset(label_texts)
-
-
-def _world_map_coordinate_dialog_identity_proven(
-    *,
-    label_texts: frozenset[str],
-    text_field_states: Mapping[UiElementId, ObservedTextFieldState],
-) -> bool:
-    """Returns whether OCR labels or selector-backed fields prove the coordinate dialog identity."""
-
-    if label_texts == frozenset({"K", "X", "Y"}):
-        return True
-    if len(label_texts) < 2 or "K" not in label_texts:
-        return False
-    return all(selector_id in text_field_states for selector_id in world_map_coordinate_dialog_text_field_selector_ids())
 
 
 def _coordinate_dialog_field_contains_zero_glyph(*, image: Image.Image, region: object) -> bool:

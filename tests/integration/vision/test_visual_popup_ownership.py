@@ -19,7 +19,9 @@ from pnc_automation.app.pnc.vision.observation_builder import (
     ObservationBuilder,
     ImageSelectorEngine,
 )
-from pnc_automation.core.vision.ocr.ocr_service import UnavailableOcrService
+from pnc_automation.app.pnc.vision.ocr_region_plan import compile_guard_ocr_region_plans
+from pnc_automation.core.vision.ocr.ocr_service import OcrLine, OcrResult, UnavailableOcrService
+from pnc_automation.core.vision.image.models import Bounds
 from pnc_automation.app.pnc.vision.pnc_observation_enricher import (
     PncObservationEnricher,
     _bright_popup_close_pixels,
@@ -36,6 +38,18 @@ from tests.support.pnc.capture_vision.fake_screenshot_session import _FakeScreen
 from tests.support.pnc.capture_vision.recording_ocr_service import _RecordingOcrService
 from tests.support.pnc.capture_vision.encode_png import _encode_png
 from tests.support.pnc.capture_vision.ocr_line import _ocr_line
+
+
+class _RegionRecordingOcrService(_RecordingOcrService):
+    """Records every backend region so popup guards remain bounded."""
+
+    def __init__(self, *, lines: tuple[OcrLine, ...]) -> None:
+        super().__init__(lines=lines)
+        self.regions: list[Bounds | None] = []
+
+    def read_result(self, image: Image.Image, region: Bounds | None = None) -> OcrResult:
+        self.regions.append(region)
+        return super().read_result(image, region)
 
 
 class VisualPopupOwnershipTests(unittest.TestCase):
@@ -111,7 +125,7 @@ class VisualPopupOwnershipTests(unittest.TestCase):
                 artifact_directory="generic_visual_popup",
                 label="upper_right_close_x",
             )
-            ocr_service = _RecordingOcrService(lines=())
+            ocr_service = _RegionRecordingOcrService(lines=())
             builder = ObservationBuilder(
                 selector_registry=_minimal_runtime_registry(),
                 selector_engine=ImageSelectorEngine(
@@ -123,12 +137,17 @@ class VisualPopupOwnershipTests(unittest.TestCase):
             ocr_service=ocr_service,
             )
 
-            observation = builder.build(screenshot)
+            ocr_context = builder.create_ocr_context(screenshot)
+            observation = builder.build(screenshot, ocr_context=ocr_context)
 
             self.assertEqual(observation.screen_type, ScreenType.UNKNOWN)
             self.assertFalse(observation.blocking_popup)
             self.assertFalse(observation.has(UiElementId.PNC_POPUP_CLOSE_BUTTON))
-            self.assertEqual(ocr_service.read_result_calls, 1)
+            allowed_regions = {plan.bounds for plan in compile_guard_ocr_region_plans(image.size)}
+            self.assertTrue(ocr_service.regions)
+            self.assertTrue(all(region is not None for region in ocr_service.regions))
+            self.assertTrue(all(region in allowed_regions for region in ocr_service.regions))
+            self.assertTrue(all(diagnostic.region is not None for diagnostic in ocr_context.read_diagnostics))
 
     def test_observation_builder_accepts_shifted_x_owned_by_modal_text_cluster(self) -> None:
         """Finds a measured X after a compact message and primary action prove modal ownership."""

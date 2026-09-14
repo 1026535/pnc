@@ -135,8 +135,8 @@ class PopupCloseRejectionTests(unittest.TestCase):
             self.assertFalse(observation.has(UiElementId.PNC_BUILDING_UPGRADE_WARNING_CONFIRM_BUTTON))
             self.assertEqual(ocr_service.read_result_calls, 1)
 
-    def test_observation_builder_classifies_vip_daily_reset_popup_from_ocr(self) -> None:
-        """Recognizes the VIP daily-reset popup as a dedicated blocking screen with a tappable Close button."""
+    def test_vip_reset_text_without_visual_identity_cannot_publish_close(self) -> None:
+        """VIP text on a uniform frame cannot establish a modal or its Close action."""
 
         with tempfile.TemporaryDirectory() as temp_directory:
             root = Path(temp_directory)
@@ -170,10 +170,10 @@ class PopupCloseRejectionTests(unittest.TestCase):
 
             observation = builder.build(screenshot)
 
-            self.assertEqual(observation.screen_type, ScreenType.PNC_VIP_DAILY_RESET)
-            self.assertTrue(observation.blocking_popup)
-            self.assertTrue(observation.has(UiElementId.PNC_VIP_DAILY_RESET_HEADER))
-            self.assertTrue(observation.has(UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON))
+            self.assertEqual(observation.screen_type, ScreenType.UNKNOWN)
+            self.assertFalse(observation.decision.action_eligible)
+            self.assertFalse(observation.has(UiElementId.PNC_VIP_DAILY_RESET_HEADER))
+            self.assertFalse(observation.has(UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON))
             self.assertFalse(observation.has(UiElementId.PNC_POPUP_CLOSE_BUTTON))
 
     def test_observation_builder_rejects_hero_offer_near_match_without_price_and_one_time(self) -> None:

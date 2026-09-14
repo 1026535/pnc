@@ -43,7 +43,7 @@ class ObservationRequest:
 
     @classmethod
     def full_runtime_default(cls) -> "ObservationRequest":
-        """Returns the broad full-frame OCR request used for unattended runtime observations."""
+        """Returns the broad semantic OCR scope used for unattended observations."""
 
         return cls(
             ocr_screen_types=runtime_screen_family_ocr_types(),

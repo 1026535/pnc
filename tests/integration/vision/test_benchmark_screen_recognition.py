@@ -495,7 +495,7 @@ class ScreenRecognitionBenchmarkTests(unittest.TestCase):
         class Enricher:
             ocr_service: object
 
-            def enrich(self, image, screen_type, visible_elements, request, *, ocr_context, ocr_regions):
+            def enrich(self, image, screen_type, visible_elements, request, *, ocr_context, ocr_regions, layout_id=None):
                 del image, screen_type, visible_elements, request, ocr_context, ocr_regions
                 return None
 

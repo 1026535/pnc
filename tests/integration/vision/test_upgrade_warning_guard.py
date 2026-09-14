@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 import unittest
 
+from pathlib import Path
 from PIL import Image
 
 from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
@@ -19,7 +20,8 @@ class WarningOcr:
     result: OcrResult
 
     def read_result(self, image, region=None):
-        return self.result
+        assert region is not None
+        return OcrResult(tuple(line for line in self.result.lines if region.contains_bounds(line.bounds)), ())
 
 
 class UpgradeWarningGuardTests(unittest.TestCase):
@@ -35,7 +37,8 @@ class UpgradeWarningGuardTests(unittest.TestCase):
                     line("Cancel", 189, 857, 128, 43),
                     line("Confirm", 580, 860, 140, 38),
                 )
-                image = Image.new("RGB", (round(900 * scale), round(1600 * scale)))
+                with Image.open(Path("tests/data/screen_recognition/upgrade_warning_aug28.png")) as source:
+                    image = source.convert("RGB").resize((round(900 * scale), round(1600 * scale)))
                 context = ObservationOcrContext(
                     image=image,
                     backend=WarningOcr(OcrResult(lines, ())),

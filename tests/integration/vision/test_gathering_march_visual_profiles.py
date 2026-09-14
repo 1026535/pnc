@@ -28,6 +28,10 @@ from tests.support.paths import TEST_DATA_ROOT
 from tests.support.pnc.capture_vision.encode_png import _encode_png
 from tests.support.pnc.capture_vision.fake_ocr_service import _FakeOcrService
 from tests.support.pnc.capture_vision.fake_screenshot_session import make_captured_frame
+from tests.support.pnc.capture_vision.modal_overlay import (
+    update_modal_lines,
+    with_update_modal,
+)
 from tests.support.pnc.capture_vision.recording_ocr_service import _RecordingOcrService
 
 
@@ -219,7 +223,7 @@ class GatheringMarchVisualProfileTests(unittest.TestCase):
                     {selector_id},
                 )
                 control = observation.visible_elements[selector_id]
-                self.assertTrue(control.identity_evidence)
+                self.assertFalse(control.identity_evidence)
                 self.assertEqual(control.source_screen, screen)
                 self.assertEqual(control.source_layout_id, layout_id)
                 self.assertEqual(control.frame_ref, capture.frame_ref)
@@ -272,16 +276,10 @@ class GatheringMarchVisualProfileTests(unittest.TestCase):
         self.assertFalse(wrong_screen.has(UiElementId.PNC_GATHER_BUTTON))
         self.assertFalse(wrong_screen.has(UiElementId.PNC_MARCH_CONFIRM_BUTTON))
 
-        popup_lines = (
-            OcrLine(
-                "New version detected. Tap Confirm to update.",
-                Bounds(58, 380, 420, 28),
-                1.0,
-            ),
-            OcrLine("Confirm", Bounds(221, 531, 90, 27), 1.0),
-        )
+        image = with_update_modal(_image("gather_node.png"))
+        popup_lines = update_modal_lines(image.size)
         blocked = _builder(popup_lines).build(
-            _capture(_image("gather_node.png")),
+            _capture(image),
             request=ObservationRequest.base(),
         )
         self.assertEqual(blocked.screen_type, ScreenType.PNC_POPUP)
