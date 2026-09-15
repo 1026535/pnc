@@ -8,6 +8,7 @@ import unittest
 from PIL import Image, ImageDraw
 
 from pnc_automation.app.pnc.domain.observation import Observation, VisibleElementSourceKind
+from pnc_automation.app.pnc.domain.popup import PopupControlKind
 from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict, ScreenEvidence
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
@@ -79,6 +80,11 @@ class AllianceInvitationCapturedTests(unittest.TestCase):
                         self.assertEqual(cancel.frame_ref, capture.frame_ref)
                         self.assertEqual(cancel.source_screen, ScreenType.PNC_POPUP)
                         self.assertEqual(cancel.source_layout_id, observation.decision.layout_id)
+                        self.assertIsNotNone(observation.popup_overlay)
+                        assert observation.popup_overlay is not None
+                        self.assertIsNotNone(observation.popup_overlay.candidate(PopupControlKind.CANCEL))
+                        self.assertIsNone(observation.popup_overlay.candidate(PopupControlKind.CLOSE_TEXT))
+                        self.assertIsNone(observation.popup_overlay.candidate(PopupControlKind.NEGATIVE_ACTION))
 
     def test_erased_cancel_cannot_be_recovered_from_ocr_text(self) -> None:
         for path in ("builder", "navigation"):
@@ -102,6 +108,11 @@ class AllianceInvitationCapturedTests(unittest.TestCase):
                 self.assertEqual(set(observation.visible_elements), {UiElementId.PNC_POPUP_CLOSE_BUTTON})
                 cancel = observation.require(UiElementId.PNC_POPUP_CLOSE_BUTTON)
                 self.assertTrue(Bounds(196, 524, 131, 45).contains_point(cancel.action_point))
+                self.assertIsNotNone(observation.popup_overlay)
+                assert observation.popup_overlay is not None
+                self.assertIsNotNone(observation.popup_overlay.candidate(PopupControlKind.CANCEL))
+                self.assertIsNone(observation.popup_overlay.candidate(PopupControlKind.CLOSE_TEXT))
+                self.assertIsNone(observation.popup_overlay.candidate(PopupControlKind.NEGATIVE_ACTION))
                 self.assertEqual(cancel.frame_ref, capture.frame_ref)
 
     def test_erased_identity_anchor_does_not_promote_cancel_and_invitation_text(self) -> None:

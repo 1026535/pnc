@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import cache
 import json
 from pathlib import Path
@@ -13,10 +13,42 @@ from PIL import Image
 
 from pnc_automation.app.pnc.domain.screen_decision import ScreenDecision, ScreenEvidence
 from pnc_automation.app.pnc.domain.observation import VisibleElement, VisibleElementSourceKind
+from pnc_automation.app.pnc.domain.popup import (
+    PopupControlKind,
+    PopupDismissCandidate,
+    PopupEvidenceKind,
+    PopupOverlayObservation,
+)
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.core.vision.image.models import Bounds
 from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
+
+
+_BLOCKING_VISUAL_SCREENS = frozenset({
+    ScreenType.PNC_POPUP,
+    ScreenType.PNC_VIP_DAILY_RESET,
+})
+# These screens can be observed before the city session has completed login.
+# They must not disarm startup/login popup families merely because their base
+# anchors matched successfully.
+_PRE_LOGIN_SCREEN_TYPES = frozenset({
+    ScreenType.ANDROID_HOME,
+    ScreenType.PNC_LOADING,
+    ScreenType.PNC_LOGIN,
+    ScreenType.PNC_ACCOUNT_SWITCH,
+    ScreenType.PNC_CASTLE_SELECTION,
+})
+_VISUAL_DISMISS_KINDS = frozenset({
+    PopupControlKind.CANCEL,
+    PopupControlKind.CLOSE_TEXT,
+    PopupControlKind.CLOSE_X,
+    PopupControlKind.POPUP_BACK,
+})
+_VISUAL_DISMISS_SELECTOR_KINDS = {
+    UiElementId.PNC_POPUP_CLOSE_BUTTON: _VISUAL_DISMISS_KINDS,
+    UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON: frozenset({PopupControlKind.CLOSE_TEXT}),
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,6 +73,7 @@ class VisualScreenProfile:
     anchors: tuple[VisualAnchor, ...]
     controls: tuple["VisualControl", ...] = ()
     occludes: tuple[ScreenType, ...] = ()
+    modal_bounds: Bounds | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,6 +83,7 @@ class VisualControl:
     selector_id: UiElementId
     anchor: VisualAnchor
     dismisses_surface: bool = False
+    popup_control_kind: PopupControlKind | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,6 +106,85 @@ class VisualProfileReview:
     qualification: str
 
 
+@dataclass(slots=True)
+class PopupRecognitionSessionState:
+    """Conservative popup-family eligibility owned by one observation session."""
+
+    session_key: tuple[str, int] | None = None
+    post_login_proven: bool = False
+    vip_consumed: bool = False
+    valiant_consumed: bool = False
+    matched_families: set[str] = field(default_factory=set)
+
+    def reset_for_session(self, session_key: tuple[str, int] | None) -> None:
+        """Reset one state owner when the emulator observation session changes."""
+
+        if session_key is None or self.session_key == session_key:
+            return
+        self.session_key = session_key
+        self.post_login_proven = False
+        self.vip_consumed = False
+        self.valiant_consumed = False
+        self.matched_families.clear()
+
+    def observe_base_identity(
+        self,
+        profiles: tuple["VisualScreenProfile", ...],
+        *,
+        session_key: tuple[str, int] | None,
+    ) -> None:
+        """Treat a stable in-game base profile as proof startup/login passed."""
+
+        self.reset_for_session(session_key)
+        if session_key is None or not profiles:
+            return
+        matched_screens = {profile.screen_type for profile in profiles}
+        if len(matched_screens) != 1:
+            return
+        matched_screen = next(iter(matched_screens))
+        if matched_screen in _PRE_LOGIN_SCREEN_TYPES:
+            return
+        self.post_login_proven = True
+        if "vip" in self.matched_families:
+            self.vip_consumed = True
+        if "valiant" in self.matched_families:
+            self.valiant_consumed = True
+
+    def allow(self, profile: "VisualScreenProfile") -> bool:
+        """Return whether this session may spend matcher work on one popup family."""
+
+        if profile.id == "vip_daily_reset":
+            return not self.vip_consumed and not self.post_login_proven
+        if profile.id == "valiant_conquest":
+            return not self.valiant_consumed
+        if profile.id.startswith("savannah_hero_offer"):
+            return not self.post_login_proven
+        if profile.id.startswith("alliance_invitation"):
+            return not self.post_login_proven
+        return True
+
+    def note_matches(
+        self,
+        profiles: tuple["VisualScreenProfile", ...],
+        *,
+        session_key: tuple[str, int] | None,
+    ) -> None:
+        """Remember active popup families until a later base frame proves transition."""
+
+        self.reset_for_session(session_key)
+        if session_key is None:
+            return
+        for profile in profiles:
+            if profile.id == "valiant_conquest":
+                self.matched_families.add("valiant")
+            elif profile.id == "vip_daily_reset":
+                self.matched_families.add("vip")
+            elif profile.id.startswith("savannah_hero_offer"):
+                self.matched_families.add("savannah")
+            elif profile.id.startswith("alliance_invitation"):
+                self.matched_families.add("alliance")
+
+
 @dataclass(frozen=True, slots=True)
 class VisualRecognition:
     """Keep competing evidence explicit; similarity is not a probability."""
@@ -81,6 +194,7 @@ class VisualRecognition:
     controls: tuple[VisibleElement, ...] = ()
     dismiss_controls: tuple[VisibleElement, ...] = ()
     control_selector_ids: frozenset[UiElementId] = frozenset()
+    popup_overlay: PopupOverlayObservation | None = None
 
     @property
     def ambiguous(self) -> bool:
@@ -129,15 +243,48 @@ class VisualScreenRecognizer:
     profiles: tuple[VisualScreenProfile, ...]
     reference_size: tuple[int, int]
     matcher: OpenCvTemplateMatcher
+    popup_state: PopupRecognitionSessionState = field(default_factory=PopupRecognitionSessionState)
 
-    def recognize(self, image: Image.Image) -> VisualRecognition:
-        """Return all matching profiles; the canonical classifier resolves evidence."""
+    def recognize(
+        self,
+        image: Image.Image,
+        *,
+        include_blocking_profiles: bool = True,
+        blocking_profiles_only: bool = False,
+        session_key: tuple[str, int] | None = None,
+    ) -> VisualRecognition:
+        """Return matching profiles, optionally excluding popup families for base identity."""
+        self.popup_state.reset_for_session(session_key)
+        if blocking_profiles_only:
+            candidate_profiles = tuple(
+                profile for profile in self.profiles
+                if profile.screen_type in _BLOCKING_VISUAL_SCREENS
+            )
+        else:
+            candidate_profiles = tuple(
+                profile
+                for profile in self.profiles
+                if include_blocking_profiles or profile.screen_type not in _BLOCKING_VISUAL_SCREENS
+            )
+        if (blocking_profiles_only or include_blocking_profiles) and session_key is not None:
+            candidate_profiles = (
+                ()
+                if blocking_profiles_only and self.popup_state.post_login_proven
+                else tuple(
+                    profile for profile in candidate_profiles if self.popup_state.allow(profile)
+                )
+            )
+        # Eligibility is resolved before any image preparation.  An expired
+        # popup phase must be genuinely zero-work, including no full-frame
+        # preprocessing, after the base pass proves the session progressed.
+        if not candidate_profiles:
+            return VisualRecognition()
         prepared_frame = self.matcher.prepare_frame(image, reference_size=self.reference_size)
         if prepared_frame is None:
             return VisualRecognition()
         matching = tuple(
             profile
-            for profile in self.profiles
+            for profile in candidate_profiles
             if all(
                 self.matcher.find_best_match(
                     prepared_frame,
@@ -159,6 +306,10 @@ class VisualScreenRecognizer:
                 for profile in matching
                 if profile.screen_type not in occluded_screens
             )
+        if not include_blocking_profiles and not blocking_profiles_only:
+            self.popup_state.observe_base_identity(matching, session_key=session_key)
+        if blocking_profiles_only or include_blocking_profiles:
+            self.popup_state.note_matches(matching, session_key=session_key)
         controls: dict[UiElementId, VisibleElement] = {}
         dismiss_ids: set[UiElementId] = set()
         matched_screens = {profile.screen_type for profile in matching}
@@ -186,6 +337,51 @@ class VisualScreenRecognizer:
                     controls[control.selector_id] = element
                     if control.dismisses_surface:
                         dismiss_ids.add(control.selector_id)
+        popup_overlay: PopupOverlayObservation | None = None
+        blocking_profiles = tuple(
+            profile for profile in matching if profile.screen_type in {
+                ScreenType.PNC_POPUP,
+                ScreenType.PNC_VIP_DAILY_RESET,
+            }
+        )
+        blocking_layouts = {profile.layout_id for profile in blocking_profiles}
+        if blocking_profiles and len(blocking_layouts) == 1 and len(matched_screens) == 1:
+            profile = blocking_profiles[0]
+            matched_profile_ids = ",".join(item.id for item in blocking_profiles)
+            candidates = tuple(
+                PopupDismissCandidate(
+                    control_kind=control.popup_control_kind,
+                    bounds=controls[control.selector_id].bounds,
+                    action_point=controls[control.selector_id].action_point or controls[control.selector_id].bounds.center(),
+                    confidence=controls[control.selector_id].confidence,
+                    evidence_kind=PopupEvidenceKind.TEMPLATE,
+                    reason=f"visual_anchor:{matched_profile_ids}",
+                )
+                for control in profile.controls
+                if (
+                    control.dismisses_surface
+                    and control.popup_control_kind is not None
+                    and control.selector_id in controls
+                )
+            )
+            popup_overlay = PopupOverlayObservation(
+                image_size=image.size,
+                modal_bounds=(
+                    None if profile.modal_bounds is None else _project_bounds(
+                        profile.modal_bounds,
+                        original_size=image.size,
+                        reference_size=self.reference_size,
+                    )
+                ),
+                layout_id=profile.layout_id,
+                candidates=candidates,
+                confidence=min(
+                    (candidate.confidence for candidate in candidates),
+                    default=1.0,
+                ),
+                evidence_kind=PopupEvidenceKind.KNOWN_LAYOUT,
+                reason=f"visual_anchor:{matched_profile_ids}",
+            )
         return VisualRecognition(
             evidence=tuple(
                 ScreenEvidence(
@@ -201,9 +397,10 @@ class VisualScreenRecognizer:
             dismiss_controls=tuple(controls[selector] for selector in sorted(dismiss_ids, key=lambda value: value.value)),
             control_selector_ids=frozenset(
                 control.selector_id
-                for profile in self.profiles if profile.screen_type in matched_screens
+                for profile in candidate_profiles if profile.screen_type in matched_screens
                 for control in profile.controls
             ),
+            popup_overlay=popup_overlay,
         )
 
 
@@ -220,8 +417,8 @@ def load_visual_screen_recognizer(
     document = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(document, dict) or set(document) != {"version", "reference_size", "profiles"}:
         raise ValueError(f"Invalid visual screen catalog fields: {path}")
-    if type(document["version"]) is not int or document["version"] != 3:
-        raise ValueError("Unsupported visual screen catalog version; expected 3.")
+    if type(document["version"]) is not int or document["version"] != 4:
+        raise ValueError("Unsupported visual screen catalog version; expected 4.")
     size = document["reference_size"]
     if not isinstance(size, list) or len(size) != 2 or any(type(v) is not int or v <= 0 for v in size):
         raise ValueError("Visual screen reference_size must contain two positive integers.")
@@ -234,7 +431,7 @@ def load_visual_screen_recognizer(
     for entry in entries:
         if not isinstance(entry, dict) or not {"id", "layout_id", "screen", "revision", "source", "review", "anchors"} <= set(entry):
             raise ValueError("Each visual profile requires id, layout_id, screen, revision, source, review, and anchors.")
-        unknown = set(entry) - {"id", "layout_id", "screen", "revision", "source", "review", "anchors", "controls", "occludes"}
+        unknown = set(entry) - {"id", "layout_id", "screen", "revision", "source", "review", "anchors", "controls", "occludes", "modal_bounds"}
         if unknown:
             raise ValueError(f"Visual profile has unknown fields: {sorted(unknown)}")
         identifier = entry["id"]
@@ -269,7 +466,7 @@ def load_visual_screen_recognizer(
             raise ValueError(f"Visual profile {identifier} controls must be a list.")
         controls: list[VisualControl] = []
         for raw_control in raw_controls:
-            if not isinstance(raw_control, dict) or set(raw_control) - {"selector", "anchor", "dismisses_surface"} or "selector" not in raw_control or "anchor" not in raw_control:
+            if not isinstance(raw_control, dict) or set(raw_control) - {"selector", "anchor", "dismisses_surface", "popup_control_kind"} or "selector" not in raw_control or "anchor" not in raw_control:
                 raise ValueError(f"Visual profile {identifier} has malformed controls.")
             try:
                 selector = UiElementId(raw_control["selector"])
@@ -278,11 +475,35 @@ def load_visual_screen_recognizer(
             dismisses = raw_control.get("dismisses_surface", False)
             if type(dismisses) is not bool:
                 raise ValueError(f"Visual profile {identifier} control dismisses_surface must be boolean.")
+            popup_control_kind = raw_control.get("popup_control_kind")
+            if popup_control_kind is not None:
+                try:
+                    popup_control_kind = PopupControlKind(popup_control_kind)
+                except (TypeError, ValueError) as error:
+                    raise ValueError(f"Visual profile {identifier} has an invalid popup control kind.") from error
+                if not dismisses:
+                    raise ValueError(
+                        f"Visual profile {identifier} typed popup control {selector.value} "
+                        "must dismiss its surface."
+                    )
+            if screen in _BLOCKING_VISUAL_SCREENS and dismisses:
+                allowed_kinds = _VISUAL_DISMISS_SELECTOR_KINDS.get(selector, frozenset())
+                if popup_control_kind is None:
+                    raise ValueError(
+                        f"Visual profile {identifier} dismiss control {selector.value} "
+                        "requires popup_control_kind."
+                    )
+                if popup_control_kind not in _VISUAL_DISMISS_KINDS or popup_control_kind not in allowed_kinds:
+                    raise ValueError(
+                        f"Visual profile {identifier} has incompatible popup control kind "
+                        f"{popup_control_kind.value} for {selector.value}."
+                    )
             controls.append(
                 VisualControl(
                     selector_id=selector,
                     anchor=_load_anchor(raw_control["anchor"], root=path.parent, reference_size=tuple(size)),
                     dismisses_surface=dismisses,
+                    popup_control_kind=popup_control_kind,
                 )
             )
         raw_occludes = entry.get("occludes", [])
@@ -292,7 +513,24 @@ def load_visual_screen_recognizer(
             occludes = tuple(ScreenType[value] for value in raw_occludes)
         except (KeyError, TypeError) as error:
             raise ValueError(f"Visual profile {identifier} has invalid occluded screen types.") from error
-        profiles.append(VisualScreenProfile(identifier, layout_id, screen, revision, source, review, anchors, tuple(controls), occludes))
+        raw_modal_bounds = entry.get("modal_bounds")
+        modal_bounds = None
+        if raw_modal_bounds is not None:
+            if (
+                not isinstance(raw_modal_bounds, list)
+                or len(raw_modal_bounds) != 4
+                or any(type(value) is not int for value in raw_modal_bounds)
+            ):
+                raise ValueError(f"Visual profile {identifier} modal_bounds must contain four integers.")
+            modal_bounds = Bounds(*raw_modal_bounds)
+            if (
+                modal_bounds.x < 0 or modal_bounds.y < 0
+                or modal_bounds.width <= 0 or modal_bounds.height <= 0
+                or modal_bounds.x + modal_bounds.width > size[0]
+                or modal_bounds.y + modal_bounds.height > size[1]
+            ):
+                raise ValueError(f"Visual profile {identifier} modal_bounds must fit inside reference_size.")
+        profiles.append(VisualScreenProfile(identifier, layout_id, screen, revision, source, review, anchors, tuple(controls), occludes, modal_bounds))
     return VisualScreenRecognizer(tuple(profiles), tuple(size), matcher or OpenCvTemplateMatcher())
 
 
@@ -327,6 +565,24 @@ def _load_anchor(entry: object, *, root: Path, reference_size: tuple[int, int]) 
         if image.width > width or image.height > height:
             raise ValueError(f"Anchor {image_name} cannot fit inside its search region.")
     return VisualAnchor(path, Bounds(x, y, width, height), float(threshold))
+
+
+def _project_bounds(
+    bounds: Bounds,
+    *,
+    original_size: tuple[int, int],
+    reference_size: tuple[int, int],
+) -> Bounds:
+    """Project profile geometry from the catalog reference viewport."""
+
+    reference_width, reference_height = reference_size
+    original_width, original_height = original_size
+    return Bounds(
+        x=round(bounds.x * original_width / reference_width),
+        y=round(bounds.y * original_height / reference_height),
+        width=max(1, round(bounds.width * original_width / reference_width)),
+        height=max(1, round(bounds.height * original_height / reference_height)),
+    )
 
 
 def _load_profile_source(entry: object, *, identifier: str) -> VisualProfileSource:

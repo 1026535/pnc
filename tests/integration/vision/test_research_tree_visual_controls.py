@@ -565,17 +565,17 @@ class ResearchTreeVisualControlTests(unittest.TestCase):
         self.assertTrue(observation.blocking_popup)
         self.assertFalse(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
 
-    def test_update_text_without_captured_panel_stays_unresolved(self) -> None:
-        """OCR text alone cannot promote a required-update action."""
+    def test_update_text_on_recognized_tree_is_not_a_guard_read(self) -> None:
+        """Recognized base identity skips popup OCR when no panel evidence exists."""
 
         image = _load_fixture()
         observation = _perception(update_modal_lines(image.size)).build(_capture(image))
 
-        self.assertEqual(observation.screen_type, ScreenType.UNKNOWN)
-        self.assertEqual(observation.decision.guard, GuardVerdict.UNRESOLVED)
+        self.assertEqual(observation.screen_type, ScreenType.PNC_RESEARCH_TREE)
+        self.assertEqual(observation.decision.guard, GuardVerdict.CLEAR)
         self.assertFalse(observation.blocking_popup)
         self.assertFalse(observation.has(UiElementId.PNC_UPDATE_CONFIRM_BUTTON))
-        self.assertFalse(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
+        self.assertTrue(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
 
     def test_back_dispatch_is_bound_to_the_current_research_tree_frame(self) -> None:
         """Dispatches Back only from the current visually matched frame."""

@@ -121,6 +121,41 @@ class PopupRecoveryTests(unittest.TestCase):
                 candidates=(candidate,),
             )
 
+    def test_typed_popup_back_uses_measured_tap_without_android_back(self) -> None:
+        """A reviewed full-screen offer may own a visible back-shaped close control."""
+
+        bounds = Bounds(20, 10, 40, 40)
+        candidate = PopupDismissCandidate(
+            control_kind=PopupControlKind.POPUP_BACK,
+            bounds=bounds,
+            action_point=bounds.center(),
+            confidence=0.98,
+            evidence_kind=PopupEvidenceKind.TEMPLATE,
+            reason="lucifer_special_offer",
+        )
+        popup = make_observation(
+            ScreenType.PNC_POPUP,
+            visible_ids=(UiElementId.PNC_POPUP_CLOSE_BUTTON,),
+            blocking_popup=True,
+            frame_fingerprint="lucifer-popup",
+            popup_overlay=PopupOverlayObservation(
+                image_size=(200, 100),
+                layout_id="lucifer_special_offer_full_height",
+                candidates=(candidate,),
+            ),
+        )
+        gift_center = make_observation(ScreenType.PNC_GIFT_CENTER)
+
+        recovered = self.executor.recover_interruption_if_required(
+            popup,
+            label_prefix="lucifer",
+            observe=FakeObservationService([gift_center]).observe,
+        )
+
+        self.assertEqual(gift_center, recovered)
+        self.assertEqual([(40, 30)], self.session.taps)
+        self.assertEqual([], self.session.key_events)
+
     def test_two_distinct_transient_popups_close_in_one_episode(self) -> None:
         popup_one = make_observation(
             ScreenType.PNC_POPUP,

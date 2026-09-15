@@ -217,11 +217,17 @@ class ResearchQueueNavigationTests(unittest.TestCase):
                     recognizer=_StaticRecognizer(recognition),
                 ).build(_capture())
 
-                self.assertEqual(ScreenType.PNC_POPUP, observation.screen_type)
-                self.assertTrue(observation.blocking_popup)
-                self.assertEqual(GuardVerdict.BLOCKED, observation.decision.guard)
-                self.assertEqual({}, observation.visible_elements)
-                self.assertIsNone(observation.popup_overlay)
+                if name == "missing_visual":
+                    self.assertEqual(ScreenType.PNC_POPUP, observation.screen_type)
+                    self.assertTrue(observation.blocking_popup)
+                    self.assertEqual(GuardVerdict.BLOCKED, observation.decision.guard)
+                    self.assertEqual({}, observation.visible_elements)
+                    self.assertIsNone(observation.popup_overlay)
+                else:
+                    self.assertEqual(ScreenType.PNC_RESEARCH_QUEUE, observation.screen_type)
+                    self.assertFalse(observation.blocking_popup)
+                    self.assertEqual(GuardVerdict.CLEAR, observation.decision.guard)
+                    self.assertEqual({close.selector_id}, set(observation.visible_elements))
 
 
 if __name__ == "__main__":

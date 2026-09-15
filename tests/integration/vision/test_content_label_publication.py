@@ -11,6 +11,7 @@ from PIL import Image
 from pnc_automation.app.automation.engine.action_executor import ActionExecutor
 from pnc_automation.app.pnc.domain.action_requests import InputTextAction, TapAction
 from pnc_automation.app.pnc.domain.observation import VisibleElement, VisibleElementSourceKind
+from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.navigation_perception import NavigationPerception

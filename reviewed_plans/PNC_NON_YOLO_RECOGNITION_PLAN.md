@@ -121,11 +121,14 @@ First add offline regressions demonstrating the unbounded reads and recording ex
 facts from saved evidence. Migrate guards and their dependent content in coherent slices;
 do not promote a partially migrated pipeline as coverage-preserving.
 
-- Keep one decision sequence in both builders: validate capture provenance; recognize
-  independent visual identity/layout and foreground ownership; resolve the global guard;
+- Keep one decision sequence in both builders: validate capture provenance; establish
+  ordinary base identity with blocking popup profiles excluded; if that base is
+  recognized, skip popup profiles and generic modal recovery, then acquire exact
+  bounded guard OCR only when compact foreground panel geometry is present; otherwise
+  resolve the bounded exact guard and eligible popup work;
   read approved content regions for the permitted screen; publish guarded facts.
-  Known popup guard regions may be selected by their independent visual proof even
-  when background identity is unresolved. Caller candidate scopes never suppress guards.
+  Known popup profiles and generic fallback are considered only for an UNKNOWN base.
+  Within that UNKNOWN branch, caller candidate scopes never suppress exact guards.
 - Reuse the shared modal recognizers and canonical classifier; remove the duplicated
   full-frame acquisition/policy between recognize_guards and detect_interruption.
   Retain legitimate foreground dismiss controls and the established Research detail

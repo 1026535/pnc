@@ -43,6 +43,7 @@ SAFE_TRANSIENT_POPUP_CONTROL_KINDS = (
     PopupControlKind.CLOSE_TEXT,
     PopupControlKind.NEGATIVE_ACTION,
     PopupControlKind.CLOSE_X,
+    PopupControlKind.POPUP_BACK,
 )
 
 TASK_OWNED_POPUP_SELECTOR_IDS = frozenset(

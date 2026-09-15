@@ -18,12 +18,14 @@ from pnc_automation.app.pnc.vision.observation_builder import (
     ImageSelectorEngine,
     ObservationBuilder,
 )
+from pnc_automation.app.pnc.vision.navigation_perception import NavigationPerception
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservationEnricher
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
 from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
 from pnc_automation.app.pnc.vision.visual_screen_recognizer import load_visual_screen_recognizer
 from pnc_automation.core.infra.capture.screenshot_service import CapturedScreenshot
+from pnc_automation.core.infra.emulator.provenance import FrameRef
 from pnc_automation.core.vision.image.models import Bounds
 from pnc_automation.core.vision.ocr.ocr_service import OcrLine
 from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
@@ -56,6 +58,22 @@ def _builder(ocr: _RecordingOcrService) -> ObservationBuilder:
     )
 
 
+def _capture_with_ref(name: str, *, session_id: str, session_epoch: int) -> CapturedScreenshot:
+    """Load a fixture with explicit session provenance for lifecycle tests."""
+
+    capture = _capture(name)
+    return replace(
+        capture,
+        frame_ref=FrameRef(
+            session_id=session_id,
+            session_epoch=session_epoch,
+            capture_sequence=1,
+            input_sequence=0,
+            captured_at=capture.captured_at,
+        ),
+    )
+
+
 class VisualScreenRecognizerTests(unittest.TestCase):
     """Require distinct tabs, conservative matches, and intact global guard ordering."""
 
@@ -74,6 +92,160 @@ class VisualScreenRecognizerTests(unittest.TestCase):
                     {item.screen_type.name for item in result.evidence},
                     set(expected_visual_screens),
                 )
+
+    def test_base_identity_skips_popup_anchor_work_and_session_progress_disarms_login_families(self) -> None:
+        """Popup templates are demand-driven and a stable post-login frame closes startup eligibility."""
+
+        delegate = OpenCvTemplateMatcher()
+        calls: list[Path] = []
+
+        class _RecordingMatcher:
+            def prepare_frame(self, image, *, reference_size):
+                return delegate.prepare_frame(image, reference_size=reference_size)
+
+            def find_best_match(self, image, template_path, *, threshold, search_region):
+                calls.append(template_path)
+                return delegate.find_best_match(
+                    image,
+                    template_path,
+                    threshold=threshold,
+                    search_region=search_region,
+                )
+
+        recognizer = load_visual_screen_recognizer(matcher=_RecordingMatcher())
+        home = _capture("home_city_core.png").image
+        savannah = _capture("savannah_hero_offer.png").image
+        base = recognizer.recognize(home, include_blocking_profiles=False, session_key=("session", 1))
+        self.assertTrue(base.evidence)
+        self.assertFalse(any("/popup/" in path.as_posix() for path in calls))
+
+        calls.clear()
+        blocked = recognizer.recognize(savannah, blocking_profiles_only=True, session_key=("session", 1))
+        self.assertNotIn("savannah_hero_offer", blocked.profile_ids)
+        self.assertFalse(any("/popup/" in path.as_posix() for path in calls))
+
+        calls.clear()
+        eligible = recognizer.recognize(savannah, blocking_profiles_only=True, session_key=("new-session", 1))
+        self.assertIn("savannah_hero_offer", eligible.profile_ids)
+        self.assertTrue(any("/popup/" in path.as_posix() for path in calls))
+
+    def test_production_paths_skip_expired_popup_preparation_and_rearm_on_new_epoch(self) -> None:
+        """Base-first production flows avoid popup work until a new session epoch."""
+
+        class _RecordingMatcher:
+            def __init__(self) -> None:
+                self.delegate = OpenCvTemplateMatcher()
+                self.prepare_calls = 0
+                self.template_paths: list[Path] = []
+
+            def prepare_frame(self, image, *, reference_size):
+                self.prepare_calls += 1
+                return self.delegate.prepare_frame(image, reference_size=reference_size)
+
+            def find_best_match(self, image, template_path, *, threshold, search_region):
+                self.template_paths.append(template_path)
+                return self.delegate.find_best_match(
+                    image,
+                    template_path,
+                    threshold=threshold,
+                    search_region=search_region,
+                )
+
+        class _NoopSelectorEngine:
+            def detect(self, image, registry, *, selector_ids=None, ocr_context=None):
+                del image, registry, selector_ids, ocr_context
+                return ()
+
+        def build_path(path: str):
+            matcher = _RecordingMatcher()
+            recognizer = load_visual_screen_recognizer(matcher=matcher)
+            registry = build_default_selector_registry()
+            enricher = PncObservationEnricher(selector_registry=registry)
+            ocr = _RecordingOcrService(lines=())
+            builder = ObservationBuilder(
+                selector_registry=registry,
+                selector_engine=_NoopSelectorEngine(),
+                screen_classifier=ScreenClassifier(),
+                enricher=enricher,
+                ocr_service=ocr,
+                visual_recognizer=recognizer,
+            )
+            if path == "builder":
+                return builder, matcher, ocr
+            return NavigationPerception(
+                recognizer,
+                enricher,
+                ScreenClassifier(),
+                builder.create_ocr_context,
+            ), matcher, ocr
+
+        for path in ("builder", "navigation"):
+            with self.subTest(path=path):
+                production_path, matcher, ocr = build_path(path)
+                home = _capture_with_ref(
+                    "home_city_core.png", session_id=f"{path}-session", session_epoch=1,
+                )
+                savannah = _capture_with_ref(
+                    "savannah_hero_offer.png", session_id=f"{path}-session", session_epoch=1,
+                )
+                production_path.build(home)
+                matcher.prepare_calls = 0
+                matcher.template_paths.clear()
+                ocr.read_result_calls = 0
+
+                # The base pass still prepares its ordinary profiles, but the
+                # expired popup phase must not prepare or match popup assets.
+                production_path.build(savannah)
+                self.assertEqual(matcher.prepare_calls, 1)
+                self.assertFalse(any("/popup/" in path.as_posix() for path in matcher.template_paths))
+                self.assertGreater(ocr.read_result_calls, 0)
+
+                # A reconnect/new epoch re-arms the conservative popup phase.
+                next_epoch = _capture_with_ref(
+                    "savannah_hero_offer.png", session_id=f"{path}-session", session_epoch=2,
+                )
+                matcher.prepare_calls = 0
+                matcher.template_paths.clear()
+                result = production_path.build(next_epoch)
+                self.assertEqual(result.screen_type, ScreenType.PNC_POPUP)
+                self.assertGreaterEqual(matcher.prepare_calls, 2)
+                self.assertTrue(any("/popup/" in path.as_posix() for path in matcher.template_paths))
+
+    def test_pre_login_sequence_keeps_startup_popup_families_eligible(self) -> None:
+        """Android/login/castle-selection frames do not prove the city session passed login."""
+
+        recognizer = load_visual_screen_recognizer()
+        state = recognizer.popup_state
+        home_profile = next(profile for profile in recognizer.profiles if profile.id == "home_city")
+        savannah_profile = next(
+            profile for profile in recognizer.profiles if profile.id == "savannah_hero_offer"
+        )
+        pre_login_screens = (
+            ScreenType.ANDROID_HOME,
+            ScreenType.PNC_LOADING,
+            ScreenType.PNC_LOGIN,
+            ScreenType.PNC_ACCOUNT_SWITCH,
+            ScreenType.PNC_CASTLE_SELECTION,
+        )
+        for screen in pre_login_screens:
+            with self.subTest(screen=screen):
+                state.observe_base_identity(
+                    (replace(home_profile, screen_type=screen),),
+                    session_key=("sequence", 1),
+                )
+                self.assertFalse(state.post_login_proven)
+                self.assertTrue(state.allow(savannah_profile))
+
+        state.observe_base_identity(
+            (home_profile, replace(home_profile, screen_type=ScreenType.PNC_LOGIN)),
+            session_key=("ambiguous-sequence", 1),
+        )
+        self.assertFalse(state.post_login_proven)
+        self.assertTrue(state.allow(savannah_profile))
+
+        state.observe_base_identity((home_profile,), session_key=("sequence", 1))
+        self.assertTrue(state.post_login_proven)
+        self.assertFalse(state.allow(savannah_profile))
 
     def test_collect_mail_profiles_expose_only_measured_controls(self) -> None:
         """Recognizes the four mail frames and keeps navigation controls template-backed."""
@@ -248,7 +420,7 @@ class VisualScreenRecognizerTests(unittest.TestCase):
         self.assertEqual(observation.screen_type, ScreenType.PNC_HERO_HALL)
         self.assertTrue(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
         self.assertFalse(observation.has(UiElementId.PNC_HERO_HALL_RECRUIT_1X_BUTTON))
-        self.assertGreater(ocr.read_result_calls, 0, "Visual evidence must still run the global popup guard.")
+        self.assertEqual(ocr.read_result_calls, 0, "Recognized base identity must skip popup guard OCR.")
 
     def test_hero_hall_back_click_is_inside_manually_reviewed_arrow(self) -> None:
         # At 540x960 the gold arrow occupies x=20..80, y=5..47.

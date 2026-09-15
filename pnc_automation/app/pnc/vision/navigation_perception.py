@@ -10,11 +10,12 @@ from typing import Protocol, runtime_checkable
 from PIL import Image
 
 from pnc_automation.app.pnc.domain.observation import Bounds, Observation, VisibleElement
-from pnc_automation.app.pnc.domain.screen_decision import ScreenEvidence, is_reviewed_viewport
+from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict, ScreenEvidence, is_reviewed_viewport
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.observation_builder import (
     ObservationAdditions, ObservationEnricher,
+    _accepts_keyword,
     allows_guarded_field_enrichment,
     reconcile_visual_modal_guard,
 )
@@ -22,7 +23,9 @@ from pnc_automation.app.pnc.vision.observation_diagnostics import ObservationDeb
 from pnc_automation.app.pnc.vision.observation_provenance import bind_list_entry, bind_visible_elements
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier, partition_guard_evidence
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
+from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservationEnricher
 from pnc_automation.app.pnc.vision.visual_screen_recognizer import (
+    VisualRecognition,
     VisualScreenRecognizer,
     visual_controls_for_decision,
 )
@@ -72,7 +75,43 @@ class NavigationPerception:
     def build(self, screenshot: CapturedScreenshot, *, include_content: bool = False) -> Observation:
         """Return only controls actually matched on an independently identified frame."""
         image = screenshot.image
-        visual = self.recognizer.recognize(image)
+        session_key = (
+            None
+            if screenshot.frame_ref is None
+            else (
+                screenshot.frame_ref.session_id,
+                screenshot.frame_ref.session_epoch,
+            )
+        )
+        visual_kwargs = (
+            {
+                "include_blocking_profiles": False,
+                "session_key": session_key,
+            }
+            if _accepts_keyword(self.recognizer.recognize, "include_blocking_profiles")
+            else {}
+        )
+        base_visual = self.recognizer.recognize(image, **visual_kwargs)
+        if base_visual.evidence and all(
+            item.screen_type in {
+                ScreenType.PNC_POPUP,
+                ScreenType.PNC_VIP_DAILY_RESET,
+            }
+            for item in base_visual.evidence
+        ):
+            base_visual = VisualRecognition()
+        if base_visual.evidence:
+            visual = base_visual
+        else:
+            popup_kwargs = (
+                {
+                    "blocking_profiles_only": True,
+                    "session_key": session_key,
+                }
+                if _accepts_keyword(self.recognizer.recognize, "blocking_profiles_only")
+                else {}
+            )
+            visual = self.recognizer.recognize(image, **popup_kwargs)
         ocr_context = self.create_ocr_context(screenshot)
         ocr_context.validate_capture(image, screenshot.frame_ref)
         ocr_context.require_bounded_regions()
@@ -105,29 +144,42 @@ class NavigationPerception:
                 for control in visual.dismiss_controls
             )
         )
-        interruption = self.guard.detect_interruption(
-            image, ocr_context=ocr_context,
-            owned_dismiss_bounds=tuple(control.bounds for control in visual.dismiss_controls),
-            owned_navigation_screen=(
-                ScreenType.PNC_RESEARCH_TREE
-                if research_detail_owned or research_detail_active_owned
-                else ScreenType.PNC_RESEARCH_QUEUE if research_queue_owned
-                else None
-            ),
+        owned_dismiss_bounds = tuple(control.bounds for control in visual.dismiss_controls)
+        owned_navigation_screen = (
+            ScreenType.PNC_RESEARCH_TREE
+            if research_detail_owned or research_detail_active_owned
+            else ScreenType.PNC_RESEARCH_QUEUE if research_queue_owned
+            else None
         )
+        if isinstance(self.guard, PncObservationEnricher):
+            interruption = self.guard.detect_interruption(
+                image,
+                ocr_context=ocr_context,
+                owned_dismiss_bounds=owned_dismiss_bounds,
+                owned_navigation_screen=owned_navigation_screen,
+                include_generic_visual_fallback=not bool(visual.evidence),
+                require_bounded_modal_evidence=bool(base_visual.evidence),
+            )
+        else:
+            interruption = self.guard.detect_interruption(
+                image,
+                ocr_context=ocr_context,
+                owned_dismiss_bounds=owned_dismiss_bounds,
+                owned_navigation_screen=owned_navigation_screen,
+            )
         interruption = reconcile_visual_modal_guard(visual, interruption)
         evidence, background_evidence = partition_guard_evidence(
             visual.evidence, interruption.screen_evidence,
         )
         if not evidence and _is_near_black_frame(image):
             evidence = (ScreenEvidence(ScreenType.PNC_LOADING, "near_black_startup_frame"),)
-        interrupted = bool(interruption.screen_evidence)
         decision = self.screen_classifier.decide(
             {}, evidence=evidence,
             background_evidence=background_evidence,
             guard=interruption.guard_verdict,
             viewport_reviewed=is_reviewed_viewport(image.size),
         )
+        interrupted = bool(interruption.screen_evidence)
         screen = decision.effective_screen
         if screen in {ScreenType.UNKNOWN, ScreenType.PNC_LOADING}:
             controls = {}

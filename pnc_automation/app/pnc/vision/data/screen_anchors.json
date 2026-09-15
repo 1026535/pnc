@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "reference_size": [
     540,
     960
@@ -685,8 +685,284 @@
             ],
             "threshold": 0.93
           },
+          "dismisses_surface": true,
+          "popup_control_kind": "cancel"
+        }
+      ],
+      "occludes": [
+        "PNC_HOME_CITY"
+      ]
+    },
+    {
+      "id": "savannah_hero_offer",
+      "layout_id": "hero_offer_full_height",
+      "screen": "PNC_POPUP",
+      "revision": 1,
+      "source": {
+        "fixture": "savannah_hero_offer.png",
+        "decoded_sha256": "1d68b551cb53b4c267b112e9fe5803539e4690346765aea8d29ae33fb6266a29",
+        "capture_group": "2026-08-31/serious_stuff"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Reviewed Savannah full-height hero offer identity from static icon, hero artwork, and empty panel chrome; mutable reward content is excluded and the X is separate.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/popup/savannah_offer_icon.png",
+          "search_region": [
+            5,
+            85,
+            110,
+            100
+          ],
+          "threshold": 0.98
+        },
+        {
+          "image": "screen_anchors/popup/savannah_offer_art.png",
+          "search_region": [
+            160,
+            160,
+            230,
+            300
+          ],
+          "threshold": 0.97
+        },
+        {
+        "image": "screen_anchors/popup/savannah_offer_panel_structure.png",
+        "search_region": [
+          10,
+          780,
+          250,
+          150
+        ],
+          "threshold": 0.97
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_POPUP_CLOSE_BUTTON",
+          "popup_control_kind": "close_x",
+          "anchor": {
+            "image": "screen_anchors/popup/savannah_offer_close.png",
+            "search_region": [
+              470,
+              45,
+              65,
+              70
+            ],
+            "threshold": 0.95
+          },
           "dismisses_surface": true
         }
+      ],
+      "modal_bounds": [
+        18,
+        0,
+        504,
+        890
+      ],
+      "occludes": [
+        "PNC_HOME_CITY"
+      ]
+    },
+    {
+      "id": "lucifer_special_offer",
+      "layout_id": "lucifer_special_offer_full_height",
+      "screen": "PNC_POPUP",
+      "revision": 1,
+      "source": {
+        "fixture": "lucifer_special_offer.png",
+        "decoded_sha256": "1723a1052fb9248d7d35dbdace5fc83c80d5582767eb45ed0b0a28585d9548de",
+        "capture_group": "2026-09-15/main/lucifer_live"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Live-reviewed Lucifer Special Offer identity from two separate static artwork regions; prices, percentages, rewards, timers, and the popup-owned back arrow are excluded from identity.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/popup/lucifer_offer_face.png",
+          "search_region": [
+            200,
+            60,
+            175,
+            240
+          ],
+          "threshold": 0.98
+        },
+        {
+          "image": "screen_anchors/popup/lucifer_offer_right_art.png",
+          "search_region": [
+            365,
+            60,
+            175,
+            245
+          ],
+          "threshold": 0.98
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_POPUP_CLOSE_BUTTON",
+          "popup_control_kind": "popup_back",
+          "anchor": {
+            "image": "screen_anchors/popup/lucifer_offer_back.png",
+            "search_region": [
+              0,
+              0,
+              100,
+              90
+            ],
+            "threshold": 0.97
+          },
+          "dismisses_surface": true
+        }
+      ],
+      "modal_bounds": [
+        0,
+        0,
+        540,
+        960
+      ],
+      "occludes": [
+        "PNC_HOME_CITY",
+        "PNC_GIFT_CENTER"
+      ]
+    },
+    {
+      "id": "vip_daily_reset",
+      "layout_id": "vip_daily_reset",
+      "screen": "PNC_VIP_DAILY_RESET",
+      "revision": 1,
+      "source": {
+        "fixture": "vip_daily_reset.png",
+        "decoded_sha256": "bae29ded34f50f968b391dc7004b1ebd032702d45077c980487be5e32114a40f",
+        "capture_group": "2026-09-11/testing"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Reviewed VIP daily-reset/login identity from a static crest wing and the VIP wordmark; the mutable VIP level is excluded and Close remains a separate text control.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/popup/vip_daily_reset_crest.png",
+          "search_region": [
+            160,
+            220,
+            220,
+            180
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/popup/vip_daily_reset_vip_word.png",
+          "search_region": [
+            180,
+            290,
+            180,
+            110
+          ],
+          "threshold": 0.95
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_VIP_DAILY_RESET_CLOSE_BUTTON",
+          "popup_control_kind": "close_text",
+          "anchor": {
+            "image": "screen_anchors/popup/vip_daily_reset_close.png",
+            "search_region": [
+              160,
+              525,
+              230,
+              90
+            ],
+            "threshold": 0.95
+          },
+          "dismisses_surface": true
+        }
+      ],
+      "modal_bounds": [
+        0,
+        300,
+        540,
+        320
+      ],
+      "occludes": [
+        "PNC_HOME_CITY"
+      ]
+    },
+    {
+      "id": "valiant_conquest",
+      "layout_id": "valiant_conquest",
+      "screen": "PNC_POPUP",
+      "revision": 1,
+      "source": {
+        "fixture": "valiant_conquest.png",
+        "decoded_sha256": "bdfe94be06070ff0a0c0c5e1ee24cdc9176d8a49ca435a8e487c05b64fae981b",
+        "capture_group": "2026-08-28/testing"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Reviewed Valiant Conquest static artwork and event panel below the countdown; countdown and X are excluded from identity and the X is separate.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/popup/valiant_conquest_artwork.png",
+          "search_region": [
+            30,
+            130,
+            440,
+            330
+          ],
+          "threshold": 0.96
+        },
+        {
+        "image": "screen_anchors/popup/valiant_conquest_panel.png",
+        "search_region": [
+          15,
+          570,
+          510,
+          300
+          ],
+          "threshold": 0.96
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_POPUP_CLOSE_BUTTON",
+          "popup_control_kind": "close_x",
+          "anchor": {
+            "image": "screen_anchors/popup/valiant_conquest_close.png",
+            "search_region": [
+              470,
+              145,
+              65,
+              80
+            ],
+            "threshold": 0.95
+          },
+          "dismisses_surface": true
+        }
+      ],
+      "modal_bounds": [
+        20,
+        165,
+        502,
+        685
       ],
       "occludes": [
         "PNC_HOME_CITY"
@@ -4162,7 +4438,8 @@
             ],
             "threshold": 0.95
           },
-          "dismisses_surface": true
+          "dismisses_surface": true,
+          "popup_control_kind": "cancel"
         }
       ],
       "occludes": [

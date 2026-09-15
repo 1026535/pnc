@@ -13,6 +13,7 @@ from PIL import Image, ImageDraw
 from pnc_automation.app.automation.engine.action_executor import ActionExecutor
 from pnc_automation.app.pnc.domain.action_requests import TapAction
 from pnc_automation.app.pnc.domain.mail import MailboxType, MailRecipientKind, SendMailParams
+from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.navigation.screen_flows import ScreenFlowPlanner
@@ -328,7 +329,7 @@ class ReviewNavigationControlsTests(unittest.TestCase):
         self.assertTrue(observation.has(UiElementId.PNC_WORLD_OVERVIEW_CLOSE_BUTTON))
         self.assertFalse(observation.has(UiElementId.PNC_POPUP_CLOSE_BUTTON))
 
-    def test_world_overview_additional_close_x_remains_unresolved(self) -> None:
+    def test_recognized_world_overview_owns_generic_like_x_without_popup_promotion(self) -> None:
         image, lines = _world_overview_fixture()
         draw = ImageDraw.Draw(image)
         draw.line((874, 53, 891, 69), fill=(255, 255, 255), width=3)
@@ -336,8 +337,9 @@ class ReviewNavigationControlsTests(unittest.TestCase):
 
         observation = _build_observation(lines, image=image, image_size=image.size)
 
-        self.assertEqual(observation.screen_type, ScreenType.UNKNOWN)
-        self.assertFalse(observation.has(UiElementId.PNC_WORLD_OVERVIEW_CLOSE_BUTTON))
+        self.assertEqual(observation.screen_type, ScreenType.PNC_WORLD_MAP_OVERVIEW)
+        self.assertEqual(observation.decision.guard, GuardVerdict.CLEAR)
+        self.assertTrue(observation.has(UiElementId.PNC_WORLD_OVERVIEW_CLOSE_BUTTON))
         self.assertFalse(observation.has(UiElementId.PNC_POPUP_CLOSE_BUTTON))
 
     def test_strong_update_popup_stays_blocked_when_overview_pixels_are_present(self) -> None:

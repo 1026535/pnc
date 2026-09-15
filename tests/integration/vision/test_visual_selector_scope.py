@@ -9,6 +9,7 @@ from PIL import Image, ImageEnhance
 
 from pnc_automation.app.pnc.domain.mail import MailboxType
 from pnc_automation.app.pnc.domain.observation import ListEntryKind, Observation
+from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.observation_builder import ImageSelectorEngine, ObservationBuilder
@@ -222,7 +223,12 @@ class VisualSelectorScopeTests(unittest.TestCase):
             capture, observations = _production_observations(_image(name), request=request, lines=lines)
             for path, observation in observations.items():
                 with self.subTest(case=name, path=path):
-                    self.assertNotIn(UiElementId.PNC_MAIL_COMPOSE_BUTTON, observation.visible_elements)
+                    if name == "mail_player_list.png":
+                        self.assertEqual(observation.screen_type, ScreenType.PNC_MAILBOX_LIST)
+                        self.assertEqual(observation.decision.guard, GuardVerdict.CLEAR)
+                        self.assertIn(UiElementId.PNC_MAIL_COMPOSE_BUTTON, observation.visible_elements)
+                    else:
+                        self.assertNotIn(UiElementId.PNC_MAIL_COMPOSE_BUTTON, observation.visible_elements)
                     self.assertEqual(observation.frame_ref, capture.frame_ref)
 
     def test_hero_free_recruit_control_is_template_bound_across_reviewed_frames(self) -> None:

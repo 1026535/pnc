@@ -595,8 +595,8 @@ class _TimedVisualRecognizer:
         self._inner = inner
         self._probe = probe
 
-    def recognize(self, image: Image.Image) -> Any:
-        value, elapsed = _timed(lambda: self._inner.recognize(image))
+    def recognize(self, image: Image.Image, *args: Any, **kwargs: Any) -> Any:
+        value, elapsed = _timed(lambda: self._inner.recognize(image, *args, **kwargs))
         self._probe.visual_seconds += elapsed / 1000.0
         self._probe.visual_calls += 1
         return value
@@ -619,13 +619,15 @@ class _TimedEnricher:
         *,
         ocr_context: ObservationOcrContext,
         owned_dismiss_bounds: tuple[Bounds, ...] = (),
+        include_generic_visual_fallback: bool = True,
     ) -> Any:
         value, elapsed = _timed(
             lambda: self._inner.recognize_guards(
                 image,
                 request,
                 ocr_context=ocr_context,
-                **({"owned_dismiss_bounds": owned_dismiss_bounds} if owned_dismiss_bounds else {}),
+                owned_dismiss_bounds=owned_dismiss_bounds,
+                include_generic_visual_fallback=include_generic_visual_fallback,
             )
         )
         self._probe.guard_seconds += elapsed / 1000.0

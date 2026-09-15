@@ -9,6 +9,7 @@ import unittest
 from PIL import Image
 
 from pnc_automation.app.pnc.domain.observation import VisibleElementSourceKind
+from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.navigation_perception import NavigationPerception
@@ -357,7 +358,6 @@ class BuildingLevelPublicationTests(unittest.TestCase):
                 contexts_by_path = (builder_context, contexts[-1])
 
                 expected_diagnostics = (
-                    ("plan:foreground_modal", guard_bounds),
                     ("plan:screen_header", header_bounds),
                     ("plan:building_level_and_actions", level_bounds),
                 )
@@ -434,12 +434,10 @@ class BuildingLevelPublicationTests(unittest.TestCase):
                 contexts_by_path = (builder_context, contexts[-1])
 
                 expected_diagnostics = (
-                    ("plan:foreground_modal", guard_bounds),
                     ("plan:screen_header", header_bounds),
                     ("plan:building_level", field_bounds),
                 )
                 expected_calls = (
-                    (guard_bounds, size),
                     (header_bounds, size),
                     (None, (field_bounds.width * 3, field_bounds.height * 3)),
                 )

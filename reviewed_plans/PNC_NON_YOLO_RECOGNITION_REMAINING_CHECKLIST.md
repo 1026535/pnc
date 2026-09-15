@@ -1,5 +1,37 @@
 # Remaining non-YOLO recognition checklist
 
+## Popup-recognition correction status (September 15, 2026)
+
+The popup slice is now implemented as demand-driven work shared by
+`ObservationBuilder` and `NavigationPerception`: ordinary base identity is
+established first with blocking popup profiles excluded. A recognized base screen
+skips named popup matching and generic modal/X recovery. It runs the single bounded
+exact guard scan only after coherent compact foreground panel geometry is measured.
+An UNKNOWN base considers session/epoch-eligible known popup profiles and runs that
+same bounded exact guard scan. The scan retains
+semantic precedence; generic visual fallback runs from that same pass only when
+neither named visual evidence nor an exact semantic guard owns the frame.
+
+Catalog schema v4 validates typed controls for every blocking profile that dismisses
+its surface (`close_x`, `popup_back`, `close_text`, or `cancel`). `PopupOverlayObservation` carries
+measured current-frame controls through both publishers. Generic X fallback requires
+a coherent modal boundary and one unique in-modal X; partial, multiple, outside-modal,
+HUD, navigation, and Home evidence remains `UNRESOLVED` with no action. The shared
+session owner keeps login families eligible through pre-login screens and disarms
+them only after a proved in-game base transition; the session epoch re-arms them.
+
+Savannah uses the original 540 reference as its sole named-profile reference plus two
+900 holdouts. The named anchors contain only stable icon/artwork/panel chrome; the
+price, timer, reward count, mutable VIP level, countdown, and controls remain outside
+identity anchors. VIP uses a static crest wing and VIP wordmark, qualified against
+one earlier and two fresh `serious_stuff` holdouts; Valiant uses reviewed static
+artwork. Both retain separate typed close controls. A later authorized `main` / `K157 Sword NPC` capture closes
+the Lucifer gap: two independent static artwork regions establish its identity,
+while its separate gold upper-left arrow publishes popup-owned `POPUP_BACK`. The
+canonical executor tapped the measured point once and received a newer Home frame;
+subsequent exact roster preflight verified `K157 / Sword NPC / level 29` and returned
+Home. No Android Back, price, reward, resource, or castle-switch action was used.
+
 Current continuation of [the active plan](PNC_NON_YOLO_RECOGNITION_PLAN.md), September 13–14, 2026. This replaces the earlier first-slice inventory and its stale full-frame/Farm/Alliance claims. Work resumed in the original dirty `codex/non-yolo-recognition-continuation` worktree at HEAD `93798a6`; the handoff's 29 modified tracked files and untracked implementation work were preserved.
 
 All paths below are worktree-relative. `V/` means `tests/integration/vision/`. **Producer qualified** means the stated saved-capture contract has a current production-path regression; it does not mean independent holdout accuracy, workflow success, or combined-main acceptance. Synthetic parser tests establish semantic parsing only. New source-adjacent and resized examples remain reference evidence.
@@ -8,10 +40,11 @@ All paths below are worktree-relative. `V/` means `tests/integration/vision/`. *
 
 - [x] Both observation paths establish visual screen/layout and global foreground ownership before ordinary semantic content reads. UNKNOWN, unsupported viewport, conflicting identity, and unresolved guards abstain before content enrichment. Late contradictory content evidence is rejected.
 - [x] Whole-screen OCR is removed from the PNC observation boundary, guard/content/fallback plans, region context, discovery, and diagnostic publication. The frame-bound context rejects unbounded/full-capture reads. Generic OCR outside this boundary and whole-image visual inspection remain available.
-- [x] One named centered foreground-modal crop covers the reviewed warning/update/reconnect surfaces. Startup uses reviewed visual identity or near-black pixels; screenshot filenames and hypothetical loading text are not evidence.
+- [x] Exact warning/update/reconnect ownership remains a bounded guard scan. UNKNOWN frames run it directly; recognized bases run it only after coherent compact foreground panel geometry is measured. Generic modal/X fallback is UNKNOWN-only; startup uses reviewed visual identity or near-black pixels. Screenshot filenames and hypothetical loading text are not evidence.
 - [x] Visual controls retain measured bounds and current frame/screen/layout. Semantic additions publish only registry-declared OCR labels, typed fields, and rows. They cannot invent or overwrite a measured control or replace independent identity.
 - [x] Known modal Confirm/Cancel candidates require current panel/button geometry or an independently proved visual layout and its measured control. OCR padding cannot supply an action. Missing compact-panel geometry remains UNRESOLVED; the full-width portrait invitation has its own visual profile and Cancel template. Missing Cancel retains the blocking identity without an action.
 - [x] Missing required fields retain independent facts and diagnostics. Castle name diagnostics identify each row separately, so a later success cannot hide an earlier missing name. Diagnostics/discovery export only already-acquired OCR, including zero-read unknown frames. No diagnostic OCR or replacement tiling exists.
+- [x] Blocking visual popup profiles publish typed `CLOSE_X`, `CLOSE_TEXT`, or `CANCEL` candidates only from current-frame measured controls. Alliance invitation Join/Apply controls never become dismissal candidates; known identity without a control remains blocking with no action.
 
 Proof: `V/test_guard_captured_regions.py`, `V/test_content_label_publication.py`, `V/test_observation_diagnostics.py`, `V/test_observation_request_scoping.py`, `V/test_selector_discovery.py`, the screen-decision contract, and bounded-context/region-plan unit tests. Both production paths use the same native-frame OCR context.
 
@@ -42,11 +75,11 @@ The former `GUARDED_FULL_FRAME_REUSE` policy is gone. Capability gating now requ
 
 Removed unused broad reads include World Map bottom HUD/navigation text, Compose header/Send text, Settings/More controls, Alliance static controls, Hall capacity/empty-state text, Stage body, and the unused Castle/Warehouse/Goddess body regions. Castle's exact level uses a 97×40 reference field with one RGB 3× enlargement; the strict `17/45` parser remains unchanged. Real RapidOCR confirms the Castle, Warehouse and Goddess levels at both supported sizes through both paths. The existing World Map coordinate-rejection consumer fact retains its own small status crop; it survives a coordinate miss and is suppressed by an overlay. Remote profile name and selected castle name are narrowly owned fields. Dynamic scroll bodies remain bounded semantic viewports where the existing parser consumes the complete list; they are not arbitrary screen tiles. Unqualified enum-only families do not acquire content merely because a region table exists. Research detail uses its detail panel rather than the full tree viewport.
 
-The named centered modal crop is 47% of the viewport. It is required by the saved centered/tall foreground surfaces and remains independent of requested background content. It is not an extra diagnostic scan. Real-OCR reports record exact bounds, call counts, processed area and cache outcomes.
+The prior centered modal crop statement belongs to the pre-popup-change OCR design and is retained as stale historical evidence. The current contract runs that bounded exact scan only after the base pass is UNKNOWN, then lets the same scan fall through to generic visual X detection when no known visual evidence exists. No second exact OCR/parser pass is performed. Real-OCR reports record exact bounds, call counts, processed area and cache outcomes; production-path lifecycle tests also assert that an expired popup phase performs no popup-anchor preparation or template matching.
 
 ## Failure triage and validation
 
-The saved run's **108 failures and 11 errors are not an accepted baseline**. The case-by-case audit is `.local-data/reports/vision_failure_triage_continuation.md`. Dispositions:
+The saved run's **108 failures and 11 errors are not an accepted baseline**. The case-by-case audit is `.local-data/reports/vision_failure_triage_continuation.md`. Those counts and the earlier **2,052-test acceptance are pre-popup-change/stale historical evidence**, retained for auditability. Dispositions:
 
 - Captured profile-name, building publication, exact castle field, coordinate dialog, launcher and current modal geometry gaps were implemented and retained as captured production regressions.
 - Missing WIP assets/catalog references and stale method signatures were repaired.
@@ -54,7 +87,22 @@ The saved run's **108 failures and 11 errors are not an accepted baseline**. The
 - OCR-only popup words no longer prove a popup on a uniform or unchanged background. Overlay tests now use actual captured panel/button pixels and retain foreground suppression assertions.
 - No previously failing run, newly unknown required fact, or reduced test count is accepted as evidence of success.
 
-Focused checks and initial full-fallback failures are recorded in the implementation report. After all three review corrections, 25 focused tests passed. The final `tools/run_tests.py affected --base origin/main --explain` required a full fallback across all 290 modules and passed: **2,052 tests run, 2,046 passed, six skipped, zero failures/errors**. Five skips are optional unavailable local screenshot fixtures; one requires Windows symlink privilege. Both paths now publish coordinate fields only after accepted visual identity and a content request; missing X preserves K/Y and measured controls. Subject-only Compose reads and publishes only its requested field, and castle diagnostics preserve missing earlier rows despite later successes. The prior 2,048-test result is retained as the pre-review gate. Installed wheel asset qualification passed for the unchanged 58 profiles, 200 anchor/control assets and six selector assets; 90 manifest samples and 43 manual annotations passed provenance checks. Exact commands, reports and wheel hash are in the implementation report. These offline results do not close the independent-evidence or consumer acceptance gates below.
+Focused checks and the final validation commands are recorded in the implementation report and `.local-data/.test-impact`. The pre-popup-change run above remains historical. Current popup acceptance covers named Savannah reference plus two holdouts, Lucifer live reference and typed popup-back, three independent VIP holdouts, Valiant, Alliance typed Cancel, generic Savannah fallback, recognized-base ownership, session/epoch eligibility, and partial-evidence abstention through both production publishers. The quiescent focused results are: `integration.vision` **447 passed, six skipped** and `integration.workflows` **201 passed**. `affected --base origin/main --explain` selected all 306 portable modules and passed **2,184 tests with seven skips**; `full` independently passed **2,184 tests with seven skips**. Installed catalog/asset validation and hashes remain part of the final handoff.
+
+The Lucifer live report is `.local-data/reports/popup_live_lucifer_main_20260915.json`.
+Its before frame is `artifacts/2026-09-15/main/20260915T040726Z_live_lucifer_main_before.png`;
+the fresh Home frame is `artifacts/2026-09-15/main/20260915T040732Z_live_lucifer_main_popup_1.png`.
+Their fingerprints differ, and the measured popup-back bounds are
+`(30, 13, 100, 95)` with action point `(80, 60)`.
+
+The opt-in `3xx_spies` smoke captured an Alliance invitation, published one typed
+`CANCEL` at measured bounds `(327, 873, 216, 72)`, dispatched it through the
+canonical observed-action executor, and obtained a newer Home frame with a distinct
+decoded fingerprint. The before/action/after record is
+`.local-data/reports/popup_live_smoke_20260915T030844Z.json`; the corresponding
+captures are `artifacts/2026-09-15/3xx_spies/20260915T030844Z_live_gift_center_3xx_home_start.png`
+and `artifacts/2026-09-15/3xx_spies/20260915T030848Z_live_gift_center_3xx_home_live_gift_center_3xx_home_interruption_popup_1.png`.
+No resource spending, Join/Apply, message, account switch, or castle switch occurred.
 
 ## Explicit integration and acceptance dependencies
 
@@ -66,7 +114,7 @@ Focused checks and initial full-fallback failures are recorded in the implementa
 - **Unsupported routes/receipts:** Transport Resources zero-selection form is not the Alliance Member recipient list. Native account UI is not the legacy Login/Continue route. Actual mail send/delivery receipt, unsupported Formation/result contracts and march-slot statistics remain unsupported; no credentials, recipients or success signals were invented.
 - **Cross-task tests:** preserve the existing `tests/unit/app/pnc/navigation/test_navigation_core.py` adaptation and review it during integration. It now uses the bounded guard plan, current layout-aware enricher signature and captured update panel. Core runtime test doubles received the same signature and temporary artifact-path correction. No navigation/core/workflow production behavior or other worktree was edited.
 - **Independent evidence:** newly captured same-session Alliance/member/profile, Farm/construction/queue, Institute, Compose and castle variants are reference evidence. Resizes and neighboring frames are not independent holdouts. The manifest and annotations record provenance honestly; missing independent holdout groups remain an explicit promotion gate.
-- [x] Post-review affected/full portable validation for all three reproduced fixes: 2,052 run / 2,046 passed / six skipped / zero failures or errors.
+- [x] Historical pre-popup post-review gate for the earlier three reproduced fixes: 2,052 run / 2,046 passed / six skipped / zero failures or errors. The current popup gate is the 2,150-test result above.
 - [x] Installed-package asset qualification; the review corrections do not change the verified catalog or assets.
 - [ ] Independent holdout acceptance for newly qualified layouts that currently have only reference captures.
 - [ ] A-owned combined-main/consumer acceptance.

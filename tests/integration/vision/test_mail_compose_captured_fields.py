@@ -325,7 +325,7 @@ class MailComposeCapturedFieldTests(unittest.TestCase):
         )
         self.assertEqual(
             ocr.calls,
-            [Bounds(16, 240, 508, 480), Bounds(91, 343, 406, 33)],
+            [Bounds(91, 343, 406, 33)],
         )
 
     def test_navigation_without_content_keeps_only_reviewed_controls(self) -> None:
@@ -348,7 +348,8 @@ class MailComposeCapturedFieldTests(unittest.TestCase):
             },
         )
         self.assertEqual(observed.text_field_states, {})
-        _assert_bounded(self, ocr)
+        # Compose is a recognized base surface; no popup guard crop runs.
+        self.assertEqual(ocr.calls, [])
 
     def test_update_overlay_owns_the_frame_and_hides_compose_controls(self) -> None:
         """The existing update guard suppresses Compose controls and field content."""

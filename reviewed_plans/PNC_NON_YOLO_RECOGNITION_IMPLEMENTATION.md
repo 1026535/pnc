@@ -15,6 +15,51 @@ records the producer contracts, captured positives/negatives, and outstanding
 consumer and independent-evidence gates. Implementation and offline verification
 must be distinguished from promotion or combined-main workflow acceptance.
 
+### Popup recovery continuation — September 15, 2026
+
+This section supersedes the older popup/guard ordering and validation totals below.
+Both production publishers now establish ordinary base identity before doing popup
+work. A recognized base skips known popup templates and the generic modal/X detector.
+It runs the single centered bounded guard scan only when coherent compact foreground
+panel geometry proves that the recognized base may be covered. An UNKNOWN base
+considers only popup profiles still eligible in the current `(session_id, session_epoch)`
+and runs the same bounded guard scan. Exact update, reconnect, and task-owned warnings retain semantic
+precedence; generic modal/X recovery runs from the same pass only when neither a
+known visual profile nor an exact guard owns the frame. Once one unambiguous
+post-login screen is established, startup popup profiles are disarmed before image
+preparation until the epoch changes. Ambiguous or pre-login identity cannot close
+that eligibility window.
+
+Catalog v4 adds typed visual popup controls. Captured Savannah, Lucifer, VIP,
+Valiant, and both Alliance invitation layouts publish measured `CLOSE_X`,
+`POPUP_BACK`, `CLOSE_TEXT`, or `CANCEL` through Builder and Navigation. Generic fallback requires one unique
+bright X owned by a measured modal with coherent boundaries; partial evidence
+remains unresolved with no action. Whole-frame OCR, arbitrary tiling, diagnostic
+OCR, workflow coordinates, Android Back, and executor changes were not added.
+
+Final exact-tree validation passed: `integration.vision` ran **447 tests with six
+skips**; `integration.workflows` ran **201 tests**; `affected --base origin/main
+--explain` selected all 306 portable modules and ran **2,184 tests with seven
+skips**; `full` independently ran **2,184 tests with seven skips**. `git diff
+--check` passed. The expected maintenance-window parser error in broad runs is a
+negative CLI test and the suites finish `OK`.
+
+The opt-in `3xx_spies` smoke recognized a real Alliance invitation, dispatched one
+typed measured Cancel through the canonical observed-action executor, and obtained
+a newer Home frame with a different decoded fingerprint. No spending, Join/Apply,
+message, account switch, or castle switch occurred. The record is
+`.local-data/reports/popup_live_smoke_20260915T030844Z.json`.
+
+The later authorized `main` / `K157 Sword NPC` run captured the real Lucifer
+Special Offer. It proved two independent static artwork anchors and a separate
+gold upper-left arrow. That arrow is published as popup-owned `POPUP_BACK` through
+the existing popup close selector; it never becomes Android Back or an ordinary
+page-navigation control. The canonical executor dispatched its measured point
+`(80, 60)` once and obtained a newer Home frame with a different fingerprint.
+Exact active-castle verification then confirmed `K157 / Sword NPC / level 29` and
+returned Home. No price, reward, resource, account, or castle-switch action ran.
+Report: `.local-data/reports/popup_live_lucifer_main_20260915.json`.
+
 ### Changed behavior
 
 - Both observation-publication paths resolve independent visual screen/layout
@@ -687,28 +732,29 @@ Root review and Luna xhigh's eight-file comparison found no unique uncommitted b
   blind Back. Required-update confirmation is blocked in read-only probes.
   Roster synchronization is suppressed through the canonical observation service.
 - **B:** ScreenClassifier owns the immutable ScreenDecision and derived
-  Observation.screen_type. Global guards precede optional content regardless of
-  request scope. Conflicts clear controls and facts; geometry cannot prove
+  Observation.screen_type. After the base identity gate, bounded global guards
+  precede optional content regardless of request scope; recognized base frames acquire
+  exact guard OCR only when compact foreground panel geometry is present. Conflicts clear controls and facts; geometry cannot prove
   identity. Coordinate-only proof cannot authorize ordinary UI input.
 - **C:** explicit catalog asset paths, masks, reference sizes and search regions
   replace implicit missing paths; loaders validate eagerly. Discovery and updater
   callers migrated. Fixed geometry requires guarded source state. OpenCV caches
   decoded templates and normalized frames; the 256-candidate bound is preserved.
 - **D:** ObservationOcrContext owns an immutable captured-image copy and bounded
-  region/preprocessing cache, with a pinned full-frame guard result and actual
-  call/area/time diagnostics. All CachedOcrService callers migrated, including
-  debug/discovery and coordinate preprocessing. Typed region plans share existing
-  family/catalog bounds; reuse requires complete contained OCR boxes. Missing
-  content stays unknown, with explicit named fallback.
+  region/preprocessing cache, with exact guard results and actual call/area/time
+  diagnostics. Whole-frame OCR remains prohibited. All CachedOcrService callers
+  migrated, including debug/discovery and coordinate preprocessing. Typed region
+  plans share existing family/catalog bounds; reuse requires complete contained OCR
+  boxes. Missing content stays unknown, with explicit named fallback.
 - **E:** Bag and Daily Quest use complete detected cards and actual contained
   action buttons. Clipped/duplicate/ambiguous rows and missing controls abstain.
   Generic row actions and card-center substitutes are removed. Strict numeric
   parsing and connected inventory consumers preserve uncertainty.
 
-Full-frame OCR remains the mandatory global guard. Families without reviewed
-regions retain a named full-frame fallback. Reviewed geometry is restricted to
-540×960 and 900×1600. Twelve visual profiles have 24 screen anchors, plus one
-control PNG; provenance/layout revision is recorded. Profiles remain
+Whole-frame OCR is prohibited at the observation boundary. Families without reviewed
+regions remain unknown until a bounded guard or visual identity proves them.
+Reviewed geometry is restricted to 540×960 and 900×1600. Twelve visual profiles have
+24 screen anchors, plus one control PNG; provenance/layout revision is recorded. Profiles remain
 `guarded_reference_only`: historical correlated frames and unknown build/locale
 do not establish independent production accuracy.
 

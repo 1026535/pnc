@@ -12,6 +12,7 @@ from PIL import Image, ImageDraw
 
 from pnc_automation.core.infra.storage.artifact_store import ArtifactStore
 from pnc_automation.core.infra.capture.screenshot_service import ScreenshotService
+from pnc_automation.app.pnc.domain.popup import PopupControlKind
 from pnc_automation.app.pnc.domain.observation import VisibleElementSourceKind
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
@@ -140,9 +141,19 @@ class VisualPopupOwnershipTests(unittest.TestCase):
             ocr_context = builder.create_ocr_context(screenshot)
             observation = builder.build(screenshot, ocr_context=ocr_context)
 
-            self.assertEqual(observation.screen_type, ScreenType.UNKNOWN)
-            self.assertFalse(observation.blocking_popup)
-            self.assertFalse(observation.has(UiElementId.PNC_POPUP_CLOSE_BUTTON))
+            self.assertEqual(observation.screen_type, ScreenType.PNC_POPUP)
+            self.assertTrue(observation.blocking_popup)
+            close_button = observation.require(UiElementId.PNC_POPUP_CLOSE_BUTTON)
+            self.assertEqual(close_button.action_point, (814, 321))
+            self.assertEqual(observation.popup_overlay.layout_id, "visual_modal_close_x")
+            self.assertIsNotNone(observation.popup_overlay.modal_bounds)
+            self.assertEqual(close_button.frame_ref, screenshot.frame_ref)
+            self.assertEqual(close_button.source_layout_id, observation.decision.layout_id)
+            candidate = observation.popup_overlay.candidate(PopupControlKind.CLOSE_X)
+            self.assertIsNotNone(candidate)
+            assert candidate is not None
+            self.assertEqual(candidate.action_point, close_button.action_point)
+            self.assertEqual(candidate.bounds, close_button.bounds)
             allowed_regions = {plan.bounds for plan in compile_guard_ocr_region_plans(image.size)}
             self.assertTrue(ocr_service.regions)
             self.assertTrue(all(region is not None for region in ocr_service.regions))

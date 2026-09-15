@@ -3,6 +3,96 @@
   "annotation": "Direct visual review by the implementing agent. Each sha256 is the decoded RGB digest: width.to_bytes(8, 'big') + height.to_bytes(8, 'big') + RGB bytes. References are never counted as holdout. Same-session and same-layout frames remain correlated; validation samples may share reviewed source groups and are not independent evidence.",
   "samples": [
     {
+      "image": "savannah_hero_offer.png",
+      "screen": "PNC_POPUP",
+      "split": "reference",
+      "group": "2026-08-31/serious_stuff",
+      "sha256": "1d68b551cb53b4c267b112e9fe5803539e4690346765aea8d29ae33fb6266a29",
+      "expected_visual_screens": [
+        "PNC_POPUP"
+      ]
+    },
+    {
+      "image": "lucifer_special_offer.png",
+      "screen": "PNC_POPUP",
+      "split": "reference",
+      "group": "2026-09-15/main/lucifer_live",
+      "sha256": "1723a1052fb9248d7d35dbdace5fc83c80d5582767eb45ed0b0a28585d9548de",
+      "expected_visual_screens": [
+        "PNC_POPUP"
+      ]
+    },
+    {
+      "image": "vip_daily_reset.png",
+      "screen": "PNC_VIP_DAILY_RESET",
+      "split": "reference",
+      "group": "2026-09-11/testing",
+      "sha256": "bae29ded34f50f968b391dc7004b1ebd032702d45077c980487be5e32114a40f",
+      "expected_visual_screens": [
+        "PNC_VIP_DAILY_RESET"
+      ]
+    },
+    {
+      "image": "savannah_hero_offer_fresh_900.png",
+      "screen": "PNC_POPUP",
+      "split": "holdout",
+      "group": "2026-09-14/development_research/research_caller_20260914T220613Z",
+      "sha256": "a6c502f9456f76d1bd20f90afde38da86aa2dc81e9acac1f5e517f20094effbd",
+      "expected_visual_screens": [
+        "PNC_POPUP"
+      ]
+    },
+    {
+      "image": "vip_daily_reset_holdout_900.png",
+      "screen": "PNC_VIP_DAILY_RESET",
+      "split": "holdout",
+      "group": "2026-09-15/mega_old_acc/infirmary_setup",
+      "sha256": "bcbc0491239b62572a967eb864d6ef0f6d9a0d1f4dbfd69ad0996e8aaabc77a6",
+      "expected_visual_screens": [
+        "PNC_VIP_DAILY_RESET"
+      ]
+    },
+    {
+      "image": "vip_daily_reset_serious_stuff_holdout_1.png",
+      "screen": "PNC_VIP_DAILY_RESET",
+      "split": "holdout",
+      "group": "2026-09-15/serious_stuff/a02_route_preflight_045517Z",
+      "sha256": "85e66242cd8c7cee1a3a5fe0157ba877ebb2ccb1c36f7007eb9aad115b0beaf4",
+      "expected_visual_screens": [
+        "PNC_VIP_DAILY_RESET"
+      ]
+    },
+    {
+      "image": "vip_daily_reset_serious_stuff_holdout_2.png",
+      "screen": "PNC_VIP_DAILY_RESET",
+      "split": "holdout",
+      "group": "2026-09-15/serious_stuff/a02_route_preflight_045551Z",
+      "sha256": "b083128ccd7e01f33cf60887886bfa713589136eb6aafeea317b3380e42315a4",
+      "expected_visual_screens": [
+        "PNC_VIP_DAILY_RESET"
+      ]
+    },
+    {
+      "image": "savannah_hero_offer_holdout_900_second.png",
+      "screen": "PNC_POPUP",
+      "split": "holdout",
+      "group": "2026-09-14/development_research/research_caller_20260914T222803Z",
+      "sha256": "890e4bfdfb8a080c1943c767801e058e7d82c9444ddd942221fe3bf77267c9ba",
+      "expected_visual_screens": [
+        "PNC_POPUP"
+      ]
+    },
+    {
+      "image": "valiant_conquest.png",
+      "screen": "PNC_POPUP",
+      "split": "reference",
+      "group": "2026-08-28/testing",
+      "sha256": "bdfe94be06070ff0a0c0c5e1ee24cdc9176d8a49ca435a8e487c05b64fae981b",
+      "expected_visual_screens": [
+        "PNC_POPUP"
+      ]
+    },
+    {
       "image": "loading_publisher_splash.png",
       "screen": "PNC_LOADING",
       "split": "reference",
