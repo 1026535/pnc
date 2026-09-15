@@ -1879,6 +1879,8 @@ class PncObservationEnricher:
         self, image: Image.Image, *, ocr_context: ObservationOcrContext,
         owned_dismiss_bounds: tuple[Bounds, ...] = (),
         owned_navigation_screen: ScreenType | None = None,
+        include_generic_visual_fallback: bool = True,
+        require_bounded_modal_evidence: bool = False,
     ) -> ObservationAdditions:
         """Measure navigation interruptions using the capture's shared OCR context."""
 
@@ -1886,7 +1888,8 @@ class PncObservationEnricher:
             image, ocr_context=ocr_context,
             owned_dismiss_bounds=owned_dismiss_bounds,
             owned_navigation_screen=owned_navigation_screen,
-            navigation_dismiss=True,
+            include_generic_visual_fallback=include_generic_visual_fallback,
+            require_bounded_modal_evidence=require_bounded_modal_evidence,
         )
 
     def _read_guard_regions(
@@ -2000,30 +2003,54 @@ class PncObservationEnricher:
         *,
         ocr_context: ObservationOcrContext,
         owned_dismiss_bounds: tuple[Bounds, ...] = (),
+        include_generic_visual_fallback: bool = True,
+        require_bounded_modal_evidence: bool = False,
     ) -> ObservationAdditions:
         """Runs independent global guard recognizers before semantic enrichment."""
 
         return self._recognize_frame_guards(
-            image, ocr_context=ocr_context, owned_dismiss_bounds=owned_dismiss_bounds,
+            image,
+            ocr_context=ocr_context,
+            owned_dismiss_bounds=owned_dismiss_bounds,
+            include_generic_visual_fallback=include_generic_visual_fallback,
+            require_bounded_modal_evidence=require_bounded_modal_evidence,
         )
 
     def _recognize_frame_guards(
         self, image: Image.Image, *, ocr_context: ObservationOcrContext,
         owned_dismiss_bounds: tuple[Bounds, ...] = (),
         owned_navigation_screen: ScreenType | None = None,
-        navigation_dismiss: bool = False,
+        include_generic_visual_fallback: bool = True,
+        require_bounded_modal_evidence: bool = False,
     ) -> ObservationAdditions:
         """Resolve one foreground guard from shared acquisition and modal rules.
 
-        The replacement navigator can consume a measured generic dismiss target;
-        the legacy builder retains its unresolved result for that weak identity.
+        Both perception paths publish the same measured generic control only
+        after visual modal ownership is proved; partial geometry stays unresolved.
         """
 
-        if image.convert("L").getextrema()[1] <= 12:
+        luminance = image.convert("L")
+        if luminance.getextrema()[1] <= 12:
             return ObservationAdditions(
                 screen_evidence=(ScreenEvidence(ScreenType.PNC_LOADING, "near_black_startup_frame"),),
                 guard_verdict=GuardVerdict.BLOCKED,
             )
+        if require_bounded_modal_evidence:
+            modal_bounds = _measure_bounded_modal_edges(
+                image=image,
+                luminance=np.asarray(luminance, dtype=np.float32),
+            )
+            compact_foreground = bool(
+                modal_bounds is not None
+                and modal_bounds.width >= int(image.width * 0.85)
+                and int(image.height * 0.30) <= modal_bounds.height <= int(image.height * 0.45)
+                and int(image.height * 0.18) <= modal_bounds.y <= int(image.height * 0.50)
+            )
+            if not compact_foreground:
+                # A recognized base remains cheap when no compact foreground
+                # panel interrupts it. Exact guard OCR is reserved for visually
+                # plausible overlays so update/reconnect can override the base.
+                return ObservationAdditions(guard_verdict=GuardVerdict.CLEAR)
         ocr_result = self._read_guard_regions(image, ocr_context=ocr_context)
         if ocr_result is None:
             return ObservationAdditions(guard_verdict=GuardVerdict.UNRESOLVED)
@@ -2049,6 +2076,8 @@ class PncObservationEnricher:
                 popup,
                 guard_verdict=GuardVerdict.UNRESOLVED if weak_popup else GuardVerdict.BLOCKED,
             )
+        if not include_generic_visual_fallback:
+            return ObservationAdditions(guard_verdict=GuardVerdict.CLEAR)
         overview_close_bounds = _world_map_overview_close_exclusion_bounds(
             image=image,
             lines=lines,
@@ -2062,29 +2091,38 @@ class PncObservationEnricher:
             excluded_bounds=excluded_close_bounds,
         )
         if visual_popup is not None:
-            if navigation_dismiss:
+            strong_visual_popup = bool(
+                visual_popup.popup_overlay is not None
+                and visual_popup.popup_overlay.modal_bounds is not None
+                and visual_popup.popup_overlay.candidates
+            )
+            if strong_visual_popup:
                 return replace(visual_popup, guard_verdict=GuardVerdict.BLOCKED)
-            if lines:
-                return replace(
-                    visual_popup,
-                    screen_evidence=tuple(
-                        replace(evidence, reason=f"weak_{evidence.reason}")
-                        for evidence in visual_popup.screen_evidence
-                    ),
-                    guard_verdict=GuardVerdict.UNRESOLVED,
-                )
-            return replace(visual_popup, guard_verdict=GuardVerdict.UNRESOLVED)
+            return replace(
+                visual_popup,
+                screen_evidence=tuple(
+                    replace(evidence, reason=(
+                        evidence.reason if evidence.reason.startswith("weak_")
+                        else f"weak_{evidence.reason}"
+                    ))
+                    for evidence in visual_popup.screen_evidence
+                ),
+                visible_elements={},
+                popup_overlay=(
+                    None if visual_popup.popup_overlay is None
+                    else replace(visual_popup.popup_overlay, candidates=())
+                ),
+                guard_verdict=GuardVerdict.UNRESOLVED,
+            )
         if (
             excluded_close_bounds
             and _find_visual_popup_close_bounds(
                 image=image,
                 excluded_bounds=excluded_close_bounds,
+                search_full_height=True,
             )
             is not None
         ):
-            # An additional close glyph outside the reviewed control
-            # makes the frame ambiguous even when it lacks enough surface
-            # support to authorize a generic popup dismissal.
             return ObservationAdditions(
                 screen_evidence=(
                     ScreenEvidence(ScreenType.PNC_POPUP, "weak_unowned_visual_upper_right_close_x"),
@@ -5616,11 +5654,49 @@ def _build_visual_popup_close_additions(
     image: Image.Image,
     excluded_bounds: tuple[Bounds, ...] = (),
 ) -> ObservationAdditions | None:
-    """Returns a generic popup close selector when upper-right image geometry contains a bright X."""
+    """Return a close action only for one X owned by a measured modal."""
 
-    close_bounds = _find_visual_popup_close_bounds(image=image, excluded_bounds=excluded_bounds)
-    if close_bounds is None or not _has_visual_popup_surface(image=image, close_bounds=close_bounds):
-        return None
+    # Pixel components are cheap and establish uniqueness before edge
+    # measurement. This also preserves unresolved evidence for multiple X
+    # glyphs or an X that later proves to be outside the modal.
+    candidates = _find_visual_popup_close_candidates(
+        image=image,
+        excluded_bounds=excluded_bounds,
+        search_full_height=True,
+    )
+    if len(candidates) != 1:
+        if not candidates:
+            return None
+        return _weak_visual_popup_close_additions(
+            image=image,
+            reason="weak_visual_close_x_ambiguous",
+        )
+    close_bounds = candidates[0]
+    modal_bounds = _measure_visual_modal_bounds(image=image)
+    if modal_bounds is None:
+        return _weak_visual_popup_close_additions(
+            image=image,
+            reason="weak_visual_close_x_without_modal",
+        )
+    if not _is_modal_close_candidate(bounds=close_bounds, modal_bounds=modal_bounds):
+        if modal_bounds.contains_point(close_bounds.center()):
+            # Bright X-like controls in the body or modal content are
+            # screen-owned evidence, not a generic modal dismissal candidate.
+            return None
+        return _weak_visual_popup_close_additions(
+            image=image,
+            reason="weak_visual_close_x_outside_modal",
+            modal_bounds=modal_bounds,
+        )
+    if any(
+        _bounds_overlap(modal_bounds, excluded)
+        for excluded in excluded_bounds
+    ):
+        return _weak_visual_popup_close_additions(
+            image=image,
+            reason="weak_visual_modal_overlaps_owned_surface",
+            modal_bounds=modal_bounds,
+        )
     close_element = _make_visible(
         selector_id=UiElementId.PNC_POPUP_CLOSE_BUTTON,
         x=close_bounds.x,
@@ -5632,13 +5708,38 @@ def _build_visual_popup_close_additions(
     )
     return ObservationAdditions(
         visible_elements={UiElementId.PNC_POPUP_CLOSE_BUTTON: close_element},
-        screen_evidence=(ScreenEvidence(ScreenType.PNC_POPUP, "visual_upper_right_close_x"),),
+        screen_evidence=(ScreenEvidence(
+            ScreenType.PNC_POPUP,
+            "visual_upper_right_close_x",
+            "visual_modal_close_x",
+        ),),
         popup_overlay=_popup_overlay_from_elements(
             image=image,
             elements=((PopupControlKind.CLOSE_X, close_element),),
             layout_id="visual_modal_close_x",
             evidence_kind=PopupEvidenceKind.GEOMETRY,
             reason="visual_upper_right_close_x",
+            modal_bounds=modal_bounds,
+        ),
+    )
+
+
+def _weak_visual_popup_close_additions(
+    *,
+    image: Image.Image,
+    reason: str,
+    modal_bounds: Bounds | None = None,
+) -> ObservationAdditions:
+    """Preserve partial visual popup evidence without publishing an action."""
+
+    return ObservationAdditions(
+        screen_evidence=(ScreenEvidence(ScreenType.PNC_POPUP, reason),),
+        popup_overlay=PopupOverlayObservation(
+            image_size=image.size,
+            modal_bounds=modal_bounds,
+            layout_id="visual_close_x_unresolved",
+            evidence_kind=PopupEvidenceKind.GEOMETRY,
+            reason=reason,
         ),
     )
 
@@ -5732,41 +5833,160 @@ def _world_map_overview_chrome_proven(*, image: Image.Image, lines: tuple[OcrLin
 
 
 def _has_visual_popup_surface(*, image: Image.Image, close_bounds: Bounds) -> bool:
-    """Requires dimmed or panel-backed surface support below the generic close X."""
+    """Return whether measured modal ownership contains the candidate X."""
 
-    rgb_image = image.convert("RGB")
-    left = int(image.width * 0.08)
-    right = int(image.width * 0.96)
-    top = min(image.height - 1, close_bounds.y + close_bounds.height + max(12, int(image.height * 0.02)))
-    bottom = min(image.height, top + max(48, int(image.height * 0.20)))
-    if right <= left or bottom <= top:
-        return False
-
-    rgb_values = np.asarray(rgb_image.crop((left, top, right, bottom)), dtype=np.uint8)
-    channel_sums = rgb_values.astype(np.int32).sum(axis=2, dtype=np.int32)
-    mean = float(channel_sums.mean(dtype=np.float64) / 3.0)
-    if mean > 105:
-        return False
-
-    # A broad surface must have both side boundaries; an isolated X on a flat
-    # background has no panel edge to establish popup ownership.
-    left_edge = _vertical_surface_edge_contrast(
-        rgb_image=rgb_image,
-        start=max(5, int(image.width * 0.02)),
-        end=max(6, int(image.width * 0.14)),
-        top=top,
-        bottom=bottom,
-        direction=1,
+    modal = _measure_visual_modal_bounds(image=image)
+    return modal is not None and (
+        modal.x <= close_bounds.center()[0] < modal.x + modal.width
+        and modal.y <= close_bounds.center()[1] < modal.y + modal.height
     )
-    right_edge = _vertical_surface_edge_contrast(
-        rgb_image=rgb_image,
-        start=min(image.width - 7, int(image.width * 0.86)),
-        end=min(image.width - 6, int(image.width * 0.98)),
-        top=top,
-        bottom=bottom,
-        direction=-1,
+
+
+def _measure_visual_modal_bounds(*, image: Image.Image) -> Bounds | None:
+    """Measure coherent modal edges across separated bands and a boundary."""
+
+    rgb = np.asarray(image.convert("RGB"), dtype=np.int16)
+    luminance = rgb.mean(axis=2)
+    width, height = image.size
+    band_height = max(12, int(height * 0.10))
+    band_starts = tuple(
+        min(height - band_height, max(0, int(height * ratio)))
+        for ratio in (0.02, 0.18, 0.36, 0.54, 0.72, 0.90)
     )
-    return left_edge >= 8 and right_edge >= 8
+
+    def vertical_score(x: int, start: int, end: int) -> float:
+        if x < 5 or x >= width:
+            return 0.0
+        return float(np.abs(luminance[start:end, x] - luminance[start:end, x - 5]).mean())
+
+    def coherent_edges(candidates: range) -> tuple[tuple[int, int, float, float, float], ...]:
+        scored: list[tuple[int, int, float, float, float]] = []
+        for x in candidates:
+            scores = tuple(
+                vertical_score(x, start, min(height, start + band_height))
+                for start in band_starts
+            )
+            count = sum(score >= 2.0 for score in scores)
+            if count >= 3:
+                scored.append((count, x, sum(scores), scores[0], scores[-1]))
+        return tuple(scored)
+
+    left_edges = coherent_edges(range(max(5, int(width * 0.02)), max(6, int(width * 0.50))))
+    right_edges = coherent_edges(range(min(width - 1, int(width * 0.50)), max(1, int(width * 0.98))))
+    edge_pairs = tuple(
+        (
+            min(left_count, right_count),
+            left_x,
+            right_x,
+            left_signal + right_signal,
+            min(left_first, right_first),
+            min(left_last, right_last),
+        )
+        for left_count, left_x, left_signal, left_first, left_last in left_edges
+        for right_count, right_x, right_signal, right_first, right_last in right_edges
+        if right_x > left_x and right_x - left_x + 1 >= int(width * 0.50)
+    )
+    full_height_pairs = tuple(pair for pair in edge_pairs if pair[4] >= 2.0 and pair[5] >= 2.0)
+    if not full_height_pairs:
+        return _measure_bounded_modal_edges(image=image, luminance=luminance)
+    _coherence, left, right, _signal, _first, _last = max(
+        full_height_pairs,
+        key=lambda item: (item[0], item[2] - item[1], item[3]),
+    )
+    modal_width = right - left + 1
+    if modal_width < int(width * 0.5):
+        return None
+
+    def horizontal_score(y: int, x_start: int, x_end: int) -> float:
+        if y < 5 or y >= height:
+            return 0.0
+        return float(np.abs(luminance[y, x_start:x_end] - luminance[y - 5, x_start:x_end]).mean())
+
+    interior_left = min(width - 1, left + max(3, int(modal_width * 0.03)))
+    interior_right = max(interior_left + 1, right - max(3, int(modal_width * 0.03)))
+    bottom_candidates = [
+        (horizontal_score(y, interior_left, interior_right), y)
+        for y in range(max(6, int(height * 0.42)), height)
+    ]
+    qualifying_bottoms = [y for score, y in bottom_candidates if score >= 8.0]
+    if not qualifying_bottoms:
+        return _measure_bounded_modal_edges(image=image, luminance=luminance)
+    top = 0
+    bottom = max(qualifying_bottoms)
+    if bottom - top + 1 < int(height * 0.18):
+        return _measure_bounded_modal_edges(image=image, luminance=luminance)
+    return Bounds(x=left, y=top, width=modal_width, height=min(height, bottom + 1) - top)
+
+
+def _measure_bounded_modal_edges(*, image: Image.Image, luminance: np.ndarray) -> Bounds | None:
+    """Measure a bounded modal when its sides do not span the full frame height."""
+
+    width, height = image.size
+    left_candidates = range(max(5, int(width * 0.02)), max(6, int(width * 0.50)))
+    right_candidates = range(min(width - 1, int(width * 0.50)), max(1, int(width * 0.98)))
+
+    def runs_for_edge(x: int) -> tuple[tuple[int, int, float], ...]:
+        profile = np.abs(luminance[:, x] - luminance[:, x - 5])
+        active = profile >= 2.0
+        runs: list[tuple[int, int, float]] = []
+        start: int | None = None
+        for index, is_active in enumerate(active):
+            if is_active and start is None:
+                start = index
+            if (not is_active or index == height - 1) and start is not None:
+                end = index if not is_active else index + 1
+                if end - start >= int(height * 0.18):
+                    runs.append((start, end, float(profile[start:end].sum())))
+                start = None
+        return tuple(runs)
+
+    def best_runs(candidates: range) -> tuple[tuple[int, int, int, float], ...]:
+        scored: list[tuple[int, int, int, float]] = []
+        for x in candidates:
+            for start, end, score in runs_for_edge(x):
+                scored.append((end - start, x, start, score))
+        return tuple(sorted(scored, key=lambda item: (item[0], item[3]), reverse=True)[:12])
+
+    left_runs = best_runs(left_candidates)
+    right_runs = best_runs(right_candidates)
+    if not left_runs or not right_runs:
+        return None
+
+    pair: tuple[int, int, int, int] | None = None
+    pair_score = -1
+    for left_length, left_x, left_start, left_signal in left_runs:
+        left_end = left_start + left_length
+        for right_length, right_x, right_start, right_signal in right_runs:
+            right_end = right_start + right_length
+            overlap_start = max(left_start, right_start)
+            overlap_end = min(left_end, right_end)
+            overlap_length = overlap_end - overlap_start
+            if right_x <= left_x or overlap_length < int(height * 0.18):
+                continue
+            score = overlap_length * 1000 + left_signal + right_signal
+            if score > pair_score:
+                pair_score = score
+                pair = (left_x, right_x, overlap_start, overlap_end)
+    if pair is None:
+        return None
+
+    left, right, top, bottom = pair
+    modal_width = right - left + 1
+    if modal_width < int(width * 0.5) or bottom - top < int(height * 0.18):
+        return None
+
+    interior_left = min(width - 1, left + max(3, int(modal_width * 0.03)))
+    interior_right = max(interior_left + 1, right - max(3, int(modal_width * 0.03)))
+
+    def horizontal_score(y: int) -> float:
+        if y < 5 or y >= height:
+            return 0.0
+        return float(np.abs(luminance[y, interior_left:interior_right] - luminance[y - 5, interior_left:interior_right]).mean())
+
+    has_boundary = horizontal_score(top) >= 8.0 or horizontal_score(bottom) >= 8.0
+    if not has_boundary:
+        return None
+    return Bounds(x=left, y=top, width=modal_width, height=bottom - top)
 
 
 def _vertical_surface_edge_contrast(
@@ -5835,15 +6055,34 @@ def _find_visual_popup_close_bounds(
     image: Image.Image,
     modal_bounds: Bounds | None = None,
     excluded_bounds: tuple[Bounds, ...] = (),
+    search_full_height: bool = False,
 ) -> Bounds | None:
-    """Find a bright X relative to a previously established modal boundary."""
+    """Find one bright X relative to a previously measured modal boundary."""
+
+    candidates = _find_visual_popup_close_candidates(
+        image=image,
+        modal_bounds=modal_bounds,
+        excluded_bounds=excluded_bounds,
+        search_full_height=search_full_height,
+    )
+    return candidates[0] if len(candidates) == 1 else None
+
+
+def _find_visual_popup_close_candidates(
+    *,
+    image: Image.Image,
+    modal_bounds: Bounds | None = None,
+    excluded_bounds: tuple[Bounds, ...] = (),
+    search_full_height: bool = False,
+) -> tuple[Bounds, ...]:
+    """Find bright X components before or after modal ownership measurement."""
 
     rgb_image = image.convert("RGB")
     if modal_bounds is None:
-        search_left = int(image.width * 0.72)
-        search_right = int(image.width * 0.99)
-        search_top = int(image.height * 0.02)
-        search_bottom = int(image.height * 0.40)
+        search_left = 0 if search_full_height else int(image.width * 0.72)
+        search_right = image.width if search_full_height else int(image.width * 0.99)
+        search_top = 0
+        search_bottom = image.height if search_full_height else int(image.height * 0.22)
     else:
         search_left = modal_bounds.x + int(modal_bounds.width * 0.5)
         search_right = min(image.width, modal_bounds.x + modal_bounds.width + int(modal_bounds.width * 0.06))
@@ -5883,11 +6122,7 @@ def _find_visual_popup_close_bounds(
         bounds = _visual_close_component_bounds(image=image, component=component)
         if bounds is None:
             continue
-        if modal_bounds is None and bounds.center()[0] < image.width * 0.86:
-            # The generic search owns only the outer close band. Shifted
-            # controls require an independently established modal boundary.
-            continue
-        if any(excluded.contains_bounds(bounds) for excluded in excluded_bounds):
+        if any(_bounds_overlap(excluded, bounds) for excluded in excluded_bounds):
             continue
         if modal_bounds is not None and not _is_modal_close_candidate(
             bounds=bounds,
@@ -5895,9 +6130,18 @@ def _find_visual_popup_close_bounds(
         ):
             continue
         candidates.append(bounds)
-    if not candidates:
-        return None
-    return max(candidates, key=lambda bounds: bounds.center()[0])
+    return tuple(candidates)
+
+
+def _bounds_overlap(first: Bounds, second: Bounds) -> bool:
+    """Return whether two positive image rectangles share any pixels."""
+
+    return (
+        first.x < second.x + second.width
+        and second.x < first.x + first.width
+        and first.y < second.y + second.height
+        and second.y < first.y + first.height
+    )
 
 
 def _is_modal_close_candidate(*, bounds: Bounds, modal_bounds: Bounds) -> bool:
@@ -5909,8 +6153,8 @@ def _is_modal_close_candidate(*, bounds: Bounds, modal_bounds: Bounds) -> bool:
     right_gap = modal_bounds.x + modal_bounds.width - center_x
     top_gap = center_y - modal_bounds.y
     return (
-        0.68 <= relative_x <= 1.0
-        and 0.0 <= relative_y <= 0.38
+        0.85 <= relative_x <= 1.0
+        and 0.0 <= relative_y <= 0.20
         and right_gap <= max(modal_bounds.width * 0.28, bounds.width * 4)
         and top_gap >= -max(bounds.height, modal_bounds.height * 0.05)
     )
@@ -6209,19 +6453,27 @@ def _build_valiant_conquest_popup_additions(
     if supporting_line is None or close_bounds is None:
         return None
 
+    close_element = _make_visible(
+        selector_id=UiElementId.PNC_POPUP_CLOSE_BUTTON,
+        x=close_bounds.x,
+        y=close_bounds.y,
+        width=close_bounds.width,
+        height=close_bounds.height,
+        action_point=close_bounds.center(),
+        source_kind=VisibleElementSourceKind.GEOMETRY,
+    )
     return ObservationAdditions(
         visible_elements={
-            UiElementId.PNC_POPUP_CLOSE_BUTTON: _make_visible(
-                selector_id=UiElementId.PNC_POPUP_CLOSE_BUTTON,
-                x=close_bounds.x,
-                y=close_bounds.y,
-                width=close_bounds.width,
-                height=close_bounds.height,
-                action_point=close_bounds.center(),
-                source_kind=VisibleElementSourceKind.GEOMETRY,
-            )
+            UiElementId.PNC_POPUP_CLOSE_BUTTON: close_element,
         },
         screen_evidence=(ScreenEvidence(ScreenType.PNC_POPUP, "ocr_valiant_conquest_popup"),),
+        popup_overlay=_popup_overlay_from_elements(
+            image=image,
+            elements=((PopupControlKind.CLOSE_X, close_element),),
+            layout_id="valiant_conquest",
+            evidence_kind=PopupEvidenceKind.KNOWN_LAYOUT,
+            reason="ocr_valiant_conquest_popup",
+        ),
     )
 
 
@@ -6260,23 +6512,32 @@ def _build_vip_daily_reset_popup_additions(
     close_top = max(0, close_line.bounds.y - close_height_padding)
     close_width = min(image.width - close_left, close_line.bounds.width + (close_width_padding * 2))
     close_height = min(image.height - close_top, close_line.bounds.height + (close_height_padding * 2))
+    close_element = _make_visible(
+        selector_id=UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON,
+        x=close_left,
+        y=close_top,
+        width=close_width,
+        height=close_height,
+        action_point=(close_line.bounds.x + (close_line.bounds.width // 2), close_line.bounds.y + (close_line.bounds.height // 2)),
+        extracted_text=close_line.text,
+        source_kind=VisibleElementSourceKind.OCR,
+    )
     return ObservationAdditions(
         visible_elements={
             UiElementId.PNC_VIP_DAILY_RESET_HEADER: _make_visible_from_line(
                 selector_id=UiElementId.PNC_VIP_DAILY_RESET_HEADER,
                 line=vip_line,
             ),
-            UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON: _make_visible(
-                selector_id=UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON,
-                x=close_left,
-                y=close_top,
-                width=close_width,
-                height=close_height,
-                action_point=(close_line.bounds.x + (close_line.bounds.width // 2), close_line.bounds.y + (close_line.bounds.height // 2)),
-                extracted_text=close_line.text,
-            ),
+            UiElementId.PNC_VIP_DAILY_RESET_CLOSE_BUTTON: close_element,
         },
         screen_evidence=(ScreenEvidence(ScreenType.PNC_VIP_DAILY_RESET, "ocr_vip_daily_reset_popup"),),
+        popup_overlay=_popup_overlay_from_elements(
+            image=image,
+            elements=((PopupControlKind.CLOSE_TEXT, close_element),),
+            layout_id="vip_daily_reset",
+            evidence_kind=PopupEvidenceKind.OCR_TEXT,
+            reason="ocr_vip_daily_reset_popup",
+        ),
     )
 
 

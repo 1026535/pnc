@@ -42,14 +42,20 @@ The implementation must generalize popup recovery without treating every `Confir
 
 ### Perception ownership
 
-- `pnc_automation/app/pnc/vision/pnc_observation_enricher.py` recognizes:
-  - VIP daily reset from OCR and its `Close` control;
-  - the exact required-update message and its dedicated `Confirm` control;
-  - disconnect/reconnect text and `Confirm`, currently misclassified as generic close;
-  - footer `Cancel` when paired with a popup primary action;
-  - offer content, followed by a synthesized top-right target;
-  - a bright upper-right `X` using guarded image geometry.
-- `Observation` exposes `blocking_popup` and selector-backed elements but has no typed representation of the modal bounds, candidate control semantics, evidence source, or candidate ranking.
+- `VisualScreenRecognizer` first establishes ordinary screen identity with blocking
+  popup profiles excluded. A recognized base screen skips named popup matching and
+  generic modal recovery. It runs bounded exact guard OCR only if coherent compact
+  foreground panel geometry is present. UNKNOWN frames enter bounded exact guard
+  recognition and the eligible blocking-popup phase directly.
+- `pnc_automation/app/pnc/vision/pnc_observation_enricher.py` retains bounded exact
+  required-update/reconnect/task-warning ownership and the generic visual fallback.
+  Known Savannah, VIP, Valiant, and Alliance layouts are supplied by reviewed visual
+  profiles with typed measured controls; missing controls remain blocking without an
+  action. The fallback requires coherent modal boundaries and a unique in-modal X.
+- `Observation` now carries typed popup overlay evidence, measured modal bounds,
+  and typed candidate controls. Shared session/epoch eligibility keeps startup/login
+  families armed through pre-login screens and disarms them after a proved in-game
+  base transition. No weekday or synthetic clock gate is used.
 - Because `visible_elements` is keyed by `UiElementId`, it cannot faithfully represent several same-kind candidate controls without prematurely selecting one in vision.
 
 ### Existing evidence disposition
@@ -95,16 +101,25 @@ Reconnect `Confirm` is a distinct typed recovery action, not a generic close. It
 
 Task-owned screens and controls continue to take precedence. At minimum, building upgrade, speedup, march confirmation, mail compose, chat send/profile, alliance member management, coordinate dialog, alliance `Join/Apply`, purchases, rewards, and other workflow-owned actions remain excluded from interruption recovery.
 
-### 3. Recognized-first perception with generic fallback
+### 3. Demand-driven recognized perception with generic fallback
 
-Refactor `_build_popup_additions()` into an ordered recognizer pipeline:
+Establish ordinary base-screen identity before popup work. The base pass excludes
+blocking popup profiles and does not run popup semantic OCR. When it recognizes a
+base screen, skip named popup profiles and generic modal/X recovery. Publish the base
+without OCR when no coherent compact foreground panel is present; otherwise run the
+bounded exact guard first so a required update can own the frame. An UNKNOWN base
+enters this ordered pipeline directly:
 
-1. VIP reset.
-2. Required update.
-3. Disconnect/reconnect.
-4. Known offer layouts (Savannah/Lucifer and structurally equivalent offer evidence).
-5. Known alliance invitation/footer layouts.
-6. Generic modal-bound control discovery.
+1. Bounded required-update, reconnect, and task-owned warning guards.
+2. Eligible VIP reset, known offer, and Alliance invitation layouts.
+3. Generic modal-bound control discovery.
+
+The shared observation-session owner filters named families before matcher work.
+Startup/login families remain eligible through Android Home, loading, login, account
+switch, and castle selection; a matched in-game base screen outside that set proves
+the startup window passed. VIP and Valiant remain active across repeated popup
+frames and are disarmed only after the popup disappears or the session epoch changes.
+This is a conservative observation gate, not proof of server-side availability.
 
 A recognized layout must still return a measured control from OCR, template, or glyph geometry. Recognition of the popup body alone must not synthesize a click target. Replace `_build_top_right_popup_close_additions()` with actual close-control localization; if the glyph cannot be measured, return blocking-popup evidence with no candidate so the executor fails closed.
 
@@ -342,6 +357,15 @@ The smoke test must use the canonical application/runtime wiring, capture a befo
 | Phase 5: popup-local back | Validate modal-local arrow without confusing page navigation | Reviewed real popup-local arrow fixture/live occurrence exists | One measured popup-arrow tap only | Fresh frame proves popup transition/dismissal | Stop if arrow ownership is not proven or any system/page back region overlaps | Before/after PNG, detector overlay, fingerprint pair | Must be `passed`; otherwise feature remains disabled with `applicability_skip` |
 | Phase 6: regression smoke | Confirm shared workflow no longer stalls when a supported popup appears | Live target healthy; no forced state changes | Canonical popup smoke, then smallest relevant existing workflow smoke | Workflow reaches its existing postcondition with no unauthorized action | Stop on any spending prompt, account mismatch, castle ambiguity, or update timeout | Popup artifacts plus workflow artifacts/log | Required affected slice `passed`; unrelated naturally absent families may remain `applicability_skip` |
 
+Phase 5 passed on September 15, 2026 under the user's bounded override for
+`main` / `K157 Sword NPC`. The real Lucifer Special Offer is a full-height offer
+with no X. Its upper-left gold arrow is owned by the offer and is published as
+`popup_back`. One measured tap changed the frame from the Lucifer layout to Home;
+the executor emitted no Android Back event. The report is
+`.local-data/reports/popup_live_lucifer_main_20260915.json`. A subsequent canonical
+identity preflight exactly verified `K157 / Sword NPC / level 29`; no account or
+castle switch and no spending occurred.
+
 ## Data, Configuration, and Migration
 
 - No account, castle, credential, or resource-budget configuration changes are required.
@@ -398,24 +422,32 @@ Run the narrow popup smoke first. Run `PNC_RUN_LIVE_SMOKE=1 py -m unittest tests
 
 ## Open Questions
 
-- Which real popup family uses a popup-local back arrow, and what adjacent ordinary navigation arrow is the best negative control? This blocks only Phase 5, not X/Cancel/Close recovery.
+- Lucifer is the evidenced popup-local-back family. Its arrow is accepted only after
+  the independently matched Lucifer artwork/layout owns the frame; ordinary Gift
+  Center and page-navigation arrows remain page controls and cannot produce the typed
+  popup candidate. Phase 5 is complete for the captured build/layout.
 - Should exact reconnect confirmation remain automatically recoverable everywhere, or only during bootstrap/navigation interruption windows? Default plan: allow it only through the centralized interruption executor, with exact message evidence and no generic selector alias.
-- Are Savannah/Lucifer layouts stable enough for a template, or should body recognition plus measured generic X remain the canonical path? Decide from the curated fixture corpus, favoring the smallest robust detector.
+- Savannah has a qualified named profile and an independently passing generic
+  modal/X fallback. Lucifer has a strict named artwork/layout profile with a separate
+  measured popup-back control. Lucifer currently has one live capture group, so a
+  future independent build/layout holdout may refine its profile without weakening
+  the current exact-identity gate.
 
 ## Execution Checklist
 
 - [ ] Rebase the implementation view on `origin/main` while preserving the current working tree and catalog overlapping edits.
-- [ ] Curate positive and negative popup evidence without copying secrets or local-only data into tracked fixtures.
-- [ ] Add failing safety-contract tests for reconnect typing and synthesized offer coordinates.
-- [ ] Introduce typed popup overlay/candidate models and propagate them through observations.
-- [ ] Separate update, reconnect, negative dismissal, X, and popup-local back semantics.
-- [ ] Convert recognized popup handlers to measured controls and remove synthetic targets.
-- [ ] Add generic modal-bound X and reviewed negative-label detection.
-- [ ] Centralize candidate authorization and enforce one-tap/one-recapture semantics.
-- [ ] Keep popup-local back disabled until its evidence gate passes.
-- [ ] Migrate all callers and remove duplicate/ad hoc popup logic.
-- [ ] Run focused tests and selector validation.
-- [ ] Run the full offline suite.
-- [ ] Run bounded live smoke on `testing`/`bs-main-1` with no account/castle switch or resource spending.
-- [ ] Record each live slice as `passed`, `applicability_skip`, or `blocked` with artifact paths.
-- [ ] Update `scripts/README.md` and report remaining evidence gaps.
+- [x] Curate positive and negative popup evidence without copying secrets or local-only data into tracked fixtures.
+- [x] Add failing safety-contract tests for reconnect typing and synthesized offer coordinates.
+- [x] Introduce typed popup overlay/candidate models and propagate them through observations.
+- [x] Separate update, reconnect, negative dismissal, X, and popup-local back semantics.
+- [x] Convert recognized popup handlers to measured controls and remove synthetic targets.
+- [x] Add generic modal-bound X and reviewed negative-label detection.
+- [x] Centralize candidate authorization and enforce one-tap/one-recapture semantics.
+- [x] Enable popup-local back only after its evidence gate passed.
+- [x] Migrate all callers and remove duplicate/ad hoc popup logic.
+- [x] Run focused tests and selector validation.
+- [x] Run the final full offline suite on the Lucifer- and VIP-holdout-inclusive tree (2,184 tests,
+  seven skips, zero failures or errors).
+- [x] Run bounded non-spending live popup smokes on the explicitly authorized instances.
+- [x] Record each live slice as `passed`, `applicability_skip`, or `blocked` with artifact paths.
+- [x] Update operator documentation and report remaining evidence gaps.

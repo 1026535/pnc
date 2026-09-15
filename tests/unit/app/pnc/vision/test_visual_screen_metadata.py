@@ -35,7 +35,7 @@ class VisualScreenMetadataTests(unittest.TestCase):
             for sample in manifest["samples"]
             if sample["split"] == "reference"
         }
-        self.assertEqual(62, len(catalog["profiles"]))
+        self.assertEqual(66, len(catalog["profiles"]))
         for profile in catalog["profiles"]:
             with self.subTest(profile=profile["id"]):
                 source = profile["source"]
@@ -87,7 +87,7 @@ class VisualScreenMetadataTests(unittest.TestCase):
                 self.assertEqual(expected_revision, profile["revision"])
 
         recognizer = load_visual_screen_recognizer()
-        self.assertEqual(62, len(recognizer.profiles))
+        self.assertEqual(66, len(recognizer.profiles))
         self.assertTrue(all(profile.review.qualification == "guarded_reference_only" for profile in recognizer.profiles))
 
         class _MatchAll:
@@ -100,7 +100,7 @@ class VisualScreenMetadataTests(unittest.TestCase):
                 return object()
 
         recognition = load_visual_screen_recognizer(matcher=_MatchAll()).recognize(Image.new("RGB", (540, 960)))
-        self.assertEqual(48, len({item.screen_type for item in recognition.evidence}))
+        self.assertEqual(49, len({item.screen_type for item in recognition.evidence}))
         # Alternate appearances can share a layout and retain separate source
         # revisions; each evidence item must preserve its matched profile's one.
         revisions = {f"visual_anchor:{profile['id']}": profile["revision"] for profile in catalog["profiles"]}
@@ -132,6 +132,32 @@ class VisualScreenMetadataTests(unittest.TestCase):
             with self.subTest(mutation=mutate):
                 document = copy.deepcopy(original)
                 mutate(document["profiles"][0])
+                with tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    shutil.copytree(CATALOG_PATH.parent / "screen_anchors", root / "screen_anchors")
+                    path = root / "screen_anchors.json"
+                    path.write_text(json.dumps(document), encoding="utf-8")
+                    with self.assertRaises(ValueError):
+                        load_visual_screen_recognizer(path)
+
+        popup_control_mutations = (
+            lambda document: next(
+                profile for profile in document["profiles"] if profile["id"] == "alliance_invitation"
+            )["controls"][0].pop("popup_control_kind"),
+            lambda document: next(
+                profile for profile in document["profiles"] if profile["id"] == "alliance_invitation"
+            )["controls"][0].update(popup_control_kind="update_confirm"),
+            lambda document: next(
+                profile for profile in document["profiles"] if profile["id"] == "vip_daily_reset"
+            )["controls"][0].update(popup_control_kind="cancel"),
+            lambda document: next(
+                profile for profile in document["profiles"] if profile["id"] == "alliance_invitation"
+            )["controls"][0].update(dismisses_surface=False),
+        )
+        for mutate in popup_control_mutations:
+            with self.subTest(popup_control_mutation=mutate):
+                document = copy.deepcopy(original)
+                mutate(document)
                 with tempfile.TemporaryDirectory() as directory:
                     root = Path(directory)
                     shutil.copytree(CATALOG_PATH.parent / "screen_anchors", root / "screen_anchors")

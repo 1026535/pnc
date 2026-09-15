@@ -159,10 +159,7 @@ class CoordinateDialogLocalFixturesTests(unittest.TestCase):
             )
             passive = navigation.build(screenshot, include_content=False)
             self.assertEqual(passive.text_field_states, {})
-            self.assertEqual(
-                [read.purpose for read in contexts[-1].read_diagnostics],
-                [OcrReadPurpose.GUARD],
-            )
+            self.assertEqual([read.purpose for read in contexts[-1].read_diagnostics], [])
 
     def test_observation_builder_classifies_live_coordinate_dialog_missing_label_fixture(self) -> None:
         """Replays the English live coordinate dialog where one full-screen label was unstable."""

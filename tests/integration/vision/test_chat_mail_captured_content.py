@@ -269,6 +269,8 @@ class ChatMailCapturedContentTests(unittest.TestCase):
                         self, observation, UiElementId.PNC_CHAT_TAB_ALLIANCE, capture,
                     )
                     self.assertEqual(observation.frame_ref, capture.frame_ref)
+                # Chat is a recognized base screen, so no centered popup guard
+                # crop is permitted; transcript acquisition remains bounded.
                 _assert_bounded(self, ocr, capture.image.size)
                 self.assertTrue(
                     any(region == CHAT_BODY_REGION for region, _ in builder_calls),
@@ -334,7 +336,7 @@ class ChatMailCapturedContentTests(unittest.TestCase):
                 self.assertTrue(any(region == CHAT_BODY_REGION for region, _ in ocr.calls))
 
     def test_navigation_no_content_flag_keeps_identity_controls_and_omits_chat_state(self) -> None:
-        """The replacement no-content mode does not publish OCR rows or channel state."""
+        """Recognized no-content Chat publishes controls without popup OCR work."""
 
         delegate = _require_rapid_ocr_service(self)
         for fixture_name in ("chat_kingdom.png", "chat_alliance.png"):
@@ -351,7 +353,7 @@ class ChatMailCapturedContentTests(unittest.TestCase):
                 self.assertEqual(observation.entries(ListEntryKind.CHAT_MESSAGE), ())
                 self.assertEqual(observation.frame_ref, capture.frame_ref)
                 _assert_control_provenance(self, observation, UiElementId.PNC_BACK_BUTTON_TOP_LEFT, capture)
-                _assert_bounded(self, ocr, capture.image.size)
+                self.assertEqual(ocr.calls, [])
 
     def test_captured_player_mail_uses_padded_title_crop_and_preserves_compose(self) -> None:
         """Recognize Player Mail from the measured title context without body-based emptiness."""

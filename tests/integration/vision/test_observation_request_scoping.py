@@ -253,18 +253,17 @@ class ObservationRequestScopingTests(unittest.TestCase):
         self.assertEqual(observation.screen_type, ScreenType.PNC_HOME_CITY)
         self.assertFalse(observation.has(UiElementId.PNC_HOME_BUILD_BUTTON))
 
-    def test_observation_builder_base_request_reads_guards_without_content(self) -> None:
-        """A captured screen still runs global guards while base requests omit semantic OCR."""
+    def test_observation_builder_base_request_skips_popup_guard_ocr_without_content(self) -> None:
+        """A recognized base screen skips popup guard OCR while omitting semantic OCR."""
 
         from tests.integration.vision.test_alliance_remaining_visual_contracts import _builder, _capture, _BoundedOcrService
-        from pnc_automation.app.pnc.vision.ocr_region_plan import compile_guard_ocr_region_plans
         with Image.open("tests/data/screen_recognition/institute_audit.png") as source:
             image = source.convert("RGB")
         ocr = _BoundedOcrService()
         builder = _builder(ocr)
         observation = builder.build(_capture(image, session_id="base-guards"), request=ObservationRequest.base())
         self.assertEqual(observation.screen_type, ScreenType.PNC_INSTITUTE)
-        self.assertEqual(ocr.calls, [plan.bounds for plan in compile_guard_ocr_region_plans(image.size)])
+        self.assertEqual(ocr.calls, [])
         self.assertFalse(observation.has(UiElementId.PNC_BUILDING_LEVEL_LABEL))
 
 

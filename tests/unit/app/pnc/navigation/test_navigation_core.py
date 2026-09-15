@@ -61,7 +61,6 @@ from pnc_automation.core.vision.ocr.ocr_service import ObservationOcrContext, Oc
 from pnc_automation.core.errors import SelectorResolutionError
 from tests.support.paths import REPOSITORY_ROOT, TEST_DATA_ROOT
 from tests.support.pnc.capture_vision.modal_overlay import with_update_modal
-from pnc_automation.app.pnc.vision.ocr_region_plan import compile_guard_ocr_region_plans
 
 
 def _perception(recognizer, guard, *, ocr_service=None):
@@ -1624,10 +1623,9 @@ class NavigationPerceptionTests(unittest.TestCase):
         self.assertEqual(result.screen_type, ScreenType.PNC_WORLD_COORDINATE_DIALOG)
         self.assertFalse(result.blocking_popup)
         self.assertTrue(result.has(UiElementId.PNC_WORLD_COORDINATE_DIALOG_CLOSE_BUTTON))
-        # Integration review: the guard now owns one bounded modal crop;
-        # loading identity is visual and must not add diagnostic OCR.
-        self.assertEqual(len(compile_guard_ocr_region_plans(capture.image.size)), ocr.read_result.call_count)
-        self.assertTrue(all(call.args[1] is not None for call in ocr.read_result.call_args_list))
+        # The owned coordinate dialog is too shallow to be an update overlay,
+        # so its ordinary frame does not spend a guard OCR read.
+        self.assertEqual(0, ocr.read_result.call_count)
         ocr.read_result.return_value = OcrResult(lines=(
             OcrLine('New version detected. Tap Confirm to update.', Bounds(58, 380, 420, 28), 1.0),
             OcrLine('Confirm', Bounds(221, 531, 90, 27), 1.0),
@@ -1697,7 +1695,7 @@ class NavigationPerceptionTests(unittest.TestCase):
 
         with patch.object(PncObservationEnricher, 'enrich', side_effect=content):
             result = perception.build(capture, include_content=True)
-            self.assertEqual(len(compile_guard_ocr_region_plans(capture.image.size)) + 1, ocr.read_result.call_count)
+            self.assertEqual(1, ocr.read_result.call_count)
             self.assertEqual(capture.image.size, ocr.read_result.call_args.args[0].size)
             self.assertEqual(capture.frame_ref, result.list_entries[0].frame_ref)
             self.assertEqual(result.decision.layout_id, result.list_entries[0].source_layout_id)
@@ -1740,7 +1738,7 @@ class NavigationPerceptionTests(unittest.TestCase):
         self.assertIs(classifier.decide.return_value, result.decision)
         self.assertFalse(result.visible_elements)
 
-    def test_owned_close_does_not_hide_an_additional_unowned_close(self):
+    def test_owned_close_with_additional_unowned_close_stays_unresolved(self):
         image = Image.new('RGB', (540, 960), (15, 28, 68))
         draw = ImageDraw.Draw(image)
         draw.rectangle((15, 160, 525, 620), fill=(25, 33, 50), outline=(65, 82, 110), width=4)
@@ -1753,10 +1751,12 @@ class NavigationPerceptionTests(unittest.TestCase):
         result = PncObservationEnricher().detect_interruption(
             image, ocr_context=context, owned_dismiss_bounds=(Bounds(505, 195, 25, 30),),
         )
-        self.assertEqual(GuardVerdict.BLOCKED, result.guard_verdict)
-        self.assertLess(result.visible_elements[UiElementId.PNC_POPUP_CLOSE_BUTTON].bounds.center()[0], 500)
+        self.assertEqual(GuardVerdict.UNRESOLVED, result.guard_verdict)
+        self.assertFalse(result.visible_elements)
+        self.assertIsNotNone(result.popup_overlay)
+        self.assertEqual((), result.popup_overlay.candidates)
 
-    def test_home_visual_identity_cannot_suppress_measured_popup(self):
+    def test_home_visual_identity_owns_a_generic_like_popup_surface(self):
         capture = self.capture('generic_popup_offer_real_sanitized.png')
         recognizer = Mock()
         recognizer.recognize.return_value = VisualRecognition(
@@ -1766,9 +1766,9 @@ class NavigationPerceptionTests(unittest.TestCase):
         ocr.read_result.return_value = OcrResult(lines=(), words=())
         result = _perception(recognizer, PncObservationEnricher(), ocr_service=ocr).build(capture)
         self.assertEqual(ScreenType.PNC_HOME_CITY, result.decision.base_screen)
-        self.assertEqual(ScreenType.PNC_POPUP, result.screen_type)
-        self.assertTrue(result.blocking_popup)
-        self.assertEqual({UiElementId.PNC_POPUP_CLOSE_BUTTON}, set(result.visible_elements))
+        self.assertEqual(ScreenType.PNC_HOME_CITY, result.screen_type)
+        self.assertFalse(result.blocking_popup)
+        self.assertNotIn(UiElementId.PNC_POPUP_CLOSE_BUTTON, result.visible_elements)
 
     def test_conflicting_layouts_and_guards_abstain(self):
         recognizer = Mock()

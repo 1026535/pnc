@@ -165,7 +165,7 @@ class CampaignVisualProfileTests(unittest.TestCase):
     """Require campaign identity and controls to remain evidence-backed and scoped."""
 
     def test_stage_content_request_preserves_controls_without_unused_body_ocr(self) -> None:
-        """The captured stage needs foreground guarding, not an unused body scan."""
+        """A recognized stage skips popup guard OCR while retaining measured controls."""
         capture = _capture(_image("campaign_stage_10_3.png"))
         for path in ("builder", "navigation"):
             with self.subTest(path=path):
@@ -187,7 +187,7 @@ class CampaignVisualProfileTests(unittest.TestCase):
                     self.assertTrue(observation.has(selector))
                     self.assertEqual(observation.visible_elements[selector].frame_ref, capture.frame_ref)
                 self.assertFalse(observation.list_entries)
-                self.assertEqual(backend.regions, [Bounds(16, 240, 508, 480)])
+                self.assertEqual(backend.regions, [])
 
     def test_campaign_ocr_regions_scale_reference_geometry(self) -> None:
         """Scale the reviewed Campaign regions without changing their native reference geometry."""
@@ -205,7 +205,7 @@ class CampaignVisualProfileTests(unittest.TestCase):
             scale_campaign_bounds(CAMPAIGN_MAP_CHAPTER_ROW, (0, 960))
 
     def test_benchmark_wrapper_preserves_owned_detail_close(self) -> None:
-        """Timing instrumentation must retain the production guard contract."""
+        """Timing instrumentation forwards the base-first visual contract."""
         from tools.benchmark_screen_recognition import _instrument_builder
 
         builder, probe = _instrument_builder(_builder((
@@ -216,7 +216,7 @@ class CampaignVisualProfileTests(unittest.TestCase):
         self.assertEqual(observation.screen_type, ScreenType.PNC_CAMPAIGN_STAGE)
         self.assertTrue(observation.has(UiElementId.PNC_CAMPAIGN_BATTLE_BUTTON))
         self.assertIsNotNone(probe)
-        self.assertGreater(probe.guard_calls, 0)
+        self.assertEqual(probe.guard_calls, 0)
 
     def test_campaign_profiles_expose_their_measured_controls(self) -> None:
         recognizer = load_visual_screen_recognizer()
@@ -629,8 +629,8 @@ class CampaignVisualProfileTests(unittest.TestCase):
         self.assertFalse(builder_result.has(UiElementId.PNC_POPUP_CLOSE_BUTTON))
         self.assertEqual(builder_result.decision.guard.value, "clear")
 
-    def test_owned_stage_close_does_not_hide_an_additional_unowned_close(self) -> None:
-        """A measured detail dismiss control cannot clear another surface's X."""
+    def test_recognized_stage_owns_generic_like_x_without_popup_promotion(self) -> None:
+        """A recognized stage keeps its own controls when another X is present."""
 
         image = _image("campaign_stage_10_3.png")
         drawing = ImageDraw.Draw(image)
@@ -646,8 +646,11 @@ class CampaignVisualProfileTests(unittest.TestCase):
             _navigation_perception(lines).build(capture),
         )):
             with self.subTest(path=index):
-                self.assertNotEqual(observation.decision.guard.value, "clear")
-                self.assertFalse(observation.has(UiElementId.PNC_CAMPAIGN_BATTLE_BUTTON))
+                self.assertEqual(observation.screen_type, ScreenType.PNC_CAMPAIGN_STAGE)
+                self.assertEqual(observation.decision.guard.value, "clear")
+                self.assertTrue(observation.has(UiElementId.PNC_CAMPAIGN_CLOSE_BUTTON))
+                self.assertTrue(observation.has(UiElementId.PNC_CAMPAIGN_BATTLE_BUTTON))
+                self.assertFalse(observation.has(UiElementId.PNC_POPUP_CLOSE_BUTTON))
 
     def test_campaign_registry_and_reviewed_edges_are_canonical(self) -> None:
         registry = build_default_selector_registry()

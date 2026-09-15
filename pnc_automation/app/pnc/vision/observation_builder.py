@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
+from inspect import Parameter, signature
 from typing import Protocol
 
 from PIL import Image
@@ -41,6 +42,7 @@ from pnc_automation.app.pnc.domain.observation import (
     castle_identity_from_entry,
     castle_entry_identity_matches,
 )
+from pnc_automation.app.pnc.domain.popup import PopupControlKind, PopupEvidenceKind
 from pnc_automation.app.pnc.domain.screen_decision import (
     BLOCKING_SCREEN_TYPES,
     GuardVerdict,
@@ -86,6 +88,19 @@ from pnc_automation.app.pnc.vision.visual_screen_recognizer import (
 )
 from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher, PreparedFrame
 
+
+def _accepts_keyword(method: object, name: str) -> bool:
+    """Return whether an injected seam supports one optional scoped keyword."""
+
+    try:
+        parameters = signature(method).parameters.values()
+    except (TypeError, ValueError):
+        return False
+    return name in {parameter.name for parameter in parameters} or any(
+        parameter.kind is Parameter.VAR_KEYWORD for parameter in parameters
+    )
+
+
 class ObservationEnricher(Protocol):
     """Adds higher-level facts after basic selector detection."""
 
@@ -97,7 +112,7 @@ class ObservationEnricher(Protocol):
         ocr_context: ObservationOcrContext,
         owned_dismiss_bounds: tuple[Bounds, ...] = (),
     ) -> "ObservationAdditions":
-        """Recognizes global blocking/loading guards independently of request scope."""
+        """Recognizes bounded guards after the independent base-identity gate."""
 
     def enrich(
         self,
@@ -396,23 +411,90 @@ class ObservationBuilder:
                 ocr_context=ocr_context,
             )
 
-        visual = (
-            VisualRecognition()
-            if self.visual_recognizer is None
-            else self.visual_recognizer.recognize(screenshot.image)
-        )
-        # Strong visual identity cannot suppress the global popup/loading guard.
+        if self.visual_recognizer is None:
+            visual = VisualRecognition()
+            base_visual = visual
+        else:
+            # Establish ordinary screen identity without evaluating any named
+            # popup anchors. Popup work is demand-driven from an unknown base.
+            session_key = (
+                None
+                if screenshot.frame_ref is None
+                else (
+                    screenshot.frame_ref.session_id,
+                    screenshot.frame_ref.session_epoch,
+                )
+            )
+            visual_kwargs = (
+                {
+                    "include_blocking_profiles": False,
+                    "session_key": session_key,
+                }
+                if _accepts_keyword(self.visual_recognizer.recognize, "include_blocking_profiles")
+                else {}
+            )
+            base_visual = self.visual_recognizer.recognize(
+                screenshot.image,
+                **visual_kwargs,
+            )
+            if base_visual.evidence and all(
+                item.screen_type in {
+                    ScreenType.PNC_POPUP,
+                    ScreenType.PNC_VIP_DAILY_RESET,
+                }
+                for item in base_visual.evidence
+            ):
+                # Keep the base phase fail-closed even for injected recognizers
+                # that do not implement the popup exclusion keyword.
+                base_visual = VisualRecognition()
+            if base_visual.evidence:
+                visual = base_visual
+            else:
+                popup_kwargs = (
+                    {
+                        "blocking_profiles_only": True,
+                        "session_key": session_key,
+                    }
+                    if _accepts_keyword(
+                        self.visual_recognizer.recognize, "blocking_profiles_only",
+                    )
+                    else {}
+                )
+                visual = self.visual_recognizer.recognize(
+                    screenshot.image,
+                    **popup_kwargs,
+                )
+        # Strong visual identity scopes semantic enrichment to the recognized
+        # surface. A cheap modal-shape gate below keeps OCR off normal base
+        # frames while allowing an exact update guard to own a foreground panel.
         if visual.evidence:
             active_request = replace(active_request, include_popup_guard=True, include_loading_guard=True)
         detection_plan = self._selector_detection_plan(active_request)
-        # Global guard regions run independently of the caller's content scope.
-        guard_additions = self.enricher.recognize_guards(
-            screenshot.image,
-            active_request,
-            ocr_context=ocr_context,
-            **({"owned_dismiss_bounds": tuple(control.bounds for control in visual.dismiss_controls)}
-               if visual.dismiss_controls else {}),
+        # Once the base is UNKNOWN, guard work remains independent of caller
+        # content scope. Recognized bases require compact foreground evidence
+        # before the same bounded exact guard OCR is acquired.
+        supports_bounded_modal_gate = _accepts_keyword(
+            self.enricher.recognize_guards, "require_bounded_modal_evidence",
         )
+        if base_visual.evidence and not supports_bounded_modal_gate:
+            guard_additions = ObservationAdditions(guard_verdict=GuardVerdict.CLEAR)
+        else:
+            guard_kwargs = {
+                "ocr_context": ocr_context,
+            }
+            if _accepts_keyword(self.enricher.recognize_guards, "owned_dismiss_bounds"):
+                guard_kwargs["owned_dismiss_bounds"] = tuple(
+                    control.bounds for control in visual.dismiss_controls
+                )
+            if _accepts_keyword(self.enricher.recognize_guards, "include_generic_visual_fallback"):
+                guard_kwargs["include_generic_visual_fallback"] = not bool(visual.evidence)
+            if supports_bounded_modal_gate:
+                guard_kwargs["require_bounded_modal_evidence"] = bool(base_visual.evidence)
+            guard_additions = self.enricher.recognize_guards(
+                screenshot.image,
+                active_request,
+                **guard_kwargs,
+            )
         guard_additions = reconcile_visual_modal_guard(visual, guard_additions)
         guard_verdict = guard_additions.guard_verdict
         global_evidence, background_evidence = partition_guard_evidence(
@@ -1141,6 +1223,7 @@ def _merge_observation_additions(
         list_entries=tuple(list_entries),
         spatial_surface=primary.spatial_surface or fallback.spatial_surface,
         screen_evidence=primary.screen_evidence + fallback.screen_evidence,
+        popup_overlay=primary.popup_overlay or fallback.popup_overlay,
         guard_verdict=_merge_guard_verdicts(primary.guard_verdict, fallback.guard_verdict),
         current_castle=primary.current_castle or fallback.current_castle,
         current_castle_evidence=primary.current_castle_evidence or fallback.current_castle_evidence,
@@ -1205,11 +1288,33 @@ def reconcile_visual_modal_guard(
         return replace(
             guard, screen_evidence=visual.evidence,
             visible_elements={item.selector_id: item for item in visual.controls},
+            popup_overlay=visual.popup_overlay,
             guard_verdict=GuardVerdict.BLOCKED,
+        )
+    if (
+        guard.guard_verdict == GuardVerdict.UNRESOLVED
+        and guard.screen_evidence
+        and all(item.reason.startswith("weak_visual_close_x") for item in guard.screen_evidence)
+        and visual.evidence
+        and all(item.screen_type not in BLOCKING_SCREEN_TYPES for item in visual.evidence)
+    ):
+        # A reviewed non-blocking screen can contain a HUD sparkle or crossed
+        # badge. Keep its independent identity while discarding weak popup
+        # geometry that has no modal owner or safe control.
+        return replace(
+            guard,
+            screen_evidence=(),
+            visible_elements={},
+            popup_overlay=None,
+            guard_verdict=GuardVerdict.CLEAR,
         )
     if guard.guard_verdict == GuardVerdict.BLOCKED and guard_screens.intersection(visual_only_families):
         if len(screens) == 1 and guard_screens == screens:
-            return replace(guard, visible_elements={item.selector_id: item for item in visual.controls})
+            return replace(
+                guard,
+                visible_elements={item.selector_id: item for item in visual.controls},
+                popup_overlay=visual.popup_overlay,
+            )
         return replace(
             guard, visible_elements={}, popup_overlay=None,
             screen_evidence=tuple(replace(item, reason=f"weak_unproved_{item.reason}")
@@ -1218,11 +1323,55 @@ def reconcile_visual_modal_guard(
         )
     if len(screens) != 1 or not screens.issubset(BLOCKING_SCREEN_TYPES):
         return guard
+    if (
+        guard.guard_verdict == GuardVerdict.BLOCKED
+        and guard.popup_overlay is not None
+        and any(
+            guard.popup_overlay.candidate(control_kind) is not None
+            for control_kind in (
+                PopupControlKind.UPDATE_CONFIRM,
+                PopupControlKind.RECONNECT_CONFIRM,
+            )
+        )
+    ):
+        # Required update and reconnect dialogs use the same broad popup
+        # family as promotional surfaces. Their exact bounded OCR evidence
+        # owns the frame even if a visual profile happens to overlap it.
+        return guard
+    if guard.guard_verdict == GuardVerdict.BLOCKED and guard_screens == screens:
+        # A known visual identity can refine the current-frame selector while
+        # retaining exact semantic evidence from the same popup family. A
+        # foreground guard's measured dismissal remains authoritative when a
+        # profile has no control or measures the same selector independently.
+        visual_is_known_layout = (
+            visual.popup_overlay is not None
+            and visual.popup_overlay.evidence_kind == PopupEvidenceKind.KNOWN_LAYOUT
+        )
+        visible_elements = dict(guard.visible_elements)
+        for item in visual.controls:
+            if visual_is_known_layout:
+                visible_elements[item.selector_id] = item
+            else:
+                visible_elements.setdefault(item.selector_id, item)
+        popup_overlay = guard.popup_overlay
+        if popup_overlay is None or popup_overlay.evidence_kind == PopupEvidenceKind.GEOMETRY:
+            popup_overlay = visual.popup_overlay or popup_overlay
+        return replace(
+            guard,
+            visible_elements=visible_elements,
+            popup_overlay=popup_overlay,
+        )
+    if guard.guard_verdict == GuardVerdict.UNRESOLVED and guard_screens == screens:
+        # An unresolved semantic guard may represent a foreign or task-owned
+        # interruption even when its coarse screen family matches the visual
+        # profile. Preserve that evidence until a typed guard proves ownership.
+        return guard
     if guard.guard_verdict != GuardVerdict.CLEAR or guard.screen_evidence:
         return guard
     return replace(
         guard, screen_evidence=visual.evidence,
         visible_elements={item.selector_id: item for item in visual.controls},
+        popup_overlay=visual.popup_overlay,
         guard_verdict=GuardVerdict.BLOCKED,
     )
 
