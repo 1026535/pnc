@@ -672,3 +672,41 @@ upgrade under target-bound operation ids and displayed finite per-operation caps
 - APK or extracted-client evidence is not being used for this resumed route
   acceptance. Pit remains a read-only `MINE_HOLE` mapping row and is deliberately
   not treated as upgradeable.
+
+### Post-popup-integration live continuation — 2026-09-15
+
+- Generic popup commit `10a28e36c69d6420e119483e33596338dbd2bf92`
+  was integrated on `origin/main` by its owning task. A02 merged that integration
+  normally as `dd0b371`; no peer work was cherry-picked and the merge was clean.
+  The merged focused check
+  `py -m unittest tests.unit.app.pnc.navigation.test_navigation_core
+  tests.integration.vision.test_known_popup_recognition -v` passed **79/79**.
+- Before integration, both A02 VIP-reset holdouts were independently exercised
+  against the corrected peer commit through the real `ObservationBuilder` and
+  `NavigationPerception`. Both paths published
+  `PNC_VIP_DAILY_RESET / blocked / vip_daily_reset` with the exact
+  `PNC_VIP_DAILY_RESET_CLOSE_BUTTON`; those frames are now tracked by the generic
+  recognition owner. This validates reset-popup recognition but is not building
+  route evidence.
+- The first post-integration `serious_stuff / bs-main / live_testing` attempt used
+  one canonical lease and stopped before building input while the newly launched
+  game progressed from publisher splash through loading. Evidence is under
+  `.local-data/artifacts/core_resume/20260915T063908Z`. One retry was justified by
+  that observed state change.
+- The retry again used one canonical lease and stopped before input on a newly
+  visible Savannah **5-star Hero** purchase offer. Evidence is under
+  `.local-data/artifacts/core_resume/20260915T064011Z`. The integrated profile's
+  icon, panel, and exact X scored `0.995704`, `0.999900`, and `0.971680`, but its
+  mutable artwork anchor scored `0.927910` against `0.97`; both production
+  observers therefore correctly retained `UNKNOWN / guard_unresolved` and no X,
+  price, reward, or building tap was sent.
+- The exact holdout and scores were sent to the generic popup owner twice. Its
+  resumed task returned without a new commit, integration, or live dismissal.
+  This Savannah startup offer is not an A02 building route. Route capture remains
+  blocked until the generic owner qualifies and closes it or the foreground state
+  otherwise changes; A02 will not lower the screen-first guard or add popup
+  recognition to building code.
+- Actual construction, upgrade, diamond, resource, speedup, purchase, and route
+  spend during this continuation remains **0**. Blacksmith's independent return,
+  all other outstanding routes, and live construction/upgrade acceptance remain
+  incomplete.
