@@ -1,6 +1,6 @@
 rotation:
-  cycle_days: 7
-  start_utc: 2030-01-01T00:00:00Z
+  cycle_days: 14
+  start_utc: 2030-01-07T00:00:00Z
 
 mail_schedules:
   - id: example-weekday-schedule

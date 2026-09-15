@@ -10,5 +10,5 @@ canary_targets:
 
 targets:
   - account_id: example-account
-    castle_ref: main
+    castle_ref: farm
     enabled_capabilities: []
