@@ -9,6 +9,7 @@ The packaged PNC **5.0.203 / version code 233** yielded **6,276 gameplay Lua fil
 | Reference | Coverage status |
 |---|---|
 | [Source map](SOURCE_MAP.md) | Discovery across the recovered source; individual workflows mostly unverified |
+| [Client navigation graph](NAVIGATION_GRAPH.md) | Window registry, scene loads, HUD/building entry points, and back semantics extracted across all recovered Lua; per-edge navigational intent unverified |
 | [Shared request path](REQUEST_PATH.md) | Native outgoing path statically traced; checksum independently checked by isolated emulation |
 | [Building upgrades](workflows/building-upgrade.md) | Normal-upgrade UI checks, request, response handling, and automation implications inspected |
 | [Castle skins and ambience](workflows/castle-appearance.md) | Castle and ambience preview layers, world-map rendering, and appearance-collection implications |
