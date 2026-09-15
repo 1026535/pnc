@@ -84,6 +84,7 @@ class JournaledMutationDispatcher:
         operation: MutationOperation,
         dispatch: Callable[[], None],
         reconcile: Callable[[], MutationReconciliation],
+        revalidate_precondition: Callable[[], bool] | None = None,
     ) -> JournaledMutationResult:
         """Executes one fresh operation through prepared/dispatched/reconciled/committed."""
 
@@ -95,6 +96,17 @@ class JournaledMutationDispatcher:
             if not _intent_matches_operation(existing, operation):
                 raise ValueError(
                     f"Mutation operation '{operation.operation_id}' has a different action identity."
+                )
+            if (
+                existing.state == MutationIntentState.PREPARED
+                and revalidate_precondition is not None
+            ):
+                return self._resume_prepared(
+                    checkpoint=checkpoint,
+                    intent=existing,
+                    revalidate_precondition=revalidate_precondition,
+                    dispatch=dispatch,
+                    reconcile=reconcile,
                 )
             return self.reconcile_existing(
                 checkpoint=checkpoint,
@@ -122,6 +134,37 @@ class JournaledMutationDispatcher:
         return self._reconcile(
             checkpoint=checkpoint,
             operation=operation,
+            reconcile=reconcile,
+        )
+
+    def _resume_prepared(
+        self,
+        *,
+        checkpoint: DailyTaskCheckpoint,
+        intent: MutationIntent,
+        revalidate_precondition: Callable[[], bool],
+        dispatch: Callable[[], None],
+        reconcile: Callable[[], MutationReconciliation],
+    ) -> JournaledMutationResult:
+        """Resume one building PREPARED intent after its target is re-proved."""
+
+        if not revalidate_precondition():
+            return JournaledMutationResult(
+                checkpoint=checkpoint,
+                committed=False,
+                retry_permitted=True,
+                pending_clarification=False,
+                artifact_paths=(),
+            )
+        checkpoint = self.journal_store.transition_intent(
+            checkpoint,
+            intent.operation_id,
+            MutationIntentState.DISPATCHED,
+        )
+        dispatch()
+        return self._reconcile(
+            checkpoint=checkpoint,
+            operation=_operation_from_intent(intent),
             reconcile=reconcile,
         )
 
@@ -189,18 +232,7 @@ class JournaledMutationDispatcher:
                 f"Only prepared or dispatched operations can resume; '{operation_id}' is "
                 f"'{intent.state.value}'."
             )
-        operation = MutationOperation(
-            operation_id=intent.operation_id,
-            quest_id=intent.quest_id,
-            expected_precondition=intent.expected_precondition,
-            expected_postcondition=intent.expected_postcondition,
-            diamond_budget=intent.diamond_budget,
-            metadata=dict(intent.metadata),
-            action_kind=(
-                None if intent.action_kind is None else BuildingMutationKind(intent.action_kind)
-            ),
-            target=None if intent.target is None else dict(intent.target),
-        )
+        operation = _operation_from_intent(intent)
         return self._reconcile(checkpoint=checkpoint, operation=operation, reconcile=reconcile)
 
     def _reconcile(
@@ -277,6 +309,23 @@ def _intent_matches_operation(intent: MutationIntent, operation: MutationOperati
         and (same_building_identity or intent.diamond_budget == operation.diamond_budget)
         and intent.action_kind == (None if operation.action_kind is None else operation.action_kind.value)
         and intent.target == operation.target
+    )
+
+
+def _operation_from_intent(intent: MutationIntent) -> MutationOperation:
+    """Rehydrate an exact operation from its durable journal record."""
+
+    return MutationOperation(
+        operation_id=intent.operation_id,
+        quest_id=intent.quest_id,
+        expected_precondition=intent.expected_precondition,
+        expected_postcondition=intent.expected_postcondition,
+        diamond_budget=intent.diamond_budget,
+        metadata=dict(intent.metadata),
+        action_kind=(
+            None if intent.action_kind is None else BuildingMutationKind(intent.action_kind)
+        ),
+        target=None if intent.target is None else dict(intent.target),
     )
 
 

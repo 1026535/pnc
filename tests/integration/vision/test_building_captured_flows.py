@@ -325,7 +325,7 @@ class BuildingCapturedFlowTests(unittest.TestCase):
         assert missing_header is not None
         self.assertEqual(missing_header.visible_elements, {})
 
-    def test_proved_queue_keeps_active_row_bounds_and_idle_empty(self) -> None:
+    def test_proved_queue_keeps_active_row_bounds_and_publishes_idle_fact(self) -> None:
         row_regions = (Bounds(36, 512, 828, 160), Bounds(36, 672, 828, 160))
         active = _build_build_queue_additions(
             image=Image.new("RGB", (900, 1600)),
@@ -350,7 +350,12 @@ class BuildingCapturedFlowTests(unittest.TestCase):
         )
         self.assertIsNotNone(idle)
         assert idle is not None
-        self.assertEqual(idle.list_entries, ())
+        self.assertEqual(len(idle.list_entries), 1)
+        self.assertEqual(idle.list_entries[0].bounds, row_regions[0])
+        self.assertEqual(
+            idle.list_entries[0].metadata,
+            {"queue_state": "idle", "queue_index": 0},
+        )
 
     def test_construction_title_or_level_misses_keep_visual_build_control(self) -> None:
         """Independent construction identity and the blue Build template survive OCR misses."""
@@ -429,7 +434,7 @@ class BuildingCapturedFlowTests(unittest.TestCase):
                     self.assertEqual(built.require(level_selector).source_kind, VisibleElementSourceKind.OCR)
                 if expected_screen == ScreenType.PNC_BUILD_QUEUE:
                     entries = built.entries(ListEntryKind.BUILDING)
-                    self.assertEqual(len(entries), 1 if active_queue else 0)
+                    self.assertEqual(len(entries), 1)
                     if active_queue:
                         self.assertEqual(entries[0].title_text, "Infirmary")
                         self.assertEqual(entries[0].timer_text, "00:48:16")
@@ -438,6 +443,8 @@ class BuildingCapturedFlowTests(unittest.TestCase):
                         self.assertEqual(entries[0].source_screen, expected_screen)
                         self.assertEqual(entries[0].source_layout_id, built.decision.layout_id)
                         self.assertEqual(entries[0].metadata, {"queue_state": "upgrading"})
+                    else:
+                        self.assertEqual(entries[0].metadata, {"queue_state": "idle", "queue_index": 0})
                     self.assertEqual(
                         built.require(UiElementId.PNC_POPUP_CLOSE_BUTTON).source_kind,
                         VisibleElementSourceKind.TEMPLATE,
@@ -453,7 +460,7 @@ class BuildingCapturedFlowTests(unittest.TestCase):
                 self._assert_frame_local_provenance(navigation_observation, capture, expected_screen)
                 if expected_screen == ScreenType.PNC_BUILD_QUEUE:
                     navigation_entries = navigation_observation.entries(ListEntryKind.BUILDING)
-                    self.assertEqual(len(navigation_entries), 1 if active_queue else 0)
+                    self.assertEqual(len(navigation_entries), 1)
                     if active_queue:
                         self.assertEqual(navigation_entries[0].title_text, "Infirmary")
                         self.assertEqual(navigation_entries[0].timer_text, "00:48:16")
@@ -461,6 +468,11 @@ class BuildingCapturedFlowTests(unittest.TestCase):
                         self.assertEqual(navigation_entries[0].frame_ref, capture.frame_ref)
                         self.assertEqual(navigation_entries[0].source_screen, expected_screen)
                         self.assertEqual(navigation_entries[0].source_layout_id, navigation_observation.decision.layout_id)
+                    else:
+                        self.assertEqual(
+                            navigation_entries[0].metadata,
+                            {"queue_state": "idle", "queue_index": 0},
+                        )
                 self.assertTrue(ocr.regions)
 
 

@@ -13,7 +13,10 @@ from pnc_automation.app.automation.daily_maintenance.mutation_dispatcher import 
 from pnc_automation.app.automation.engine.core_runtime import CoreRuntime
 from pnc_automation.app.automation.engine.core_daily_mutation import CoreMutationBoundary
 from pnc_automation.app.automation.engine.navigation_core import require_resource_inventory_surface
-from pnc_automation.app.automation.tasks.building_workflow_support import can_open_build_queue
+from pnc_automation.app.automation.tasks.building_workflow_support import (
+    build_queue_first_slot_is_idle,
+    can_open_build_queue,
+)
 from pnc_automation.app.pnc.domain.daily_maintenance import (
     DailyQuestId, DailyQuestRow, DailyTaskCheckpoint, DailyTargetOutcome,
 )
@@ -487,6 +490,13 @@ class WorkflowContext:
                     target.slot_id,
                     candidates[0],
                 )
+                if (
+                    target.slot_instance_key is not None
+                    and target.slot_instance_key != slot_instance_key
+                ):
+                    raise RuntimeError(
+                        "The exact construction slot identity changed before its menu opened."
+                    )
                 execution = executor.execute_actions(
                     (
                         TapSpatialObjectAction(
@@ -602,8 +612,15 @@ class WorkflowContext:
                 f"building_upgrade_queue_{label}", include_content=True,
             ),
         ).observation
-        if opened.screen_type != ScreenType.PNC_BUILD_QUEUE or opened.blocking_popup:
-            raise RuntimeError("Building queue availability was not positively observed.")
+        if (
+            opened.screen_type != ScreenType.PNC_BUILD_QUEUE
+            or opened.blocking_popup
+            or not build_queue_first_slot_is_idle(opened)
+        ):
+            raise RuntimeError(
+                "Building queue availability was not positively observed: "
+                "the first queue slot is not proven idle."
+            )
         returned = executor.execute_actions(
             (
                 KeyEventAction(

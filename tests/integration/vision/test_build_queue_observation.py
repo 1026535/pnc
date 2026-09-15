@@ -6,7 +6,8 @@ import unittest
 
 from PIL import Image
 
-from pnc_automation.app.pnc.domain.observation import ListEntryKind
+from pnc_automation.app.automation.tasks.building_workflow_support import build_queue_first_slot_is_idle
+from pnc_automation.app.pnc.domain.observation import DetectedListEntry, ListEntryKind, Observation
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.vision.pnc_observation_enricher import _build_build_queue_additions
 from pnc_automation.core.vision.image.models import Bounds
@@ -74,8 +75,8 @@ class BuildQueueParserTests(unittest.TestCase):
         self.assertEqual(entry.bounds, QUEUE_ROWS[0])
         self.assertEqual(entry.metadata, {"queue_state": "upgrading"})
 
-    def test_parser_omits_idle_first_row_and_keeps_inactive_second_row_empty(self) -> None:
-        """Idle and inactive rows cannot be published as active construction."""
+    def test_parser_publishes_first_idle_row_and_omits_inactive_second_row(self) -> None:
+        """Idle availability is explicit, while inactive rows remain absent."""
 
         additions = _build_build_queue_additions(
             image=Image.new("RGB", VIEWPORT),
@@ -86,8 +87,31 @@ class BuildQueueParserTests(unittest.TestCase):
 
         self.assertIsNotNone(additions)
         assert additions is not None
-        self.assertEqual(additions.list_entries, ())
+        self.assertEqual(len(additions.list_entries), 1)
+        self.assertEqual(additions.list_entries[0].bounds, QUEUE_ROWS[0])
+        self.assertEqual(
+            additions.list_entries[0].metadata,
+            {"queue_state": "idle", "queue_index": 0},
+        )
         self.assertEqual(additions.screen_evidence, ())
+
+    def test_queue_availability_fails_closed_for_active_or_unknown_rows(self) -> None:
+        """Upgrade admission cannot infer an idle slot from active or missing OCR rows."""
+
+        active = Observation(
+            screen_type=ScreenType.PNC_BUILD_QUEUE,
+            list_entries=(
+                DetectedListEntry(
+                    kind=ListEntryKind.BUILDING,
+                    bounds=QUEUE_ROWS[0],
+                    metadata={"queue_state": "upgrading"},
+                ),
+            ),
+        )
+        unknown = Observation(screen_type=ScreenType.PNC_BUILD_QUEUE)
+
+        self.assertFalse(build_queue_first_slot_is_idle(active))
+        self.assertFalse(build_queue_first_slot_is_idle(unknown))
 
 
 if __name__ == "__main__":

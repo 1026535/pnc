@@ -590,3 +590,11 @@ blocked/skipped under the parent task's offline-only delegation.
 
 The final source-control review and local feature commit are recorded in the task
 handoff.
+
+### Follow-up runtime review — 2026-09-14
+
+- Follow-up base: `e40d96df72a7317da2f0cc1557f9889eff6c6ecc` on `codex/a02-buildings`; offline-only, no BlueStacks, ADB, live config, or live artifacts were accessed.
+- Queue availability now requires a production-observed first-slot `queue_state=idle` fact through the shared enrichment path used by both `ObservationBuilder` and `NavigationPerception`; active and unknown rows fail closed.
+- Building PREPARED intents now rehydrate the stored typed target, reacquire and revalidate its exact construction slot or Home building detail, durably transition to DISPATCHED once, dispatch once, and reconcile. Generic mutation callers retain their existing non-replay PREPARED disposition.
+- The alternate Sacred Tree source/return capture at `.local-data/artifacts/core_resume/20260914T250000Z` was inspected. The selected return frame is visually Sacred Tree, has decoded SHA-256 `af8f39db49447ebd19f8f3dea2e9a1288debbbd0d5d3a5cab70ab26c5c70f158`, and is promoted as `sacred_tree_validation_20260914.png` under capture group `2026-09-14/a02_buildings/20260914T250000Z/sacred_tree_return`. Its provenance reports `unknown_screen`, and all source/return frames in that saved run are byte-identical; it is therefore one independent saved capture group, not multiple independent frames. The observer gate now validates both reference and return-group fixtures through both production observers.
+- Focused offline results: `contract.workflows` 80 passed; `unit.app.automation.daily_maintenance` 119 passed; `integration.vision` 435 passed, 6 skipped. `git diff --check` passed. Live acceptance remains blocked by the explicitly offline-only delegation.

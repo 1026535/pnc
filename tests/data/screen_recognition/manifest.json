@@ -761,6 +761,16 @@
       ]
     },
     {
+      "image": "building_routes/sacred_tree_validation_20260914.png",
+      "screen": "PNC_SACRED_TREE",
+      "split": "validation",
+      "group": "2026-09-14/a02_buildings/20260914T250000Z/sacred_tree_return",
+      "sha256": "af8f39db49447ebd19f8f3dea2e9a1288debbbd0d5d3a5cab70ab26c5c70f158",
+      "expected_visual_screens": [
+        "PNC_SACRED_TREE"
+      ]
+    },
+    {
       "image": "building_routes/hall_of_war_validation_20260914.png",
       "screen": "PNC_HALL_OF_WAR",
       "split": "validation",

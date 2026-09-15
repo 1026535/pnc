@@ -83,6 +83,16 @@ CASES = (
         },
     ),
     (
+        "sacred_tree_validation_20260914.png",
+        ScreenType.PNC_SACRED_TREE,
+        "building_sacred_tree",
+        {
+            UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+            UiElementId.PNC_SACRED_TREE_BLESSING_RECORD_BUTTON,
+            UiElementId.PNC_SACRED_TREE_HARVEST_BUTTON,
+        },
+    ),
+    (
         "hall_of_war_validation_20260914.png",
         ScreenType.PNC_HALL_OF_WAR,
         "building_hall_of_war",

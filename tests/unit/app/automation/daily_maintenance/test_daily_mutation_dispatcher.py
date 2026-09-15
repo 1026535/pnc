@@ -23,6 +23,7 @@ from pnc_automation.app.pnc.domain.daily_maintenance import (
     MutationIntent,
     MutationIntentState,
 )
+from pnc_automation.app.pnc.domain.building_operations import BuildingMutationKind
 from pnc_automation.app.pnc.persistence.daily_run_journal_store import DailyRunJournalStore
 
 
@@ -120,6 +121,55 @@ class DailyMutationDispatcherTests(unittest.TestCase):
         )
 
         self.assertTrue(result.committed)
+
+    def test_prepared_building_intent_promotes_once_after_precondition_revalidation(self) -> None:
+        """A building-only resume transitions durably before one dispatch and never replays."""
+
+        operation = MutationOperation(
+            operation_id="building-prepared-1",
+            quest_id=None,
+            expected_precondition="exact target control visible",
+            expected_postcondition="building receipt observed",
+            action_kind=BuildingMutationKind.UPGRADE,
+            target={"building": "institute", "instance_key": "home:institute:1"},
+        )
+        checkpoint = self.store.prepare_intent(
+            self.checkpoint,
+            MutationIntent(
+                operation_id=operation.operation_id,
+                quest_id=None,
+                state=MutationIntentState.PREPARED,
+                expected_precondition=operation.expected_precondition,
+                expected_postcondition=operation.expected_postcondition,
+                action_kind=operation.action_kind.value,
+                target=operation.target,
+            ),
+        )
+        dispatch_count = 0
+
+        def dispatch() -> None:
+            nonlocal dispatch_count
+            dispatch_count += 1
+
+        result = self.dispatcher.execute(
+            checkpoint=checkpoint,
+            operation=operation,
+            dispatch=dispatch,
+            revalidate_precondition=lambda: True,
+            reconcile=lambda: MutationReconciliation(True, False),
+        )
+        replay = self.dispatcher.execute(
+            checkpoint=result.checkpoint,
+            operation=operation,
+            dispatch=dispatch,
+            revalidate_precondition=lambda: True,
+            reconcile=lambda: MutationReconciliation(True, False),
+        )
+
+        self.assertEqual(1, dispatch_count)
+        self.assertTrue(result.committed)
+        self.assertTrue(replay.committed)
+        self.assertEqual(MutationIntentState.COMMITTED, replay.checkpoint.mutation_intents[0].state)
 
 
 class DailyMutationAuthorizerTests(unittest.TestCase):

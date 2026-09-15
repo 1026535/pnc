@@ -135,11 +135,25 @@ class BuildingConstructionWorkflow(CoreWorkflow[BuildingMutationResult]):
             checkpoint=self.checkpoint,
             expected_target=BuildingConstructionTarget.for_building(self.policy.building),
         )
-        if reconciled is not None:
+        prepared = _prepared_building_reconciliation(reconciled)
+        if reconciled is not None and prepared is None:
             return _result_from_reconciliation(reconciled, action_name="Construction")
-        target = BuildingConstructionTarget.for_building(self.policy.building)
+        if prepared is None:
+            target = BuildingConstructionTarget.for_building(self.policy.building)
+            resume_checkpoint = self.checkpoint
+            resume_action = None
+        else:
+            resume_action, resume_checkpoint = prepared
+            if resume_action.kind is not BuildingMutationKind.CONSTRUCT:
+                raise TaskVerificationError("Stored building operation is not a construction action.")
+            if not isinstance(resume_action.target, BuildingConstructionTarget):
+                raise TaskVerificationError("Stored construction operation has no exact slot target.")
+            target = resume_action.target
         content, slot_instance_key = context.open_construction_slot(target)
-        target = target.bind_slot(slot_instance_key)
+        if target.slot_instance_key is None:
+            target = target.bind_slot(slot_instance_key)
+        elif target.slot_instance_key != slot_instance_key:
+            raise TaskVerificationError("Construction slot identity changed during PREPARED recovery.")
         if content.screen_type != _menu_screen(target):
             raise TaskVerificationError(
                 "Construction slot did not open its canonical building menu."
@@ -148,12 +162,16 @@ class BuildingConstructionWorkflow(CoreWorkflow[BuildingMutationResult]):
             raise TaskVerificationError(
                 "Construction menu did not expose the exact catalog option."
             )
-        action = BuildingActionIdentity(
-            kind=BuildingMutationKind.CONSTRUCT,
-            operation_id=operation_id,
-            target=target,
+        action = (
+            resume_action
+            if resume_action is not None
+            else BuildingActionIdentity(
+                kind=BuildingMutationKind.CONSTRUCT,
+                operation_id=operation_id,
+                target=target,
+            )
         )
-        checkpoint, receipt, result = context.execute_building(action, self.checkpoint, content)
+        checkpoint, receipt, result = context.execute_building(action, resume_checkpoint, content)
         return BuildingMutationResult(
             checkpoint=checkpoint,
             action=action,
@@ -224,15 +242,24 @@ class BuildingUpgradeWorkflow(CoreWorkflow[BuildingMutationResult]):
             daily_quest_id=daily_quest_id,
             expected_target=self.target,
         )
-        if reconciled is not None:
+        prepared = _prepared_building_reconciliation(reconciled)
+        if reconciled is not None and prepared is None:
             return _result_from_reconciliation(reconciled, action_name="Upgrade")
         arrival = None
-        if daily_quest_id is DailyQuestId.UPGRADE_BUILDING:
+        resume_action = None
+        resume_checkpoint = self.checkpoint
+        if prepared is not None:
+            resume_action, resume_checkpoint = prepared
+            if resume_action.kind is not BuildingMutationKind.UPGRADE:
+                raise TaskVerificationError("Stored building operation is not an upgrade action.")
+            if not isinstance(resume_action.target, BuildingUpgradeTarget):
+                raise TaskVerificationError("Stored upgrade operation has no exact building target.")
+        elif daily_quest_id is DailyQuestId.UPGRADE_BUILDING:
             arrival = context.open_daily_upgrade_go()
         ensure_queue = getattr(context, "ensure_building_queue_available", None)
         if callable(ensure_queue):
             ensure_queue()
-        target = self.target
+        target = resume_action.target if resume_action is not None else self.target
         if target is None:
             if not self.policy.priority:
                 raise TaskVerificationError("Building upgrade policy has no target priority.")
@@ -270,13 +297,17 @@ class BuildingUpgradeWorkflow(CoreWorkflow[BuildingMutationResult]):
                     "Building upgrade target instance changed before opening its detail screen."
                 )
             _validate_target_observation(source, target)
-        action = BuildingActionIdentity(
-            kind=BuildingMutationKind.UPGRADE,
-            operation_id=operation_id,
-            target=target,
-            daily_quest_id=daily_quest_id,
+        action = (
+            resume_action
+            if resume_action is not None
+            else BuildingActionIdentity(
+                kind=BuildingMutationKind.UPGRADE,
+                operation_id=operation_id,
+                target=target,
+                daily_quest_id=daily_quest_id,
+            )
         )
-        checkpoint, receipt, result = context.execute_building(action, self.checkpoint, source)
+        checkpoint, receipt, result = context.execute_building(action, resume_checkpoint, source)
         return BuildingMutationResult(
             checkpoint=checkpoint,
             action=action,
@@ -439,6 +470,23 @@ def _reconcile_existing_building(
         daily_quest_id=daily_quest_id,
         expected_target=expected_target,
     )
+
+
+def _prepared_building_reconciliation(
+    reconciled: tuple[
+        BuildingActionIdentity,
+        BuildingMutationReceipt | None,
+        JournaledMutationResult,
+    ] | None,
+) -> tuple[BuildingActionIdentity, DailyTaskCheckpoint] | None:
+    """Return a PREPARED identity so the workflow can re-prove it before dispatch."""
+
+    if reconciled is None:
+        return None
+    action, _receipt, result = reconciled
+    if result.committed or not result.retry_permitted:
+        return None
+    return action, result.checkpoint
 
 
 def _pending_building_message(result: object, *, action: str) -> str:

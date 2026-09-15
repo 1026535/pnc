@@ -10,6 +10,7 @@ import unittest
 from unittest.mock import Mock
 
 from pnc_automation.app.automation.buildings import (
+    BuildingConstructionWorkflow,
     BuildingUpgradeWorkflow,
     _validate_target_observation,
 )
@@ -45,14 +46,19 @@ from pnc_automation.app.pnc.domain.daily_maintenance import (
     MutationAcknowledgement,
     MutationIntentState,
 )
-from pnc_automation.app.pnc.domain.policy_models import BuildingUpgradePolicy
+from pnc_automation.app.pnc.domain.policy_models import (
+    BuildingConstructionPolicy,
+    BuildingUpgradePolicy,
+)
 from pnc_automation.app.authoring.config.daily_maintenance import (
     DailyCapabilityPolicy,
     DailyMaintenanceTargetConfig,
 )
 from pnc_automation.app.automation.engine.task import TaskId
 from pnc_automation.app.pnc.domain.observation import (
+    DetectedListEntry,
     DetectedSpatialObject,
+    ListEntryKind,
     Observation,
     SpatialObjectKind,
     SpatialSurfaceObservation,
@@ -410,6 +416,155 @@ class BuildingMutationIdentityTests(unittest.TestCase):
         self.assertEqual("started", result.disposition.value)
         self.assertEqual(BuildingMutationKind.UPGRADE, context.kwargs["action_kind"])
 
+    def test_prepared_construction_reacquires_stored_slot_then_dispatches_same_identity(self) -> None:
+        """A prepared construction resumes only after its stored slot is re-observed."""
+
+        checkpoint = DailyTaskCheckpoint(
+            maintenance_date="2026-09-14",
+            game_reset_id="reset-1",
+            account_id="account",
+            castle=CastleIdentity("K1", "Main", 10),
+        )
+        target = BuildingConstructionTarget.for_building(HomeCityObjectId.INSTITUTE).bind_slot(
+            "home-slot:reserved_institute_slot:100,200,80,60:140,230"
+        )
+        identity = BuildingActionIdentity(
+            kind=BuildingMutationKind.CONSTRUCT,
+            operation_id="construct-prepared",
+            target=target,
+        )
+        prepared = SimpleNamespace(
+            checkpoint=checkpoint,
+            committed=False,
+            retry_permitted=True,
+            pending_clarification=False,
+            artifact_paths=(),
+        )
+        option = VisibleElement(
+            selector_id=target.option_selector_id,
+            bounds=Bounds(10, 10, 30, 20),
+            confidence=1.0,
+        )
+
+        class Context:
+            def __init__(self):
+                self.opened_target = None
+                self.executed = None
+
+            def reconcile_building_operation(self, **_kwargs):
+                return identity, None, prepared
+
+            def open_construction_slot(self, stored_target):
+                self.opened_target = stored_target
+                return (
+                    Observation(
+                        screen_type=ScreenType.PNC_BUILD_MENU_FIXED_SLOT,
+                        visible_elements={option.selector_id: option},
+                    ),
+                    stored_target.slot_instance_key,
+                )
+
+            def execute_building(self, action, resumed_checkpoint, _source):
+                self.executed = (action, resumed_checkpoint)
+                return resumed_checkpoint, None, SimpleNamespace(
+                    committed=True,
+                    retry_permitted=False,
+                )
+
+        context = Context()
+        result = BuildingConstructionWorkflow(
+            policy=BuildingConstructionPolicy.from_params(
+                {"building": HomeCityObjectId.INSTITUTE.value, "operation_id": "construct-prepared"}
+            ),
+            checkpoint=checkpoint,
+        ).execute(context)
+
+        self.assertIs(context.opened_target, target)
+        self.assertIs(context.executed[0], identity)
+        self.assertIs(context.executed[1], checkpoint)
+        self.assertEqual("started", result.disposition.value)
+
+    def test_prepared_upgrade_reacquires_stored_detail_without_daily_go_or_retargeting(self) -> None:
+        """A prepared upgrade revalidates the stored Home identity and dispatches it once."""
+
+        checkpoint = DailyTaskCheckpoint(
+            maintenance_date="2026-09-14",
+            game_reset_id="reset-1",
+            account_id="account",
+            castle=CastleIdentity("K1", "Main", 10),
+        )
+        target = BuildingUpgradeTarget(
+            building=HomeCityObjectId.INSTITUTE,
+            instance_key="home:institute:100,200,80,60:140,230",
+            current_level=7,
+            next_level=8,
+        )
+        identity = BuildingActionIdentity(
+            kind=BuildingMutationKind.UPGRADE,
+            operation_id="upgrade-prepared",
+            target=target,
+        )
+        prepared = SimpleNamespace(
+            checkpoint=checkpoint,
+            committed=False,
+            retry_permitted=True,
+            pending_clarification=False,
+            artifact_paths=(),
+        )
+        level = VisibleElement(
+            selector_id=UiElementId.PNC_BUILDING_LEVEL_LABEL,
+            bounds=Bounds(10, 10, 30, 20),
+            confidence=1.0,
+            extracted_text="Lv. 7",
+        )
+        upgrade = VisibleElement(
+            selector_id=UiElementId.PNC_BUILDING_UPGRADE_BUTTON,
+            bounds=Bounds(10, 40, 30, 20),
+            confidence=1.0,
+        )
+
+        class Context:
+            def __init__(self):
+                self.queue_checks = 0
+                self.executed = None
+
+            def reconcile_building_operation(self, **_kwargs):
+                return identity, None, prepared
+
+            def ensure_building_queue_available(self):
+                self.queue_checks += 1
+
+            def open_building_with_identity(self, building, *, expected_instance_key=None):
+                self.opened_building = (building, expected_instance_key)
+                return Observation(
+                    screen_type=ScreenType.PNC_INSTITUTE,
+                    visible_elements={level.selector_id: level, upgrade.selector_id: upgrade},
+                ), expected_instance_key
+
+            def execute_building(self, action, resumed_checkpoint, _source):
+                self.executed = (action, resumed_checkpoint)
+                return resumed_checkpoint, None, SimpleNamespace(
+                    committed=True,
+                    retry_permitted=False,
+                )
+
+        context = Context()
+        result = BuildingUpgradeWorkflow(
+            policy=BuildingUpgradePolicy.from_params(
+                {"priority": [HomeCityObjectId.INSTITUTE.value], "operation_id": "upgrade-prepared"}
+            ),
+            checkpoint=checkpoint,
+        ).execute(context)
+
+        self.assertEqual(1, context.queue_checks)
+        self.assertEqual(
+            (HomeCityObjectId.INSTITUTE, target.instance_key),
+            context.opened_building,
+        )
+        self.assertIs(context.executed[0], identity)
+        self.assertIs(context.executed[1], checkpoint)
+        self.assertEqual("started", result.disposition.value)
+
     def test_building_queue_proof_uses_current_home_control_and_back_action(self) -> None:
         """Queue availability is proven by the production Home control, never atlas geometry."""
 
@@ -423,7 +578,16 @@ class BuildingMutationIdentityTests(unittest.TestCase):
             screen_type=ScreenType.PNC_HOME_CITY,
             visible_elements={home_build.selector_id: home_build},
         )
-        queue = Observation(screen_type=ScreenType.PNC_BUILD_QUEUE)
+        queue = Observation(
+            screen_type=ScreenType.PNC_BUILD_QUEUE,
+            list_entries=(
+                DetectedListEntry(
+                    kind=ListEntryKind.BUILDING,
+                    bounds=Bounds(36, 512, 828, 160),
+                    metadata={"queue_state": "idle", "queue_index": 0},
+                ),
+            ),
+        )
         actions: list[object] = []
 
         class Executor:

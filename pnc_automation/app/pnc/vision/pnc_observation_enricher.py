@@ -6840,7 +6840,7 @@ def _build_build_queue_additions(
         return None
     entries: list[DetectedListEntry] = []
     if proved_screen is not None:
-        for row_region in row_regions:
+        for row_index, row_region in enumerate(row_regions):
             active_entry = _extract_build_queue_active_entry(
                 image=image,
                 lines=tuple(line for line in lines if row_region.contains_bounds(line.bounds)),
@@ -6849,10 +6849,26 @@ def _build_build_queue_additions(
             if active_entry is not None:
                 entries.append(active_entry)
                 break
+            idle_entry = _extract_build_queue_idle_entry(
+                lines=tuple(line for line in lines if row_region.contains_bounds(line.bounds)),
+                row_region=row_region,
+                queue_index=row_index,
+            )
+            if idle_entry is not None:
+                entries.append(idle_entry)
+                break
     else:
         active_entry = _extract_build_queue_active_entry(image=image, lines=lines)
         if active_entry is not None:
             entries.append(active_entry)
+        else:
+            idle_entry = _extract_build_queue_idle_entry(
+                lines=lines,
+                row_region=None,
+                queue_index=0,
+            )
+            if idle_entry is not None:
+                entries.append(idle_entry)
     support_count = sum(
         1
         for line in lines
@@ -6917,6 +6933,37 @@ def _extract_build_queue_active_entry(
         title_text=title_text,
         timer_text=None if timer_line is None else timer_line.text.strip(),
         metadata={"queue_state": "upgrading"},
+    )
+
+
+def _extract_build_queue_idle_entry(
+    *,
+    lines: tuple[OcrLine, ...],
+    row_region: Bounds | None,
+    queue_index: int,
+) -> DetectedListEntry | None:
+    """Returns an idle queue row only when its owned row visibly says ``Idle``."""
+
+    idle_line = _find_first_line_in_texts(
+        lines=lines,
+        texts=frozenset({"IDLE"}),
+        min_y=0 if row_region is None else row_region.y,
+        max_y=None if row_region is None else row_region.y + row_region.height,
+    )
+    if idle_line is None:
+        return None
+    entry_bounds = row_region
+    if entry_bounds is None:
+        entry_bounds = Bounds(
+            x=0,
+            y=max(0, idle_line.bounds.y - 12),
+            width=idle_line.bounds.x + idle_line.bounds.width + 12,
+            height=idle_line.bounds.height + 24,
+        )
+    return DetectedListEntry(
+        kind=ListEntryKind.BUILDING,
+        bounds=entry_bounds,
+        metadata={"queue_state": "idle", "queue_index": queue_index},
     )
 
 

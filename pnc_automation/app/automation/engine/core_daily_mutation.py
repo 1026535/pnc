@@ -541,6 +541,11 @@ class CoreMutationBoundary:
             ),
             dispatch=dispatch,
             reconcile=reconcile,
+            revalidate_precondition=(
+                (lambda: True)
+                if existing is not None and existing.state == MutationIntentState.PREPARED
+                else None
+            ),
         )
         receipt = _receipt_from_result(identity, result)
         return result.checkpoint, receipt, result
