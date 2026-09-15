@@ -19,10 +19,32 @@ from pnc_automation.app.pnc.domain.daily_maintenance import (
 from pnc_automation.app.pnc.domain.daily_quest_catalog import DailyQuestCatalog
 from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.domain.policy_models import ResearchCategory
-from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
+from pnc_automation.app.pnc.domain.building_catalog import (
+    HomeCityObjectId,
+    require_building_construction_source,
+)
+from pnc_automation.app.pnc.domain.building_operations import (
+    BuildingActionIdentity,
+    BuildingMutationKind,
+    BuildingMutationReceipt,
+    observable_building_instance_key,
+    observable_construction_slot_key,
+)
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.domain.chat import ChatChannel
 from pnc_automation.app.pnc.domain.observation import Observation
+from pnc_automation.app.pnc.domain.observation import (
+    ListEntryKind,
+    RowRecognitionStatus,
+    SpatialObjectKind,
+    SpatialObjectQuery,
+    SpatialSurfaceType,
+)
+from pnc_automation.app.pnc.domain.action_requests import TapListEntryAction, TapSpatialObjectAction
+from pnc_automation.app.pnc.navigation.spatial_navigation import (
+    home_city_scan_step_budget,
+    home_city_scan_steps,
+)
 from pnc_automation.app.pnc.domain.observation import (
     CurrentCastleEvidenceKind,
     CurrentCastleMatchStatus,
@@ -30,6 +52,35 @@ from pnc_automation.app.pnc.domain.observation import (
 )
 from pnc_automation.app.pnc.domain.mail import MailboxAvailability, MailboxType
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
+
+
+def _resolve_unique_home_building_identity(
+    observation: Observation,
+    *,
+    target: HomeCityObjectId,
+    expected_instance_key: str | None = None,
+) -> str:
+    """Derive one observable Home identity without inventing a hidden game id."""
+
+    if (
+        observation.screen_type != ScreenType.PNC_HOME_CITY
+        or observation.blocking_popup
+        or observation.spatial_surface is None
+        or observation.spatial_surface.surface_type != SpatialSurfaceType.HOME_CITY_SURFACE
+    ):
+        raise RuntimeError("Building identity requires a fresh Home-city spatial surface.")
+    candidates = tuple(
+        object_
+        for object_ in observation.spatial_objects(SpatialObjectKind.HOME_BUILDING)
+        if object_.metadata.get("home_city_object_id") == target.value
+    )
+    if len(candidates) != 1:
+        raise RuntimeError("Building upgrade requires one exact Home object instance identity.")
+    instance_key = observable_building_instance_key(target, candidates[0])
+    if expected_instance_key is not None and instance_key != expected_instance_key:
+        raise RuntimeError("Building Home object identity changed before its detail was opened.")
+    return instance_key
 
 
 class WorkflowEffect(StrEnum):
@@ -49,6 +100,7 @@ class WorkflowSpec:
     exit_screen: ScreenType
     effect: WorkflowEffect
     mutation_capability: DailyQuestId | None = None
+    mutation_action_kind: BuildingMutationKind | None = None
     reconciliation_operation_id: str | None = None
 
     def __post_init__(self) -> None:
@@ -67,6 +119,11 @@ class WorkflowSpec:
                 raise TypeError("WorkflowSpec.mutation_capability must be a DailyQuestId.")
             if self.effect != WorkflowEffect.RESOURCE_CHANGING and self.reconciliation_operation_id is None:
                 raise ValueError("A mutation capability requires the RESOURCE_CHANGING effect.")
+        if self.mutation_action_kind is not None:
+            if not isinstance(self.mutation_action_kind, BuildingMutationKind):
+                raise TypeError("WorkflowSpec.mutation_action_kind must be a BuildingMutationKind.")
+            if self.effect != WorkflowEffect.RESOURCE_CHANGING:
+                raise ValueError("A building mutation action requires the RESOURCE_CHANGING effect.")
         if self.reconciliation_operation_id is not None and (
             not isinstance(self.reconciliation_operation_id, str)
             or not self.reconciliation_operation_id.strip()
@@ -340,6 +397,205 @@ class WorkflowContext:
         self._last_observation = observation
         return observation
 
+    def open_building_with_identity(
+        self,
+        target: HomeCityObjectId,
+        *,
+        expected_instance_key: str | None = None,
+    ) -> tuple[Observation, str]:
+        """Open one building and bind its identity to the exact dispatch frame."""
+
+        if not isinstance(target, HomeCityObjectId):
+            raise ValueError("Building navigation requires a known HomeCityObjectId target.")
+        acquired: list[str] = []
+
+        def remember(object_: object) -> None:
+            from pnc_automation.app.pnc.domain.observation import DetectedSpatialObject
+
+            if not isinstance(object_, DetectedSpatialObject):
+                raise TypeError("Building navigation returned an invalid spatial target.")
+            instance_key = observable_building_instance_key(target, object_)
+            if expected_instance_key is not None and instance_key != expected_instance_key:
+                raise RuntimeError(
+                    "Building Home object identity changed before its detail was opened."
+                )
+            acquired.append(instance_key)
+
+        self._research_node = None
+        observation = self._runtime.navigation.open_building(
+            target,
+            observe_content=lambda label: self._runtime.observe(label, include_content=True),
+            on_target_acquired=remember,
+        )
+        if len(acquired) != 1:
+            raise RuntimeError("Building navigation did not publish one exact dispatch identity.")
+        self._last_navigation_count = self._runtime.observation_count
+        self._last_observation = observation
+        return observation, acquired[0]
+
+    def open_construction_slot(self, target: object) -> tuple[Observation, str]:
+        """Acquire one exact Home empty slot, then return its typed construction menu."""
+
+        from pnc_automation.app.pnc.domain.building_operations import BuildingConstructionTarget
+
+        if not isinstance(target, BuildingConstructionTarget):
+            raise TypeError("Construction slot acquisition requires a BuildingConstructionTarget.")
+        source = require_building_construction_source(target.building)
+        current = self._ensure_home_city_for_building_flow("building_construct_home")
+        query = SpatialObjectQuery(
+            surface_type=SpatialSurfaceType.HOME_CITY_SURFACE,
+            kind=SpatialObjectKind.HOME_EMPTY_SLOT,
+            metadata_key="home_city_object_id",
+            metadata_value=source.slot_id.value,
+        )
+        executor = self._runtime.runtime.require_observed_action_executor(
+            "Construction slot acquisition requires the canonical observed action executor."
+        )
+        scan_steps = home_city_scan_steps()
+        scan_budget = home_city_scan_step_budget()
+        for step_index in range(scan_budget + 1):
+            if (
+                current.screen_type != ScreenType.PNC_HOME_CITY
+                or current.blocking_popup
+                or current.spatial_surface is None
+                or current.spatial_surface.surface_type != SpatialSurfaceType.HOME_CITY_SURFACE
+            ):
+                raise RuntimeError("Construction slot acquisition requires a fresh Home-city spatial surface.")
+            candidates = tuple(
+                object_
+                for object_ in current.spatial_objects(SpatialObjectKind.HOME_EMPTY_SLOT)
+                if object_.matches(query)
+            )
+            if len(candidates) > 1:
+                raise RuntimeError("The exact construction slot is ambiguous; no tap was sent.")
+            if candidates:
+                slot_instance_key = observable_construction_slot_key(
+                    target.slot_id,
+                    candidates[0],
+                )
+                execution = executor.execute_actions(
+                    (
+                        TapSpatialObjectAction(
+                            query=query,
+                            reason="building_construct_exact_home_slot",
+                            use_action_point=True,
+                        ),
+                    ),
+                    current,
+                    observe=lambda label, request=None: self._runtime.observe(
+                        f"building_construct_slot_{step_index}_{label}", include_content=True,
+                    ),
+                )
+                current = execution.observation
+                if current.screen_type != source.menu_screen_type:
+                    raise RuntimeError("The exact construction slot did not open its canonical building menu.")
+                self._last_navigation_count = self._runtime.observation_count
+                self._last_observation = current
+                return current, slot_instance_key
+            if step_index == scan_budget:
+                break
+            execution = executor.execute_actions(
+                (scan_steps[step_index % len(scan_steps)],),
+                current,
+                observe=lambda label, request=None: self._runtime.observe(
+                    f"building_construct_slot_{step_index}_{label}", include_content=True,
+                ),
+            )
+            current = execution.observation
+        raise RuntimeError("Construction slot acquisition exceeded the bounded Home-city search budget.")
+
+    def resolve_home_building_instance(
+        self,
+        target: HomeCityObjectId,
+        *,
+        expected_instance_key: str | None = None,
+    ) -> str:
+        """Carry the exact Home object identity across the detail navigation boundary."""
+
+        if not isinstance(target, HomeCityObjectId):
+            raise ValueError("Building identity requires a known HomeCityObjectId target.")
+        current = self._ensure_home_city_for_building_flow("building_upgrade_home")
+        return _resolve_unique_home_building_identity(
+            current,
+            target=target,
+            expected_instance_key=expected_instance_key,
+        )
+
+    def open_daily_upgrade_go(self) -> Observation:
+        """Consume only the existing Upgrade Building Daily row's visual Go action."""
+
+        self.navigate(ScreenType.PNC_QUEST_DAILY)
+        daily = self.observe_content(expected_screen=ScreenType.PNC_QUEST_DAILY)
+        rows = tuple(
+            entry
+            for entry in daily.entries(ListEntryKind.DAILY_QUEST)
+            if entry.metadata.get("quest_id") == DailyQuestId.UPGRADE_BUILDING.value
+            and entry.metadata.get("row_state") == "go"
+            and entry.row_status == RowRecognitionStatus.COMPLETE
+            and entry.action_point is not None
+            and entry.action_bounds is not None
+        )
+        if len(rows) != 1 or not daily.has(UiElementId.PNC_QUEST_GO_BUTTON):
+            raise RuntimeError("Daily Upgrade Building Go row is missing or ambiguous; no input was sent.")
+        executor = self._runtime.runtime.require_observed_action_executor(
+            "Daily Upgrade Building Go requires the canonical observed action executor."
+        )
+        result = executor.execute_action(
+            TapListEntryAction(
+                reason="daily_upgrade_building_go",
+                entry_kind=ListEntryKind.DAILY_QUEST,
+                metadata_key="quest_id",
+                metadata_value=DailyQuestId.UPGRADE_BUILDING.value,
+                use_action_point=True,
+            ),
+            daily,
+            observe=lambda label: self._runtime.observe(label, include_content=True),
+        )
+        if not result:
+            raise RuntimeError("Daily Upgrade Building Go was not consumed; no mutation was attempted.")
+        arrived = self._runtime.observe("daily_upgrade_building_arrival", include_content=True)
+        self._last_navigation_count = self._runtime.observation_count
+        self._last_observation = arrived
+        if arrived.blocking_popup or arrived.screen_type in {
+            ScreenType.PNC_QUEST_DAILY,
+            ScreenType.UNKNOWN,
+        }:
+            raise RuntimeError("Daily Upgrade Building Go did not reach a usable building state.")
+        return arrived
+
+    def _ensure_home_city_for_building_flow(self, label: str) -> Observation:
+        """Return a fresh Home frame for a target identity acquisition."""
+
+        if self._last_observation is None or self._last_observation.screen_type != ScreenType.PNC_HOME_CITY:
+            self.navigate(ScreenType.PNC_HOME_CITY)
+        current = self._runtime.observe(label, include_content=True)
+        if current.screen_type != ScreenType.PNC_HOME_CITY or current.blocking_popup:
+            raise RuntimeError("Building target acquisition requires a fresh unblocked Home-city observation.")
+        self._last_navigation_count = self._runtime.observation_count
+        self._last_observation = current
+        return current
+
+    def execute_building(
+        self,
+        identity: BuildingActionIdentity,
+        checkpoint: DailyTaskCheckpoint,
+        source: Observation,
+    ) -> tuple[DailyTaskCheckpoint, BuildingMutationReceipt | None, JournaledMutationResult]:
+        """Execute one exact building action through the shared journal boundary."""
+
+        if self._effect != WorkflowEffect.RESOURCE_CHANGING or self._mutation_boundary is None:
+            raise PermissionError("Building mutations require an exact resource-changing boundary.")
+        try:
+            return self._mutation_boundary.execute_building(
+                runtime=self._runtime,
+                observe=lambda label: self._observe_operation_content(label, operation="Building"),
+                identity=identity,
+                checkpoint=checkpoint,
+                source=source,
+            )
+        finally:
+            self._sync_from_runtime()
+
     def open_mailbox(self, mailbox: MailboxType) -> MailboxAvailability:
         """Inspect and, when available, open one reviewed mail category."""
 
@@ -512,7 +768,11 @@ class CoreWorkflowRunner(Generic[T]):
         reconciling = spec.reconciliation_operation_id is not None
         scoped = mutating or reconciling
         if scoped and (
-            self.mutation_boundary is None or spec.mutation_capability != self.mutation_boundary.policy.quest_id
+            self.mutation_boundary is None
+            or not self.mutation_boundary.supports_mutation(
+                capability=spec.mutation_capability,
+                action_kind=spec.mutation_action_kind,
+            )
         ):
             self.runtime.record(
                 {
@@ -525,13 +785,20 @@ class CoreWorkflowRunner(Generic[T]):
                 "The resource-changing workflow has no supported exact mutation boundary."
             )
         if mutating:
-            self.mutation_boundary.authorize()
+            self.mutation_boundary.authorize(
+                capability=spec.mutation_capability,
+                action_kind=spec.mutation_action_kind,
+            )
         elif reconciling:
             self.mutation_boundary.require_hero_reconciliation(spec.reconciliation_operation_id)
         self.runtime.record({"event": "workflow_started", "workflow": spec.name, "effect": spec.effect.value})
         try:
             if mutating:
-                self.mutation_boundary.verify_active_castle(self.runtime)
+                self.mutation_boundary.verify_active_castle(
+                    self.runtime,
+                    capability=spec.mutation_capability,
+                    action_kind=spec.mutation_action_kind,
+                )
             elif reconciling:
                 self.mutation_boundary.verify_hero_reconciliation_target(
                     self.runtime, spec.reconciliation_operation_id,

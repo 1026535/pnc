@@ -8,6 +8,7 @@ from enum import StrEnum
 from typing import Any, TypeVar
 
 from pnc_automation.core.errors import ScriptValidationError
+from pnc_automation.app.pnc.domain.daily_maintenance import DailyQuestId
 from pnc_automation.app.pnc.domain.building_catalog import (
     HomeCityObjectId,
     HomeCityObjectRole,
@@ -90,6 +91,9 @@ class BuildingUpgradePolicy:
     allow_speedups: bool = False
     prerequisite_mode: BuildingPrerequisiteMode = BuildingPrerequisiteMode.FAIL
     allow_premium_material_purchases: bool = False
+    operation_id: str | None = None
+    daily_quest_id: DailyQuestId | None = None
+    request_help: bool = True
 
     @classmethod
     def from_params(cls, params: Mapping[str, Any]) -> "BuildingUpgradePolicy":
@@ -119,6 +123,9 @@ class BuildingUpgradePolicy:
                 params.get("allow_premium_material_purchases", False),
                 field_name="allow_premium_material_purchases",
             ),
+            operation_id=_parse_optional_operation_id(params.get("operation_id")),
+            daily_quest_id=_parse_optional_daily_upgrade_quest(params.get("daily_quest_id")),
+            request_help=_parse_bool(params.get("request_help", True), field_name="request_help"),
         )
 
 
@@ -158,12 +165,13 @@ class BuildingConstructionPolicy:
     """Task parameters for constructing one exact home-city building."""
 
     building: HomeCityObjectId
+    operation_id: str | None = None
 
     @classmethod
     def from_params(cls, params: Mapping[str, Any]) -> "BuildingConstructionPolicy":
         """Builds a typed policy and rejects buildings without a legal source slot."""
 
-        unexpected = set(params) - {"building"}
+        unexpected = set(params) - {"building", "operation_id"}
         if unexpected:
             field = sorted(unexpected)[0]
             raise ScriptValidationError(f"Unexpected building-construction parameter '{field}'.", field=field)
@@ -184,7 +192,7 @@ class BuildingConstructionPolicy:
                 field="building",
                 value=raw_building,
             )
-        return cls(building=building)
+        return cls(building=building, operation_id=_parse_optional_operation_id(params.get("operation_id")))
 
 
 @dataclass(frozen=True, slots=True)
@@ -304,3 +312,40 @@ def _parse_bool(value: Any, *, field_name: str) -> bool:
     if not isinstance(value, bool):
         raise ScriptValidationError(f"Expected '{field_name}' to be a boolean.", field=field_name)
     return value
+
+
+def _parse_optional_operation_id(value: Any) -> str | None:
+    """Validate an optional caller-owned durable operation identity."""
+
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ScriptValidationError("Expected 'operation_id' to be a non-empty string.", field="operation_id")
+    return value.strip()
+
+
+def _parse_optional_daily_upgrade_quest(value: Any) -> DailyQuestId | None:
+    """Accept only the existing Daily Upgrade Building entry context."""
+
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ScriptValidationError(
+            "Expected 'daily_quest_id' to be a string.",
+            field="daily_quest_id",
+        )
+    try:
+        quest_id = DailyQuestId(value)
+    except ValueError as error:
+        raise ScriptValidationError(
+            f"Unsupported value '{value}' for 'daily_quest_id'.",
+            field="daily_quest_id",
+            value=value,
+        ) from error
+    if quest_id is not DailyQuestId.UPGRADE_BUILDING:
+        raise ScriptValidationError(
+            "Building upgrade accepts only the existing Upgrade Building Daily context.",
+            field="daily_quest_id",
+            value=value,
+        )
+    return quest_id

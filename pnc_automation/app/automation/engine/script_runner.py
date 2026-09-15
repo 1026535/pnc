@@ -242,6 +242,10 @@ class ScriptRunner:
             step
             for step in prepared_script.steps
             if isinstance(self.task_registry.require(step.task), CoreWorkflowTaskDefinition)
+            or (
+                mutation_boundary is not None
+                and step.task in {TaskId.BUILDING_CONSTRUCT, TaskId.BUILDING_UPGRADE}
+            )
         )
         effective_role = required_role
         if core_steps:
@@ -341,6 +345,7 @@ class ScriptRunner:
         params: dict[str, Any] | None = None,
         required_role: LiveAutomationRole | None = None,
         session_cleanup_policy: BlueStacksSessionCleanupPolicy | None = None,
+        mutation_boundary: CoreMutationBoundary | None = None,
     ) -> StepRunResult:
         """Runs one task step against the selected account using current-castle semantics."""
 
@@ -353,6 +358,7 @@ class ScriptRunner:
             ),
             required_role=required_role,
             session_cleanup_policy=session_cleanup_policy,
+            mutation_boundary=mutation_boundary,
         )
         return result.steps[0]
 

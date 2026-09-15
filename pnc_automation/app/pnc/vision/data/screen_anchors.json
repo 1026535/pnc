@@ -3575,6 +3575,242 @@
       ]
     },
     {
+      "id": "building_arena",
+      "layout_id": "building_arena",
+      "screen": "PNC_VERSUS_CENTER",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/building_routes/arena_reference_20260914.png",
+        "decoded_sha256": "e6039c7258352a44dd8b69073cddedbe3398b280682946a0ba44b081b004702a",
+        "capture_group": "2026-09-14/a02_buildings/20260914T274500Z/arena_reference"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Reviewed Arena destination from the Versus Center title and selected Arena tab, matching the packaged ARENA_ENTER_HUB route; mutable events and timers are excluded.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/building_arena_title.png",
+          "search_region": [20, 0, 300, 52],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/building_arena_arena_tab.png",
+          "search_region": [0, 52, 270, 54],
+          "threshold": 0.94
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/building_arena_back.png",
+            "search_region": [0, 0, 100, 55],
+            "threshold": 0.94
+          }
+        },
+        {
+          "selector": "PNC_VERSUS_CENTER_TAB_ARENA",
+          "anchor": {
+            "image": "screen_anchors/building_arena_arena_tab.png",
+            "search_region": [0, 52, 270, 54],
+            "threshold": 0.94
+          }
+        },
+        {
+          "selector": "PNC_VERSUS_CENTER_TAB_EXCHANGE_SHOP",
+          "anchor": {
+            "image": "screen_anchors/building_arena_exchange_tab.png",
+            "search_region": [270, 52, 270, 54],
+            "threshold": 0.94
+          }
+        }
+      ],
+      "occludes": ["PNC_HOME_CITY"]
+    },
+    {
+      "id": "building_blacksmith",
+      "layout_id": "building_blacksmith",
+      "screen": "PNC_BLACKSMITH",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/building_routes/blacksmith_reference_20260914.png",
+        "decoded_sha256": "c0c0bfd2729b5d32fad9b1fb42dbaa6db4cbf0af995da04c80c60c90b4cf7e6e",
+        "capture_group": "2026-09-14/a02_buildings/20260914T301500Z/blacksmith_reference"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Reviewed Blacksmith destination from its static title and forge description, matching the packaged EQUIP_ENTER_WIN route; mutable level and unlock rows are excluded.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/building_blacksmith_title.png",
+          "search_region": [80, 0, 190, 55],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/building_blacksmith_description.png",
+          "search_region": [270, 120, 270, 100],
+          "threshold": 0.94
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/building_blacksmith_back.png",
+            "search_region": [0, 0, 100, 55],
+            "threshold": 0.94
+          }
+        },
+        {
+          "selector": "PNC_BLACKSMITH_UPGRADE_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/building_blacksmith_upgrade.png",
+            "search_region": [360, 245, 180, 60],
+            "threshold": 0.94
+          }
+        }
+      ],
+      "occludes": ["PNC_HOME_CITY"]
+    },
+    {
+      "id": "building_hall_of_war",
+      "layout_id": "building_hall_of_war",
+      "screen": "PNC_HALL_OF_WAR",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/building_routes/hall_of_war_reference_20260914.png",
+        "decoded_sha256": "96d8e548ff6a7633a678635a5fe89586832a15d6176c1cdea0e16c91b5a9cb44",
+        "capture_group": "2026-09-14/a02_buildings/20260914T222500Z/hall_of_war_reference"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Reviewed Hall of War identity from the static building title and facility description; mutable level, queue, and rally rows are excluded.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/building_hall_of_war_title.png",
+          "search_region": [
+            70,
+            0,
+            250,
+            65
+          ],
+          "threshold": 0.93
+        },
+        {
+          "image": "screen_anchors/building_hall_of_war_description.png",
+          "search_region": [
+            260,
+            115,
+            280,
+            110
+          ],
+          "threshold": 0.92
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/building_hall_of_war_back.png",
+            "search_region": [
+              0,
+              0,
+              100,
+              65
+            ],
+            "threshold": 0.94
+          }
+        },
+        {
+          "selector": "PNC_HALL_OF_WAR_UPGRADE_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/building_hall_of_war_upgrade.png",
+            "search_region": [
+              360,
+              225,
+              180,
+              100
+            ],
+            "threshold": 0.94
+          }
+        }
+      ],
+      "occludes": [
+        "PNC_HOME_CITY"
+      ]
+    },
+    {
+      "id": "building_sacred_tree",
+      "layout_id": "building_sacred_tree",
+      "screen": "PNC_SACRED_TREE",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/building_routes/sacred_tree_reference_20260914.png",
+        "decoded_sha256": "2101d9b9d3664df822f1d7a92ccb666036e8deaac374d8fda5bb4d31eec524e8",
+        "capture_group": "2026-09-14/a02_buildings/20260914T234000Z/sacred_tree_reference"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Reviewed Sacred Tree identity from the static title and harvest guidance; mutable level and reward amounts are excluded.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/building_sacred_tree_title.png",
+          "search_region": [90, 0, 230, 60],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/building_sacred_tree_description.png",
+          "search_region": [85, 730, 390, 100],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/building_sacred_tree_back.png",
+            "search_region": [0, 0, 100, 65],
+            "threshold": 0.94
+          }
+        },
+        {
+          "selector": "PNC_SACRED_TREE_BLESSING_RECORD_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/building_sacred_tree_blessing_record.png",
+            "search_region": [425, 50, 115, 145],
+            "threshold": 0.94
+          }
+        },
+        {
+          "selector": "PNC_SACRED_TREE_HARVEST_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/building_sacred_tree_harvest.png",
+            "search_region": [155, 860, 230, 100],
+            "threshold": 0.94
+          }
+        }
+      ],
+      "occludes": [
+        "PNC_HOME_CITY"
+      ]
+    },
+    {
       "id": "remote_player_profile_gear",
       "layout_id": "remote_player_profile_gear",
       "screen": "PNC_PLAYER_PROFILE",

@@ -711,6 +711,76 @@
       "expected_visual_screens": []
     },
     {
+      "image": "building_routes/arena_reference_20260914.png",
+      "screen": "PNC_VERSUS_CENTER",
+      "split": "reference",
+      "group": "2026-09-14/a02_buildings/20260914T274500Z/arena_reference",
+      "sha256": "e6039c7258352a44dd8b69073cddedbe3398b280682946a0ba44b081b004702a",
+      "expected_visual_screens": [
+        "PNC_VERSUS_CENTER"
+      ]
+    },
+    {
+      "image": "building_routes/hall_of_war_reference_20260914.png",
+      "screen": "PNC_HALL_OF_WAR",
+      "split": "reference",
+      "group": "2026-09-14/a02_buildings/20260914T222500Z/hall_of_war_reference",
+      "sha256": "96d8e548ff6a7633a678635a5fe89586832a15d6176c1cdea0e16c91b5a9cb44",
+      "expected_visual_screens": [
+        "PNC_HALL_OF_WAR"
+      ]
+    },
+    {
+      "image": "building_routes/blacksmith_reference_20260914.png",
+      "screen": "PNC_BLACKSMITH",
+      "split": "reference",
+      "group": "2026-09-14/a02_buildings/20260914T301500Z/blacksmith_reference",
+      "sha256": "c0c0bfd2729b5d32fad9b1fb42dbaa6db4cbf0af995da04c80c60c90b4cf7e6e",
+      "expected_visual_screens": [
+        "PNC_BLACKSMITH"
+      ]
+    },
+    {
+      "image": "building_routes/arena_validation_20260914.png",
+      "screen": "PNC_VERSUS_CENTER",
+      "split": "validation",
+      "group": "2026-09-14/a02_buildings/20260914T283000Z/arena_validation",
+      "sha256": "cc1b65ca309284c6581ccc8f15b4e70c3c64cfd3021c4b81b9d0ac2f2cc6aa7c",
+      "expected_visual_screens": [
+        "PNC_VERSUS_CENTER"
+      ]
+    },
+    {
+      "image": "building_routes/sacred_tree_reference_20260914.png",
+      "screen": "PNC_SACRED_TREE",
+      "split": "reference",
+      "group": "2026-09-14/a02_buildings/20260914T234000Z/sacred_tree_reference",
+      "sha256": "2101d9b9d3664df822f1d7a92ccb666036e8deaac374d8fda5bb4d31eec524e8",
+      "expected_visual_screens": [
+        "PNC_SACRED_TREE"
+      ]
+    },
+    {
+      "image": "building_routes/hall_of_war_validation_20260914.png",
+      "screen": "PNC_HALL_OF_WAR",
+      "split": "validation",
+      "group": "2026-09-14/a02_buildings/20260914T231500Z/hall_of_war_validation",
+      "sha256": "2676935d4f1cb8abbfd2520f1a0649b478fa991db2840fc74b232d59318d34b3",
+      "expected_visual_screens": [
+        "PNC_HALL_OF_WAR"
+      ]
+    },
+    {
+      "image": "building_routes/sacred_tree_validation_20260914.png",
+      "screen": "PNC_SACRED_TREE",
+      "split": "validation",
+      "group": "2026-09-14/a02_buildings/20260914T240500Z/sacred_tree_validation",
+      "sha256": "2101d9b9d3664df822f1d7a92ccb666036e8deaac374d8fda5bb4d31eec524e8",
+      "expected_visual_screens": [
+        "PNC_SACRED_TREE"
+      ]
+    },
+    {
       "image": "player_profile_variants/remote_player_profile_gear.png",
       "screen": "PNC_PLAYER_PROFILE",
       "split": "reference",

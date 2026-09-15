@@ -114,6 +114,7 @@ class ApplicationRunner:
         params: dict[str, object] | None = None,
         required_role: LiveAutomationRole | None = None,
         session_cleanup_policy: BlueStacksSessionCleanupPolicy | None = None,
+        mutation_boundary: CoreMutationBoundary | None = None,
     ) -> StepRunResult:
         """Runs one direct task call against the current live session state."""
 
@@ -123,6 +124,7 @@ class ApplicationRunner:
             params=params,
             required_role=required_role,
             session_cleanup_policy=session_cleanup_policy,
+            mutation_boundary=mutation_boundary,
         )
 
     def run_mail_schedules(

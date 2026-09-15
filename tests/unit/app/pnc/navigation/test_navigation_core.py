@@ -872,6 +872,7 @@ class NavigationCoreTests(unittest.TestCase):
             )
         )
         records: list[dict[str, object]] = []
+        acquired = []
         actuator = Actuator()
         core = NavigationCore(
             actuator,
@@ -885,9 +886,11 @@ class NavigationCoreTests(unittest.TestCase):
         result = core.open_building(
             HomeCityObjectId.GODDESS_STATUE,
             observe_content=lambda _: next(content_frames),
+            on_target_acquired=acquired.append,
         )
 
         self.assertEqual(ScreenType.PNC_GODDESS_STATUE, result.screen_type)
+        self.assertEqual([target], acquired)
         self.assertEqual(2, len(actuator.actions))
         self.assertIsInstance(actuator.actions[0], SwipeAction)
         self.assertEqual(home_city_scan_steps()[0], actuator.actions[0])
@@ -1229,6 +1232,9 @@ class NavigationCoreTests(unittest.TestCase):
         self.assertEqual(1, len(actuator.actions))
         self.assertIsInstance(actuator.actions[0], SwipeAction)
         self.assertEqual("down", actuator.actions[0].direction)
+        self.assertEqual(0.90, actuator.actions[0].start_x_ratio)
+        self.assertEqual(0.18, actuator.actions[0].start_y_ratio)
+        self.assertEqual(0.82, actuator.actions[0].end_y_ratio)
 
         with self.assertRaisesRegex(ValueError, "direction"):
             core.scroll_castle_roster("sideways", observe_content=lambda _: next(frames))

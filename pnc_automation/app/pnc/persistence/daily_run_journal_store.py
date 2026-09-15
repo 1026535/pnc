@@ -11,6 +11,7 @@ from time import sleep
 from typing import Any
 
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
+from pnc_automation.app.pnc.domain.building_operations import BuildingMutationKind
 from pnc_automation.app.pnc.domain.daily_maintenance import (
     DailyQuestId,
     DailyTaskCheckpoint,
@@ -213,13 +214,15 @@ def _serialize_checkpoint(checkpoint: DailyTaskCheckpoint) -> dict[str, Any]:
         "mutation_intents": [
             {
                 "operation_id": intent.operation_id,
-                "quest_id": intent.quest_id.value,
+                "quest_id": None if intent.quest_id is None else intent.quest_id.value,
                 "state": intent.state.value,
                 "expected_precondition": intent.expected_precondition,
                 "expected_postcondition": intent.expected_postcondition,
                 "diamond_budget": intent.diamond_budget,
                 "diamonds_spent": intent.diamonds_spent,
                 "metadata": intent.metadata,
+                "action_kind": intent.action_kind,
+                "target": intent.target,
             }
             for intent in checkpoint.mutation_intents
         ],
@@ -255,13 +258,19 @@ def _deserialize_checkpoint(payload: Any) -> DailyTaskCheckpoint:
         mutation_intents=tuple(
             MutationIntent(
                 operation_id=str(item["operation_id"]),
-                quest_id=DailyQuestId(item["quest_id"]),
+                quest_id=(None if item.get("quest_id") is None else DailyQuestId(item["quest_id"])),
                 state=MutationIntentState(item["state"]),
                 expected_precondition=str(item["expected_precondition"]),
                 expected_postcondition=str(item["expected_postcondition"]),
                 diamond_budget=int(item["diamond_budget"]),
                 diamonds_spent=int(item["diamonds_spent"]),
                 metadata=dict(item.get("metadata") or {}),
+                action_kind=(
+                    None
+                    if item.get("action_kind") is None
+                    else BuildingMutationKind(item["action_kind"]).value
+                ),
+                target=(None if item.get("target") is None else dict(item["target"])),
             )
             for item in intents_raw
         ),

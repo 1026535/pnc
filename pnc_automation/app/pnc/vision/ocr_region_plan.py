@@ -141,7 +141,14 @@ _SCREEN_CONTENT_REGIONS = {
     # Complete roster cards can extend to the bottom edge on the captured
     # eight-row layout. Keep the text column, including its last name/level.
     ScreenType.PNC_CASTLE_SELECTION: (("castle_roster", 0.20, 0.07, 0.62, 0.92),),
-    ScreenType.PNC_HOME_CITY: (("home_queue_status", 0.0, 0.19, 0.17, 0.22), ("home_navigation", 0.0, 0.925, 1.0, 0.075)),
+    ScreenType.PNC_HOME_CITY: (
+        ("home_queue_status", 0.0, 0.19, 0.17, 0.22),
+        # Building labels are the canonical input to the Home spatial surface.
+        # Keep this bounded above the task/banner and bottom-navigation chrome;
+        # labels below this region cannot authorize a safe building tap.
+        ("home_city_objects", 0.0, 0.12, 1.0, 0.70),
+        ("home_navigation", 0.0, 0.925, 1.0, 0.075),
+    ),
     ScreenType.PNC_LORD_INFO: (("lord_header", 0.02, 0.02, 0.96, 0.16), ("lord_profile", 0.02, 0.18, 0.96, 0.72)),
     ScreenType.PNC_PLAYER_TERRITORY: (("territory_header", 0.02, 0.02, 0.96, 0.16), ("territory_profile", 0.02, 0.18, 0.96, 0.72)),
     ScreenType.PNC_PLAYER_PROFILE: (("profile_name", 0.18, 0.0, 0.70, 0.055),),

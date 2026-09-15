@@ -131,7 +131,11 @@ class NavigationCore:
         return self._execute_and_confirm(action, before, edge.destinations, label)
 
     def open_visible_building(
-        self, target: HomeCityObjectId, *, observe_content: Callable[[str], Observation],
+        self,
+        target: HomeCityObjectId,
+        *,
+        observe_content: Callable[[str], Observation],
+        on_target_acquired: Callable[[DetectedSpatialObject], None] | None = None,
     ) -> Observation:
         """Open one observed city object without atlas estimates or camera prediction."""
         destination = _require_reviewed_building_route(target=target, edges=self.edges)
@@ -141,9 +145,11 @@ class NavigationCore:
         resolved = _resolve_observed_building_target(before, target=target)
         if resolved is None:
             raise RuntimeError("Building is absent or ambiguous; no further gesture or building tap was sent.")
-        _observed_object, point = resolved
+        observed_object, point = resolved
         if not _is_hud_safe_building_point(point, image_size=before.image_size):
             raise RuntimeError("Observed building target overlaps the HUD; no tap sent.")
+        if on_target_acquired is not None:
+            on_target_acquired(observed_object)
         self.record({"event": "pending_building", "target": target.value,
                      "artifact": str(before.artifact_path), "point": point})
         return self._execute_and_confirm(
@@ -152,7 +158,11 @@ class NavigationCore:
         )
 
     def open_building(
-        self, target: HomeCityObjectId, *, observe_content: Callable[[str], Observation],
+        self,
+        target: HomeCityObjectId,
+        *,
+        observe_content: Callable[[str], Observation],
+        on_target_acquired: Callable[[DetectedSpatialObject], None] | None = None,
     ) -> Observation:
         """Use a reviewed in-game focus route, then require an observed object.
 
@@ -172,7 +182,11 @@ class NavigationCore:
             if focus is None:
                 raise ValueError("Institute focus route is missing from the reviewed graph.")
             self.transition(focus)
-            return self.open_visible_building(target, observe_content=observe_content)
+            return self.open_visible_building(
+                target,
+                observe_content=observe_content,
+                on_target_acquired=on_target_acquired,
+            )
 
         self._sequence += 1
         scan_label = f"core_{self._sequence}_building_scan_source"
@@ -182,6 +196,7 @@ class NavigationCore:
             target=target,
             current=current,
             observe_content=observe_content,
+            on_target_acquired=on_target_acquired,
         )
 
     def _open_building_after_home_scan(
@@ -190,6 +205,7 @@ class NavigationCore:
         target: HomeCityObjectId,
         current: Observation,
         observe_content: Callable[[str], Observation],
+        on_target_acquired: Callable[[DetectedSpatialObject], None] | None,
     ) -> Observation:
         """Searches the measured Home scan sequence, then reacquires the target before tapping."""
 
@@ -207,6 +223,7 @@ class NavigationCore:
                     target=target,
                     source=current,
                     observe_content=observe_content,
+                    on_target_acquired=on_target_acquired,
                 )
 
             if step_index == scan_budget:
@@ -239,6 +256,7 @@ class NavigationCore:
         target: HomeCityObjectId,
         source: Observation,
         observe_content: Callable[[str], Observation],
+        on_target_acquired: Callable[[DetectedSpatialObject], None] | None,
     ) -> Observation:
         """Reacquires one safe target frame before delegating the single visible-building tap."""
 
@@ -248,7 +266,11 @@ class NavigationCore:
                 raise RuntimeError("Building target reacquisition received a stale capture; no further tap was sent.")
             return observation
 
-        return self.open_visible_building(target, observe_content=observe_reacquired)
+        return self.open_visible_building(
+            target,
+            observe_content=observe_reacquired,
+            on_target_acquired=on_target_acquired,
+        )
 
     def open_mailbox(
         self, mailbox: MailboxType, *, observe_content: Callable[[str], Observation],
@@ -580,6 +602,10 @@ class NavigationCore:
                 distance_ratio=0.58,
                 duration_ms=450,
                 reason="replacement_scan_active_castle",
+                start_x_ratio=0.90,
+                start_y_ratio=0.82 if direction == "up" else 0.18,
+                end_x_ratio=0.90,
+                end_y_ratio=0.18 if direction == "up" else 0.82,
             ),
             before,
             frozenset({ScreenType.PNC_CASTLE_SELECTION}),
@@ -1183,7 +1209,8 @@ def reviewed_navigation_edges() -> tuple[NavigationEdge, ...]:
         edges.append(NavigationEdge(source, selector.PNC_BACK_BUTTON_TOP_LEFT, frozenset({screen.PNC_SETTINGS})))
     for source in (
         *sorted(quest, key=lambda value: value.name), screen.PNC_BAG,
-        screen.PNC_INSTITUTE, screen.PNC_GODDESS_STATUE,
+        screen.PNC_INSTITUTE, screen.PNC_GODDESS_STATUE, screen.PNC_HALL_OF_WAR,
+        screen.PNC_SACRED_TREE, screen.PNC_VERSUS_CENTER,
         screen.PNC_WAREHOUSE, screen.PNC_HERO_HALL, screen.PNC_CASTLE,
     ):
         edges.append(NavigationEdge(source, selector.PNC_BACK_BUTTON_TOP_LEFT, frozenset({screen.PNC_HOME_CITY})))

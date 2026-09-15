@@ -407,23 +407,22 @@ class AutomationApi:
         account_id: str | None = None,
         task_id: TaskId,
         params: dict[str, Any] | None = None,
+        mutation_boundary: CoreMutationBoundary | None = None,
     ) -> StepRunResult:
         """Runs one direct task call against the selected account using current-castle semantics."""
 
         resolved_account_id = self._resolve_account_id(account_id)
         cleanup_policy = self._cleanup_policy_for(resolved_account_id)
-        if cleanup_policy is None:
-            return self.application.run_task(
-                account_id=resolved_account_id,
-                task_id=task_id,
-                params=params,
-            )
-        return self.application.run_task(
-            account_id=resolved_account_id,
-            task_id=task_id,
-            params=params,
-            session_cleanup_policy=cleanup_policy,
-        )
+        kwargs: dict[str, Any] = {
+            "account_id": resolved_account_id,
+            "task_id": task_id,
+            "params": params,
+        }
+        if cleanup_policy is not None:
+            kwargs["session_cleanup_policy"] = cleanup_policy
+        if mutation_boundary is not None:
+            kwargs["mutation_boundary"] = mutation_boundary
+        return self.application.run_task(**kwargs)
 
     def building_upgrade(
         self,
@@ -434,19 +433,25 @@ class AutomationApi:
         allow_speedups: bool = False,
         prerequisite_mode: str = "fail",
         allow_premium_material_purchases: bool = False,
+        operation_id: str | None = None,
+        mutation_boundary: CoreMutationBoundary | None = None,
     ) -> StepRunResult:
         """Runs one direct building-upgrade step using current-castle semantics."""
 
         resolved_priority = resolve_building_priority_values(priority=priority, priority_file=priority_file)
+        params: dict[str, Any] = {
+            "priority": resolved_priority,
+            "allow_speedups": allow_speedups,
+            "prerequisite_mode": prerequisite_mode,
+            "allow_premium_material_purchases": allow_premium_material_purchases,
+        }
+        if operation_id is not None:
+            params["operation_id"] = operation_id
         return self.run_task(
             account_id=self._resolve_account_id(account_id),
             task_id=TaskId.BUILDING_UPGRADE,
-            params={
-                "priority": resolved_priority,
-                "allow_speedups": allow_speedups,
-                "prerequisite_mode": prerequisite_mode,
-                "allow_premium_material_purchases": allow_premium_material_purchases,
-            },
+            params=params,
+            mutation_boundary=mutation_boundary,
         )
 
     def building_construct(
@@ -454,13 +459,19 @@ class AutomationApi:
         *,
         account_id: str | None = None,
         building: str,
+        operation_id: str | None = None,
+        mutation_boundary: CoreMutationBoundary | None = None,
     ) -> StepRunResult:
         """Constructs one exact building using current-castle semantics."""
 
+        params: dict[str, Any] = {"building": building}
+        if operation_id is not None:
+            params["operation_id"] = operation_id
         return self.run_task(
             account_id=self._resolve_account_id(account_id),
             task_id=TaskId.BUILDING_CONSTRUCT,
-            params={"building": building},
+            params=params,
+            mutation_boundary=mutation_boundary,
         )
 
     def open_building(
@@ -841,6 +852,8 @@ def building_upgrade(
     allow_speedups: bool = False,
     prerequisite_mode: str = "fail",
     allow_premium_material_purchases: bool = False,
+    operation_id: str | None = None,
+    mutation_boundary: CoreMutationBoundary | None = None,
 ) -> StepRunResult:
     """Runs one direct building-upgrade step through the default application facade."""
 
@@ -851,13 +864,26 @@ def building_upgrade(
         allow_speedups=allow_speedups,
         prerequisite_mode=prerequisite_mode,
         allow_premium_material_purchases=allow_premium_material_purchases,
+        operation_id=operation_id,
+        mutation_boundary=mutation_boundary,
     )
 
 
-def building_construct(*, account_id: str | None = None, building: str) -> StepRunResult:
+def building_construct(
+    *,
+    account_id: str | None = None,
+    building: str,
+    operation_id: str | None = None,
+    mutation_boundary: CoreMutationBoundary | None = None,
+) -> StepRunResult:
     """Runs one direct building-construction step through the default facade."""
 
-    return _default_api().building_construct(account_id=account_id, building=building)
+    return _default_api().building_construct(
+        account_id=account_id,
+        building=building,
+        operation_id=operation_id,
+        mutation_boundary=mutation_boundary,
+    )
 
 
 def open_building(

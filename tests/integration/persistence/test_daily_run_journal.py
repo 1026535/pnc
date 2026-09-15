@@ -24,6 +24,7 @@ from pnc_automation.app.automation.engine.task import TaskId
 from pnc_automation.app.pnc.domain.daily_maintenance import (
     DailyQuestId,
     DailyTaskCheckpoint,
+    MutationAcknowledgement,
     MutationIntent,
     MutationIntentState,
 )
@@ -83,11 +84,50 @@ class MutationAcknowledgementTests(unittest.TestCase):
                 maintenance_date=date(2026, 9, 4),
             )
 
+    def test_building_acknowledgement_has_no_fake_daily_quest(self) -> None:
+        """Binds a direct building mutation to its exact action kind."""
+
+        acknowledgement = parse_mutation_acknowledgement(
+            '{"account_id":"account","castle_ref":"main",'
+            '"action_kind":"building_upgrade","maintenance_date":"2026-09-14",'
+            '"max_mutations":1,"max_diamond_spend":0}'
+        )
+
+        self.assertIsNone(acknowledgement.quest_id)
+        acknowledgement.authorize(
+            account_id="account",
+            castle_ref="main",
+            quest_id=None,
+            action_kind="building_upgrade",
+            max_mutations=1,
+            max_diamond_spend=0,
+            maintenance_date=date(2026, 9, 14),
+        )
+
     def test_rejects_incomplete_acknowledgement_schema(self) -> None:
         """Prevents an unbounded acknowledgement from reaching live setup."""
 
         with self.assertRaisesRegex(ConfigurationError, "exact schema"):
             parse_mutation_acknowledgement('{"account_id":"mega_old_acc"}')
+
+    def test_acknowledgement_requires_exactly_one_authority_identity(self) -> None:
+        """Prevents a direct constructor from blending Daily and building authority."""
+
+        common = {
+            "account_id": "account",
+            "castle_ref": "main",
+            "maintenance_date": date(2026, 9, 14),
+            "max_mutations": 1,
+            "max_diamond_spend": 0,
+        }
+        with self.assertRaisesRegex(ValueError, "exactly one"):
+            MutationAcknowledgement(quest_id=None, **common)
+        with self.assertRaisesRegex(ValueError, "exactly one"):
+            MutationAcknowledgement(
+                quest_id=DailyQuestId.UPGRADE_BUILDING,
+                action_kind="building_upgrade",
+                **common,
+            )
 
 
 class DailyRunJournalStoreTests(unittest.TestCase):

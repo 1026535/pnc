@@ -415,3 +415,150 @@ This package does not change automatic Daily maintenance, scheduling, real-money
 actions, other accounts, generic OCR/guard/runtime mechanics, or unrelated feature
 ownership. Its branch is reviewable and independently complete once the feature
 definition of done above is satisfied.
+
+## Implementation report — 2026-09-14
+
+Status: **implemented and offline-validated; partially live-accepted; incomplete on
+explicit evidence/producer blockers.** The historical `mega_old_acc` live wording
+above was superseded for this run by the prompt's exact allocation
+`serious_stuff / bs-main / live_testing`. The freshly observed active castle was
+`K226 / free cookies / level 17`; no account or castle switch was performed.
+
+### Repository and source-control record
+
+- Feature repository root:
+  `C:/Users/lebel/pnc/.local-data/worktrees/buildings_package_02`
+- Feature branch: `codex/a02-buildings`
+- Code and plan base: `a4ac5d280ce04f63251c616e0b9f7bcb380b2be8`
+- Merged code ancestor: `6bc27585fbac1244672cf4a653ea6248955a4aca`
+- Both requested ancestry checks passed locally. No remote refs were updated and no
+  peer worktree changes were imported.
+
+### Implemented slice
+
+- Added typed construction/upgrade targets, action kind, exact observable
+  slot/instance/level identity, durable `operation_id`, optional Upgrade-Building
+  Daily context, and target-bound receipts.
+- Extended the canonical mutation envelope, journal serialization, authorizer,
+  dispatcher, workflow runner, API/session/CLI/authored dispatch, and direct versus
+  Daily-Go boundary without creating a construction quest or a second journal.
+- Direct and Daily-Go callers share operation identity and replay budget. Automatic
+  Daily scheduling remains disabled; Upgrade Building remains claim-only in the
+  generic Daily catalog.
+- Construction uses the exact observed empty-slot spatial query, canonical source
+  family/menu/option, ordinary Build control, and target/slot-correlated receipt.
+- Upgrade re-acquires the target on the dispatch frame, requires a typed owning
+  screen and exact current→next level, checks requirement/queue state, journals
+  warning/confirmation and post-start Help follow-ups, and accepts only a
+  target-correlated timer/queue/level receipt. Priority selection skips only
+  safely proven ineligible candidates before creating an intent; explicit QUEUE,
+  speedup, and premium branches remain attached to the selected target and fail
+  closed when their required facts are unavailable. Premium-only construction and
+  mutation states stop before input.
+- Optional speedup and premium-material branches now fail closed before input when
+  their required item/quantity/availability/cost producer is absent. QUEUE parses
+  the visible requirement and rejects unsupported or untyped prerequisite routes.
+  These three enabled branches are safe but not complete; see blockers below.
+- Added bounded Home OCR publication used by both observers and guarded visual
+  profiles/fixtures for Hall of War, Sacred Tree, Arena/Versus Center, and the newly
+  observed Blacksmith endpoint. Added the Arena primary mapping. Pit is retained as
+  a read-only mine-war endpoint and is not considered upgradeable.
+- Added the scoped client-source note
+  `docs/game-reference/workflows/building-endpoints.md` from build
+  `5.0.203 / 233`, including `BuildTableData:_OpenBuildWinImpl` mappings.
+
+### Route acceptance and blockers
+
+The six preserve-only endpoints remained green. Of the nineteen A02 rows:
+
+- Live accepted with independently replayed typed destination and measured Home
+  return: **Arena, Hall of War, Sacred Tree**.
+- APK and one exact live source→destination observation: **Blacksmith**
+  (`CONSTRUCTIONID -> EQUIP_ENTER_WIN`). Its second group and Back return were
+  blocked by the generic VIP daily-reset foreground described below, so it is not
+  counted as fully accepted.
+- Current Home source observed but no safe endpoint tap: **Pit**. The live producer
+  published `upgradeable=false`; its point was outside the reviewed safe band.
+  Client source maps `MINE_HOLE` to `MineWarData:sendOpenMineMainWin()`.
+- Current bounded Home acquisition did not find a safe exact object:
+  **Wall, Trap Workshop, Watchtower, Alliance Hall, Bank**. Market was not retargeted
+  after the preceding untyped Blacksmith frame because the fresh-source guard
+  detected a different screen.
+- Not live attempted after the foreground blocker: **Sauroi Lair, Market, Tower of
+  Trial, Sanctum, Ranged Barracks, Infantry Barracks, Cavalry Barracks, Siege
+  Factory, Dragondom Conquest**.
+- Bank and Dragondom remain intentionally unpromoted despite client candidates
+  `TREASURE_CAVE_WIN` and `DRAGON_CAVE_MAIN_WIN`; the plan requires current typed
+  destination and return evidence.
+
+Relevant ignored evidence groups:
+
+- `.local-data/artifacts/core_resume/20260914T231500Z` — Hall of War
+- `.local-data/artifacts/core_resume/20260914T255500Z` — Sacred Tree
+- `.local-data/artifacts/core_resume/20260914T263000Z` — Pit safe-band stop
+- `.local-data/artifacts/core_resume/20260914T271500Z` — Wall source miss
+- `.local-data/artifacts/core_resume/20260914T274500Z` and
+  `20260914T283000Z` — Arena destination and independent return evidence
+- `.local-data/artifacts/core_resume/20260914T292000Z` — Bank source miss
+- `.local-data/artifacts/core_resume/20260914T301500Z` — five-route group and
+  Blacksmith destination
+- `.local-data/artifacts/core_resume/20260914T311500Z` — independent run stopped
+  at the unqualified VIP daily-reset foreground before route acquisition
+
+### Exact remaining blockers
+
+1. The VIP daily-reset modal in the `20260914T311500Z` group was classified
+   `UNKNOWN`. Existing OCR can describe it, but `ObservationBuilder` deliberately
+   requires an independent visual modal identity before publishing Close. No input
+   was sent. A focused consultation with `Continue non-YOLO recognition` confirmed
+   this is a generic producer gap and that A02 must not add a coordinate/Back
+   bypass or import unreviewed dirty peer work.
+2. Optional speedup lacks a production fact containing the exact inventory item,
+   quantity, availability and cost. The available tests describe screen controls
+   only; no independently qualified consumable receipt exists.
+3. Premium-material purchase lacks an exact purchase selector/cost/availability
+   producer and independently qualified purchase receipt. Diamond authority alone
+   does not establish those facts.
+4. QUEUE lacks a qualified actual-prerequisite identity/Go destination/return and a
+   separate prerequisite Start receipt tied to the requested root target.
+5. `tests/data/local_fixture_artifacts.json` is absent in this checkout; no path was
+   invented. Saved historical evidence was read in place from the roots named by
+   this plan.
+
+No live construction or upgrade mutation was attempted because the required branch
+producers and final live route preconditions were not all offline-qualified. No
+durable intent was created and no in-game resources were spent.
+
+### Verification record
+
+- `py -m unittest tests.contract.workflows.test_building_mutation_identity
+  tests.integration.persistence.test_daily_maintenance_config
+  tests.integration.persistence.test_daily_run_journal
+  tests.unit.app.pnc.navigation.test_navigation_core
+  tests.integration.vision.test_building_route_captured_observers
+  tests.integration.vision.test_home_city_captured_observers` — **105 passed**.
+- `py tools/run_tests.py group contract.entrypoints` — **59 passed**.
+- `py tools/run_tests.py group contract.workflows` — **74 passed** on the
+  final implementation.
+- `py tools/run_tests.py group integration.workflows` — **200 passed**.
+- `py tools/run_tests.py group integration.persistence` — **133 passed,
+  1 skipped**.
+- `py tools/run_tests.py group unit` — **1,072 passed** after restoring the
+  no-automatic-Daily contract.
+- `py -m unittest tests.integration.vision.test_building_route_captured_observers
+  tests.unit.app.pnc.vision.test_visual_screen_metadata
+  tests.unit.app.automation.daily_maintenance.test_daily_canaries
+  tests.unit.app.automation.daily_maintenance.test_daily_quest_catalog
+  tests.integration.persistence.test_daily_maintenance_config` — **36 passed**.
+- `py -m compileall -q pnc_automation ...` — **passed**.
+- `git diff --check` — **passed** (line-ending conversion warnings only).
+- `py tools/run_tests.py affected --base origin/main --explain --json
+  .test-impact/buildings-selection.json --results
+  .test-impact/buildings-results.json` — selected the mandated full fallback and
+  **passed 2,154 tests, 7 skipped**.
+- After the full gate, the final acknowledgement invariant and priority-fallback
+  regression coverage passed **62 tests**, followed by the final building-focused
+  suite at **96 tests**.
+
+The final source-control review and local feature commit are recorded in the task
+handoff.
