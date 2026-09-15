@@ -1,13 +1,13 @@
-# Remaining 06 — Castle switching and shared navigation
+# Remaining 06 — Castle switching and account-selection menus
 
-Revised September 14, 2026. **Owner: the Castle/navigation feature agent**, from
+Scope revised September 15, 2026; evidence snapshot September 14. **Owner: the Castle/navigation feature agent**, from
 roster/control recognition through exact selection, route/caller behavior,
 regressions and live switch/return acceptance. Missing castle or More/Settings
-facts are this agent's implementation work. Continue core and Continue non-YOLO
-are occasional consultants for a generic-service question, not delivery gates.
+facts remain this package's implementation work because V01–V43 do not cover
+account-selection menus. Shared visual integration is consumed from V01.
 
-Execution base: merged `6bc27585fbac1244672cf4a653ea6248955a4aca` or a verified
-descendant containing it and this plan revision. Reuse a suitable existing
+Execution base: the current assignment's verified checkpoint and this plan
+revision. The old merged `6bc2758` remains historical source context. Reuse a suitable existing
 isolated task worktree and create/use the feature branch there; do not create a
 second worktree merely for a preferred path. Preserve resumed feature work; use
 a new worktree only if the current checkout is shared or unsuitable. Follow the
@@ -18,10 +18,33 @@ feature writers in the integration checkout. Read the
 [independent package contract](PNC_CORE_WORKFLOW_PORTING_PLAN.md#six-remaining-agent-packages).
 
 The existing World Search/coordinate-dialog edge remainder moves to package 03,
-which owns world navigation needed by Gathering. It is no longer a DoD item or
+which retains the missing Search/dialog correction and gathering-action routes;
+V19 supplies qualified World object acquisition/inspection. It is no longer a DoD item or
 prerequisite here. Login/provider/session preparation ordering belongs to 05;
 this package consumes an already authenticated session and owns selection and
 identity semantics without waiting for 05's completion.
+
+## V01–V43 boundary
+
+Read the [remaining-feature scope amendment](PNC_CORE_REMAINING_VISION_BOUNDARY.md).
+This package retains More/Settings/Manage Characters, selected-roster identity,
+row geometry, bounded scanning and exact switch/return behavior, including their
+feature-local recognition and qualification. V01 supplies the existing shared
+matcher, OCR, guard and observation integration; do not rebuild those services.
+
+V02–V03 own Home camera localization, fixed atlas, building acquisition/panning,
+seasonal references and event occupancy. V41 owns the Castle building/Territory
+menu. Neither is account or castle switching, and neither is new work here.
+Use existing Home identity for More/Settings; Home-building detection is not a
+prerequisite for that route. World Search/dialog remains package 03; Login/provider
+and generated authentication ordering remain package 05.
+
+Do not wait for all V packets or duplicate their qualification. Record any actual
+shared-output dependency while continuing selection work. Preserve resumed
+implementation; do not reset to the historical base. Bind the round trip to the
+current assignment's authorized account, instance, configured role and fresh
+source/alternate identities under the amendment. Saved identities are fixtures,
+not an execution allocation.
 
 ### Saved evidence locations
 
@@ -41,7 +64,7 @@ exact source path, never replaced by a guessed current screen or invented result
 Accept this slice after one fresh, authorized production run proves an actual
 alternate-castle round trip through the typed replacement core:
 
-1. the configured `mega_old_acc` account is established through the canonical
+1. the current assignment's authorized account is established through the canonical
    leased runtime and a fresh preflight observes the exact currently selected
    `CastleIdentity` before any selection tap; this observed source identity is
    retained as the required return target;
@@ -61,9 +84,9 @@ alternate-castle round trip through the typed replacement core:
    script uses one connected runtime for both hops; cleanup preserves the first execution error, and the result,
    trace, identity frames and final Home evidence are retained.
 
-The worker may use a supplied target preference or choose another already-configured
-castle on authorized `mega_old_acc`; record the alias and exact identity before
-the first hop. The source is
+Use the supplied alternate target, or choose a different configured castle only
+when the current assignment authorizes that choice. Record its alias and exact
+identity before the first hop. The source is
 the fresh active castle observed at the start of the run, and restoration to
 that source is a fixed part of this package's acceptance. A no-op on the
 already selected destination, a manually performed switch, a partial roster
@@ -112,55 +135,43 @@ checkpoint rather than independent live target authorization.
 
 Root's latest saved RapidOCR both-path Home frame (`0026`) is `Home/CLEAR` but
 contains zero Home-building objects where the old A capture contained four.
-Home identity therefore does not prove the Home object route; root's plans 01/02
-own the Home/Institute producer regression. This package keeps that evidence
-separate from castle selection and the More/Settings/Search edge checks.
+Home identity therefore does not prove building acquisition; V02–V03 now own
+Home localization/acquisition, with V04 consuming Institute entry. Keep that
+evidence separate from account selection and More/Settings checks.
 
 ## Decisions, target and authority
 
-The user has authorized `mega_old_acc` and all needed in-game actions with
-unlimited resource spending. Castle selection is classified by the workflow as
-`NONSPENDING_STATE_CHANGE`; this package needs one round trip and qualified
-navigation, without another game workflow. Account configuration remains
-the authority for instance and live role. The saved config resolves
-`mega_old_acc` to the configured `daily_canary` role, so the live caller must
-use `DAILY_CANARY` where a role is required by the authored selection path.
+Bind this proof to the current execution assignment's explicitly authorized
+account/instance and switch/return scope. Preserve applicable session permission
+without asking again. This plan does not select an account or grant new switching
+or spending authority. Resolve the configured live role through the canonical
+runtime; a missing role or caller incompatibility is an explicit gap, not a reason
+to substitute a role or edit configuration. The proof is one
+`NONSPENDING_STATE_CHANGE` round trip and requires no resource spend.
 
-The tracked catalog currently names exactly these aliases for the account:
+Preflight the current source freshly, retain its exact identity and match it to
+the configured catalog before constructing the return step. Honor the user's
+alternate target if supplied. Choose another configured alias only when the
+current assignment authorizes that choice; freeze its full identity before input.
+If no valid authorized source/alternate pair exists, request the exact missing
+choice while continuing offline work. Restore the observed source through the
+same reviewed route.
 
-| Alias | Exact configured identity |
-| --- | --- |
-| `main` | K314 / `K314a4452b3900` / level 1 |
-| `npc_2` | K157 / `NPC 2` / level 22 |
+Historical fixtures remain separate from execution targets:
 
-The B captured K157 / `0 sticker NPC` / level 15 identity in saved frames `0042`
-and `0108` is a qualified producer fixture, not the configured `npc_2` alias
-and not a live target choice. Keep its exact spelling and level separate from
-the catalog identity. Likewise, the corrected 3xx 8th/bottom-row evidence
-publishes K303 / level 5, but the prior 3xx authorization and duplicate raw
-roster/holdout pixels do not authorize this plan's current live target.
+- The old catalog example named `main` as K314 / `K314a4452b3900` / level 1 and
+  `npc_2` as K157 / `NPC 2` / level 22. Re-resolve current configuration; neither
+  example selects or authorizes a target.
+- Saved `0042` and `0108` publish K157 / `0 sticker NPC` / level 15. That is not
+  the `npc_2` identity. Preserve spelling/level distinctions and exact matching.
+- The corrected bottom-row fixture publishes K303 / level 5. Historical 3xx
+  permission and duplicate raw/holdout pixels are not current target authority.
 
-The earlier NPC 2 runs establish neither that it is still selected nor that it
-is the intended switch destination. The worker must observe the current source
-freshly, retain its exact identity, and match it to the configured catalog
-before constructing the return step. Use the user's supplied alternate preference
-if present; otherwise choose one different already-configured alias on that same
-authorized account and freeze its full identity. If several exist, a deterministic
-alias order is sufficient for the one round-trip proof; it is a test-target choice,
-not a new selection policy. Restoration to the observed source is fixed. If no
-valid configured alternate/source pair exists, ask the user for that exact missing
-configuration decision rather than waiting for another package.
-
-| Decision or permission | State | Worker action |
-| --- | --- | --- |
-| `mega_old_acc` account and its configured instance | Granted | Resolve through the canonical account/lease runtime; do not hard-code an ADB endpoint. |
-| In-game switch and return actions | Granted by the user | Use only the reviewed typed route and exact observed controls; selection has no resource budget to spend. |
-| Live role | Configured `DAILY_CANARY` | Pass the exact configured role required by the caller; missing authority is a runtime stop. Do not substitute `LIVE_TESTING`. |
-| Current source castle | Fresh observed runtime fact | Preflight the selected row, retain its exact full identity, and match it to the configured catalog before constructing the return step. If it cannot be matched exactly, stop rather than inventing a return target. |
-| Alternate target alias | Feature worker chooses within the authorized configured account, honoring any supplied preference | Record a different configured alias and fresh full identity before input. Old screenshots do not select the current target. |
-| Return/round-trip policy | Fixed by this package | Return to the freshly observed source through the same reviewed route and prove exact source identity/Home before cleanup. |
-| Other accounts, unconfigured castles, config edits, credentials/session secrets, direct game-service calls or external sign-in | Not authorized by this handoff | Do not access or change them. |
-| Merge, push, destructive Git/filesystem operations | Not part of this handoff | Deliver a reviewable feature change and its own acceptance report; a later merge is not a DoD predicate. |
+Record account/instance/role, applicable switch permission, fresh source, exact
+alternate, return target and cleanup policy in the nonsecret run manifest. Keep
+other accounts, unconfigured castles, protected-config changes and external
+sign-in outside the assignment unless explicitly authorized. Merge/push authority
+comes from the execution session, not this handoff.
 
 ## Independent source and producer checkpoint
 
@@ -179,9 +190,9 @@ producer defect in its canonical field parser/semantic crop/control definition;
 never supply a desired identity from config or the workflow target.
 
 `CoreRuntime.observe_ready` and the no-claim checkpoint fix are implemented.
-Preserve their timing, freshness and no-replay behavior. Home/Institute object
-acquisition belongs to 01 and the other building acquisition to 02; those facts
-are unnecessary for entering More/Settings and are not this feature's blockers.
+Preserve their timing, freshness and no-replay behavior. Home building
+acquisition belongs to V02–V03; it is unnecessary for More/Settings entry and
+is not this feature's blocker.
 The World Search/dialog edge formerly listed here must be implemented and accepted
 within 03, so castle completion neither waits for it nor repeats its proof.
 
@@ -287,14 +298,14 @@ The meaningful new tests, if required, are narrowly defined:
 
 ## Bounded live proof
 
-The feature worker selects the already-configured alternate under the target
-policy above, honoring any user preference. Record that target identity, the freshly observed source
+The feature worker resolves the authorized configured alternate under the target
+policy above, honoring the current assignment's choice and scope. Record that target identity, the freshly observed source
 identity and a sanitized reset/checkpoint identifier in a unique ignored
 artifact directory.
 The saved K303 level-5 3xx result and earlier 3xx authorization do not satisfy
-this current target choice. Use the canonical process-scoped lease for
-`mega_old_acc`,
-hold it across both hops, and preserve a pre-existing instance through the
+this current target choice. Use the canonical process-scoped lease for the
+assigned account/instance, hold it across both hops, and preserve a pre-existing
+instance through the
 existing cleanup policy. Do not edit account/castle configuration to
 manufacture a target.
 
@@ -302,8 +313,9 @@ After the initial fresh preflight observes the source, match that exact
 `CastleIdentity` to the account target catalog and construct one authored
 `RunScript` with explicit typed selection steps, for example
 `ENSURE_GAME_RUNNING`, `SELECT_CASTLE(target)`, then `SELECT_CASTLE(source)`.
-Invoke the production ScriptRunner path once with the configured
-`DAILY_CANARY` role, the selected cleanup policy and no mutation boundary.
+Invoke the production ScriptRunner path once with the actual configured live
+role required by that caller, the selected cleanup policy and no mutation boundary.
+Verify the role contract; do not hard-code the historical `DAILY_CANARY` allocation.
 Resolve the target and return identities through the account target catalog; do
 not substitute a hand-written identity or raw ADB endpoint. If the observed
 source cannot be matched exactly to a configured return target, stop before a
@@ -426,22 +438,16 @@ methods and their tests belong to this worker and do not require consultation.
 
 ## Copyable worker kickoff
 
-> Reuse your suitable existing isolated task worktree and feature branch; create
-> another worktree only if the current checkout is shared or unsuitable. Preserve
-> ongoing task work. For a fresh start use the assignment's pinned commit containing
-> merged `6bc27585fbac1244672cf4a653ea6248955a4aca` and this plan revision,
-> recording both bases. Own the castle/selected-roster
-> and More/Settings/Manage producers, both-observer fixtures/qualification, exact
-> selection/preflight/navigation/caller semantics and tests. Do not wait for B or
-> the Login task, reserve whole shared files, or import dirty peer work. Start
-> with an authenticated mega_old_acc session; freshly observe source, choose a
-> different configured alias within the standing authority and freeze the exact
-> round trip. Preserve the 0 sticker NPC versus 0 stickerNPC distinction, kingdom
-> and supplied level checks, bounded scans, one tap per actual hop and no-replay.
-> Use real saved evidence and the repository runner, then the canonical leased
-> production two-selection script and Home/identity/cleanup proof. World Search
-> is package 03's work, Login/preparation ordering is 05's, and neither completion
-> gates this feature. Consult the core/non-YOLO task only for a concrete generic
-> service question; ask the user for a missing external input or unresponsive
-> BlueStacks manipulation. Deliver your own reviewable change and complete DoD
-> evidence independently of the final combined merge.
+> Implement the revised package 06 with PNC_CORE_REMAINING_VISION_BOUNDARY.md.
+> Preserve resumed work and record actual code/plan revisions. Reuse V01 shared
+> visual/observation machinery. Own only uncovered More/Settings/Manage Characters
+> and roster recognition, exact identity, bounded scan/selection, typed callers
+> and alignment, and an authorized actual switch/return proof. Do not implement
+> V02/V03 Home camera/building panning, V41 Castle building menus, World inspection
+> or the Search/dialog edge. Keep Login/provider ordering in package 05. Qualify
+> changed roster/control facts in both observers; retain exact kingdom/name/level
+> matching and no replay after uncertainty. Use the current assignment's authorized
+> target/configured role, freeze fresh source and alternate identities, and run
+> both production hops on one runtime/lease. Historical aliases, roles and budgets
+> are not the execution allocation. Report tests, actual switch/return identity
+> and Home evidence, cleanup and exact remaining gaps.

@@ -20,9 +20,9 @@ These files have dated DROPPED banners and replacement links. Their original his
 |---|---|
 | Zero full-frame OCR, two-path publication, independent screen/overlay identity, bounded unknown diagnostics | Preserve landed behavior; V01 and the common contract govern any changed boundary. No redo of the original migration. |
 | Exact castle identity and mutation journal matching | [Core feature06](../PNC_CORE_REMAINING_06_CASTLE_NAVIGATION_PLAN.md) and the canonical mutation owner; no fuzzy identity correction. |
-| World Search selector, coordinates, map objects | [Core feature03](../PNC_CORE_REMAINING_03_GATHERING_PLAN.md) retains route/dispatch ownership; V19 handles qualified object publication. |
+| World Search selector, coordinates, map objects | V19 owns qualified World object publication and read-only inspection routes; existing coordinate reading/movement is reused. [Core feature03](../PNC_CORE_REMAINING_03_GATHERING_PLAN.md) retains the missing Search/dialog correction and gathering-only actions/receipts. |
 | Research queue eligibility and Start receipts | [Core feature01](../PNC_CORE_REMAINING_01_RESEARCH_LIVE_PLAN.md) plus V04 facts; V05–07 extend categories. |
-| Campaign Hero Formation mismatch / stage provenance | [Core feature04](../PNC_CORE_REMAINING_04_CAMPAIGN_PLAN.md), V13–14. |
+| Campaign Hero Formation mismatch / stage provenance | V13–14 own facts, navigation and existing consumer endpoint correction. [Core feature04](../PNC_CORE_REMAINING_04_CAMPAIGN_PLAN.md) consumes these for policy, typed workflow/results and public/authored caller migration. |
 | March slots, active collection/report correlation and dispatch receipts | Core feature03; these are not satisfied by the World vision bridge. |
 | Market zero-selection form versus recipient list | V27, with separate exact surface identity and no transport action. |
 | Native Login/provider route and actual Mail send/delivery receipts | [Core feature05](../PNC_CORE_REMAINING_05_MAIL_LOGIN_PLAN.md) retains applicable work. The vision plans add no messaging or account-switch authorization. |
@@ -39,7 +39,7 @@ The old [Building Actions subplan](../abandonned/PNC_BUILDING_ACTIONS_SUBPLAN.md
 
 - [Screen recognition exploration](../PNC_SCREEN_RECOGNITION_EXPLORATION.md) and its review are dated investigation evidence, not a new implementation queue.
 - [Screen recognition implementation](../PNC_SCREEN_RECOGNITION_IMPLEMENTATION.md), [non-YOLO implementation](../PNC_NON_YOLO_RECOGNITION_IMPLEMENTATION.md), capture findings and integration reviews remain historical implementation/evidence records.
-- [Core workflow porting](../PNC_CORE_WORKFLOW_PORTING_PLAN.md) and its six feature plans retain unfinished action/caller/receipt work. Only their vision handoff references are updated.
+- [Core workflow porting](../PNC_CORE_WORKFLOW_PORTING_PLAN.md) and its six feature plans retain unfinished action/caller/receipt work. Retrieved packages 03–06 are actively narrowed by the [scope amendment](../PNC_CORE_REMAINING_VISION_BOUNDARY.md); none is retired. Mail/Login and account-selection recognition remain outside V01–V43.
 - [A/B coordination](../PNC_AB_COORDINATED_CONTINUATION.md) retains historical integration context with a current pointer; its old recognition-agent queue is superseded.
 - [YOLO prototype](../PNC_YOLO_PROTOTYPE.md) and current model work are not replaced by Home/menu OpenCV plans. V19 consumes that work after qualification.
 

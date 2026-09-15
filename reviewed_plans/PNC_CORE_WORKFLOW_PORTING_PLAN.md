@@ -2,14 +2,26 @@
 
 ## Vision planning amendment — September 15
 
-The [modular vision plan](PNC_VISION_MODULAR_PLAN.md) now owns feature vision/menu planning. The older recognition plan, checklist and B follow-up are DROPPED; their links below retain historical evidence. Use the [retirement map](vision_modules/PLAN_RETIREMENT.md) to trace unfinished requirements. The six core feature plans keep their current workflow, caller, action and receipt ownership. No historical wait-for-B rule or queued recognition handoff blocks the new feature packets.
+The [modular vision plan](PNC_VISION_MODULAR_PLAN.md) owns its assigned perception,
+menu and navigation work. The [03–06 scope amendment](PNC_CORE_REMAINING_VISION_BOUNDARY.md)
+removes that work from the four retrieved core plans: 03 consumes V19; 04 consumes
+V02/V13/V14; 05 and 06 retain their uncovered Mail/Login and account-selection
+screens while reusing V01. Workflow, caller, action and receipt work remains in
+the core packages. Specific V outputs are technical dependencies, not a blanket
+wait for all 43 packets. This amendment supersedes conflicting full-vertical
+ownership and no-peer-dependency language below and in recovered launch prompts.
+
+The older recognition plan, checklist and B follow-up are DROPPED; their links
+retain historical evidence. Use the [retirement map](vision_modules/PLAN_RETIREMENT.md)
+for traceability. None of packages 03–06 is dropped: each retains work outside
+V01–V43. No old wait-for-B or queued handoff rule is reinstated.
 
 ## Current purpose and execution boundary
 
 The September 14 instruction makes the six feature plans independently executable.
-Each feature agent owns its required observation facts, navigation, canonical
-operation, direct/authored/Daily entry adapters where applicable, tests and live
-acceptance. Continue core and Continue non-YOLO provide occasional consultation
+Each feature agent owns its remaining workflow, canonical operation,
+direct/authored/Daily adapters and acceptance. It implements observation/navigation
+only where the current scope amendment leaves that work outside V01–V43. Continue core and Continue non-YOLO provide occasional consultation
 for a specific cross-cutting question; neither supplies a routine approval,
 producer release, shared-file edit or definition-of-done gate.
 
@@ -297,19 +309,21 @@ Campaign battle execution, automatic Daily scheduling or unrelated YOLO work.
 |---|---|
 | Development Research, including missing Institute Home acquisition | 01, including its producer correction, route, caller and one-Start receipt |
 | Nineteen remaining building endpoints, construction and upgrade policies | 02, including visual facts, normal/optional branches, feature action identities and direct/Daily entry parity |
-| Gathering target/slots/formation/march correlation, World Search dialog and execution | 03, including feature action identity, Stone policy and direct/Daily entry parity |
-| Campaign stage selection through formation and return | 04, including stage/preparation producers and callers |
+| Gathering policy/slots/formation/march correlation, World Search dialog and dispatch | 03 consumes V19 object/inspection outputs; retains gathering-only facts, action identity, Stone policy and direct/Daily parity |
+| Campaign policy and typed workflow/callers through preparation and Home | 04 consumes V02/V13/V14 facts, navigation and endpoint correction; owns remaining policy/composition/caller acceptance |
 | Mail send and actual Login/session preparation | 05, including producers, exact new-send receipt and authentication proof |
 | Exact alternate-castle round trip and More/Settings | 06, including roster/control producers and navigation |
-| Resource partial cards, Hero result sequence and broader Research | Existing separate follow-up; none is a prerequisite for completing 01–06 |
+| Resource partial cards, Hero result sequence and broader Research | V09, V18 and V05–07 respectively; only specific outputs actually consumed are dependencies |
 | Combined integration of independently accepted features | Later integration activity; not a feature's definition of done |
 
 ## Six remaining agent packages
 
 Each plan is a complete assignment to one accountable feature agent. That agent
 may delegate cohesive implementation work, but retains its own diagnosis,
-ownership decisions, review and acceptance. No feature agent waits for another
-feature agent to finish, hand back files, approve tests or run its live proof.
+ownership decisions, review and acceptance within the current scope split.
+Independent work proceeds without organizational handbacks. Acceptance still needs
+the specific qualified V outputs consumed; no agent duplicates their implementation
+merely to avoid that dependency.
 
 | Package | Saved plan | Definition-of-done boundary |
 |---|---|---|
@@ -361,11 +375,12 @@ facts from filenames, expected destinations or workflow targets.
 
 ### Independence, producer ownership and entry conditions
 
-A feature owns the full vertical path for its supported behavior. Its agent may
-edit the necessary feature-specific vision models/IDs, bounded semantic OCR plans,
-visual anchors/controls, parsers, publication hooks in BOTH observers, captured
-fixtures and qualification tests. This supersedes the older blanket rule that B
-alone edits vision files. Generic OCR execution, visual matching algorithms,
+A core feature owns only the remaining path assigned by the current scope split.
+For uncovered screens (Gathering action/receipt surfaces, Mail/Login, More/Settings
+and roster), it may edit feature-specific models/IDs, bounded semantic OCR,
+controls/parsers, both-observer publication, fixtures and qualification. For
+V-owned surfaces, consume the relevant packet's qualified outputs instead. The
+historical rule that B alone edits vision files remains superseded. Generic OCR execution, visual matching algorithms,
 foreground guards, freshness/recovery mechanics, ADB/lease infrastructure and
 unrelated feature facts remain shared services to reuse, not rewrite.
 
@@ -373,8 +388,8 @@ unrelated feature facts remain shared services to reuse, not rewrite.
 |---|---|
 | 01 Institute Home acquisition and Development Research | Institute Home object/nameplate/action binding; Development tree/node/detail and Research Queue fact/control keys; `ResearchWorkflow`, Research caller/dispatcher branches and `start_research` contract. Preserve already-supported neighboring Home objects. No Institute upgrade-panel policy or broader Research category changes. |
 | 02 Building navigation/construction/upgrade | Remaining building object identities, build/upgrade/prerequisite/queue/speedup/help panels and keys, including Institute upgrade/requirements and shared build-queue content; building `TaskId` branches, feature policies and action receipts. May repair canonical general Home-building acquisition for owned routes, preserving the existing Institute output contract and 01's Research-specific focus behavior. |
-| 03 Gathering | World resource-node/occupancy/slot/status facts, Search/coordinate-dialog control and edge, march formation and march/report correlation; Gathering `TaskId` branch, resource/formation policy and action receipts. Campaign hero formation is excluded. The Search-edge remainder formerly in 06 moves here so world navigation does not depend on a castle task. |
-| 04 Campaign | Campaign Home-entry object/control, map/chapter/stage/mode/eligibility and Campaign hero formation fields/controls/return edges; Campaign policy, workflow and caller branches. Gathering march formation is a separate screen/contract. |
+| 03 Gathering | Consume V19 World objects and inspection routes. Retain additional gathering-only selected-node eligibility, slots/active marches, formation, march/report receipts, Search/dialog correction and Gathering policy/action/callers. No duplicate World detector or spatial parser. |
+| 04 Campaign | Consume V02 Home entry and V13/V14 facts, selection/formation/return operations and existing task endpoint correction. Retain ordered policy, typed workflow/result composition and public/authored callers; no producer/profile/route implementation. |
 | 05 Mail/Login | Compose/recipient/profile-route/send-receipt and actual Login/provider overlays/identity; Mail/Login caller branches; authentication/lifecycle sequence in `ScriptRunner._prepare_account_session_steps`. Calls existing castle selection without changing its matching or alignment semantics. |
 | 06 Castle/navigation | Castle/selected-roster identity and measured list-entry controls, More/Settings/Manage Characters; `SelectCastleWorkflow`, active-identity preflight, selection branches and `AutomationRunner._align_step_castle_target`. Does not redesign Login/preparation ordering. |
 
@@ -400,7 +415,9 @@ has an actual reproducible defect that cannot be avoided by a valid declared
 initial state, consult Continue core once with the exact predicate/evidence;
 do not add a local bypass or turn every feature into another Login/castle port.
 
-Feature-specific missing facts are normal owned work. A proven defect in a generic
+Missing facts on uncovered feature surfaces remain owned work. Gaps in transferred
+V surfaces stay with their named V owner; consumers record the dependency and
+continue independent work. A proven defect in a generic
 service outside the ownership table is a rare consultation with Continue core
 (runtime/authority) or Continue non-YOLO (generic vision). Send one bounded question
 with the relevant symbols, evidence and proposed smallest change; continue
@@ -465,9 +482,10 @@ capabilities as part of exposing an explicit Go-entry adapter.
 
 ### Permission and unanswered-detail register
 
-The user's standing authority covers `mega_old_acc`, any needed in-game action,
-and unlimited in-game resources. Each proof records its actual target/action and
-minimum useful bounds. Existing exact runtime policies remain enforced until the
+Use the current execution session's explicit target/action authority. Historical
+`mega_old_acc` and unlimited-budget entries do not allocate a future run. Preserve
+applicable authorization already supplied without asking again; each proof records
+its account/instance, configured role, actual action and minimum useful bounds. Existing exact runtime policies remain enforced until the
 owning feature implements a supported explicit replacement; authority never
 bypasses fresh identity, configured live roles, receipts or no-replay checks.
 Use canonical BlueStacks APIs/leases, not desktop mouse/keyboard control. Ask the
@@ -482,7 +500,7 @@ Only genuine external choices stay open, locally to their feature:
 |---|---|
 | Exact Mail recipient kind/name/kingdom and subject/body | 05 asks the user directly before Send; other packages continue. No authority to message another person is inferred from a resource budget. |
 | Actual Login/provider method and any required private interaction | 05 asks the user without requesting credentials in chat; implement only the selected route. |
-| Alternate castle for the 06 round trip | 06 records a user-selected alias if supplied; otherwise it may choose a different already-configured alias on authorized mega_old_acc, freeze its exact identity and return to the observed source. No other agent chooses it or runs the proof. |
+| Alternate castle for the 06 round trip | 06 uses the current assignment's exact alternate, or chooses a different configured alias only if that choice is authorized. Freeze its fresh identity and return to the observed source on the same assigned account. |
 | Missing local role, changed configured identity or unavailable live evidence | The affected feature reports the exact runtime/configuration input to the user; it does not wait for another feature to repair unrelated configuration. |
 
 Live processes sharing the same physical emulator still use the canonical
@@ -572,8 +590,8 @@ Preserve the committed manual Hero single; do not replay it.
 The historical [B follow-up handoff](../dropped_plan/PNC_B_FOLLOWUP_RECOGNITION_HANDOFF.md)
 is retired. The modular plan assigns Resource partial cards to V09, Hero
 summon/result recognition to V18, and broader Research to V05–07. Each feature
-owns its required producer/caller integration under the current ownership
-contract. Retirement does not mark those dependencies delivered or change
+owns its remaining caller/action integration under the current scope amendment;
+the named V packet owns transferred producer/navigation implementation. Retirement does not mark those dependencies delivered or change
 the existing mutation executors and receipt requirements.
 
 ## Stop/report and completion
@@ -587,7 +605,8 @@ work. No operator substitutes a desired target or missing fact to pass a guard.
 A live stop retains its first unproved predicate, action/receipt state and cleanup;
 independent offline work may continue. Missing required acceptance is incomplete,
 not Done-with-a-blocker. Complete a feature when its named scope and evidence pass,
-without waiting for peers. The later combined candidate has its own integration
+without waiting for unrelated peers; required V output qualification still applies.
+The later combined candidate has its own integration
 validation and does not retroactively replace missing feature-level live proof.
 Automatic Daily scheduling and broader D01 rollout remain separate. Building and
 Gathering's explicit direct/Daily Go adapters are included in their feature plans.
