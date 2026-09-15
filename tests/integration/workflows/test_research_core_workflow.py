@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 import unittest
 
@@ -143,23 +143,71 @@ class ResearchCoreWorkflowTests(unittest.TestCase):
                     checkpoint=self.checkpoint,
                 )
 
-    def test_ambiguous_or_clipped_node_is_denied_before_research_start(self) -> None:
-        """Refuses incomplete or duplicate Development geometry without opening or starting a node."""
+    def test_duplicate_development_node_is_denied_before_research_start(self) -> None:
+        """Retains fail-closed duplicate-title handling before any node is opened."""
 
-        for entries in (
-            (_complete_entry("Construction I"), _complete_entry("Construction I")),
-            (_clipped_entry("Construction I"),),
-        ):
-            with self.subTest(entries=entries):
-                context = _FakeResearchContext(_tree(*entries))
-                workflow = ResearchWorkflow(
-                    policy=ResearchPolicy(priority=(ResearchCategory.DEVELOPMENT,)),
-                    checkpoint=self.checkpoint,
-                )
-                with self.assertRaises(TaskVerificationError):
-                    workflow.execute(context)
-                self.assertEqual(0, context.open_node_calls)
-                self.assertEqual(0, context.start_calls)
+        entries = (_complete_entry("Construction I"), _complete_entry("Construction I"))
+        context = _FakeResearchContext(_tree(*entries))
+        workflow = ResearchWorkflow(
+            policy=ResearchPolicy(priority=(ResearchCategory.DEVELOPMENT,)),
+            checkpoint=self.checkpoint,
+        )
+        with self.assertRaises(TaskVerificationError):
+            workflow.execute(context)
+        self.assertEqual(0, context.open_node_calls)
+        self.assertEqual(0, context.start_calls)
+
+    def test_bad_geometry_is_skipped_for_a_later_complete_peer(self) -> None:
+        """Skips a clipped row and inspects the next complete eligible Development row."""
+
+        context = _FakeResearchContext(
+            _tree(_clipped_entry("Construction I"), _complete_entry("Research Speed I"))
+        )
+        result = ResearchWorkflow(
+            policy=ResearchPolicy(priority=(ResearchCategory.DEVELOPMENT,)),
+            checkpoint=self.checkpoint,
+        ).execute(context)
+
+        self.assertEqual(ResearchDisposition.STARTED, result.disposition)
+        self.assertEqual("Research Speed I", result.node_title)
+        self.assertEqual(1, context.open_node_calls)
+        self.assertEqual(1, context.start_calls)
+
+    def test_invalid_action_geometry_is_skipped_for_a_later_complete_peer(self) -> None:
+        """Skips an unreadable row with unusable action geometry."""
+
+        invalid = _complete_entry("Construction I")
+        invalid = replace(
+            invalid,
+            action_point=None,
+            action_bounds=None,
+            row_status=RowRecognitionStatus.UNREADABLE,
+        )
+        context = _FakeResearchContext(
+            _tree(invalid, _complete_entry("Research Speed I"))
+        )
+        result = ResearchWorkflow(
+            policy=ResearchPolicy(priority=(ResearchCategory.DEVELOPMENT,)),
+            checkpoint=self.checkpoint,
+        ).execute(context)
+
+        self.assertEqual(ResearchDisposition.STARTED, result.disposition)
+        self.assertEqual("Research Speed I", result.node_title)
+        self.assertEqual(1, context.open_node_calls)
+        self.assertEqual(1, context.start_calls)
+
+    def test_only_bad_geometry_returns_no_visible_disposition(self) -> None:
+        """Leaves the mutation budget untouched when every eligible row is unreadable."""
+
+        context = _FakeResearchContext(_tree(_clipped_entry("Construction I")))
+        result = ResearchWorkflow(
+            policy=ResearchPolicy(priority=(ResearchCategory.DEVELOPMENT,)),
+            checkpoint=self.checkpoint,
+        ).execute(context)
+
+        self.assertEqual(ResearchDisposition.NO_VISIBLE_SUPPORTED_NODE, result.disposition)
+        self.assertEqual(0, context.open_node_calls)
+        self.assertEqual(0, context.start_calls)
 
     def test_start_failure_propagates_without_replay(self) -> None:
         """Leaves an ambiguous or failed mutation result to the boundary without replaying Start."""

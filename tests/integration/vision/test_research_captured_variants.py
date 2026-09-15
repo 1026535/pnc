@@ -16,7 +16,11 @@ from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.navigation_perception import NavigationPerception
 from pnc_automation.app.pnc.vision.observation_builder import ImageSelectorEngine, ObservationBuilder
-from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservationEnricher
+from pnc_automation.app.pnc.vision.pnc_observation_enricher import (
+    PncObservationEnricher,
+    _research_detail_queue_available,
+    _research_detail_resources_sufficient,
+)
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
 from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
 from pnc_automation.app.pnc.vision.visual_screen_recognizer import load_visual_screen_recognizer
@@ -225,6 +229,68 @@ def _assert_bounded_reads(test: unittest.TestCase, ocr: _BoundedOcrService) -> N
 
 class ResearchCapturedVariantTests(unittest.TestCase):
     """Keep only observed Research controls authoritative across both consumers."""
+
+    def test_two_row_cost_set_requires_visual_completeness_before_true(self) -> None:
+        """Keeps a reviewed two-row detail fundable only when both displayed rows are read."""
+
+        lines = _detail_lines(
+            title="Food Output I (2/4)",
+            might="Might +320",
+            effect="Food Production Speed+6%",
+            level="23",
+            institute="Institute:Lv.3",
+        )
+        image = _load_fixture("economy_detail_idle.png")
+        self.assertTrue(_research_detail_resources_sufficient(lines, image=image))
+        self.assertIsNone(
+            _research_detail_resources_sufficient(lines[:-1], image=image),
+        )
+        self.assertFalse(
+            _research_detail_resources_sufficient(
+                (
+                    *lines[:12],
+                    _line("1,000/2,000", 106, 673, 115),
+                    _line("434,442/2,290", 106, 725, 105),
+                ),
+                image=image,
+            )
+        )
+        self.assertFalse(
+            _research_detail_resources_sufficient(
+                (*lines[:11], _line("1,000/2,000", 106, 673, 115)),
+                image=image,
+            )
+        )
+        self.assertIsNone(
+            _research_detail_resources_sufficient(
+                (*lines[:12], _line("434,442/???", 106, 725, 105)),
+                image=image,
+            )
+        )
+        self.assertFalse(
+            _research_detail_resources_sufficient(
+                (
+                    *lines[:11],
+                    _line("1,000/2,000", 106, 673, 115),
+                    _line("434,442/???", 106, 725, 105),
+                ),
+                image=image,
+            )
+        )
+
+    def test_queue_fact_requires_positive_idle_text(self) -> None:
+        """Does not infer idle from detail chrome or from a missing warning."""
+
+        lines = _detail_lines(
+            title="Food Output I (2/4)",
+            might="Might +320",
+            effect="Food Production Speed+6%",
+            level="23",
+            institute="Institute:Lv.3",
+        )
+        self.assertIsNone(_research_detail_queue_available(lines))
+        self.assertTrue(_research_detail_queue_available((*lines, _line("Idle", 106, 640, 34))))
+        self.assertFalse(_research_detail_queue_available(_active_detail_lines()))
 
     def test_idle_normal_detail_publishes_blue_start_without_premium_start(self) -> None:
         """Idle Economy captures expose blue Start through both production paths."""

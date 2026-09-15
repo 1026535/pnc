@@ -389,7 +389,7 @@ class ResearchTreeVisualControlTests(unittest.TestCase):
         self.assertEqual(detail.screen_type, ScreenType.PNC_RESEARCH_TREE)
         self.assertEqual(detail.decision.guard, GuardVerdict.CLEAR)
         self.assertTrue(detail.research_start_resources_sufficient)
-        self.assertTrue(detail.research_start_queue_available)
+        self.assertIsNone(detail.research_start_queue_available)
         start = detail.require(UiElementId.PNC_RESEARCH_START_BUTTON)
         self.assertEqual(start.source_kind, VisibleElementSourceKind.TEMPLATE)
         self.assertEqual(start.source_screen, ScreenType.PNC_RESEARCH_TREE)

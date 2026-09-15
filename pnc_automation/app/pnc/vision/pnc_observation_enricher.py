@@ -7900,7 +7900,10 @@ def _build_research_tree_additions(
         )
     return ObservationAdditions(
         list_entries=entries,
-        research_start_resources_sufficient=_research_detail_resources_sufficient(lines),
+        research_start_resources_sufficient=_research_detail_resources_sufficient(
+            lines,
+            image=image,
+        ),
         research_start_queue_available=_research_detail_queue_available(lines),
         screen_evidence=(
             ()
@@ -7963,8 +7966,19 @@ def _research_node_candidates(lines: tuple[OcrLine, ...]) -> tuple[_ResearchNode
     return tuple(sorted(unique.values(), key=lambda item: (item.line.bounds.y, item.line.bounds.x)))
 
 
-def _research_detail_resources_sufficient(lines: tuple[OcrLine, ...]) -> bool | None:
-    """Return whether every fully parsed resource row can fund normal Research."""
+def _research_detail_resources_sufficient(
+    lines: tuple[OcrLine, ...],
+    *,
+    image: Image.Image | None = None,
+) -> bool | None:
+    """Return whether the complete displayed cost set can fund normal Research.
+
+    A detail may show two, three, or four cost rows.  OCR alone cannot prove
+    that the final row was not missed, so a positive result requires the
+    observed ratio count to match the blue row-marker count from the same
+    frame.  A confidently parsed short row remains a definitive negative even
+    when another row is missing or malformed.
+    """
 
     normalized = {normalize_ocr_text(line.text) for line in lines}
     if not (
@@ -7974,10 +7988,30 @@ def _research_detail_resources_sufficient(lines: tuple[OcrLine, ...]) -> bool | 
         and any(text.startswith("INSTITUTELV") for text in normalized)
     ):
         return None
+    institute_line = next(
+        (
+            line
+            for line in lines
+            if normalize_ocr_text(line.text).startswith("INSTITUTELV")
+        ),
+        None,
+    )
+    if institute_line is None:
+        return None
+    cost_lines = tuple(
+        line
+        for line in lines
+        if line.bounds.y > institute_line.bounds.y + institute_line.bounds.height
+    )
     requirements: list[tuple[int, int]] = []
+    malformed_cost_row = False
     for line in lines:
+        if line not in cost_lines:
+            continue
         match = _RESEARCH_DETAIL_RESOURCE_RATIO_PATTERN.fullmatch(line.text)
         if match is None:
+            if "/" in line.text:
+                malformed_cost_row = True
             continue
         current_text = match.group("current").replace(",", "").replace(" ", "")
         required_text = match.group("required").replace(",", "").replace(" ", "")
@@ -7985,17 +8019,25 @@ def _research_detail_resources_sufficient(lines: tuple[OcrLine, ...]) -> bool | 
             current = int(current_text)
             required = int(required_text)
         except ValueError:
-            return None
+            malformed_cost_row = True
+            continue
         if required <= 0:
-            return None
+            malformed_cost_row = True
+            continue
         requirements.append((current, required))
+    if any(current < required for current, required in requirements):
+        return False
     if len(requirements) < 2:
         return None
-    return all(current >= required for current, required in requirements)
+    if malformed_cost_row or image is None:
+        return None
+    if _research_detail_visual_cost_row_count(image, institute_line) != len(requirements):
+        return None
+    return True
 
 
 def _research_detail_queue_available(lines: tuple[OcrLine, ...]) -> bool | None:
-    """Return whether the proved normal Research detail has an idle queue."""
+    """Return whether the proved normal Research detail positively proves an idle queue."""
 
     normalized = {normalize_ocr_text(line.text) for line in lines}
     if not (
@@ -8005,7 +8047,50 @@ def _research_detail_queue_available(lines: tuple[OcrLine, ...]) -> bool | None:
         and any(text.startswith("INSTITUTELV") for text in normalized)
     ):
         return None
-    return not any(text.startswith("NOIDLEQUEUE") for text in normalized)
+    if any(text.startswith("NOIDLEQUEUE") for text in normalized):
+        return False
+    # The detail's normal blue Research control is not queue evidence.  Only
+    # an explicit, exact Idle status can authorize a positive result here.
+    return True if "IDLE" in normalized else None
+
+
+def _research_detail_visual_cost_row_count(
+    image: Image.Image,
+    institute_line: OcrLine,
+) -> int:
+    """Count the resource-row markers below the Institute fact in one frame."""
+
+    rgb_image = image if image.mode == "RGB" else image.convert("RGB")
+    marker_center_x = round(rgb_image.width * 0.106)
+    marker_half_width = max(3, round(rgb_image.width * 0.02))
+    start_y = institute_line.bounds.y + institute_line.bounds.height + round(rgb_image.height * 0.01)
+    end_y = rgb_image.height - round(rgb_image.height * 0.03)
+    marker_rows: list[int] = []
+    pixels = rgb_image.load()
+    for y in range(max(0, start_y), min(rgb_image.height, end_y)):
+        marker_pixels = 0
+        for x in range(
+            max(0, marker_center_x - marker_half_width),
+            min(rgb_image.width, marker_center_x + marker_half_width + 1),
+        ):
+            red, green, blue = pixels[x, y]
+            if (
+                red <= 100
+                and green >= 50
+                and blue >= 80
+                and green - red >= 20
+                and blue - green >= 20
+            ):
+                marker_pixels += 1
+        if marker_pixels >= 3:
+            marker_rows.append(y)
+    groups: list[list[int]] = []
+    for y in marker_rows:
+        if not groups or y > groups[-1][-1] + 1:
+            groups.append([y])
+        else:
+            groups[-1].append(y)
+    return sum(len(group) >= 3 for group in groups)
 
 
 def _match_research_development_label(text: str) -> tuple[str, bool] | None:

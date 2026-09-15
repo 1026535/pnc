@@ -334,7 +334,7 @@ class HomeDevelopmentResearchCapturedTests(unittest.TestCase):
             self.assertTrue(start.bounds.contains_point(start.action_point))
             self.assertEqual(capture.frame_ref, start.frame_ref)
             self.assertFalse(observation.research_start_resources_sufficient)
-            self.assertTrue(observation.research_start_queue_available)
+            self.assertIsNone(observation.research_start_queue_available)
 
 
 if __name__ == "__main__":

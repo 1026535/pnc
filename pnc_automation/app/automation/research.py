@@ -212,6 +212,26 @@ def _select_development_node(
     if not candidates:
         return None
 
+    matching_titles = [entry.title_text for entry in candidates]
+    duplicate_titles = {
+        title
+        for title in matching_titles
+        if title is not None and matching_titles.count(title) > 1
+    }
+    if duplicate_titles:
+        raise TaskVerificationError(
+            "Development research node is ambiguous; no node was opened or started.",
+            candidate_count=len(candidates),
+        )
+
+    candidates = [
+        entry
+        for entry in candidates
+        if _development_node_geometry_is_actionable(entry)
+    ]
+    if not candidates:
+        return None
+
     target = choose_priority_entry(
         candidates,
         policy.priority,
@@ -219,27 +239,24 @@ def _select_development_node(
     )
     if target is None:
         return None
-    matching_titles = [entry.title_text for entry in candidates]
     if target.title_text is None or matching_titles.count(target.title_text) != 1:
         raise TaskVerificationError(
             "Development research node is ambiguous; no node was opened or started.",
             candidate_count=len(candidates),
         )
-    if target.row_status != RowRecognitionStatus.COMPLETE:
-        raise TaskVerificationError(
-            "Development research node is not completely observed; no node was opened or started.",
-            row_status=target.row_status.value,
-        )
-    if (
-        target.action_point is None
-        or target.action_bounds is None
-        or not target.action_bounds.contains_point(target.action_point)
-        or not target.bounds.contains_bounds(target.action_bounds)
-    ):
-        raise TaskVerificationError(
-            "Development research node has no valid observed action geometry; no mutation was attempted."
-        )
     return target
+
+
+def _development_node_geometry_is_actionable(entry: DetectedListEntry) -> bool:
+    """Return whether one eligible Development row has complete tap geometry."""
+
+    return (
+        entry.row_status == RowRecognitionStatus.COMPLETE
+        and entry.action_point is not None
+        and entry.action_bounds is not None
+        and entry.action_bounds.contains_point(entry.action_point)
+        and entry.bounds.contains_bounds(entry.action_bounds)
+    )
 
 
 def _development_viewport_signature(
