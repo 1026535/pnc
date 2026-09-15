@@ -705,7 +705,7 @@
       },
       "review": {
         "reference_manifest": "tests/data/screen_recognition/manifest.json",
-        "description": "Reviewed Savannah full-height hero offer identity from static icon, hero artwork, and empty panel chrome; mutable reward content is excluded and the X is separate.",
+        "description": "Reviewed Savannah full-height hero offer identity from the static element icon and lower panel structure; hero animation, mutable reward content, and the separate X are excluded.",
         "build": null,
         "locale": null,
         "qualification": "guarded_reference_only"
@@ -722,23 +722,13 @@
           "threshold": 0.98
         },
         {
-          "image": "screen_anchors/popup/savannah_offer_art.png",
+          "image": "screen_anchors/popup/savannah_offer_panel_structure.png",
           "search_region": [
-            160,
-            160,
-            230,
-            300
+            10,
+            780,
+            250,
+            150
           ],
-          "threshold": 0.97
-        },
-        {
-        "image": "screen_anchors/popup/savannah_offer_panel_structure.png",
-        "search_region": [
-          10,
-          780,
-          250,
-          150
-        ],
           "threshold": 0.97
         }
       ],

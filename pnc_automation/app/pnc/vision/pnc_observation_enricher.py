@@ -5672,7 +5672,10 @@ def _build_visual_popup_close_additions(
             reason="weak_visual_close_x_ambiguous",
         )
     close_bounds = candidates[0]
-    modal_bounds = _measure_visual_modal_bounds(image=image)
+    modal_bounds = _measure_visual_modal_bounds(
+        image=image,
+        required_point=close_bounds.center(),
+    )
     if modal_bounds is None:
         return _weak_visual_popup_close_additions(
             image=image,
@@ -5835,14 +5838,21 @@ def _world_map_overview_chrome_proven(*, image: Image.Image, lines: tuple[OcrLin
 def _has_visual_popup_surface(*, image: Image.Image, close_bounds: Bounds) -> bool:
     """Return whether measured modal ownership contains the candidate X."""
 
-    modal = _measure_visual_modal_bounds(image=image)
+    modal = _measure_visual_modal_bounds(
+        image=image,
+        required_point=close_bounds.center(),
+    )
     return modal is not None and (
         modal.x <= close_bounds.center()[0] < modal.x + modal.width
         and modal.y <= close_bounds.center()[1] < modal.y + modal.height
     )
 
 
-def _measure_visual_modal_bounds(*, image: Image.Image) -> Bounds | None:
+def _measure_visual_modal_bounds(
+    *,
+    image: Image.Image,
+    required_point: tuple[int, int] | None = None,
+) -> Bounds | None:
     """Measure coherent modal edges across separated bands and a boundary."""
 
     rgb = np.asarray(image.convert("RGB"), dtype=np.int16)
@@ -5885,6 +5895,10 @@ def _measure_visual_modal_bounds(*, image: Image.Image) -> Bounds | None:
         for left_count, left_x, left_signal, left_first, left_last in left_edges
         for right_count, right_x, right_signal, right_first, right_last in right_edges
         if right_x > left_x and right_x - left_x + 1 >= int(width * 0.50)
+        and (
+            required_point is None
+            or left_x <= required_point[0] <= right_x
+        )
     )
     full_height_pairs = tuple(pair for pair in edge_pairs if pair[4] >= 2.0 and pair[5] >= 2.0)
     if not full_height_pairs:

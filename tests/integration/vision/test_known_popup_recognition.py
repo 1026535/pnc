@@ -103,6 +103,18 @@ class KnownPopupRecognitionTests(unittest.TestCase):
                 PopupControlKind.CLOSE_X,
                 "hero_offer_full_height",
             ),
+            "savannah_hero_offer_serious_stuff_holdout.png": (
+                ScreenType.PNC_POPUP,
+                UiElementId.PNC_POPUP_CLOSE_BUTTON,
+                PopupControlKind.CLOSE_X,
+                "hero_offer_full_height",
+            ),
+            "savannah_hero_offer_mega_old_acc_holdout_900.png": (
+                ScreenType.PNC_POPUP,
+                UiElementId.PNC_POPUP_CLOSE_BUTTON,
+                PopupControlKind.CLOSE_X,
+                "hero_offer_full_height",
+            ),
             "lucifer_special_offer.png": (
                 ScreenType.PNC_POPUP,
                 UiElementId.PNC_POPUP_CLOSE_BUTTON,
@@ -157,6 +169,8 @@ class KnownPopupRecognitionTests(unittest.TestCase):
             "savannah_hero_offer.png",
             "savannah_hero_offer_fresh_900.png",
             "savannah_hero_offer_holdout_900_second.png",
+            "savannah_hero_offer_serious_stuff_holdout.png",
+            "savannah_hero_offer_mega_old_acc_holdout_900.png",
         ):
             capture = _capture(name)
             for observation in (builder.build(capture), navigation.build(capture)):

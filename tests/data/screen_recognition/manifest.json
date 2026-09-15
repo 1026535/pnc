@@ -83,6 +83,26 @@
       ]
     },
     {
+      "image": "savannah_hero_offer_serious_stuff_holdout.png",
+      "screen": "PNC_POPUP",
+      "split": "holdout",
+      "group": "2026-09-15/serious_stuff/a02_route_preflight_064011Z",
+      "sha256": "4fe8938198b89fb77912b1bcc14e4ef68643adeabb306fb10889bea3bf922726",
+      "expected_visual_screens": [
+        "PNC_POPUP"
+      ]
+    },
+    {
+      "image": "savannah_hero_offer_mega_old_acc_holdout_900.png",
+      "screen": "PNC_POPUP",
+      "split": "holdout",
+      "group": "2026-09-15/mega_old_acc/research_prefunded_115047Z",
+      "sha256": "c42e6e7c749159769109f24e75a0e93e11782da2756a8f19e8de084729fd6658",
+      "expected_visual_screens": [
+        "PNC_POPUP"
+      ]
+    },
+    {
       "image": "valiant_conquest.png",
       "screen": "PNC_POPUP",
       "split": "reference",
@@ -1004,7 +1024,9 @@
       "split": "validation",
       "group": "2026-09-13/capture_gap_exploration/hero_offer",
       "sha256": "71d700c087dca28ace93a71ff9e50f409cb2f6abab11b67aea2615ac7aca7b2b",
-      "expected_visual_screens": []
+      "expected_visual_screens": [
+        "PNC_POPUP"
+      ]
     },
     {
       "image": "castle_identity_variants/castle_identity_3xx_holdout.png",
