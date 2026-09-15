@@ -76,6 +76,40 @@ class AutomationApiTests(RuntimeCastleTargetingFixtures, unittest.TestCase):
         )
         self.assertEqual(fake_runner.prepare_calls, [])
 
+    def test_python_research_forwards_explicit_bag_resource_confirmation(self) -> None:
+        """Publishes the spending opt-in only when the caller enables it."""
+
+        fake_runner = _FakeApplicationRunner()
+        api = AutomationApi(application=fake_runner)
+
+        api.research(
+            account_id="account_a",
+            priority=["development"],
+            confirm_resource_shortfall_from_bag=True,
+            mutation_boundary=self.mutation_boundary,
+        )
+
+        self.assertEqual(
+            fake_runner.research_calls,
+            [
+                (
+                    "account_a",
+                    {
+                        "priority": ["development"],
+                        "confirm_resource_shortfall_from_bag": True,
+                    },
+                    self.mutation_boundary,
+                )
+            ],
+        )
+
+        with self.assertRaisesRegex(TypeError, "must be a bool"):
+            api.research(
+                account_id="account_a",
+                confirm_resource_shortfall_from_bag=1,
+                mutation_boundary=self.mutation_boundary,
+            )
+
     def test_python_generic_run_task_no_longer_accepts_castle_targeting(self) -> None:
         """Keeps explicit castle alignment out of the public direct-call task API."""
 

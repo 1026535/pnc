@@ -21,6 +21,7 @@ from pnc_automation.app.pnc.domain.observation import (
     SpatialSurfaceType,
     VisibleElementSourceKind,
 )
+from pnc_automation.app.pnc.domain.popup import PopupControlKind
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.navigation_perception import NavigationPerception
@@ -46,6 +47,8 @@ from tests.support.pnc.capture_vision.require_rapid_ocr_service import _require_
 
 FIXTURES = TEST_DATA_ROOT / "screen_recognition"
 MOTIVATING_FIXTURE = "home_city_development_research_institute.png"
+RESOURCE_AUTO_USE_FIXTURE = "development_research_resource_auto_use_popup.png"
+ACTIVE_RESEARCH_FIXTURE = "development_research_speed_active.png"
 
 
 @dataclass(slots=True)
@@ -335,6 +338,100 @@ class HomeDevelopmentResearchCapturedTests(unittest.TestCase):
             self.assertEqual(capture.frame_ref, start.frame_ref)
             self.assertFalse(observation.research_start_resources_sufficient)
             self.assertIsNone(observation.research_start_queue_available)
+
+    def test_live_resource_auto_use_popup_is_task_owned_in_both_paths(self) -> None:
+        """The exact live popup publishes its measured task-owned controls."""
+
+        capture = _capture(
+            RESOURCE_AUTO_USE_FIXTURE,
+            session_id="package-01-research-resource-auto-use",
+        )
+        ocr = _BoundedRapidOcrService(_require_rapid_ocr_service(self))
+        builder, navigation = _wire(ocr)
+
+        observations = []
+        for operation in (
+            lambda: builder.build(capture),
+            lambda: navigation.build(capture, include_content=True),
+        ):
+            ocr.bind(capture.image.size)
+            observation = operation()
+            calls = tuple(ocr.calls)
+            observations.append(observation)
+            whole = ImageBounds(0, 0, *capture.image.size)
+            self.assertTrue(calls)
+            self.assertTrue(
+                all(region is not None and region != whole for region in calls)
+            )
+            self.assertIn(ImageBounds(27, 224, 846, 976), calls)
+
+        for observation in observations:
+            self.assertEqual(ScreenType.PNC_POPUP, observation.screen_type)
+            self.assertTrue(observation.blocking_popup)
+            self.assertEqual("blocked", observation.decision.guard.value)
+            cancel = observation.require(UiElementId.PNC_POPUP_CLOSE_BUTTON)
+            self.assertIn(
+                cancel.source_kind,
+                {VisibleElementSourceKind.OCR, VisibleElementSourceKind.GEOMETRY},
+            )
+            self.assertTrue(cancel.bounds.contains_point(cancel.action_point))
+            confirm = observation.require(
+                UiElementId.PNC_RESEARCH_RESOURCE_CONFIRM_BUTTON
+            )
+            self.assertEqual(VisibleElementSourceKind.OCR, confirm.source_kind)
+            self.assertEqual(Bounds(563, 1170, 139, 29), confirm.bounds)
+            self.assertEqual((632, 1184), confirm.action_point)
+            self.assertEqual(capture.frame_ref, confirm.frame_ref)
+            self.assertIsNotNone(observation.popup_overlay)
+            assert observation.popup_overlay is not None
+            self.assertEqual(
+                "research_resource_auto_use",
+                observation.popup_overlay.layout_id,
+            )
+            self.assertIsNotNone(
+                observation.popup_overlay.candidate(
+                    PopupControlKind.RESEARCH_RESOURCE_CONFIRM
+                )
+            )
+
+    def test_live_shifted_active_detail_is_proved_in_both_paths(self) -> None:
+        """The correlated post-Start frame is active even while alliance Help is available."""
+
+        capture = _capture(
+            ACTIVE_RESEARCH_FIXTURE,
+            session_id="package-01-research-active-reconciliation",
+        )
+        ocr = _BoundedRapidOcrService(_require_rapid_ocr_service(self))
+        builder, navigation = _wire(ocr)
+        request = ObservationRequest.source_screen_retry(ScreenType.PNC_RESEARCH_TREE)
+
+        observations = []
+        for operation in (
+            lambda: builder.build(capture, request=request),
+            lambda: navigation.build(capture, include_content=True),
+        ):
+            ocr.bind(capture.image.size)
+            observation = operation()
+            calls = tuple(ocr.calls)
+            observations.append(observation)
+            whole = ImageBounds(0, 0, *capture.image.size)
+            self.assertTrue(calls)
+            self.assertTrue(
+                all(region is not None and region != whole for region in calls)
+            )
+
+        for observation in observations:
+            self.assertEqual(ScreenType.PNC_RESEARCH_TREE, observation.screen_type)
+            self.assertEqual("clear", observation.decision.guard.value)
+            self.assertIn(
+                "visual_anchor:research_tree_node_detail_active",
+                {evidence.reason for evidence in observation.decision.evidence},
+            )
+            self.assertFalse(
+                observation.has(UiElementId.PNC_RESEARCH_START_BUTTON)
+            )
+            self.assertFalse(observation.research_start_queue_available)
+            self.assertEqual(capture.frame_ref, observation.frame_ref)
 
 
 if __name__ == "__main__":

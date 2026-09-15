@@ -157,7 +157,13 @@ class ResearchWorkflow(CoreWorkflow[ResearchResult]):
                     category=ResearchCategory.DEVELOPMENT,
                 )
                 if (
-                    detail.research_start_resources_sufficient is True
+                    (
+                        detail.research_start_resources_sufficient is True
+                        or (
+                            detail.research_start_resources_sufficient is False
+                            and self.policy.confirm_resource_shortfall_from_bag
+                        )
+                    )
                     and detail.research_start_queue_available is True
                 ):
                     target = candidate
@@ -179,7 +185,12 @@ class ResearchWorkflow(CoreWorkflow[ResearchResult]):
             raise TaskVerificationError(
                 "Development research node has no stable title; no mutation was attempted."
             )
-        checkpoint, outcome = context.start_research(self.checkpoint)
+        checkpoint, outcome = context.start_research(
+            self.checkpoint,
+            confirm_resource_shortfall_from_bag=(
+                self.policy.confirm_resource_shortfall_from_bag
+            ),
+        )
         if outcome.quest_id != DailyQuestId.UPGRADE_RESEARCH:
             raise ValueError("WorkflowContext.start_research returned an unrelated mutation outcome.")
         return ResearchResult(

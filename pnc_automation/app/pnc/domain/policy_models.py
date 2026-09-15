@@ -197,6 +197,7 @@ class ResearchPolicy:
         ResearchCategory.MILITARY,
         ResearchCategory.FORTIFICATION,
     )
+    confirm_resource_shortfall_from_bag: bool = False
 
     @classmethod
     def from_params(cls, params: Mapping[str, Any]) -> "ResearchPolicy":
@@ -207,7 +208,11 @@ class ResearchPolicy:
                 params.get("priority", [member.value for member in cls().priority]),
                 enum_type=ResearchCategory,
                 field_name="priority",
-            )
+            ),
+            confirm_resource_shortfall_from_bag=_parse_bool(
+                params.get("confirm_resource_shortfall_from_bag", False),
+                field_name="confirm_resource_shortfall_from_bag",
+            ),
         )
 
 

@@ -15,7 +15,19 @@ from pnc_automation.app.automation.engine.task import TaskId
 from pnc_automation.app.authoring.config.daily_maintenance import DailyCapabilityPolicy, DailyMaintenanceTargetConfig
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.domain.daily_maintenance import DailyQuestId, DailyTaskCheckpoint, MutationAcknowledgement, MutationIntentState
-from pnc_automation.app.pnc.domain.observation import DetectedListEntry, ListEntryKind, RowRecognitionStatus, VisibleElement
+from pnc_automation.app.pnc.domain.observation import (
+    DetectedListEntry,
+    ListEntryKind,
+    RowRecognitionStatus,
+    VisibleElement,
+    VisibleElementSourceKind,
+)
+from pnc_automation.app.pnc.domain.popup import (
+    PopupControlKind,
+    PopupDismissCandidate,
+    PopupEvidenceKind,
+    PopupOverlayObservation,
+)
 from pnc_automation.app.pnc.domain.policy_models import ResearchCategory
 from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict, ScreenDecision, ScreenEvidence
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
@@ -160,15 +172,115 @@ class CoreResearchMutationTests(unittest.TestCase):
             "research_tree_node_detail",
             start=True,
             resources_sufficient=False,
+            queue_available=True,
         )
         runtime, context = self.context((self.grid, self.idle, self.idle, short))
         context.open_research_node("Construction I", ResearchCategory.DEVELOPMENT)
 
-        with self.assertRaisesRegex(RuntimeError, "sufficient observed resources"):
+        with self.assertRaisesRegex(RuntimeError, "Bag confirmation is disabled"):
             context.start_research(self.checkpoint)
 
         self.assertEqual(1, runtime.actuator.execute_action.call_count)
         self.assertIsNone(self.load())
+
+    def test_opt_in_journals_before_confirm_then_starts_from_funded_detail(self):
+        """Confirms exact Auto Use once, re-proves funding, and sends the second Research tap."""
+
+        short = research(
+            "research_tree_node_detail",
+            start=True,
+            resources_sufficient=False,
+            queue_available=True,
+        )
+        funded = research(
+            "research_tree_node_detail",
+            start=True,
+            resources_sufficient=True,
+            queue_available=True,
+        )
+        popup_bounds = Bounds(120, 70, 80, 30)
+        popup = make_observation(
+            ScreenType.PNC_POPUP,
+            visible_ids=(UiElementId.PNC_RESEARCH_RESOURCE_CONFIRM_BUTTON,),
+            source_kinds={
+                UiElementId.PNC_RESEARCH_RESOURCE_CONFIRM_BUTTON: VisibleElementSourceKind.OCR,
+            },
+            visible_texts={
+                UiElementId.PNC_RESEARCH_RESOURCE_CONFIRM_BUTTON: "Confirm",
+            },
+            blocking_popup=True,
+            image_size=(540, 960),
+            popup_overlay=PopupOverlayObservation(
+                image_size=(540, 960),
+                layout_id="research_resource_auto_use",
+                candidates=(
+                    PopupDismissCandidate(
+                        PopupControlKind.RESEARCH_RESOURCE_CONFIRM,
+                        popup_bounds,
+                        popup_bounds.center(),
+                        1.0,
+                        PopupEvidenceKind.OCR_TEXT,
+                        extracted_text="Confirm",
+                    ),
+                ),
+            ),
+        )
+        runtime, context = self.context(
+            (self.grid, short, short, short, popup, funded, self.active, self.active)
+        )
+        context.open_research_node("Construction I", ResearchCategory.DEVELOPMENT)
+        dispatched_selectors = []
+
+        def check_dispatch(action, source):
+            dispatched_selectors.append(action.selector_id)
+            if action.selector_id == UiElementId.PNC_RESEARCH_START_BUTTON and len(dispatched_selectors) == 1:
+                self.assertIsNone(self.load())
+            if action.selector_id == UiElementId.PNC_RESEARCH_RESOURCE_CONFIRM_BUTTON:
+                self.assertEqual(MutationIntentState.DISPATCHED, self.load().mutation_intents[0].state)
+            return True
+
+        runtime.actuator.execute_action.side_effect = check_dispatch
+        checkpoint, outcome = context.start_research(
+            self.checkpoint,
+            confirm_resource_shortfall_from_bag=True,
+        )
+
+        self.assertEqual(
+            [
+                UiElementId.PNC_RESEARCH_START_BUTTON,
+                UiElementId.PNC_RESEARCH_RESOURCE_CONFIRM_BUTTON,
+                UiElementId.PNC_RESEARCH_START_BUTTON,
+            ],
+            dispatched_selectors,
+        )
+        self.assertEqual(MutationIntentState.COMMITTED, checkpoint.mutation_intents[0].state)
+        self.assertEqual("success", outcome.status.value)
+
+    def test_opt_in_refuses_unrecognized_popup_without_creating_intent(self):
+        """The non-mutating reveal tap cannot authorize an unrelated generic Confirm."""
+
+        short = research(
+            "research_tree_node_detail",
+            start=True,
+            resources_sufficient=False,
+            queue_available=True,
+        )
+        generic = make_observation(
+            ScreenType.PNC_POPUP,
+            visible_ids=(UiElementId.PNC_POPUP_CLOSE_BUTTON,),
+            blocking_popup=True,
+        )
+        runtime, context = self.context((self.grid, short, short, short, generic))
+        context.open_research_node("Construction I", ResearchCategory.DEVELOPMENT)
+
+        with self.assertRaisesRegex(RuntimeError, "exact Auto Use popup"):
+            context.start_research(
+                self.checkpoint,
+                confirm_resource_shortfall_from_bag=True,
+            )
+
+        self.assertIsNone(self.load())
+        self.assertEqual(2, runtime.actuator.execute_action.call_count)
 
     def test_busy_research_queue_does_not_create_intent_or_dispatch_start(self):
         busy = research(

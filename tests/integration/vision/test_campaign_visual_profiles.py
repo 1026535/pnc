@@ -187,7 +187,7 @@ class CampaignVisualProfileTests(unittest.TestCase):
                     self.assertTrue(observation.has(selector))
                     self.assertEqual(observation.visible_elements[selector].frame_ref, capture.frame_ref)
                 self.assertFalse(observation.list_entries)
-                self.assertEqual(backend.regions, [Bounds(16, 240, 508, 480)])
+                self.assertEqual(backend.regions, [Bounds(16, 134, 508, 586)])
 
     def test_campaign_ocr_regions_scale_reference_geometry(self) -> None:
         """Scale the reviewed Campaign regions without changing their native reference geometry."""

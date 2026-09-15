@@ -498,6 +498,29 @@ class PopupRecoveryTests(unittest.TestCase):
 
         self.assertEqual(self.session.taps, [])
 
+    def test_research_resource_confirm_is_not_swallowed(self) -> None:
+        """Leaves the exact Bag-resource confirmation to the Research operation owner."""
+
+        popup = make_observation(
+            ScreenType.PNC_POPUP,
+            visible_ids=(
+                UiElementId.PNC_POPUP_CLOSE_BUTTON,
+                UiElementId.PNC_RESEARCH_RESOURCE_CONFIRM_BUTTON,
+            ),
+            blocking_popup=True,
+        )
+
+        with self.assertRaisesRegex(SelectorResolutionError, "safe close selector"):
+            self.executor.recover_interruption_if_required(
+                popup,
+                label_prefix="research-task-owned",
+                observe=lambda *_args, **_kwargs: self.fail(
+                    "Research task-owned popup must not be dismissed"
+                ),
+            )
+
+        self.assertEqual(self.session.taps, [])
+
     def test_screen_flow_planner_rejects_untyped_popup_instead_of_using_back(self) -> None:
         popup = make_observation(ScreenType.PNC_POPUP, blocking_popup=True)
 

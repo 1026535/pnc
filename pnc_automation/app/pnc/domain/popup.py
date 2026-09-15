@@ -26,6 +26,7 @@ class PopupControlKind(StrEnum):
     POPUP_BACK = "popup_back"
     UPDATE_CONFIRM = "update_confirm"
     RECONNECT_CONFIRM = "reconnect_confirm"
+    RESEARCH_RESOURCE_CONFIRM = "research_resource_confirm"
 
 
 class PopupEvidenceKind(StrEnum):
@@ -50,6 +51,7 @@ TASK_OWNED_POPUP_SELECTOR_IDS = frozenset(
         UiElementId.PNC_BUILDING_UPGRADE_CONFIRM_BUTTON,
         UiElementId.PNC_BUILDING_UPGRADE_WARNING_CONFIRM_BUTTON,
         UiElementId.PNC_BUILD_SPEEDUP_CONFIRM_BUTTON,
+        UiElementId.PNC_RESEARCH_RESOURCE_CONFIRM_BUTTON,
         UiElementId.PNC_MARCH_CONFIRM_BUTTON,
         UiElementId.PNC_MAIL_COMPOSE_SEND_BUTTON,
         UiElementId.PNC_CHAT_SEND_BUTTON,

@@ -29,7 +29,7 @@ from pnc_automation.app.pnc.domain.observation import (
 )
 from pnc_automation.app.pnc.domain.policy_models import ResearchCategory, ResearchPolicy
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
-from pnc_automation.core.errors import TaskVerificationError
+from pnc_automation.core.errors import ScriptValidationError, TaskVerificationError
 from tests.support.pnc.observations import make_observation
 
 
@@ -269,6 +269,47 @@ class ResearchCoreWorkflowTests(unittest.TestCase):
         self.assertEqual(2, context.close_detail_calls)
         self.assertEqual(0, context.start_calls)
 
+    def test_opt_in_selects_one_unfunded_detail_for_bag_confirmation(self) -> None:
+        """Carries the explicit Bag-resource opt-in to the mutation boundary."""
+
+        context = _FakeResearchContext(
+            _tree(_complete_entry("Construction II")),
+            detail_resources={"Construction II": False},
+        )
+
+        result = ResearchWorkflow(
+            policy=ResearchPolicy(
+                priority=(ResearchCategory.DEVELOPMENT,),
+                confirm_resource_shortfall_from_bag=True,
+            ),
+            checkpoint=self.checkpoint,
+        ).execute(context)
+
+        self.assertEqual(ResearchDisposition.STARTED, result.disposition)
+        self.assertEqual("Construction II", result.node_title)
+        self.assertEqual([True], context.confirm_resource_shortfall_flags)
+
+    def test_research_policy_parses_strict_bag_confirmation_opt_in(self) -> None:
+        """Defaults the spending branch off and rejects non-boolean authored values."""
+
+        default = ResearchPolicy.from_params({"priority": ["development"]})
+        enabled = ResearchPolicy.from_params(
+            {
+                "priority": ["development"],
+                "confirm_resource_shortfall_from_bag": True,
+            }
+        )
+
+        self.assertFalse(default.confirm_resource_shortfall_from_bag)
+        self.assertTrue(enabled.confirm_resource_shortfall_from_bag)
+        with self.assertRaisesRegex(ScriptValidationError, "to be a boolean"):
+            ResearchPolicy.from_params(
+                {
+                    "priority": ["development"],
+                    "confirm_resource_shortfall_from_bag": "true",
+                }
+            )
+
 
 @dataclass
 class _FakeResearchContext:
@@ -284,6 +325,7 @@ class _FakeResearchContext:
         self.start_calls = 0
         self.scroll_calls = 0
         self.close_detail_calls = 0
+        self.confirm_resource_shortfall_flags: list[bool] = []
         self._trees = self.tree if isinstance(self.tree, tuple) else (self.tree,)
         self._tree_index = 0
 
@@ -334,11 +376,17 @@ class _FakeResearchContext:
         return self._trees[self._tree_index]
 
     def start_research(
-        self, checkpoint: DailyTaskCheckpoint,
+        self,
+        checkpoint: DailyTaskCheckpoint,
+        *,
+        confirm_resource_shortfall_from_bag: bool = False,
     ) -> tuple[DailyTaskCheckpoint, DailyTargetOutcome]:
         """Records one authorized mutation request and propagates boundary failures."""
 
         self.start_calls += 1
+        self.confirm_resource_shortfall_flags.append(
+            confirm_resource_shortfall_from_bag
+        )
         self.calls.append(("start", checkpoint))
         if self.start_error is not None:
             raise self.start_error

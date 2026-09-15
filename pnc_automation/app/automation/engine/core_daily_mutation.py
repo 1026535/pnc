@@ -47,6 +47,7 @@ from pnc_automation.app.pnc.domain.daily_maintenance import (
     MutationIntentState,
 )
 from pnc_automation.app.pnc.domain.observation import Observation, VisibleElementSourceKind
+from pnc_automation.app.pnc.domain.popup import PopupControlKind
 from pnc_automation.app.pnc.domain.daily_quest_catalog import DailyQuestCatalog
 from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
@@ -308,12 +309,16 @@ class CoreMutationBoundary:
         *,
         runtime: CoreRuntime,
         observe: Callable[[str], Observation],
+        observe_task_owned_interruption: Callable[[str], Observation],
         node_title: str,
         checkpoint: DailyTaskCheckpoint,
+        confirm_resource_shortfall_from_bag: bool = False,
     ) -> tuple[DailyTaskCheckpoint, DailyTargetOutcome]:
         """Start one normal research item; uncertain dispatch is never replayed."""
 
         self.authorize()
+        if type(confirm_resource_shortfall_from_bag) is not bool:
+            raise TypeError("Research Bag resource confirmation opt-in must be a bool.")
         if self.policy.quest_id != DailyQuestId.UPGRADE_RESEARCH:
             raise PermissionError("This scope does not authorize Research.")
         self._require_checkpoint(checkpoint)
@@ -335,32 +340,109 @@ class CoreMutationBoundary:
             )
             or control is None
             or control.source_kind != VisibleElementSourceKind.TEMPLATE
-            or source.research_start_resources_sufficient is not True
+            or type(source.research_start_resources_sufficient) is not bool
             or source.research_start_queue_available is not True
             or _is_active_research_detail(source)
         ):
             raise RuntimeError(
                 "Research requires a fresh, guarded normal Start control with an idle queue and "
-                "sufficient observed resources."
+                "an exact observed resource sufficiency fact."
+            )
+        uses_bag_resources = source.research_start_resources_sufficient is False
+        if uses_bag_resources and not confirm_resource_shortfall_from_bag:
+            raise RuntimeError(
+                "Research has insufficient observed resources and Bag confirmation is disabled."
             )
         executor = runtime.runtime.require_observed_action_executor(
             "Core Research requires the canonical observed action executor."
         )
+        resource_popup: Observation | None = None
+        if uses_bag_resources:
+            revealed = executor.execute_action(
+                TapAction(
+                    selector_id=UiElementId.PNC_RESEARCH_START_BUTTON,
+                    reason="reveal_research_resource_shortfall",
+                ),
+                source,
+            )
+            if not revealed:
+                raise RuntimeError(
+                    "Research resource shortfall popup was not requested; no intent was created."
+                )
+            for index in range(runtime.navigation.policy.max_observations):
+                runtime.navigation.sleep(runtime.navigation.policy.poll_seconds)
+                candidate = observe_task_owned_interruption(
+                    f"research_resource_popup_after_{index}"
+                )
+                if _is_exact_research_resource_popup(candidate):
+                    resource_popup = candidate
+                    break
+                if candidate.screen_type not in {
+                    ScreenType.PNC_RESEARCH_TREE,
+                    ScreenType.PNC_LOADING,
+                    ScreenType.UNKNOWN,
+                }:
+                    break
+            if resource_popup is None:
+                raise RuntimeError(
+                    "Research resource shortfall did not produce the exact Auto Use popup; "
+                    "no Bag resources were confirmed and no intent was created."
+                )
+
+        dispatched_source = source
 
         def dispatch() -> None:
+            nonlocal dispatched_source
+            if resource_popup is not None:
+                confirmed = executor.execute_action(
+                    TapAction(
+                        selector_id=UiElementId.PNC_RESEARCH_RESOURCE_CONFIRM_BUTTON,
+                        reason="confirm_research_resource_shortfall_from_bag",
+                    ),
+                    resource_popup,
+                )
+                if not confirmed:
+                    raise RuntimeError(
+                        "Research Bag resource confirmation was not executed; "
+                        "its journal prevents replay."
+                    )
+                funded_detail = None
+                for index in range(runtime.navigation.policy.max_observations):
+                    runtime.navigation.sleep(runtime.navigation.policy.poll_seconds)
+                    candidate = observe_task_owned_interruption(
+                        f"research_resource_confirmed_after_{index}"
+                    )
+                    if _is_funded_idle_research_detail(candidate):
+                        funded_detail = candidate
+                        break
+                    if candidate.blocking_popup and not _is_exact_research_resource_popup(candidate):
+                        break
+                    if candidate.screen_type not in {
+                        ScreenType.PNC_POPUP,
+                        ScreenType.PNC_RESEARCH_TREE,
+                        ScreenType.PNC_LOADING,
+                        ScreenType.UNKNOWN,
+                    }:
+                        break
+                if funded_detail is None:
+                    raise RuntimeError(
+                        "Research Bag resources were confirmed, but the same funded idle detail "
+                        "was not proved; the journal prevents replay."
+                    )
+                dispatched_source = funded_detail
             executed = executor.execute_action(
                 TapAction(
                     selector_id=UiElementId.PNC_RESEARCH_START_BUTTON,
                     reason="start_research",
                 ),
-                source,
+                dispatched_source,
             )
             if not executed:
                 raise RuntimeError("Research Start was not executed; its journal prevents replay.")
 
         def reconcile() -> MutationReconciliation:
             after = runtime.navigation.confirm_content_after_action(
-                source,
+                dispatched_source,
                 frozenset({ScreenType.PNC_RESEARCH_TREE}),
                 "research_started",
                 observe,
@@ -383,10 +465,18 @@ class CoreMutationBoundary:
                 operation_id="research-001",
                 quest_id=DailyQuestId.UPGRADE_RESEARCH,
                 expected_precondition=(
-                    f"Selected research {node_title} has a normal Start control and sufficient resources"
+                    f"Selected research {node_title} has a normal Start control and "
+                    + (
+                        "an exact resource Auto Use confirmation"
+                        if uses_bag_resources
+                        else "sufficient resources"
+                    )
                 ),
                 expected_postcondition="Guarded active research detail with no Start control",
-                metadata={"node_title": node_title},
+                metadata={
+                    "node_title": node_title,
+                    "confirmed_resource_shortfall_from_bag": uses_bag_resources,
+                },
             ),
             dispatch=dispatch,
             reconcile=reconcile,
@@ -405,3 +495,39 @@ class CoreMutationBoundary:
             ),
             artifact_paths=result.artifact_paths,
         )
+
+
+def _is_exact_research_resource_popup(observation: Observation) -> bool:
+    """Require the task-owned Auto Use identity before Bag resources may be confirmed."""
+
+    overlay = observation.popup_overlay
+    return (
+        observation.screen_type == ScreenType.PNC_POPUP
+        and observation.blocking_popup
+        and observation.decision.guard == GuardVerdict.BLOCKED
+        and observation.has(UiElementId.PNC_RESEARCH_RESOURCE_CONFIRM_BUTTON)
+        and overlay is not None
+        and overlay.layout_id == "research_resource_auto_use"
+        and overlay.candidate(PopupControlKind.RESEARCH_RESOURCE_CONFIRM) is not None
+    )
+
+
+def _is_funded_idle_research_detail(observation: Observation) -> bool:
+    """Require the same normal funded detail shape before the second Research tap."""
+
+    control = observation.visible_elements.get(UiElementId.PNC_RESEARCH_START_BUTTON)
+    return (
+        observation.screen_type == ScreenType.PNC_RESEARCH_TREE
+        and not observation.blocking_popup
+        and observation.decision.guard == GuardVerdict.CLEAR
+        and any(
+            evidence.screen_type == ScreenType.PNC_RESEARCH_TREE
+            and evidence.reason == "visual_anchor:research_tree_node_detail"
+            for evidence in observation.decision.evidence
+        )
+        and control is not None
+        and control.source_kind == VisibleElementSourceKind.TEMPLATE
+        and observation.research_start_resources_sufficient is True
+        and observation.research_start_queue_available is True
+        and not _is_active_research_detail(observation)
+    )

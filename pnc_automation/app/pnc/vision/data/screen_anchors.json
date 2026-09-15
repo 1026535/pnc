@@ -1568,9 +1568,9 @@
           "image": "screen_anchors/research_node_detail_0.png",
           "search_region": [
             476,
-            248,
+            80,
             48,
-            49
+            260
           ],
           "threshold": 0.95
         },
@@ -1578,22 +1578,22 @@
           "image": "screen_anchors/research_node_detail_active_speedup.png",
           "search_region": [
             350,
-            410,
+            390,
             180,
-            85
+            105
           ],
           "threshold": 0.97
         }
       ],
-      "revision": 1,
+      "revision": 2,
       "source": {
-        "fixture": "research_node_detail_active.png",
-        "decoded_sha256": "d528d880814f582794683b3a9a9e6633d2ac646ef6df131b13b94a80b5b21698",
-        "capture_group": "2026-09-12/testing"
+        "fixture": "development_research_speed_active.png",
+        "decoded_sha256": "30bcb23bf91d2c18fd3e65c2aca4c2fac9e259f70dd521c8342e62be15b13a11",
+        "capture_group": "2026-09-15/mega_old_acc/npc_2/development_research"
       },
       "review": {
         "reference_manifest": "tests/data/screen_recognition/manifest.json",
-        "description": "Reviewed active Construction research detail with stable blue Speedup button chrome; mutable progress fill and timer text are excluded and no active controls are exposed.",
+        "description": "Reviewed active Construction and live Development research details across bounded vertical panel motion with stable blue Speedup button chrome; mutable progress fill and timer text are excluded and no active controls are exposed.",
         "build": null,
         "locale": null,
         "qualification": "guarded_reference_only"

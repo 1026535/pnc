@@ -235,6 +235,16 @@
       ]
     },
     {
+      "image": "development_research_speed_active.png",
+      "screen": "PNC_RESEARCH_TREE",
+      "split": "reference",
+      "group": "2026-09-15/mega_old_acc/npc_2/development_research",
+      "sha256": "30bcb23bf91d2c18fd3e65c2aca4c2fac9e259f70dd521c8342e62be15b13a11",
+      "expected_visual_screens": [
+        "PNC_RESEARCH_TREE"
+      ]
+    },
+    {
       "image": "goddess_statue_audit.png",
       "screen": "PNC_GODDESS_STATUE",
       "split": "reference",

@@ -81,6 +81,9 @@ class Runtime:
     def observe(self, label, *, include_content=False):
         return self.fresh(next(self.observations))
 
+    def observe_task_owned_interruption(self, label, *, include_content=False):
+        return self.fresh(next(self.observations))
+
 
 @dataclass
 class ClaimWorkflow:

@@ -112,6 +112,17 @@ class CoreRuntime:
             started_at=started,
         )
 
+    def observe_task_owned_interruption(
+        self,
+        label: str,
+        *,
+        include_content: bool = False,
+    ) -> Observation:
+        """Capture a task-owned popup transition without generic dismissal recovery."""
+
+        self._last_observe_recovered = False
+        return self._observe_once(label, include_content=include_content)
+
     def _observe_once(self, label: str, *, include_content: bool) -> Observation:
         """Captures and perceives one frame without recursively entering popup recovery."""
 

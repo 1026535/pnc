@@ -103,7 +103,7 @@ def compile_guard_ocr_region_plans(
         return ()
     width, height = image_size
     regions = (
-        (OcrRegionPurpose.MODAL_CONTENT, "foreground_modal", (0.03, 0.25, 0.94, 0.50)),
+        (OcrRegionPurpose.MODAL_CONTENT, "foreground_modal", (0.03, 0.14, 0.94, 0.61)),
     )
     return tuple(
         OcrRegionPlan(

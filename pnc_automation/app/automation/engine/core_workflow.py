@@ -250,7 +250,12 @@ class WorkflowContext:
         finally:
             self._sync_from_runtime()
 
-    def start_research(self, checkpoint: DailyTaskCheckpoint) -> tuple[DailyTaskCheckpoint, DailyTargetOutcome]:
+    def start_research(
+        self,
+        checkpoint: DailyTaskCheckpoint,
+        *,
+        confirm_resource_shortfall_from_bag: bool = False,
+    ) -> tuple[DailyTaskCheckpoint, DailyTargetOutcome]:
         """Use the canonical one-research boundary only after this context selected its node."""
 
         if (
@@ -262,8 +267,12 @@ class WorkflowContext:
         self._research_node = None
         try:
             return self._mutation_boundary.start_research(
-                runtime=self._runtime, observe=self._observe_research_content,
-                node_title=title, checkpoint=checkpoint,
+                runtime=self._runtime,
+                observe=self._observe_research_content,
+                observe_task_owned_interruption=self._observe_research_resource_transition,
+                node_title=title,
+                checkpoint=checkpoint,
+                confirm_resource_shortfall_from_bag=confirm_resource_shortfall_from_bag,
             )
         finally:
             self._sync_from_runtime()
@@ -272,6 +281,33 @@ class WorkflowContext:
         """Keep research captures fresh; operation owners evaluate their published facts."""
 
         observation = self._observe_operation_content(label, operation="Research")
+        return self._carry_research_queue_proof(observation)
+
+    def _observe_research_resource_transition(self, label: str) -> Observation:
+        """Capture the task-owned Auto Use transition without generic popup recovery."""
+
+        observation = self._runtime.observe_task_owned_interruption(
+            label,
+            include_content=True,
+        )
+        if self._runtime.observation_count <= self._last_navigation_count:
+            raise RuntimeError(
+                "Research resource transition was not captured after the previous workflow observation."
+            )
+        if (
+            self._last_observation is not None
+            and observation.captured_at <= self._last_observation.captured_at
+        ):
+            raise RuntimeError(
+                "Research resource transition was stale relative to the previous workflow observation."
+            )
+        self._last_navigation_count = self._runtime.observation_count
+        self._last_observation = observation
+        return self._carry_research_queue_proof(observation)
+
+    def _carry_research_queue_proof(self, observation: Observation) -> Observation:
+        """Carry a fresh route-scoped idle Queue fact onto a compatible detail frame."""
+
         proof = self._research_queue_observation
         if (
             proof is None

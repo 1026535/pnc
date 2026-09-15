@@ -1953,6 +1953,9 @@ class PncObservationEnricher:
         warning = _build_exact_building_upgrade_warning_additions(image=image, lines=lines)
         if warning is not None:
             strong.append(warning)
+        research_resource = _build_research_resource_popup_additions(image=image, lines=lines)
+        if research_resource is not None:
+            strong.append(research_resource)
         update_required = _build_update_required_popup_additions(image=image, lines=lines)
         if update_required is not None:
             strong.append(update_required)
@@ -5369,6 +5372,9 @@ def _build_popup_additions(
 
     if task_owned:
         return None
+    research_resource = _build_research_resource_popup_additions(image=image, lines=lines)
+    if research_resource is not None:
+        return research_resource
     vip_daily_reset = _build_vip_daily_reset_popup_additions(image=image, lines=lines)
     if vip_daily_reset is not None:
         return vip_daily_reset
@@ -5408,6 +5414,91 @@ def _build_popup_additions(
         image=image,
         lines=lines,
         excluded_close_bounds=excluded_close_bounds,
+    )
+
+
+def _build_research_resource_popup_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+) -> ObservationAdditions | None:
+    """Publish measured task-owned controls on the exact Research Auto Use popup."""
+
+    title = _find_line_with_normalized_text(
+        lines=lines,
+        normalized_text="AUTOUSE",
+        min_y=int(image.height * 0.12),
+        max_y=int(image.height * 0.24),
+    )
+    sufficient = _find_line_with_normalized_text(
+        lines=lines,
+        normalized_text="SUFFICIENTAFTERUSE",
+        min_y=int(image.height * 0.18),
+        max_y=int(image.height * 0.31),
+    )
+    cancel = _find_line_with_normalized_text(
+        lines=lines,
+        normalized_text="CANCEL",
+        min_y=int(image.height * 0.62),
+        max_y=int(image.height * 0.80),
+    )
+    confirm = _find_line_with_normalized_text(
+        lines=lines,
+        normalized_text="CONFIRM",
+        min_y=int(image.height * 0.62),
+        max_y=int(image.height * 0.80),
+    )
+    if title is None or sufficient is None or cancel is None or confirm is None:
+        return None
+    title_center_x, title_center_y = title.bounds.center()
+    sufficient_center_x, sufficient_center_y = sufficient.bounds.center()
+    cancel_center_x, cancel_center_y = cancel.bounds.center()
+    confirm_center_x, confirm_center_y = confirm.bounds.center()
+    if not (
+        abs(title_center_x - image.width // 2) <= int(image.width * 0.16)
+        and abs(sufficient_center_x - image.width // 2) <= int(image.width * 0.20)
+        and title_center_y < sufficient_center_y < cancel_center_y
+        and cancel_center_x < int(image.width * 0.48)
+        and confirm_center_x > int(image.width * 0.52)
+        and abs(cancel_center_y - confirm_center_y) <= max(
+            28,
+            cancel.bounds.height * 2,
+            confirm.bounds.height * 2,
+        )
+    ):
+        return None
+    confirm_element = replace(
+        _make_visible_from_line(
+            selector_id=UiElementId.PNC_RESEARCH_RESOURCE_CONFIRM_BUTTON,
+            line=confirm,
+        ),
+        action_point=confirm.bounds.center(),
+    )
+    cancel_element = replace(
+        _make_visible_from_line(
+            selector_id=UiElementId.PNC_POPUP_CLOSE_BUTTON,
+            line=cancel,
+        ),
+        action_point=cancel.bounds.center(),
+    )
+    return ObservationAdditions(
+        visible_elements={
+            UiElementId.PNC_POPUP_CLOSE_BUTTON: cancel_element,
+            UiElementId.PNC_RESEARCH_RESOURCE_CONFIRM_BUTTON: confirm_element,
+        },
+        screen_evidence=(
+            ScreenEvidence(ScreenType.PNC_POPUP, "ocr_research_resource_auto_use"),
+        ),
+        popup_overlay=_popup_overlay_from_elements(
+            image=image,
+            elements=(
+                (PopupControlKind.CANCEL, cancel_element),
+                (PopupControlKind.RESEARCH_RESOURCE_CONFIRM, confirm_element),
+            ),
+            layout_id="research_resource_auto_use",
+            evidence_kind=PopupEvidenceKind.OCR_TEXT,
+            reason="ocr_research_resource_auto_use_with_sufficient_after_use",
+        ),
     )
 
 

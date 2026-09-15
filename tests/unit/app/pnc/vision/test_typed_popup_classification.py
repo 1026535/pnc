@@ -17,6 +17,46 @@ from tests.support.pnc.capture_vision.ocr_line import _ocr_line
 class TypedPopupClassificationTests(unittest.TestCase):
     """Proves typed popup classification."""
 
+    def test_research_auto_use_requires_positive_resource_and_paired_action_evidence(self) -> None:
+        """Publishes Confirm only for the exact sufficient-after-use Research popup."""
+
+        additions = _build_popup_additions(
+            image=Image.new("RGB", (900, 1600)),
+            lines=(
+                _ocr_line("Auto Use", x=359, y=268, width=182, height=36),
+                _ocr_line("Sufficient after use", x=323, y=356, width=258, height=26),
+                _ocr_line("Cancel", x=208, y=1173, width=118, height=26),
+                _ocr_line("Confirm", x=565, y=1175, width=137, height=24),
+            ),
+            anchors=(),
+        )
+
+        self.assertIsNotNone(additions)
+        assert additions is not None
+        self.assertEqual(
+            {
+                UiElementId.PNC_POPUP_CLOSE_BUTTON,
+                UiElementId.PNC_RESEARCH_RESOURCE_CONFIRM_BUTTON,
+            },
+            set(additions.visible_elements),
+        )
+        self.assertEqual("research_resource_auto_use", additions.popup_overlay.layout_id)
+        self.assertEqual(
+            PopupControlKind.RESEARCH_RESOURCE_CONFIRM,
+            additions.popup_overlay.candidates[1].control_kind,
+        )
+
+        missing_positive = _build_popup_additions(
+            image=Image.new("RGB", (900, 1600)),
+            lines=(
+                _ocr_line("Auto Use", x=359, y=268, width=182, height=36),
+                _ocr_line("Cancel", x=208, y=1173, width=118, height=26),
+                _ocr_line("Confirm", x=565, y=1175, width=137, height=24),
+            ),
+            anchors=(),
+        )
+        self.assertIsNone(missing_positive)
+
     def test_popup_classifier_materializes_exact_app_update_confirm(self) -> None:
         """Exposes Confirm only when OCR proves the exact required-update modal."""
 

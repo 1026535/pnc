@@ -2397,6 +2397,16 @@ selectors:
   notes:
   - Produced only by the proved research detail visual profile for the blue Research button.
   - The premium gold Research Now control is intentionally excluded.
+- id: PNC_RESEARCH_RESOURCE_CONFIRM_BUTTON
+  screens:
+  - PNC_POPUP
+  status: planned
+  detection_kind: semantic
+  interaction_kind: action
+  materialize_relative_bounds: false
+  notes:
+  - Produced only by the exact Research Auto Use popup with positive sufficient-after-use evidence.
+  - Confirms proposed Bag resource packs; it does not itself start Research.
 - id: PNC_GATHER_BUTTON
   screens:
   - PNC_GATHER_NODE

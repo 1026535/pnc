@@ -54,6 +54,17 @@ idle queue, parse at least two complete `current/required` resource rows, and
 prove every current amount is at least its requirement; missing or malformed
 facts remain non-authoritative.
 
+**Client source verified:** the insufficient-resource branch passes
+`WinType.COLLEGE_CONDITION` to `ItemData:ResFaseUse` in
+`uis/college/collegeresearchuppan.lua`. `datas/itemdata.lua`,
+`ItemData:ResFaseUse`, builds the proposed pack list, while
+`uis/bag/resfaseusewin.lua`, `ResFaseUseWin.OnUseHandler`, closes the “Auto Use”
+popup and sends `ItemSend.UseBoxItems`. The response refreshes the college
+condition; it does not call `RequireStudyTech`. Consequently the opt-in runtime
+path must confirm the exact positive “Sufficient after use” popup, re-observe a
+funded idle detail, and press normal Research a second time. The Bag confirmation
+and second Research tap belong to the same durable `research-001` intent.
+
 ## Live comparison
 
 **Live observed:** the 2026-09-14 non-spending inspection under
@@ -92,6 +103,27 @@ center lies inside the measured node icon, with one strict node-local OCR
 fallback when the shared crop misses it. A node-local red-pixel probe over the
 lock-sprite corner matched all three locked live nodes and excluded the
 available tier-II nodes plus independent MAX and 540px negative controls.
+
+The 2026-09-15 authorized non-confirming capture under
+`.local-data/artifacts/development_research/resource_popup_capture_20260915T050023Z/`
+opened the live `Construction II` shortfall popup on NPC 2. Bounded OCR measured
+the centered `Auto Use` title, positive `Sufficient after use` status, paired
+Cancel/Confirm row, and the proposed Food packs. No pack was confirmed, no
+Research started, and zero diamonds were spent. The saved final frame is the
+tracked two-observer regression for the task-owned Confirm selector.
+
+The later authorized production run under
+`.local-data/artifacts/development_research/research_caller_20260915T054612Z/`
+selected `Research Speed II (4/10)`, revealed and confirmed one exact Auto Use
+popup, re-proved the funded idle detail, and pressed normal Research once. Its
+correlated post-Start frame shows the countdown and only Speedup controls. The
+active Development panel is vertically higher than the earlier Construction
+reference, so the bounded active-detail anchor regions cover both observed
+positions. A no-replay reconciliation under
+`.local-data/artifacts/development_research/research_reconciliation_20260915T062039Z/`
+combined that correlated receipt with a fresh exact NPC 2 preflight and final
+Home, then committed the one durable `research-001` intent. Diamonds spent were
+zero.
 
 ## Remaining uncertainty
 

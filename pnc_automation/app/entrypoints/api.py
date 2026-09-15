@@ -224,6 +224,7 @@ class AutomationSession:
         self,
         *,
         priority: list[str] | None = None,
+        confirm_resource_shortfall_from_bag: bool = False,
         mutation_boundary: CoreMutationBoundary,
     ) -> CoreWorkflowResult[ResearchResult]:
         """Runs one direct research step against the prepared session."""
@@ -231,6 +232,7 @@ class AutomationSession:
         return self.api.research(
             account_id=self.account_id,
             priority=priority,
+            confirm_resource_shortfall_from_bag=confirm_resource_shortfall_from_bag,
             mutation_boundary=mutation_boundary,
         )
 
@@ -486,20 +488,26 @@ class AutomationApi:
         *,
         account_id: str | None = None,
         priority: list[str] | None = None,
+        confirm_resource_shortfall_from_bag: bool = False,
         mutation_boundary: CoreMutationBoundary,
     ) -> CoreWorkflowResult[ResearchResult]:
         """Runs one direct research step using current-castle semantics."""
 
+        if type(confirm_resource_shortfall_from_bag) is not bool:
+            raise TypeError("confirm_resource_shortfall_from_bag must be a bool.")
         resolved_account_id = self._resolve_account_id(account_id)
+        params: dict[str, object] = {
+            "priority": ["economy", "development", "military"]
+            if priority is None
+            else list(priority),
+        }
+        if confirm_resource_shortfall_from_bag:
+            params["confirm_resource_shortfall_from_bag"] = True
         return self._run_with_account_reservation(
             resolved_account_id,
             lambda: self.application.run_research(
                 account_id=resolved_account_id,
-                params={
-                    "priority": ["economy", "development", "military"]
-                    if priority is None
-                    else list(priority),
-                },
+                params=params,
                 mutation_boundary=mutation_boundary,
                 session_cleanup_policy=self._cleanup_policy_for(resolved_account_id),
             ),
@@ -872,6 +880,7 @@ def research(
     *,
     account_id: str | None = None,
     priority: list[str] | None = None,
+    confirm_resource_shortfall_from_bag: bool = False,
     mutation_boundary: CoreMutationBoundary,
 ) -> CoreWorkflowResult[ResearchResult]:
     """Runs one direct research step through the default application facade."""
@@ -879,6 +888,7 @@ def research(
     return _default_api().research(
         account_id=account_id,
         priority=priority,
+        confirm_resource_shortfall_from_bag=confirm_resource_shortfall_from_bag,
         mutation_boundary=mutation_boundary,
     )
 

@@ -325,7 +325,7 @@ class MailComposeCapturedFieldTests(unittest.TestCase):
         )
         self.assertEqual(
             ocr.calls,
-            [Bounds(16, 240, 508, 480), Bounds(91, 343, 406, 33)],
+            [Bounds(16, 134, 508, 586), Bounds(91, 343, 406, 33)],
         )
 
     def test_navigation_without_content_keeps_only_reviewed_controls(self) -> None:

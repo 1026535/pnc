@@ -337,7 +337,7 @@ class BuildingLevelPublicationTests(unittest.TestCase):
             ),
         )
         level_bounds = Bounds(11, 192, 518, 134)
-        guard_bounds = Bounds(16, 240, 508, 480)
+        guard_bounds = Bounds(16, 134, 508, 586)
 
         for name, screen, title, expected_level, header_bounds in cases:
             with self.subTest(name=name):
@@ -406,9 +406,9 @@ class BuildingLevelPublicationTests(unittest.TestCase):
                 )
                 guard_bounds = Bounds(
                     round(size[0] * 0.03),
-                    round(size[1] * 0.25),
+                    round(size[1] * 0.14),
                     round(size[0] * 0.94),
-                    round(size[1] * 0.50),
+                    round(size[1] * 0.61),
                 )
                 plans = compile_screen_content_ocr_region_plans(
                     resolved_screen=ScreenType.PNC_CASTLE,
