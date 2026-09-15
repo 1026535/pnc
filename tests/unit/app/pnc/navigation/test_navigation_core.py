@@ -242,6 +242,50 @@ def mail_thread_entry(title: str = "Lux") -> DetectedListEntry:
 
 
 class NavigationCoreTests(unittest.TestCase):
+    def test_trial_building_opens_category_list_and_has_measured_return(self):
+        target = home_building_object(HomeCityObjectId.TOWER_OF_TRIAL)
+        now = datetime.now(UTC)
+        frames = iter(
+            mail_frame(ScreenType.PNC_TRIAL_CHALLENGE, captured_at=now + timedelta(seconds=index))
+            for index in (1, 2)
+        )
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator, lambda _: next(frames), reviewed_navigation_edges(), sleep=lambda _: None,
+        )
+        result = core.open_visible_building(
+            HomeCityObjectId.TOWER_OF_TRIAL,
+            observe_content=lambda _: home_building_frame((target,), captured_at=now),
+        )
+        self.assertEqual(ScreenType.PNC_TRIAL_CHALLENGE, result.screen_type)
+        self.assertEqual(1, len(actuator.actions))
+        self.assertEqual(target.action_point, actuator.actions[0].target_point)
+
+    def test_new_surface_returns_require_their_measured_control(self):
+        for source, selector, destination in (
+            (ScreenType.PNC_TRIAL_CHALLENGE, UiElementId.PNC_BACK_BUTTON_TOP_LEFT, ScreenType.PNC_HOME_CITY),
+            (ScreenType.PNC_BAG_CHEST_PREVIEW, UiElementId.PNC_BAG_CHEST_PREVIEW_CLOSE, ScreenType.PNC_BAG),
+        ):
+            for present in (True, False):
+                with self.subTest(source=source, present=present):
+                    now = datetime.now(UTC)
+                    frames = iter((
+                        mail_frame(source, selector=selector if present else None, captured_at=now),
+                        mail_frame(destination, captured_at=now + timedelta(seconds=1)),
+                        mail_frame(destination, captured_at=now + timedelta(seconds=2)),
+                    ))
+                    actuator = Actuator()
+                    edges = reviewed_navigation_edges()
+                    core = NavigationCore(actuator, lambda _: next(frames), edges, sleep=lambda _: None)
+                    edge = next(item for item in edges if item.source == source)
+                    if present:
+                        self.assertEqual(destination, core.transition(edge).screen_type)
+                        self.assertEqual([selector], [action.selector_id for action in actuator.actions])
+                    else:
+                        with self.assertRaisesRegex(RuntimeError, "current-frame visual evidence"):
+                            core.transition(edge)
+                        self.assertEqual([], actuator.actions)
+
     def test_campaign_endpoint_opens_after_fresh_target_reacquisition(self):
         target = home_building_object(HomeCityObjectId.CAMPAIGN)
         now = datetime(2026, 9, 12, tzinfo=UTC)
@@ -1244,6 +1288,54 @@ class NavigationPerceptionTests(unittest.TestCase):
     def capture(self, name):
         with Image.open(TEST_DATA_ROOT / 'screen_recognition' / name) as image:
             return CapturedScreenshot(None, image.copy(), "PNG", ephemeral_captured_at=datetime.now(UTC))
+
+    def test_live_tour_surfaces_publish_only_measured_return_controls(self):
+        ocr = Mock(spec=OcrService)
+        ocr.read_result.return_value = OcrResult(lines=(), words=())
+        perception = _perception(
+            load_visual_screen_recognizer(), PncObservationEnricher(), ocr_service=ocr,
+        )
+        for fixture, screen, selector in (
+            ("campaign_map_chapter_6.png", ScreenType.PNC_CAMPAIGN_MAP, UiElementId.PNC_CAMPAIGN_HOME_PORTAL),
+            ("campaign_map_chapter_6_pulse.png", ScreenType.PNC_CAMPAIGN_MAP, UiElementId.PNC_CAMPAIGN_HOME_PORTAL),
+            ("trial_challenge.png", ScreenType.PNC_TRIAL_CHALLENGE, UiElementId.PNC_BACK_BUTTON_TOP_LEFT),
+            ("bag_arena_chest_preview.png", ScreenType.PNC_BAG_CHEST_PREVIEW, UiElementId.PNC_BAG_CHEST_PREVIEW_CLOSE),
+        ):
+            with self.subTest(fixture=fixture):
+                result = perception.build(self.capture(fixture))
+                self.assertEqual(screen, result.screen_type)
+                self.assertFalse(result.blocking_popup)
+                self.assertTrue(result.decision.action_eligible)
+                self.assertEqual({selector}, set(result.visible_elements))
+                self.assertEqual(VisibleElementSourceKind.TEMPLATE, result.require(selector).source_kind)
+                self.assertIsNone(decide_popup_recovery(
+                    screen_type=result.screen_type, blocking_popup=result.blocking_popup,
+                    visible_selector_ids=frozenset(result.visible_elements), popup_overlay=result.popup_overlay,
+                ))
+
+    def test_chest_preview_close_requires_visible_x_and_cannot_override_update(self):
+        ocr = Mock(spec=OcrService)
+        ocr.read_result.return_value = OcrResult(lines=(), words=())
+        perception = _perception(
+            load_visual_screen_recognizer(), PncObservationEnricher(), ocr_service=ocr,
+        )
+        capture = self.capture("bag_arena_chest_preview.png")
+        result = perception.build(capture)
+        close = result.require(UiElementId.PNC_BAG_CHEST_PREVIEW_CLOSE).bounds
+        obscured = capture.image.copy()
+        ImageDraw.Draw(obscured).rectangle(
+            (close.x - 2, close.y - 2, close.x + close.width + 2, close.y + close.height + 2),
+            fill="black",
+        )
+        result = perception.build(replace(capture, image=obscured))
+        self.assertFalse(result.has(UiElementId.PNC_BAG_CHEST_PREVIEW_CLOSE))
+        ocr.read_result.return_value = OcrResult(lines=(
+            OcrLine("New version detected. Tap Confirm to update.", Bounds(58, 380, 420, 28), 1.0),
+            OcrLine("Confirm", Bounds(221, 531, 90, 27), 1.0),
+        ), words=())
+        result = perception.build(replace(capture, image=with_update_modal(capture.image)))
+        self.assertTrue(result.blocking_popup)
+        self.assertFalse(result.has(UiElementId.PNC_BAG_CHEST_PREVIEW_CLOSE))
 
     def test_measured_controls_and_resolution_projection(self):
         perception = _perception(load_visual_screen_recognizer(), Guard())

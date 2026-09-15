@@ -1063,6 +1063,15 @@ selectors:
   notes:
   - 'Proposed unsupported strategy: No bulk-action producer; E supplies rows/state,
     not an inferred action.'
+- id: PNC_BAG_CHEST_PREVIEW_CLOSE
+  screens:
+  - PNC_BAG_CHEST_PREVIEW
+  status: screenshot_seeded
+  detection_kind: semantic
+  interaction_kind: action
+  materialize_relative_bounds: false
+  notes:
+  - Measured gold X owned by the Arena Surprise Chest preview visual profile.
 - id: PNC_QUEST_TAB_MAIN
   screens:
   - PNC_QUEST_MAIN

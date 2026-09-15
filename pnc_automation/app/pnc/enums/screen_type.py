@@ -31,6 +31,7 @@ class ScreenType(StrEnum):
     PNC_VIP_DAILY_RESET = "pnc_vip_daily_reset"
     PNC_IMPROVE_MIGHT = "pnc_improve_might"
     PNC_BAG = "pnc_bag"
+    PNC_BAG_CHEST_PREVIEW = "pnc_bag_chest_preview"
     PNC_QUEST_MAIN = "pnc_quest_main"
     PNC_QUEST_DAILY = "pnc_quest_daily"
     PNC_HERO_LIST = "pnc_hero_list"

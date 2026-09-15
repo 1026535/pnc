@@ -23,6 +23,25 @@ from tests.support.automation.engine.make_observed_action_executor import (
 class ObservedActionPopupRecoveryTests(AutomationFrameworkFixtures, unittest.TestCase):
     """Proves observed action popup recovery."""
 
+    def test_chest_preview_remains_inspectable_until_explicit_close(self) -> None:
+        """Normal runtime recovery must leave an intentionally opened preview alone."""
+        preview = make_observation(
+            ScreenType.PNC_BAG_CHEST_PREVIEW,
+            visible_ids=(UiElementId.PNC_BAG_CHEST_PREVIEW_CLOSE,),
+        )
+        fake_observer = FakeObservationService(observations=[])
+        fake_session = FakeSession()
+        executor = _make_observed_action_executor(fake_session)
+
+        result = executor.recover_interruption_if_required(
+            preview, label_prefix="inspect_chest_preview", observe=fake_observer.observe,
+        )
+
+        self.assertIsNone(result)
+        self.assertEqual([], fake_session.taps)
+        self.assertEqual([], fake_session.key_events)
+        self.assertEqual([], fake_observer.requests)
+
     def test_observed_action_executor_retries_geometry_navigation_taps_once_through_ocr(self) -> None:
         """Promotes one settled geometry miss to an OCR-backed retry using the narrow follow-up requests."""
 

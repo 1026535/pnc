@@ -671,7 +671,7 @@ _PRIMARY_SCREEN_BY_HOME_CITY_OBJECT_ID = {
     HomeCityObjectId.SACRED_TREE: ScreenType.PNC_SACRED_TREE,
     HomeCityObjectId.PIT: ScreenType.PNC_PIT,
     HomeCityObjectId.SANCTUM: ScreenType.PNC_SANCTUM,
-    HomeCityObjectId.TOWER_OF_TRIAL: ScreenType.PNC_TOWER_OF_TRIAL,
+    HomeCityObjectId.TOWER_OF_TRIAL: ScreenType.PNC_TRIAL_CHALLENGE,
     HomeCityObjectId.GODDESS_STATUE: ScreenType.PNC_GODDESS_STATUE,
     HomeCityObjectId.INSTITUTE: ScreenType.PNC_INSTITUTE,
     HomeCityObjectId.WAREHOUSE: ScreenType.PNC_WAREHOUSE,
