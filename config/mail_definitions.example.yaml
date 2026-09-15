@@ -1,0 +1,13 @@
+mails:
+  - id: example-alliance-announcement
+    castle_ref: main
+    recipient_kind: alliance
+    subject: Example alliance announcement
+    body: This is example content. Replace it in your local configuration.
+
+  - id: example-player-message
+    castle_ref: main
+    recipient_kind: player
+    player_name: Example Player
+    subject: Example player message
+    body: This is example content. Replace it in your local configuration.

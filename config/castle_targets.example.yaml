@@ -1,0 +1,9 @@
+accounts:
+  - account_id: example-account
+    castle_targets:
+      main:
+        kingdom: K999
+        castle_name: Example Main Castle
+      farm:
+        kingdom: K999
+        castle_name: Example Farm Castle

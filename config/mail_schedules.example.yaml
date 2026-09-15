@@ -1,0 +1,19 @@
+rotation:
+  cycle_days: 7
+  start_utc: 2030-01-01T00:00:00Z
+
+mail_schedules:
+  - id: example-weekday-schedule
+    enabled: false
+    day_indices: [0, 2]
+    hour_utc: 12
+    mail_ids:
+      - example-alliance-announcement
+      - example-player-message
+
+  - id: example-weekend-schedule
+    enabled: false
+    day_indices: [5]
+    hour_utc: 18
+    mail_ids:
+      - example-alliance-announcement

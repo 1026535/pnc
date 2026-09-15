@@ -1,0 +1,9 @@
+pnc_accounts:
+  - pnc_account_id: example-player
+    ordering: full_scan
+    castles:
+      - kingdom: K999
+        castle_name: Example Main Castle
+        castle_level: 30
+      - kingdom: K999
+        castle_name: Example Farm Castle

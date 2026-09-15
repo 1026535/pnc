@@ -1,0 +1,14 @@
+automatic_runs_enabled: false
+maintenance_timezone: America/Toronto
+maintenance_hour_local: 2
+game_reset_hour_utc: 0
+
+canary_targets:
+  - account_id: example-account
+    castle_ref: main
+    enabled_capabilities: [praise]
+
+targets:
+  - account_id: example-account
+    castle_ref: main
+    enabled_capabilities: []

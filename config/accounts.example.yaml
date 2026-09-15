@@ -1,0 +1,37 @@
+artifacts:
+  root: .local-data/example-artifacts
+
+archives:
+  root: .local-data/example-archives
+
+runtime:
+  observation_mode: debug
+  bluestacks_memory:
+    enabled: true
+    max_working_set_mb: 4096
+    consecutive_over_limit_samples: 3
+    sample_interval_seconds: 30
+    restart_cooldown_seconds: 300
+    restart_roles: [smoke_test]
+
+defaults:
+  adb_path: C:/example/path/HD-Adb.exe
+  bluestacks_config_path: C:/example/path/bluestacks.conf
+  screenshot_format: png
+  stable_click_delay_ms: 300
+  post_action_observe_delay_ms: 800
+  chat_stable_click_delay_ms: 120
+  chat_post_action_observe_delay_ms: 250
+
+instances:
+  - id: example-instance
+    display_name: Example Instance
+    app_package: com.example.game
+
+accounts:
+  - id: example-account
+    instance_id: example-instance
+    pnc_account_id: example-player
+    live_roles: [smoke_test]
+    username_env: EXAMPLE_PNC_USERNAME
+    password_env: EXAMPLE_PNC_PASSWORD
