@@ -31,10 +31,13 @@ from pnc_automation.app.pnc.domain.observation import (
     Observation,
     SpatialSurfaceType,
     VisibleElementSourceKind,
+    RowRecognitionStatus,
     castle_entry_matches,
     castle_entry_identity_matches,
 )
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
+from pnc_automation.app.pnc.domain.policy_models import ResearchCategory
+from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.domain.chat import (
     ChatChannel,
     chat_channel_selector_id,
@@ -107,6 +110,7 @@ class NavigationCore:
     sleep: Callable[[float], None] = time.sleep
     clock: Callable[[], float] = time.monotonic
     record: Callable[[dict[str, object]], None] = lambda _: None
+    observe_ready: Callable[[str], Observation] | None = None
     _sequence: int = field(default=0, init=False)
 
     def transition(self, edge: NavigationEdge) -> Observation:
@@ -115,7 +119,7 @@ class NavigationCore:
             raise ValueError("Transition is outside the reviewed navigation graph.")
         self._sequence += 1
         label = f"core_{self._sequence}"
-        before = self.observe(f"{label}_source")
+        before = self._observe_source(f"{label}_source")
         if before.blocking_popup or before.screen_type != edge.source:
             raise RuntimeError("Navigation source changed or is interrupted; no action sent.")
         element = before.visible_elements.get(edge.selector)
@@ -127,7 +131,11 @@ class NavigationCore:
         return self._execute_and_confirm(action, before, edge.destinations, label)
 
     def open_visible_building(
-        self, target: HomeCityObjectId, *, observe_content: Callable[[str], Observation],
+        self,
+        target: HomeCityObjectId,
+        *,
+        observe_content: Callable[[str], Observation],
+        on_target_acquired: Callable[[DetectedSpatialObject], None] | None = None,
     ) -> Observation:
         """Open one observed city object without atlas estimates or camera prediction."""
         destination = _require_reviewed_building_route(target=target, edges=self.edges)
@@ -137,9 +145,11 @@ class NavigationCore:
         resolved = _resolve_observed_building_target(before, target=target)
         if resolved is None:
             raise RuntimeError("Building is absent or ambiguous; no further gesture or building tap was sent.")
-        _observed_object, point = resolved
+        observed_object, point = resolved
         if not _is_hud_safe_building_point(point, image_size=before.image_size):
             raise RuntimeError("Observed building target overlaps the HUD; no tap sent.")
+        if on_target_acquired is not None:
+            on_target_acquired(observed_object)
         self.record({"event": "pending_building", "target": target.value,
                      "artifact": str(before.artifact_path), "point": point})
         return self._execute_and_confirm(
@@ -148,7 +158,11 @@ class NavigationCore:
         )
 
     def open_building(
-        self, target: HomeCityObjectId, *, observe_content: Callable[[str], Observation],
+        self,
+        target: HomeCityObjectId,
+        *,
+        observe_content: Callable[[str], Observation],
+        on_target_acquired: Callable[[DetectedSpatialObject], None] | None = None,
     ) -> Observation:
         """Use a reviewed in-game focus route, then require an observed object.
 
@@ -168,7 +182,11 @@ class NavigationCore:
             if focus is None:
                 raise ValueError("Institute focus route is missing from the reviewed graph.")
             self.transition(focus)
-            return self.open_visible_building(target, observe_content=observe_content)
+            return self.open_visible_building(
+                target,
+                observe_content=observe_content,
+                on_target_acquired=on_target_acquired,
+            )
 
         self._sequence += 1
         scan_label = f"core_{self._sequence}_building_scan_source"
@@ -178,6 +196,7 @@ class NavigationCore:
             target=target,
             current=current,
             observe_content=observe_content,
+            on_target_acquired=on_target_acquired,
         )
 
     def _open_building_after_home_scan(
@@ -186,6 +205,7 @@ class NavigationCore:
         target: HomeCityObjectId,
         current: Observation,
         observe_content: Callable[[str], Observation],
+        on_target_acquired: Callable[[DetectedSpatialObject], None] | None,
     ) -> Observation:
         """Searches the measured Home scan sequence, then reacquires the target before tapping."""
 
@@ -203,6 +223,7 @@ class NavigationCore:
                     target=target,
                     source=current,
                     observe_content=observe_content,
+                    on_target_acquired=on_target_acquired,
                 )
 
             if step_index == scan_budget:
@@ -235,6 +256,7 @@ class NavigationCore:
         target: HomeCityObjectId,
         source: Observation,
         observe_content: Callable[[str], Observation],
+        on_target_acquired: Callable[[DetectedSpatialObject], None] | None,
     ) -> Observation:
         """Reacquires one safe target frame before delegating the single visible-building tap."""
 
@@ -244,7 +266,11 @@ class NavigationCore:
                 raise RuntimeError("Building target reacquisition received a stale capture; no further tap was sent.")
             return observation
 
-        return self.open_visible_building(target, observe_content=observe_reacquired)
+        return self.open_visible_building(
+            target,
+            observe_content=observe_reacquired,
+            on_target_acquired=on_target_acquired,
+        )
 
     def open_mailbox(
         self, mailbox: MailboxType, *, observe_content: Callable[[str], Observation],
@@ -455,6 +481,104 @@ class NavigationCore:
             observe_content,
         )
 
+    def open_research_node(
+        self, title: str, category: ResearchCategory, *,
+        observe_content: Callable[[str], Observation],
+    ) -> Observation:
+        """Select one fresh Development node and prove its normal detail control."""
+
+        if category != ResearchCategory.DEVELOPMENT or not isinstance(title, str) or not title.strip():
+            raise ValueError("Research selection requires one named Development node.")
+        self._sequence += 1
+        label = f"core_{self._sequence}_research_node"
+        source = observe_content(f"{label}_source")
+        if (
+            source.screen_type != ScreenType.PNC_RESEARCH_TREE or source.blocking_popup
+            or source.decision.guard != GuardVerdict.CLEAR
+            or not any(evidence.reason == "visual_anchor:research_tree_development" for evidence in source.decision.evidence)
+        ):
+            raise RuntimeError("Research node selection requires the proved Development grid.")
+        matches = tuple(
+            entry for entry in source.entries(ListEntryKind.RESEARCH)
+            if entry.title_text == title and entry.metadata.get("category") == category.value
+        )
+        if (
+            len(matches) != 1 or matches[0].row_status != RowRecognitionStatus.COMPLETE
+            or matches[0].action_point is None or matches[0].action_bounds is None
+            or not matches[0].action_bounds.contains_point(matches[0].action_point)
+            or not matches[0].bounds.contains_bounds(matches[0].action_bounds)
+        ):
+            raise RuntimeError("Research node is missing, changed or ambiguous; no tap sent.")
+        return self._execute_content_and_confirm(
+            TapListEntryAction(
+                entry_kind=ListEntryKind.RESEARCH, title_text=title,
+                metadata_key="category", metadata_value=category.value,
+                use_action_point=True, reason="open_research_candidate",
+            ),
+            source, frozenset({ScreenType.PNC_RESEARCH_TREE}), label, observe_content,
+            completion_predicate=lambda frame: (
+                frame.decision.guard == GuardVerdict.CLEAR
+                and any(evidence.reason == "visual_anchor:research_tree_node_detail" for evidence in frame.decision.evidence)
+                and _template_control(frame, UiElementId.PNC_RESEARCH_START_BUTTON)
+            ),
+        )
+
+    def scroll_daily_quest(
+        self, *, adjusted: bool, observe_content: Callable[[str], Observation],
+    ) -> Observation:
+        """Perform one existing Daily-list gesture and prove fresh Daily completion."""
+
+        if type(adjusted) is not bool:
+            raise ValueError("Daily scrolling requires a boolean adjusted flag.")
+        self._sequence += 1
+        label = f"core_{self._sequence}_daily_scroll"
+        before = observe_content(f"{label}_source")
+        if before.screen_type != ScreenType.PNC_QUEST_DAILY or before.blocking_popup:
+            raise RuntimeError("Daily scrolling requires an unblocked Daily screen.")
+        return self._execute_content_and_confirm(
+            SwipeAction(
+                reason="daily_scroll_adjusted" if adjusted else "daily_scroll",
+                start_x_ratio=0.5, start_y_ratio=0.82 if adjusted else 0.80,
+                end_x_ratio=0.5, end_y_ratio=0.49 if adjusted else 0.44,
+                duration_ms=420 if adjusted else 350,
+            ),
+            before, frozenset({ScreenType.PNC_QUEST_DAILY}), label, observe_content,
+        )
+
+    def scroll_resource_inventory(
+        self, *, upward: bool, adjusted: bool, fine: bool = False,
+        observe_content: Callable[[str], Observation],
+        confirm_scroll: Callable[[], Observation],
+    ) -> Observation:
+        """Swipe the selected Resource list once; its scanner owns stable row completion."""
+
+        if any(type(flag) is not bool for flag in (upward, adjusted, fine)):
+            raise ValueError("Resource scrolling requires boolean gesture flags.")
+        self._sequence += 1
+        before = observe_content(f"core_{self._sequence}_resource_scroll_source")
+        require_resource_inventory_surface(before)
+        low = 0.64 if fine else (0.78 if adjusted else 0.85)
+        high = 0.46 if fine else (0.42 if adjusted else 0.32)
+        if not self.actuator.execute_action(
+            SwipeAction(
+                reason=("resource_inventory_focus_scroll" if fine else
+                        "resource_inventory_scroll_adjusted" if adjusted else "resource_inventory_scroll"),
+                start_x_ratio=0.5, end_x_ratio=0.5,
+                start_y_ratio=high if upward else low,
+                end_y_ratio=low if upward else high,
+                duration_ms=420 if adjusted else 350,
+            ), before,
+        ):
+            raise RuntimeError("Navigation actuator did not execute the Resource scroll.")
+        started = self.clock()
+        after = confirm_scroll()
+        if self.clock() - started >= self.policy.max_seconds:
+            raise RuntimeError("Resource scroll completion budget exhausted; the gesture was not repeated.")
+        require_resource_inventory_surface(after)
+        if after.captured_at <= before.captured_at:
+            raise RuntimeError("Resource scroll completion received a stale capture.")
+        return after
+
     def scroll_castle_roster(
         self,
         direction: Literal["up", "down"],
@@ -478,6 +602,10 @@ class NavigationCore:
                 distance_ratio=0.58,
                 duration_ms=450,
                 reason="replacement_scan_active_castle",
+                start_x_ratio=0.90,
+                start_y_ratio=0.82 if direction == "up" else 0.18,
+                end_x_ratio=0.90,
+                end_y_ratio=0.18 if direction == "up" else 0.82,
             ),
             before,
             frozenset({ScreenType.PNC_CASTLE_SELECTION}),
@@ -636,6 +764,18 @@ class NavigationCore:
         """Execute one bounded content action without replaying a failed gesture."""
         if not self.actuator.execute_action(action, before):
             raise RuntimeError("Navigation actuator did not execute the content action.")
+        return self.confirm_content_after_action(
+            before, destinations, label, observe_content,
+            completion_predicate=completion_predicate,
+        )
+
+    def confirm_content_after_action(
+        self, before: Observation, destinations: frozenset[ScreenType], label: str,
+        observe_content: Callable[[str], Observation], *,
+        completion_predicate: Callable[[Observation], bool] | None = None,
+    ) -> Observation:
+        """Passively confirm one already dispatched action without issuing another."""
+
         started = self.clock()
         stable = 0
         previous = ScreenType.UNKNOWN
@@ -712,7 +852,7 @@ class NavigationCore:
         """Replan through the reviewed graph after each confirmed transition."""
         if max_transitions < 1 or target == ScreenType.UNKNOWN:
             raise ValueError("Navigation needs a known target and positive transition budget.")
-        current = self.observe("core_route_source")
+        current = self._observe_source("core_route_source")
         for _ in range(max_transitions):
             if current.blocking_popup or current.screen_type == ScreenType.UNKNOWN:
                 raise RuntimeError("Cannot route from an unknown or interrupted screen.")
@@ -739,6 +879,25 @@ class NavigationCore:
                         visited.add(destination)
                         queue.append((destination, first or edge))
         raise RuntimeError(f"No reviewed route from {source.name} to {target.name}.")
+
+    def _observe_source(self, label: str) -> Observation:
+        """Capture a reviewed edge source through the optional loading-ready boundary."""
+
+        if self.observe_ready is not None:
+            return self.observe_ready(label)
+        return self.observe(label)
+
+
+def require_resource_inventory_surface(observation: Observation) -> None:
+    """Require B's selected Resource anchor before inventory observation or a list action."""
+
+    if (
+        observation.screen_type != ScreenType.PNC_BAG
+        or observation.blocking_popup
+        or observation.decision.guard != GuardVerdict.CLEAR
+        or not _template_control(observation, UiElementId.PNC_BAG_SUBTAB_RESOURCE)
+    ):
+        raise RuntimeError("Resource inventory requires a guarded Bag with the selected Resource tab.")
 
 
 def _require_reviewed_building_route(
@@ -1050,7 +1209,8 @@ def reviewed_navigation_edges() -> tuple[NavigationEdge, ...]:
         edges.append(NavigationEdge(source, selector.PNC_BACK_BUTTON_TOP_LEFT, frozenset({screen.PNC_SETTINGS})))
     for source in (
         *sorted(quest, key=lambda value: value.name), screen.PNC_BAG,
-        screen.PNC_INSTITUTE, screen.PNC_GODDESS_STATUE,
+        screen.PNC_INSTITUTE, screen.PNC_GODDESS_STATUE, screen.PNC_HALL_OF_WAR,
+        screen.PNC_SACRED_TREE, screen.PNC_VERSUS_CENTER,
         screen.PNC_WAREHOUSE, screen.PNC_HERO_HALL, screen.PNC_CASTLE,
     ):
         edges.append(NavigationEdge(source, selector.PNC_BACK_BUTTON_TOP_LEFT, frozenset({screen.PNC_HOME_CITY})))

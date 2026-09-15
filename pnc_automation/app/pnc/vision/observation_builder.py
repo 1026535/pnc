@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import hashlib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
@@ -43,6 +42,7 @@ from pnc_automation.app.pnc.domain.observation import (
     castle_entry_identity_matches,
 )
 from pnc_automation.app.pnc.domain.screen_decision import (
+    BLOCKING_SCREEN_TYPES,
     GuardVerdict,
     ScreenDecision,
     ScreenEvidence,
@@ -52,7 +52,14 @@ from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.core.text.normalization import normalize_ocr_text
 from pnc_automation.app.pnc.vision.image_models import SelectorMatch
-from pnc_automation.app.pnc.vision.observation_provenance import bind_list_entry, bind_visible_elements
+from pnc_automation.app.pnc.vision.observation_diagnostics import (
+    ObservationDebugArtifactCollector as ObservationDebugArtifactCollector,
+)
+from pnc_automation.app.pnc.vision.observation_provenance import (
+    bind_list_entry,
+    bind_visible_elements,
+    select_content_labels,
+)
 from pnc_automation.app.pnc.vision.observation_request import (
     ObservationRequest,
     world_map_coordinate_dialog_text_field_selector_ids,
@@ -65,12 +72,11 @@ from pnc_automation.app.pnc.vision.ocr_region_plan import (
 )
 from pnc_automation.core.vision.ocr.ocr_service import (
     ObservationOcrContext,
-    OcrLine,
     OcrReadPurpose,
     OcrService,
     UnavailableOcrService,
 )
-from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
+from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier, partition_guard_evidence
 from pnc_automation.app.pnc.vision.selectors import DetectionKind, SelectorRegistry
 from pnc_automation.app.pnc.vision.world_map_coordinates import read_world_coordinate_bar_text, world_coordinate_text_matches
 from pnc_automation.app.pnc.vision.visual_screen_recognizer import (
@@ -102,6 +108,7 @@ class ObservationEnricher(Protocol):
         *,
         ocr_context: ObservationOcrContext,
         ocr_regions: Mapping[UiElementId, OcrRegionRead],
+        layout_id: str | None = None,
     ) -> "ObservationAdditions":
         """Returns derived observation additions."""
 
@@ -161,10 +168,11 @@ class DefaultObservationEnricher:
         *,
         ocr_context: ObservationOcrContext,
         ocr_regions: Mapping[UiElementId, OcrRegionRead],
+        layout_id: str | None = None,
     ) -> ObservationAdditions:
         """Returns an empty enrichment result."""
 
-        del image, screen_type, visible_elements, request, ocr_context, ocr_regions
+        del image, screen_type, visible_elements, request, ocr_context, ocr_regions, layout_id
         return ObservationAdditions()
 
     def recognize_guards(
@@ -193,63 +201,6 @@ class SelectorEngine(Protocol):
         ocr_context: ObservationOcrContext | None = None,
     ) -> Sequence[SelectorMatch]:
         """Returns all selectors detected in the image."""
-
-
-@dataclass(slots=True)
-class ObservationDebugArtifactCollector:
-    """Persists debug-only OCR sidecars that capture lines the runtime could not yet classify."""
-
-    def persist_unidentified_ocr_sidecar(
-        self,
-        *,
-        screenshot: CapturedScreenshot,
-        observation: Observation,
-        ocr_context: ObservationOcrContext,
-    ) -> None:
-        """Writes one sidecar containing unmatched OCR lines next to the persisted screenshot artifact."""
-
-        artifact_path = screenshot.artifact_path
-        if artifact_path is None:
-            return
-        recognized_texts = _recognized_ocr_text_hints(observation)
-        unidentified_lines = _unidentified_ocr_lines(
-            lines=ocr_context.read_lines(
-                screenshot.image,
-                purpose=OcrReadPurpose.DEBUG,
-                detail="debug_unidentified_ocr",
-            ),
-            recognized_texts=recognized_texts,
-        )
-        if not unidentified_lines:
-            return
-        sidecar_path = artifact_path.with_name(f"{artifact_path.stem}_unidentified_ocr.json")
-        sidecar_path.write_text(
-            json.dumps(
-                {
-                    "artifact_path": str(artifact_path),
-                    "screen_type": observation.screen_type.value,
-                    "captured_at": observation.captured_at.isoformat(),
-                    "recognized_text_hints": sorted(recognized_texts),
-                    "unidentified_ocr_lines": [
-                        {
-                            "text": line.text,
-                            "normalized_text": normalize_ocr_text(line.text),
-                            "bounds": {
-                                "x": line.bounds.x,
-                                "y": line.bounds.y,
-                                "width": line.bounds.width,
-                                "height": line.bounds.height,
-                            },
-                            "confidence": line.confidence,
-                        }
-                        for line in unidentified_lines
-                    ],
-                },
-                indent=2,
-                ensure_ascii=True,
-            ),
-            encoding="utf-8",
-        )
 
 
 @dataclass(slots=True)
@@ -369,12 +320,14 @@ class ObservationBuilder:
             backend = getattr(self.enricher, "ocr_service", None)
         if backend is None:
             backend = UnavailableOcrService()
-        return ObservationOcrContext(
+        context = ObservationOcrContext(
             screenshot.image,
             backend,
             getattr(screenshot, "frame_ref", None),
             self.ocr_backend_revision,
         )
+        context.require_bounded_regions()
+        return context
 
     def compile_ocr_region_plans(
         self,
@@ -405,6 +358,7 @@ class ObservationBuilder:
             ocr_context = self.create_ocr_context(screenshot)
         else:
             ocr_context.validate_capture(screenshot.image, getattr(screenshot, "frame_ref", None))
+        ocr_context.require_bounded_regions()
         active_request = request or ObservationRequest.full_runtime_default()
         viewport_reviewed = is_reviewed_viewport(screenshot.image.size)
         if active_request.world_map_coordinate_only:
@@ -435,8 +389,11 @@ class ObservationBuilder:
             return self._publish(
                 screenshot=screenshot,
                 decision=decision,
-                visible_elements=additions.visible_elements,
+                visible_elements=select_content_labels(
+                    additions.visible_elements, selector_registry=self.selector_registry,
+                ),
                 additions=additions,
+                ocr_context=ocr_context,
             )
 
         visual = (
@@ -448,9 +405,7 @@ class ObservationBuilder:
         if visual.evidence:
             active_request = replace(active_request, include_popup_guard=True, include_loading_guard=True)
         detection_plan = self._selector_detection_plan(active_request)
-        # The mandatory full-frame guard stage owns the first OCR read.  Any
-        # later selector/content crop can then reuse contained lines from this
-        # pinned context without issuing an independent backend call.
+        # Global guard regions run independently of the caller's content scope.
         guard_additions = self.enricher.recognize_guards(
             screenshot.image,
             active_request,
@@ -458,9 +413,12 @@ class ObservationBuilder:
             **({"owned_dismiss_bounds": tuple(control.bounds for control in visual.dismiss_controls)}
                if visual.dismiss_controls else {}),
         )
+        guard_additions = reconcile_visual_modal_guard(visual, guard_additions)
         guard_verdict = guard_additions.guard_verdict
-        global_evidence = (*visual.evidence, *guard_additions.screen_evidence)
-        if guard_verdict == GuardVerdict.BLOCKED and not _blocked_screen_has_requested_fields(
+        global_evidence, background_evidence = partition_guard_evidence(
+            visual.evidence, guard_additions.screen_evidence,
+        )
+        if guard_verdict == GuardVerdict.BLOCKED and not allows_guarded_field_enrichment(
             active_request,
             guard_additions,
         ):
@@ -469,12 +427,15 @@ class ObservationBuilder:
                 global_evidence,
                 guard=guard_verdict,
                 viewport_reviewed=viewport_reviewed,
+                background_evidence=background_evidence,
             )
             return self._publish(
                 screenshot=screenshot,
                 decision=preliminary,
                 visible_elements=guard_additions.visible_elements,
                 additions=guard_additions,
+                ocr_context=ocr_context,
+                profile_ids=visual.profile_ids,
             )
         if guard_verdict == GuardVerdict.BLOCKED:
             # A known modal may expose requested fields of its own, but its
@@ -484,8 +445,28 @@ class ObservationBuilder:
             visual_decision = self.screen_classifier.decide(
                 {}, global_evidence, guard=guard_verdict,
                 viewport_reviewed=viewport_reviewed,
+                background_evidence=background_evidence,
             )
+            if visual_decision.effective_screen == ScreenType.PNC_LOADING:
+                # Foreground guards already ran. A passive loading decision has
+                # no selector or semantic-field reads to acquire.
+                return self._publish(
+                    screenshot=screenshot, decision=visual_decision,
+                    visible_elements={}, additions=guard_additions,
+                    ocr_context=ocr_context, profile_ids=visual.profile_ids,
+                )
             probe_selector_ids = detection_plan.selector_ids
+            if visual_decision.effective_screen == ScreenType.UNKNOWN:
+                # Text fields have no semantic owner before independent identity.
+                # Template probes may still establish a supported legacy screen.
+                unowned_ocr_ids = {
+                    selector.id for selector in self.selector_registry.all()
+                    if selector.detection_kind == DetectionKind.OCR_REGION
+                }
+                probe_selector_ids = tuple(
+                    selector_id for selector_id in probe_selector_ids
+                    if selector_id not in unowned_ocr_ids
+                )
             if visual.evidence and visual_decision.action_eligible:
                 # Global guards have already run. A proved layout needs only
                 # its own selectors, not unrelated OCR identity probes.
@@ -511,8 +492,15 @@ class ObservationBuilder:
             global_evidence,
             guard=guard_verdict,
             viewport_reviewed=viewport_reviewed,
+            background_evidence=background_evidence,
         )
-        if preliminary.guard == GuardVerdict.BLOCKED and not _blocked_screen_has_requested_fields(
+        if not preliminary.action_eligible:
+            return self._publish(
+                screenshot=screenshot, decision=preliminary,
+                visible_elements={}, additions=ObservationAdditions(),
+                ocr_context=ocr_context, profile_ids=visual.profile_ids,
+            )
+        if preliminary.guard == GuardVerdict.BLOCKED and not allows_guarded_field_enrichment(
             active_request,
             guard_additions,
         ):
@@ -521,6 +509,8 @@ class ObservationBuilder:
                 decision=preliminary,
                 visible_elements=guard_additions.visible_elements,
                 additions=guard_additions,
+                ocr_context=ocr_context,
+                profile_ids=visual.profile_ids,
             )
 
         semantic_request = replace(
@@ -528,9 +518,8 @@ class ObservationBuilder:
             include_popup_guard=False,
             include_loading_guard=False,
         )
-        # Compile and execute only the fixed fields owned by the accepted screen.
-        # The mandatory guard has already pinned the full-frame result, so these
-        # reads reuse that context without creating a second OCR owner.
+        # Compile only fixed fields owned by the accepted screen. All reads share
+        # this immutable capture and retain their own crop/cache identity.
         ocr_region_plans = self.compile_ocr_region_plans(
             resolved_screen=preliminary.effective_screen,
             request=semantic_request,
@@ -557,7 +546,10 @@ class ObservationBuilder:
             semantic_request,
             ocr_context=ocr_context,
             ocr_regions=ocr_regions,
+            layout_id=preliminary.layout_id,
         )
+        if any(item.screen_type != preliminary.effective_screen for item in additions.screen_evidence):
+            raise ValueError("Content parser contradicted independent screen identity.")
         if guard_verdict == GuardVerdict.BLOCKED:
             # Preserve the modal's own guarded fields and controls while
             # allowing explicitly requested content enrichment to add facts.
@@ -579,30 +571,6 @@ class ObservationBuilder:
             visible_elements = {}
             additions = ObservationAdditions(guard_verdict=guard_verdict)
             global_evidence = tuple(item for item in visual.evidence if item.screen_type in overlay_screens)
-        if (
-            preliminary.effective_screen == ScreenType.UNKNOWN
-            and not additions.screen_evidence
-            and guard_verdict == GuardVerdict.CLEAR
-            and _request_has_narrow_semantic_scope(active_request)
-        ):
-            # A narrow source request cannot hide an unexpected screen.  Give
-            # the canonical semantic enricher one broad retry on this same
-            # frame, then let the final classifier reconcile its evidence.
-            fallback_additions = self.enricher.enrich(
-                screenshot.image,
-                ScreenType.UNKNOWN,
-                visible_elements,
-                replace(
-                    ObservationRequest.full_runtime_default(),
-                    include_popup_guard=False,
-                    include_loading_guard=False,
-                    expected_mailbox=active_request.expected_mailbox,
-                    expected_world_coordinate=active_request.expected_world_coordinate,
-                ),
-                ocr_context=ocr_context,
-                ocr_regions=ocr_regions,
-            )
-            additions = _merge_observation_additions(additions, fallback_additions)
         combined_evidence = (*global_evidence, *additions.screen_evidence)
         guard_verdict = _merge_guard_verdicts(guard_verdict, additions.guard_verdict)
         visible_elements = _merge_visible_element_maps(
@@ -614,6 +582,7 @@ class ObservationBuilder:
             combined_evidence,
             guard=guard_verdict,
             viewport_reviewed=viewport_reviewed,
+            background_evidence=background_evidence,
         )
         visible_elements = _merge_visible_element_maps(
             visible_elements,
@@ -624,6 +593,7 @@ class ObservationBuilder:
             combined_evidence,
             guard=guard_verdict,
             viewport_reviewed=viewport_reviewed,
+            background_evidence=background_evidence,
         )
 
         # Complete selector detection before geometry publication, while keeping
@@ -643,6 +613,7 @@ class ObservationBuilder:
                 combined_evidence,
                 guard=guard_verdict,
                 viewport_reviewed=viewport_reviewed,
+                background_evidence=background_evidence,
             )
         if decision.effective_screen != ScreenType.UNKNOWN and decision.guard != GuardVerdict.UNRESOLVED:
             visible_elements, _ = self._complete_screen_scope(
@@ -660,12 +631,29 @@ class ObservationBuilder:
                 combined_evidence,
                 guard=guard_verdict,
                 viewport_reviewed=viewport_reviewed,
+                background_evidence=background_evidence,
             )
+        visible_elements = visual_controls_for_decision(
+            visual, decision, candidates=visible_elements,
+        )
+        if visual.evidence and decision.action_eligible and guard_verdict == GuardVerdict.CLEAR:
+            # Match NavigationPerception: parsed text contributes declared labels,
+            # while current visual evidence owns controls. Content cannot repair
+            # a missing template or create an unmeasured premium action.
+            visible_elements = {
+                **visual_controls_for_decision(visual, decision),
+                **select_content_labels(
+                    {**visible_elements, **additions.visible_elements},
+                    selector_registry=self.selector_registry,
+                ),
+            }
         return self._publish(
             screenshot=screenshot,
             decision=decision,
             visible_elements=visible_elements,
             additions=additions,
+            ocr_context=ocr_context,
+            profile_ids=visual.profile_ids,
         )
 
     def _publish(
@@ -675,6 +663,8 @@ class ObservationBuilder:
         decision: ScreenDecision,
         visible_elements: Mapping[UiElementId, VisibleElement],
         additions: ObservationAdditions,
+        ocr_context: ObservationOcrContext | None = None,
+        profile_ids: tuple[str, ...] = (),
     ) -> Observation:
         """Publishes only facts tied to an accepted screen decision and frame."""
 
@@ -692,12 +682,21 @@ class ObservationBuilder:
             decision=decision,
             additions=additions,
         )
-        visible_elements = bind_visible_elements(
+        content_labels = select_content_labels(
+            visible_elements,
+            selector_registry=self.selector_registry,
+        )
+        visible_elements = {
+            selector_id: content_labels.get(selector_id, element)
+            for selector_id, element in visible_elements.items()
+        }
+        bound_visible_elements = bind_visible_elements(
             visible_elements,
             frame_ref=getattr(screenshot, "frame_ref", None),
             source_screen=decision.effective_screen,
             source_layout_id=decision.layout_id,
         )
+        visible_elements = bound_visible_elements
         bound_list_entries = tuple(
             bind_list_entry(
                 entry,
@@ -707,7 +706,7 @@ class ObservationBuilder:
             )
             for entry in additions.list_entries
         )
-        return Observation(
+        observation = Observation(
             decision=decision,
             visible_elements=visible_elements,
             list_entries=bound_list_entries,
@@ -735,6 +734,14 @@ class ObservationBuilder:
             chat_draft_text=additions.chat_draft_text,
             frame_ref=getattr(screenshot, "frame_ref", None),
         )
+        if self.debug_artifact_collector is not None and ocr_context is not None:
+            self.debug_artifact_collector.persist_recognition_gap(
+                screenshot=screenshot,
+                observation=observation,
+                ocr_context=ocr_context,
+                profile_ids=profile_ids,
+            )
+        return observation
 
     def _filter_visible_elements_for_decision(
         self,
@@ -1110,12 +1117,9 @@ def _merge_observation_additions(
     primary: ObservationAdditions,
     fallback: ObservationAdditions,
 ) -> ObservationAdditions:
-    """Appends broad fallback evidence without discarding facts from the scoped pass.
+    """Combine same-frame guard and owned content facts without losing either.
 
-    A narrow request may already have extracted rows, spatial state, or text
-    fields before its screen identity was unresolved.  The broad same-frame
-    retry supplies identity evidence; it must not replace those facts or make
-    the observation lose its original semantic context.
+    This merge does not acquire OCR or retry unresolved screen identity.
     """
 
     list_entries = list(primary.list_entries)
@@ -1165,7 +1169,65 @@ def _merge_observation_additions(
     )
 
 
-def _blocked_screen_has_requested_fields(
+def reconcile_visual_modal_guard(
+    visual: VisualRecognition, guard: ObservationAdditions,
+) -> ObservationAdditions:
+    """Let a proved modal own its measured controls without requiring title OCR.
+
+    A foreign or unresolved global interruption always retains precedence.
+    """
+
+    screens = {item.screen_type for item in visual.evidence}
+    visual_only_families = {
+        ScreenType.PNC_VIP_DAILY_RESET,
+        ScreenType.PNC_WORLD_COORDINATE_DIALOG,
+        ScreenType.PNC_BUILD_SPEEDUP_CONFIRM,
+        ScreenType.PNC_MAIL_COMPOSE_POPUP,
+        ScreenType.PNC_CHAT_PLAYER_ACTION_POPUP,
+        ScreenType.PNC_ALLIANCE_MEMBER_MANAGE_POPUP,
+        ScreenType.PNC_RESEARCH_QUEUE,
+    }
+    guard_screens = {item.screen_type for item in guard.screen_evidence}
+    if (
+        guard.guard_verdict == GuardVerdict.UNRESOLVED
+        and guard.screen_evidence
+        and all(item.reason == "weak_unmeasured_ocr_popup_cancel_button"
+                for item in guard.screen_evidence)
+        and visual.evidence
+        and all(item.screen_type == ScreenType.PNC_POPUP
+                and item.layout_id == "alliance_invitation_footer"
+                for item in visual.evidence)
+    ):
+        # The portrait invitation extends to the screen edge, outside the
+        # compact modal geometry probe. Its independent visual anchors prove
+        # this layout; only its current Cancel template can supply an action.
+        # Other unresolved guards retain precedence over this profile.
+        return replace(
+            guard, screen_evidence=visual.evidence,
+            visible_elements={item.selector_id: item for item in visual.controls},
+            guard_verdict=GuardVerdict.BLOCKED,
+        )
+    if guard.guard_verdict == GuardVerdict.BLOCKED and guard_screens.intersection(visual_only_families):
+        if len(screens) == 1 and guard_screens == screens:
+            return replace(guard, visible_elements={item.selector_id: item for item in visual.controls})
+        return replace(
+            guard, visible_elements={}, popup_overlay=None,
+            screen_evidence=tuple(replace(item, reason=f"weak_unproved_{item.reason}")
+                                  for item in guard.screen_evidence),
+            guard_verdict=GuardVerdict.UNRESOLVED,
+        )
+    if len(screens) != 1 or not screens.issubset(BLOCKING_SCREEN_TYPES):
+        return guard
+    if guard.guard_verdict != GuardVerdict.CLEAR or guard.screen_evidence:
+        return guard
+    return replace(
+        guard, screen_evidence=visual.evidence,
+        visible_elements={item.selector_id: item for item in visual.controls},
+        guard_verdict=GuardVerdict.BLOCKED,
+    )
+
+
+def allows_guarded_field_enrichment(
     request: ObservationRequest,
     guard_additions: ObservationAdditions,
 ) -> bool:
@@ -1193,28 +1255,6 @@ def _single_screen_evidence(evidence: Sequence[ScreenEvidence]) -> ScreenType | 
         if item.screen_type not in {ScreenType.UNKNOWN, ScreenType.PNC_LOADING}
     }
     return next(iter(screens)) if len(screens) == 1 else None
-
-
-def _request_has_narrow_semantic_scope(request: ObservationRequest) -> bool:
-    """Returns whether a request actually narrows semantic family/content work.
-
-    Guard flags are intentionally excluded: normal observations run the guard
-    stage independently, so a caller may disable those flags on an otherwise
-    full semantic request without accidentally triggering a second broad pass.
-    """
-
-    full_runtime = ObservationRequest.full_runtime_default()
-    return any(
-        (
-            request.candidate_screen_types != full_runtime.candidate_screen_types,
-            request.ocr_screen_types != full_runtime.ocr_screen_types,
-            request.include_chat_state != full_runtime.include_chat_state,
-            request.include_chat_entries != full_runtime.include_chat_entries,
-            request.text_field_selectors != full_runtime.text_field_selectors,
-            request.expected_mailbox is not None,
-            request.expected_world_coordinate is not None,
-        )
-    )
 
 
 def _should_replace_visible_element(*, current: VisibleElement, candidate: VisibleElement) -> bool:
@@ -1278,77 +1318,6 @@ def _trusted_observed_account_id(observation: Observation) -> str | None:
     if observation.screen_type not in {ScreenType.PNC_LOGIN, ScreenType.PNC_ACCOUNT_SWITCH}:
         return None
     return observation.current_pnc_account_id
-
-
-def _recognized_ocr_text_hints(observation: Observation) -> frozenset[str]:
-    """Returns normalized OCR phrases already explained by the typed observation."""
-
-    recognized_texts: set[str] = set()
-    _add_recognized_text(recognized_texts, observation.current_pnc_account_id)
-    _add_recognized_text(recognized_texts, observation.verified_pnc_account_id)
-    _add_recognized_text(recognized_texts, observation.profile_player_name)
-    _add_recognized_text(recognized_texts, observation.chat_draft_text)
-    if observation.current_castle is not None:
-        _add_recognized_text(recognized_texts, observation.current_castle.castle_name)
-        _add_recognized_text(recognized_texts, observation.current_castle.kingdom)
-    for element in observation.visible_elements.values():
-        _add_recognized_text(recognized_texts, element.extracted_text)
-    for entry in observation.list_entries:
-        _add_recognized_text(recognized_texts, entry.title_text)
-        _add_recognized_text(recognized_texts, entry.subtitle_text)
-        for value in entry.metadata.values():
-            if isinstance(value, str):
-                _add_recognized_text(recognized_texts, value)
-    if observation.spatial_surface is not None:
-        coordinate_text = observation.spatial_surface.metadata.get("coordinate_text")
-        if isinstance(coordinate_text, str):
-            _add_recognized_text(recognized_texts, coordinate_text)
-        for object_ in observation.spatial_surface.objects:
-            _add_recognized_text(recognized_texts, object_.name_text)
-            _add_recognized_text(recognized_texts, object_.alliance_tag)
-            _add_recognized_text(recognized_texts, object_.kingdom)
-            if object_.alliance_tag is not None and object_.name_text is not None:
-                _add_recognized_text(recognized_texts, f"{object_.alliance_tag}{object_.name_text}")
-    return frozenset(recognized_texts)
-
-
-def _add_recognized_text(recognized_texts: set[str], text: str | None) -> None:
-    """Adds one non-blank normalized text hint to the recognized OCR set."""
-
-    if text is None:
-        return
-    normalized_text = normalize_ocr_text(text)
-    if normalized_text == "":
-        return
-    recognized_texts.add(normalized_text)
-
-
-def _unidentified_ocr_lines(
-    *,
-    lines: Sequence[OcrLine],
-    recognized_texts: frozenset[str],
-) -> tuple[OcrLine, ...]:
-    """Returns only OCR lines whose normalized text is not already explained by the observation."""
-
-    unidentified_lines: list[OcrLine] = []
-    for line in lines:
-        normalized_text = normalize_ocr_text(line.text)
-        if normalized_text == "" or _recognized_text_matches_line(normalized_text, recognized_texts):
-            continue
-        unidentified_lines.append(line)
-    return tuple(unidentified_lines)
-
-
-def _recognized_text_matches_line(normalized_text: str, recognized_texts: frozenset[str]) -> bool:
-    """Returns whether one normalized OCR line is already represented by the typed observation."""
-
-    for recognized_text in recognized_texts:
-        if normalized_text == recognized_text:
-            return True
-        if len(normalized_text) >= 4 and len(recognized_text) >= 4:
-            if normalized_text in recognized_text or recognized_text in normalized_text:
-                return True
-    return False
 
 
 def _screenshot_artifact_path(screenshot: object) -> object:

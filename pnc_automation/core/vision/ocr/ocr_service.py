@@ -70,13 +70,34 @@ class OcrReadStatus(StrEnum):
     ERROR = "error"
 
 
+class OcrRequiredFieldStatus(StrEnum):
+    """Describes whether a parser produced a value for a required OCR fact."""
+
+    PRESENT = "present"
+    MISSING = "missing"
+    INVALID = "invalid"
+
+
 @dataclass(frozen=True, slots=True)
 class OcrReadDiagnostic:
-    """Immutable reason and outcome for one context-bound OCR request."""
+    """Immutable request outcome and acquired result, retained for OCR-free export."""
 
     purpose: OcrReadPurpose
     status: OcrReadStatus
     region: Bounds | None
+    detail: str | None = None
+    result: OcrResult | None = None
+    required_fact: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class OcrRequiredFieldDiagnostic:
+    """Immutable parser outcome for one required, region-backed OCR fact."""
+
+    required_fact: str
+    status: OcrRequiredFieldStatus
+    region: Bounds | None
+    reason: str | None = None
     detail: str | None = None
 
 
@@ -117,6 +138,15 @@ class _OcrCacheEntry:
 _RAW_PREPROCESSING_ID = "__raw__"
 
 
+def _validate_required_fact(required_fact: str | None) -> None:
+    """Validate optional semantic ownership attached to one OCR request."""
+
+    if required_fact is not None and (
+        not isinstance(required_fact, str) or not required_fact.strip()
+    ):
+        raise ValueError("required_fact must be a non-empty string when provided.")
+
+
 @dataclass(slots=True, init=False)
 class ObservationOcrContext:
     """Owns one captured image, its OCR cache, and frame-local measurements.
@@ -124,8 +154,8 @@ class ObservationOcrContext:
     The source image identity is retained only to reject accidental reads from a
     different capture. OCR always receives a private copy, and cache keys never
     contain image identity or dimensions. A successful raw full-frame result is
-    pinned so repeated bounded-region discovery cannot evict the result needed by
-    later diagnostics.
+    pinned while legacy guard/content callers still reuse it. Diagnostics retain
+    acquired results independently of cache eviction and never need another read.
     """
 
     _source_image: Image.Image = field(init=False, repr=False)
@@ -148,6 +178,10 @@ class ObservationOcrContext:
     _fullframe_reuses: int = field(default=0, init=False, repr=False)
     _engine_seconds: float = field(default=0.0, init=False, repr=False)
     _diagnostics: list[OcrReadDiagnostic] = field(default_factory=list, init=False, repr=False)
+    _required_field_diagnostics: list[OcrRequiredFieldDiagnostic] = field(
+        default_factory=list, init=False, repr=False
+    )
+    _bounded_regions_required: bool = field(default=False, init=False, repr=False)
 
     def __init__(
         self,
@@ -189,6 +223,8 @@ class ObservationOcrContext:
         self._fullframe_reuses = 0
         self._engine_seconds = 0.0
         self._diagnostics = []
+        self._required_field_diagnostics = []
+        self._bounded_regions_required = False
 
     @property
     def image(self) -> Image.Image:
@@ -242,6 +278,41 @@ class ObservationOcrContext:
         with self._lock:
             return tuple(self._diagnostics)
 
+    @property
+    def required_field_diagnostics(self) -> tuple[OcrRequiredFieldDiagnostic, ...]:
+        """Returns parser outcomes for required fields in this capture."""
+
+        with self._lock:
+            return tuple(self._required_field_diagnostics)
+
+    @property
+    def bounded_regions_required(self) -> bool:
+        """Returns whether this context rejects unbounded OCR requests."""
+
+        with self._lock:
+            return self._bounded_regions_required
+
+    def require_bounded_regions(self) -> None:
+        """Require all future OCR reads to name a strict subregion of the capture.
+
+        The policy is one-way for a context. Enabling it after a successful
+        full-frame read would leave existing evidence with a different scope,
+        so that transition is rejected instead of silently reusing or clearing
+        the evidence.
+        """
+
+        with self._lock:
+            if self._bounded_regions_required:
+                return
+            if any(
+                self._is_whole_frame_region(read.region) and read.result is not None
+                for read in self._diagnostics
+            ):
+                raise ValueError(
+                    "Cannot require bounded OCR regions after full-frame OCR evidence was acquired."
+                )
+            self._bounded_regions_required = True
+
     def _record_diagnostic(
         self,
         *,
@@ -249,8 +320,19 @@ class ObservationOcrContext:
         status: OcrReadStatus,
         region: Bounds | None,
         detail: str | None,
+        result: OcrResult | None = None,
+        required_fact: str | None = None,
     ) -> None:
-        self._diagnostics.append(OcrReadDiagnostic(purpose, status, region, detail))
+        self._diagnostics.append(
+            OcrReadDiagnostic(
+                purpose,
+                status,
+                region,
+                detail,
+                result,
+                required_fact,
+            )
+        )
 
     def record_diagnostic(
         self,
@@ -259,15 +341,52 @@ class ObservationOcrContext:
         status: OcrReadStatus,
         region: Bounds | None = None,
         detail: str | None = None,
+        required_fact: str | None = None,
     ) -> None:
         """Records an application-owned outcome for a planned read."""
 
         with self._lock:
+            _validate_required_fact(required_fact)
             self._record_diagnostic(
                 purpose=purpose,
                 status=status,
                 region=region,
                 detail=detail,
+                required_fact=required_fact,
+            )
+
+    def record_required_field_diagnostic(
+        self,
+        *,
+        required_fact: str,
+        status: OcrRequiredFieldStatus,
+        region: Bounds | None,
+        reason: str | None = None,
+        detail: str | None = None,
+    ) -> None:
+        """Record a parser outcome without issuing another OCR request.
+
+        Required-field outcomes are kept separate from OCR engine outcomes: a
+        non-empty crop can still fail its semantic parser. Callers should use
+        the same ``required_fact`` and region for retries so the diagnostic
+        exporter can retain the latest parser result.
+        """
+
+        if not isinstance(required_fact, str) or not required_fact.strip():
+            raise ValueError("required_fact must be a non-empty string.")
+        if not isinstance(status, OcrRequiredFieldStatus):
+            raise TypeError("status must be an OcrRequiredFieldStatus value.")
+        if region is not None:
+            self._validate_region(region)
+        with self._lock:
+            self._required_field_diagnostics.append(
+                OcrRequiredFieldDiagnostic(
+                    required_fact=required_fact,
+                    status=status,
+                    region=region,
+                    reason=reason,
+                    detail=detail,
+                )
             )
 
     def validate_capture(self, image: Image.Image | None, frame_ref: FrameRef | None) -> None:
@@ -288,12 +407,15 @@ class ObservationOcrContext:
         reuse_full_frame: bool = True,
         purpose: OcrReadPurpose = OcrReadPurpose.CONTENT,
         detail: str | None = None,
+        required_fact: str | None = None,
     ) -> OcrResult:
         """Returns OCR for a full image or bounded region using this frame's cache."""
 
         with self._lock:
             self.validate_capture(image, self._frame_ref)
             validated_region = self._validate_region(region)
+            self._reject_unbounded_region(validated_region)
+            _validate_required_fact(required_fact)
             self._requests += 1
             key = self._cache_key(validated_region, _RAW_PREPROCESSING_ID)
             cached = self._lookup_cached(key)
@@ -304,20 +426,25 @@ class ObservationOcrContext:
                     status=OcrReadStatus.CACHE_HIT,
                     region=validated_region,
                     detail=detail,
+                    result=cached.result,
+                    required_fact=required_fact,
                 )
                 return cached.result
-            if validated_region is not None and reuse_full_frame:
+            if validated_region is not None and reuse_full_frame and not self._bounded_regions_required:
                 fullframe_key = self._cache_key(None, _RAW_PREPROCESSING_ID)
                 fullframe = self._cache.get(fullframe_key)
                 if fullframe is not None and fullframe.result is not None:
                     self._fullframe_reuses += 1
+                    result = _contained_result(fullframe.result, validated_region)
                     self._record_diagnostic(
                         purpose=purpose,
                         status=OcrReadStatus.FULL_FRAME_REUSE,
                         region=validated_region,
                         detail=detail,
+                        result=result,
+                        required_fact=required_fact,
                     )
-                    return _contained_result(fullframe.result, validated_region)
+                    return result
             try:
                 result = self._run_backend(
                     key=key,
@@ -331,6 +458,7 @@ class ObservationOcrContext:
                     status=OcrReadStatus.ERROR,
                     region=validated_region,
                     detail=detail,
+                    required_fact=required_fact,
                 )
                 raise
             self._record_diagnostic(
@@ -338,6 +466,8 @@ class ObservationOcrContext:
                 status=OcrReadStatus.ENGINE,
                 region=validated_region,
                 detail=detail,
+                result=result,
+                required_fact=required_fact,
             )
             return result
 
@@ -349,6 +479,7 @@ class ObservationOcrContext:
         reuse_full_frame: bool = True,
         purpose: OcrReadPurpose = OcrReadPurpose.CONTENT,
         detail: str | None = None,
+        required_fact: str | None = None,
     ) -> tuple[OcrLine, ...]:
         """Returns OCR lines through the frame-local result cache."""
 
@@ -358,6 +489,7 @@ class ObservationOcrContext:
             reuse_full_frame=reuse_full_frame,
             purpose=purpose,
             detail=detail,
+            required_fact=required_fact,
         ).lines
 
     def read_text(
@@ -368,6 +500,7 @@ class ObservationOcrContext:
         reuse_full_frame: bool = True,
         purpose: OcrReadPurpose = OcrReadPurpose.CONTENT,
         detail: str | None = None,
+        required_fact: str | None = None,
     ) -> str:
         """Returns newline-joined OCR text through the frame-local result cache."""
 
@@ -379,6 +512,7 @@ class ObservationOcrContext:
                 reuse_full_frame=reuse_full_frame,
                 purpose=purpose,
                 detail=detail,
+                required_fact=required_fact,
             ).lines
         )
 
@@ -391,6 +525,7 @@ class ObservationOcrContext:
         prepare: Callable[[Image.Image, Bounds], Image.Image | None],
         purpose: OcrReadPurpose = OcrReadPurpose.CONTENT,
         detail: str | None = None,
+        required_fact: str | None = None,
     ) -> OcrResult | None:
         """Runs one named preprocessing variant and projects its OCR back once.
 
@@ -403,7 +538,10 @@ class ObservationOcrContext:
         with self._lock:
             self.validate_capture(image, self._frame_ref)
             validated_region = self._validate_region(region)
-            assert validated_region is not None
+            self._reject_unbounded_region(validated_region)
+            _validate_required_fact(required_fact)
+            if validated_region is None:
+                raise ValueError("Preprocessed OCR requires a bounded region.")
             if not isinstance(preprocessing_id, str) or not preprocessing_id.strip():
                 raise ValueError("preprocessing_id must be non-empty.")
             if preprocessing_id.strip() == _RAW_PREPROCESSING_ID:
@@ -419,6 +557,8 @@ class ObservationOcrContext:
                     status=OcrReadStatus.MISSING if cached.not_applicable else OcrReadStatus.CACHE_HIT,
                     region=validated_region,
                     detail=detail,
+                    result=cached.result,
+                    required_fact=required_fact,
                 )
                 return None if cached.not_applicable else cached.result
             try:
@@ -434,6 +574,7 @@ class ObservationOcrContext:
                     status=OcrReadStatus.ERROR,
                     region=validated_region,
                     detail=detail,
+                    required_fact=required_fact,
                 )
                 raise
             self._record_diagnostic(
@@ -441,6 +582,8 @@ class ObservationOcrContext:
                 status=OcrReadStatus.MISSING if result is None else OcrReadStatus.ENGINE,
                 region=validated_region,
                 detail=detail,
+                result=result,
+                required_fact=required_fact,
             )
             return result
 
@@ -462,6 +605,19 @@ class ObservationOcrContext:
         ):
             raise ValueError("OCR region must fit inside the captured image.")
         return region
+
+    def _reject_unbounded_region(self, region: Bounds | None) -> None:
+        """Reject a missing or whole-capture region under the bounded policy."""
+
+        if not self._bounded_regions_required:
+            return
+        if self._is_whole_frame_region(region):
+            raise ValueError("Bounded OCR policy requires a strict subregion of the captured image.")
+
+    def _is_whole_frame_region(self, region: Bounds | None) -> bool:
+        """Return whether a region denotes the entire captured image."""
+
+        return region is None or region == Bounds(0, 0, self._owned_image.width, self._owned_image.height)
 
     def _cache_key(
         self,
@@ -501,6 +657,10 @@ class ObservationOcrContext:
                 return None
             if not isinstance(source, Image.Image) or source.width <= 0 or source.height <= 0:
                 raise ValueError("prepare must return a non-empty PIL image or None.")
+            if self._bounded_regions_required and source.size == self._owned_image.size:
+                raise ValueError(
+                    "Bounded OCR policy rejected a preprocessed image with full-capture dimensions."
+                )
             source = source.copy()
         else:
             source = self._owned_image.copy()

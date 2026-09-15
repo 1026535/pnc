@@ -45,6 +45,10 @@ from tests.support.paths import TEST_DATA_ROOT
 from tests.support.pnc.capture_vision.encode_png import _encode_png
 from tests.support.pnc.capture_vision.fake_ocr_service import _FakeOcrService
 from tests.support.pnc.capture_vision.fake_screenshot_session import make_captured_frame
+from tests.support.pnc.capture_vision.modal_overlay import (
+    update_modal_lines,
+    with_update_modal,
+)
 from tests.support.pnc.observations import make_entry, make_observation
 
 
@@ -342,17 +346,13 @@ class ResearchTreeVisualControlTests(unittest.TestCase):
     def test_active_detail_required_update_still_owns_popup(self) -> None:
         """Keeps the required-update modal guard ahead of active-detail ownership."""
 
+        image = with_update_modal(_load_active_detail_fixture())
         popup_lines = (
             *_active_detail_ocr_lines(),
-            OcrLine(
-                "New version detected. Tap Confirm to update.",
-                Bounds(58, 380, 420, 28),
-                1.0,
-            ),
-            OcrLine("Confirm", Bounds(221, 531, 90, 27), 1.0),
+            *update_modal_lines(image.size),
         )
         observation = _perception(popup_lines).build(
-            _capture(_load_active_detail_fixture())
+            _capture(image)
         )
 
         self.assertEqual(observation.screen_type, ScreenType.PNC_POPUP)
@@ -419,17 +419,13 @@ class ResearchTreeVisualControlTests(unittest.TestCase):
     def test_production_builder_blocks_start_behind_required_update(self) -> None:
         """Keeps the measured background Start unavailable when an update owns the frame."""
 
+        image = with_update_modal(_load_detail_fixture())
         popup_lines = (
             *_detail_ocr_lines(),
-            OcrLine(
-                "New version detected. Tap Confirm to update.",
-                Bounds(58, 380, 420, 28),
-                1.0,
-            ),
-            OcrLine("Confirm", Bounds(221, 531, 90, 27), 1.0),
+            *update_modal_lines(image.size),
         )
         observation = _observation_builder(popup_lines).build(
-            _capture(_load_detail_fixture())
+            _capture(image)
         )
 
         self.assertEqual(observation.screen_type, ScreenType.PNC_POPUP)
@@ -520,16 +516,12 @@ class ResearchTreeVisualControlTests(unittest.TestCase):
     def test_research_detail_popup_suppresses_start(self) -> None:
         """Keeps a required update popup as the owner even when detail anchors remain visible."""
 
+        image = with_update_modal(_load_detail_fixture())
         popup_lines = (
             *_detail_ocr_lines(),
-            OcrLine(
-                "New version detected. Tap Confirm to update.",
-                Bounds(58, 380, 420, 28),
-                1.0,
-            ),
-            OcrLine("Confirm", Bounds(221, 531, 90, 27), 1.0),
+            *update_modal_lines(image.size),
         )
-        observation = _perception(popup_lines).build(_capture(_load_detail_fixture()))
+        observation = _perception(popup_lines).build(_capture(image))
 
         self.assertEqual(observation.screen_type, ScreenType.PNC_POPUP)
         self.assertTrue(observation.blocking_popup)
@@ -566,18 +558,23 @@ class ResearchTreeVisualControlTests(unittest.TestCase):
     def test_blocking_popup_suppresses_research_tree_back(self) -> None:
         """A blocking update prompt owns the frame even when tree anchors remain visible."""
 
-        popup_lines = (
-            OcrLine(
-                "New version detected. Tap Confirm to update.",
-                Bounds(58, 380, 420, 28),
-                1.0,
-            ),
-            OcrLine("Confirm", Bounds(221, 531, 90, 27), 1.0),
-        )
-        observation = _perception(popup_lines).build(_capture(_load_fixture()))
+        image = with_update_modal(_load_fixture())
+        observation = _perception(update_modal_lines(image.size)).build(_capture(image))
 
         self.assertEqual(observation.screen_type, ScreenType.PNC_POPUP)
         self.assertTrue(observation.blocking_popup)
+        self.assertFalse(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
+
+    def test_update_text_without_captured_panel_stays_unresolved(self) -> None:
+        """OCR text alone cannot promote a required-update action."""
+
+        image = _load_fixture()
+        observation = _perception(update_modal_lines(image.size)).build(_capture(image))
+
+        self.assertEqual(observation.screen_type, ScreenType.UNKNOWN)
+        self.assertEqual(observation.decision.guard, GuardVerdict.UNRESOLVED)
+        self.assertFalse(observation.blocking_popup)
+        self.assertFalse(observation.has(UiElementId.PNC_UPDATE_CONFIRM_BUTTON))
         self.assertFalse(observation.has(UiElementId.PNC_BACK_BUTTON_TOP_LEFT))
 
     def test_back_dispatch_is_bound_to_the_current_research_tree_frame(self) -> None:

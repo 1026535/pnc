@@ -99,6 +99,19 @@ class CoreRuntime:
         self._last_observe_recovered = True
         return recovered
 
+    def observe_ready(self, label: str, *, include_content: bool = False) -> Observation:
+        """Capture one frame and pass only published loading through passive settling."""
+
+        started = self.navigation.clock()
+        observation = self.observe(label, include_content=include_content)
+        if observation.screen_type != ScreenType.PNC_LOADING:
+            return observation
+        return self._settle_initial_screen(
+            include_content=include_content,
+            initial_observation=observation,
+            started_at=started,
+        )
+
     def _observe_once(self, label: str, *, include_content: bool) -> Observation:
         """Captures and perceives one frame without recursively entering popup recovery."""
 
@@ -199,18 +212,33 @@ class CoreRuntime:
         if observation.screen_type != ScreenType.PNC_CASTLE_SELECTION:
             raise RuntimeError("Active castle identity preflight reached an unexpected screen.")
 
-    def _settle_initial_screen(self, *, launch_started: bool = False) -> Observation:
+    def _settle_initial_screen(
+        self,
+        *,
+        launch_started: bool = False,
+        include_content: bool = False,
+        initial_observation: Observation | None = None,
+        started_at: float | None = None,
+    ) -> Observation:
         """Waits passively through loading until a known screen is stable."""
 
         policy = self.navigation.policy
-        started = self.navigation.clock()
+        started = self.navigation.clock() if started_at is None else started_at
         previous_screen = ScreenType.UNKNOWN
         previous_captured_at = None
         stable = 0
+        settle_index = 0
         for index in range(policy.max_observations):
             if self.navigation.clock() - started >= policy.max_seconds:
                 break
-            observation = self.observe(f"preflight_settle_{index}")
+            if index == 0 and initial_observation is not None:
+                observation = initial_observation
+            else:
+                observation = self.observe(
+                    f"preflight_settle_{settle_index}",
+                    include_content=include_content,
+                )
+                settle_index += 1
             if self._last_observe_recovered:
                 # Popup recovery owns an independent bounded episode. Restart
                 # only this passive settle clock and stability state before
@@ -317,6 +345,11 @@ def assemble_core_runtime(
 
         return holder["runtime"].observe(label)
 
+    def observe_ready(label: str) -> Observation:
+        """Adapts the bounded loading-ready callback to the shared runtime object."""
+
+        return holder["runtime"].observe_ready(label)
+
     def record(entry: dict[str, object]) -> None:
         """Routes core events through the runtime's sanitized trace writer."""
 
@@ -328,6 +361,7 @@ def assemble_core_runtime(
         reviewed_navigation_edges(),
         policy=policy or NavigationPolicy(),
         record=record,
+        observe_ready=observe_ready,
     )
     result = CoreRuntime(
         runtime=connected_runtime,

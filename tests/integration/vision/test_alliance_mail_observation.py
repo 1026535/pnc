@@ -9,6 +9,7 @@ from pnc_automation.app.pnc.domain.observation import ListEntryKind
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
+from pnc_automation.app.pnc.vision.pnc_observation_enricher import _build_alliance_home_additions
 
 from tests.support.pnc.mail.mail_workflow_fixtures import MailWorkflowFixtures
 from tests.support.pnc.mail.build_observation import _build_observation
@@ -23,6 +24,7 @@ class AllianceMailObservationTests(MailWorkflowFixtures, unittest.TestCase):
 
         observation = _build_observation(
             request=ObservationRequest.mail_navigation_follow_up(),
+            accepted_screen=ScreenType.PNC_MAIL_HUB,
             lines=(
                 _ocr_line("Mail", x=310, y=42, width=110, height=24),
                 _ocr_line("Player Mail", x=220, y=317, width=155, height=39),
@@ -44,6 +46,8 @@ class AllianceMailObservationTests(MailWorkflowFixtures, unittest.TestCase):
 
         observation = _build_observation(
             request=ObservationRequest.mail_navigation_follow_up(ScreenType.PNC_ALLIANCE_HOME, ScreenType.PNC_MAIL_HUB),
+            accepted_screen=ScreenType.PNC_ALLIANCE_HOME,
+            semantic_parser=_build_alliance_home_additions,
             lines=(
                 _ocr_line("Alliance", x=182, y=17, width=183, height=54),
                 _ocr_line("Alliance Territory", x=49, y=842, width=253, height=40),
@@ -82,6 +86,8 @@ class AllianceMailObservationTests(MailWorkflowFixtures, unittest.TestCase):
 
         observation = _build_observation(
             request=ObservationRequest.mail_navigation_follow_up(ScreenType.PNC_ALLIANCE_HOME),
+            accepted_screen=ScreenType.PNC_ALLIANCE_HOME,
+            semantic_parser=_build_alliance_home_additions,
             lines=(
                 _ocr_line("Alliance", x=182, y=17, width=183, height=54),
                 _ocr_line("Alliance Territory", x=49, y=842, width=253, height=40),
@@ -102,6 +108,7 @@ class AllianceMailObservationTests(MailWorkflowFixtures, unittest.TestCase):
 
         observation = _build_observation(
             request=ObservationRequest.mail_navigation_follow_up(ScreenType.PNC_ALLIANCE_HOME),
+            accepted_screen=ScreenType.PNC_ALLIANCE_HOME,
             lines=(
                 _ocr_line("Alliance", x=182, y=17, width=183, height=54),
                 _ocr_line("Please clear Campaign Ch.3 first", x=194, y=454, width=512, height=39),
@@ -134,6 +141,7 @@ class AllianceMailObservationTests(MailWorkflowFixtures, unittest.TestCase):
 
         observation = _build_observation(
             request=ObservationRequest.full_runtime_default(),
+            accepted_screen=ScreenType.PNC_CHAT,
             lines=(
                 _ocr_line("Chat", x=240, y=38, width=100, height=26),
                 _ocr_line("Kingdom", x=210, y=118, width=120, height=34),
@@ -151,6 +159,7 @@ class AllianceMailObservationTests(MailWorkflowFixtures, unittest.TestCase):
 
         observation = _build_observation(
             request=ObservationRequest.mail_navigation_follow_up(ScreenType.PNC_MAIL_HUB),
+            accepted_screen=ScreenType.PNC_MAIL_HUB,
             lines=(
                 _ocr_line("Mail", x=310, y=42, width=110, height=24),
                 _ocr_line("Player Mail", x=220, y=317, width=155, height=39),

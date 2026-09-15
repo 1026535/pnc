@@ -13,6 +13,7 @@ from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.core.infra.adb.client import AdbClient
 from pnc_automation.app.automation.engine.action_executor import ActionExecutor
 from pnc_automation.app.automation.engine.observed_action_executor import ObservedActionExecutor
+from pnc_automation.app.automation.engine.core_daily_mutation import CoreMutationBoundary
 from pnc_automation.app.automation.engine.runner import AutomationRunner, CoreStepExecutor, RunResult, StepRunResult
 from pnc_automation.app.authoring.scripts.loader import load_run_script
 from pnc_automation.app.authoring.scripts.models import PreparedScriptStep, RunScript, ScriptStep
@@ -185,6 +186,7 @@ class ScriptRunner:
         castle_refs: list[str] | None = None,
         required_role: LiveAutomationRole | None = None,
         session_cleanup_policy: BlueStacksSessionCleanupPolicy | None = None,
+        mutation_boundary: CoreMutationBoundary | None = None,
     ) -> RunResult:
         """Executes the selected script for one account and optional ordered castle aliases."""
 
@@ -194,6 +196,7 @@ class ScriptRunner:
             castle_refs=castle_refs,
             required_role=required_role,
             session_cleanup_policy=session_cleanup_policy,
+            mutation_boundary=mutation_boundary,
         )
 
     def run_script(
@@ -204,6 +207,7 @@ class ScriptRunner:
         castle_refs: list[str] | None = None,
         required_role: LiveAutomationRole | None = None,
         session_cleanup_policy: BlueStacksSessionCleanupPolicy | None = None,
+        mutation_boundary: CoreMutationBoundary | None = None,
     ) -> RunResult:
         """Executes one loaded script for an account and optional ordered castle aliases."""
 
@@ -214,6 +218,7 @@ class ScriptRunner:
             castle_refs=castle_refs,
             required_role=required_role,
             session_cleanup_policy=session_cleanup_policy,
+            mutation_boundary=mutation_boundary,
         )
 
     def _run_script_for_account(
@@ -224,6 +229,7 @@ class ScriptRunner:
         castle_refs: list[str] | None = None,
         required_role: LiveAutomationRole | None = None,
         session_cleanup_policy: BlueStacksSessionCleanupPolicy | None = None,
+        mutation_boundary: CoreMutationBoundary | None = None,
     ) -> RunResult:
         """Executes one already-loaded run script for one already-resolved account target."""
 
@@ -236,16 +242,33 @@ class ScriptRunner:
             step
             for step in prepared_script.steps
             if isinstance(self.task_registry.require(step.task), CoreWorkflowTaskDefinition)
+            or (
+                mutation_boundary is not None
+                and step.task in {TaskId.BUILDING_CONSTRUCT, TaskId.BUILDING_UPGRADE}
+            )
         )
         effective_role = required_role
         if core_steps:
-            self._validate_core_script_dependencies(core_steps)
-            effective_role = required_role or LiveAutomationRole.LIVE_TESTING
+            has_research = any(step.task == TaskId.RESEARCH for step in core_steps)
+            self._validate_core_script_dependencies(
+                core_steps,
+                account=account,
+                mutation_boundary=mutation_boundary,
+            )
+            if has_research:
+                if required_role is not None and required_role != LiveAutomationRole.DAILY_CANARY:
+                    raise PermissionError(
+                        "Authored Research scripts require the DAILY_CANARY live role."
+                    )
+                effective_role = LiveAutomationRole.DAILY_CANARY
+            else:
+                effective_role = required_role or LiveAutomationRole.LIVE_TESTING
             account.require_live_role(effective_role)
         runner, castle_roster_provider = self._build_runner(
             account,
             required_role=effective_role,
             session_cleanup_policy=session_cleanup_policy,
+            mutation_boundary=mutation_boundary,
         )
         try:
             result = runner.run(
@@ -266,7 +289,13 @@ class ScriptRunner:
         runner.close()
         return result
 
-    def _validate_core_script_dependencies(self, core_steps: tuple[PreparedScriptStep, ...]) -> None:
+    def _validate_core_script_dependencies(
+        self,
+        core_steps: tuple[PreparedScriptStep, ...],
+        *,
+        account: AccountConfig | None = None,
+        mutation_boundary: CoreMutationBoundary | None = None,
+    ) -> None:
         """Validates typed dispatch dependencies before any connected session is constructed."""
 
         from pnc_automation.app.automation.engine.core_script_dispatcher import validate_core_script_step
@@ -277,7 +306,15 @@ class ScriptRunner:
                 chat_archive_store=self.chat_archive_store,
                 mail_archive_store=self.mail_archive_store,
                 castle_roster_store=self.castle_roster_store,
+                mutation_boundary=mutation_boundary,
+                account_id=None if account is None else account.id,
             )
+            if prepared_step.task == TaskId.RESEARCH:
+                mutation_boundary.require_caller(
+                    account_id="" if account is None else account.id,
+                    journal_root=self.config.artifact_root,
+                    castle=prepared_step.castle,
+                )
 
     def prepare_account_session(
         self,
@@ -308,6 +345,7 @@ class ScriptRunner:
         params: dict[str, Any] | None = None,
         required_role: LiveAutomationRole | None = None,
         session_cleanup_policy: BlueStacksSessionCleanupPolicy | None = None,
+        mutation_boundary: CoreMutationBoundary | None = None,
     ) -> StepRunResult:
         """Runs one task step against the selected account using current-castle semantics."""
 
@@ -320,6 +358,7 @@ class ScriptRunner:
             ),
             required_role=required_role,
             session_cleanup_policy=session_cleanup_policy,
+            mutation_boundary=mutation_boundary,
         )
         return result.steps[0]
 
@@ -507,6 +546,7 @@ class ScriptRunner:
         *,
         required_role: LiveAutomationRole | None = None,
         session_cleanup_policy: BlueStacksSessionCleanupPolicy | None = None,
+        mutation_boundary: CoreMutationBoundary | None = None,
     ) -> tuple[AutomationRunner, Callable[[], PncAccountCastleRosterConfig | None]]:
         """Builds one connected runtime runner and roster provider for a specific account."""
 
@@ -523,14 +563,13 @@ class ScriptRunner:
             account=account,
             session_cleanup_policy=session_cleanup_policy,
         )
-        return (
-            self._build_automation_runner_from_services(
-                account=account,
-                connected_runtime=connected_runtime,
-                required_role=required_role,
-            ),
-            castle_roster_provider,
+        runner = self._build_automation_runner_from_services(
+            account=account,
+            connected_runtime=connected_runtime,
+            required_role=required_role,
+            mutation_boundary=mutation_boundary,
         )
+        return runner, castle_roster_provider
 
     def _build_automation_runner_from_services(
         self,
@@ -538,6 +577,7 @@ class ScriptRunner:
         account: AccountConfig,
         connected_runtime: ConnectedAccountRuntime,
         required_role: LiveAutomationRole | None = None,
+        mutation_boundary: CoreMutationBoundary | None = None,
     ) -> AutomationRunner:
         """Builds a runner over an already-created connected service graph."""
 
@@ -550,6 +590,7 @@ class ScriptRunner:
                 account=account,
                 connected_runtime=connected_runtime,
                 required_role=required_role or LiveAutomationRole.LIVE_TESTING,
+                mutation_boundary=mutation_boundary,
             )
             return AutomationRunner(
                 defaults=self.config.defaults,
@@ -577,6 +618,7 @@ class ScriptRunner:
         account: AccountConfig,
         connected_runtime: ConnectedAccountRuntime,
         required_role: LiveAutomationRole,
+        mutation_boundary: CoreMutationBoundary | None = None,
     ) -> CoreStepExecutor | None:
         """Builds the typed dispatcher lazily over this runner's existing connected services."""
 
@@ -597,6 +639,7 @@ class ScriptRunner:
             required_role=required_role,
             mail_archive_store=self.mail_archive_store,
             castle_roster_store=self.castle_roster_store,
+            mutation_boundary=mutation_boundary,
         )
 
     def build_connected_session(

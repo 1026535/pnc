@@ -12,6 +12,7 @@ from pnc_automation.core.infra.adb.client import AdbClient
 from pnc_automation.core.vision.observation_policy import ObservationMode
 from pnc_automation.app.automation.engine.runner import RunResult, StepRunResult
 from pnc_automation.app.automation.engine.core_runtime import build_core_runtime
+from pnc_automation.app.automation.engine.core_daily_mutation import CoreMutationBoundary
 from pnc_automation.app.automation.engine.core_workflow import CoreWorkflowResult, CoreWorkflowRunner
 from pnc_automation.app.automation.engine.script_runner import ScriptRunner
 from pnc_automation.core.infra.emulator.session import BlueStacksSessionCleanupPolicy
@@ -29,6 +30,7 @@ from pnc_automation.app.automation.collect_kingdom_chat import (
     CollectKingdomChatResult,
     CollectKingdomChatWorkflow,
 )
+from pnc_automation.app.automation.research import ResearchResult, prepare_research_workflow
 from pnc_automation.core.infra.storage.artifact_store import ArtifactStore
 from pnc_automation.app.pnc.persistence.chat_archive_store import ChatArchiveStore
 from pnc_automation.app.pnc.persistence.mail_archive_store import MailArchiveStore
@@ -38,6 +40,7 @@ from pnc_automation.app.authoring.config.loader import load_app_config
 from pnc_automation.app.authoring.config.models import AppConfig, LiveAutomationRole
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.domain.mail import parse_collect_mail_params
+from pnc_automation.app.pnc.domain.policy_models import ResearchPolicy
 from pnc_automation.core.infra.diagnostics.logging_setup import configure_logging
 from pnc_automation.core.infra.emulator.bluestacks_instance_resolver import BlueStacksInstanceResolver
 from pnc_automation.app.pnc.vision.observation_builder import (
@@ -73,6 +76,7 @@ class ApplicationRunner:
         castle_refs: list[str] | None = None,
         required_role: LiveAutomationRole | None = None,
         session_cleanup_policy: BlueStacksSessionCleanupPolicy | None = None,
+        mutation_boundary: CoreMutationBoundary | None = None,
     ) -> RunResult:
         """Executes one script for an account and optional ordered castle aliases."""
 
@@ -82,6 +86,7 @@ class ApplicationRunner:
             castle_refs=castle_refs,
             required_role=required_role,
             session_cleanup_policy=session_cleanup_policy,
+            mutation_boundary=mutation_boundary,
         )
 
     def prepare_account_session(
@@ -109,6 +114,7 @@ class ApplicationRunner:
         params: dict[str, object] | None = None,
         required_role: LiveAutomationRole | None = None,
         session_cleanup_policy: BlueStacksSessionCleanupPolicy | None = None,
+        mutation_boundary: CoreMutationBoundary | None = None,
     ) -> StepRunResult:
         """Runs one direct task call against the current live session state."""
 
@@ -118,6 +124,7 @@ class ApplicationRunner:
             params=params,
             required_role=required_role,
             session_cleanup_policy=session_cleanup_policy,
+            mutation_boundary=mutation_boundary,
         )
 
     def run_mail_schedules(
@@ -247,6 +254,44 @@ class ApplicationRunner:
                 core_runtime.close,
                 error,
                 message="Kingdom Chat execution and BlueStacks phase cleanup both failed.",
+            )
+            raise
+        core_runtime.close()
+        return result
+
+    def run_research(
+        self,
+        *,
+        account_id: str,
+        params: Mapping[str, object],
+        mutation_boundary: CoreMutationBoundary,
+        session_cleanup_policy: BlueStacksSessionCleanupPolicy | None = None,
+    ) -> CoreWorkflowResult[ResearchResult]:
+        """Runs the Development-only Research workflow through its exact mutation boundary."""
+
+        account = self.script_runner.config.require_account(account_id)
+        if not isinstance(mutation_boundary, CoreMutationBoundary):
+            raise PermissionError("Research callers require an explicit CoreMutationBoundary.")
+        mutation_boundary.require_caller(
+            account_id=account.id,
+            journal_root=self.script_runner.config.artifact_root,
+        )
+        policy = ResearchPolicy.from_params(params)
+        workflow = prepare_research_workflow(policy=policy, mutation_boundary=mutation_boundary)
+        core_runtime = build_core_runtime(
+            self.script_runner,
+            account,
+            account.artifact_directory_name,
+            required_role=LiveAutomationRole.DAILY_CANARY,
+            session_cleanup_policy=session_cleanup_policy,
+        )
+        try:
+            result = CoreWorkflowRunner(core_runtime, mutation_boundary).run(workflow)
+        except BaseException as error:
+            close_preserving_error(
+                core_runtime.close,
+                error,
+                message="Research execution and BlueStacks phase cleanup both failed.",
             )
             raise
         core_runtime.close()

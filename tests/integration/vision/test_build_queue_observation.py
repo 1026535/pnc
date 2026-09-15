@@ -1,115 +1,118 @@
-"""Build queue observation: verifies the named internal boundary with offline fixtures."""
+"""Canonical build-queue parser qualifications for active and idle rows."""
 
 from __future__ import annotations
 
-from tests.support.pnc.capture_vision.minimal_runtime_registry import _minimal_runtime_registry
-
-import tempfile
 import unittest
-from pathlib import Path
 
 from PIL import Image
 
-from pnc_automation.core.infra.storage.artifact_store import ArtifactStore
-from pnc_automation.core.infra.capture.screenshot_service import ScreenshotService
-from pnc_automation.app.pnc.domain.observation import ListEntryKind
+from pnc_automation.app.automation.tasks.building_workflow_support import build_queue_first_slot_is_idle
+from pnc_automation.app.pnc.domain.observation import DetectedListEntry, ListEntryKind, Observation
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
-from pnc_automation.app.pnc.vision.observation_builder import (
-    ObservationBuilder,
-    ImageSelectorEngine,
-)
-from pnc_automation.core.vision.ocr.ocr_service import UnavailableOcrService
-from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservationEnricher
-from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
-from pnc_automation.app.pnc.vision.selectors import SelectorRegistry
-from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
-
-from tests.support.pnc.capture_vision.fake_ocr_service import _FakeOcrService
-from tests.support.pnc.capture_vision.fake_screenshot_session import _FakeScreenshotSession
-from tests.support.pnc.capture_vision.encode_png import _encode_png
-from tests.support.pnc.capture_vision.ocr_line import _ocr_line
+from pnc_automation.app.pnc.vision.pnc_observation_enricher import _build_build_queue_additions
+from pnc_automation.core.vision.image.models import Bounds
+from pnc_automation.core.vision.ocr.ocr_service import OcrLine
 
 
-class BuildQueueObservationTests(unittest.TestCase):
-    """Proves build queue observation."""
+VIEWPORT = (900, 1600)
+QUEUE_ROWS = (Bounds(36, 512, 828, 160), Bounds(36, 672, 828, 160))
 
-    def test_observation_builder_classifies_build_queue_and_extracts_active_entry(self) -> None:
-        """Recognizes the build queue overlay and exposes its active upgrading row for task verification."""
 
-        with tempfile.TemporaryDirectory() as temp_directory:
-            root = Path(temp_directory)
-            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
-            screenshot = screenshot_service.capture(
-                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
-                artifact_directory="k230_build_queue",
-                label="build_queue",
+def _line(text: str, *, x: int, y: int, width: int, height: int) -> OcrLine:
+    """Create one localized OCR line in the canonical queue coordinates."""
+
+    return OcrLine(text=text, bounds=Bounds(x, y, width, height), confidence=1.0)
+
+
+def _queue_lines(*, active: bool) -> tuple[OcrLine, ...]:
+    """Return OCR output already partitioned by the queue region compiler."""
+
+    lines = [
+        _line("Build Queue", x=330, y=432, width=248, height=57),
+        _line("2nd Build Queue", x=212, y=703, width=225, height=30),
+        _line("Inactive", x=211, y=758, width=110, height=30),
+        _line("Activate", x=662, y=734, width=125, height=31),
+    ]
+    if active:
+        lines.extend(
+            (
+                _line("Upgrading: Wall", x=210, y=543, width=302, height=40),
+                _line("00:48:16", x=327, y=593, width=120, height=35),
+                _line("Speedup", x=618, y=558, width=215, height=66),
             )
-            builder = ObservationBuilder(
-                selector_registry=_minimal_runtime_registry(),
-                selector_engine=ImageSelectorEngine(
-                    template_matcher=OpenCvTemplateMatcher(),
-
-                ),
-                screen_classifier=ScreenClassifier(),
-                enricher=PncObservationEnricher(
-
-                ),
-            ocr_service=_FakeOcrService(
-                        lines=(
-                            _ocr_line("Build Queue", x=315, y=64, width=256, height=36),
-                            _ocr_line("Upgrading: Wall", x=115, y=250, width=250, height=34),
-                            _ocr_line("00:48:16", x=262, y=303, width=128, height=28),
-                            _ocr_line("Speedup", x=673, y=244, width=154, height=40),
-                            _ocr_line("2nd Build Queue", x=101, y=420, width=278, height=32),
-                            _ocr_line("Idle", x=113, y=470, width=68, height=26),
-                            _ocr_line("Go", x=754, y=468, width=52, height=28),
-                        )
-                    )
-                )
-
-            observation = builder.build(screenshot)
-
-            self.assertEqual(observation.screen_type, ScreenType.PNC_BUILD_QUEUE)
-            active_entries = observation.entries(ListEntryKind.BUILDING)
-            self.assertEqual(len(active_entries), 1)
-            self.assertEqual(active_entries[0].title_text, "Wall")
-            self.assertEqual(active_entries[0].timer_text, "00:48:16")
-            self.assertEqual(active_entries[0].metadata["queue_state"], "upgrading")
-
-    def test_observation_builder_classifies_centered_idle_build_queue(self) -> None:
-        """Recognizes the live centered queue overlay when its first queue is idle and second queue inactive."""
-
-        with tempfile.TemporaryDirectory() as temp_directory:
-            root = Path(temp_directory)
-            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
-            screenshot = screenshot_service.capture(
-                _FakeScreenshotSession(_encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))),
-                artifact_directory="testing_build_queue",
-                label="centered_idle_build_queue",
+        )
+    else:
+        lines.extend(
+            (
+                _line("1st Build Queue", x=212, y=543, width=216, height=32),
+                _line("Idle", x=209, y=596, width=57, height=33),
             )
-            builder = ObservationBuilder(
-                selector_registry=_minimal_runtime_registry(),
-                selector_engine=ImageSelectorEngine(
-                    template_matcher=OpenCvTemplateMatcher(),
+        )
+    return tuple(lines)
 
+
+class BuildQueueParserTests(unittest.TestCase):
+    """Prove only the canonical queue-row parser after screen ownership."""
+
+    def test_parser_extracts_active_row_title_timer_and_state(self) -> None:
+        """An active row keeps its title, timer, queue state, and owned bounds."""
+
+        additions = _build_build_queue_additions(
+            image=Image.new("RGB", VIEWPORT),
+            lines=_queue_lines(active=True),
+            proved_screen=ScreenType.PNC_BUILD_QUEUE,
+            row_regions=QUEUE_ROWS,
+        )
+
+        self.assertIsNotNone(additions)
+        assert additions is not None
+        self.assertEqual(additions.screen_evidence, ())
+        self.assertEqual(len(additions.list_entries), 1)
+        entry = additions.list_entries[0]
+        self.assertEqual(entry.kind, ListEntryKind.BUILDING)
+        self.assertEqual(entry.title_text, "Wall")
+        self.assertEqual(entry.timer_text, "00:48:16")
+        self.assertEqual(entry.bounds, QUEUE_ROWS[0])
+        self.assertEqual(entry.metadata, {"queue_state": "upgrading"})
+
+    def test_parser_publishes_first_idle_row_and_omits_inactive_second_row(self) -> None:
+        """Idle availability is explicit, while inactive rows remain absent."""
+
+        additions = _build_build_queue_additions(
+            image=Image.new("RGB", VIEWPORT),
+            lines=_queue_lines(active=False),
+            proved_screen=ScreenType.PNC_BUILD_QUEUE,
+            row_regions=QUEUE_ROWS,
+        )
+
+        self.assertIsNotNone(additions)
+        assert additions is not None
+        self.assertEqual(len(additions.list_entries), 1)
+        self.assertEqual(additions.list_entries[0].bounds, QUEUE_ROWS[0])
+        self.assertEqual(
+            additions.list_entries[0].metadata,
+            {"queue_state": "idle", "queue_index": 0},
+        )
+        self.assertEqual(additions.screen_evidence, ())
+
+    def test_queue_availability_fails_closed_for_active_or_unknown_rows(self) -> None:
+        """Upgrade admission cannot infer an idle slot from active or missing OCR rows."""
+
+        active = Observation(
+            screen_type=ScreenType.PNC_BUILD_QUEUE,
+            list_entries=(
+                DetectedListEntry(
+                    kind=ListEntryKind.BUILDING,
+                    bounds=QUEUE_ROWS[0],
+                    metadata={"queue_state": "upgrading"},
                 ),
-                screen_classifier=ScreenClassifier(),
-                enricher=PncObservationEnricher(
+            ),
+        )
+        unknown = Observation(screen_type=ScreenType.PNC_BUILD_QUEUE)
 
-                ),
-            ocr_service=_FakeOcrService(
-                        lines=(
-                            _ocr_line("Build Queue", x=327, y=428, width=249, height=44),
-                            _ocr_line("1st Build Queue", x=212, y=541, width=216, height=32),
-                            _ocr_line("Idle", x=209, y=596, width=57, height=33),
-                            _ocr_line("2nd Build Queue", x=213, y=703, width=225, height=30),
-                            _ocr_line("Activate", x=662, y=734, width=125, height=31),
-                            _ocr_line("Inactive", x=211, y=758, width=110, height=30),
-                        )
-                    )
-                )
+        self.assertFalse(build_queue_first_slot_is_idle(active))
+        self.assertFalse(build_queue_first_slot_is_idle(unknown))
 
-            observation = builder.build(screenshot)
 
-            self.assertEqual(observation.screen_type, ScreenType.PNC_BUILD_QUEUE)
-            self.assertEqual(observation.entries(ListEntryKind.BUILDING), ())
+if __name__ == "__main__":
+    unittest.main()

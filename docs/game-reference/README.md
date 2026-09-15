@@ -11,9 +11,14 @@ The packaged PNC **5.0.203 / version code 233** yielded **6,276 gameplay Lua fil
 | [Source map](SOURCE_MAP.md) | Discovery across the recovered source; individual workflows mostly unverified |
 | [Shared request path](REQUEST_PATH.md) | Native outgoing path statically traced; checksum independently checked by isolated emulation |
 | [Building upgrades](workflows/building-upgrade.md) | Normal-upgrade UI checks, request, response handling, and automation implications inspected |
+| [Castle skins and ambience](workflows/castle-appearance.md) | Castle and ambience preview layers, world-map rendering, and appearance-collection implications |
 | [Campaign navigation](workflows/campaign-navigation.md) | Chapter 10 and stage 10-3 saved transitions, source correspondence, and bounded automation implications |
+| [Resource tile labels and markers](workflows/resource-tile-markers.md) | Resource artwork, occupancy, protection, focus markers, and OCR/automation uncertainty |
 | [Seasonal Alliance layouts](workflows/seasonal-alliance-layout.md) | Recovered Faction eligibility/layout gate and live participating/nonparticipating comparison |
 | [Neutral gathering](workflows/neutral-gathering.md) | Target/occupancy shield predicate, army-count semantics, and one correlated live collection receipt |
+| [Hero Hall recruitment](workflows/hero-hall-recruitment.md) | Free-single animation, Confirm/Close result flow, subsequent paid draw, and reconciliation limits |
+| [Resource inventory](workflows/resource-inventory.md) | Recycled Bag rows, partial edge visibility, single versus bulk Use, and full-inventory proof limits |
+| [Mail sending](workflows/mail-sending.md) | Player versus alliance send branches, client eligibility checks, and correlated receipt requirements |
 | [Provenance and reproduction](PROVENANCE.md) | Build, hashes, artifact locations, and offline reconstruction |
 
 Detailed coverage should grow with scoped work. A complete behavioral reference for every UI, event, server rule, and account state cannot be inferred from a source inventory. Start with the workflow affected by the current task, following its callers and state owners only as far as needed to resolve the question.

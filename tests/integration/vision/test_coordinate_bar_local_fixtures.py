@@ -19,6 +19,7 @@ from pnc_automation.app.pnc.vision.observation_builder import (
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservationEnricher
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
+from pnc_automation.app.pnc.vision.visual_screen_recognizer import load_visual_screen_recognizer
 from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
 from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
 
@@ -31,7 +32,7 @@ from tests.support.pnc.capture_vision.require_rapid_ocr_service import _require_
 class CoordinateBarLocalFixturesTests(unittest.TestCase):
     """Proves coordinate bar local fixtures."""
 
-    def test_observation_builder_recovers_live_world_coordinate_bar_when_filtered_crop_drops_y_axis(self) -> None:
+    def test_coordinate_only_read_recovers_live_bar_when_filtered_crop_drops_y_axis(self) -> None:
         """Keeps world-map proof on the reviewed live edge-case screenshot by falling back to raw OCR inside the canonical bar crop."""
 
         fixture_path = require_local_fixture_artifact(
@@ -56,6 +57,7 @@ class CoordinateBarLocalFixturesTests(unittest.TestCase):
 
                 ),
                 screen_classifier=ScreenClassifier(),
+                visual_recognizer=load_visual_screen_recognizer(),
                 enricher=PncObservationEnricher(
 
                     selector_registry=registry,
@@ -72,14 +74,10 @@ class CoordinateBarLocalFixturesTests(unittest.TestCase):
             assert observation.spatial_surface is not None
             self.assertEqual(observation.spatial_surface.viewport.coordinate, (0, 4))
             self.assertEqual(observation.require(UiElementId.PNC_WORLD_COORDINATE_BAR).extracted_text, "X:0 Y:4")
-            search_action_point = observation.require(UiElementId.PNC_WORLD_SEARCH_BUTTON).action_point
-            assert search_action_point is not None
-            self.assertLess(
-                search_action_point[0],
-                observation.require(UiElementId.PNC_WORLD_COORDINATE_BAR).bounds.x,
-            )
+            self.assertFalse(observation.decision.action_eligible)
+            self.assertFalse(observation.has(UiElementId.PNC_WORLD_SEARCH_BUTTON))
 
-    def test_observation_builder_keeps_live_three_digit_y_inside_world_coordinate_bar_crop(self) -> None:
+    def test_coordinate_only_read_keeps_live_three_digit_y_inside_crop(self) -> None:
         """Keeps the canonical coordinate-bar crop wide enough for live three-digit Y values near the HUD edge."""
 
         fixture_path = require_local_fixture_artifact(
@@ -104,6 +102,7 @@ class CoordinateBarLocalFixturesTests(unittest.TestCase):
 
                 ),
                 screen_classifier=ScreenClassifier(),
+                visual_recognizer=load_visual_screen_recognizer(),
                 enricher=PncObservationEnricher(
 
                     selector_registry=registry,
@@ -120,9 +119,5 @@ class CoordinateBarLocalFixturesTests(unittest.TestCase):
             assert observation.spatial_surface is not None
             self.assertEqual(observation.spatial_surface.viewport.coordinate, (341, 663))
             self.assertEqual(observation.require(UiElementId.PNC_WORLD_COORDINATE_BAR).extracted_text, "X:341 Y:663")
-            search_action_point = observation.require(UiElementId.PNC_WORLD_SEARCH_BUTTON).action_point
-            assert search_action_point is not None
-            self.assertLess(
-                search_action_point[0],
-                observation.require(UiElementId.PNC_WORLD_COORDINATE_BAR).bounds.x,
-            )
+            self.assertFalse(observation.decision.action_eligible)
+            self.assertFalse(observation.has(UiElementId.PNC_WORLD_SEARCH_BUTTON))

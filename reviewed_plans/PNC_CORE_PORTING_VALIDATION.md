@@ -340,3 +340,575 @@ The explicit recovery smoke ran on `testing`, the current `SMOKE_TEST` account, 
 The focused offline validation covering the affected navigation, perception, popup, runtime, live-smoke wiring, and Daily paths completed with 234 tests passing and 3 expected skips. The full offline suite completed with 1,207 tests passing and 22 expected skips. No live proof spent resources, switched castles, or used an unsafe popup action.
 
 The initial Savannah live failure and the deterministic semantic popup identity guard remain part of the engineering evidence. Savannah did not reappear during this final live run, so these results do not claim live reappearance or live dismissal of that popup family after the guard was added.
+
+## September 13 combined Hero Hall and Resource Item gate
+
+The restart preserved A's Daily claim and Development Research work and integrated
+B's published 93798a64de73538c8992c953b7394598468911f9 plus the restart plan
+4a58e86bca931f9905ef5ec2890ec9348002ce3a. Verified origin/main baseline:
+850bdb747be79bb78363b8dca49a0097c6ed6546. All 40 profiles were retained; no
+recognition catalog, asset or producer file was changed by the adapter slices.
+B's ongoing local vision changes and the unrelated dirty main checkout were preserved.
+
+Hero Hall feature e794e1d955a90b3328fc454fcd47fea1fbe05de1 is published. Its 22
+focused checks and affected full fallback (1,984 passed, six skipped) proved the
+canonical free-only adapter and corrected the old generic-control consumption rule.
+Resource Item adds the shared inventory adapter and selected-tab core navigation.
+Its 57 focused checks include the new Resource contracts and existing claims,
+Research and Hero boundaries. Both saved Bag frames were replayed with actual RapidOCR
+through ObservationBuilder and NavigationPerception: CLEAR Bag, selected template tab,
+six complete resource rows each. Saved frames establish neither a full live inventory
+nor a consumption receipt.
+
+Final command on the combined feature tree:
+
+```powershell
+py tools/run_tests.py affected --base origin/main --explain --json .test-impact/resource-selection.json --results .test-impact/resource-results.json
+```
+
+Passed: the repository selected its mandatory full portable fallback for shared
+contracts and new production modules. **2,004 total: 1,998 passed, six skipped, zero
+failures.** Test execution took 239.663 seconds; collection/reporting included,
+255.456 seconds. Five skips are optional local screenshots and one requires Windows
+symlink privilege. The exact results and selection are in the Resource Item worktree's
+.test-impact directory; resource-affected.log retains command output. Source fingerprint:
+b68b7da94725cb723eb03beff9504c9875a4f7d7ef349e9cb24a6f25b9823adb.
+Subsequent changes record documentation only. git diff --check passed. The candidate
+is advanced to this same validated tree; no redundant second full run is needed.
+
+Live checks are blocked, not passed. Under separate canonical process leases:
+
+- testing accepted the required game update, then stopped at a Savannah offer lacking
+  an explicit safe-close selector. No recruit or resource use occurred. Last confirmed
+  screen is that offer, not Home; current castle was not established.
+- 157_farm resolved but foreground preflight raised GameLaunchError because Android
+  output did not contain exactly one mCurrentFocus field. No game input or current
+  screen/castle proof occurred there.
+
+The offer screenshot is in the root workspace at
+.local-data/artifacts/core_ports_20260913/2026-09-13/testing_hero_hall/
+20260913T170227Z_core_20260913T170044Z_e9666465_0006_preflight_settle_2.png.
+Both leases were explicitly released and the owned live Python session exited.
+No workaround popup control or device-parser change was introduced. Repeating either
+unchanged preflight would add no evidence.
+
+Remaining proof: resolve the owned popup/runtime blockers, acquire a fresh canonical
+lease and exact active-castle boundary, then validate CoreHeroHallWorkflow's free
+increment/cooldown/final Daily receipt and CoreResourceItemWorkflow's full scan/single
+Use/stock-and-Daily receipt. There is no promoted core canary CLI yet; existing canary
+bindings remain legacy pending that acceptance. Unselected Resource-tab entry also
+needs a qualified producer/control. Caller migration, live acceptance and broader
+producer-dependent original ports remain incomplete. Automatic Daily execution,
+scheduling and mainline landing remain outside this publication.
+
+## September 13 foreground repair and independent port review
+
+The user approved the narrow device-owner exception for the paired foreground
+diagnostics. Commit `97ef36f` changes only `BlueStacksSession.is_app_foregrounded`
+to query `dumpsys window`, plus its three existing test-call expectations. The
+strict package parser and lease/role behavior remain unchanged. The repository
+runner's `group unit.core.infra.emulator` passed all 44 tests. A dedicated
+read-only reviewer found no actionable issue in this fix.
+
+The external task `core workflow porting (2)` had reviewed the dirty main
+checkout rather than the core candidate. Its published document/ignore-only
+commit `afc5d867808101d61621ce132eaaf6878c09b045` is retained by a history-preserving
+merge. All 13 relative documentation links resolve; existing reference entries
+survive. The main checkout and mainline branch were not changed.
+
+The dedicated reviewer then checked the actual Hero Hall and Resource Item
+ports and found one deadline gap in Resource scrolling. Commit `f3869a8` rejects
+scanner completion at or after the existing navigation deadline, with the same
+post-dispatch clock convention as other gestures. Row stability remains with
+the scanner. Five focused Resource navigation tests pass, including a fake-clock
+expiry regression proving exactly one gesture; the reviewer accepted the fix.
+
+### Fresh live proof and limits
+
+Root acquired one canonical `157_farm` lease, resolved the configured instance
+and active castle, and preserved the running instance. The foreground query
+returned true, and the exact nonselecting preflight returned Home. This replaces
+the earlier foreground blocker for that instance; it is not a workflow mutation
+receipt. Proof root: `.local-data/artifacts/core_ports_foreground_fix_20260913/`
+in the root workspace. `foreground_preflight_result.json` records the result;
+the trace is under `2026-09-13/157_farm_foreground_fix/` with run ID
+`20260913T175731Z_fc2f4b80`.
+
+The Resource entry observation published a clear Bag, selected Resource anchor
+and six complete visible rows. The first typed workflow attempt stopped on a
+black `PNC_LOADING` source while returning from preflight (capture 0047). A
+bounded canonical passive settle proved Settings, and no mutation intent existed,
+so one new attempt was permitted. That attempt reached actual inventory swipes
+but stopped on another black source (capture 0090) before Use. Offline image
+inspection proves both entire RGB frames are zero; `black_frame_diagnostic.json`
+and `resource_scan_stop.json` preserve the evidence. No third Resource attempt
+was run. The source of the intermittent blank captures is not established; no
+capture fallback, guard relaxation or parser change was added.
+
+After the canonical settle proved Bag, the Hero Hall workflow's fresh preflight
+stopped on an exact identity mismatch, before recruitment. Production replay of
+captures 0042 and 0108 publishes `0 stickerNPC` and `0 sticker NPC` respectively
+for the same visible selected K157, level-15 row. Both are labelled exact by the
+published perception path. `identity_replay_comparison.json` records this concrete
+B-owned identity-publication dependency. Do not normalize away the mismatch in
+the workflow or change authorization/journal identity to bypass it.
+
+The last confirmed screen is Home (capture 0115). Root explicitly closed the
+lease and exited Python REPL 14931. No castle switch, resource pack Use, Hero Hall
+recruitment, spending, or mutation journal write occurred. Screenshots and reports
+are under the proof root; the configured canonical journal root was reused for
+read checks. The passing foreground proof and offline ports do not establish
+Resource/Hero live acceptance, caller migration, five-single canary completion,
+broader Daily readiness or mainline landing. The final combined offline gate is
+recorded below after execution.
+
+### Final combined offline result
+
+`Python313 tools/run_tests.py affected --base origin/main --explain` selected its
+mandatory full fallback on the combined feature tree. It passed **1,999 tests
+with six skips (2,005 total)**, zero failures, in 254.279 seconds of test execution
+and 279.080 seconds including selection/collection/reporting. Five skips require
+optional local screenshots; one requires Windows symlink privilege. Evidence is
+`core_foreground_query_fix/.test-impact/foreground-results.json`, with selection
+and log alongside it. This includes the deadline fix and all retained producer,
+workflow, journal, locking and mainline regressions. The subsequent gate-result
+note changes documentation only; no source or test changes followed the gate.
+`git diff --check` passed. No additional live or full-suite run was needed for
+that result note. Publication retains every completed port and reviewed history;
+live acceptance remains limited as described above.
+
+## September 13 resumed implementation
+
+The user resumed the handoff's STOP in the existing integration worktree. Fresh
+inspection verified `codex/workflow-recognition-integration`, clean at
+`196e5b165f2d907158fd547f25d2fd4c1534be27`. No reset, merge, commit, push, or
+other worktree edit occurred. The source changes below, including the later
+exact update-popup recognition fix, remain uncommitted on that checkpoint.
+
+### Daily durable checkpoint regression
+
+An added regression using the real core runner, coordinator and journal reproduced
+the handoff's defect: a no-claim sweep erased one newer committed intent. The
+initial `group contract.workflows` run failed that assertion (52 passed, one
+failed). Evidence: `.test-impact/stale-reproduction-results.json` in the candidate.
+
+`CoreDailyMaintenanceWorkflow` now supplies only its checkpoint through
+`WorkflowContext.run_daily_maintenance`. `CoreMutationBoundary` checks exact
+authority and durable checkpoint state before the coordinator runs, then supplies
+its own target and journal. Per-claim validation remains in the same owner. The
+connected caller uses this boundary; its duplicate checkpoint guards were removed.
+No shared persistence internals changed. Regressions prove stale/unresolved/wrong-
+date state is rejected before Daily entry and a current no-claim sweep preserves
+committed receipts. Claim-first scrolling, reopening and ambiguity semantics remain.
+
+### Bounded source readiness
+
+`CoreRuntime.observe_ready` captures once and enters the existing passive settle
+loop only for `PNC_LOADING`. It retains initial capture time/count, requested
+content, stable known completion, freshness and popup episode ownership. Reviewed
+initial/edge source acquisition and Resource content opt in. Exact source/control
+and selected-tab guards still govern input. Ordinary observations, navigation
+post-action polling and Chat capture behavior remain unchanged; there is no
+generic UNKNOWN retry. Resource scrolling retains its outer completion deadline.
+
+### New offline results
+
+All commands used installed Python 3.13.5 at
+`C:/Users/lebel/AppData/Local/Programs/Python/Python313/python.exe`; the `py -3.13`
+launcher reported no installed Python. The repository runner remained the test
+authority.
+
+- `tools/run_tests.py group unit.app.automation.daily_maintenance`: 114 passed.
+- `tools/run_tests.py group contract.workflows`: 55 passed.
+- `tools/run_tests.py group integration.workflows`: 200 passed.
+- `tools/run_tests.py group unit.app.pnc.navigation`: 245 passed.
+- `tools/run_tests.py group unit.app.pnc.vision`: 122 passed.
+- `tools/run_tests.py group integration.vision`: 337 passed, five skipped.
+- `tools/run_tests.py affected --base origin/main --explain --json
+  .test-impact/resume-selection-final.json --results .test-impact/resume-results-final.json`:
+  mandatory full fallback passed, **2,010 passed, six skipped, 2,016 total**,
+  zero failures; total 149.720 seconds. Five skips require optional local
+  screenshots; one requires Windows symlink privilege.
+
+Final gate evidence is in the candidate's `.test-impact/resume-selection-final.json`
+and `resume-results-final.json`. Run ID:
+`e5b294e3e4334365bb4fde1ec27dbc74`; source fingerprint:
+`8d6a8e81531c142c7a8ddc0d37603ed1042ba5df4ce033da39ac4f0d151822af`.
+The dedicated read-only review found no actionable defect in either completed
+slice. Only result/contract documentation followed this source/test gate.
+
+### Fresh live attempts and remaining gates
+
+The user freshly authorized all needed in-game actions and unlimited resource
+spending on `mega_old_acc`. Configured authority resolves that account to
+`bs-mega-old-acc`, with the `daily_canary` role and canary target K157 / `NPC 2`,
+level 22. This is configured identity, not a new verified active-castle finding.
+No local account, castle, Daily config or shared device/storage code was changed.
+
+The prepared bounded mutation proof would run one normal Resource pack Use and
+one free Hero Hall increment, both with zero diamonds, through the canonical
+scope and journal. Its first invocation failed during canonical process
+discovery because sandboxed CIM access was denied, before any game input.
+The elevated invocation was rejected by automatic approval review, which stated
+that exact actions/target/budgets needed explicit authorization despite the broad
+authorization above. It was not executed or bypassed. The user then explicitly
+approved the prepared one-pack/one-free-single proof on `mega_old_acc` / K157 /
+`NPC 2`, zero diamonds, after readiness and exact identity are proven. This
+resolves the requested action/target/budget confirmation; do not ask again.
+
+A separate approved read-only helper constructed no mutation workflow. It held
+the canonical account reservation while resolving/foregrounding the game and
+attempting nonselecting identity preflight. The default eight-observation startup
+budget expired with all frames published as `PNC_LOADING`: the first and last
+were all-zero RGB; intermediate frames showed the publisher splash. This is
+cold-start evidence, not proof of a persistent blank-capture defect. Inspecting
+that evidence justified one read-only retry with 20 observations and the same
+45-second deadline. That attempt also exhausted the deadline with loading frames.
+Visual inspection of its final frame revealed `Update failed. Try again?` with a
+Confirm button over the update download screen. This refines the second stop to
+an update-failure dialog that was unrecognized at that checkpoint, rather than
+merely slow startup. No further
+unchanged attempt was made. Active identity and final Home were never
+proven; no claims, Resource Use, recruitment, or mutation-journal write occurred.
+Both helper processes exited 1 after canonical context cleanup and reservation
+release. Cleanup preserves pre-existing instances.
+
+Evidence is under the candidate's `.local-data/artifacts/core_resume/`:
+`sandbox_discovery_stop.json`, `live_ports.py` (unexecuted elevated mutation path),
+`preflight_only.py`, and `preflight/initial_eight_frame_result.json`, `result.json`,
+`black_frame_diagnostic.json`, `update_failure_replay.json`. The read-only traces are
+`20260913T211330Z_49d7b3a3_core_trace.jsonl` and
+`20260913T211751Z_e1dd626b_core_trace.jsonl` under
+`preflight/2026-09-13/mega_old_acc_preflight/`. The diagnostic covers the initial
+eight frames. These outcomes do not establish the new source-readiness path's
+live acceptance or Resource/Hero caller acceptance.
+
+Offline RapidOCR replay of the final second-run frame now publishes `PNC_POPUP`,
+guard `blocked`, `blocking_popup=True`, the existing
+`PNC_UPDATE_CONFIRM_BUTTON`, and one `PopupControlKind.UPDATE_CONFIRM` candidate
+with `required_game_update` layout. The exact retry dialog takes precedence over
+the same frame's publisher loading-splash evidence. The canonical
+`ObservedActionExecutor.recover_update_if_required` can therefore own the
+bounded Confirm/recovery path when mutation policy permits; read-only probes
+still fail closed. No generic Confirm click, workflow-local parser, or popup
+bypass was added.
+
+Next concrete step: establish game readiness through canonical recovery, rerun
+exact identity preflight, and use the now-approved bounded mutation proof. Keep the
+`0 stickerNPC` / `0 sticker NPC` exact-identity publication blocker with the
+recognition owner. Broader Research categories, Campaign preparation, building
+normal/queue receipts, Gathering slots/correlated receipts, Mail send receipt,
+Login facts, and the pending Resource/Hero proofs still gate the remaining
+consumer/caller migrations. The full porting plan is not complete; automatic
+Daily remains disabled and no merge or push was performed.
+Final `git diff --check` passed; only these documentation notes followed the
+passing source/test gate.
+
+### Manual resumption and Resource boundary, 21:33–21:48 UTC
+
+The user requested manual Confirm handling and left the update recognition fix
+with another agent. On fresh inspection the download had already completed and
+a Savannah purchase offer was visible. The operator dismissed its visible X;
+no Confirm remained to click and no purchase occurred. Home was then observed.
+The canonical runtime reservation remained held across these dependent steps.
+
+The first nonselecting identity attempt stopped on More → Settings returning
+Home. Saved replay of the source publishes `PNC_MORE_SETTINGS` with template
+bounds `(772, 1430, 105, 43)` and action point `(824, 1451)` on its label in the
+900×1600 frame. This is evidence of the failing published point, not proof of
+the underlying UI cause. No coordinate override or producer edit was made by
+the workflow task. When the user pressed Escape, Computer Use stopped and the
+helper explicitly released its lease, preserving the running game.
+
+On the next authorized resumption, the fresh starting frame was Settings.
+`CoreWorkflowRunner(CoreResourceItemWorkflow(...))` then passed canonical
+identity verification against **K157 / NPC 2 / level 22** without a castle-row
+tap. It entered the selected Resource tab and performed the bounded inventory
+scan. The result was `PENDING_CLARIFICATION`: inventory remained unknown, so
+no pack was selected. The checkpoint contained **zero mutation intents**. The
+workflow returned to freshly confirmed Home; its `succeeded=True` records
+lifecycle completion and does not make the pending feature outcome a success.
+No resource or diamonds were spent and no new durable mutation was recorded.
+
+Candidate evidence under `.local-data/artifacts/core_resume/`:
+
+- `manual_update_20260913T213334Z/identity_stop.json`, `settings_replay.json`,
+  `closed.json`, and trace `20260913T213336Z_d6b5d31e_core_trace.jsonl`.
+- `manual_update_20260913T214455Z/use_resource_item.json`, `resource_summary.json`,
+  and trace `20260913T214457Z_b39f74f1_core_trace.jsonl`.
+- Exact selected-row frame `..._0008_active_castle_identity.png`; final inventory
+  frames `..._0041_resource_scroll_first.png`, `..._0042_resource_scroll_second.png`,
+  `..._0043_resource_scroll_settled.png`; Home `..._0047_core_10_after_1.png`.
+  Frames/traces are under each run's `2026-09-13/mega_old_acc_manual_update/`.
+
+Resource caller migration remains gated on complete inventory and the actual
+single-Use/Daily receipt. Hero proof is independent and still pending. The
+historical `0 stickerNPC` / `0 sticker NPC` producer mismatch remains recorded
+for that selected identity; NPC 2 success does not fix it or qualify other
+accounts. The remaining producer-dependent ports in the plan remain incomplete.
+
+### Resource replay and Hero result dependency
+
+Luna replayed the three final Resource frames with real RapidOCR through both
+`ObservationBuilder` and `NavigationPerception(include_content=True)`. Both paths
+agree on CLEAR Bag, selected Resource, matching rows, and unresolved
+`missing_or_ambiguous_title_or_count` boundary cards. The final settled frame has
+a bottom card at `(9, 1458, 882, 141)` with missing count; an earlier frame also
+has a truncated top card. The canonical scanner returns UNKNOWN for these typed
+unresolved rows, and the executor correctly returns pending without selecting or
+using an item. No workflow-local crop, parser or unknown-row exemption was added.
+Detailed replay: `manual_update_20260913T214455Z/`
+`resource_inventory_replay_diagnostic_20260913T215446Z.json`.
+
+After the user manually opened Settings, the Hero workflow independently passed
+the exact NPC 2 preflight, found Hero Hall through bounded Home camera scanning,
+and observed five Daily attempts with the distinct free-single template control.
+At 21:52 UTC it sent exactly one approved free tap. The following capture showed
+the summon animation and published UNKNOWN; `HeroHallState.from_observation`
+stopped the workflow. Durable intent `hero-hall-recruit-001` remained DISPATCHED
+with `before_daily_attempts_remaining=5`, zero diamond budget/spend, and no replay.
+This failure is preserved in `hero_hall_stop.json` in the same run directory.
+
+A later diagnostic frame showed Albertus with Confirm. The user's Confirm click
+revealed a fragments result with blue Close and a distinct paid Recruit 1x.
+Both result frames also published UNKNOWN, without a supported safe result
+control. The user was asked to click Close; no second Recruit was requested or
+executed. Frames are `..._0077_hero_hall_recruit_pre.png`,
+`..._0078_hero_hall_dispatch.png`, `..._0079_hero_hall_recruit_post.png`,
+`..._0080_hero_result_diagnostic.png`, and `..._0081_hero_after_manual_confirm.png`.
+The [scoped source/live reference](../docs/game-reference/workflows/hero-hall-recruitment.md)
+explains why neither result closure nor the paid repeat button is a free receipt.
+
+Automatic Hero acceptance remains blocked on qualified result-state/control
+publication, then A-owned bounded traversal back to fresh Hero Hall receipt
+evidence. One successful free tap or manual result dismissal does not establish
+the complete automatic workflow, the full five-single Daily canary, or caller
+promotion. The existing journal is the authority for subsequent reconciliation.
+
+At 22:00 UTC a fresh diagnostic still showed the fragments result and blue Close.
+The requested manual Close had not been observed and no reply had arrived, so no
+reconciliation or further input was attempted. The helper saved
+`awaiting_manual_close.json`, released the lease explicitly, and preserved the
+running game (`closed.json`). Final Home is unproven for this Hero attempt.
+Next: after manual Close, capture fresh Hero Hall state and reconcile only the
+existing `hero-hall-recruit-001` intent through the canonical executor/dispatcher.
+Do not repeat the free tap or use the result screen's paid Recruit control.
+
+The latest Resource diagnostic adds the actual OCR lines supporting the same
+finding: `resource_inventory_replay_diagnostic_with_ocr_20260913T215728Z.json` in
+the run directory. No additional test suite or live Resource attempt was run for
+this evidence-only diagnosis. The previously recorded Daily/readiness checks
+remain the validation for those unchanged implementations.
+
+### Hero reconciliation complete, 22:03–22:08 UTC
+
+The user's Ready followed the requested blue Close. A new canonical lease and
+fresh capture proved clear Hero Hall with **Daily attempts: 4**, compared with
+five before the single authorized tap; eight recruit items remained displayed.
+The operator used the visible More menu and Settings gear, which responded to
+manual input, without changing a production selector or castle. Canonical
+nonselecting preflight then freshly verified K157 / NPC 2 / level 22 and returned
+Home. Settings displayed footer version text `5.2.77 5.0.204.235`.
+
+The ignored `core_resume/reconcile_hero_only.py` helper validated the existing
+checkpoint through `CoreMutationBoundary`, reopened Hero Hall through the core,
+and used `HeroHallRecruitmentExecutor._reconcile_existing` with the core session
+and `JournaledMutationDispatcher`. It did not call the executor's new-increment
+path. A fresh guarded four-attempt frame committed `hero-hall-recruit-001`,
+retaining the canonical cooldown metadata and zero diamond spend. **No new
+recruit tap occurred.** Final Home was confirmed with two fresh frames; explicit
+cleanup released the lease and preserved the running game. The prior unresolved
+journal and final-Home blocker are therefore resolved.
+
+Evidence: `.local-data/artifacts/core_resume/manual_update_20260913T220305Z/`
+contains `hero_after_close.json`, `identity.json`, `hero_reconciliation.json`,
+`reconciliation_summary.json`, `reconciliation_final_home.json`, and `closed.json`.
+Its `2026-09-13/mega_old_acc_manual_update/` directory contains trace
+`20260913T220307Z_2fe54436_core_trace.jsonl`, receipt
+`..._0025_hero-hall-recruit-001_reconcile.png`, and Home
+`..._0029_core_7_after_1.png`.
+
+This proves one free-single consumption and reconciliation with manual result
+dismissal. It does not accept the automatic result path, the five-single Daily
+requirement, or the Hero caller migration. Resource Use remains zero. No new
+supported producer facts were added by the workflow task; remaining original
+consumer ports retain their precise recognition dependencies in the plan.
+
+The saved final runner report was also rechecked: its 2,016 records comprise
+2,010 passes and six skips. The earlier notes double-counted the skips and paired
+the gate filename with the final run's metadata; the counts, paths and duration
+above now match the actual final JSON. This resumption changed only evidence and
+documentation, so no additional unit/full run was needed. `git diff --check`
+passed after the updates. No merge, push, account/castle change or automatic
+Daily activation occurred.
+
+After this proof, the user clarified that computer/BlueStacks manipulation must
+be left to them. Future needed clicks or navigation are requested from the user;
+the workflow task continues code work and offline validation without desktop or
+game input. No further live input was sent after that clarification.
+
+### Published checkpoint and Resource edge investigation
+
+The user then requested a checkpoint push before continuing and authorized
+needed evidence through the canonical BlueStacks API. Desktop mouse/keyboard
+control remains with the user; request manual interaction for unsupported or
+unresponsive controls. No new live input or spending occurred in this phase.
+
+Before continuation, HEAD and the remote feature branch were both verified at
+`4f332027e924a9f73e3e3740d92980d8950ddae1`, with a clean worktree. The explicit
+exact-commit push returned `Everything up-to-date`. This publishes the completed
+Daily checkpoint/readiness and popup integration with its already-recorded
+2,010-pass/six-skip gate; no mainline merge occurred. The evidence notes below
+are subsequent documentation work, not a new production-code validation claim.
+
+Visual inspection of settled Resource frame `..._0043_resource_scroll_settled.png`
+showed an additional top card fragment with `Owned: 727` that was absent from
+the published rows. An offline geometry diagnostic used the unchanged canonical
+card detector on the three saved frames and retained the prior real-OCR results
+from both production observation paths. It confirmed:
+
+- At 900 by 1600, the detector requires a 120-pixel card band. Frame 0041's
+  60-pixel bottom fragment and frames 0042/0043's 66-pixel top fragment are
+  omitted. Thus the dependency includes missing rows, not only unreadable rows.
+- The taller partial cards already reported as UNREADABLE are not classified
+  as CLIPPED. The bottom band ends at exclusive y=1599, short of the current
+  y=1600 clipping check; the top band begins at y=278, below the y=272 body
+  boundary. All three frames produce zero CLIPPED cards.
+- A consumer sees neither complete evidence for those cards nor a reliable
+  published distinction between edge clipping and unreadable interior content.
+  Ignoring unresolved rows or adding generic UNKNOWN retries would not repair
+  full-inventory proof. No scanner or perception code was changed.
+
+The diagnostic command passed using the installed Python 3.13 executable and
+`.local-data/artifacts/core_resume/inspect_resource_edges.py`; its result is
+`resource_edge_geometry.json` beside it. This replay needs no device, fresh
+mutation or repeated OCR run. B's qualification must retain visible edge
+fragments and correctly distinguish clipping through both production paths;
+then A can implement bounded traversal without discarding unknown inventory.
+The existing Hero result-state/control and exact selected-castle name
+dependencies remain unchanged.
+
+The bounded package investigation also verified the selected Bag page's stored
+item list, recycled cells with partial viewport intersection, and distinct
+single/bulk Use handlers. The [Resource reference](../docs/game-reference/workflows/resource-inventory.md)
+owns the source paths, symbols, build limits and automation implications.
+This adds explanatory evidence without publishing new recognition facts or
+accepting a mutation/caller path. No additional portable test run was needed
+for the documentation-only continuation; `git diff --check` passed.
+
+### September 13 independent A caller execution
+
+The user requested execution of the independent portion of
+`PNC_CORE_WORKFLOW_PORTING_PLAN.md`, with A/B coordinated work deferred until B
+finishes. Work continued in the existing integration worktree at
+`4f332027e924a9f73e3e3740d92980d8950ddae1`; prior documentation changes were retained.
+No B worktree or unfinished recognition edits were imported.
+
+Implemented Development Research direct/application/session and authored caller
+wiring with an explicit exact `CoreMutationBoundary`. Caller target, journal root,
+durable checkpoint, one-Start/zero-diamond authority, Development-only priority and
+`DAILY_CANARY` role are checked before connection. Typed results and existing lease/
+cleanup ownership are retained; unscoped generic Research cannot enter legacy
+execution. Existing committed Hero receipts remain in the loaded Research checkpoint.
+
+Implemented public Hero `reconcile_existing` and a named-operation core workflow.
+The canary's reconcile-only branch exits through that workflow without entering
+`execute` or accepting a new-spend acknowledgement. Durable state and exact identity
+remain canonical. Dedicated read-only review found a local-midnight date mismatch;
+the scope now uses the journal's maintenance date. A real-journal CLI regression
+covers one UTC reset spanning Toronto midnight and the absence of new authority.
+The final Research/Hero review reported no actionable findings.
+
+A11's finite inventory is complete: six supported endpoints out of the 25 original
+smoke targets, 16 mapped endpoints lacking independent profiles and return edges,
+Arena lacking mapping/profile/Versus-to-Home proof, and two unmapped requirements
+(Bank and Dragondom Conquest). Campaign is the sixth currently modeled endpoint;
+earlier five-endpoint notes predate that route. No additional route was justified.
+The plan records every remaining identity; the diagnostic mapping is
+`.local-data/artifacts/core_resume/a11_endpoint_inventory.json`.
+
+Actual offline validation used the installed Python 3.13.5 executable and
+`tools/run_tests.py`, with no live flags:
+
+- Focused groups passed during implementation: Daily maintenance unit 118,
+  workflow contracts 59, script runner 106, API 72, entrypoints unit 4, architecture
+  22 and tools unit 44. These are component results, not added to the final count.
+- The first affected full fallback exposed two obsolete fixture expectations after
+  typed Research promotion: a missing explicit `mutation_boundary=None` argument
+  and an end-to-end fixture still modeling legacy Research. The fixtures now assert
+  typed dispatch and omit its four old legacy taps/observations. The intermediate
+  workflow-group failure was the remaining old tap-count assertion, also corrected.
+- Final `tools/run_tests.py affected --base origin/main --explain --json
+  .test-impact/a_independent_selection_final.json --results
+  .test-impact/a_independent_results_final.json` **passed**. Shared contracts and
+  test infrastructure caused the full portable fallback: **2,033 tests, 2,027
+  passed, six skipped**, 194.493 seconds test execution / 208.577 seconds overall.
+  Skips are optional local screenshots and the existing Windows symlink-privilege
+  limitation. Run ID `c467de4a5dcb42809cef0545c3aa43e6`, completion
+  `2026-09-13T23:18:18.415109+00:00`. The subsequent completion edits are documentation
+  only; no production changes followed this passing gate.
+
+The bounded live Research proof was prepared with the approved plan's one normal
+Development Start and zero diamonds on configured `mega_old_acc` / K157 / NPC 2,
+level 22. The local canary config lacks Research; the probe supplies the plan's
+exact runtime policy without editing local configuration. It binds the canonical
+journal root `C:/Users/lebel/pnc/artifacts`, which still contains the committed
+`hero-hall-recruit-001` receipt and no Research intent.
+
+The canonical API reservation and runtime readiness probe confirmed Home at
+23:12 UTC. It performed no Research call, Start, resource spending, account/castle
+switch or desktop manipulation. The known More-to-Settings tap defect remains with
+B, so manual Settings entry was requested before the caller's fresh exact-identity
+preflight. The initial lease was released while awaiting the response. The user
+then confirmed Settings and a new scoped phase ran the production caller.
+
+Evidence is under
+`.local-data/artifacts/core_resume/research_caller_20260913T231220Z/`:
+`prepared.json`, `baseline.json`, `closed.json`, and the readiness screenshots.
+The sanitized runtime trace is referenced by `baseline.json`. The prepared probe
+is `core_resume/research_caller_live.py`; resume it with the installed Python using
+`PYTHON_BASIC_REPL=1` and an interactive terminal, call `connect()`, verify the user's
+manual Settings state with `capture()`, then invoke `run()` once and `close()`.
+`run()` calls the production `AutomationApi.research` with the exact scope; no test
+double or alternate dispatcher is used. If the active identity, eligible detail or
+receipt is unproved, stop and retain evidence without retrying Start.
+
+The second phase, `research_caller_20260913T232029Z/`, confirmed Settings,
+passed the exact K157 / NPC 2 / level-22 preflight, returned Home and used the
+reviewed Research Queue Go route. `AutomationApi.research` stopped at
+`open_visible_building`: **the visible Institute was absent from published Home
+spatial content**. No Institute tap or Research Start occurred. `summary.json`
+confirms zero Starts/diamonds and an unchanged canonical checkpoint; `closed.json`
+confirms lease release with the pre-existing game preserved. Home was the last
+confirmed screen. Trace: `C:/Users/lebel/pnc/artifacts/2026-09-13/mega_old_acc/`
+`20260913T232104Z_db7df270_core_trace.jsonl`.
+
+The actual RapidOCR replay of saved frame
+`..._0026_core_7_building_source.png` through both production paths reported CLEAR
+Home with Castle, Warehouse, Goddess Statue and Trap Workshop objects, but zero
+Institute candidates and no Institute OCR line. The exact A resolver correctly
+returned `None`; the focus arrow is not published as an authoritative target.
+`research_replay_20260913T232029Z_observation_diagnostic.json` owns the replay.
+This is a B producer dependency, not an A selection defect. Existing caller code
+does not infer a coordinate from the focus route or ignore missing identity.
+
+The user subsequently clarified that API-based evidence navigation should handle
+unsupported controls, with manual clicks requested only when BlueStacks is
+unresponsive. This supersedes the earlier manual-only handling of unsupported
+Settings. Inspection input is separate from production caller acceptance; an
+inspection workaround does not qualify the defective production selector.
+
+The user then requested `serious_stuff`. It resolves to `bs-main`, with the
+`live_testing` role and no configured canary target. A scoped read-only API phase
+was started there; its eight initial captures were all black/PNC_LOADING and the
+canonical readiness budget expired. The user was asked to bring the window forward
+and report whether the game is visible. Evidence is under
+`core_resume/serious_inspection_20260913T232758Z/`. No identity, mutation or spending
+is claimed there. Research mutation additionally requires the configured
+`DAILY_CANARY` role, which is absent; local roles/configuration have not been changed.
+`stop.json` and `closed.json` record the readiness stop and released lease; the
+pre-existing instance was preserved while awaiting the user's window check.
+
+All other remaining original execution paths keep the explicit B/target/message/
+login dependencies in the plan. A/B integration waits for B to finish. No new commit,
+push, merge or automatic Daily activation occurred in this execution.

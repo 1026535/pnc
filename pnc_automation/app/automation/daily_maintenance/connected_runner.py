@@ -9,28 +9,20 @@ from pnc_automation.app.automation.daily_maintenance.application_service import 
     DailyRunBoundary,
 )
 from pnc_automation.app.automation.daily_maintenance.authorization import DailyMutationAuthorizer
-from pnc_automation.app.automation.daily_maintenance.claim_executor import JournaledDailyClaimExecutor
-from pnc_automation.app.automation.daily_maintenance.coordinator import (
-    DailyMaintenanceCoordinator,
-)
-from pnc_automation.app.automation.daily_maintenance.live_session import ConnectedDailyQuestSession
-from pnc_automation.app.automation.daily_maintenance.mutation_dispatcher import JournaledMutationDispatcher
+from pnc_automation.app.automation.daily_maintenance.core_daily_maintenance import CoreDailyMaintenanceWorkflow
+from pnc_automation.app.automation.engine.core_daily_mutation import CoreMutationBoundary
+from pnc_automation.app.automation.engine.core_runtime import CoreRuntime, build_core_runtime
+from pnc_automation.app.automation.engine.core_workflow import CoreWorkflowRunner
 from pnc_automation.app.authoring.config.daily_maintenance import DailyMaintenanceTargetConfig
-from pnc_automation.app.authoring.config.models import AccountConfig, AppConfig, LiveAutomationRole
+from pnc_automation.app.authoring.config.models import AppConfig, LiveAutomationRole
 from pnc_automation.app.automation.engine.script_runner import (
-    ConnectedAutomationRuntime,
     ScriptRunner,
     require_successful_preparation,
 )
 from pnc_automation.app.pnc.domain.daily_maintenance import (
-    DailyQuestRow,
-    DailyTargetOutcome,
     DailyTargetOutcomeStatus,
     DailyTaskCheckpoint,
-    MutationAcknowledgement,
-    MutationIntentState,
 )
-from pnc_automation.app.pnc.domain.daily_quest_catalog import DailyQuestCatalog
 from pnc_automation.app.pnc.persistence.daily_run_journal_store import DailyRunJournalStore
 
 
@@ -58,14 +50,14 @@ class ConnectedClaimOnlyCastleRunner:
         if target.capabilities:
             labels = ", ".join(policy.quest_id.value for policy in target.capabilities)
             raise PermissionError(f"Daily capabilities are not promoted for unattended execution: {labels}.")
-        acknowledgement = self.authorizer.require_claims(
+        self.authorizer.require_claims(
             account_id=target.account_id,
             castle_ref=target.castle_ref,
             maintenance_date=boundary.maintenance_date,
             max_claims=target.max_claims,
         )
         with self.script_runner.reserve_accounts((target.account_id,)):
-            preparation = require_successful_preparation(
+            require_successful_preparation(
                 self.script_runner.prepare_account_session(
                     account_id=target.account_id,
                     castle=target.castle,
@@ -73,16 +65,16 @@ class ConnectedClaimOnlyCastleRunner:
                 )
             )
 
-            with self.script_runner.build_connected_runtime_bundle(
+            with build_core_runtime(
+                self.script_runner,
                 account=account,
+                artifact_directory=account.artifact_directory_name,
                 required_role=LiveAutomationRole.DAILY_CANARY,
-            ) as bundle:
+            ) as core:
                 return self._run_connected_castle(
                     target=target,
                     boundary=boundary,
-                    account=account,
-                    acknowledgement=acknowledgement,
-                    bundle=bundle,
+                    core=core,
                 )
 
     def _run_connected_castle(
@@ -90,21 +82,10 @@ class ConnectedClaimOnlyCastleRunner:
         *,
         target: DailyMaintenanceTargetConfig,
         boundary: DailyRunBoundary,
-        account: AccountConfig,
-        acknowledgement: MutationAcknowledgement,
-        bundle: ConnectedAutomationRuntime,
+        core: CoreRuntime,
     ) -> DailyCastleRunSummary:
         """Runs the connected portion while the caller owns its lease bundle."""
 
-        connected = bundle.runtime
-        action_executor = connected.require_observed_action_executor(
-            "Daily claims require the canonical selector-backed action executor."
-        )
-        session = ConnectedDailyQuestSession(
-            runner=bundle.runner,
-            observation_service=connected.observation_service,
-            action_executor=action_executor,
-        )
         journal_store = DailyRunJournalStore(self.app_config.artifact_root)
         checkpoint = journal_store.load(
             game_reset_id=boundary.game_reset_id,
@@ -116,28 +97,13 @@ class ConnectedClaimOnlyCastleRunner:
             account_id=target.account_id,
             castle=target.castle,
         )
-        if checkpoint.game_reset_id != boundary.game_reset_id:
-            raise RuntimeError("Existing Daily journal has a different game-reset identity.")
-        unresolved = tuple(
-            intent for intent in checkpoint.mutation_intents if intent.state != MutationIntentState.COMMITTED
-        )
-        if unresolved:
-            raise RuntimeError(
-                "Daily journal contains an unresolved mutation; reconcile it before another live run."
-            )
-        coordinator = DailyMaintenanceCoordinator(
-            session=session,
-            claim_executor=JournaledDailyClaimExecutor(
-                session=session,
-                action_executor=action_executor,
-                dispatcher=JournaledMutationDispatcher(journal_store),
-                maximum_claims=acknowledgement.max_mutations,
+        result = CoreWorkflowRunner(
+            core,
+            mutation_boundary=CoreMutationBoundary(
+                target=target, boundary=boundary, authorizer=self.authorizer,
+                journal_store=journal_store,
             ),
-            capability_executor=_RejectingCapabilityExecutor(),
-            journal_store=journal_store,
-            catalog=DailyQuestCatalog(),
-        )
-        result = coordinator.run(target=target, checkpoint=checkpoint)
+        ).run(CoreDailyMaintenanceWorkflow(checkpoint)).value
         failed_outcomes = tuple(
             outcome for outcome in result.outcomes
             if outcome.status not in {
@@ -145,11 +111,12 @@ class ConnectedClaimOnlyCastleRunner:
                 DailyTargetOutcomeStatus.APPLICABILITY_SKIP,
             }
         )
-        succeeded = not failed_outcomes
+        succeeded = not failed_outcomes and not result.unknown_titles
         message = (
             f"Claim sweep completed across {result.scanned_viewports} viewports."
             if succeeded else
             f"Claim sweep stopped with {len(failed_outcomes)} unresolved outcome(s) "
+            f"and {len(result.unknown_titles)} unknown title(s) "
             f"after {result.scanned_viewports} viewports."
         )
         journal_path = journal_store.checkpoint_path(
@@ -164,13 +131,3 @@ class ConnectedClaimOnlyCastleRunner:
             message=message,
             artifact_paths=(str(journal_path),),
         )
-
-
-class _RejectingCapabilityExecutor:
-    """Fails closed if configuration bypasses pre-ADB capability promotion checks."""
-
-    def execute(self, *, row: DailyQuestRow, target, checkpoint) -> tuple[DailyTaskCheckpoint, DailyTargetOutcome]:
-        """Rejects execution because no action capability has passed its live promotion gate."""
-
-        del target, checkpoint
-        raise PermissionError(f"Daily capability '{row.quest_id.value}' is not promoted.")

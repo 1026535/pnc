@@ -25,6 +25,7 @@ from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.core.vision.ocr.ocr_service import UnavailableOcrService
 from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservationEnricher
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
+from pnc_automation.app.pnc.vision.visual_screen_recognizer import load_visual_screen_recognizer
 from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
 from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
 
@@ -100,20 +101,14 @@ class ObservationArtifactEmissionTests(unittest.TestCase):
                 root.mkdir(parents=True, exist_ok=True)
                 try:
                     screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
-                    payload = _encode_png(Image.new("RGB", (900, 1600), (15, 28, 68)))
+                    with Image.open("tests/data/screen_recognition/institute_audit.png") as source:
+                        payload = _encode_png(source.convert("RGB"))
                     registry = build_default_selector_registry()
                     ocr_service = _FakeOcrService(
                         lines=(
-                            _ocr_line("X:253", x=73, y=67, width=71, height=24),
-                            _ocr_line("Y:447", x=177, y=67, width=69, height=24),
-                            _ocr_line("My Territory", x=210, y=505, width=180, height=24),
-                            _ocr_line("Mystery Badge", x=640, y=820, width=140, height=24),
-                            _ocr_line("Home", x=50, y=1564, width=90, height=24),
-                            _ocr_line("Hero", x=215, y=1564, width=90, height=24),
-                            _ocr_line("Quest", x=330, y=1569, width=90, height=24),
-                            _ocr_line("Mail", x=570, y=1568, width=90, height=24),
-                            _ocr_line("Alliance", x=665, y=1566, width=120, height=24),
-                            _ocr_line("More", x=794, y=1567, width=90, height=24),
+                            _ocr_line("Institute", x=110, y=15, width=120, height=28),
+                            _ocr_line("8/45", x=122, y=245, width=45, height=23),
+                            _ocr_line("Mystery Badge", x=320, y=490, width=140, height=24),
                         )
                     )
                     builder = ObservationBuilder(
@@ -123,6 +118,7 @@ class ObservationArtifactEmissionTests(unittest.TestCase):
 
                         ),
                         screen_classifier=ScreenClassifier(),
+                        visual_recognizer=load_visual_screen_recognizer(),
                         enricher=PncObservationEnricher(
 
                             selector_registry=registry,
@@ -139,7 +135,7 @@ class ObservationArtifactEmissionTests(unittest.TestCase):
 
                     capture = service.capture_observation("world_scan", request=persist_request)
 
-                    expected_screen_type = ScreenType.PNC_WORLD_MAP
+                    expected_screen_type = ScreenType.PNC_INSTITUTE
                     self.assertEqual(capture.observation.screen_type, expected_screen_type)
                     if expect_artifact:
                         self.assertIsNotNone(capture.screenshot.artifact_path)
@@ -154,7 +150,7 @@ class ObservationArtifactEmissionTests(unittest.TestCase):
                     document = json.loads(sidecar_files[0].read_text(encoding="utf-8"))
                     unidentified_texts = [entry["text"] for entry in document["unidentified_ocr_lines"]]
                     self.assertIn("Mystery Badge", unidentified_texts)
-                    self.assertNotIn("My Territory", unidentified_texts)
+                    self.assertNotIn("8/45", unidentified_texts)
                 finally:
                     if root.exists():
                         shutil.rmtree(root)

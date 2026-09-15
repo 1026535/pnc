@@ -40,47 +40,31 @@ from tests.support.pnc.capture_vision.ocr_line import _ocr_line
 class SystemPopupObservationTests(unittest.TestCase):
     """Proves system popup observation."""
 
-    def test_observation_builder_classifies_bluestacks_android_home_from_pnc_label(self) -> None:
-        """Replays BlueStacks home when template matching misses but OCR proves the P&C launcher label."""
+    def test_captured_android_launcher_requires_independent_chrome_and_icon(self) -> None:
+        """The search bar and System apps prove identity; the PNC icon owns its control."""
 
-        fixture_path = require_local_fixture_artifact(
-            "bluestacks_android_home_pnc_label_live_20260617",
-            default_repo_relative_path="tests/data/world_map/bluestacks_android_home_pnc_label_live_20260617.png",
+        from tests.integration.vision.test_alliance_remaining_visual_contracts import (
+            _BoundedOcrService, _builder, _capture, _perception,
         )
-        with tempfile.TemporaryDirectory() as temp_directory:
-            root = Path(temp_directory)
-            screenshot_service = ScreenshotService(artifact_store=ArtifactStore(root=root / "artifacts"))
-            image = Image.open(fixture_path).convert("RGB")
-            screenshot = screenshot_service.capture(
-                _FakeScreenshotSession(_encode_png(image)),
-                artifact_directory="live_android_home",
-                label="bluestacks_android_home",
-            )
-            builder = ObservationBuilder(
-                selector_registry=_minimal_runtime_registry(),
-                selector_engine=ImageSelectorEngine(
-                    template_matcher=OpenCvTemplateMatcher(),
-
-                ),
-                screen_classifier=ScreenClassifier(),
-                enricher=PncObservationEnricher(
-
-                ),
-            ocr_service=_FakeOcrService(
-                        lines=(
-                            _ocr_line("Search for games & apps", x=125, y=56, width=113, height=16),
-                            _ocr_line("Store", x=86, y=215, width=44, height=20),
-                            _ocr_line("System apps", x=221, y=216, width=98, height=20),
-                            _ocr_line("Puzzles & Conquest", x=359, y=217, width=146, height=17),
-                        )
-                    )
-                )
-
-            observation = builder.build(screenshot, request=ObservationRequest.full_runtime_default())
-
-            self.assertEqual(observation.screen_type, ScreenType.ANDROID_HOME)
-            launcher = observation.require(UiElementId.ANDROID_HOME_PNC_ICON)
-            self.assertEqual(launcher.extracted_text, "Puzzles & Conquest")
+        with Image.open("tests/data/screen_recognition/android_launcher_june17.png") as source:
+            image = source.convert("RGB")
+        for icon_present in (True, False):
+            variant = image.copy()
+            if not icon_present:
+                variant.paste((7, 11, 34), (400, 138, 464, 205))
+            for path in ("builder", "navigation"):
+                with self.subTest(path=path, icon_present=icon_present):
+                    builder = _builder(_BoundedOcrService())
+                    capture = _capture(variant, session_id=f"launcher-{path}-{icon_present}")
+                    observation = builder.build(capture) if path == "builder" else _perception(builder).build(capture)
+                    self.assertEqual(observation.screen_type, ScreenType.ANDROID_HOME)
+                    self.assertEqual(observation.has(UiElementId.ANDROID_HOME_PNC_ICON), icon_present)
+                    self.assertEqual(observation.decision.layout_id, "android_launcher_june17")
+                    if icon_present:
+                        control = observation.require(UiElementId.ANDROID_HOME_PNC_ICON)
+                        self.assertEqual(control.frame_ref, capture.frame_ref)
+                        self.assertFalse(control.identity_evidence)
+                        self.assertTrue(control.bounds.contains_point((430, 170)))
 
     def test_observation_builder_classifies_research_queue_overlay_as_blocking_popup(self) -> None:
         """Recognizes the in-game research queue overlay as a popup so bootstrap stays inside the game."""
@@ -118,7 +102,7 @@ class SystemPopupObservationTests(unittest.TestCase):
             self.assertEqual(observation.screen_type, ScreenType.PNC_POPUP)
             self.assertTrue(observation.blocking_popup)
 
-    def test_observation_builder_classifies_google_play_games_profile_prompt_as_blocking_popup(self) -> None:
+    def test_google_play_games_parser_retains_cancel_ownership(self) -> None:
         """Treats the external Google Play Games profile prompt as a recoverable popup instead of bootstrap unknown."""
 
         with tempfile.TemporaryDirectory() as temp_directory:
@@ -150,11 +134,11 @@ class SystemPopupObservationTests(unittest.TestCase):
                     )
                 )
 
-            observation = builder.build(screenshot)
+            observation = _build_popup_additions(image=screenshot.image, lines=builder.ocr_service.lines, anchors=TextAnchorDetector().detect(builder.ocr_service.lines))
 
-            self.assertEqual(observation.screen_type, ScreenType.PNC_POPUP)
-            self.assertTrue(observation.blocking_popup)
-            self.assertTrue(observation.has(UiElementId.PNC_POPUP_CLOSE_BUTTON))
+            self.assertEqual(observation.screen_evidence[0].screen_type, ScreenType.PNC_POPUP)
+            self.assertIsNotNone(observation.popup_overlay)
+            self.assertIn(UiElementId.PNC_POPUP_CLOSE_BUTTON, observation.visible_elements)
 
     def test_alliance_invitation_fixture_requires_alliance_body_before_exposing_cancel(self) -> None:
         """The tracked invitation artifact authorizes Cancel only with its body/title evidence."""

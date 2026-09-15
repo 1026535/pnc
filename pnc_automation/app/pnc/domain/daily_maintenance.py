@@ -229,10 +229,11 @@ class MutationAcknowledgement:
 
     account_id: str
     castle_ref: str
-    quest_id: DailyQuestId
+    quest_id: DailyQuestId | None
     maintenance_date: date
     max_mutations: int
     max_diamond_spend: int | None
+    action_kind: str | None = None
 
     def __post_init__(self) -> None:
         """Rejects broad or unbounded live acknowledgements."""
@@ -241,17 +242,27 @@ class MutationAcknowledgement:
             raise ValueError("Mutation acknowledgement account and castle cannot be empty.")
         if isinstance(self.max_mutations, bool) or self.max_mutations <= 0:
             raise ValueError("Mutation acknowledgement max_mutations must be positive.")
-        validate_daily_diamond_limit(self.max_diamond_spend, quest_id=self.quest_id)
+        if (self.quest_id is None) == (self.action_kind is None):
+            raise ValueError(
+                "Mutation acknowledgement requires exactly one Daily capability or building action kind."
+            )
+        if self.quest_id is not None:
+            validate_daily_diamond_limit(self.max_diamond_spend, quest_id=self.quest_id)
+        elif self.max_diamond_spend is None or self.max_diamond_spend < 0:
+            raise ValueError("Building mutation acknowledgement requires a finite premium budget.")
+        if self.action_kind is not None and not self.action_kind.strip():
+            raise ValueError("Mutation acknowledgement action_kind cannot be blank.")
 
     def authorize(
         self,
         *,
         account_id: str,
         castle_ref: str,
-        quest_id: DailyQuestId,
+        quest_id: DailyQuestId | None,
         max_mutations: int,
         max_diamond_spend: int | None,
         maintenance_date: date,
+        action_kind: str | None = None,
     ) -> None:
         """Fails unless this acknowledgement exactly matches the requested live slice."""
 
@@ -263,6 +274,8 @@ class MutationAcknowledgement:
             raise ValueError("Mutation acknowledgement must match the capability mutation limit exactly.")
         if self.max_diamond_spend != max_diamond_spend:
             raise ValueError("Mutation acknowledgement must match the capability diamond limit exactly.")
+        if self.action_kind != action_kind:
+            raise ValueError("Mutation acknowledgement must match the exact action kind.")
 
 
 class DailyApplicabilitySkipReason(StrEnum):
@@ -321,25 +334,33 @@ class MutationIntent:
     """Represents one individually journaled mutating sub-operation."""
 
     operation_id: str
-    quest_id: DailyQuestId
+    quest_id: DailyQuestId | None
     state: MutationIntentState
     expected_precondition: str
     expected_postcondition: str
     diamond_budget: int = 0
     diamonds_spent: int = 0
     metadata: dict[str, Any] = field(default_factory=dict)
+    action_kind: str | None = None
+    target: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
         """Rejects malformed identifiers and overspent premium budgets."""
 
-        if not self.operation_id.strip():
+        if not isinstance(self.operation_id, str) or not self.operation_id.strip():
             raise ValueError("MutationIntent.operation_id cannot be empty.")
+        if self.quest_id is not None and not isinstance(self.quest_id, DailyQuestId):
+            raise TypeError("MutationIntent.quest_id must be a DailyQuestId or None.")
         if not self.expected_precondition.strip() or not self.expected_postcondition.strip():
             raise ValueError("MutationIntent precondition and postcondition cannot be empty.")
         if self.diamond_budget < 0 or self.diamonds_spent < 0:
             raise ValueError("MutationIntent diamond values cannot be negative.")
         if self.diamonds_spent > self.diamond_budget:
             raise ValueError("MutationIntent cannot spend beyond its diamond budget.")
+        if self.action_kind is not None and not self.action_kind.strip():
+            raise ValueError("MutationIntent.action_kind cannot be blank.")
+        if self.target is not None and not isinstance(self.target, dict):
+            raise TypeError("MutationIntent.target must be a mapping or None.")
 
 
 @dataclass(frozen=True, slots=True)

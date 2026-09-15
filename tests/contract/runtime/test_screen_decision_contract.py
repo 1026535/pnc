@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import logging
 import unittest
+from unittest.mock import Mock
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Iterator
 
 from PIL import Image
+from pnc_automation.app.pnc.vision.visual_screen_recognizer import VisualRecognition
 
 from pnc_automation.app.automation.engine.action_executor import ActionExecutor
 from pnc_automation.app.pnc.domain.action_requests import (
@@ -88,7 +90,7 @@ class ScriptedEnricher:
         del image, request, ocr_context
         return ObservationAdditions(guard_verdict=GuardVerdict.CLEAR)
 
-    def enrich(self, image, screen_type, visible_elements, request, *, ocr_context, ocr_regions):
+    def enrich(self, image, screen_type, visible_elements, request, *, ocr_context, ocr_regions, layout_id=None):
         del image, screen_type, visible_elements, request, ocr_context, ocr_regions
         if not self.enrichments:
             raise AssertionError("Scripted enricher received more calls than expected")
@@ -236,7 +238,7 @@ class ScreenDecisionContractTests(unittest.TestCase):
         self.assertIsNone(unsupported.spatial_surface)
         self.assertEqual(unsupported.decision.guard, GuardVerdict.UNRESOLVED)
 
-        supported = _builder(ScriptedEnricher([additions])).build(
+        supported = _builder(ScriptedEnricher([additions]), screen=ScreenType.PNC_SETTINGS).build(
             _screenshot(),
             request=ObservationRequest.source_screen_retry(ScreenType.PNC_SETTINGS),
         )
@@ -254,7 +256,7 @@ class ScreenDecisionContractTests(unittest.TestCase):
                     )
                 )
 
-    def test_builder_clears_all_facts_after_late_non_geometry_conflict(self) -> None:
+    def test_builder_rejects_content_that_contradicts_independent_identity(self) -> None:
         additions = ObservationAdditions(
             visible_elements={UiElementId.PNC_HOME_BUILD_BUTTON: _element(UiElementId.PNC_HOME_BUILD_BUTTON)},
             list_entries=(_entry(),),
@@ -271,15 +273,10 @@ class ScreenDecisionContractTests(unittest.TestCase):
                 )
             },
         )
-        observation = _builder(ScriptedEnricher([additions])).build(_screenshot())
+        with self.assertRaisesRegex(ValueError, "contradicted independent screen identity"):
+            _builder(ScriptedEnricher([additions]), screen=ScreenType.PNC_HOME_CITY).build(_screenshot())
 
-        self.assertEqual(observation.screen_type, ScreenType.UNKNOWN)
-        self.assertEqual(observation.visible_elements, {})
-        self.assertEqual(observation.list_entries, ())
-        self.assertIsNone(observation.spatial_surface)
-        self.assertEqual(observation.text_field_states, {})
-
-    def test_narrow_identity_fallback_preserves_existing_scoped_facts(self) -> None:
+    def test_missing_independent_identity_never_invokes_content_or_identity_fallback(self) -> None:
         scoped = ObservationAdditions(
             list_entries=(_entry(),),
             spatial_surface=_spatial_surface(),
@@ -294,25 +291,16 @@ class ScreenDecisionContractTests(unittest.TestCase):
         fallback_identity = ObservationAdditions(
             screen_evidence=(ScreenEvidence(ScreenType.PNC_SETTINGS, "settings-fallback", "settings"),)
         )
-        observation = _builder(ScriptedEnricher([scoped, fallback_identity])).build(
-            _screenshot(),
-            request=ObservationRequest.source_screen_retry(ScreenType.PNC_SETTINGS),
+        enricher = ScriptedEnricher([scoped, fallback_identity])
+        observation = _builder(enricher).build(
+            _screenshot(), request=ObservationRequest.source_screen_retry(ScreenType.PNC_SETTINGS),
         )
-
-        self.assertEqual(observation.screen_type, ScreenType.PNC_SETTINGS)
-        self.assertEqual(
-            observation.list_entries,
-            (
-                replace(
-                    scoped.list_entries[0],
-                    frame_ref=FRAME,
-                    source_screen=ScreenType.PNC_SETTINGS,
-                    source_layout_id="settings",
-                ),
-            ),
-        )
-        self.assertEqual(observation.spatial_surface, scoped.spatial_surface)
-        self.assertEqual(observation.text_field_states, scoped.text_field_states)
+        self.assertEqual(observation.screen_type, ScreenType.UNKNOWN)
+        self.assertFalse(observation.decision.action_eligible)
+        self.assertEqual(observation.list_entries, ())
+        self.assertIsNone(observation.spatial_surface)
+        self.assertEqual(observation.text_field_states, {})
+        self.assertEqual(len(enricher.enrichments), 2)
 
     def test_prebound_element_frame_and_row_layout_contradictions_are_rejected(self) -> None:
         builder = _builder(ScriptedEnricher([]))
@@ -420,12 +408,16 @@ class ScreenDecisionContractTests(unittest.TestCase):
         self.assertEqual(session.taps, [(5, 5)])
 
 
-def _builder(enricher: ScriptedEnricher) -> ObservationBuilder:
+def _builder(enricher: ScriptedEnricher, *, screen: ScreenType | None = None) -> ObservationBuilder:
     return ObservationBuilder(
         selector_registry=build_default_selector_registry(),
         selector_engine=EmptySelectorEngine(),
         screen_classifier=ScreenClassifier(),
         enricher=enricher,
+        visual_recognizer=None if screen is None else Mock(recognize=Mock(return_value=VisualRecognition(
+            evidence=(ScreenEvidence(screen, "visual_test_input", "contract-layout"),),
+            controls=(_element(UiElementId.PNC_MORE_MANAGE_CHAR, identity_evidence=False),),
+        ))),
     )
 
 

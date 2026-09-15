@@ -257,7 +257,22 @@ class AutomationRunner:
         """Executes one script step until it succeeds or fails."""
 
         task = self.task_registry.require(step.task)
-        if isinstance(task, CoreWorkflowTaskDefinition):
+        building_core_requested = (
+            step.task in {TaskId.BUILDING_CONSTRUCT, TaskId.BUILDING_UPGRADE}
+            and (
+                getattr(step.parsed_params, "operation_id", None) is not None
+                or getattr(step.parsed_params, "daily_quest_id", None) is not None
+            )
+        )
+        if building_core_requested and getattr(self.core_step_executor, "supports_building_core", False) is not True:
+            raise PermissionError(
+                "Typed building operation identity requires an explicit CoreMutationBoundary; "
+                "the legacy building task was not used."
+            )
+        if isinstance(task, CoreWorkflowTaskDefinition) or (
+            step.task in {TaskId.BUILDING_CONSTRUCT, TaskId.BUILDING_UPGRADE}
+            and getattr(self.core_step_executor, "supports_building_core", False) is True
+        ):
             return self._run_core_step(
                 step=step,
             )

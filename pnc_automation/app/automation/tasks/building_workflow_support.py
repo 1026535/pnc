@@ -57,6 +57,18 @@ def build_queue_active_timer_text(observation: Observation) -> str | None:
     return None
 
 
+def build_queue_first_slot_is_idle(observation: Observation) -> bool:
+    """Return true only when the production observer proves slot one is idle."""
+
+    idle_rows = tuple(
+        entry
+        for entry in observation.entries(ListEntryKind.BUILDING)
+        if entry.metadata.get("queue_state") == "idle"
+        and entry.metadata.get("queue_index") == 0
+    )
+    return len(idle_rows) == 1
+
+
 def building_requirement_is_visible(observation: Observation) -> bool:
     """Returns whether an insufficient-resource or prerequisite panel is visible."""
 

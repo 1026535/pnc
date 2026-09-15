@@ -60,6 +60,8 @@ from pnc_automation.core.infra.emulator.provenance import FrameRef
 from pnc_automation.core.vision.ocr.ocr_service import ObservationOcrContext, OcrLine, OcrResult, OcrService
 from pnc_automation.core.errors import SelectorResolutionError
 from tests.support.paths import REPOSITORY_ROOT, TEST_DATA_ROOT
+from tests.support.pnc.capture_vision.modal_overlay import with_update_modal
+from pnc_automation.app.pnc.vision.ocr_region_plan import compile_guard_ocr_region_plans
 
 
 def _perception(recognizer, guard, *, ocr_service=None):
@@ -319,6 +321,32 @@ class NavigationCoreTests(unittest.TestCase):
         core = NavigationCore(actuator, lambda _: next(iterator), reviewed_navigation_edges(),
                               NavigationPolicy(max_observations=4), sleep=lambda _: None)
         return core, actuator, core.edges[0]
+
+    def test_route_uses_ready_source_for_initial_and_reviewed_edge_reacquisition(self):
+        """Loading-aware source reacquisition leaves post-action completion unchanged."""
+
+        now = datetime(2026, 9, 12, tzinfo=UTC)
+        home = replace(observation(ScreenType.PNC_HOME_CITY), captured_at=now)
+        world = replace(observation(ScreenType.PNC_WORLD_MAP), captured_at=now + timedelta(seconds=2))
+        world_after = replace(observation(ScreenType.PNC_WORLD_MAP), captured_at=now + timedelta(seconds=3))
+        ready = Mock(side_effect=[home, home])
+        observe = Mock(side_effect=[world, world_after])
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator,
+            observe,
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+            observe_ready=ready,
+        )
+
+        result = core.navigate(ScreenType.PNC_WORLD_MAP)
+
+        self.assertIs(world_after, result)
+        self.assertEqual(["core_route_source", "core_1_source"], [call.args[0] for call in ready.call_args_list])
+        self.assertEqual(["core_1_after_0", "core_1_after_1"], [call.args[0] for call in observe.call_args_list])
+        self.assertEqual(1, len(actuator.actions))
 
     def test_chat_route_has_reviewed_home_entry_and_back_edges(self):
         edges = reviewed_navigation_edges()
@@ -844,6 +872,7 @@ class NavigationCoreTests(unittest.TestCase):
             )
         )
         records: list[dict[str, object]] = []
+        acquired = []
         actuator = Actuator()
         core = NavigationCore(
             actuator,
@@ -857,9 +886,11 @@ class NavigationCoreTests(unittest.TestCase):
         result = core.open_building(
             HomeCityObjectId.GODDESS_STATUE,
             observe_content=lambda _: next(content_frames),
+            on_target_acquired=acquired.append,
         )
 
         self.assertEqual(ScreenType.PNC_GODDESS_STATUE, result.screen_type)
+        self.assertEqual([target], acquired)
         self.assertEqual(2, len(actuator.actions))
         self.assertIsInstance(actuator.actions[0], SwipeAction)
         self.assertEqual(home_city_scan_steps()[0], actuator.actions[0])
@@ -1201,6 +1232,9 @@ class NavigationCoreTests(unittest.TestCase):
         self.assertEqual(1, len(actuator.actions))
         self.assertIsInstance(actuator.actions[0], SwipeAction)
         self.assertEqual("down", actuator.actions[0].direction)
+        self.assertEqual(0.90, actuator.actions[0].start_x_ratio)
+        self.assertEqual(0.18, actuator.actions[0].start_y_ratio)
+        self.assertEqual(0.82, actuator.actions[0].end_y_ratio)
 
         with self.assertRaisesRegex(ValueError, "direction"):
             core.scroll_castle_roster("sideways", observe_content=lambda _: next(frames))
@@ -1232,7 +1266,7 @@ class NavigationPerceptionTests(unittest.TestCase):
                 super().__init__()
                 self.requests = []
 
-            def enrich(self, image, screen_type, visible_elements, request, *, ocr_context, ocr_regions):
+            def enrich(self, image, screen_type, visible_elements, request, *, ocr_context, ocr_regions, layout_id=None):
                 del image, screen_type, visible_elements, ocr_context, ocr_regions
                 self.requests.append(request)
                 return ObservationAdditions(
@@ -1411,12 +1445,15 @@ class NavigationPerceptionTests(unittest.TestCase):
         self.assertEqual(result.screen_type, ScreenType.PNC_WORLD_COORDINATE_DIALOG)
         self.assertFalse(result.blocking_popup)
         self.assertTrue(result.has(UiElementId.PNC_WORLD_COORDINATE_DIALOG_CLOSE_BUTTON))
-        ocr.read_result.assert_called_once()
+        # Integration review: the guard now owns one bounded modal crop;
+        # loading identity is visual and must not add diagnostic OCR.
+        self.assertEqual(len(compile_guard_ocr_region_plans(capture.image.size)), ocr.read_result.call_count)
+        self.assertTrue(all(call.args[1] is not None for call in ocr.read_result.call_args_list))
         ocr.read_result.return_value = OcrResult(lines=(
             OcrLine('New version detected. Tap Confirm to update.', Bounds(58, 380, 420, 28), 1.0),
             OcrLine('Confirm', Bounds(221, 531, 90, 27), 1.0),
         ), words=())
-        result = perception.build(capture)
+        result = perception.build(replace(capture, image=with_update_modal(capture.image)))
         self.assertTrue(result.blocking_popup)
         self.assertTrue(result.has(UiElementId.PNC_UPDATE_CONFIRM_BUTTON))
         self.assertFalse(result.has(UiElementId.PNC_POPUP_CLOSE_BUTTON))
@@ -1474,14 +1511,14 @@ class NavigationPerceptionTests(unittest.TestCase):
         )
         row = DetectedListEntry(ListEntryKind.DAILY_QUEST, Bounds(10, 10, 100, 40), title_text='Observed row')
 
-        def content(image, screen, controls, request, *, ocr_context, ocr_regions):
+        def content(image, screen, controls, request, *, ocr_context, ocr_regions, layout_id=None):
             ocr_context.validate_capture(image, capture.frame_ref)
-            ocr_context.read_result(image)
+            ocr_context.read_result(image, Bounds(10, 10, 100, 40))
             return ObservationAdditions(list_entries=(row,))
 
         with patch.object(PncObservationEnricher, 'enrich', side_effect=content):
             result = perception.build(capture, include_content=True)
-            self.assertEqual(1, ocr.read_result.call_count)
+            self.assertEqual(len(compile_guard_ocr_region_plans(capture.image.size)) + 1, ocr.read_result.call_count)
             self.assertEqual(capture.image.size, ocr.read_result.call_args.args[0].size)
             self.assertEqual(capture.frame_ref, result.list_entries[0].frame_ref)
             self.assertEqual(result.decision.layout_id, result.list_entries[0].source_layout_id)

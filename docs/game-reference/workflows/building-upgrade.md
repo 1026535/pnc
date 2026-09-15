@@ -54,7 +54,15 @@ The `UPGRADE_BUILDING` event is dispatched by both normal-upgrade and fast-upgra
 
 The existing timer/level checks address the distinction between a UI click and an observed outcome. This correspondence is not a full code review or proof that every timer belongs to the requested target. When changing these paths, preserve target identity and a pre-action baseline, distinguish a pre-existing queue from the newly requested operation, and verify initiation versus completion according to the task contract.
 
-No production changes or new tests were made for this note. Use the repository test runner for future implementation changes, and the existing live workflow only when offline evidence cannot establish the changed boundary.
+The original source inventory made no production changes. The recognition continuation below adds a captured regression; it does not implement upgrade navigation or spending.
+
+## Prerequisite Go versus equipment Go — September 13, 2026
+
+Source inspected offline in the same recorded build: `uis/building/sub/upinfo_conditionitem.lua`, `UpInfo_ConditionItem:SetPrevBuildingInfo` (line 83) and `OnButtonClickHandler` (line 189); `uis/building/buildingupgradewin.lua`, `GetConditionBarList` (line 432); and `uis/building/sub/upinfo_suittipitem.lua`, `UpInfo_SuitTipItem.OnGotoJumpHandler` (line 96). Confidence: verified packaged client behavior, corroborated by the saved Institute upgrade capture `capture_gap_exploration/20260913T030954Z/0055_institute_upgrade_blocked_settled.png`.
+
+A satisfied building prerequisite hides both its error icon and button. An unmet building prerequisite displays a red description, error icon, and Go button. Queue-condition rows use the same component but have separate Speed/Free/Help behavior. The equipment suggestion uses a different component: its Go opens gift window 1013 for tip type 3, or the Lord window otherwise. Thus the visible word Go alone cannot establish a prerequisite action.
+
+Automation implication: the captured Institute profile owns only the measured Go aligned with `Castle: Lv.23`; removing that control must suppress the unmet-prerequisite fact/action even when the lower Builder Set Go survives. The normal and instant Upgrade labels turn red when prerequisites fail (`buildingupgradewin.lua`, line 334); neither button is qualified by this profile. `tests/integration/vision/test_institute_prerequisite_captured.py` checks this distinction through both publication paths. Source and pixels establish these UI distinctions, not server eligibility, purchase success, or authorization to invoke the handlers.
 
 ## Still unverified
 

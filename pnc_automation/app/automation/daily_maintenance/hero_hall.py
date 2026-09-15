@@ -10,6 +10,7 @@ from typing import Protocol
 
 from pnc_automation.app.automation.daily_maintenance.mutation_dispatcher import (
     JournaledMutationDispatcher,
+    JournaledMutationResult,
     MutationOperation,
     MutationReconciliation,
 )
@@ -22,12 +23,30 @@ from pnc_automation.app.pnc.domain.daily_maintenance import (
     MutationIntent,
     MutationIntentState,
 )
-from pnc_automation.app.pnc.domain.observation import Observation
+from pnc_automation.app.pnc.domain.observation import Observation, VisibleElementSourceKind
+from pnc_automation.app.automation.daily_maintenance.coordinator import DailyReadOnlySurvey
+from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 
 HERO_HALL_FREE_SINGLE_TARGET = 5
 HERO_HALL_FREE_SINGLE_COOLDOWN_SECONDS = 300
+
+
+def hero_hall_daily_completed(survey: DailyReadOnlySurvey) -> bool:
+    """Retain the existing five-recruit Daily completion rule without claiming a reward."""
+
+    return any(
+        row.quest_id == DailyQuestId.HERO_HALL
+        and (
+            row.state.value in {"claim", "completed"}
+            or (
+                row.progress_current is not None and row.progress_required is not None
+                and row.progress_current >= HERO_HALL_FREE_SINGLE_TARGET
+            )
+        )
+        for row in survey.rows
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,10 +64,13 @@ class HeroHallState:
 
         if observation.screen_type != ScreenType.PNC_HERO_HALL:
             raise ValueError(f"Hero Hall state requires PNC_HERO_HALL, got '{observation.screen_type}'.")
+        if observation.blocking_popup or observation.decision.guard != GuardVerdict.CLEAR:
+            raise ValueError("Hero Hall state requires a positively clear current screen.")
         banner = observation.get(UiElementId.PNC_HERO_HALL_RECRUIT_BANNER)
         banner_text = "" if banner is None or banner.extracted_text is None else banner.extracted_text
+        free = observation.get(UiElementId.PNC_HERO_HALL_FREE_RECRUIT_1X_BUTTON)
         return cls(
-            free_single_available=observation.has(UiElementId.PNC_HERO_HALL_RECRUIT_1X_BUTTON),
+            free_single_available=(free is not None and free.source_kind == VisibleElementSourceKind.TEMPLATE),
             daily_attempts_remaining=_parse_daily_attempts(banner_text),
             cooldown_seconds_remaining=_parse_cooldown_seconds(banner_text),
             artifact_path=None if observation.artifact_path is None else str(observation.artifact_path),
@@ -111,10 +133,11 @@ class HeroHallRecruitmentExecutor:
         if len(unresolved) > 1:
             return checkpoint, self._pending("Multiple Hero Hall singles are unresolved; no replay.", intents)
         if unresolved:
-            checkpoint, result = self._reconcile_existing(
+            result = self.reconcile_existing(
                 checkpoint=checkpoint,
-                intent=unresolved[0],
+                operation_id=unresolved[0].operation_id,
             )
+            checkpoint = result.checkpoint
             if result.pending_clarification:
                 return checkpoint, self._pending("Hero Hall single result is ambiguous; no replay.", intents)
             if result.committed:
@@ -147,9 +170,18 @@ class HeroHallRecruitmentExecutor:
                 )
             return checkpoint, DailyTargetOutcome(
                 quest_id=DailyQuestId.HERO_HALL,
-                status=DailyTargetOutcomeStatus.WAITING_COOLDOWN,
+                status=(
+                    DailyTargetOutcomeStatus.WAITING_COOLDOWN
+                    if before.cooldown_seconds_remaining is not None and before.cooldown_seconds_remaining > 0
+                    else DailyTargetOutcomeStatus.PENDING_CLARIFICATION
+                ),
                 message="Hero Hall has not exposed the next free single yet.",
                 artifact_paths=self._artifacts(intents, before.artifact_path),
+            )
+
+        if before.daily_attempts_remaining is None or before.daily_attempts_remaining <= 0:
+            return checkpoint, self._pending(
+                "A free control without positive current attempts cannot authorize recruitment.", intents,
             )
 
         operation_id = f"hero-hall-recruit-{committed_count + 1:03d}"
@@ -208,14 +240,29 @@ class HeroHallRecruitmentExecutor:
             artifact_paths=result.artifact_paths,
         )
 
-    def _reconcile_existing(
+    def reconcile_existing(
         self,
         *,
         checkpoint: DailyTaskCheckpoint,
-        intent: MutationIntent,
-    ):
-        """Reconciles one dispatched Hero Hall single without sending a second tap."""
+        operation_id: str,
+    ) -> JournaledMutationResult:
+        """Reconciles one existing Hero Hall intent without dispatching a new action.
 
+        The operation is resolved from the durable checkpoint so callers cannot
+        substitute an intent from another quest or fabricate reconciliation
+        preconditions. Committed operations are already fully reconciled and are
+        therefore returned idempotently without another observation.
+        """
+
+        intent = self.require_reconciliation_intent(checkpoint=checkpoint, operation_id=operation_id)
+        if intent.state == MutationIntentState.COMMITTED:
+            return JournaledMutationResult(
+                checkpoint=checkpoint,
+                committed=True,
+                retry_permitted=False,
+                pending_clarification=False,
+                artifact_paths=self._persisted_artifacts(intent),
+            )
         def reconcile() -> MutationReconciliation:
             """Uses one fresh Hero Hall state to distinguish consumed from unchanged."""
 
@@ -229,7 +276,7 @@ class HeroHallRecruitmentExecutor:
                 not after.free_single_available
                 and after.cooldown_seconds_remaining is not None
                 and after.cooldown_seconds_remaining > 0
-            ) or (before_remaining is None and not after.free_single_available)
+            )
             ready_at = _next_ready_at(
                 now=self.now(),
                 observed_cooldown_seconds=after.cooldown_seconds_remaining,
@@ -237,17 +284,38 @@ class HeroHallRecruitmentExecutor:
             )
             return MutationReconciliation(
                 postcondition_proven=consumed,
-                original_precondition_proven=not consumed,
+                original_precondition_proven=_single_not_consumed(
+                    before_remaining=before_remaining,
+                    after=after,
+                ),
                 artifact_paths=self._artifacts((intent,), after.artifact_path),
                 metadata={"next_ready_at": ready_at.isoformat()},
             )
 
-        result = self.dispatcher.reconcile_existing(
+        return self.dispatcher.reconcile_existing(
             checkpoint=checkpoint,
-            operation_id=intent.operation_id,
+            operation_id=operation_id,
             reconcile=reconcile,
         )
-        return result.checkpoint, result
+
+    @staticmethod
+    def require_reconciliation_intent(
+        *, checkpoint: DailyTaskCheckpoint, operation_id: str,
+    ) -> MutationIntent:
+        """Validate the existing Hero operation before a caller acquires device evidence."""
+
+        intent = next(
+            (item for item in checkpoint.mutation_intents if item.operation_id == operation_id), None,
+        )
+        if intent is None:
+            raise KeyError(f"Hero Hall mutation operation '{operation_id}' does not exist.")
+        if intent.quest_id != DailyQuestId.HERO_HALL:
+            raise ValueError(f"Hero Hall reconciliation requires a Hero Hall intent: '{operation_id}'.")
+        if intent.state not in {
+            MutationIntentState.DISPATCHED, MutationIntentState.RECONCILED, MutationIntentState.COMMITTED,
+        }:
+            raise ValueError(f"Hero Hall mutation operation '{operation_id}' is in invalid state '{intent.state}'.")
+        return intent
 
     def _finish_if_daily_complete(
         self,
@@ -292,13 +360,41 @@ class HeroHallRecruitmentExecutor:
                 paths.append(path)
         return tuple(paths)
 
+    @staticmethod
+    def _persisted_artifacts(intent: MutationIntent) -> tuple[str, ...]:
+        """Returns only durable evidence when a committed intent needs no refresh."""
+
+        paths = intent.metadata.get("artifact_paths", ())
+        if not isinstance(paths, (list, tuple)):
+            return ()
+        unique: list[str] = []
+        for path in paths:
+            if isinstance(path, str) and path not in unique:
+                unique.append(path)
+        return tuple(unique)
+
 
 def _single_consumed(*, before: HeroHallState, after: HeroHallState) -> bool:
     """Returns whether one free single is proven consumed by typed transition evidence."""
 
     if before.daily_attempts_remaining is not None and after.daily_attempts_remaining is not None:
         return after.daily_attempts_remaining == before.daily_attempts_remaining - 1
-    return before.free_single_available and not after.free_single_available
+    return (
+        before.free_single_available and not after.free_single_available
+        and after.cooldown_seconds_remaining is not None
+        and after.cooldown_seconds_remaining > 0
+    )
+
+
+def _single_not_consumed(*, before_remaining: object, after: HeroHallState) -> bool:
+    """Returns whether fresh typed facts prove the interrupted single stayed available."""
+
+    return (
+        isinstance(before_remaining, int)
+        and after.daily_attempts_remaining == before_remaining
+        and after.free_single_available
+        and (after.cooldown_seconds_remaining is None or after.cooldown_seconds_remaining <= 0)
+    )
 
 
 def _remaining_cooldown(*, intents: tuple[MutationIntent, ...], now: datetime) -> int:

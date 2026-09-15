@@ -21,6 +21,7 @@ from pnc_automation.app.pnc.vision.text_anchors import TextAnchorDetector
 
 from tests.local_fixture_artifacts import require_local_fixture_artifact
 from tests.support.paths import TEST_DATA_ROOT
+from tests.support.pnc.capture_vision.modal_overlay import with_update_modal
 from tests.support.pnc.capture_vision.fake_ocr_service import _FakeOcrService
 from tests.support.pnc.capture_vision.ocr_line import _ocr_line
 
@@ -82,9 +83,10 @@ class VisualPopupFixturesTests(unittest.TestCase):
         drawing.rectangle((25, 100, 515, 780), fill=(25, 33, 50), outline=(65, 82, 110), width=4)
         drawing.line((476, 46, 504, 74), fill=(255, 247, 218), width=7)
         drawing.line((504, 46, 476, 74), fill=(255, 247, 218), width=7)
+        image = with_update_modal(image)
         ocr_service = _FakeOcrService(
             lines=(
-                _ocr_line("New version detected. Tap Confirm to update.", x=58, y=300, width=420, height=28),
+                _ocr_line("New version detected. Tap Confirm to update.", x=58, y=380, width=420, height=28),
                 _ocr_line("Confirm", x=221, y=531, width=90, height=27),
             )
         )

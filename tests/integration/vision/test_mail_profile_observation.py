@@ -23,9 +23,10 @@ class MailProfileObservationTests(MailWorkflowFixtures, unittest.TestCase):
 
         observation = _build_observation(
             request=ObservationRequest.player_profile_follow_up(),
+            accepted_screen=ScreenType.PNC_PLAYER_PROFILE,
+            layout_id="remote_player_profile_gear",
             lines=(
-                _ocr_line("Player Profile", x=240, y=38, width=180, height=24),
-                _ocr_line("Enemy Bob", x=300, y=420, width=140, height=26),
+                _ocr_line("Enemy Bob", x=300, y=20, width=140, height=26),
                 _ocr_line("Mail", x=720, y=1190, width=90, height=26),
             ),
         )
@@ -44,8 +45,10 @@ class MailProfileObservationTests(MailWorkflowFixtures, unittest.TestCase):
         )
         observation = _build_observation(
             request=ObservationRequest.player_profile_follow_up(),
+            accepted_screen=ScreenType.PNC_PLAYER_PROFILE,
+            layout_id="remote_player_profile_gear",
             lines=(
-                _ocr_line("Cutie Voj", x=116, y=20, width=168, height=36),
+                _ocr_line("Cutie Voj", x=180, y=20, width=168, height=36),
                 _ocr_line("Gear", x=48, y=108, width=86, height=30),
                 _ocr_line("Gem", x=210, y=108, width=78, height=30),
                 _ocr_line("Saurgem", x=352, y=108, width=144, height=30),
@@ -81,6 +84,8 @@ class MailProfileObservationTests(MailWorkflowFixtures, unittest.TestCase):
         )
         observation = _build_observation(
             request=ObservationRequest.player_profile_follow_up(),
+            accepted_screen=ScreenType.PNC_PLAYER_PROFILE,
+            layout_id="remote_player_profile_gear",
             lines=(
                 _ocr_line("LadiesLoveCake", x=187, y=26, width=355, height=40),
                 _ocr_line("Gear", x=40, y=105, width=88, height=30),

@@ -33,7 +33,7 @@ class AutomationApiRunnerTests(RuntimeCastleTargetingFixtures, unittest.TestCase
             api = AutomationApi(application=application)
 
             with api.use_account("account_a") as session:
-                session.research(priority=["economy"])
+                session.research(priority=["economy"], mutation_boundary=self.mutation_boundary)
 
             application.probe_after_scope()
             self.assertTrue(application.competitor_acquired_after_scope)
@@ -48,10 +48,10 @@ class AutomationApiRunnerTests(RuntimeCastleTargetingFixtures, unittest.TestCase
         )
 
         with api.use_account("account_a", session_cleanup_policy=policy) as session:
-            session.research(priority=["economy"])
+            session.research(priority=["economy"], mutation_boundary=self.mutation_boundary)
 
         self.assertEqual(fake_runner.prepare_cleanup_policies, [policy])
-        self.assertEqual(fake_runner.task_cleanup_policies, [policy])
+        self.assertEqual(fake_runner.research_cleanup_policies, [policy])
 
     def test_python_use_account_holds_real_lease_between_dependent_actions(self) -> None:
         """Prevents another process-shaped registry from entering between two dependent actions."""
@@ -61,7 +61,7 @@ class AutomationApiRunnerTests(RuntimeCastleTargetingFixtures, unittest.TestCase
             api = AutomationApi(application=application)
 
             with api.use_account("account_a") as session:
-                session.research(priority=["economy"])
+                session.research(priority=["economy"], mutation_boundary=self.mutation_boundary)
                 session.building_construct(building="farm")
 
             application.probe_after_scope()
@@ -74,7 +74,7 @@ class AutomationApiRunnerTests(RuntimeCastleTargetingFixtures, unittest.TestCase
         api = AutomationApi(application=fake_runner)
 
         with api.reserve_accounts(("account_a",)):
-            api.research(priority=["economy"])
+            api.research(priority=["economy"], mutation_boundary=self.mutation_boundary)
             api.building_construct(building="farm")
 
         self.assertEqual(len(fake_runner.reservations), 1)
@@ -82,9 +82,12 @@ class AutomationApiRunnerTests(RuntimeCastleTargetingFixtures, unittest.TestCase
         self.assertEqual(
             fake_runner.task_calls,
             [
-                (TaskId.RESEARCH, "account_a", {"priority": ["economy"]}),
                 (TaskId.BUILDING_CONSTRUCT, "account_a", {"building": "farm"}),
             ],
+        )
+        self.assertEqual(
+            fake_runner.research_calls,
+            [("account_a", {"priority": ["economy"]}, self.mutation_boundary)],
         )
 
     def test_python_reservation_rejects_account_outside_declared_bundle(self) -> None:
@@ -95,7 +98,7 @@ class AutomationApiRunnerTests(RuntimeCastleTargetingFixtures, unittest.TestCase
 
         with api.reserve_accounts(("account_a",)):
             with self.assertRaisesRegex(RuntimeError, "outside the active workflow reservation"):
-                api.research(account_id="account_b")
+                api.research(account_id="account_b", mutation_boundary=self.mutation_boundary)
 
         self.assertTrue(fake_runner.reservations[0].closed)
         self.assertEqual(fake_runner.task_calls, [])
@@ -140,12 +143,12 @@ class AutomationApiRunnerTests(RuntimeCastleTargetingFixtures, unittest.TestCase
                 with self.assertRaisesRegex(RuntimeError, "cannot be entered twice"):
                     with session:
                         self.fail("A live session must not be recursively entered.")
-                api.research()
+                api.research(mutation_boundary=self.mutation_boundary)
 
             self.assertEqual(len(fake_runner.reservations), 1)
             self.assertTrue(fake_runner.reservations[0].closed)
             with self.assertRaisesRegex(RuntimeError, "require either an explicit account_id"):
-                api.research()
+                api.research(mutation_boundary=self.mutation_boundary)
 
         Context().run(exercise_session)
 

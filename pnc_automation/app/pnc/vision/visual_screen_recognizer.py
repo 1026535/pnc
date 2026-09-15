@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import cache
 import json
@@ -79,6 +80,7 @@ class VisualRecognition:
     profile_ids: tuple[str, ...] = ()
     controls: tuple[VisibleElement, ...] = ()
     dismiss_controls: tuple[VisibleElement, ...] = ()
+    control_selector_ids: frozenset[UiElementId] = frozenset()
 
     @property
     def ambiguous(self) -> bool:
@@ -89,21 +91,35 @@ class VisualRecognition:
 def visual_controls_for_decision(
     recognition: VisualRecognition,
     decision: ScreenDecision,
+    *,
+    candidates: Mapping[UiElementId, VisibleElement] | None = None,
 ) -> dict[UiElementId, VisibleElement]:
-    """Return measured controls owned by the decided screen and layout."""
+    """Publish controls measured on the accepted profile, withholding other variants.
 
+    Legacy candidates may supply other screen-owned facts, but cannot replace a
+    measured control or recover its missing template from text or default geometry.
+    A screen's alternate profiles also reserve their controls: a tree's Back
+    button must not appear behind a detail panel that shares the screen type.
+    """
+
+    published = dict(candidates or {})
     if decision.effective_screen in {
         ScreenType.UNKNOWN,
         ScreenType.PNC_LOADING,
     }:
-        return {}
+        return published
     if not recognition.evidence or any(
         evidence.screen_type != decision.effective_screen
         or evidence.layout_id != decision.layout_id
         for evidence in recognition.evidence
     ):
-        return {}
-    return {control.selector_id: control for control in recognition.controls}
+        return published
+    published = {
+        selector_id: element for selector_id, element in published.items()
+        if selector_id not in recognition.control_selector_ids
+    }
+    published.update({control.selector_id: control for control in recognition.controls})
+    return published
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,7 +161,8 @@ class VisualScreenRecognizer:
             )
         controls: dict[UiElementId, VisibleElement] = {}
         dismiss_ids: set[UiElementId] = set()
-        if len({profile.screen_type for profile in matching}) == 1:
+        matched_screens = {profile.screen_type for profile in matching}
+        if len(matched_screens) == 1:
             for profile in matching:
                 for control in profile.controls:
                     match = self.matcher.find_best_match(
@@ -162,6 +179,9 @@ class VisualScreenRecognizer:
                         confidence=match.confidence,
                         source_kind=VisibleElementSourceKind.TEMPLATE,
                         action_point=match.bounds.center(),
+                        # The profile anchors own identity. Its controls must
+                        # not independently reclassify the accepted surface.
+                        identity_evidence=False,
                     )
                     controls[control.selector_id] = element
                     if control.dismisses_surface:
@@ -179,6 +199,11 @@ class VisualScreenRecognizer:
             profile_ids=tuple(profile.id for profile in matching),
             controls=tuple(controls.values()),
             dismiss_controls=tuple(controls[selector] for selector in sorted(dismiss_ids, key=lambda value: value.value)),
+            control_selector_ids=frozenset(
+                control.selector_id
+                for profile in self.profiles if profile.screen_type in matched_screens
+                for control in profile.controls
+            ),
         )
 
 

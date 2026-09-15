@@ -15,6 +15,7 @@ htmlcov/
 .venv/
 venv/
 artifacts/
+/Ultralytics/
 /selector_discovery_output/
 /navigation_selector_validation_output/
 /archives/

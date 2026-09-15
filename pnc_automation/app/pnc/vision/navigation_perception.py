@@ -2,22 +2,25 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass, replace
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field, replace
 import hashlib
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from PIL import Image
 
-from pnc_automation.app.pnc.domain.observation import Bounds, Observation
+from pnc_automation.app.pnc.domain.observation import Bounds, Observation, VisibleElement
 from pnc_automation.app.pnc.domain.screen_decision import ScreenEvidence, is_reviewed_viewport
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.observation_builder import (
     ObservationAdditions, ObservationEnricher,
+    allows_guarded_field_enrichment,
+    reconcile_visual_modal_guard,
 )
+from pnc_automation.app.pnc.vision.observation_diagnostics import ObservationDebugArtifactCollector
 from pnc_automation.app.pnc.vision.observation_provenance import bind_list_entry, bind_visible_elements
-from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
+from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier, partition_guard_evidence
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.app.pnc.vision.visual_screen_recognizer import (
     VisualScreenRecognizer,
@@ -37,6 +40,16 @@ class NavigationGuard(ObservationEnricher, Protocol):
     ) -> ObservationAdditions: ...
 
 
+@runtime_checkable
+class _ContentLabelPublisher(Protocol):
+    """Optional registry-backed publication for guards that also produce labels."""
+
+    def content_labels(
+        self,
+        additions: ObservationAdditions,
+    ) -> Mapping[UiElementId, VisibleElement]: ...
+
+
 @dataclass(frozen=True, slots=True)
 class NavigationPerception:
     """Recognize without candidate hints, inferred geometry, or content-driven identity.
@@ -52,6 +65,9 @@ class NavigationPerception:
     guard: NavigationGuard
     screen_classifier: ScreenClassifier
     create_ocr_context: Callable[[CapturedScreenshot], ObservationOcrContext]
+    debug_artifact_collector: ObservationDebugArtifactCollector = field(
+        default_factory=ObservationDebugArtifactCollector, kw_only=True,
+    )
 
     def build(self, screenshot: CapturedScreenshot, *, include_content: bool = False) -> Observation:
         """Return only controls actually matched on an independently identified frame."""
@@ -59,6 +75,7 @@ class NavigationPerception:
         visual = self.recognizer.recognize(image)
         ocr_context = self.create_ocr_context(screenshot)
         ocr_context.validate_capture(image, screenshot.frame_ref)
+        ocr_context.require_bounded_regions()
         matched_profiles = set(visual.profile_ids)
         matched_screens = {item.screen_type for item in visual.evidence}
         research_detail_owned = (
@@ -98,13 +115,16 @@ class NavigationPerception:
                 else None
             ),
         )
-        evidence = tuple(visual.evidence) + tuple(interruption.screen_evidence)
+        interruption = reconcile_visual_modal_guard(visual, interruption)
+        evidence, background_evidence = partition_guard_evidence(
+            visual.evidence, interruption.screen_evidence,
+        )
         if not evidence and _is_near_black_frame(image):
             evidence = (ScreenEvidence(ScreenType.PNC_LOADING, "near_black_startup_frame"),)
         interrupted = bool(interruption.screen_evidence)
         decision = self.screen_classifier.decide(
-            {}, evidence=interruption.screen_evidence if interrupted else evidence,
-            background_evidence=visual.evidence if interrupted else (),
+            {}, evidence=evidence,
+            background_evidence=background_evidence,
             guard=interruption.guard_verdict,
             viewport_reviewed=is_reviewed_viewport(image.size),
         )
@@ -139,23 +159,37 @@ class NavigationPerception:
             frame_fingerprint=hashlib.sha256(image.tobytes()).hexdigest(),
             frame_ref=screenshot.frame_ref,
         )
-        if not include_content or interrupted or not decision.action_eligible:
-            return observation
         content_request = (
             ObservationRequest.chat_transcript_observation()
             if screen == ScreenType.PNC_CHAT
-            else ObservationRequest(ocr_screen_types=frozenset({screen}))
+            else ObservationRequest.source_screen_retry(screen)
         )
+        if (
+            not include_content
+            or not decision.action_eligible
+            or (interrupted and not allows_guarded_field_enrichment(content_request, interruption))
+        ):
+            return self._finish(screenshot, observation, ocr_context, visual.profile_ids)
         content = self.guard.enrich(
             image, screen, controls, content_request,
             ocr_context=ocr_context, ocr_regions={},
+            layout_id=decision.layout_id,
         )
         if any(item.screen_type != screen for item in content.screen_evidence):
             raise ValueError("Content parser contradicted independent screen identity.")
+        content_labels = bind_visible_elements(
+            self.guard.content_labels(content)
+            if isinstance(self.guard, _ContentLabelPublisher) else {},
+            frame_ref=screenshot.frame_ref,
+            source_screen=screen,
+            source_layout_id=decision.layout_id,
+        )
         # Parsed content cannot create controls, replace identity, or redirect a
         # transition. Keep the existing typed content parsers during migration.
-        return replace(
-            observation, list_entries=tuple(
+        observation = replace(
+            observation,
+            visible_elements={**observation.visible_elements, **content_labels},
+            list_entries=tuple(
                 bind_list_entry(entry, frame_ref=screenshot.frame_ref, source_screen=screen,
                                      source_layout_id=decision.layout_id)
                 for entry in content.list_entries
@@ -165,12 +199,27 @@ class NavigationPerception:
             current_castle_evidence=content.current_castle_evidence,
             mailbox_type=content.mailbox_type,
             mailbox_empty=content.mailbox_empty,
+            empty_mailboxes=content.empty_mailboxes,
+            profile_player_name=content.profile_player_name,
             text_field_states=content.text_field_states,
             available_march_slots=content.available_march_slots,
             active_chat_channel=content.active_chat_channel,
             chat_draft_empty=content.chat_draft_empty,
             chat_draft_text=content.chat_draft_text,
         )
+        return self._finish(screenshot, observation, ocr_context, visual.profile_ids)
+
+    def _finish(
+        self, screenshot: CapturedScreenshot, observation: Observation,
+        ocr_context: ObservationOcrContext, profile_ids: tuple[str, ...],
+    ) -> Observation:
+        """Report remaining recognition gaps using this capture's existing evidence."""
+
+        self.debug_artifact_collector.persist_recognition_gap(
+            screenshot=screenshot, observation=observation, ocr_context=ocr_context,
+            profile_ids=profile_ids,
+        )
+        return observation
 
 
 def _is_near_black_frame(image: Image.Image) -> bool:

@@ -129,6 +129,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parsed = parser.parse_args(arguments)
     if parsed.command == "daily-maintenance":
         return _run_daily_maintenance(parsed)
+    if parsed.command in {"build", "construct"} and parsed.operation_id is not None:
+        raise PermissionError(
+            "CLI typed building --operation-id requires an authored mutation boundary and "
+            "invocation acknowledgement; use an authored workflow/API boundary. "
+            "The legacy no-operation-id command remains available."
+        )
     application = build_application_runner(
         Path(parsed.config),
         verbose=parsed.verbose,
@@ -191,7 +197,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             step_result = application.run_task(
                 account_id=parsed.account,
                 task_id=TaskId.BUILDING_CONSTRUCT,
-                params={"building": parsed.building},
+                params={
+                    "building": parsed.building,
+                    **({"operation_id": parsed.operation_id} if parsed.operation_id is not None else {}),
+                },
                 required_role=required_role,
             )
         print(_serialize_step_result(account_id=parsed.account, step_result=step_result))
@@ -247,6 +256,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "allow_speedups": parsed.allow_speedups,
                 "prerequisite_mode": parsed.prerequisite_mode,
                 "allow_premium_material_purchases": parsed.allow_premium_material_purchases,
+                **({"operation_id": parsed.operation_id} if parsed.operation_id is not None else {}),
             },
             required_role=required_role,
         )
@@ -364,6 +374,10 @@ def _add_building_upgrade_arguments(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help="Allow explicitly supported premium-material purchases such as Hall of War Dwarf Engineering.",
     )
+    parser.add_argument(
+        "--operation-id",
+        help="Caller-owned durable operation id reused when reconciling an interrupted upgrade.",
+    )
 
 
 def _add_open_building_arguments(parser: argparse.ArgumentParser) -> None:
@@ -383,6 +397,10 @@ def _add_building_construction_arguments(parser: argparse.ArgumentParser) -> Non
         "--building",
         required=True,
         help="Exact constructable building id, such as farm, institute, or alliance_hall.",
+    )
+    parser.add_argument(
+        "--operation-id",
+        help="Caller-owned durable operation id reused when reconciling an interrupted construction.",
     )
 
 

@@ -1,5 +1,76 @@
 # A/B remaining work: complete vision and workflow components
 
+## Current ownership amendment — September 14
+
+The user reports the A/B merge is complete; the published integration branch was
+verified and fast-forwarded to `6bc27585fbac1244672cf4a653ea6248955a4aca`, containing
+A `5c1cb92` and B `10740eb`. The six remaining feature plans now use
+[independent vertical ownership](PNC_CORE_WORKFLOW_PORTING_PLAN.md#six-remaining-agent-packages).
+That current contract supersedes this document's historical wait-for-B, whole-file
+reservations, shared coordinator edits and cross-package acceptance sequencing
+for those six packages. Each owns its producers, consumers and proof. Continue
+core/Continue non-YOLO are rare consultants for a concrete generic-service question.
+
+Reuse a suitable existing isolated task worktree and create/use its feature branch
+there. The [common starting-checkpoint rules](PNC_CORE_WORKFLOW_PORTING_PLAN.md#common-starting-checkpoint-and-evidence-rules)
+require separate working files for concurrent features, not an additional worktree
+for a task that already has one. Preserve resumed task work and unrelated changes.
+
+Institute Home acquisition/Development belongs to 01; Buildings to 02; Gathering
+and World Search/dialog to 03; Campaign preparation to 04; Mail/Login and
+preparation order to 05; Castle/roster/More/Settings to 06. Building and Gathering
+action identities and direct/Daily entry convergence belong to their respective
+features. Daily Go is an alternative entry to the same action, not another engine
+or a coordinator-owned mutation foundation. Resource/Hero/broader Research remain
+outside the six packages. Preserve their existing separate handoff, except that
+Institute acquisition has transferred to 01.
+
+The sections below retain earlier evidence and instructions as history; they do
+not override the current feature ownership or require another merge of B's batch.
+Final integration of future feature branches remains separate from each feature's
+own definition of done. No further task was started by this plan amendment.
+
+
+## September 13 execution update: A restart after B's published slice
+
+Current execution authority is [A's updated restart plan](PNC_CORE_WORKFLOW_PORTING_PLAN.md).
+It supersedes the historical pause and parallel-period sequencing below. Whole-file
+component ownership remains in effect. The user requested this plan update; publication
+does not itself resume A or B.
+
+The subsequent authorized A continuation is now published at `4f33202` on the
+existing integration branch; the earlier merge instruction and baseline below
+are historical. Current completion, exact live receipts and remaining producer
+dependencies are maintained in A's linked plan and validation ledger. This
+checkpoint does not resume B or transfer its recognition ownership to A.
+
+The [remaining-work dependency split](PNC_CORE_WORKFLOW_PORTING_PLAN.md#remaining-original-work-separated-by-dependency)
+distinguishes independently implementable A caller/reconciliation work from
+producer-blocked execution and separate user/live prerequisites. Use that split
+instead of treating every remaining A port as blocked on B.
+
+The user subsequently requested a queued
+[B recognition follow-up handoff](PNC_B_FOLLOWUP_RECOGNITION_HANDOFF.md). After
+finishing its current work, B takes complete producer implementation and
+qualification ownership of Resource partial-card handling, Hero summon/result
+recognition and broader Research facts. The handoff includes the saved evidence,
+acceptance criteria and consumer handback. A retains workflow/navigation/mutation
+integration. This queues the follow-up without interrupting B or editing its worktree.
+
+B published `93798a6` on top of main `850bdb7`; its latest reviewed slice is complete,
+not its full vision plan. A's candidate `1994020` separately preserves `291f049` Daily
+claims and `9e34d14` Research. Merge the histories as specified in A's plan; do not replace
+A with the newer B tip. Remote refs were verified September 13. Current catalog union is
+40 profiles, subject to legitimate later additions.
+
+B retains outstanding guard/region migration, full-screen OCR removal and qualification
+in its current plan/checklist. Its later explicit zero-full-screen objective supersedes
+this document's historical fallback allowances. A consumes supported current production
+facts for bounded workflow implementation and does not declare that global goal achieved.
+The latest narrow label-input rejection in A's executor and prior consumer-test corrections
+were directly authorized in B's task; retain them without extending B's ongoing ownership.
+YOLO/map-object work belongs to the separate active tasks and is excluded from A/B porting.
+
 ## Proposed revision; no restart yet
 
 This replaces `bad1898` and `521019b` ownership/coordination instructions following the

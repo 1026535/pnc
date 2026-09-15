@@ -53,6 +53,29 @@ class CliCastleTargetingTests(RuntimeCastleTargetingFixtures, unittest.TestCase)
             [(TaskId.BUILDING_CONSTRUCT, "account_a", {"building": "farm"})],
         )
 
+    def test_cli_typed_operation_id_fails_before_unbound_runtime(self) -> None:
+        """The CLI does not claim durable mutation identity without an acknowledgement boundary."""
+
+        fake_runner = _FakeApplicationRunner()
+        with patch("pnc_automation.app.entrypoints.cli.build_application_runner", return_value=fake_runner):
+            with self.assertRaisesRegex(PermissionError, "authored mutation boundary"):
+                cli_main(
+                    [
+                        "construct",
+                        "--account",
+                        "account_a",
+                        "--building",
+                        "farm",
+                        "--operation-id",
+                        "construct-001",
+                        "--config",
+                        "config/accounts.yaml",
+                    ]
+                )
+
+        self.assertEqual(fake_runner.task_calls, [])
+        self.assertEqual(fake_runner.reservations, [])
+
     def test_cli_login_with_castle_reuses_session_preparation_service(self) -> None:
         """Calls the shared preparation path with the explicit CLI castle target when one is provided."""
 

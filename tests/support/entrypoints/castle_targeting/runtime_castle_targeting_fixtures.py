@@ -30,3 +30,4 @@ class RuntimeCastleTargetingFixtures:
         )
         self.defaults = DefaultsConfig(stable_click_delay_ms=0, post_action_observe_delay_ms=0)
         self.target_castle = CastleIdentity(kingdom="K230", castle_name="Main", castle_level=8)
+        self.mutation_boundary = object()
