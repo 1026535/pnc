@@ -16,7 +16,9 @@ from pnc_automation.app.automation.buildings import (
 from pnc_automation.app.automation.daily_maintenance.authorization import (
     DailyMutationAuthorizer,
 )
+from pnc_automation.app.automation.daily_maintenance.application_service import DailyRunBoundary
 from pnc_automation.app.automation.engine.core_daily_mutation import _building_receipt_proof
+from pnc_automation.app.automation.engine.core_daily_mutation import CoreMutationBoundary
 from pnc_automation.app.automation.engine.core_workflow import (
     WorkflowContext,
     WorkflowEffect,
@@ -27,7 +29,7 @@ from pnc_automation.app.automation.daily_maintenance.mutation_dispatcher import 
     MutationOperation,
     MutationReconciliation,
 )
-from pnc_automation.app.pnc.domain.action_requests import TapSpatialObjectAction
+from pnc_automation.app.pnc.domain.action_requests import KeyEventAction, TapAction, TapSpatialObjectAction
 from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
 from pnc_automation.app.pnc.domain.building_operations import (
     BuildingActionIdentity,
@@ -44,6 +46,11 @@ from pnc_automation.app.pnc.domain.daily_maintenance import (
     MutationIntentState,
 )
 from pnc_automation.app.pnc.domain.policy_models import BuildingUpgradePolicy
+from pnc_automation.app.authoring.config.daily_maintenance import (
+    DailyCapabilityPolicy,
+    DailyMaintenanceTargetConfig,
+)
+from pnc_automation.app.automation.engine.task import TaskId
 from pnc_automation.app.pnc.domain.observation import (
     DetectedSpatialObject,
     Observation,
@@ -138,6 +145,41 @@ class BuildingMutationIdentityTests(unittest.TestCase):
         )
 
         self.assertIs(acknowledgement, authorized)
+
+    def test_direct_and_daily_building_limits_are_selected_by_invocation_context(self) -> None:
+        """A Daily policy cannot silently consume a direct acknowledgement budget."""
+
+        castle = CastleIdentity("K1", "Main", 10)
+        with tempfile.TemporaryDirectory() as temporary:
+            boundary = CoreMutationBoundary(
+                target=DailyMaintenanceTargetConfig(
+                    "account",
+                    "K1:Main",
+                    castle,
+                    (
+                        DailyCapabilityPolicy(
+                            DailyQuestId.UPGRADE_BUILDING,
+                            TaskId.BUILDING_UPGRADE,
+                            max_mutations=1,
+                            max_diamond_spend=3,
+                        ),
+                    ),
+                ),
+                boundary=DailyRunBoundary(date(2026, 9, 14), "reset-1"),
+                authorizer=DailyMutationAuthorizer(()),
+                journal_store=DailyRunJournalStore(Path(temporary)),
+                building_action_kind=BuildingMutationKind.UPGRADE,
+                building_max_mutations=2,
+                building_max_diamond_spend=9,
+            )
+            self.assertEqual((2, 9), boundary._building_mutation_limits(BuildingMutationKind.UPGRADE))
+            self.assertEqual(
+                (1, 3),
+                boundary._building_mutation_limits(
+                    BuildingMutationKind.UPGRADE,
+                    daily_context=True,
+                ),
+            )
 
     def test_direct_upgrade_does_not_claim_daily_authority(self) -> None:
         checkpoint = DailyTaskCheckpoint(
@@ -316,6 +358,105 @@ class BuildingMutationIdentityTests(unittest.TestCase):
             Observation(screen_type=ScreenType.PNC_INSTITUTE, visible_elements={level.selector_id: level}),
             target,
         )
+
+    def test_upgrade_reconciles_existing_operation_before_daily_go_or_queue_navigation(self) -> None:
+        """A durable receipt must win before any obsolete UI precondition is reacquired."""
+
+        target = BuildingUpgradeTarget(
+            building=HomeCityObjectId.INSTITUTE,
+            instance_key="home:institute:100,200,80,60:140,230",
+            current_level=7,
+            next_level=8,
+        )
+        checkpoint = DailyTaskCheckpoint(
+            maintenance_date="2026-09-14",
+            game_reset_id="reset-1",
+            account_id="account",
+            castle=CastleIdentity("K1", "Main", 10),
+        )
+        durable = SimpleNamespace(
+            checkpoint=checkpoint,
+            committed=True,
+            retry_permitted=False,
+            pending_clarification=False,
+            artifact_paths=(),
+        )
+        identity = BuildingActionIdentity(
+            kind=BuildingMutationKind.UPGRADE,
+            operation_id="upgrade-existing",
+            target=target,
+        )
+
+        class Context:
+            def reconcile_building_operation(self, **kwargs):
+                self.kwargs = kwargs
+                return identity, None, durable
+
+            def open_daily_upgrade_go(self):
+                raise AssertionError("Daily Go must not be reacquired for an existing operation")
+
+            def ensure_building_queue_available(self):
+                raise AssertionError("queue precondition must not be reacquired for an existing operation")
+
+        context = Context()
+        result = BuildingUpgradeWorkflow(
+            policy=BuildingUpgradePolicy.from_params(
+                {"priority": [HomeCityObjectId.INSTITUTE.value], "operation_id": "upgrade-existing"}
+            ),
+            checkpoint=checkpoint,
+        ).execute(context)
+
+        self.assertEqual("upgrade-existing", result.action.operation_id)
+        self.assertEqual("started", result.disposition.value)
+        self.assertEqual(BuildingMutationKind.UPGRADE, context.kwargs["action_kind"])
+
+    def test_building_queue_proof_uses_current_home_control_and_back_action(self) -> None:
+        """Queue availability is proven by the production Home control, never atlas geometry."""
+
+        home_build = VisibleElement(
+            selector_id=UiElementId.PNC_HOME_BUILD_BUTTON,
+            bounds=Bounds(10, 10, 30, 20),
+            confidence=1.0,
+            extracted_text="Build",
+        )
+        home = Observation(
+            screen_type=ScreenType.PNC_HOME_CITY,
+            visible_elements={home_build.selector_id: home_build},
+        )
+        queue = Observation(screen_type=ScreenType.PNC_BUILD_QUEUE)
+        actions: list[object] = []
+
+        class Executor:
+            def __init__(self):
+                self.results = iter((queue, home))
+
+            def execute_actions(self, requests, _observation, *, observe):
+                del observe
+                actions.extend(requests)
+                return SimpleNamespace(observation=next(self.results))
+
+        runtime = SimpleNamespace(
+            runtime=SimpleNamespace(require_observed_action_executor=lambda _reason: Executor()),
+            observation_count=1,
+            observe=lambda _label, include_content=True: home,
+        )
+        context = WorkflowContext.__new__(WorkflowContext)
+        context._runtime = runtime
+        context._last_navigation_count = 1
+        context._last_observation = home
+        context._effect = WorkflowEffect.RESOURCE_CHANGING
+        context._mutation_boundary = None
+        context._research_node = None
+        context._reconciliation_operation_id = None
+        context._building_queue_available = False
+
+        opened = context.ensure_building_queue_available()
+
+        self.assertIs(queue, opened)
+        self.assertIsInstance(actions[0], TapAction)
+        self.assertIsInstance(actions[1], KeyEventAction)
+        self.assertEqual(UiElementId.PNC_HOME_BUILD_BUTTON, actions[0].selector_id)
+        self.assertEqual("KEYCODE_BACK", actions[1].key_code)
 
     def test_home_receipt_proof_correlates_geometry_without_instance_metadata(self) -> None:
         home_object = DetectedSpatialObject(
@@ -600,6 +741,58 @@ class BuildingMutationIdentityTests(unittest.TestCase):
                     dispatch=lambda: None,
                     reconcile=lambda: MutationReconciliation(True, False),
                 )
+
+    def test_direct_retry_reuses_daily_building_receipt_and_stored_budget(self) -> None:
+        """Daily progress context may change on retry, but the durable operation does not."""
+
+        target = BuildingUpgradeTarget(
+            building=HomeCityObjectId.FARM,
+            instance_key="farm-1",
+            current_level=3,
+            next_level=4,
+        )
+        checkpoint = DailyTaskCheckpoint(
+            maintenance_date="2026-09-14",
+            game_reset_id="reset-1",
+            account_id="account",
+            castle=CastleIdentity("K1", "Main", 10),
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            store = DailyRunJournalStore(Path(temporary))
+            dispatcher = JournaledMutationDispatcher(store)
+            operation = MutationOperation(
+                operation_id="shared-upgrade",
+                quest_id=DailyQuestId.UPGRADE_BUILDING,
+                expected_precondition="Farm has Upgrade",
+                expected_postcondition="Farm start receipt",
+                diamond_budget=3,
+                action_kind=BuildingMutationKind.UPGRADE,
+                target=target.as_metadata(),
+            )
+            first = dispatcher.execute(
+                checkpoint=checkpoint,
+                operation=operation,
+                dispatch=lambda: None,
+                reconcile=lambda: MutationReconciliation(True, False),
+            )
+            direct_retry = MutationOperation(
+                operation_id="shared-upgrade",
+                quest_id=None,
+                expected_precondition="Farm has Upgrade",
+                expected_postcondition="Farm start receipt",
+                diamond_budget=99,
+                action_kind=BuildingMutationKind.UPGRADE,
+                target=target.as_metadata(),
+            )
+            replayed = dispatcher.execute(
+                checkpoint=first.checkpoint,
+                operation=direct_retry,
+                dispatch=lambda: self.fail("a direct retry must not dispatch"),
+                reconcile=lambda: self.fail("a committed receipt must not be re-observed"),
+            )
+
+            self.assertTrue(replayed.committed)
+            self.assertEqual(first.checkpoint, replayed.checkpoint)
 
     def test_distinct_operation_ids_dispatch_as_distinct_authorized_operations(self) -> None:
         target = BuildingUpgradeTarget(

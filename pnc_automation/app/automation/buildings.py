@@ -7,6 +7,7 @@ from enum import StrEnum
 from typing import ClassVar
 
 from pnc_automation.app.automation.engine.core_daily_mutation import CoreMutationBoundary
+from pnc_automation.app.automation.daily_maintenance.mutation_dispatcher import JournaledMutationResult
 from pnc_automation.app.automation.engine.core_workflow import (
     CoreWorkflow,
     WorkflowContext,
@@ -52,6 +53,7 @@ class BuildingMutationResult:
     receipt: BuildingMutationReceipt | None
     disposition: BuildingMutationDisposition
     message: str
+    retry_permitted: bool = False
 
 
 def prepare_building_construction_workflow(
@@ -125,6 +127,16 @@ class BuildingConstructionWorkflow(CoreWorkflow[BuildingMutationResult]):
     def execute(self, context: WorkflowContext) -> BuildingMutationResult:
         """Navigate to the exact source menu and submit ordinary Build once."""
 
+        operation_id = _require_operation_id(self.policy.operation_id, action="construction")
+        reconciled = _reconcile_existing_building(
+            context,
+            operation_id=operation_id,
+            action_kind=BuildingMutationKind.CONSTRUCT,
+            checkpoint=self.checkpoint,
+            expected_target=BuildingConstructionTarget.for_building(self.policy.building),
+        )
+        if reconciled is not None:
+            return _result_from_reconciliation(reconciled, action_name="Construction")
         target = BuildingConstructionTarget.for_building(self.policy.building)
         content, slot_instance_key = context.open_construction_slot(target)
         target = target.bind_slot(slot_instance_key)
@@ -138,10 +150,7 @@ class BuildingConstructionWorkflow(CoreWorkflow[BuildingMutationResult]):
             )
         action = BuildingActionIdentity(
             kind=BuildingMutationKind.CONSTRUCT,
-            operation_id=_require_operation_id(
-                self.policy.operation_id,
-                action="construction",
-            ),
+            operation_id=operation_id,
             target=target,
         )
         checkpoint, receipt, result = context.execute_building(action, self.checkpoint, content)
@@ -157,8 +166,9 @@ class BuildingConstructionWorkflow(CoreWorkflow[BuildingMutationResult]):
             message=(
                 f"Construction of '{target.building.value}' started."
                 if result.committed
-                else "Construction outcome is unproved; no replay was attempted."
+                else _pending_building_message(result, action="Construction")
             ),
+            retry_permitted=getattr(result, "retry_permitted", False),
         )
 
 
@@ -201,9 +211,27 @@ class BuildingUpgradeWorkflow(CoreWorkflow[BuildingMutationResult]):
         """Select a priority target, revalidate its detail, then dispatch once."""
 
         daily_quest_id = self.daily_quest_id or self.policy.daily_quest_id
+        operation_id = _resolve_upgrade_operation_id(
+            self.policy.operation_id,
+            checkpoint=self.checkpoint,
+            daily_quest_id=daily_quest_id,
+        )
+        reconciled = _reconcile_existing_building(
+            context,
+            operation_id=operation_id,
+            action_kind=BuildingMutationKind.UPGRADE,
+            checkpoint=self.checkpoint,
+            daily_quest_id=daily_quest_id,
+            expected_target=self.target,
+        )
+        if reconciled is not None:
+            return _result_from_reconciliation(reconciled, action_name="Upgrade")
         arrival = None
         if daily_quest_id is DailyQuestId.UPGRADE_BUILDING:
             arrival = context.open_daily_upgrade_go()
+        ensure_queue = getattr(context, "ensure_building_queue_available", None)
+        if callable(ensure_queue):
+            ensure_queue()
         target = self.target
         if target is None:
             if not self.policy.priority:
@@ -244,11 +272,7 @@ class BuildingUpgradeWorkflow(CoreWorkflow[BuildingMutationResult]):
             _validate_target_observation(source, target)
         action = BuildingActionIdentity(
             kind=BuildingMutationKind.UPGRADE,
-            operation_id=_resolve_upgrade_operation_id(
-                self.policy.operation_id,
-                checkpoint=self.checkpoint,
-                daily_quest_id=daily_quest_id,
-            ),
+            operation_id=operation_id,
             target=target,
             daily_quest_id=daily_quest_id,
         )
@@ -265,8 +289,9 @@ class BuildingUpgradeWorkflow(CoreWorkflow[BuildingMutationResult]):
             message=(
                 f"Upgrade of '{target.building.value}' started."
                 if result.committed
-                else "Upgrade outcome is unproved; no replay was attempted."
+                else _pending_building_message(result, action="Upgrade")
             ),
+            retry_permitted=getattr(result, "retry_permitted", False),
         )
 
 
@@ -391,6 +416,66 @@ def _require_operation_id(operation_id: str | None, *, action: str) -> str:
             f"Typed building {action} requires a caller-owned durable operation_id."
         )
     return operation_id.strip()
+
+
+def _reconcile_existing_building(
+    context: WorkflowContext,
+    *,
+    operation_id: str,
+    action_kind: BuildingMutationKind,
+    checkpoint: DailyTaskCheckpoint,
+    daily_quest_id: DailyQuestId | None = None,
+    expected_target: BuildingConstructionTarget | BuildingUpgradeTarget | None = None,
+) -> tuple[BuildingActionIdentity, BuildingMutationReceipt | None, JournaledMutationResult] | None:
+    """Use the durable operation before any new navigation or precondition acquisition."""
+
+    reconcile = getattr(context, "reconcile_building_operation", None)
+    if not callable(reconcile):
+        return None
+    return reconcile(
+        operation_id=operation_id,
+        action_kind=action_kind,
+        checkpoint=checkpoint,
+        daily_quest_id=daily_quest_id,
+        expected_target=expected_target,
+    )
+
+
+def _pending_building_message(result: object, *, action: str) -> str:
+    """Expose a durable prepared/reconciliation retry instead of implying a replay is safe."""
+
+    if getattr(result, "retry_permitted", False):
+        return (
+            f"{action} intent is durably prepared but not dispatched; retry after fresh "
+            "precondition validation. No input was replayed."
+        )
+    return f"{action} outcome is unproved; no replay was attempted."
+
+
+def _result_from_reconciliation(
+    reconciled: tuple[BuildingActionIdentity, BuildingMutationReceipt | None, JournaledMutationResult],
+    *,
+    action_name: str,
+) -> BuildingMutationResult:
+    """Materialize one workflow result from an existing durable operation."""
+
+    action, receipt, result = reconciled
+    return BuildingMutationResult(
+        checkpoint=result.checkpoint,
+        action=action,
+        receipt=receipt,
+        disposition=(
+            BuildingMutationDisposition.STARTED
+            if result.committed
+            else BuildingMutationDisposition.PENDING_CLARIFICATION
+        ),
+        message=(
+            f"{action_name} receipt already committed; no input was replayed."
+            if result.committed
+            else _pending_building_message(result, action=action_name)
+        ),
+        retry_permitted=result.retry_permitted,
+    )
 
 
 def _resolve_upgrade_operation_id(

@@ -129,6 +129,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parsed = parser.parse_args(arguments)
     if parsed.command == "daily-maintenance":
         return _run_daily_maintenance(parsed)
+    if parsed.command in {"build", "construct"} and parsed.operation_id is not None:
+        raise PermissionError(
+            "CLI typed building --operation-id requires an authored mutation boundary and "
+            "invocation acknowledgement; use an authored workflow/API boundary. "
+            "The legacy no-operation-id command remains available."
+        )
     application = build_application_runner(
         Path(parsed.config),
         verbose=parsed.verbose,

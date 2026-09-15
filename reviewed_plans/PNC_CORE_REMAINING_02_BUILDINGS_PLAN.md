@@ -529,6 +529,34 @@ No live construction or upgrade mutation was attempted because the required bran
 producers and final live route preconditions were not all offline-qualified. No
 durable intent was created and no in-game resources were spent.
 
+### Runtime review revision — 2026-09-14
+
+- The typed retry path now resolves the stored target and reconciles its receipt
+  before any Daily-Go, Home, queue, or detail precondition is reacquired. A
+  prepared intent is returned as an actionable retry state; it is not replayed.
+- Direct building authority uses the direct acknowledgement mutation/diamond
+  limits. Only an invocation carrying the existing Upgrade Building Daily
+  capability uses the Daily limits. The durable building identity ignores that
+  optional progress context while retaining the stored receipt and budget.
+- Upgrade now requires a fresh production Home build-control proof before the
+  target is opened. The detail observer's unproduced queue-state metadata is no
+  longer used as queue availability proof; existing requirement, warning,
+  payment, speedup, premium-material, and Help branches remain fail-closed.
+- CLI `build`/`construct --operation-id` is rejected before runtime because the
+  CLI has no invocation acknowledgement/boundary composition. Legacy commands
+  without `--operation-id` retain their existing path; authored/API callers with
+  an explicit boundary remain supported.
+- The duplicate Sacred Tree validation fixture and manifest/test claim were
+  removed. The tracked validation image, reference image, and all available
+  ignored replay PNGs were byte-identical; no independent validation capture
+  existed to promote. Sacred Tree is therefore reference-qualified only in this
+  offline revision, not independently validation-qualified.
+
+Focused offline revision validation: `py tools/run_tests.py group
+contract.workflows` — **77 passed**; `py tools/run_tests.py group
+contract.entrypoints` — **60 passed**. Live validation remains intentionally
+blocked/skipped under the parent task's offline-only delegation.
+
 ### Verification record
 
 - `py -m unittest tests.contract.workflows.test_building_mutation_identity

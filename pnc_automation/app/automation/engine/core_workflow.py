@@ -13,6 +13,7 @@ from pnc_automation.app.automation.daily_maintenance.mutation_dispatcher import 
 from pnc_automation.app.automation.engine.core_runtime import CoreRuntime
 from pnc_automation.app.automation.engine.core_daily_mutation import CoreMutationBoundary
 from pnc_automation.app.automation.engine.navigation_core import require_resource_inventory_surface
+from pnc_automation.app.automation.tasks.building_workflow_support import can_open_build_queue
 from pnc_automation.app.pnc.domain.daily_maintenance import (
     DailyQuestId, DailyQuestRow, DailyTaskCheckpoint, DailyTargetOutcome,
 )
@@ -25,8 +26,10 @@ from pnc_automation.app.pnc.domain.building_catalog import (
 )
 from pnc_automation.app.pnc.domain.building_operations import (
     BuildingActionIdentity,
+    BuildingConstructionTarget,
     BuildingMutationKind,
     BuildingMutationReceipt,
+    BuildingUpgradeTarget,
     observable_building_instance_key,
     observable_construction_slot_key,
 )
@@ -40,7 +43,12 @@ from pnc_automation.app.pnc.domain.observation import (
     SpatialObjectQuery,
     SpatialSurfaceType,
 )
-from pnc_automation.app.pnc.domain.action_requests import TapListEntryAction, TapSpatialObjectAction
+from pnc_automation.app.pnc.domain.action_requests import (
+    KeyEventAction,
+    TapAction,
+    TapListEntryAction,
+    TapSpatialObjectAction,
+)
 from pnc_automation.app.pnc.navigation.spatial_navigation import (
     home_city_scan_step_budget,
     home_city_scan_steps,
@@ -53,6 +61,7 @@ from pnc_automation.app.pnc.domain.observation import (
 from pnc_automation.app.pnc.domain.mail import MailboxAvailability, MailboxType
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
+from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 
 
 def _resolve_unique_home_building_identity(
@@ -161,7 +170,11 @@ class CoreWorkflowResult(Generic[T]):
 class WorkflowContext:
     """Exposes only reviewed navigation and fresh, expected-screen content capture."""
 
-    __slots__ = ("_runtime", "_last_navigation_count", "_last_observation", "_effect", "_mutation_boundary", "_research_node", "_reconciliation_operation_id")
+    __slots__ = (
+        "_runtime", "_last_navigation_count", "_last_observation", "_effect",
+        "_mutation_boundary", "_research_node", "_reconciliation_operation_id",
+        "_building_queue_available",
+    )
 
     def __init__(
         self,
@@ -183,6 +196,7 @@ class WorkflowContext:
         self._mutation_boundary = mutation_boundary
         self._research_node: str | None = None
         self._reconciliation_operation_id = reconciliation_operation_id
+        self._building_queue_available = False
 
     def reconcile_hero_hall(self, checkpoint: DailyTaskCheckpoint) -> JournaledMutationResult:
         """Read only the Hero receipt named by this non-spending workflow's contract."""
@@ -563,6 +577,80 @@ class WorkflowContext:
             raise RuntimeError("Daily Upgrade Building Go did not reach a usable building state.")
         return arrived
 
+    def ensure_building_queue_available(self) -> Observation:
+        """Prove the current Home build control can open the queue before an upgrade."""
+
+        current = self._ensure_home_city_for_building_flow("building_upgrade_queue_home")
+        if not can_open_build_queue(current):
+            raise RuntimeError(
+                "Building upgrade requires a fresh Home build control that positively opens the queue."
+            )
+        executor = self._runtime.runtime.require_observed_action_executor(
+            "Building queue availability requires the canonical observed action executor."
+        )
+        opened = executor.execute_actions(
+            (
+                TapAction(
+                    selector_id=UiElementId.PNC_HOME_BUILD_BUTTON,
+                    reason="building_upgrade_open_queue_for_availability",
+                    observe_after=True,
+                    follow_up_request=ObservationRequest.build_queue_follow_up(),
+                ),
+            ),
+            current,
+            observe=lambda label, request=None: self._runtime.observe(
+                f"building_upgrade_queue_{label}", include_content=True,
+            ),
+        ).observation
+        if opened.screen_type != ScreenType.PNC_BUILD_QUEUE or opened.blocking_popup:
+            raise RuntimeError("Building queue availability was not positively observed.")
+        returned = executor.execute_actions(
+            (
+                KeyEventAction(
+                    key_code="KEYCODE_BACK",
+                    reason="building_upgrade_leave_queue_after_availability",
+                    observe_after=True,
+                    follow_up_request=ObservationRequest.build_queue_follow_up(),
+                ),
+            ),
+            opened,
+            observe=lambda label, request=None: self._runtime.observe(
+                f"building_upgrade_queue_{label}", include_content=True,
+            ),
+        ).observation
+        if returned.screen_type != ScreenType.PNC_HOME_CITY or returned.blocking_popup:
+            raise RuntimeError("Building queue availability did not return to an unblocked Home city.")
+        self._last_navigation_count = self._runtime.observation_count
+        self._last_observation = returned
+        self._building_queue_available = True
+        return opened
+
+    def reconcile_building_operation(
+        self,
+        *,
+        operation_id: str,
+        action_kind: BuildingMutationKind,
+        checkpoint: DailyTaskCheckpoint,
+        daily_quest_id: DailyQuestId | None = None,
+        expected_target: BuildingConstructionTarget | BuildingUpgradeTarget | None = None,
+    ) -> tuple[BuildingActionIdentity, BuildingMutationReceipt | None, JournaledMutationResult] | None:
+        """Reconcile a named durable building operation before reacquiring UI preconditions."""
+
+        if self._effect != WorkflowEffect.RESOURCE_CHANGING or self._mutation_boundary is None:
+            raise PermissionError("Building reconciliation requires an exact resource-changing boundary.")
+        try:
+            return self._mutation_boundary.reconcile_building_operation(
+                runtime=self._runtime,
+                observe=lambda label: self._observe_operation_content(label, operation="Building"),
+                operation_id=operation_id,
+                action_kind=action_kind,
+                checkpoint=checkpoint,
+                daily_quest_id=daily_quest_id,
+                expected_target=expected_target,
+            )
+        finally:
+            self._sync_from_runtime()
+
     def _ensure_home_city_for_building_flow(self, label: str) -> Observation:
         """Return a fresh Home frame for a target identity acquisition."""
 
@@ -592,6 +680,7 @@ class WorkflowContext:
                 identity=identity,
                 checkpoint=checkpoint,
                 source=source,
+                queue_available=getattr(self, "_building_queue_available", False),
             )
         finally:
             self._sync_from_runtime()

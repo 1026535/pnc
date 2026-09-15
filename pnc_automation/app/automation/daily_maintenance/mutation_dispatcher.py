@@ -262,11 +262,19 @@ class JournaledMutationDispatcher:
 def _intent_matches_operation(intent: MutationIntent, operation: MutationOperation) -> bool:
     """Require a retry to carry the same target and action identity."""
 
+    # Building Daily-Go is optional progress context, not part of the durable
+    # action identity.  A direct retry must therefore reconcile the same
+    # receipt instead of being treated as a different operation (and the
+    # stored budget remains authoritative for that retry).
+    same_building_identity = (
+        operation.action_kind is not None
+        and intent.action_kind == operation.action_kind.value
+    )
     return (
-        intent.quest_id == operation.quest_id
+        (same_building_identity or intent.quest_id == operation.quest_id)
         and intent.expected_precondition == operation.expected_precondition
         and intent.expected_postcondition == operation.expected_postcondition
-        and intent.diamond_budget == operation.diamond_budget
+        and (same_building_identity or intent.diamond_budget == operation.diamond_budget)
         and intent.action_kind == (None if operation.action_kind is None else operation.action_kind.value)
         and intent.target == operation.target
     )

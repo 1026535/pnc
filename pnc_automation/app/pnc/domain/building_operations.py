@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any
+from typing import Any, Mapping
 
 from pnc_automation.app.pnc.domain.building_catalog import (
     ConstructionSlotFamily,
@@ -131,6 +131,23 @@ class BuildingConstructionTarget:
             slot_instance_key=slot_instance_key,
         )
 
+    @classmethod
+    def from_metadata(cls, metadata: Mapping[str, Any]) -> "BuildingConstructionTarget":
+        """Rehydrate a journaled construction target without inventing new identity."""
+
+        if not isinstance(metadata, Mapping):
+            raise TypeError("Construction target metadata must be a mapping.")
+        slot_instance_key = metadata.get("slot_instance_key")
+        if slot_instance_key == "":
+            slot_instance_key = None
+        return cls(
+            building=HomeCityObjectId(metadata["building"]),
+            slot_id=HomeCityObjectId(metadata["slot_id"]),
+            slot_family=ConstructionSlotFamily(metadata["slot_family"]),
+            option_selector_id=UiElementId(metadata["option_selector_id"]),
+            slot_instance_key=slot_instance_key,
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class BuildingUpgradeTarget:
@@ -179,6 +196,23 @@ class BuildingUpgradeTarget:
             "allow_premium_material_purchases": self.allow_premium_material_purchases,
             "request_help": self.request_help,
         }
+
+    @classmethod
+    def from_metadata(cls, metadata: Mapping[str, Any]) -> "BuildingUpgradeTarget":
+        """Rehydrate a journaled upgrade target without trusting untyped caller input."""
+
+        if not isinstance(metadata, Mapping):
+            raise TypeError("Upgrade target metadata must be a mapping.")
+        return cls(
+            building=HomeCityObjectId(metadata["building"]),
+            instance_key=metadata["instance_key"],
+            current_level=metadata["current_level"],
+            next_level=metadata["next_level"],
+            prerequisite_mode=BuildingPrerequisiteMode(metadata.get("prerequisite_mode", "fail")),
+            allow_speedups=metadata.get("allow_speedups", False),
+            allow_premium_material_purchases=metadata.get("allow_premium_material_purchases", False),
+            request_help=metadata.get("request_help", False),
+        )
 
 
 @dataclass(frozen=True, slots=True)

@@ -273,6 +273,70 @@ class CoreMutationBoundary:
                 "The active castle does not match the authorized mutation target."
             )
 
+    def reconcile_building_operation(
+        self,
+        *,
+        runtime: CoreRuntime,
+        observe: Callable[[str], Observation],
+        operation_id: str,
+        action_kind: BuildingMutationKind,
+        checkpoint: DailyTaskCheckpoint,
+        daily_quest_id: DailyQuestId | None = None,
+        expected_target: BuildingConstructionTarget | BuildingUpgradeTarget | None = None,
+    ) -> tuple[BuildingActionIdentity, BuildingMutationReceipt | None, JournaledMutationResult] | None:
+        """Reconcile a named durable building intent before opening obsolete UI preconditions."""
+
+        if self.building_action_kind != action_kind:
+            raise PermissionError("Building mutation authority does not match the requested action kind.")
+        self.authorize(capability=daily_quest_id, action_kind=action_kind)
+        self._require_building_checkpoint(
+            checkpoint,
+            operation_id,
+            action_kind=action_kind,
+            daily_context=daily_quest_id is DailyQuestId.UPGRADE_BUILDING,
+        )
+        intent = next(
+            (item for item in checkpoint.mutation_intents if item.operation_id == operation_id),
+            None,
+        )
+        if intent is None:
+            return None
+        if intent.action_kind != action_kind.value or not isinstance(intent.target, dict):
+            raise ValueError("Stored building operation has a different action identity.")
+        target = (
+            BuildingConstructionTarget.from_metadata(intent.target)
+            if action_kind is BuildingMutationKind.CONSTRUCT
+            else BuildingUpgradeTarget.from_metadata(intent.target)
+        )
+        if expected_target is not None and not _building_targets_match_for_retry(
+            target,
+            expected_target,
+        ):
+            raise ValueError("Stored building operation has different target parameters.")
+        identity = BuildingActionIdentity(
+            kind=action_kind,
+            operation_id=operation_id,
+            target=target,
+            daily_quest_id=daily_quest_id,
+        )
+
+        def reconcile() -> MutationReconciliation:
+            after = observe(f"{action_kind.value}_existing_receipt")
+            proof, status = _building_receipt_proof(identity, after)
+            return MutationReconciliation(
+                postcondition_proven=proof,
+                original_precondition_proven=False,
+                artifact_paths=(() if after.artifact_path is None else (str(after.artifact_path),)),
+                metadata={"receipt_status": status.value, "target": target.as_metadata()},
+            )
+
+        result = JournaledMutationDispatcher(self.journal_store).reconcile_existing(
+            checkpoint=checkpoint,
+            operation_id=operation_id,
+            reconcile=reconcile,
+        )
+        return identity, _receipt_from_result(identity, result), result
+
     def execute_building(
         self,
         *,
@@ -281,6 +345,7 @@ class CoreMutationBoundary:
         identity: BuildingActionIdentity,
         checkpoint: DailyTaskCheckpoint,
         source: Observation,
+        queue_available: bool = False,
     ) -> tuple[DailyTaskCheckpoint, BuildingMutationReceipt | None, JournaledMutationResult]:
         """Dispatch one target-bound building action through the shared journal."""
 
@@ -291,6 +356,7 @@ class CoreMutationBoundary:
             checkpoint,
             identity.operation_id,
             action_kind=identity.kind,
+            daily_context=identity.daily_quest_id is DailyQuestId.UPGRADE_BUILDING,
         )
         if identity.kind is BuildingMutationKind.CONSTRUCT:
             selector = UiElementId.PNC_BUILDING_CONSTRUCTION_BUILD_BUTTON
@@ -329,7 +395,7 @@ class CoreMutationBoundary:
             target = identity.target
             if not isinstance(target, BuildingUpgradeTarget):
                 raise TypeError("Upgrade action requires an upgrade target.")
-            _require_upgrade_policy_state(source, target)
+            _require_upgrade_policy_state(source, target, queue_available=queue_available)
             if source.has(UiElementId.PNC_BUILDING_SPEEDUP_BUTTON):
                 if not target.allow_speedups:
                     raise RuntimeError(
@@ -457,7 +523,10 @@ class CoreMutationBoundary:
                 metadata={"receipt_status": status.value, "target": identity.target.as_metadata()},
             )
 
-        _, diamond_budget = self._building_mutation_limits(identity.kind)
+        _, diamond_budget = self._building_mutation_limits(
+            identity.kind,
+            daily_context=identity.daily_quest_id is DailyQuestId.UPGRADE_BUILDING,
+        )
         result = JournaledMutationDispatcher(self.journal_store).execute(
             checkpoint=checkpoint,
             operation=MutationOperation(
@@ -482,6 +551,7 @@ class CoreMutationBoundary:
         operation_id: str,
         *,
         action_kind: BuildingMutationKind,
+        daily_context: bool = False,
     ) -> None:
         """Validate identity while allowing this operation's own receipt to reconcile."""
 
@@ -505,7 +575,10 @@ class CoreMutationBoundary:
                 and intent.metadata.get("building_subaction") is not True
                 for intent in checkpoint.mutation_intents
             )
-            max_mutations, _ = self._building_mutation_limits(action_kind)
+            max_mutations, _ = self._building_mutation_limits(
+                action_kind,
+                daily_context=daily_context,
+            )
             if mutation_count >= max_mutations:
                 raise PermissionError("The building mutation acknowledgement cap has been exhausted.")
         unresolved = tuple(
@@ -528,10 +601,15 @@ class CoreMutationBoundary:
         ):
             raise PermissionError("Mutation checkpoint does not match its authorized boundary.")
 
-    def _building_mutation_limits(self, action_kind: BuildingMutationKind) -> tuple[int, int]:
+    def _building_mutation_limits(
+        self,
+        action_kind: BuildingMutationKind,
+        *,
+        daily_context: bool = False,
+    ) -> tuple[int, int]:
         """Return the exact mutation and premium budget bound for one building action kind."""
 
-        if action_kind is BuildingMutationKind.UPGRADE:
+        if daily_context and action_kind is BuildingMutationKind.UPGRADE:
             daily_policy = next(
                 (
                     item
@@ -785,11 +863,17 @@ class CoreMutationBoundary:
 def _require_upgrade_policy_state(
     observation: Observation,
     target: BuildingUpgradeTarget,
+    *,
+    queue_available: bool = False,
 ) -> None:
     """Reject unsupported queue/material states before a normal Upgrade input."""
 
     if observation.blocking_popup:
         raise RuntimeError("Building upgrade is blocked by an unresolved popup.")
+    if not queue_available:
+        raise RuntimeError(
+            "Building upgrade requires a positive current-frame Home build-control queue proof."
+        )
     if building_requirement_is_visible(observation):
         requirement = building_requirement_text(observation) or "unknown prerequisite"
         if target.allow_premium_material_purchases:
@@ -806,6 +890,9 @@ def _require_upgrade_policy_state(
         raise RuntimeError(
             "Building upgrade QUEUE requires a typed prerequisite target and route; no input was sent."
         )
+    # Preserve the existing typed dispositions when a production observer has
+    # published one.  The current-frame Home proof above remains mandatory;
+    # these optional facts never establish availability on their own.
     for entry in observation.entries(ListEntryKind.BUILDING):
         queue_state = entry.metadata.get("queue_state")
         if queue_state in {"full", "gift", "third", "third_queue", "unknown"}:
@@ -962,6 +1049,30 @@ def _spatial_object_matches_upgrade_target(
         return observable_building_instance_key(target.building, object_) == target.instance_key
     except (AttributeError, TypeError, ValueError):
         return False
+
+
+def _building_targets_match_for_retry(
+    stored: BuildingConstructionTarget | BuildingUpgradeTarget,
+    requested: BuildingConstructionTarget | BuildingUpgradeTarget,
+) -> bool:
+    """Compare caller-known target parameters without weakening stored identity."""
+
+    if type(stored) is not type(requested):
+        return False
+    if isinstance(stored, BuildingConstructionTarget) and isinstance(requested, BuildingConstructionTarget):
+        return (
+            stored.building == requested.building
+            and stored.slot_id == requested.slot_id
+            and stored.slot_family == requested.slot_family
+            and stored.option_selector_id == requested.option_selector_id
+            and (
+                requested.slot_instance_key is None
+                or stored.slot_instance_key == requested.slot_instance_key
+            )
+        )
+    if isinstance(stored, BuildingUpgradeTarget) and isinstance(requested, BuildingUpgradeTarget):
+        return stored == requested
+    return False
 
 
 def _spatial_object_matches_construction_target(
