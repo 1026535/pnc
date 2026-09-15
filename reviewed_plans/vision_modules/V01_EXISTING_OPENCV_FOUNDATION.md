@@ -10,7 +10,12 @@
 - `ocr_region_plan.py`, `core/vision/ocr/ocr_service.py`: bounded requests and frame-owned OCR.
 - `app/pnc/domain/observation.py`, `domain/popup.py`: typed facts and popup ownership.
 
-These components already exist. Use the fixed chest preview as the small integration specimen, preserving its current behavior.
+These components already exist. Use the supported Bag Resource layout
+(`tests/data/screen_recognition/bag.png` and its current profile) as the small
+integration specimen. The [source-fix assessment](CONTEXT_AND_EVIDENCE.md#navigation-findings-retained-in-these-plans)
+shows that chest-preview support is absent on the main landing base; V11 owns
+that feature. V01 must not depend on V11 or recreate the preview to qualify the
+shared path.
 
 ## Implementation
 
@@ -22,8 +27,19 @@ These components already exist. Use the fixed chest preview as the small integra
 
 ## Acceptance and proof
 
-Existing tests to target: `tests/unit/core/vision/test_template_matcher.py`, `tests/integration/vision/test_template_observation.py`, `test_observation_request_scoping.py`, `test_known_popup_recognition.py`. Replay the tracked Arena chest preview through both publishers with production bounded OCR. Require matching identity, measured close, preserved preview and frame provenance; an unrelated frame must not acquire its controls.
+Existing tests to target: `tests/unit/core/vision/test_template_matcher.py`,
+`tests/integration/vision/test_template_observation.py`,
+`test_observation_request_scoping.py` and `test_known_popup_recognition.py`.
+Replay the existing Bag reference through both publishers with production bounded
+OCR. Require matching identity, requested current controls/content and frame
+provenance; an unrelated frame must not acquire Bag controls. Preserve existing
+known-popup and unknown-modal guard tests. Preview-specific qualification stays
+in V11.
 
 Start with `py tools/run_tests.py group unit.core.vision`; apply the index's affected/integration rule to actual changes. A shared schema change requires its callers and broader contract checks in this packet.
 
-No new live run is needed if this is documentation/qualification of unchanged behavior. If the shared live publication boundary changes, use one existing read-only Bag → chest magnifier → preview → Bag route through the core runtime. Stop before Open/Use; save pre/post frames and guard/observation trace. The existing fix's saved live proof is the baseline comparison.
+No new live run is needed for qualification of unchanged behavior. If the shared
+live publication boundary changes, use one existing read-only Home → Bag → Home
+route through the core runtime, retaining frames and guard/observation trace.
+Inspect current content without Use/Open. Do not introduce a preview dependency
+or extend Bag semantics owned by V09/V11 merely for this shared proof.

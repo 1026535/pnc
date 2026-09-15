@@ -8,6 +8,12 @@ Updated: 2026-09-15. Status: **planning complete; implementation status not yet 
 
 **First assignment: V01. Then prioritize V02 and V04.** This proves the existing vision integration, fixes Home acquisition/panning, and completes the Institute/Development inspection path that exposed the original OCR problem.
 
+V01 uses the existing Bag Resource layout. The
+[retained navigation findings](vision_modules/CONTEXT_AND_EVIDENCE.md#navigation-findings-retained-in-these-plans)
+are source-revision evidence: main at `762cf84` lacks the earlier runtime fix.
+V11, V13 and V15 reuse its relevant changes within their feature slices when
+needed; there is no whole-fix prerequisite or extra legacy-vision workstream.
+
 Continue with V09, V13 and V16 to establish Bag, Campaign and shared building-menu contracts. Their dependent features then reuse those contracts. This is the execution-order document; the individual packets remain authoritative for detailed scope, owners, evidence and validation.
 
 The roadmap has **five delivery waves containing 39 packets**, plus **four packets on an availability-dependent track**. Every packet appears once in the tables below. Wave numbers express priority, not a barrier requiring every earlier packet to finish. Start a later packet when its own prerequisites are integrated and its work is the next useful available assignment.
@@ -79,7 +85,7 @@ The diagram shows shared prerequisites, not every route dependency. The tables c
 | [V07 — Fortification research](vision_modules/V07_RESEARCH_FORTIFICATION.md) | V04; H for route | Fortification node → matching detail → return. |
 | [V08 — Alliance research categories, nodes and details](vision_modules/V08_ALLIANCE_RESEARCH.md) | V01; V04 reuse if compatible; Alliance access | Alliance categories, nodes and donation-detail facts without donating. |
 | [V10 — Bag Speedup cards and item details](vision_modules/V10_BAG_SPEEDUPS.md) | V09 | Speedup type/duration/quantity and safe item inspection. |
-| [V11 — Bag Treasure, chest previews and item details](vision_modules/V11_BAG_TREASURE_AND_PREVIEWS.md) | V09; baseline chest-preview fix | Treasure variants, possible-reward preview content and owned close. |
+| [V11 — Bag Treasure, chest previews and item details](vision_modules/V11_BAG_TREASURE_AND_PREVIEWS.md) | V09; incorporate source preview behavior if absent | Treasure variants, possible-reward preview content and owned close. |
 | [V12 — Remaining Bag tabs on the supported layout](vision_modules/V12_BAG_REMAINING_TABS.md) | V09; remaining-tab inventory | The other evidenced Bag tabs, or an explicit no-additional-tabs result. |
 | [V14 — Campaign stage detail, Hero Formation and return](vision_modules/V14_CAMPAIGN_STAGE_AND_FORMATION.md) | V13; proved non-spending formation entry | Stage → actual Hero Formation → return, with honest stage context. |
 | [V15 — Trial Challenge cards and read-only details](vision_modules/V15_TRIAL_CHALLENGE.md) | V01; H for route | Trial card identity/state and one proved read-only detail family. |
@@ -150,7 +156,11 @@ This track is **not the final mandatory barrier for ordinary menus**:
 
 ### First assignments
 
-1. Reconcile the current branch/base and any newer feature01/02/04 work. The planning base was `4d317dbad066afca989dfa3b09d76bd1f7b82a02`, including the Campaign/Trial/chest-return fix. Do not assume every dependency is on main.
+1. Reconcile the current branch/base and newer feature01/02/04 work against the
+   retained evidence. The source Campaign/Trial/chest fix is `4d317db`; main at
+   `762cf84` lacks its runtime changes. V11/V13/V15 own carrying forward those
+   relevant behaviors if absent; V01 starts independently from the existing Bag
+   profile. Preserve equivalents already integrated on newer bases.
 2. Assign **V01** and accept its qualification or necessary small integration correction.
 3. Assign **V02** and **V04** as the first independent feature slices.
 4. Take **V09** and **V13** next, then **V16** and the highest-priority ready W3 feature, typically V15 or a Bag tab.

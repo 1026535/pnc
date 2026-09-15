@@ -37,9 +37,43 @@ The tour used the configured testing instance's active level-10 castle in K287, 
 | 01_world | Standard World screen identified; this observation published no objects | Diagnose publication/model scope; no global claim about all World modes |
 | Alliance research | Not captured by this tour | Category, node, detail and return evidence |
 
-The tour's UNKNOWN results for Chapter 6, Trial Challenge and chest preview are **superseded** by commit `4d317dbad066afca989dfa3b09d76bd1f7b82a02`. See [fix report](C:/Users/lebel/pnc/.local-data/reports/vision_navigation_fix_20260915/report.md) and [tracked findings](../../instructions/VISION_NAVIGATION_FINDINGS_20260915.md). The fix adds identity/return support, not complete content parsers.
+### Navigation findings retained in these plans
 
-Preserve the corrected Campaign text-only anchor, which excludes its pulsing ring. Preserve Trial → Home, Campaign → Home using the blue bottom-right portal, and owned chest preview → Bag. Chest preview is an inspection surface and must not be automatically dismissed as an interrupt.
+The original failures were corrected and validated on
+[source commit `4d317db`](https://github.com/1026535/pnc/commit/4d317dbad066afca989dfa3b09d76bd1f7b82a02).
+The [fix report](C:/Users/lebel/pnc/.local-data/reports/vision_navigation_fix_20260915/report.md)
+and its ignored traces retain the observations. These findings remain useful as
+versioned evidence; they do not establish that a different checkout contains the fix.
+
+The source revision's `tests/data/screen_recognition/manifest.json` records capture
+group `2026-09-15/vision_live_tour_20260915`, decoded-image hashes and reference/
+validation roles. Reuse those authored fixtures and profile changes where they
+fit the current owner; do not rerun the tour merely to recreate evidence.
+
+| Finding and exact source evidence | Plan obligation |
+|---|---|
+| Campaign Chapter 6 exits Home through the bottom-right portal. The selected-node ring pulses, so the stable title-only anchor excludes it. `campaign_map_chapter_6.png` and `campaign_map_chapter_6_pulse.png` cover the reference and settled-frame regression. The first loading frame was not qualified. | V13 owns the identity/portal and pulse regression before extending chapter content. It supplies neither stage selection proof nor generic loading/UNKNOWN recovery. |
+| A Tower body tap opened Trial Challenge directly; its measured top-left control returned Home. `trial_challenge.png` covers the category-list appearance. | V15 owns the canonical Tower → `PNC_TRIAL_CHALLENGE` destination and return, then card semantics. V02 owns Home acquisition. This does not prove trial entry or battle behavior. |
+| Arena Surprise Chest's magnifier opened contents without using the item. `bag_arena_chest_preview.png` covers the preview and gold-X close to Bag. Ordinary observation retained the preview. | V11 owns preview identity, measured close, task-owned inspection and content. Missing close/unknown interruptions retain the existing guards; no automatic dismissal or Use/Open action. |
+
+**Main assessment at `762cf84` (2026-09-15):** the plan commits are present, but
+`4d317db` is not an ancestor and its four fixtures are absent. The catalog still
+maps Tower to `PNC_TOWER_OF_TRIAL`; the chest-preview screen ID is absent. These
+are pending feature changes on this base, not completed main behavior. V11, V13
+and V15 should reuse the relevant reviewed source changes or implement the same
+contracts in their current feature slices, then run their normal acceptance.
+Preserve already-integrated equivalents on newer bases. A separate legacy-vision
+repair project and a prerequisite merge of the whole old fix are unnecessary.
+V01 starts from the existing Bag layout so preview support cannot block it.
+
+The source fix recorded **427 focused passes**: 249 navigation, 122 vision and
+56 engine. The affected and vision-integration runs were stopped at the user's
+request; neither is a passing broader gate. Recorded live returns were Trial →
+Home, corrected Chapter 6 → Home, and preview → Bag → Home on the same active
+testing castle, game 5.2.80 in English at 900 × 1600. The Campaign pulse failure
+preceded its successful corrected retry. No trial, battle, item use, research,
+account/castle switch or spending occurred. These results qualify those captured
+surfaces and revision only, not current main, all chapters/chests, or Home variants.
 
 ## OpenCV evidence and its limits
 

@@ -17,7 +17,13 @@ OpenCV is already integrated. V01 adapts and qualifies existing interfaces; it i
 
 ## Baseline and precedence
 
-Planning checkout: `codex/vision-modular-plan`, based on `4d317dbad066afca989dfa3b09d76bd1f7b82a02`. At planning time `origin/main` was `75153e76e940525dada3b5b4ae98093b5273ef7a`. The planning base includes the reviewed Campaign Chapter 6, Trial Challenge and Bag chest-preview navigation fix from `codex/vision-navigation-fixes`; do not assume that fix is already on main.
+Planning checkout: `codex/vision-modular-plan`, based on `4d317dbad066afca989dfa3b09d76bd1f7b82a02`. At planning time `origin/main` was `75153e76e940525dada3b5b4ae98093b5273ef7a`. The planning base includes the reviewed Campaign Chapter 6, Trial Challenge and
+Bag chest-preview fix from `codex/vision-navigation-fixes`. The main landing at
+`762cf84` contains the plans, not that runtime fix. The
+[retained navigation evidence](vision_modules/CONTEXT_AND_EVIDENCE.md#navigation-findings-retained-in-these-plans)
+records exact provenance and current gaps. V11, V13 and V15 absorb the relevant
+reviewed changes into their own feature work when absent; no separate legacy
+repair phase is required. V01 uses the already-supported Bag Resource layout.
 
 Before dispatch, reconcile the actual current commit and active feature work. Read current AGENTS.md, applicable skills and [core porting instructions](../instructions/CORE_WORKFLOW_PORTING.md). The user's latest fixed-map facts and this scoped vision objective supersede contradictory historical task goals. Existing feature plans retain ownership of their workflow and mutation contracts; this set supplies perception/navigation work within those boundaries. The [remaining feature scope map](PNC_CORE_REMAINING_VISION_BOUNDARY.md) removes overlapping V work from packages 03–06 and identifies their retained deliverables.
 
@@ -39,7 +45,7 @@ The set contains **43 implementation packets**. All packets start **not implemen
 | [V08](vision_modules/V08_ALLIANCE_RESEARCH.md) | Alliance research categories, nodes and donation details | V01; V04's shared node representation if compatible |
 | [V09](vision_modules/V09_BAG_SHELL_AND_RESOURCES.md) | Bag tabs, common card contract and Resource inventory | V01 |
 | [V10](vision_modules/V10_BAG_SPEEDUPS.md) | Speedup cards and item details | V09 |
-| [V11](vision_modules/V11_BAG_TREASURE_AND_PREVIEWS.md) | Treasure cards, chest preview and item details | V09; existing chest fix |
+| [V11](vision_modules/V11_BAG_TREASURE_AND_PREVIEWS.md) | Treasure cards, chest preview and item details | V09; reuse source preview changes within V11 |
 | [V12](vision_modules/V12_BAG_REMAINING_TABS.md) | Remaining Bag tabs discovered on the supported layout | V09; bounded capture inventory |
 | [V13](vision_modules/V13_CAMPAIGN_MAP_AND_CHAPTERS.md) | Campaign map/chapter content and navigation | V01; V02 for automatic Home entry |
 | [V14](vision_modules/V14_CAMPAIGN_STAGE_AND_FORMATION.md) | Stage details, Hero Formation and return | V13 |

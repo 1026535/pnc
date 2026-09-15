@@ -4,17 +4,28 @@
 
 ## Evidence and owners
 
-Tour29 and tracked `trial_challenge.png` show Hero, Curio, Tech, Gear, Rune and Sauroi cards with progress, weekday/timer and lock indicators. The baseline already identifies `PNC_TRIAL_CHALLENGE`, returns Home and maps the Tower building to that destination. It does not parse cards or prove trial entry/battle behavior.
+Tour29 and `trial_challenge.png` from
+[source commit `4d317db`](CONTEXT_AND_EVIDENCE.md#navigation-findings-retained-in-these-plans)
+show Hero, Curio, Tech, Gear, Rune and Sauroi cards with progress, weekday/timer
+and lock indicators. That revision qualifies `PNC_TRIAL_CHALLENGE`, the measured
+top-left Home return and Tower's destination. Main at `762cf84` still maps Tower
+to `PNC_TOWER_OF_TRIAL` and lacks the fixture. Reuse the relevant source changes
+and provenance within this packet if still missing. They do not parse cards or
+prove trial entry/battle behavior.
 
 Extend the Trial feature producer in `app/pnc/vision`, current profiles/selectors, bounded OCR planning and `navigation_core.py`. Do not create a second Tower navigation controller.
 
 ## Implementation
 
-1. Measure the category-card regions and selected/locked indicators under the proved Trial layout. Read only displayed category labels, progress/floor, schedule and counters.
+1. Establish or preserve Tower → `PNC_TRIAL_CHALLENGE` and its measured top-left
+   Home return through the canonical catalog/navigation owner; reuse the source
+   profile and fixture rather than adding a second Tower controller. Measure the
+   category-card regions and selected/locked indicators under the proved layout. Read only displayed category labels, progress/floor, schedule and counters.
 2. Publish canonical category identity, observed availability, progress and measured inspectable control. A displayed weekday is observed text, not a computed server-time availability decision.
 3. Qualify one available, non-spending category detail if its entry semantics are established by saved/current evidence. Parse the visible floor/reward/ranking information actually needed for inspection and its return control.
 4. Reuse common card parsing across the six categories only where the layouts agree. If a category opens a different interface, record it as unqualified and prepare a separate packet rather than force it through the first parser.
-5. Keep entry to battle/resource actions separate; retain the already-correct Trial → Home route.
+5. Keep entry to battle/resource actions separate and qualify Trial → Home on
+   the actual candidate; preserve an already-integrated equivalent return.
 
 ## Acceptance and proof
 
