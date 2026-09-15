@@ -546,14 +546,12 @@ durable intent was created and no in-game resources were spent.
   CLI has no invocation acknowledgement/boundary composition. Legacy commands
   without `--operation-id` retain their existing path; authored/API callers with
   an explicit boundary remain supported.
-- The duplicate Sacred Tree validation fixture and manifest/test claim were
-  removed. The tracked validation image, reference image, and all available
-  ignored replay PNGs were byte-identical; no independent validation capture
-  existed to promote. Sacred Tree is therefore reference-qualified only in this
-  offline revision, not independently validation-qualified.
+- The duplicate Sacred Tree validation fixture was removed at this revision.
+  The later follow-up below found and promoted a genuinely distinct saved capture;
+  that later evidence supersedes this revision's temporary downgrade.
 
 Focused offline revision validation: `py tools/run_tests.py group
-contract.workflows` — **77 passed**; `py tools/run_tests.py group
+contract.workflows` — **78 passed**; `py tools/run_tests.py group
 contract.entrypoints` — **60 passed**. Live validation remains intentionally
 blocked/skipped under the parent task's offline-only delegation.
 
@@ -598,3 +596,44 @@ handoff.
 - Building PREPARED intents now rehydrate the stored typed target, reacquire and revalidate its exact construction slot or Home building detail, durably transition to DISPATCHED once, dispatch once, and reconcile. Generic mutation callers retain their existing non-replay PREPARED disposition.
 - The alternate Sacred Tree source/return capture at `.local-data/artifacts/core_resume/20260914T250000Z` was inspected. The selected return frame is visually Sacred Tree, has decoded SHA-256 `af8f39db49447ebd19f8f3dea2e9a1288debbbd0d5d3a5cab70ab26c5c70f158`, and is promoted as `sacred_tree_validation_20260914.png` under capture group `2026-09-14/a02_buildings/20260914T250000Z/sacred_tree_return`. Its provenance reports `unknown_screen`, and all source/return frames in that saved run are byte-identical; it is therefore one independent saved capture group, not multiple independent frames. The observer gate now validates both reference and return-group fixtures through both production observers.
 - Focused offline results: `contract.workflows` 80 passed; `unit.app.automation.daily_maintenance` 119 passed; `integration.vision` 435 passed, 6 skipped. `git diff --check` passed. Live acceptance remains blocked by the explicitly offline-only delegation.
+
+### Final review and bounded live recheck — 2026-09-15
+
+- Reviewed implementation commits: `446112019e0931ddb9bc2a539ce221a08a300c69`,
+  `e40d96df72a7317da2f0cc1557f9889eff6c6ecc`, and
+  `fd0f3f630acd0e54afada5ec6e330f318c04711b`.
+- Exact runtime resolution from `C:/Users/lebel/pnc/config/accounts.yaml` passed for
+  `serious_stuff / bs-main / serious_stuff / live_testing`. One canonical
+  process-scoped reservation was used and the pre-existing instance was preserved.
+- The non-spending core preflight stopped on its first screenshot with
+  `UNKNOWN / guard_unresolved`. OCR independently described the VIP daily-reset
+  text and Close label, but no visual profile proved the modal identity, so no
+  recovery input was sent and the active castle could not be freshly reverified.
+  Evidence is retained under the feature-owned ignored group
+  `.local-data/artifacts/core_resume/20260915T040847Z`.
+- No building route input, construction, upgrade, speedup, prerequisite, Help,
+  premium-material purchase, diamond purchase, durable intent, or receipt was
+  attempted. Actual resource and diamond spend: **0**. The live lease and connected
+  runtime were released after the failed preflight.
+- Independent focused recheck:
+  `py -m unittest tests.contract.workflows.test_building_mutation_identity
+  tests.unit.app.automation.daily_maintenance.test_daily_mutation_dispatcher
+  tests.integration.vision.test_build_queue_observation
+  tests.integration.vision.test_building_route_captured_observers
+  tests.integration.vision.test_building_captured_flows` — **38 passed**.
+- Required affected gate:
+  `py tools/run_tests.py affected --base origin/main --explain --json
+  .test-impact/buildings-final-selection.json --results
+  .test-impact/buildings-final-results.json` selected the full portable fallback:
+  **2,158 passed, 7 skipped, 1 failed** out of 2,166. The sole failure was the
+  unrelated concurrent mail-archive test
+  `test_same_fingerprint_lookup_and_create_are_serialized`; its isolated rerun
+  immediately passed **1/1**. No building, journal, dispatcher, entrypoint, visual,
+  navigation, or architecture test failed.
+
+Live acceptance remains incomplete until the generic VIP modal obtains an
+independently qualified visual identity in the integration line. The package does
+not import the uncommitted generic recognition worktree and does not bypass that
+guard. Once integrated, rerun the same preflight first, then resume the unaccepted
+route inventory and at most one exact normal construction and one exact normal
+upgrade under target-bound operation ids and displayed finite per-operation caps.
