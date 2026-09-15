@@ -356,44 +356,43 @@ class CoreMutationBoundary:
         executor = runtime.runtime.require_observed_action_executor(
             "Core Research requires the canonical observed action executor."
         )
-        resource_popup: Observation | None = None
-        if uses_bag_resources:
-            revealed = executor.execute_action(
-                TapAction(
-                    selector_id=UiElementId.PNC_RESEARCH_START_BUTTON,
-                    reason="reveal_research_resource_shortfall",
-                ),
-                source,
-            )
-            if not revealed:
-                raise RuntimeError(
-                    "Research resource shortfall popup was not requested; no intent was created."
-                )
-            for index in range(runtime.navigation.policy.max_observations):
-                runtime.navigation.sleep(runtime.navigation.policy.poll_seconds)
-                candidate = observe_task_owned_interruption(
-                    f"research_resource_popup_after_{index}"
-                )
-                if _is_exact_research_resource_popup(candidate):
-                    resource_popup = candidate
-                    break
-                if candidate.screen_type not in {
-                    ScreenType.PNC_RESEARCH_TREE,
-                    ScreenType.PNC_LOADING,
-                    ScreenType.UNKNOWN,
-                }:
-                    break
-            if resource_popup is None:
-                raise RuntimeError(
-                    "Research resource shortfall did not produce the exact Auto Use popup; "
-                    "no Bag resources were confirmed and no intent was created."
-                )
-
         dispatched_source = source
 
         def dispatch() -> None:
             nonlocal dispatched_source
-            if resource_popup is not None:
+            if uses_bag_resources:
+                revealed = executor.execute_action(
+                    TapAction(
+                        selector_id=UiElementId.PNC_RESEARCH_START_BUTTON,
+                        reason="reveal_research_resource_shortfall",
+                    ),
+                    source,
+                )
+                if not revealed:
+                    raise RuntimeError(
+                        "Research resource shortfall popup was not requested; "
+                        "its journal prevents replay."
+                    )
+                resource_popup = None
+                for index in range(runtime.navigation.policy.max_observations):
+                    runtime.navigation.sleep(runtime.navigation.policy.poll_seconds)
+                    candidate = observe_task_owned_interruption(
+                        f"research_resource_popup_after_{index}"
+                    )
+                    if _is_exact_research_resource_popup(candidate):
+                        resource_popup = candidate
+                        break
+                    if candidate.screen_type not in {
+                        ScreenType.PNC_RESEARCH_TREE,
+                        ScreenType.PNC_LOADING,
+                        ScreenType.UNKNOWN,
+                    }:
+                        break
+                if resource_popup is None:
+                    raise RuntimeError(
+                        "Research resource shortfall did not produce the exact Auto Use popup; "
+                        "no Bag resources were confirmed and its journal prevents replay."
+                    )
                 confirmed = executor.execute_action(
                     TapAction(
                         selector_id=UiElementId.PNC_RESEARCH_RESOURCE_CONFIRM_BUTTON,

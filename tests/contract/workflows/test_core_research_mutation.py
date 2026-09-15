@@ -233,8 +233,14 @@ class CoreResearchMutationTests(unittest.TestCase):
 
         def check_dispatch(action, source):
             dispatched_selectors.append(action.selector_id)
-            if action.selector_id == UiElementId.PNC_RESEARCH_START_BUTTON and len(dispatched_selectors) == 1:
-                self.assertIsNone(self.load())
+            if (
+                action.selector_id == UiElementId.PNC_RESEARCH_START_BUTTON
+                and len(dispatched_selectors) == 1
+            ):
+                self.assertEqual(
+                    MutationIntentState.DISPATCHED,
+                    self.load().mutation_intents[0].state,
+                )
             if action.selector_id == UiElementId.PNC_RESEARCH_RESOURCE_CONFIRM_BUTTON:
                 self.assertEqual(MutationIntentState.DISPATCHED, self.load().mutation_intents[0].state)
             return True
@@ -256,8 +262,8 @@ class CoreResearchMutationTests(unittest.TestCase):
         self.assertEqual(MutationIntentState.COMMITTED, checkpoint.mutation_intents[0].state)
         self.assertEqual("success", outcome.status.value)
 
-    def test_opt_in_refuses_unrecognized_popup_without_creating_intent(self):
-        """The non-mutating reveal tap cannot authorize an unrelated generic Confirm."""
+    def test_opt_in_journals_reveal_and_refuses_unrecognized_popup(self):
+        """The journal blocks replay when the first Start reveals an unknown popup."""
 
         short = research(
             "research_tree_node_detail",
@@ -279,7 +285,16 @@ class CoreResearchMutationTests(unittest.TestCase):
                 confirm_resource_shortfall_from_bag=True,
             )
 
-        self.assertIsNone(self.load())
+        self.assertEqual(
+            MutationIntentState.DISPATCHED,
+            self.load().mutation_intents[0].state,
+        )
+        self.assertEqual(2, runtime.actuator.execute_action.call_count)
+        with self.assertRaises(PermissionError):
+            context.start_research(
+                self.checkpoint,
+                confirm_resource_shortfall_from_bag=True,
+            )
         self.assertEqual(2, runtime.actuator.execute_action.call_count)
 
     def test_busy_research_queue_does_not_create_intent_or_dispatch_start(self):
