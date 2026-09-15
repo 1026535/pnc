@@ -637,3 +637,38 @@ not import the uncommitted generic recognition worktree and does not bypass that
 guard. Once integrated, rerun the same preflight first, then resume the unaccepted
 route inventory and at most one exact normal construction and one exact normal
 upgrade under target-bound operation ids and displayed finite per-operation caps.
+
+### Route-resumption revision — 2026-09-15
+
+- The feature worktree was safely fast-forwarded to the already-integrated A02
+  merge `cfdeb1e5161c7fe495ccd260656d0a837a0a1b23`; ongoing feature work remains
+  on `codex/a02-buildings` in the same repository root recorded above.
+- Commit `91960a9d629d583f5d5b1e3c1feb21e912a76df9` adds one bounded pan derived
+  from an exactly observed out-of-band Home target. The pan consumes the existing
+  gesture budget, requires fresh unblocked Home reacquisition, and permits only
+  one tap on the reacquired exact target. It adds no atlas coordinate or predicted
+  target and preserves stale, unknown, popup, missing, and ambiguous fail-closed
+  behavior.
+- Focused validation passed 5/5 new regressions and 250/250 tests in
+  `unit.app.pnc.navigation`; an independent direct run of
+  `tests.unit.app.pnc.navigation.test_navigation_core` passed 70/70. The affected
+  planner selected its mandated 305-module fallback because the public navigation
+  declaration changed; that fallback remains due after the next live-derived
+  observer/route slice rather than being repeated between each small slice.
+- Two new independent `serious_stuff` preflight groups,
+  `.local-data/artifacts/core_resume/20260915T045517Z` and
+  `.local-data/artifacts/core_resume/20260915T045551Z`, stopped before input on
+  the same daily-reset VIP modal. Their decoded frame SHA-256 values are
+  `f7f5a38fe46f52d3cbdc61be9d35737cdecd4085ab69e2c0362a746e700883c9`
+  and `e14bf9fdeffbf51bd43852a3cf35de27aa92234a43b8da85bfcb03ebc6a0e291`.
+  The production guard OCR read VIP, the daily-login text, points, and Close, but
+  correctly retained `UNKNOWN / guard_unresolved` because the generic modal lacks
+  independent visual identity. No input or spend occurred.
+- That reset popup is not a building route, is not evidence from `mega_old_acc`,
+  and is not owned by A02. Its canonical reset-close task has the evidence and is
+  handling the generic recognition/close boundary. A02 will neither add a popup
+  profile nor bypass the screen-first guard; live route capture resumes on
+  `serious_stuff / bs-main` after that task leaves a recognized stable screen.
+- APK or extracted-client evidence is not being used for this resumed route
+  acceptance. Pit remains a read-only `MINE_HOLE` mapping row and is deliberately
+  not treated as upgradeable.
