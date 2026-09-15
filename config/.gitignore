@@ -1,0 +1,7 @@
+# Configuration is machine-local and may contain credentials or private game data.
+*.yaml
+*.yml
+
+# Sanitized templates are safe to publish.
+!*.example.yaml
+!*.example.yml

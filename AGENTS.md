@@ -58,8 +58,8 @@
 
 - Put generated screenshots, logs, archives, reports, timing data, and selector output under `.local-data/`. Keep `.test-impact/` for test-selection scratch and CI evidence.
 - Keep authored fixtures and package data tracked, including `tests/data/`, `pnc_automation/**/data/`, examples, plans, and selector catalogs.
-- Treat `config/*.example.yaml` as templates. Do not modify local `accounts.yaml`, `castles.yaml`, `daily_maintenance.yaml`, or `tests/data/local_fixture_artifacts.json` unless requested.
-- `config/castle_targets.yaml` is tracked authored config; change it only for target-catalog work and validate changed identities with existing loaders and relevant roster evidence.
+- Treat `config/*.example.yaml` as sanitized templates containing synthetic values only.
+- All other `config/*.yaml` and `config/*.yml` files are ignored local configuration. Do not modify them or `tests/data/local_fixture_artifacts.json` unless requested.
 - Never expose credentials, tokens, account secrets, or sensitive config values. Redact them from captured output.
 
 ## Offline Validation
