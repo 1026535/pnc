@@ -56,15 +56,16 @@ fit the current owner; do not rerun the tour merely to recreate evidence.
 | A Tower body tap opened Trial Challenge directly; its measured top-left control returned Home. `trial_challenge.png` covers the category-list appearance. | V15 owns the canonical Tower → `PNC_TRIAL_CHALLENGE` destination and return, then card semantics. V02 owns Home acquisition. This does not prove trial entry or battle behavior. |
 | Arena Surprise Chest's magnifier opened contents without using the item. `bag_arena_chest_preview.png` covers the preview and gold-X close to Bag. Ordinary observation retained the preview. | V11 owns preview identity, measured close, task-owned inspection and content. Missing close/unknown interruptions retain the existing guards; no automatic dismissal or Use/Open action. |
 
-**Main assessment at `762cf84` (2026-09-15):** the plan commits are present, but
-`4d317db` is not an ancestor and its four fixtures are absent. The catalog still
-maps Tower to `PNC_TOWER_OF_TRIAL`; the chest-preview screen ID is absent. These
-are pending feature changes on this base, not completed main behavior. V11, V13
-and V15 should reuse the relevant reviewed source changes or implement the same
-contracts in their current feature slices, then run their normal acceptance.
-Preserve already-integrated equivalents on newer bases. A separate legacy-vision
-repair project and a prerequisite merge of the whole old fix are unnecessary.
-V01 starts from the existing Bag layout so preview support cannot block it.
+**Baseline port after `ff38127` (2026-09-15):** the initial main plan landing
+omitted the runtime correction. At the user's request, the bounded fix is now
+included alongside these plans: all 22 runtime/test/fixture paths are ported
+exactly from `4d317db`. Before the port, main's runtime/tests/tools matched that
+fix's parent; after it, they match the live-tested source revision. Tower now
+maps to `PNC_TRIAL_CHALLENGE`; the Chapter 6 and owned-preview profiles, measured
+returns and four fixtures are present. The retired standalone findings note
+remains removed. Preserve this baseline in V11/V13/V15; their content parsing and
+broader feature acceptance remain planned. V01 still starts from the existing
+Bag layout.
 
 The source fix recorded **427 focused passes**: 249 navigation, 122 vision and
 56 engine. The affected and vision-integration runs were stopped at the user's
@@ -73,7 +74,18 @@ Home, corrected Chapter 6 → Home, and preview → Bag → Home on the same act
 testing castle, game 5.2.80 in English at 900 × 1600. The Campaign pulse failure
 preceded its successful corrected retry. No trial, battle, item use, research,
 account/castle switch or spending occurred. These results qualify those captured
-surfaces and revision only, not current main, all chapters/chests, or Home variants.
+surfaces and revision only. The exact port reuses that saved live evidence;
+it adds no claim about all chapters/chests or Home variants.
+
+**Port validation (2026-09-15):** the navigation group passed all 249 tests.
+`py tools/run_tests.py affected --base origin/main --explain` selected all 306
+portable modules against `ff38127` because of the shared screen contracts; the
+full fallback passed with 2,182 passes and 7 skips (2,189 total). Skips were six
+unavailable optional captures and one Windows symlink privilege case. This
+completes the broader offline gate that was stopped in the original source run.
+The runtime/test tree still exactly matches `4d317db`. No new live tour was run;
+the saved route evidence above was reused. Plan links and `git diff --check`
+also passed.
 
 ## OpenCV evidence and its limits
 

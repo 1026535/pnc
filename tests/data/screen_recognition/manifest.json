@@ -563,6 +563,16 @@
       ]
     },
     {
+      "image": "campaign_map_chapter_6.png",
+      "screen": "PNC_CAMPAIGN_MAP",
+      "split": "reference",
+      "group": "2026-09-15/vision_live_tour_20260915",
+      "sha256": "b7050284fd22c62309c70bfd8c06c2cb0b7956875b6611d2459ebd20f5cb85e4",
+      "expected_visual_screens": [
+        "PNC_CAMPAIGN_MAP"
+      ]
+    },
+    {
       "image": "campaign_chapter_10.png",
       "screen": "PNC_CAMPAIGN_CHAPTER",
       "split": "reference",
@@ -580,6 +590,26 @@
       "sha256": "efab0c7ecb4c30187e057235bfe9efdfb831fc212aa61bc42548791177628157",
       "expected_visual_screens": [
         "PNC_CAMPAIGN_STAGE"
+      ]
+    },
+    {
+      "image": "trial_challenge.png",
+      "screen": "PNC_TRIAL_CHALLENGE",
+      "split": "reference",
+      "group": "2026-09-15/vision_live_tour_20260915",
+      "sha256": "a8eda616ad18961844c1763a01cb506e557ec390ff6dccadaf322042b6a48c24",
+      "expected_visual_screens": [
+        "PNC_TRIAL_CHALLENGE"
+      ]
+    },
+    {
+      "image": "bag_arena_chest_preview.png",
+      "screen": "PNC_BAG_CHEST_PREVIEW",
+      "split": "reference",
+      "group": "2026-09-15/vision_live_tour_20260915",
+      "sha256": "2ee823d7d3b00a35b8ce45b4fdb42678aa358f49bc50a03c707ce44880fb79cc",
+      "expected_visual_screens": [
+        "PNC_BAG_CHEST_PREVIEW"
       ]
     },
     {
@@ -1066,6 +1096,16 @@
       "sha256": "949922560e3607bd020fa07a23369f547ca20a4787fc107992d0810e55d78867",
       "expected_visual_screens": [
         "PNC_ALLIANCE_JOIN"
+      ]
+    },
+    {
+      "image": "campaign_map_chapter_6_pulse.png",
+      "screen": "PNC_CAMPAIGN_MAP",
+      "split": "validation",
+      "group": "2026-09-15/vision_navigation_fix_20260915",
+      "sha256": "4b4e53ee39d8a76f4195b782d3434b73d2b8a23b17eb62ffdf4ed1d32846ba39",
+      "expected_visual_screens": [
+        "PNC_CAMPAIGN_MAP"
       ]
     }
   ]

@@ -1165,6 +1165,7 @@ def reviewed_navigation_edges() -> tuple[NavigationEdge, ...]:
         NavigationEdge(screen.PNC_CAMPAIGN_STAGE, selector.PNC_CAMPAIGN_CLOSE_BUTTON, frozenset({screen.PNC_CAMPAIGN_CHAPTER})),
         NavigationEdge(screen.PNC_HOME_CITY, selector.PNC_BOTTOM_NAV_QUEST, quest),
         NavigationEdge(screen.PNC_HOME_CITY, selector.PNC_BOTTOM_NAV_BAG, frozenset({screen.PNC_BAG})),
+        NavigationEdge(screen.PNC_BAG_CHEST_PREVIEW, selector.PNC_BAG_CHEST_PREVIEW_CLOSE, frozenset({screen.PNC_BAG})),
         NavigationEdge(screen.PNC_HOME_CITY, selector.PNC_BOTTOM_NAV_MAIL, frozenset({screen.PNC_MAIL_HUB})),
         NavigationEdge(screen.PNC_HOME_CITY, selector.PNC_CHAT_SHORTCUT, frozenset({screen.PNC_CHAT})),
         NavigationEdge(
@@ -1210,7 +1211,7 @@ def reviewed_navigation_edges() -> tuple[NavigationEdge, ...]:
     for source in (
         *sorted(quest, key=lambda value: value.name), screen.PNC_BAG,
         screen.PNC_INSTITUTE, screen.PNC_GODDESS_STATUE, screen.PNC_HALL_OF_WAR,
-        screen.PNC_SACRED_TREE, screen.PNC_VERSUS_CENTER,
+        screen.PNC_SACRED_TREE, screen.PNC_VERSUS_CENTER, screen.PNC_TRIAL_CHALLENGE,
         screen.PNC_WAREHOUSE, screen.PNC_HERO_HALL, screen.PNC_CASTLE,
     ):
         edges.append(NavigationEdge(source, selector.PNC_BACK_BUTTON_TOP_LEFT, frozenset({screen.PNC_HOME_CITY})))

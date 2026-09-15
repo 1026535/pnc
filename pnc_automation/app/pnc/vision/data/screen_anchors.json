@@ -959,6 +959,71 @@
       ]
     },
     {
+      "id": "bag_arena_chest_preview",
+      "layout_id": "bag_arena_chest_preview",
+      "screen": "PNC_BAG_CHEST_PREVIEW",
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/bag_arena_chest_preview.png",
+        "decoded_sha256": "2ee823d7d3b00a35b8ce45b4fdb42678aa358f49bc50a03c707ce44880fb79cc",
+        "capture_group": "2026-09-15/vision_live_tour_20260915"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Observed Arena Surprise Chest contents preview opened from Bag Treasure; the centered modal owns its measured upper-right gold X for explicit close and preserves the Bag background as occluded context.",
+        "build": "5.2.80",
+        "locale": "English",
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/bag_arena_chest_preview_title.png",
+          "search_region": [
+            80,
+            215,
+            400,
+            55
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/bag_arena_chest_preview_body.png",
+          "search_region": [
+            20,
+            270,
+            500,
+            80
+          ],
+          "threshold": 0.95
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BAG_CHEST_PREVIEW_CLOSE",
+          "anchor": {
+            "image": "screen_anchors/bag_arena_chest_preview_close.png",
+            "search_region": [
+              445,
+              195,
+              95,
+              85
+            ],
+            "threshold": 0.95
+          },
+          "dismisses_surface": true
+        }
+      ],
+      "modal_bounds": [
+        10,
+        210,
+        520,
+        535
+      ],
+      "occludes": [
+        "PNC_BAG"
+      ]
+    },
+    {
       "id": "institute",
       "screen": "PNC_INSTITUTE",
       "anchors": [
@@ -2812,6 +2877,61 @@
       "layout_id": "campaign_chapter_10"
     },
     {
+      "id": "campaign_map_chapter_6",
+      "screen": "PNC_CAMPAIGN_MAP",
+      "anchors": [
+        {
+          "image": "screen_anchors/campaign_chapter_6_title.png",
+          "search_region": [
+            178,
+            435,
+            185,
+            85
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/campaign_chapter_6_center_node.png",
+          "search_region": [
+            180,
+            210,
+            185,
+            105
+          ],
+          "threshold": 0.95
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_CAMPAIGN_HOME_PORTAL",
+          "anchor": {
+            "image": "screen_anchors/campaign_home_portal.png",
+            "search_region": [
+              466,
+              775,
+              55,
+              45
+            ],
+            "threshold": 0.95
+          }
+        }
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/campaign_map_chapter_6.png",
+        "decoded_sha256": "b7050284fd22c62309c70bfd8c06c2cb0b7956875b6611d2459ebd20f5cb85e4",
+        "capture_group": "2026-09-15/vision_live_tour_20260915"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Observed Chapter 6 Campaign map identity from the Marsh of Tear title row and central Mt. Blade node; the existing lower-right Home portal remains the only return control.",
+        "build": "5.2.80",
+        "locale": "English",
+        "qualification": "guarded_reference_only"
+      },
+      "layout_id": "campaign_map_chapter_6"
+    },
+    {
       "id": "campaign_stage_10_3",
       "screen": "PNC_CAMPAIGN_STAGE",
       "anchors": [
@@ -2879,6 +2999,61 @@
         "qualification": "guarded_reference_only"
       },
       "layout_id": "campaign_stage_10_3"
+    },
+    {
+      "id": "trial_challenge_live",
+      "screen": "PNC_TRIAL_CHALLENGE",
+      "anchors": [
+        {
+          "image": "screen_anchors/trial_challenge_title.png",
+          "search_region": [
+            90,
+            0,
+            350,
+            53
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/trial_challenge_hero_card.png",
+          "search_region": [
+            10,
+            156,
+            170,
+            125
+          ],
+          "threshold": 0.95
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/core_bag_pnc_back_button_top_left.png",
+            "search_region": [
+              22,
+              8,
+              58,
+              38
+            ],
+            "threshold": 0.93
+          }
+        }
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "tests/data/screen_recognition/trial_challenge.png",
+        "decoded_sha256": "a8eda616ad18961844c1763a01cb506e557ec390ff6dccadaf322042b6a48c24",
+        "capture_group": "2026-09-15/vision_live_tour_20260915"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Observed Tower of Trial destination opened directly as the Trial Challenge category list; only the measured top-left return arrow is owned.",
+        "build": "5.2.80",
+        "locale": "English",
+        "qualification": "guarded_reference_only"
+      },
+      "layout_id": "trial_challenge_live"
     },
     {
       "id": "gather_node_selected_resource",

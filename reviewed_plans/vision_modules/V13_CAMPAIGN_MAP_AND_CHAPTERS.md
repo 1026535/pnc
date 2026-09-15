@@ -5,15 +5,15 @@
 ## Current state and owners
 
 The [source fix](CONTEXT_AND_EVIDENCE.md#navigation-findings-retained-in-these-plans)
-recognizes Chapter6 and its bottom-right Home portal on `4d317db`; it is absent
-from main at `762cf84`. Reconcile the current base and reuse the reviewed
-Campaign-specific changes and fixtures here if missing. In `pnc_observation_enricher.py`, `_build_campaign_additions` still publishes only the reviewed Chapter10/Grandia Ruins and stage3 cases. `campaign_ocr_regions.py` contains those bounded regions. `navigation_core.py` and `tasks/campaign_task.py` own navigation and consumption.
+recognizes Chapter6 and its bottom-right Home portal on `4d317db`; its exact
+runtime changes and fixtures are ported after `ff38127`. Preserve that baseline
+and reconcile newer Campaign work before extending content. In `pnc_observation_enricher.py`, `_build_campaign_additions` still publishes only the reviewed Chapter10/Grandia Ruins and stage3 cases. `campaign_ocr_regions.py` contains those bounded regions. `navigation_core.py` and `tasks/campaign_task.py` own navigation and consumption.
 
 Use tour15, the Chapter6 pulse validation fixture, and the saved Chapter10/path/stage evidence in the [Campaign note](../../docs/game-reference/workflows/campaign-navigation.md). Old source-build conclusions do not prove today's visible control semantics.
 
 ## Implementation
 
-1. Establish or preserve the reviewed title-only Chapter6 anchor and bottom-right
+1. Preserve the integrated title-only Chapter6 anchor and bottom-right
    Home portal on this candidate. Reuse `campaign_map_chapter_6.png` and
    `campaign_map_chapter_6_pulse.png` with source-manifest provenance. Exclude the
    animated ring; the source's first loading frame does not justify UNKNOWN retry. Expand content within observed map/chapter layouts, without hardcoding the only readable chapter to10.

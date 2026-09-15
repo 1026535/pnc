@@ -61,6 +61,7 @@ TASK_OWNED_POPUP_SELECTOR_IDS = frozenset(
 
 TASK_OWNED_POPUP_SCREEN_TYPES = frozenset(
     {
+        ScreenType.PNC_BAG_CHEST_PREVIEW,
         ScreenType.PNC_BUILDING_UPGRADE_WARNING,
         ScreenType.PNC_BUILD_SPEEDUP_CONFIRM,
         ScreenType.PNC_MARCH_CONFIRM,

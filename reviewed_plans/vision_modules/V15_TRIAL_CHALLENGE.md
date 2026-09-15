@@ -8,16 +8,16 @@ Tour29 and `trial_challenge.png` from
 [source commit `4d317db`](CONTEXT_AND_EVIDENCE.md#navigation-findings-retained-in-these-plans)
 show Hero, Curio, Tech, Gear, Rune and Sauroi cards with progress, weekday/timer
 and lock indicators. That revision qualifies `PNC_TRIAL_CHALLENGE`, the measured
-top-left Home return and Tower's destination. Main at `762cf84` still maps Tower
-to `PNC_TOWER_OF_TRIAL` and lacks the fixture. Reuse the relevant source changes
-and provenance within this packet if still missing. They do not parse cards or
-prove trial entry/battle behavior.
+top-left Home return and Tower's destination. The exact runtime changes and
+fixture are ported after `ff38127`: Tower now maps to `PNC_TRIAL_CHALLENGE`.
+Preserve this baseline. It does not parse cards or prove trial entry/battle
+behavior.
 
 Extend the Trial feature producer in `app/pnc/vision`, current profiles/selectors, bounded OCR planning and `navigation_core.py`. Do not create a second Tower navigation controller.
 
 ## Implementation
 
-1. Establish or preserve Tower → `PNC_TRIAL_CHALLENGE` and its measured top-left
+1. Preserve Tower → `PNC_TRIAL_CHALLENGE` and its measured top-left
    Home return through the canonical catalog/navigation owner; reuse the source
    profile and fixture rather than adding a second Tower controller. Measure the
    category-card regions and selected/locked indicators under the proved layout. Read only displayed category labels, progress/floor, schedule and counters.

@@ -1,6 +1,6 @@
 # PNC vision roadmap — 43 implementation packets
 
-Updated: 2026-09-15. Status: **planning complete; implementation status not yet assessed against a new execution base**.
+Updated: 2026-09-15. Status: **planning complete; bounded Campaign/Trial/chest navigation correction ported; V01-V43 remain planned**.
 
 [Scope and architecture](PNC_VISION_MODULAR_PLAN.md) · [Building coverage](vision_modules/BUILDING_MENU_COVERAGE.md) · [Evidence](vision_modules/CONTEXT_AND_EVIDENCE.md) · [Dropped-plan replacements](vision_modules/PLAN_RETIREMENT.md)
 
@@ -10,9 +10,9 @@ Updated: 2026-09-15. Status: **planning complete; implementation status not yet 
 
 V01 uses the existing Bag Resource layout. The
 [retained navigation findings](vision_modules/CONTEXT_AND_EVIDENCE.md#navigation-findings-retained-in-these-plans)
-are source-revision evidence: main at `762cf84` lacks the earlier runtime fix.
-V11, V13 and V15 reuse its relevant changes within their feature slices when
-needed; there is no whole-fix prerequisite or extra legacy-vision workstream.
+document the earlier runtime fix and its exact port after `ff38127`.
+V11, V13 and V15 preserve the corrected recognition/returns and implement their
+remaining content and routes; these packets are not completed by the small fix.
 
 Continue with V09, V13 and V16 to establish Bag, Campaign and shared building-menu contracts. Their dependent features then reuse those contracts. This is the execution-order document; the individual packets remain authoritative for detailed scope, owners, evidence and validation.
 
@@ -157,10 +157,10 @@ This track is **not the final mandatory barrier for ordinary menus**:
 ### First assignments
 
 1. Reconcile the current branch/base and newer feature01/02/04 work against the
-   retained evidence. The source Campaign/Trial/chest fix is `4d317db`; main at
-   `762cf84` lacks its runtime changes. V11/V13/V15 own carrying forward those
-   relevant behaviors if absent; V01 starts independently from the existing Bag
-   profile. Preserve equivalents already integrated on newer bases.
+   retained evidence. The source Campaign/Trial/chest fix is `4d317db`; its
+   runtime changes and fixtures are ported after `ff38127`. Preserve that
+   baseline in V11/V13/V15 and scope their remaining content/routes. V01 starts
+   independently from the existing Bag profile.
 2. Assign **V01** and accept its qualification or necessary small integration correction.
 3. Assign **V02** and **V04** as the first independent feature slices.
 4. Take **V09** and **V13** next, then **V16** and the highest-priority ready W3 feature, typically V15 or a Bag tab.
@@ -192,7 +192,7 @@ Record status changes here in the following compact log; use the linked packet f
 
 | Packet | Status | Base / result commit | Evidence, supported coverage and remaining condition |
 |---|---|---|---|
-| — | No implementation status updates recorded by this roadmap | — | All 43 packets await reconciliation/dispatch; existing implementation is preserved. |
+| Baseline correction | Integrated with these plans; no packet completed | Exact runtime/fixture port of `4d317db` after `ff38127` | Chapter 6 recognition/Home portal, Tower destination/return and chest-preview ownership/close. V01-V43 remain planned; V11/V13/V15 retain their content and broader route acceptance. |
 
 To choose the next assignment: filter out integrated/accepted work as appropriate, check the packet's own dependencies and available evidence, then select the earliest useful ready item. A blocked packet is not a reason to repeat the same failed live action.
 

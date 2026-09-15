@@ -18,12 +18,13 @@ OpenCV is already integrated. V01 adapts and qualifies existing interfaces; it i
 ## Baseline and precedence
 
 Planning checkout: `codex/vision-modular-plan`, based on `4d317dbad066afca989dfa3b09d76bd1f7b82a02`. At planning time `origin/main` was `75153e76e940525dada3b5b4ae98093b5273ef7a`. The planning base includes the reviewed Campaign Chapter 6, Trial Challenge and
-Bag chest-preview fix from `codex/vision-navigation-fixes`. The main landing at
-`762cf84` contains the plans, not that runtime fix. The
+Bag chest-preview fix from `codex/vision-navigation-fixes`. The initial plan
+landing omitted that runtime fix; the bounded port after `ff38127` now includes
+its exact runtime changes and fixtures. The
 [retained navigation evidence](vision_modules/CONTEXT_AND_EVIDENCE.md#navigation-findings-retained-in-these-plans)
-records exact provenance and current gaps. V11, V13 and V15 absorb the relevant
-reviewed changes into their own feature work when absent; no separate legacy
-repair phase is required. V01 uses the already-supported Bag Resource layout.
+records provenance and remaining gaps. V11, V13 and V15 preserve this navigation
+baseline and implement their remaining content/feature work. This correction does
+not complete those packets. V01 still uses the existing Bag Resource layout.
 
 Before dispatch, reconcile the actual current commit and active feature work. Read current AGENTS.md, applicable skills and [core porting instructions](../instructions/CORE_WORKFLOW_PORTING.md). The user's latest fixed-map facts and this scoped vision objective supersede contradictory historical task goals. Existing feature plans retain ownership of their workflow and mutation contracts; this set supplies perception/navigation work within those boundaries. The [remaining feature scope map](PNC_CORE_REMAINING_VISION_BOUNDARY.md) removes overlapping V work from packages 03–06 and identifies their retained deliverables.
 

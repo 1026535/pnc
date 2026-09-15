@@ -12,10 +12,10 @@
 
 These components already exist. Use the supported Bag Resource layout
 (`tests/data/screen_recognition/bag.png` and its current profile) as the small
-integration specimen. The [source-fix assessment](CONTEXT_AND_EVIDENCE.md#navigation-findings-retained-in-these-plans)
-shows that chest-preview support is absent on the main landing base; V11 owns
-that feature. V01 must not depend on V11 or recreate the preview to qualify the
-shared path.
+integration specimen. The [navigation baseline](CONTEXT_AND_EVIDENCE.md#navigation-findings-retained-in-these-plans)
+now includes the bounded chest-preview recognition/close fix; V11 still owns its
+content and feature qualification. V01 must not depend on V11 or expand the
+preview to qualify the shared path.
 
 ## Implementation
 
