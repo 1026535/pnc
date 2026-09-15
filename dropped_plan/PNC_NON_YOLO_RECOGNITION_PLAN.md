@@ -1,9 +1,11 @@
 # Remaining screen recognition corrections before integration
 
+> **Status: DROPPED — superseded 2026-09-15.** This is historical evidence, not an active execution plan. Use the [modular vision plan](../reviewed_plans/PNC_VISION_MODULAR_PLAN.md) and [replacement/retained-requirement map](../reviewed_plans/vision_modules/PLAN_RETIREMENT.md). Historical ownership, accounts, budgets and resume instructions below are inactive. Retirement does not claim every historical defect is fixed.
+
 Reviewed September 13, 2026 against commit 850bdb747be79bb78363b8dca49a0097c6ed6546.
 This is the active remaining-work plan. Completed work and historical validation
-belong in the [implementation report](PNC_NON_YOLO_RECOGNITION_IMPLEMENTATION.md);
-the [capture findings](PNC_NON_YOLO_CAPTURE_FINDINGS_20260913.md) supply dated evidence.
+belong in the [implementation report](../reviewed_plans/PNC_NON_YOLO_RECOGNITION_IMPLEMENTATION.md);
+the [capture findings](../reviewed_plans/PNC_NON_YOLO_CAPTURE_FINDINGS_20260913.md) supply dated evidence.
 Neither an old test result nor a captured frame proves the work below is complete.
 
 ## Outcome and scope
@@ -225,7 +227,7 @@ state-changing evidence is necessary, record its exact missing fact and action s
 
 B owns the existing vision/publication/guard/region and perception-model owners,
 relevant selector assets, vision tests and offline qualification tools under the
-[coordinated boundary](PNC_AB_COORDINATED_CONTINUATION.md#exclusive-whole-file-ownership). A retains routes, workflows,
+[coordinated boundary](../reviewed_plans/PNC_AB_COORDINATED_CONTINUATION.md#exclusive-whole-file-ownership). A retains routes, workflows,
 runtime composition, authorization, executors, journal mechanisms, live-driving tools
 and consumer tests. Reuse published interfaces; do not port Research or other workflows
 to conceal a producer gap. Preserve the previously authorized narrow consumer-fixture

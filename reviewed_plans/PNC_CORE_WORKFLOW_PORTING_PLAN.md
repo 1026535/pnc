@@ -1,5 +1,9 @@
 # Core workflow port — independent remaining packages
 
+## Vision planning amendment — September 15
+
+The [modular vision plan](PNC_VISION_MODULAR_PLAN.md) now owns feature vision/menu planning. The older recognition plan, checklist and B follow-up are DROPPED; their links below retain historical evidence. Use the [retirement map](vision_modules/PLAN_RETIREMENT.md) to trace unfinished requirements. The six core feature plans keep their current workflow, caller, action and receipt ownership. No historical wait-for-B rule or queued recognition handoff blocks the new feature packets.
+
 ## Current purpose and execution boundary
 
 The September 14 instruction makes the six feature plans independently executable.
@@ -206,15 +210,15 @@ B's latest full fallback reports 1,941 passed/six skipped at `93798a6`; this val
 slice, not the combination with A's additional code. The original vision release has an
 installed-wheel check; the latest label/diagnostic slice changed no assets.
 
-## What B actually finished and what remains outside A
+## Historical B checkpoint and external dependencies
 
 The [implementation report](PNC_NON_YOLO_RECOGNITION_IMPLEMENTATION.md) explicitly calls
-`93798a6` the first remaining-plan slice. Its [checklist](PNC_NON_YOLO_RECOGNITION_REMAINING_CHECKLIST.md)
+`93798a6` the first remaining-plan slice. Its [checklist](../dropped_plan/PNC_NON_YOLO_RECOGNITION_REMAINING_CHECKLIST.md)
 still leaves shared guard/content region migration, removal of full-screen OCR, complete
 required-field gap diagnostics, independent qualification and captured-family dispositions
 unfinished. Zero additional OCR during diagnostic export is not zero full-screen OCR.
 
-B's [current vision plan](PNC_NON_YOLO_RECOGNITION_PLAN.md) supersedes the older coordination
+B's [archived vision plan](../dropped_plan/PNC_NON_YOLO_RECOGNITION_PLAN.md) superseded the older coordination
 plan's full-frame fallback allowance. A neither expands that fallback nor implements B's
 migration. Existing partial production behavior can support scoped offline workflow work;
 do not claim complete vision/zero-OCR or final Daily readiness from those checks. Before
@@ -565,11 +569,12 @@ That earlier continuation awaited qualified B evidence. B's batch is now merged,
 and the six feature plans own their remaining facts/consumers independently.
 Preserve the committed manual Hero single; do not replay it.
 
-The user's subsequent [B follow-up handoff](PNC_B_FOLLOWUP_RECOGNITION_HANDOFF.md)
-assigns B complete recognition implementation/qualification ownership of Resource
-partial cards, Hero summon/result controls and broader Research facts after its
-current work. It closes gaps in B's existing plan; it does not mark those
-dependencies delivered or transfer A's execution consumers.
+The historical [B follow-up handoff](../dropped_plan/PNC_B_FOLLOWUP_RECOGNITION_HANDOFF.md)
+is retired. The modular plan assigns Resource partial cards to V09, Hero
+summon/result recognition to V18, and broader Research to V05–07. Each feature
+owns its required producer/caller integration under the current ownership
+contract. Retirement does not mark those dependencies delivered or change
+the existing mutation executors and receipt requirements.
 
 ## Stop/report and completion
 

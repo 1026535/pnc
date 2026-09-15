@@ -1,5 +1,7 @@
 # Remaining non-YOLO recognition checklist
 
+> **Status: DROPPED — superseded 2026-09-15.** This is historical evidence, not an active execution plan. Use the [modular vision plan](../reviewed_plans/PNC_VISION_MODULAR_PLAN.md) and [replacement/retained-requirement map](../reviewed_plans/vision_modules/PLAN_RETIREMENT.md). Historical ownership, accounts, budgets and resume instructions below are inactive. Retirement does not claim every historical defect is fixed.
+
 ## Popup-recognition correction status (September 15, 2026)
 
 The popup slice is now implemented as demand-driven work shared by
