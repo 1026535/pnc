@@ -8800,9 +8800,14 @@ def _read_castle_name_field(
     )
     # A fragmented or partially detected label cannot become an exact identity.
     name = candidates[0] if len(candidates) == 1 else None
+    # The broad locator can include a small decorative glyph beside the name.
+    # Keep the native field authoritative while allowing only the observed
+    # sub-character horizontal inset; materially truncated reads still abstain.
+    completeness_tolerance = padding + max(2, round(line.bounds.height * 0.1))
     if name is not None and (
-        name.bounds.x > line.bounds.x + padding
-        or name.bounds.x + name.bounds.width < line.bounds.x + line.bounds.width - padding
+        name.bounds.x > line.bounds.x + completeness_tolerance
+        or name.bounds.x + name.bounds.width
+        < line.bounds.x + line.bounds.width - completeness_tolerance
     ):
         name = None
     ocr_context.record_required_field_diagnostic(

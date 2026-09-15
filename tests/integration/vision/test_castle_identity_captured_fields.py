@@ -51,6 +51,9 @@ from tests.support.pnc.capture_vision.fake_screenshot_session import _FakeScreen
 FIXTURE_ROOT = TEST_DATA_ROOT / "screen_recognition" / "castle_identity_variants"
 FIXTURES = ("castle_identity_0042.png", "castle_identity_0108.png")
 BOTTOM_FIXTURE = "castle_identity_3xx_holdout.png"
+DECORATED_NAME_FIXTURE = (
+    TEST_DATA_ROOT / "screen_recognition" / "castle_roster_decorated_name.png"
+)
 VIEWPORT = (900, 1600)
 SCALED_VIEWPORT = (540, 960)
 ROSTER_REGION = Bounds(180, 112, 558, 1472)
@@ -147,6 +150,8 @@ class _RosterOcrService:
                     _line("0 sticker", Bounds(201, 545, 86, 29)),
                     _line("NPC", Bounds(292, 545, 50, 29)),
                 )
+            elif self.refined_mode == "truncated":
+                lines = (_line("NPC", Bounds(300, 545, 42, 29)),)
             elif self.refined_mode == "unknown":
                 lines = ()
             else:
@@ -587,6 +592,43 @@ class CastleIdentityCapturedFieldTests(unittest.TestCase):
                         self.assertTrue(selected.bounds.contains_point(selected.action_point))
                         _assert_rapid_bounded(self, ocr, size)
 
+    def test_real_decorated_name_row_is_owned_by_native_field_in_both_paths(self) -> None:
+        """A small locator-only decoration must not discard the complete native name."""
+
+        with Image.open(DECORATED_NAME_FIXTURE) as source:
+            image = source.convert("RGB")
+        capture = _capture(image, session_id="castle:decorated-name:rapid")
+        expected = CastleIdentity("K290", "KetchupOnSteak", 19)
+        for producer in ("builder", "navigation"):
+            with self.subTest(producer=producer):
+                try:
+                    ocr = _BoundedRapidOcrService(RapidOcrService())
+                except Exception as exc:  # pragma: no cover - optional backend
+                    raise unittest.SkipTest(f"RapidOCR replay unavailable: {exc}") from exc
+                builder, navigation = _wire(ocr)
+                observation = (
+                    builder.build(
+                        capture,
+                        request=ObservationRequest.source_screen_retry(
+                            ScreenType.PNC_CASTLE_SELECTION,
+                        ),
+                    )
+                    if producer == "builder"
+                    else navigation.build(capture, include_content=True)
+                )
+                _assert_common_observation(self, observation, capture)
+                matches = tuple(
+                    entry
+                    for entry in observation.entries(ListEntryKind.CASTLE)
+                    if entry.title_text == expected.castle_name
+                    and entry.metadata.get("kingdom") == expected.kingdom
+                )
+                self.assertEqual(1, len(matches))
+                self.assertEqual(expected.castle_level, matches[0].metadata["castle_level"])
+                self.assertFalse(matches[0].selected)
+                self.assertTrue(matches[0].bounds.contains_point(matches[0].action_point))
+                _assert_rapid_bounded(self, ocr, image.size)
+
 
     def test_authoritative_old_spelling_remains_distinct_from_requested_target(self) -> None:
         """A no-space authoritative crop stays a different castle name under exact matching."""
@@ -613,7 +655,7 @@ class CastleIdentityCapturedFieldTests(unittest.TestCase):
         """An unusable refined name cannot create selected identity or a partial row."""
 
         capture = _capture(_load_fixture(FIXTURES[0]), session_id="castle:missing-name")
-        for mode in ("unknown", "fragmented"):
+        for mode in ("unknown", "fragmented", "truncated"):
             with self.subTest(mode=mode):
                 for producer in ("builder", "navigation"):
                     with self.subTest(producer=producer):
