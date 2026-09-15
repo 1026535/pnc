@@ -1,5 +1,7 @@
 # Puzzles & Conquest Trial Challenge Sub-Plan
 
+> **Status: DROPPED — historical plan.** Current vision/menu work is [V15 Trial Challenge](../reviewed_plans/vision_modules/V15_TRIAL_CHALLENGE.md) under the [modular plan](../reviewed_plans/PNC_VISION_MODULAR_PLAN.md). The historical route inventory below requires current evidence; its broader action/framework scope is not reactivated.
+
 ## 1. Purpose
 
 This document owns the Trial Challenge subtree that was split out of the main building-actions plan.

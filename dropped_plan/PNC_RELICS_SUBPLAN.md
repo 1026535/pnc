@@ -1,5 +1,7 @@
 # Puzzles & Conquest Relics Sub-Plan
 
+> **Status: DROPPED — historical plan.** Current vision/menu work is [V28 Sanctum and Relics](../reviewed_plans/vision_modules/V28_SANCTUM_RELICS.md) under the [modular plan](../reviewed_plans/PNC_VISION_MODULAR_PLAN.md). Historical rows/routes below are capture leads, not current implementation or action authority.
+
 ## 1. Purpose
 
 This document owns the Relics-specific navigation and row-destination mapping that was intentionally split out of the main building-actions plan.

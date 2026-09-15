@@ -1,5 +1,7 @@
 # B follow-up: Resource cards, Hero results and broader Research
 
+> **Status: DROPPED — superseded 2026-09-15.** This is historical evidence, not an active execution plan. Use the [modular vision plan](../reviewed_plans/PNC_VISION_MODULAR_PLAN.md) and [replacement/retained-requirement map](../reviewed_plans/vision_modules/PLAN_RETIREMENT.md). Historical ownership, accounts, budgets and resume instructions below are inactive. Retirement does not claim every historical defect is fixed.
+
 Date: September 13, 2026. Owner: B, the recognition task.
 
 ## Current scope amendment — September 14
@@ -16,7 +18,7 @@ summon/result recognition and broader Economy/Military/Fortification Research.
 Preserve the existing Development producer contract while extending broader
 categories, but do not independently redo feature 01's Institute correction.
 Shared container files are partitioned by feature symbols/profile/control keys;
-the [active ownership contract](PNC_CORE_WORKFLOW_PORTING_PLAN.md#six-remaining-agent-packages)
+the [active ownership contract](../reviewed_plans/PNC_CORE_WORKFLOW_PORTING_PLAN.md#six-remaining-agent-packages)
 supersedes the blanket whole-file restrictions below for the six packages.
 Generic vision-engine questions may be consulted occasionally; ordinary feature
 recognition is no longer a B delivery prerequisite.
@@ -60,7 +62,7 @@ below. Full task transcripts and the full extracted game source are unnecessary.
 | Research category/node/detail/requirements/queue facts, excluding Institute Home acquisition, now owned by feature 01 | Category/node selection policy, navigation edges, Start eligibility enforcement, mutation journal and caller integration |
 
 Use the existing vision owners and whole-file ownership in
-[A/B coordination](PNC_AB_COORDINATED_CONTINUATION.md). A's runtime, navigation,
+[A/B coordination](../reviewed_plans/PNC_AB_COORDINATED_CONTINUATION.md). A's runtime, navigation,
 workflows, action policy, authorizer, journal and mutation consumers remain A-owned.
 If a producer contract needs an addition, B owns its perception model/identifier
 change and documents the exact consumer adaptation for A. Do not move parsing or

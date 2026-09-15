@@ -1,5 +1,7 @@
 # Non-YOLO recognition implementation
 
+> **Historical implementation/evidence record.** Its execution plan and remaining checklist were retired on 2026-09-15. Use the [modular vision plan](PNC_VISION_MODULAR_PLAN.md) and [retirement map](vision_modules/PLAN_RETIREMENT.md) for current ownership and remaining work. Dated continuation instructions, baselines and permissions below are not current authority.
+
 ## Current continuation — September 13, 2026
 
 The implementation resumes the handoff in the existing dirty worktree at
@@ -10,7 +12,7 @@ merge was performed. The user subsequently authorized the review corrections
 before pushing this existing branch. The historical first-slice results below
 do not describe this continuation's acceptance.
 
-The [reconciled checklist](PNC_NON_YOLO_RECOGNITION_REMAINING_CHECKLIST.md)
+The [reconciled checklist](../dropped_plan/PNC_NON_YOLO_RECOGNITION_REMAINING_CHECKLIST.md)
 records the producer contracts, captured positives/negatives, and outstanding
 consumer and independent-evidence gates. Implementation and offline verification
 must be distinguished from promotion or combined-main workflow acceptance.
@@ -290,7 +292,7 @@ validation base are main commit `850bdb747be79bb78363b8dca49a0097c6ed6546`.
 The implementation described here was prepared on that plan commit and subsequently
 reviewed with the corrections below. It starts the plan; it does not complete or
 promote the full correction.
-The [remaining checklist](PNC_NON_YOLO_RECOGNITION_REMAINING_CHECKLIST.md) records
+The [remaining checklist](../dropped_plan/PNC_NON_YOLO_RECOGNITION_REMAINING_CHECKLIST.md) records
 working contracts, reproduced gaps and captured variants awaiting qualification.
 
 ### Producer contract and changed owners
@@ -575,7 +577,7 @@ and A's final producer/consumer integration remain required. Spending authorizat
 does not supply those observations or permit invented success/receipt facts.
 
 
-Current continuation and ownership are in [B's revised plan](PNC_NON_YOLO_RECOGNITION_PLAN.md)
+Current continuation and ownership are in [B's revised plan](../dropped_plan/PNC_NON_YOLO_RECOGNITION_PLAN.md)
 and the [shared A/B backlog](PNC_AB_COORDINATED_CONTINUATION.md). The foundation and
 Research production-builder correction are now integrated in main `2eacb12`; later
 combined candidate `8a7d1a9` was published and validated. Preserve the dated evidence

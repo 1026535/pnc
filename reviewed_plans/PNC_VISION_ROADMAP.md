@@ -1,0 +1,195 @@
+# PNC vision roadmap — 43 implementation packets
+
+Updated: 2026-09-15. Status: **planning complete; implementation status not yet assessed against a new execution base**.
+
+[Scope and architecture](PNC_VISION_MODULAR_PLAN.md) · [Building coverage](vision_modules/BUILDING_MENU_COVERAGE.md) · [Evidence](vision_modules/CONTEXT_AND_EVIDENCE.md) · [Dropped-plan replacements](vision_modules/PLAN_RETIREMENT.md)
+
+## Start here
+
+**First assignment: V01. Then prioritize V02 and V04.** This proves the existing vision integration, fixes Home acquisition/panning, and completes the Institute/Development inspection path that exposed the original OCR problem.
+
+Continue with V09, V13 and V16 to establish Bag, Campaign and shared building-menu contracts. Their dependent features then reuse those contracts. This is the execution-order document; the individual packets remain authoritative for detailed scope, owners, evidence and validation.
+
+The roadmap has **five delivery waves containing 39 packets**, plus **four packets on an availability-dependent track**. Every packet appears once in the tables below. Wave numbers express priority, not a barrier requiring every earlier packet to finish. Start a later packet when its own prerequisites are integrated and its work is the next useful available assignment.
+
+## Delivery overview
+
+| Wave | Packets | Count | Value delivered |
+|---|---|---:|---|
+| **W1 — Existing foundation** | V01 | 1 | One canonical OpenCV, OCR and observation path ready for feature work. |
+| **W2 — Home and reusable menu contracts** | V02, V04, V09, V13, V16 | 5 | Reliable Home targeting plus research, Bag, Campaign and building-menu foundations. |
+| **W3 — Requested feature flows** | V05–08, V10–12, V14–15, V17–18 | 11 | Broader research, Bag tabs, Campaign formation, Trial, construction and Hero result inspection. |
+| **W4 — Ordinary building menus** | V20–22, V27, V30–31, V34–38, V41–43 | 14 | Training/healing, equipment entry, defense, Alliance support and ordinary building details. |
+| **W5 — Equipment branches and deeper menus** | V23–26, V28–29, V39–40 | 8 | Equipment submenus, Relics, Sauroi, Pit and Bank. |
+| **E — Appearance, event and model availability** | V03, V19, V32–33 | 4 | Supported Home variants, qualified World detections and available event hubs. |
+| **Total** | V01–V43 | **43** | Named planning ownership; completion requires each supported feature's evidence. |
+
+```mermaid
+flowchart LR
+  F["V01 Existing vision contract"] --> H["V02 Home camera and targeting"]
+  F --> R["V04 Research contract"]
+  F --> B["V09 Bag contract"]
+  F --> C["V13 Campaign maps"]
+  F --> U["V16 Building menus"]
+  R --> RX["V05–07 Research categories"]
+  R -. reuse when suitable .-> A["V08 Alliance research"]
+  F --> A
+  B --> BX["V10–12 Bag tabs"]
+  C --> CX["V14 Stage and formation"]
+  U --> K["V17 Construction"]
+  H --> K
+  U --> G["V22 Blacksmith and Gear"]
+  G --> GX["V23–26 Equipment branches"]
+  H --> HV["V03 Qualified Home variants"]
+  HV --> EV["V32–33 Event hubs"]
+  F --> W["V19 World bridge"]
+  M["Qualified PNC model"] --> W
+```
+
+The diagram shows shared prerequisites, not every route dependency. The tables cover all 43 packets. **H** in a table means V02's current Home acquisition for the automated route. It does not block offline parsing of an already-saved menu frame. A parent dependency means the relevant shared contract is reviewed and integrated; unrelated missing variants do not delay work that can use an already-qualified contract.
+
+## W1 — Qualify the existing foundation
+
+| Packet | Prerequisite for its supported scope | Acceptance outcome |
+|---|---|---|
+| [V01 — Existing OpenCV and observation integration](vision_modules/V01_EXISTING_OPENCV_FOUNDATION.md) | Current baseline | One verified OpenCV/observation path; preserve working profiles and guards. |
+
+**Finish when:** the existing production path and extension points are verified, including both publishers and popup ownership. If current code already satisfies V01, a documented qualification is enough. Do not turn this into another OCR/backend comparison or rebuild already-working OpenCV integration.
+
+## W2 — Home and reusable menu contracts
+
+| Packet | Prerequisite for its supported scope | Acceptance outcome |
+|---|---|---|
+| [V02 — Home camera localization and atlas navigation](vision_modules/V02_HOME_CAMERA_AND_NAVIGATION.md) | V01 | Home camera localization, measured pan, fresh building acquisition and verified open/return. |
+| [V04 — Institute, Development research and shared research parsing](vision_modules/V04_INSTITUTE_DEVELOPMENT.md) | V01; H for route | Institute/Development node and detail inspection, scrolling and queue facts. |
+| [V09 — Bag shell, common cards and Resource inventory](vision_modules/V09_BAG_SHELL_AND_RESOURCES.md) | V01 | Bag tab/card contract and correct Resource partial-card handling. |
+| [V13 — Campaign map and chapter navigation](vision_modules/V13_CAMPAIGN_MAP_AND_CHAPTERS.md) | V01; H for route | Campaign map/chapter facts and the correct Home portal. |
+| [V16 — Building upgrade, prerequisites and queue menus](vision_modules/V16_BUILDING_UPGRADE_AND_QUEUES.md) | V01; H for route | Shared building upgrade, prerequisite and queue observations. |
+
+**Recommended order:** V02 and V04 first; V09 and V13 next; V16 next or earlier when it unblocks an active building caller. Feature parsing can proceed while V02's route proof is pending. Mark that split explicitly.
+
+**Finish when:** supported Home localization survives a pan and verifies the opened building; each shared menu producer has a reviewed typed result and current measured controls. A useful first acceptance route is Home → Institute → Development → matching node detail → Home. Bag, Campaign and generic-building contracts can land independently.
+
+## W3 — Complete the requested feature flows
+
+| Packet | Prerequisite for its supported scope | Acceptance outcome |
+|---|---|---|
+| [V05 — Economy research](vision_modules/V05_RESEARCH_ECONOMY.md) | V04; H for route | Economy node → matching detail → return. |
+| [V06 — Military research](vision_modules/V06_RESEARCH_MILITARY.md) | V04; H for route | Military node → matching detail → return. |
+| [V07 — Fortification research](vision_modules/V07_RESEARCH_FORTIFICATION.md) | V04; H for route | Fortification node → matching detail → return. |
+| [V08 — Alliance research categories, nodes and details](vision_modules/V08_ALLIANCE_RESEARCH.md) | V01; V04 reuse if compatible; Alliance access | Alliance categories, nodes and donation-detail facts without donating. |
+| [V10 — Bag Speedup cards and item details](vision_modules/V10_BAG_SPEEDUPS.md) | V09 | Speedup type/duration/quantity and safe item inspection. |
+| [V11 — Bag Treasure, chest previews and item details](vision_modules/V11_BAG_TREASURE_AND_PREVIEWS.md) | V09; baseline chest-preview fix | Treasure variants, possible-reward preview content and owned close. |
+| [V12 — Remaining Bag tabs on the supported layout](vision_modules/V12_BAG_REMAINING_TABS.md) | V09; remaining-tab inventory | The other evidenced Bag tabs, or an explicit no-additional-tabs result. |
+| [V14 — Campaign stage detail, Hero Formation and return](vision_modules/V14_CAMPAIGN_STAGE_AND_FORMATION.md) | V13; proved non-spending formation entry | Stage → actual Hero Formation → return, with honest stage context. |
+| [V15 — Trial Challenge cards and read-only details](vision_modules/V15_TRIAL_CHALLENGE.md) | V01; H for route | Trial card identity/state and one proved read-only detail family. |
+| [V17 — Construction slot menus and construction details](vision_modules/V17_CONSTRUCTION_AND_SLOTS.md) | V02 + V16; suitable slot for live route | Construction slot/menu/detail inspection, without constructing. |
+| [V18 — Hero Hall menu and saved recruitment result surfaces](vision_modules/V18_HERO_HALL_AND_RESULTS.md) | V01; H for route; saved result captures | Hero Hall and stable recruitment-result content without replaying recruitment. |
+
+**Recommended choices as prerequisites land:** V10/V11 and V14/V15 close the tour's most visible content gaps; V05–07 expand the working research pattern. V08 follows current Alliance access. V17 unlocks later construction/territory coverage. V18 uses saved result evidence; it must not create a recruitment merely for validation. V12 begins with the remaining-tab inventory.
+
+**Finish when:** each selected supported family can identify its content, inspect a safe target and return through its own route, with its limitations recorded. A blocked Alliance category, absent construction slot or unavailable Hero result blocks only that qualification; continue independent ready packets.
+
+## W4 — Cover ordinary building menus
+
+| Packet | Prerequisite for its supported scope | Acceptance outcome |
+|---|---|---|
+| [V20 — Barracks training and unit information](vision_modules/V20_BARRACKS_TRAINING.md) | V01 + V16; H for route | Barracks unit/tier information, queue presentation and information details. |
+| [V21 — Infirmary healing menus](vision_modules/V21_INFIRMARY_HEALING.md) | V01 + V16; H for route | Infirmary wounded/healing facts and owned information controls. |
+| [V22 — Blacksmith hub and Gear inventory](vision_modules/V22_BLACKSMITH_AND_GEAR.md) | V01 + V16; H for route | Blacksmith/Gear hub, inventory/detail and shared equipment primitives. |
+| [V27 — Market and resource-transport menus](vision_modules/V27_MARKET_TRANSPORT.md) | V01; V09 resource contract; H for route | Market recipient list and transport form kept semantically distinct. |
+| [V30 — Arena and Versus Center menus](vision_modules/V30_ARENA_VERSUS_CENTER.md) | V01; H for route | Versus Center/Arena rows and safe ranking/detail previews. |
+| [V31 — Sacred Tree and blessing records](vision_modules/V31_SACRED_TREE.md) | V01; H for route | Sacred Tree and Blessing Record content/return. |
+| [V34 — Wall and Defense Info menus](vision_modules/V34_WALL_DEFENSE.md) | V01 + V16; H for route | Wall/Defense Info facts and verified settled destination. |
+| [V35 — Watchtower reports and information](vision_modules/V35_WATCHTOWER.md) | V01 + V16; H for route | Watchtower empty/alert/report information where captured. |
+| [V36 — Trap Workshop and effect tables](vision_modules/V36_TRAP_WORKSHOP.md) | V01 + V16; H for route | Trap Workshop, Effect Table and observed queue facts. |
+| [V37 — Alliance Hall and reinforcement menus](vision_modules/V37_ALLIANCE_HALL_REINFORCEMENT.md) | V01 + V16; H for route; Alliance access | Preserved Alliance Hall/Reinforce rows plus missing information details. |
+| [V38 — Hall of War and rally information](vision_modules/V38_HALL_OF_WAR.md) | V01 + V16; H for route | Hall of War rally/status and information/Glory Level detail. |
+| [V41 — Castle and Territory Overview](vision_modules/V41_CASTLE_TERRITORY.md) | V01 + V16 + V17; H for route | Castle/Territory Overview without confusing Go, Build and Unlock. |
+| [V42 — Warehouse, resource buildings and Recruiting Center details](vision_modules/V42_UTILITY_BUILDING_DETAILS.md) | V01 + V16; H for route | Warehouse/resource/Recruiting Center shared details with exact building identity. |
+| [V43 — Goddess Statue menu and information](vision_modules/V43_GODDESS_STATUE.md) | V01 + V16; H for route | Goddess Statue attributes and current versus preview state. |
+
+**Recommended choices:** V22 first where useful because it unlocks four equipment packets. V30, V31 and V38 already have useful captured hub/return evidence; preserve it and add missing semantics. V20/V21 address training/healing presentation. Order the remainder by a current caller need and available captures rather than touring every building first.
+
+**Finish when:** each supported menu family reuses the shared entry/upgrade machinery, publishes its own content and owns its popups/return. Four Barracks or multiple utility buildings may share a parser, but exact building identity and demonstrated layout compatibility remain required.
+
+## W5 — Equipment branches and deeper menus
+
+| Packet | Prerequisite for its supported scope | Acceptance outcome |
+|---|---|---|
+| [V23 — Gem and Saurgem inventories](vision_modules/V23_GEM_AND_SAURGEM.md) | V22; evidence for each included family | Gem/Saurgem identities, slot/item facts and inspection. |
+| [V24 — Warsigil menu and details](vision_modules/V24_WARSIGIL.md) | V22 | Warsigil inventory/loadout presentation and information. |
+| [V25 — Hero Curio inventory and details](vision_modules/V25_HERO_CURIO.md) | V22 | Hero Curio inventory, equipped association and details. |
+| [V26 — Ascend menu and requirement details](vision_modules/V26_ASCEND.md) | V22 | Ascend target/requirements/preview facts without ascending. |
+| [V28 — Sanctum and Relics menus](vision_modules/V28_SANCTUM_RELICS.md) | V01; H for route; reuse existing card helpers if suitable | Sanctum/Relics tabs, sets, owned pieces and effect details. |
+| [V29 — Sauroi Lair and Sauregg menus](vision_modules/V29_SAUROI_AND_SAUREGG.md) | V01; H for route; V03 for a variant-specific route | Current Sauroi Lair/Sauregg menu and information. |
+| [V39 — Pit and Rare Earth menus](vision_modules/V39_PIT_RARE_EARTH.md) | V01; H for route; current Pit endpoint | Pit/Rare Earth information, explicit entry/return and no dispatch. |
+| [V40 — Bank and current Treasure Cave endpoint](vision_modules/V40_BANK_TREASURE_CAVE.md) | V01; H for route; current Bank endpoint | Bank's actual current menu and terms/status information. |
+
+**Recommended choices:** V23–26 can start as soon as V22's contract lands, even while other W4 buildings remain. V28 reuses only compatible existing item primitives; it does not require a new general inventory framework. V29's ordinary available Lair menu can proceed before seasonal qualification. V39/V40 begin by resolving their current endpoints.
+
+**Finish when:** the supported family has an explicit current menu/detail/return contract. If capture discovery reveals a substantially different subtree, split that work into a named follow-on before expanding the packet. A declared enum or an old source-code route does not satisfy acceptance.
+
+## E — Work when the required evidence is available
+
+| Packet | Prerequisite for its supported scope | Acceptance outcome |
+|---|---|---|
+| [V03 — Home appearances, seasonal references and event slots](vision_modules/V03_HOME_APPEARANCES_AND_EVENT_SLOTS.md) | V02; captures for each appearance/slot variant | Qualified seasonal references, present/empty/unknown event slots and Sauroi variants. |
+| [V19 — Qualified World detections into current navigation](vision_modules/V19_WORLD_PERCEPTION_BRIDGE.md) | V01; qualified current PNC model/class contract | One qualified World object class through canonical perception and inspection. |
+| [V32 — Dragondom event-building menus](vision_modules/V32_DRAGONDOM_EVENT.md) | V01 + V02; V03's relevant slot proof; event evidence | Current Dragondom hub and one read-only detail/return. |
+| [V33 — Lost City Headquarters event menus](vision_modules/V33_LOST_CITY_HEADQUARTERS.md) | V01 + V02; V03's relevant slot proof; event evidence | Verified Lost City ID/slot, current hub and read-only detail/return. |
+
+This track is **not the final mandatory barrier for ordinary menus**:
+
+- Start V03 once V02 is stable and a useful variant capture exists. Track ordinary/seasonal appearance, each event slot and Sauroi variants separately. A missing Christmas capture does not block an already-proved event-slot contract.
+- V32/V33 depend on their relevant occupancy/identity proof, not on every V03 variant. Absent events remain pending; no need to wait for an event during another packet.
+- V19 starts from the current model owner's actual qualified export/class evidence. Its runtime integration is separate from training and cannot block Home or menu work.
+- Other packets can also lack captures or access. Record the exact blocker against that packet instead of moving all work into an indefinite research phase.
+
+## Dispatch and integration
+
+### First assignments
+
+1. Reconcile the current branch/base and any newer feature01/02/04 work. The planning base was `4d317dbad066afca989dfa3b09d76bd1f7b82a02`, including the Campaign/Trial/chest-return fix. Do not assume every dependency is on main.
+2. Assign **V01** and accept its qualification or necessary small integration correction.
+3. Assign **V02** and **V04** as the first independent feature slices.
+4. Take **V09** and **V13** next, then **V16** and the highest-priority ready W3 feature, typically V15 or a Bag tab.
+5. Continue from the earliest useful ready packet. A dependency that is only needed for live Home entry may remain pending while offline producer work proceeds.
+
+### One coherent packet per Luna xhigh worker
+
+Use the dispatch prompt in the plan index. Each worker owns its feature's producer, controls, navigation/callers and proof. This roadmap does not start workers or authorize implementation by itself.
+
+When implementation is requested, **two concurrent feature workers** are a practical starting arrangement. Increase concurrency only when their symbols/profile IDs are independent and shared contracts are already integrated. Keep one owner for Home localization, common research, common Bag and common equipment helpers. A small shared correction belongs to that owner and should land before dependent feature edits.
+
+One worker at a time holds the configured testing instance for dependent live steps. Other workers can use saved evidence/offline checks. Coordinate by feature symbols and profile/control keys rather than assigning the entire enricher file to one worker. Do not revive the dropped A/B wait rules.
+
+### Acceptance and integration gates
+
+- **Contract ready:** the dependency's consumed interface is reviewed, tested and present on the worker's base.
+- **Offline ready:** the changed parser/control path passes relevant real-capture checks through both production publishers. Synthetic semantic tests supplement those checks.
+- **Route qualified:** the packet's required non-spending route passes, or the exact unavailable boundary is recorded as pending. A current screenshot and process exit do not prove the route.
+- **Accepted for stated coverage:** the supported layouts, behavior, review and required checks are complete; unresolved variants remain explicitly listed.
+- **Integrated:** the exact accepted change is combined with its dependencies and the required combined checks pass. Commit/push follows the implementation task's delivery authorization.
+
+Run the smallest useful packet validation and the repository-required affected checks. Reserve broader integration checks for shared-contract changes or the combined branch; do not repeat a full suite for every menu. No additional broad live tour, resource spending or account/castle switching is introduced by this roadmap.
+
+## Progress tracking
+
+At creation, every packet's dispatch status is **Planned**. This is not a claim that the underlying feature has no existing implementation. Before assigning a packet, reconcile what is already landed and record only its remaining delta.
+
+Record status changes here in the following compact log; use the linked packet for detailed evidence. Valid statuses: **In progress**, **Offline ready**, **Accepted for stated coverage**, **Integrated**, or **Blocked: exact prerequisite**. A partial qualification must name the supported and pending surfaces.
+
+| Packet | Status | Base / result commit | Evidence, supported coverage and remaining condition |
+|---|---|---|---|
+| — | No implementation status updates recorded by this roadmap | — | All 43 packets await reconciliation/dispatch; existing implementation is preserved. |
+
+To choose the next assignment: filter out integrated/accepted work as appropriate, check the packet's own dependencies and available evidence, then select the earliest useful ready item. A blocked packet is not a reason to repeat the same failed live action.
+
+## Roadmap completion
+
+The first useful milestone is reliable Home → Institute research inspection. The next is the requested Home/research/Bag/Campaign/Trial coverage, followed by ordinary building and equipment families.
+
+Full roadmap completion means all 43 packets have an accepted disposition with exact supported coverage and required integration proof. Blocked required interfaces remain incomplete; do not report “all buildings supported” while hiding unqualified menus. New events or substantially different future layouts remain explicit follow-on scope.
+
+This roadmap updates sequencing only. The [modular plan](PNC_VISION_MODULAR_PLAN.md) owns architecture/validation policy, individual packets own feature details, and the [retirement map](vision_modules/PLAN_RETIREMENT.md) preserves requirements from dropped plans.

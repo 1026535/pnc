@@ -1,5 +1,7 @@
 # Puzzles & Conquest Building Actions Sub-Plan
 
+> **Status: DROPPED — retained in its existing historical archive.** The current [building-menu coverage map](../vision_modules/BUILDING_MENU_COVERAGE.md) replaces this document's vision/menu planning scope. Core feature plans retain current action/caller requirements; this historical action-policy roadmap is not imported by the new vision plans. See the [retirement map](../vision_modules/PLAN_RETIREMENT.md).
+
 ## 1. Purpose
 
 This document starts the canonical feature plan for home-city building automation beyond the current narrow `building_upgrade` tracer bullet.

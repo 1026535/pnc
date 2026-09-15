@@ -1,5 +1,9 @@
 # A/B remaining work: complete vision and workflow components
 
+## Vision handoff superseded — September 15
+
+The old recognition plan, checklist and queued B follow-up are now DROPPED. Use the [modular vision plan](PNC_VISION_MODULAR_PLAN.md) for feature-owned vision/menu work and its [retirement map](vision_modules/PLAN_RETIREMENT.md) for retained requirements. Resource fragments, Hero result recognition and broader Research now belong to V09, V18 and V05–07. The six core feature plans retain their action/caller/receipt requirements. Historical A/B scheduling and whole-file ownership below do not resume or block the new packets.
+
 ## Current ownership amendment — September 14
 
 The user reports the A/B merge is complete; the published integration branch was
@@ -50,7 +54,7 @@ producer-blocked execution and separate user/live prerequisites. Use that split
 instead of treating every remaining A port as blocked on B.
 
 The user subsequently requested a queued
-[B recognition follow-up handoff](PNC_B_FOLLOWUP_RECOGNITION_HANDOFF.md). After
+[B recognition follow-up handoff](../dropped_plan/PNC_B_FOLLOWUP_RECOGNITION_HANDOFF.md). After
 finishing its current work, B takes complete producer implementation and
 qualification ownership of Resource partial-card handling, Hero summon/result
 recognition and broader Research facts. The handoff includes the saved evidence,
