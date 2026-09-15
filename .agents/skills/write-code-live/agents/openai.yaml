@@ -1,4 +1,4 @@
 interface:
   display_name: "Write Code Live"
-  short_description: "Code with authorized live resource spending"
-  default_prompt: "Use $write-code-live to implement this change with bounded live testing and explicitly authorized resource spending."
+  short_description: "Code with profile-governed live spending"
+  default_prompt: "Use $write-code-live to implement this change with exploration spending governed by the live profile and strict limits where required."

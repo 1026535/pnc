@@ -10,10 +10,10 @@ Create a plan that another engineer can execute and verify without prescribing w
 ## Workflow
 
 1. Infer the objective and scope from the request and repository. Ask only when a missing choice would materially change the design.
-2. Inspect the current owner, callers, tests, config, relevant plans, and recent UI/runtime evidence. Research official external documentation only when it affects the design.
+2. Inspect the current owner, callers, tests, config, relevant plans, and UI/runtime evidence. For live-dependent work, establish evidence readiness before fixing material UI assumptions. Research official external documentation only when it affects the design.
 3. Describe the current state and the smallest target design that satisfies the requirement.
 4. Break work into deliverables with concrete acceptance checks and dependencies.
-5. Match validation to risk: focused or affected offline tests for ordinary slices, full validation only for broad integration, and live proof only for behavior that depends on current emulator state.
+5. Plan coherent behavioral batches, focused or affected offline checks, trigger-based live checkpoints for changed runtime boundaries, and final acceptance across distinct feature-owned use cases.
 6. State material assumptions, tradeoffs, migration needs, and unresolved decisions.
 
 ## Proportional Planning
@@ -28,9 +28,9 @@ Create a plan that another engineer can execute and verify without prescribing w
 
 ## Live Evidence
 
-Use deterministic tests, fixtures, and saved UI/runtime artifacts first. Read [references/live-evidence.md](references/live-evidence.md) only when an unresolved current UI, selector, navigation, or emulator fact could materially change the plan and existing evidence is insufficient.
+Read [references/live-evidence.md](references/live-evidence.md) for emulator/UI-dependent planning. It defines when saved evidence is sufficient and when pre-implementation exploration is required.
 
-Planning does not automatically require launching BlueStacks. When live evidence is justified, use one bounded, non-spending observation targeted at the decision. Stop at any mutation boundary. Read [references/implementation-live-validation.md](references/implementation-live-validation.md) only when the plan actually changes a live runtime boundary.
+Planning alone does not authorize BlueStacks access or game mutation. When live work is authorized, follow [test-bluestacks-live](../test-bluestacks-live/SKILL.md). Read [references/implementation-live-validation.md](references/implementation-live-validation.md) when the plan changes a live runtime boundary.
 
 Use multi-target matrices only when the feature contract names multiple targets or repository evidence shows meaningful target-specific variation. Do not require identical proof across interchangeable targets.
 
@@ -47,5 +47,5 @@ Before finishing, confirm that:
 - the design solves the requested outcome through one canonical path;
 - each step has a useful deliverable and observable acceptance check;
 - validation is sufficient but not repetitive;
-- live work is included only where offline evidence cannot prove the behavior; and
+- live exploration, checkpoints, and acceptance are assigned to the phase that can efficiently prove the behavior; and
 - material unknowns are explicit without expanding minor possibilities into design requirements.

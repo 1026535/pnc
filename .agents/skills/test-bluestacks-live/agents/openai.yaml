@@ -1,4 +1,4 @@
 interface:
   display_name: "Test BlueStacks Live"
-  short_description: "Run opt-in BlueStacks live smoke checks"
-  default_prompt: "Use $test-bluestacks-live to run the smallest BlueStacks proof needed for this live boundary."
+  short_description: "Explore and validate live BlueStacks behavior"
+  default_prompt: "Use $test-bluestacks-live to gather the live evidence needed for exploration, a development checkpoint, or acceptance."

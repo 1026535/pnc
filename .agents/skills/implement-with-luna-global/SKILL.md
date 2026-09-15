@@ -16,17 +16,20 @@ The root owns requirements, architecture, integration, formal review, acceptance
 
 ## Dispatch
 
-Before delegation, resolve material behavior, ownership, interfaces, migration, and acceptance criteria from an approved plan or the conversation. Do not create planning or tracking artifacts solely for this workflow.
+Before delegation, resolve material behavior, ownership, interfaces, migration, and acceptance criteria from an approved plan or the conversation. For live-dependent work, also establish evidence readiness and the substantial batch boundary. Do not create planning or tracking artifacts solely for this workflow.
 
 Give the worker only decision-relevant context:
 
 - objective, exact scope, worktree, and pre-existing changes to preserve;
 - authoritative repository instructions and design;
 - required behavior, non-goals, and migration;
-- proportionate validation and any live boundary; and
+- evidence references, live boundary, checkpoint triggers, and acceptance cases when applicable;
+- proportionate offline validation; and
 - handoff requirements: changed files, tests/results, self-review corrections, and unresolved implementation issues.
 
 Link authoritative files instead of copying them. Do not ask Luna to redesign settled architecture or repeat completed research.
+
+Workers implement coherent batches while supplied assumptions remain supported and escalate a material new assumption rather than requesting live probes after each edit. The root coordinates live access through the canonical lease and may reuse adequate worker evidence instead of replaying it reflexively.
 
 ## Coordination
 
@@ -43,6 +46,6 @@ Only one agent writes a worktree. The root may inspect read-only while Luna work
 3. Send concrete corrections back to the same worker when practical. Repeat only while actionable findings remain.
 4. Finish when the root finds no actionable issue and required validation is satisfactory.
 
-Use [write-code](../write-code/SKILL.md) for implementation guidance, [test-bluestacks-live](../test-bluestacks-live/SKILL.md) when a live boundary truly requires proof, and [write-code-live](../write-code-live/SKILL.md) only for authorized spending.
+Use [write-code](../write-code/SKILL.md) for implementation guidance, [test-bluestacks-live](../test-bluestacks-live/SKILL.md) for readiness, checkpoints, and acceptance, and [write-code-live](../write-code-live/SKILL.md) for resource authorization modes.
 
 Do not push, publish, deploy, or perform another consequential action unless authorized. Do not add coordinators, ledgers, lock protocols, fixed phase counts, or checkpoint ceremonies without a concrete need.

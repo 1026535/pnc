@@ -1,30 +1,31 @@
 ---
 name: test-bluestacks-live
-description: Run bounded live BlueStacks validation for PNC behavior that depends on ADB, emulator state, current UI, selectors, or navigation. Use for explicit live-test requests or when offline evidence cannot prove a changed live boundary.
+description: Explore, checkpoint, or accept PNC behavior through BlueStacks when current UI, ADB, selectors, navigation, timing, or real transitions materially affect the work.
 ---
 
 # Test BlueStacks Live
 
-Use live validation only when its fidelity is needed. Prefer deterministic offline tests and saved screenshots for behavior they can prove. Do not spend emulator time, host resources, or live actions on protection whose realistic likelihood-and-impact reduction is negligible.
+Use live evidence where its fidelity changes implementation or acceptance. Separate pre-implementation exploration, development checkpoints, and final acceptance; they do not share one universal smoke rule.
+
+Read [references/live-phases.md](references/live-phases.md) to select and execute the phase. Read [references/failure-handling.md](references/failure-handling.md) only after a failure or when manual recovery may establish a feature precondition.
 
 ## Safety
 
 - Resolve the account, castle, display name, role, ADB path, and BlueStacks config through repository config and the canonical runtime. Do not hard-code ports or device IDs.
-- Treat `accounts[].live_roles` as authority. If no castle is named, use the active castle on the configured `testing` instance; never switch accounts or castles without explicit authorization.
+- Treat `accounts[].live_roles` as authority. The `live_testing` role supplies standing authority for bounded agent-led exploration on that configured target; other roles authorize only their named modes. An explicit current-task instruction may narrow this authority. If no castle is named, use the active castle on the configured `testing` instance; never switch accounts or castles without explicit authorization.
 - Acquire the canonical process-scoped lease before ADB access. Keep one reservation across dependent steps and declare a multi-instance bundle up front.
 - The outer live phase owns cleanup. Preserve instances that were already running unless the task explicitly authorizes closing them.
-- Default to non-spending actions. If validation may spend resources, use [write-code-live](../write-code-live/SKILL.md) with the exact action, target, and budget.
+- For any resource-consuming phase, follow [write-code-live](../write-code-live/SKILL.md). Its exploration mode permits non-premium, non-protected in-game resources without a numeric per-action budget and treats diamonds as non-premium; its strict mode governs canaries, unattended execution, protected or irreversible actions, and uncertain retries.
 - Do not modify local config merely to make a smoke test pass.
 
 ## Workflow
 
-1. Run the smallest relevant offline group or affected selection. Do not run the full suite merely because a live test follows.
-2. Choose one smoke path that exercises the changed boundary.
-3. Acquire the scoped runtime, verify fresh identity and screen state, and capture a baseline.
-4. Perform one bounded action or workflow and capture the observable postcondition.
-5. On failure, inspect screenshots, OCR, observations, and logs under `.local-data/artifacts/`. Change code or state only when the evidence supports it, then rerun the same proof.
-6. Stop repeated attempts that produce the same evidence without a new diagnosis. Add an offline regression for a reproducible live defect when practical.
-7. End at a stable screen when the existing flow supports it and apply the outer phase's cleanup decision.
+1. Classify the phase and its questions or acceptance cases.
+2. Run focused offline checks before validating modified code; discovery of not-yet-implemented behavior does not require tests for that future code.
+3. Acquire one scoped runtime for the connected work, verify fresh identity and state, and capture a baseline.
+4. Exercise the phase's related questions or distinct cases through production boundaries and capture observable results.
+5. Preserve reusable evidence and add an offline regression for a reproducible defect when practical.
+6. End at a stable screen when supported and apply the outer phase's cleanup decision.
 
 Run multiple castles or instances only when the contract names them, configuration differs materially, or observed behavior is target-dependent.
 
@@ -42,8 +43,8 @@ Use selector or host-management commands only when that subsystem is in scope. I
 
 ## Stop Conditions
 
-Stop the affected live action when identity cannot be verified, the screen or selector is ambiguous, ADB cannot become responsive within its configured bound, the next action crosses an unauthorized mutation boundary, or the authorized budget is exhausted. Preserve the last useful artifact and continue safe offline diagnosis when possible.
+Stop the affected action when identity cannot be verified, the next action would be blind or cross an unauthorized/protected boundary, ADB cannot recover within its configured bound, an acceptance limit is exhausted, or further attempts repeat unchanged evidence. Preserve the last useful artifact and continue independent safe work where possible.
 
 ## Report
 
-State the target, offline and live commands, observed result, relevant artifact paths, cleanup decision, and any material blocker. A process exit alone is not proof of the UI postcondition.
+State the phase, target, questions or use cases, commands, observed results, relevant artifacts, resource mode, cleanup decision, and material limitations. A process exit alone is not proof of the UI postcondition.

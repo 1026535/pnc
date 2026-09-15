@@ -10,9 +10,9 @@ Implement the requested behavior through the smallest maintainable change and ve
 ## Workflow
 
 1. Read the affected owner, callers, tests, config, and any approved plan.
-2. Establish PNC game behavior from user-confirmed facts, deterministic tests and fixtures, and saved or live UI/runtime evidence. Research official external documentation only when it can change the implementation.
+2. For live-dependent behavior, use [test-bluestacks-live](../test-bluestacks-live/SKILL.md) to establish evidence readiness before encoding material UI or emulator assumptions. Research official external documentation only when it can change the implementation.
 3. Choose the simplest design that fully satisfies the request. Reuse canonical interfaces and refactor only when needed to avoid real duplication or conflicting ownership.
-4. Implement a coherent slice and add focused tests for changed behavior or likely regressions.
+4. Implement a substantial coherent behavioral batch and add focused tests for changed behavior or likely regressions.
 5. Run the narrowest relevant validation, then the repository's affected selection when the change has broader consumers.
 6. For behavior that depends on live PNC or emulator state, follow the live section below.
 7. Report the result, validation, and material remaining risk.
@@ -39,15 +39,11 @@ Use the repository runner described in `AGENTS.md`:
 
 ## Live-Dependent Changes
 
-Use [test-bluestacks-live](../test-bluestacks-live/SKILL.md) only when offline evidence cannot prove the changed boundary.
+Follow the readiness, coherent-batch, checkpoint, and use-case acceptance rules in [test-bluestacks-live](../test-bluestacks-live/SKILL.md). Live work is not required for documentation, internal refactors, or behavior fully proven below the emulator boundary.
 
-1. Define one observable precondition and success condition.
-2. Run focused offline tests.
-3. Execute the smallest non-spending live probe through the canonical runtime and preserve the relevant artifacts.
-4. If it fails, inspect the evidence, make a meaningful fix, and rerun that proof. Stop repeated attempts with unchanged evidence.
-5. Convert a reproducible live defect into an offline regression when practical.
+Do not stop after each edit. Finish the current coherent batch, then checkpoint its runnable changed boundary before the next batch depends on it. Interrupt the batch early only for safety, a contradicted material assumption, or a dependency that cannot progress without live evidence; also checkpoint when evidence is invalidated or acceptance is due. Batch related questions in one reservation. Convert reproducible live defects into offline regressions when practical.
 
-A live check is not required for documentation, internal refactors, or behavior fully proven below the emulator boundary. Use [write-code-live](../write-code-live/SKILL.md) when proof may spend resources.
+Use [write-code-live](../write-code-live/SKILL.md) for any resource-consuming live work. It distinguishes exploration without a numeric non-premium-resource budget from strictly limited canaries, unattended execution, protected or irreversible actions, and uncertain retries.
 
 ## Completion
 

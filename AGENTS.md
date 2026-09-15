@@ -22,7 +22,7 @@
 1. Inspect only the code, tests, configs, artifacts, and plans needed to understand the affected behavior and owner.
 2. Research current external behavior only when it can change the answer. Prefer official or primary sources and cite sources that materially shape the result.
 3. Keep plans compact and acceptance-focused. Save a plan only when requested or required by the planning workflow.
-4. Implement small, coherent changes through existing interfaces. After a risky slice, run the narrowest relevant check.
+4. Implement coherent changes through existing interfaces. For emulator/UI-dependent work, establish evidence readiness first and use substantial batches bounded by supported assumptions and the live-checkpoint rules.
 5. Inspect actual failure evidence before changing code. Iterate while new evidence or a meaningful fix exists; stop repeated attempts that reproduce the same result without changing the diagnosis.
 6. Report the outcome, changed files, validation results, and any material remaining risk or blocker.
 
@@ -49,10 +49,11 @@
 
 ## Game Behavior Evidence
 
-- Establish game behavior from user-confirmed facts, deterministic tests and fixtures, saved UI/runtime artifacts, and, when necessary, one bounded observation through the existing live workflow.
+- Before planning or implementing emulator/UI-dependent behavior, establish whether saved evidence and deterministic checks demonstrably support the material assumptions in the applicable current context. Otherwise explore through the live workflow before coding dependent behavior.
+- Treat a fixture pass as proof against that fixture, not by itself as proof of the current game. Judge evidence by provenance, applicability, covered transitions and postconditions, and newer contradictions rather than a universal age limit.
 - Distinguish user-confirmed, repository-proven, artifact-observed, live-observed, inferred, and unknown findings. Resolve material conflicts with current UI observations.
 - Add or correct a scoped workflow note when the task establishes reusable behavior. Include artifact or workflow provenance, the observation date and build when available, confidence, automation implications, and remaining uncertainty.
-- Keep generated screenshots, observations, logs, and indexes under ignored `.local-data/`. If evidence is absent, reproduce it through the supported UI workflow or report the gap; absence alone does not authorize live access, account changes, or resource spending.
+- Keep generated screenshots, observations, logs, and indexes under ignored `.local-data/`. If evidence is absent, reproduce it through the supported UI workflow when the configured live authority permits it, or report the gap. Evidence gaps never authorize account changes or spending outside the live policy below.
 
 ## Local Data, Config, And Secrets
 
@@ -74,14 +75,18 @@
 
 ## Live BlueStacks Validation
 
-Use `.agents/skills/test-bluestacks-live` when the request or changed behavior depends on ADB, emulator state, live UI timing, selectors, navigation, or a real workflow transition.
+Use `.agents/skills/test-bluestacks-live` for live exploration, development checkpoints, and acceptance when behavior depends on ADB, emulator state, live UI timing, selectors, navigation, or a real workflow transition.
 
-- Prefer saved evidence and offline tests. Run one smallest relevant live smoke; do not run every flag, castle, or instance unless the contract or observed variability requires it.
-- Resolve targets from config, treat `accounts[].live_roles` as authority, and use configured ADB paths and instance resolution.
+- Explore before implementation by default unless inspected saved evidence and relevant offline checks pass the skill's readiness gate. Keep one scoped session across connected questions instead of stopping after each action.
+- During implementation, finish substantial coherent batches with focused offline checks. Checkpoint after the current batch reaches a runnable live boundary and before another batch depends on it, when evidence is invalidated, or when acceptance is due. A helper or selector merely becoming runnable mid-batch is not enough; interrupt a batch early only for safety, a contradicted material assumption, or a dependency that cannot progress without live evidence.
+- Final acceptance covers every distinct feature-owned use case. Use representative targets unless the contract or observed variability requires more.
+- Resolve targets from config and use configured ADB paths and instance resolution. The `live_testing` role in `accounts[].live_roles` is standing authorization for bounded agent-led exploration on that configured target when the readiness gate requires it; other roles authorize only their named modes. An explicit current-task instruction may narrow this authority.
 - Acquire the canonical process-scoped lease before ADB access. Hold one scoped reservation across dependent steps; declare multi-instance bundles up front. The outer phase owns cleanup and preserves pre-existing instances by default.
 - If no castle is named, use the active castle on the configured `testing` instance. Never switch accounts or castles without explicit authorization.
-- Default to non-spending proof. Resource spending requires the exact action, target, and budget from the request or an approved plan and must use `.agents/skills/write-code-live`.
-- Inspect `.local-data/artifacts/` after a failure. Repeat a live action only after a relevant implementation or state change, and never repeat an irreversible action outside its authorized budget.
+- Within `live_testing` exploration authority, spending follows the current user prompt first, then an applicable agent or execution profile, then the repository fallback: all non-premium, non-protected in-game resources without a numeric per-action budget. Diamonds are non-premium for this policy. These defaults never authorize real-money purchases, automatic paid refills, protected items, unrelated or consequential actions, account/castle switching, or replay of an uncertain mutation.
+- Acceptance canaries, unattended/daily automation, protected or irreversible actions, and uncertain retries require explicit action, target, resource, attempt, and retry limits through `.agents/skills/write-code-live`.
+- Inspect `.local-data/artifacts/` after a failure. Repeat a live action only after a relevant implementation, state, or diagnosis change, and never repeat an irreversible action outside its authorized limits.
+- An unrelated navigation or preflight defect may be handed off separately. A manually established equivalent precondition can support feature-action acceptance when freshly verified, but it does not prove the failed route or unattended end-to-end execution.
 
 Opt-in flags:
 
@@ -110,4 +115,4 @@ Read the applicable `SKILL.md` completely before its workflow.
 
 ## Completion
 
-Finish when the requested behavior is implemented and the smallest sufficient checks pass. For modifying tasks, inspect final status and report task-owned uncommitted paths plus commit and push state; a commit in another checkout does not make the original clean. Report commands as passed, failed, or skipped. For a required live check that cannot run, give the exact blocker and remaining command. Mention only material residual risks and never expose secrets.
+Finish when the requested behavior is implemented and the smallest sufficient checks pass. For modifying tasks, inspect final status and report task-owned uncommitted paths plus commit and push state; a commit in another checkout does not make the original clean. Report commands as passed, failed, or skipped. For a required live check that cannot run, give the exact blocker and remaining command. When manual setup bypassed an unrelated route, report feature-action acceptance, upstream-route validation, and unattended readiness separately. Mention only material residual risks and never expose secrets.
