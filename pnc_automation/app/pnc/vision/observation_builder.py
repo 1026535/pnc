@@ -97,6 +97,7 @@ class ObservationEnricher(Protocol):
         *,
         ocr_context: ObservationOcrContext,
         owned_dismiss_bounds: tuple[Bounds, ...] = (),
+        owned_navigation_screen: ScreenType | None = None,
     ) -> "ObservationAdditions":
         """Recognizes global blocking/loading guards independently of request scope."""
 
@@ -185,10 +186,11 @@ class DefaultObservationEnricher:
         *,
         ocr_context: ObservationOcrContext,
         owned_dismiss_bounds: tuple[Bounds, ...] = (),
+        owned_navigation_screen: ScreenType | None = None,
     ) -> ObservationAdditions:
         """Leaves guard recognition explicitly unevaluated for test doubles."""
 
-        del image, request, ocr_context, owned_dismiss_bounds
+        del image, request, ocr_context, owned_dismiss_bounds, owned_navigation_screen
         return ObservationAdditions()
 
 
@@ -407,14 +409,28 @@ class ObservationBuilder:
         # Strong visual identity cannot suppress the global popup/loading guard.
         if visual.evidence:
             active_request = replace(active_request, include_popup_guard=True, include_loading_guard=True)
+        matched_screens = {item.screen_type for item in visual.evidence}
+        research_queue_owned = (
+            matched_screens == {ScreenType.PNC_RESEARCH_QUEUE}
+            and any(
+                control.selector_id == UiElementId.PNC_RESEARCH_QUEUE_CLOSE
+                for control in visual.dismiss_controls
+            )
+        )
         detection_plan = self._selector_detection_plan(active_request)
         # Global guard regions run independently of the caller's content scope.
+        guard_kwargs = {}
+        if visual.dismiss_controls:
+            guard_kwargs["owned_dismiss_bounds"] = tuple(
+                control.bounds for control in visual.dismiss_controls
+            )
+        if research_queue_owned:
+            guard_kwargs["owned_navigation_screen"] = ScreenType.PNC_RESEARCH_QUEUE
         guard_additions = self.enricher.recognize_guards(
             screenshot.image,
             active_request,
             ocr_context=ocr_context,
-            **({"owned_dismiss_bounds": tuple(control.bounds for control in visual.dismiss_controls)}
-               if visual.dismiss_controls else {}),
+            **guard_kwargs,
         )
         guard_additions = reconcile_visual_modal_guard(visual, guard_additions)
         guard_verdict = guard_additions.guard_verdict

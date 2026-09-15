@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import deque
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import time
 from typing import Literal, Protocol
 
@@ -113,6 +113,13 @@ class NavigationCore:
     record: Callable[[dict[str, object]], None] = lambda _: None
     observe_ready: Callable[[str], Observation] | None = None
     _sequence: int = field(default=0, init=False)
+    _last_research_queue_observation: Observation | None = field(default=None, init=False)
+
+    @property
+    def research_queue_observation(self) -> Observation | None:
+        """Return the queue content frame used by the latest Institute route."""
+
+        return self._last_research_queue_observation
 
     def transition(self, edge: NavigationEdge) -> Observation:
         """Reacquire the source, tap once, and require a stable observed destination."""
@@ -163,8 +170,22 @@ class NavigationCore:
         they are not visible in the current frame.
         """
         _require_reviewed_building_route(target=target, edges=self.edges)
+        self._last_research_queue_observation = None
         if target == HomeCityObjectId.INSTITUTE:
-            self.navigate(ScreenType.PNC_RESEARCH_QUEUE)
+            queue_surface = self.navigate(ScreenType.PNC_RESEARCH_QUEUE)
+            queue_before_go = observe_content(
+                f"core_{self._sequence}_research_queue_content",
+            )
+            if (
+                queue_before_go.screen_type != ScreenType.PNC_RESEARCH_QUEUE
+                or queue_before_go.blocking_popup
+                or queue_before_go.decision.guard != GuardVerdict.CLEAR
+                or queue_before_go.captured_at <= queue_surface.captured_at
+            ):
+                raise RuntimeError(
+                    "Research Queue content was not freshly observed before Institute focus."
+                )
+            self._last_research_queue_observation = queue_before_go
             focus = next((
                 edge for edge in self.edges
                 if edge.source == ScreenType.PNC_RESEARCH_QUEUE
@@ -173,7 +194,10 @@ class NavigationCore:
             if focus is None:
                 raise ValueError("Institute focus route is missing from the reviewed graph.")
             self.transition(focus)
-            return self.open_visible_building(target, observe_content=observe_content)
+            opened = self.open_visible_building(target, observe_content=observe_content)
+            if queue_before_go.research_start_queue_available is True:
+                return replace(opened, research_start_queue_available=True)
+            return opened
 
         self._sequence += 1
         scan_label = f"core_{self._sequence}_building_scan_source"

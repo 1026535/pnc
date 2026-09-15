@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Generic, Literal, Protocol, TypeVar
 
@@ -30,6 +30,7 @@ from pnc_automation.app.pnc.domain.observation import (
 )
 from pnc_automation.app.pnc.domain.mail import MailboxAvailability, MailboxType
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 
 
 class WorkflowEffect(StrEnum):
@@ -104,7 +105,11 @@ class CoreWorkflowResult(Generic[T]):
 class WorkflowContext:
     """Exposes only reviewed navigation and fresh, expected-screen content capture."""
 
-    __slots__ = ("_runtime", "_last_navigation_count", "_last_observation", "_effect", "_mutation_boundary", "_research_node", "_reconciliation_operation_id")
+    __slots__ = (
+        "_runtime", "_last_navigation_count", "_last_observation", "_effect",
+        "_mutation_boundary", "_research_node", "_research_queue_observation",
+        "_reconciliation_operation_id",
+    )
 
     def __init__(
         self,
@@ -125,6 +130,7 @@ class WorkflowContext:
         self._effect = effect
         self._mutation_boundary = mutation_boundary
         self._research_node: str | None = None
+        self._research_queue_observation: Observation | None = None
         self._reconciliation_operation_id = reconciliation_operation_id
 
     def reconcile_hero_hall(self, checkpoint: DailyTaskCheckpoint) -> JournaledMutationResult:
@@ -265,7 +271,31 @@ class WorkflowContext:
     def _observe_research_content(self, label: str) -> Observation:
         """Keep research captures fresh; operation owners evaluate their published facts."""
 
-        return self._observe_operation_content(label, operation="Research")
+        observation = self._observe_operation_content(label, operation="Research")
+        proof = self._research_queue_observation
+        if (
+            proof is None
+            or proof.screen_type != ScreenType.PNC_RESEARCH_QUEUE
+            or proof.blocking_popup
+            or proof.decision.guard != GuardVerdict.CLEAR
+            or proof.research_start_queue_available is not True
+            or observation.screen_type != ScreenType.PNC_RESEARCH_TREE
+            or observation.blocking_popup
+            or observation.decision.guard != GuardVerdict.CLEAR
+            or observation.research_start_queue_available is not None
+            or not observation.has(UiElementId.PNC_RESEARCH_START_BUTTON)
+            or not any(
+                evidence.reason == "visual_anchor:research_tree_node_detail"
+                for evidence in observation.decision.evidence
+            )
+            or observation.captured_at <= proof.captured_at
+        ):
+            return observation
+        # Detail OCR is allowed to omit queue status. Carry only the fresh,
+        # route-scoped queue proof; a detail's explicit False remains authoritative.
+        enriched = replace(observation, research_start_queue_available=True)
+        self._last_observation = enriched
+        return enriched
 
     def run_daily_maintenance(self, checkpoint: DailyTaskCheckpoint) -> DailyMaintenanceResult:
         """Run the whole claim sweep under the canonical target and journal authority."""
@@ -322,6 +352,8 @@ class WorkflowContext:
 
         if not isinstance(target, ScreenType) or target == ScreenType.UNKNOWN:
             raise ValueError("Workflow navigation requires a known screen target.")
+        if target != ScreenType.PNC_RESEARCH_TREE:
+            self._research_queue_observation = None
         self._research_node = None
         observation = self._runtime.navigation.navigate(target)
         self._last_navigation_count = self._runtime.observation_count
@@ -353,11 +385,23 @@ class WorkflowContext:
 
         if not isinstance(target, HomeCityObjectId):
             raise ValueError("Building navigation requires a known HomeCityObjectId target.")
+        self._research_queue_observation = None
         self._research_node = None
         observation = self._runtime.navigation.open_building(
             target,
-            observe_content=lambda label: self._runtime.observe(label, include_content=True),
+            observe_content=(
+                self._observe_research_content
+                if target == HomeCityObjectId.INSTITUTE
+                else lambda label: self._runtime.observe(label, include_content=True)
+            ),
         )
+        queue_observation = getattr(self._runtime.navigation, "research_queue_observation", None)
+        if (
+            target == HomeCityObjectId.INSTITUTE
+            and observation.research_start_queue_available is True
+            and isinstance(queue_observation, Observation)
+        ):
+            self._research_queue_observation = queue_observation
         self._last_navigation_count = self._runtime.observation_count
         self._last_observation = observation
         return observation

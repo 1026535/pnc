@@ -1096,16 +1096,30 @@ class NavigationCoreTests(unittest.TestCase):
             core, actuator, _ = self.make_core([
                 home, home, queue, queue, queue, home, home, institute, institute,
             ])
+            queue_content = replace(
+                queue,
+                research_start_queue_available=True,
+                captured_at=datetime.now(UTC) + timedelta(seconds=30),
+            )
             content = replace(home, image_size=(540, 960), spatial_surface=replace(
                 surface, objects=surface.objects if visible else (),
             ))
             if visible:
-                result = core.open_building(HomeCityObjectId.INSTITUTE, observe_content=lambda _: content)
+                contents = iter((queue_content, content))
+                result = core.open_building(
+                    HomeCityObjectId.INSTITUTE,
+                    observe_content=lambda _: next(contents),
+                )
                 self.assertEqual(result.screen_type, ScreenType.PNC_INSTITUTE)
+                self.assertTrue(result.research_start_queue_available)
                 self.assertEqual(actuator.actions[-1].target_point, (270, 520))
             else:
+                contents = iter((queue_content, content))
                 with self.assertRaisesRegex(RuntimeError, 'absent or ambiguous'):
-                    core.open_building(HomeCityObjectId.INSTITUTE, observe_content=lambda _: content)
+                    core.open_building(
+                        HomeCityObjectId.INSTITUTE,
+                        observe_content=lambda _: next(contents),
+                    )
             self.assertEqual(actuator.actions[0].selector_id, UiElementId.PNC_HOME_RESEARCH_BUTTON)
             self.assertEqual(actuator.actions[1].selector_id, UiElementId.PNC_RESEARCH_QUEUE_GO)
             self.assertEqual(len(actuator.actions), 3 if visible else 2)

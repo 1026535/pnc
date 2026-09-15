@@ -1,7 +1,7 @@
 """Research consumes published facts through the same durable core boundary as claims."""
 
 from dataclasses import replace
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
@@ -185,6 +185,63 @@ class CoreResearchMutationTests(unittest.TestCase):
 
         self.assertEqual(1, runtime.actuator.execute_action.call_count)
         self.assertIsNone(self.load())
+
+    def test_idle_detail_without_idle_ocr_carries_fresh_queue_surface_proof(self):
+        """Carries the prior canonical Queue Idle fact onto the actual detail shape."""
+
+        detail_without_queue_text = replace(self.idle, research_start_queue_available=None)
+        queue_proof = replace(make_observation(
+            ScreenType.PNC_RESEARCH_QUEUE,
+            decision=ScreenDecision(
+                ScreenType.PNC_RESEARCH_QUEUE,
+                ScreenType.PNC_RESEARCH_QUEUE,
+                guard=GuardVerdict.CLEAR,
+                evidence=(ScreenEvidence(ScreenType.PNC_RESEARCH_QUEUE, "visual_anchor:research_queue"),),
+            ),
+            research_start_queue_available=True,
+        ), captured_at=datetime(2026, 9, 12, tzinfo=UTC))
+        runtime, context = self.context((
+            self.grid,
+            detail_without_queue_text,
+            detail_without_queue_text,
+            detail_without_queue_text,
+            self.active,
+            self.active,
+        ))
+        context._research_queue_observation = queue_proof
+
+        observed = context.open_research_node(
+            "Construction I",
+            ResearchCategory.DEVELOPMENT,
+        )
+        checkpoint, outcome = context.start_research(self.checkpoint)
+
+        self.assertTrue(observed.research_start_queue_available)
+        self.assertGreater(observed.captured_at, queue_proof.captured_at)
+        self.assertEqual("success", outcome.status.value)
+        self.assertEqual(2, runtime.actuator.execute_action.call_count)
+        self.assertEqual(MutationIntentState.COMMITTED, checkpoint.mutation_intents[0].state)
+
+    def test_busy_detail_overrides_prior_idle_queue_surface_proof(self):
+        """Preserves explicit detail NOIDLEQUEUE over an earlier Queue Idle frame."""
+
+        busy_detail = replace(self.idle, research_start_queue_available=False)
+        queue_proof = replace(make_observation(
+            ScreenType.PNC_RESEARCH_QUEUE,
+            decision=ScreenDecision(
+                ScreenType.PNC_RESEARCH_QUEUE,
+                ScreenType.PNC_RESEARCH_QUEUE,
+                guard=GuardVerdict.CLEAR,
+                evidence=(ScreenEvidence(ScreenType.PNC_RESEARCH_QUEUE, "visual_anchor:research_queue"),),
+            ),
+            research_start_queue_available=True,
+        ), captured_at=datetime(2026, 9, 12, tzinfo=UTC))
+        runtime, context = self.context((busy_detail,))
+        context._research_queue_observation = queue_proof
+
+        observed = context._observe_research_content("busy_detail_overrides_idle_proof")
+
+        self.assertFalse(observed.research_start_queue_available)
 
     def test_executor_declines_start_without_committing_or_replaying(self):
         runtime, context = self.context((self.grid, self.idle, self.idle, self.idle))

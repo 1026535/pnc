@@ -89,6 +89,7 @@ _SCREEN_FAMILIES = frozenset({
     ScreenType.PNC_DAILY_TO_DO,
     ScreenType.PNC_MIGHT_RANK,
     ScreenType.PNC_RESEARCH_TREE,
+    ScreenType.PNC_RESEARCH_QUEUE,
     ScreenType.PNC_CASTLE_SELECTION,
     ScreenType.PNC_CAMPAIGN_MAP,
     ScreenType.PNC_CAMPAIGN_CHAPTER,

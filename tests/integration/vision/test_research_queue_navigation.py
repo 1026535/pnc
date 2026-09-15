@@ -18,6 +18,7 @@ from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict, ScreenEv
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.navigation_perception import NavigationPerception
+from pnc_automation.app.pnc.vision.observation_builder import ImageSelectorEngine, ObservationBuilder
 from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservationEnricher
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
 from pnc_automation.app.pnc.vision.selectors import build_default_selector_registry
@@ -27,6 +28,7 @@ from pnc_automation.app.pnc.vision.visual_screen_recognizer import (
 )
 from pnc_automation.core.infra.capture.screenshot_service import CapturedScreenshot
 from pnc_automation.core.vision.ocr.ocr_service import ObservationOcrContext, OcrLine
+from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher
 
 from tests.support.automation.session import FakeSession
 from tests.support.core.logging import build_logger
@@ -92,6 +94,22 @@ def _perception(ocr: _FakeOcrService, recognizer=None) -> NavigationPerception:
     )
 
 
+def _builder(ocr: _FakeOcrService) -> ObservationBuilder:
+    """Wire the legacy builder to the same queue OCR fixture."""
+
+    registry = build_default_selector_registry()
+    matcher = OpenCvTemplateMatcher()
+    return ObservationBuilder(
+        selector_registry=registry,
+        selector_engine=ImageSelectorEngine(matcher),
+        screen_classifier=ScreenClassifier(),
+        enricher=PncObservationEnricher(selector_registry=registry),
+        visual_recognizer=load_visual_screen_recognizer(matcher=matcher),
+        ocr_service=ocr,
+        ocr_backend_revision="research-queue-navigation-test",
+    )
+
+
 class _StaticRecognizer:
     """Returns one prescribed visual result for missing-proof cases."""
 
@@ -148,7 +166,10 @@ class ResearchQueueNavigationTests(unittest.TestCase):
     def test_reviewed_idle_queue_is_clear_with_measured_go_and_close(self) -> None:
         """Recognizes the tracked Queue fixture as an actionable typed surface."""
 
-        observation = _perception(_FakeOcrService(lines=_queue_lines())).build(_capture())
+        observation = _perception(_FakeOcrService(lines=_queue_lines())).build(
+            _capture(),
+            include_content=True,
+        )
 
         self.assertEqual(ScreenType.PNC_RESEARCH_QUEUE, observation.screen_type)
         self.assertEqual(ScreenType.PNC_RESEARCH_QUEUE, observation.decision.base_screen)
@@ -156,6 +177,7 @@ class ResearchQueueNavigationTests(unittest.TestCase):
         self.assertEqual(GuardVerdict.CLEAR, observation.decision.guard)
         self.assertFalse(observation.blocking_popup)
         self.assertIsNone(observation.popup_overlay)
+        self.assertTrue(observation.research_start_queue_available)
         self.assertEqual(
             {
                 UiElementId.PNC_RESEARCH_QUEUE_GO,
@@ -172,6 +194,18 @@ class ResearchQueueNavigationTests(unittest.TestCase):
         self.assertEqual((488, 269), close.action_point)
         self.assertEqual(VisibleElementSourceKind.TEMPLATE, go.source_kind)
         self.assertEqual(VisibleElementSourceKind.TEMPLATE, close.source_kind)
+
+    def test_both_observers_publish_the_queue_idle_fact(self) -> None:
+        """Keeps queue status authoritative before the route enters Institute."""
+
+        for name, observe in (
+            ("navigation", lambda ocr: _perception(ocr).build(_capture(), include_content=True)),
+            ("builder", lambda ocr: _builder(ocr).build(_capture())),
+        ):
+            with self.subTest(observer=name):
+                observation = observe(_FakeOcrService(lines=_queue_lines()))
+                self.assertEqual(ScreenType.PNC_RESEARCH_QUEUE, observation.screen_type)
+                self.assertTrue(observation.research_start_queue_available)
 
     def test_update_popup_above_queue_stays_blocking_and_hides_queue_controls(self) -> None:
         """Keeps an exact update modal as the foreground owner over Queue evidence."""

@@ -2036,11 +2036,15 @@ class PncObservationEnricher:
         *,
         ocr_context: ObservationOcrContext,
         owned_dismiss_bounds: tuple[Bounds, ...] = (),
+        owned_navigation_screen: ScreenType | None = None,
     ) -> ObservationAdditions:
         """Runs independent global guard recognizers before semantic enrichment."""
 
         return self._recognize_frame_guards(
-            image, ocr_context=ocr_context, owned_dismiss_bounds=owned_dismiss_bounds,
+            image,
+            ocr_context=ocr_context,
+            owned_dismiss_bounds=owned_dismiss_bounds,
+            owned_navigation_screen=owned_navigation_screen,
         )
 
     def _recognize_frame_guards(
@@ -2637,6 +2641,17 @@ class PncObservationEnricher:
             )
             if research_tree is not None:
                 return research_tree
+        if request.allows_screen(ScreenType.PNC_RESEARCH_QUEUE) and can_attempt_screen_family_ocr(
+            request_screen=ScreenType.PNC_RESEARCH_QUEUE,
+            observed_screen=screen_type,
+        ):
+            research_queue = _build_research_queue_content_additions(
+                image=image,
+                lines=lines,
+                proved_screen=screen_type,
+            )
+            if research_queue is not None:
+                return research_queue
         if not request.allows_screen(ScreenType.PNC_CASTLE_SELECTION) or not can_attempt_screen_family_ocr(
             request_screen=ScreenType.PNC_CASTLE_SELECTION,
             observed_screen=screen_type,
@@ -6967,16 +6982,42 @@ def _build_research_queue_popup_additions(
     header = _find_header_line(lines=lines, header_texts=_RESEARCH_QUEUE_HEADER_TEXTS, max_y=int(image.height * 0.4))
     if header is None:
         return None
-    support_count = sum(
-        1
-        for line in lines
-        if line.bounds.y >= header.bounds.y and normalize_ocr_text(line.text) in _RESEARCH_QUEUE_SUPPORT_TEXTS
-    )
-    if support_count < 2:
+    if not _research_queue_idle_is_proven(lines=lines, header=header):
         return None
     return ObservationAdditions(
         screen_evidence=(ScreenEvidence(ScreenType.PNC_POPUP, "ocr_research_queue_popup"),),
     )
+
+
+def _build_research_queue_content_additions(
+    *,
+    image: Image.Image,
+    lines: tuple[OcrLine, ...],
+    proved_screen: ScreenType | None,
+) -> ObservationAdditions | None:
+    """Publish the queue's positive idle fact only on its independently owned screen."""
+
+    if proved_screen != ScreenType.PNC_RESEARCH_QUEUE:
+        return None
+    header = _find_header_line(
+        lines=lines,
+        header_texts=_RESEARCH_QUEUE_HEADER_TEXTS,
+        max_y=int(image.height * 0.4),
+    )
+    if header is None or not _research_queue_idle_is_proven(lines=lines, header=header):
+        return None
+    return ObservationAdditions(research_start_queue_available=True)
+
+
+def _research_queue_idle_is_proven(*, lines: tuple[OcrLine, ...], header: OcrLine) -> bool:
+    """Require both measured queue controls and the explicit Idle row status."""
+
+    support = {
+        normalize_ocr_text(line.text)
+        for line in lines
+        if line.bounds.y >= header.bounds.y
+    }
+    return _RESEARCH_QUEUE_SUPPORT_TEXTS <= support
 
 
 def _build_more_menu_additions(
