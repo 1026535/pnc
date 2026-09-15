@@ -10,7 +10,7 @@ Implement the requested behavior through the smallest maintainable change and ve
 ## Workflow
 
 1. Read the affected owner, callers, tests, config, and any approved plan.
-2. Research external behavior only when current documentation can change the implementation.
+2. Establish PNC game behavior from user-confirmed facts, deterministic tests and fixtures, and saved or live UI/runtime evidence. Research official external documentation only when it can change the implementation.
 3. Choose the simplest design that fully satisfies the request. Reuse canonical interfaces and refactor only when needed to avoid real duplication or conflicting ownership.
 4. Implement a coherent slice and add focused tests for changed behavior or likely regressions.
 5. Run the narrowest relevant validation, then the repository's affected selection when the change has broader consumers.

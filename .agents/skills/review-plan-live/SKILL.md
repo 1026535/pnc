@@ -10,7 +10,7 @@ Determine whether the plan is sound enough to implement and whether any claimed 
 ## Workflow
 
 1. Establish the plan, requirements, user decisions, and intended implementation or promotion decision.
-2. Inspect the relevant code, tests, config, artifacts, and prior results before considering live work.
+2. Inspect the relevant code, tests, config, saved UI/runtime artifacts, and prior results before considering live work.
 3. Identify consequential claims whose failure would change architecture, safety, acceptance, or likely behavior. Do not inventory cosmetic details or remote theoretical cases.
 4. Use [references/assumption-evidence-matrix.md](references/assumption-evidence-matrix.md) only when several consequential claims need traceability. A short review can use ordinary findings.
 5. Reuse adequate evidence. Run one bounded live observation only when a material current-runtime question remains; follow [../test-bluestacks-live/SKILL.md](../test-bluestacks-live/SKILL.md).

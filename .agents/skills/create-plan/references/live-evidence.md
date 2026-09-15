@@ -1,6 +1,6 @@
 # Live Evidence For Planning
 
-Use this reference only when a current BlueStacks fact could materially change a plan and repository artifacts cannot answer it.
+Use this reference only when a current BlueStacks fact could materially change a plan and deterministic tests, fixtures, or saved UI/runtime artifacts cannot answer it.
 
 ## Before Running
 

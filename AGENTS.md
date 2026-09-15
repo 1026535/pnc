@@ -45,15 +45,14 @@
 - Runtime evidence and reports: `.local-data/` (ignored)
 - Test-selection evidence: `.test-impact/` (ignored)
 - Plans: `reviewed_plans/`
-- Game behavior reference: `docs/game-reference/README.md`
 - Skills: `.agents/skills/`; shared instructions: `instructions/`
 
 ## Game Behavior Evidence
 
-- For implementation, planning, or review that depends on game behavior, consult [the game reference](docs/game-reference/README.md) and the relevant workflow note before making behavioral assumptions. Use its source map for workflows without detailed notes; do not load the entire extracted source.
-- Treat extracted client code as versioned evidence of client behavior, not proof of server rules or a live action's success. Check the recorded build and source provenance, distinguish verified findings from inference, and resolve material conflicts with current observations through the existing live workflow.
-- Add or correct a scoped workflow note when the task establishes reusable behavior. Include source path and symbol, build, confidence, automation implications, and remaining uncertainty. Do not label source inventory as verified workflow coverage.
-- Keep APKs, extracted game code, native dumps, and generated indexes under ignored `.local-data/`. If source evidence is absent, use the reference's reproduction guidance or report the evidence gap; absence alone does not authorize live access, account changes, resource spending, or direct game calls.
+- Establish game behavior from user-confirmed facts, deterministic tests and fixtures, saved UI/runtime artifacts, and, when necessary, one bounded observation through the existing live workflow.
+- Distinguish user-confirmed, repository-proven, artifact-observed, live-observed, inferred, and unknown findings. Resolve material conflicts with current UI observations.
+- Add or correct a scoped workflow note when the task establishes reusable behavior. Include artifact or workflow provenance, the observation date and build when available, confidence, automation implications, and remaining uncertainty.
+- Keep generated screenshots, observations, logs, and indexes under ignored `.local-data/`. If evidence is absent, reproduce it through the supported UI workflow or report the gap; absence alone does not authorize live access, account changes, or resource spending.
 
 ## Local Data, Config, And Secrets
 

@@ -26,7 +26,7 @@ Use target results `passed`, `applicability_skip`, or `blocked` only when multip
 
 - A test supports a claim only when it exercises the behavior and would fail on regression.
 - A screenshot proves visible state at one moment, not an unobserved transition.
-- Historical evidence can support stable behavior when its version and context remain representative.
+- Historical UI/runtime evidence can support stable behavior when its version and context remain representative.
 - Preserve user-supplied domain decisions unless material repository or runtime evidence contradicts them.
 - One representative target is sufficient unless target differences matter to the claim.
 
