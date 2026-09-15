@@ -141,7 +141,12 @@ _SCREEN_CONTENT_REGIONS = {
     # Complete roster cards can extend to the bottom edge on the captured
     # eight-row layout. Keep the text column, including its last name/level.
     ScreenType.PNC_CASTLE_SELECTION: (("castle_roster", 0.20, 0.07, 0.62, 0.92),),
-    ScreenType.PNC_HOME_CITY: (("home_queue_status", 0.0, 0.19, 0.17, 0.22), ("home_navigation", 0.0, 0.925, 1.0, 0.075)),
+    ScreenType.PNC_HOME_CITY: (
+        ("home_queue_status", 0.0, 0.19, 0.17, 0.22),
+        ("home_building_nameplates_upper", 0.10, 0.18, 0.80, 0.25),
+        ("home_building_nameplates_lower", 0.10, 0.42, 0.80, 0.22),
+        ("home_navigation", 0.0, 0.925, 1.0, 0.075),
+    ),
     ScreenType.PNC_LORD_INFO: (("lord_header", 0.02, 0.02, 0.96, 0.16), ("lord_profile", 0.02, 0.18, 0.96, 0.72)),
     ScreenType.PNC_PLAYER_TERRITORY: (("territory_header", 0.02, 0.02, 0.96, 0.16), ("territory_profile", 0.02, 0.18, 0.96, 0.72)),
     ScreenType.PNC_PLAYER_PROFILE: (("profile_name", 0.18, 0.0, 0.70, 0.055),),
@@ -265,7 +270,7 @@ def compile_screen_content_ocr_region_plans(
         )
     if resolved_screen == ScreenType.PNC_RESEARCH_TREE:
         if layout_id in {"research_tree_node_detail", "research_tree_node_detail_active"}:
-            regions = (("research_detail", 0.04, 0.245, 0.92, 0.48),)
+            regions = (("research_detail", 0.04, 0.245, 0.92, 0.60),)
         elif layout_id != "research_tree_development":
             return ()
     if resolved_screen == ScreenType.PNC_CAMPAIGN_MAP:
@@ -345,6 +350,22 @@ def compile_screen_content_ocr_region_plans(
         )
         for fact, x, y, w, h in regions
     ))
+
+
+def resolve_visual_content_layout_id(
+    *,
+    profile_ids: tuple[str, ...],
+    fallback_layout_id: str | None,
+) -> str | None:
+    """Select a detail-only OCR plan without changing the shared screen layout."""
+
+    if "research_tree_node_detail_active" in profile_ids:
+        return "research_tree_node_detail_active"
+    if "research_tree_node_detail" in profile_ids:
+        return "research_tree_node_detail"
+    return fallback_layout_id
+
+
 def execute_ocr_region_plans(
     *,
     image: Image.Image,

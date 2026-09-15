@@ -311,7 +311,10 @@ class ResearchTreeVisualControlTests(unittest.TestCase):
         recognizer = load_visual_screen_recognizer()
         recognition = recognizer.recognize(_load_active_detail_fixture())
 
-        self.assertEqual(recognition.profile_ids, ("research_tree_node_detail_active",))
+        self.assertEqual(
+            recognition.profile_ids,
+            ("research_tree_node_detail", "research_tree_node_detail_active"),
+        )
         self.assertEqual(
             {item.screen_type for item in recognition.evidence},
             {ScreenType.PNC_RESEARCH_TREE},
@@ -320,11 +323,17 @@ class ResearchTreeVisualControlTests(unittest.TestCase):
         self.assertTrue(_bounds_from_box(ACTIVE_SPEEDUP_BOX).contains_point((437, 447)))
 
         reloaded = recognizer.recognize(_load_reloaded_active_detail_fixture())
-        self.assertEqual(reloaded.profile_ids, ("research_tree_node_detail_active",))
+        self.assertEqual(
+            reloaded.profile_ids,
+            ("research_tree_node_detail", "research_tree_node_detail_active"),
+        )
         self.assertEqual(reloaded.controls, ())
 
         scaled = recognizer.recognize(_load_active_detail_fixture().resize((900, 1600)))
-        self.assertEqual(scaled.profile_ids, ("research_tree_node_detail_active",))
+        self.assertEqual(
+            scaled.profile_ids,
+            ("research_tree_node_detail", "research_tree_node_detail_active"),
+        )
         self.assertEqual(scaled.controls, ())
 
         base = recognizer.recognize(_load_detail_fixture())
@@ -379,6 +388,8 @@ class ResearchTreeVisualControlTests(unittest.TestCase):
         )
         self.assertEqual(detail.screen_type, ScreenType.PNC_RESEARCH_TREE)
         self.assertEqual(detail.decision.guard, GuardVerdict.CLEAR)
+        self.assertTrue(detail.research_start_resources_sufficient)
+        self.assertTrue(detail.research_start_queue_available)
         start = detail.require(UiElementId.PNC_RESEARCH_START_BUTTON)
         self.assertEqual(start.source_kind, VisibleElementSourceKind.TEMPLATE)
         self.assertEqual(start.source_screen, ScreenType.PNC_RESEARCH_TREE)

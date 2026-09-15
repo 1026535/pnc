@@ -22,6 +22,7 @@ from pnc_automation.app.pnc.vision.observation_diagnostics import ObservationDeb
 from pnc_automation.app.pnc.vision.observation_provenance import bind_list_entry, bind_visible_elements
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier, partition_guard_evidence
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
+from pnc_automation.app.pnc.vision.ocr_region_plan import resolve_visual_content_layout_id
 from pnc_automation.app.pnc.vision.visual_screen_recognizer import (
     VisualScreenRecognizer,
     visual_controls_for_decision,
@@ -173,7 +174,10 @@ class NavigationPerception:
         content = self.guard.enrich(
             image, screen, controls, content_request,
             ocr_context=ocr_context, ocr_regions={},
-            layout_id=decision.layout_id,
+            layout_id=resolve_visual_content_layout_id(
+                profile_ids=visual.profile_ids,
+                fallback_layout_id=decision.layout_id,
+            ),
         )
         if any(item.screen_type != screen for item in content.screen_evidence):
             raise ValueError("Content parser contradicted independent screen identity.")
@@ -203,6 +207,8 @@ class NavigationPerception:
             profile_player_name=content.profile_player_name,
             text_field_states=content.text_field_states,
             available_march_slots=content.available_march_slots,
+            research_start_resources_sufficient=content.research_start_resources_sufficient,
+            research_start_queue_available=content.research_start_queue_available,
             active_chat_channel=content.active_chat_channel,
             chat_draft_empty=content.chat_draft_empty,
             chat_draft_text=content.chat_draft_text,

@@ -69,6 +69,7 @@ from pnc_automation.app.pnc.vision.ocr_region_plan import (
     OcrRegionPlan,
     compile_ocr_region_plans,
     execute_ocr_region_plans,
+    resolve_visual_content_layout_id,
 )
 from pnc_automation.core.vision.ocr.ocr_service import (
     ObservationOcrContext,
@@ -128,6 +129,8 @@ class ObservationAdditions:
     current_castle_evidence: CurrentCastleEvidenceKind | None = None
     current_pnc_account_id: str | None = None
     available_march_slots: int | None = None
+    research_start_resources_sufficient: bool | None = None
+    research_start_queue_available: bool | None = None
     active_chat_channel: ChatChannel | None = None
     profile_player_name: str | None = None
     mailbox_type: MailboxType | None = None
@@ -546,7 +549,10 @@ class ObservationBuilder:
             semantic_request,
             ocr_context=ocr_context,
             ocr_regions=ocr_regions,
-            layout_id=preliminary.layout_id,
+            layout_id=resolve_visual_content_layout_id(
+                profile_ids=visual.profile_ids,
+                fallback_layout_id=preliminary.layout_id,
+            ),
         )
         if any(item.screen_type != preliminary.effective_screen for item in additions.screen_evidence):
             raise ValueError("Content parser contradicted independent screen identity.")
@@ -724,6 +730,8 @@ class ObservationBuilder:
             current_castle_evidence=additions.current_castle_evidence,
             current_pnc_account_id=additions.current_pnc_account_id,
             available_march_slots=additions.available_march_slots,
+            research_start_resources_sufficient=additions.research_start_resources_sufficient,
+            research_start_queue_available=additions.research_start_queue_available,
             active_chat_channel=additions.active_chat_channel,
             profile_player_name=additions.profile_player_name,
             mailbox_type=additions.mailbox_type,
@@ -1149,6 +1157,16 @@ def _merge_observation_additions(
             primary.available_march_slots
             if primary.available_march_slots is not None
             else fallback.available_march_slots
+        ),
+        research_start_resources_sufficient=(
+            primary.research_start_resources_sufficient
+            if primary.research_start_resources_sufficient is not None
+            else fallback.research_start_resources_sufficient
+        ),
+        research_start_queue_available=(
+            primary.research_start_queue_available
+            if primary.research_start_queue_available is not None
+            else fallback.research_start_queue_available
         ),
         active_chat_channel=primary.active_chat_channel or fallback.active_chat_channel,
         profile_player_name=primary.profile_player_name or fallback.profile_player_name,

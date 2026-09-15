@@ -1513,9 +1513,9 @@
           "image": "screen_anchors/research_node_detail_0.png",
           "search_region": [
             476,
-            272,
+            80,
             48,
-            49
+            260
           ],
           "threshold": 0.95
         },
@@ -1523,9 +1523,9 @@
           "image": "screen_anchors/research_node_detail_1.png",
           "search_region": [
             94,
-            519,
+            330,
             278,
-            42
+            260
           ],
           "threshold": 0.95
         }
@@ -1537,15 +1537,15 @@
             "image": "screen_anchors/research_node_detail_research_button.png",
             "search_region": [
               280,
-              420,
+              240,
               180,
-              110
+              310
             ],
             "threshold": 0.97
           }
         }
       ],
-      "revision": 1,
+      "revision": 3,
       "source": {
         "fixture": "research_node_detail.png",
         "decoded_sha256": "b3ac3a01f7d61286cefe067e0f2e02857d5766f5491b90cbb7abf324144df0db",
@@ -1553,7 +1553,7 @@
       },
       "review": {
         "reference_manifest": "tests/data/screen_recognition/manifest.json",
-        "description": "Reviewed Construction research detail chrome and the separate blue Research action; the gold Research Now control is excluded.",
+        "description": "Reviewed Construction and live Development details across their bounded vertical motion with the separate blue Research action; the gold Research Now control is excluded.",
         "build": null,
         "locale": null,
         "qualification": "guarded_reference_only"

@@ -17,6 +17,7 @@ from pnc_automation.app.automation.engine.navigation_core import (
     reviewed_navigation_edges,
 )
 from pnc_automation.app.pnc.domain.action_requests import (
+    KeyEventAction,
     SelectChatChannelAction,
     SwipeAction,
     TapPointAction,
@@ -147,6 +148,56 @@ def mail_frame(
         image_size=(540, 960),
         captured_at=captured_at or datetime.now(UTC),
         blocking_popup=blocked,
+    )
+
+
+def research_frame(*, captured_at: datetime | None = None) -> Observation:
+    """Build one clear Development-grid frame with independent visual identity."""
+
+    return Observation(
+        decision=ScreenDecision(
+            base_screen=ScreenType.PNC_RESEARCH_TREE,
+            effective_screen=ScreenType.PNC_RESEARCH_TREE,
+            guard=GuardVerdict.CLEAR,
+            evidence=(
+                ScreenEvidence(
+                    ScreenType.PNC_RESEARCH_TREE,
+                    "visual_anchor:research_tree_development",
+                ),
+            ),
+        ),
+        image_size=(540, 960),
+        captured_at=captured_at or datetime.now(UTC),
+    )
+
+
+def research_detail_frame(*, captured_at: datetime | None = None) -> Observation:
+    """Build one clear idle detail with a current-frame normal Start control."""
+
+    selector = UiElementId.PNC_RESEARCH_START_BUTTON
+    return Observation(
+        decision=ScreenDecision(
+            base_screen=ScreenType.PNC_RESEARCH_TREE,
+            effective_screen=ScreenType.PNC_RESEARCH_TREE,
+            guard=GuardVerdict.CLEAR,
+            evidence=(
+                ScreenEvidence(
+                    ScreenType.PNC_RESEARCH_TREE,
+                    "visual_anchor:research_tree_node_detail",
+                ),
+            ),
+        ),
+        visible_elements={
+            selector: VisibleElement(
+                selector,
+                Bounds(304, 447, 135, 49),
+                1.0,
+                source_kind=VisibleElementSourceKind.TEMPLATE,
+            )
+        },
+        image_size=(540, 960),
+        captured_at=captured_at or datetime.now(UTC),
+        research_start_resources_sufficient=False,
     )
 
 
@@ -1202,6 +1253,111 @@ class NavigationCoreTests(unittest.TestCase):
         self.assertEqual(result.screen_type, ScreenType.PNC_MAILBOX_LIST)
         self.assertEqual(len(actuator.actions), 1)
         self.assertIsInstance(actuator.actions[0], SwipeAction)
+
+    def test_scroll_research_tree_uses_one_grid_scoped_swipe(self):
+        """Keeps Development scanning to one observed gesture per call."""
+
+        actuator = Actuator()
+        now = datetime(2026, 9, 14, tzinfo=UTC)
+        frames = iter(
+            research_frame(captured_at=now + timedelta(seconds=offset))
+            for offset in range(1, 4)
+        )
+        core = NavigationCore(
+            actuator,
+            lambda _: research_frame(),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+
+        result = core.scroll_research_tree(observe_content=lambda _: next(frames))
+
+        self.assertEqual(ScreenType.PNC_RESEARCH_TREE, result.screen_type)
+        self.assertEqual(1, len(actuator.actions))
+        action = actuator.actions[0]
+        self.assertIsInstance(action, SwipeAction)
+        self.assertEqual("replacement_scan_development_research", action.reason)
+        self.assertEqual((0.5, 0.82, 0.5, 0.32), (
+            action.start_x_ratio,
+            action.start_y_ratio,
+            action.end_x_ratio,
+            action.end_y_ratio,
+        ))
+
+    def test_close_research_detail_uses_one_back_and_requires_restored_grid(self):
+        """Leaves an unfunded idle detail without repeating or inventing a tap."""
+
+        now = datetime(2026, 9, 14, tzinfo=UTC)
+        frames = iter(
+            (
+                research_detail_frame(captured_at=now),
+                research_frame(captured_at=now + timedelta(seconds=1)),
+                research_frame(captured_at=now + timedelta(seconds=2)),
+            )
+        )
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator,
+            lambda _: research_detail_frame(),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+
+        result = core.close_research_detail(observe_content=lambda _: next(frames))
+
+        self.assertEqual(ScreenType.PNC_RESEARCH_TREE, result.screen_type)
+        self.assertEqual(1, len(actuator.actions))
+        action = actuator.actions[0]
+        self.assertIsInstance(action, KeyEventAction)
+        self.assertEqual("KEYCODE_BACK", action.key_code)
+        self.assertEqual("close_unfunded_research_detail", action.reason)
+
+    def test_route_closes_proved_research_detail_before_using_grid_back(self):
+        """Normalizes a leftover detail without requiring a nonexistent top-left control."""
+
+        now = datetime(2026, 9, 14, tzinfo=UTC)
+        back = UiElementId.PNC_BACK_BUTTON_TOP_LEFT
+        grid = replace(
+            research_frame(captured_at=now + timedelta(seconds=1)),
+            visible_elements={
+                back: VisibleElement(
+                    back,
+                    Bounds(14, 30, 44, 42),
+                    1.0,
+                    source_kind=VisibleElementSourceKind.TEMPLATE,
+                )
+            },
+        )
+        institute = replace(
+            observation(ScreenType.PNC_INSTITUTE),
+            captured_at=now + timedelta(seconds=4),
+        )
+        frames = iter((
+            research_detail_frame(captured_at=now),
+            grid,
+            replace(grid, captured_at=now + timedelta(seconds=2)),
+            replace(grid, captured_at=now + timedelta(seconds=3)),
+            institute,
+            replace(institute, captured_at=now + timedelta(seconds=5)),
+        ))
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator,
+            lambda _: next(frames),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+
+        result = core.navigate(ScreenType.PNC_INSTITUTE)
+
+        self.assertEqual(ScreenType.PNC_INSTITUTE, result.screen_type)
+        self.assertEqual(2, len(actuator.actions))
+        self.assertIsInstance(actuator.actions[0], KeyEventAction)
+        self.assertEqual("close_research_detail_for_route", actuator.actions[0].reason)
+        self.assertEqual(back, actuator.actions[1].selector_id)
 
     def test_scroll_castle_roster_uses_one_typed_swipe_without_row_tap(self):
         """Keeps active-castle search to one reviewed roster gesture per call."""

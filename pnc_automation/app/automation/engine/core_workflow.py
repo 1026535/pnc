@@ -222,6 +222,28 @@ class WorkflowContext:
         finally:
             self._sync_from_runtime()
 
+    def scroll_research_tree(self) -> Observation:
+        """Scroll one proved Development viewport through the constrained navigator."""
+
+        self._research_node = None
+        try:
+            return self._runtime.navigation.scroll_research_tree(
+                observe_content=self._observe_research_content,
+            )
+        finally:
+            self._sync_from_runtime()
+
+    def close_research_detail(self) -> Observation:
+        """Return an unfunded idle detail to its preserved Development grid."""
+
+        self._research_node = None
+        try:
+            return self._runtime.navigation.close_research_detail(
+                observe_content=self._observe_research_content,
+            )
+        finally:
+            self._sync_from_runtime()
+
     def start_research(self, checkpoint: DailyTaskCheckpoint) -> tuple[DailyTaskCheckpoint, DailyTargetOutcome]:
         """Use the canonical one-research boundary only after this context selected its node."""
 

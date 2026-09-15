@@ -18,6 +18,7 @@ The packaged PNC **5.0.203 / version code 233** yielded **6,276 gameplay Lua fil
 | [Neutral gathering](workflows/neutral-gathering.md) | Target/occupancy shield predicate, army-count semantics, and one correlated live collection receipt |
 | [Hero Hall recruitment](workflows/hero-hall-recruitment.md) | Free-single animation, Confirm/Close result flow, subsequent paid draw, and reconciliation limits |
 | [Resource inventory](workflows/resource-inventory.md) | Recycled Bag rows, partial edge visibility, single versus bulk Use, and full-inventory proof limits |
+| [Development Research](workflows/development-research.md) | Research-tree progression, grid geometry, node-detail eligibility, and bounded automation implications |
 | [Mail sending](workflows/mail-sending.md) | Player versus alliance send branches, client eligibility checks, and correlated receipt requirements |
 | [Provenance and reproduction](PROVENANCE.md) | Build, hashes, artifact locations, and offline reconstruction |
 

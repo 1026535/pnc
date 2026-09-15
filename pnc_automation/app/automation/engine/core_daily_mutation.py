@@ -335,9 +335,14 @@ class CoreMutationBoundary:
             )
             or control is None
             or control.source_kind != VisibleElementSourceKind.TEMPLATE
+            or source.research_start_resources_sufficient is not True
+            or source.research_start_queue_available is not True
             or _is_active_research_detail(source)
         ):
-            raise RuntimeError("Research requires a fresh, guarded normal Start control.")
+            raise RuntimeError(
+                "Research requires a fresh, guarded normal Start control with an idle queue and "
+                "sufficient observed resources."
+            )
         executor = runtime.runtime.require_observed_action_executor(
             "Core Research requires the canonical observed action executor."
         )
@@ -377,7 +382,9 @@ class CoreMutationBoundary:
             operation=MutationOperation(
                 operation_id="research-001",
                 quest_id=DailyQuestId.UPGRADE_RESEARCH,
-                expected_precondition=f"Selected research {node_title} has a normal Start control",
+                expected_precondition=(
+                    f"Selected research {node_title} has a normal Start control and sufficient resources"
+                ),
                 expected_postcondition="Guarded active research detail with no Start control",
                 metadata={"node_title": node_title},
             ),

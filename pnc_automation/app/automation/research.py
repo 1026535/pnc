@@ -33,6 +33,10 @@ from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.core.errors import TaskVerificationError
 
 
+_MAX_DEVELOPMENT_RESEARCH_VIEWPORTS = 4
+_MAX_DEVELOPMENT_DETAIL_INSPECTIONS = 8
+
+
 class ResearchDisposition(StrEnum):
     """Describes the bounded outcome of one Development research attempt."""
 
@@ -126,8 +130,48 @@ class ResearchWorkflow(CoreWorkflow[ResearchResult]):
         context.open_building(HomeCityObjectId.INSTITUTE)
         context.navigate(ScreenType.PNC_RESEARCH_TREE)
         tree = context.observe_content(expected_screen=ScreenType.PNC_RESEARCH_TREE)
-        target = _select_development_node(tree, self.policy)
+        target = None
+        inspected_titles: set[str] = set()
+        last_unfunded_title: str | None = None
+        seen_viewports: set[tuple[tuple[object, ...], ...]] = set()
+        for viewport_index in range(_MAX_DEVELOPMENT_RESEARCH_VIEWPORTS):
+            signature = _development_viewport_signature(tree)
+            if signature in seen_viewports:
+                break
+            seen_viewports.add(signature)
+            while len(inspected_titles) < _MAX_DEVELOPMENT_DETAIL_INSPECTIONS:
+                candidate = _select_development_node(
+                    tree,
+                    self.policy,
+                    excluded_titles=frozenset(inspected_titles),
+                )
+                if candidate is None:
+                    break
+                title = candidate.title_text
+                if title is None or not title.strip():
+                    raise TaskVerificationError(
+                        "Development research node has no stable title; no mutation was attempted."
+                    )
+                detail = context.open_research_node(
+                    title=title,
+                    category=ResearchCategory.DEVELOPMENT,
+                )
+                if (
+                    detail.research_start_resources_sufficient is True
+                    and detail.research_start_queue_available is True
+                ):
+                    target = candidate
+                    break
+                inspected_titles.add(title)
+                last_unfunded_title = title
+                tree = context.close_research_detail()
+            if target is not None or len(inspected_titles) >= _MAX_DEVELOPMENT_DETAIL_INSPECTIONS:
+                break
+            if viewport_index + 1 < _MAX_DEVELOPMENT_RESEARCH_VIEWPORTS:
+                tree = context.scroll_research_tree()
         if target is None:
+            if last_unfunded_title is not None:
+                return _unfunded_supported_node(self.checkpoint, last_unfunded_title)
             return _no_visible_supported_node(self.checkpoint)
 
         title = target.title_text
@@ -135,10 +179,6 @@ class ResearchWorkflow(CoreWorkflow[ResearchResult]):
             raise TaskVerificationError(
                 "Development research node has no stable title; no mutation was attempted."
             )
-        context.open_research_node(
-            title=title,
-            category=ResearchCategory.DEVELOPMENT,
-        )
         checkpoint, outcome = context.start_research(self.checkpoint)
         if outcome.quest_id != DailyQuestId.UPGRADE_RESEARCH:
             raise ValueError("WorkflowContext.start_research returned an unrelated mutation outcome.")
@@ -154,13 +194,20 @@ class ResearchWorkflow(CoreWorkflow[ResearchResult]):
 def _select_development_node(
     observation: Observation,
     policy: ResearchPolicy,
+    *,
+    excluded_titles: frozenset[str] = frozenset(),
 ) -> DetectedListEntry | None:
-    """Select exactly one complete Development row without inferring eligibility."""
+    """Select the first stable non-max Development row in viewport order."""
 
     candidates: list[DetectedListEntry] = []
     for entry in observation.entries(ListEntryKind.RESEARCH):
         category = _entry_category(entry)
-        if category == ResearchCategory.DEVELOPMENT:
+        if (
+            category == ResearchCategory.DEVELOPMENT
+            and entry.title_text not in excluded_titles
+            and entry.metadata.get("research_progress_state") == "incomplete"
+            and entry.metadata.get("research_access_state") == "available"
+        ):
             candidates.append(entry)
     if not candidates:
         return None
@@ -172,7 +219,8 @@ def _select_development_node(
     )
     if target is None:
         return None
-    if len(candidates) != 1:
+    matching_titles = [entry.title_text for entry in candidates]
+    if target.title_text is None or matching_titles.count(target.title_text) != 1:
         raise TaskVerificationError(
             "Development research node is ambiguous; no node was opened or started.",
             candidate_count=len(candidates),
@@ -192,6 +240,27 @@ def _select_development_node(
             "Development research node has no valid observed action geometry; no mutation was attempted."
         )
     return target
+
+
+def _development_viewport_signature(
+    observation: Observation,
+) -> tuple[tuple[object, ...], ...]:
+    """Describe visible Development facts so a stalled scroll cannot loop."""
+
+    return tuple(
+        (
+            entry.title_text,
+            entry.row_status.value,
+            entry.metadata.get("research_access_state"),
+            entry.metadata.get("research_progress_state"),
+            entry.metadata.get("research_progress_current"),
+            entry.metadata.get("research_progress_limit"),
+            entry.bounds.x,
+            entry.bounds.y,
+        )
+        for entry in observation.entries(ListEntryKind.RESEARCH)
+        if _entry_category(entry) == ResearchCategory.DEVELOPMENT
+    )
 
 
 def _entry_category(entry: DetectedListEntry) -> ResearchCategory | None:
@@ -220,6 +289,26 @@ def _no_visible_supported_node(checkpoint: DailyTaskCheckpoint) -> ResearchResul
         checkpoint=checkpoint,
         outcome=outcome,
         disposition=ResearchDisposition.NO_VISIBLE_SUPPORTED_NODE,
+    )
+
+
+def _unfunded_supported_node(
+    checkpoint: DailyTaskCheckpoint,
+    title: str,
+) -> ResearchResult:
+    """Return pending after bounded detail checks find no safely fundable node."""
+
+    outcome = DailyTargetOutcome(
+        quest_id=DailyQuestId.UPGRADE_RESEARCH,
+        status=DailyTargetOutcomeStatus.PENDING_CLARIFICATION,
+        message="No inspected Development detail proved sufficient resources; no intent was created.",
+    )
+    return ResearchResult(
+        checkpoint=checkpoint,
+        outcome=outcome,
+        disposition=ResearchDisposition.PENDING_CLARIFICATION,
+        category=ResearchCategory.DEVELOPMENT,
+        node_title=title,
     )
 
 

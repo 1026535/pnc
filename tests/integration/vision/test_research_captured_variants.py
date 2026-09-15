@@ -341,17 +341,19 @@ class ResearchCapturedVariantTests(unittest.TestCase):
         )
         self.assertTrue(task.verify(context, before, perceived).succeeded)
 
-    def test_visible_busy_military_detail_abstains_without_unproved_identity(self) -> None:
-        """A no-idle Military detail visibly says Research but lacks a proved profile."""
+    def test_visible_busy_military_detail_is_identified_but_queue_blocked(self) -> None:
+        """A no-idle Military detail cannot satisfy the normal Start boundary."""
 
         lines = _military_no_idle_lines()
         builder_ocr = _BoundedOcrService(lines)
         built = _builder(builder_ocr).build(
             _capture(_load_fixture("military_detail_no_idle.png"), session_id="builder:military")
         )
-        self.assertEqual(built.screen_type, ScreenType.UNKNOWN)
+        self.assertEqual(built.screen_type, ScreenType.PNC_RESEARCH_TREE)
         self.assertEqual(built.decision.guard, GuardVerdict.CLEAR)
-        self.assertFalse(built.visible_elements)
+        self.assertTrue(built.has(START))
+        self.assertTrue(built.research_start_resources_sufficient)
+        self.assertFalse(built.research_start_queue_available)
         _assert_bounded_reads(self, builder_ocr)
 
         perception_ocr = _BoundedOcrService(lines)
@@ -359,9 +361,11 @@ class ResearchCapturedVariantTests(unittest.TestCase):
             _capture(_load_fixture("military_detail_no_idle.png"), session_id="perception:military"),
             include_content=True,
         )
-        self.assertEqual(perceived.screen_type, ScreenType.UNKNOWN)
+        self.assertEqual(perceived.screen_type, ScreenType.PNC_RESEARCH_TREE)
         self.assertEqual(perceived.decision.guard, GuardVerdict.CLEAR)
-        self.assertFalse(perceived.visible_elements)
+        self.assertTrue(perceived.has(START))
+        self.assertTrue(perceived.research_start_resources_sufficient)
+        self.assertFalse(perceived.research_start_queue_available)
         _assert_bounded_reads(self, perception_ocr)
 
     def test_fortification_available_detail_uses_blue_start_profile(self) -> None:

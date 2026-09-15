@@ -73,6 +73,43 @@ class ResearchCoreWorkflowTests(unittest.TestCase):
             context.calls,
         )
 
+    def test_max_nodes_are_skipped_before_one_bounded_scroll_selects_progression(self) -> None:
+        """Uses node-local progress and never opens a completed Development node."""
+
+        context = _FakeResearchContext(
+            (
+                _tree(_max_entry("Construction I"), _max_entry("Research Speed I")),
+                _tree(_complete_entry("Troop Load I", current=1, limit=5)),
+            )
+        )
+
+        result = ResearchWorkflow(
+            policy=ResearchPolicy(priority=(ResearchCategory.DEVELOPMENT,)),
+            checkpoint=self.checkpoint,
+        ).execute(context)
+
+        self.assertEqual(ResearchDisposition.STARTED, result.disposition)
+        self.assertEqual("Troop Load I", result.node_title)
+        self.assertEqual(1, context.scroll_calls)
+        self.assertNotIn(
+            ("open_node", "Construction I", ResearchCategory.DEVELOPMENT),
+            context.calls,
+        )
+
+    def test_incomplete_locked_node_is_not_opened_or_started(self) -> None:
+        """A client prerequisite badge withholds the node before detail navigation."""
+
+        context = _FakeResearchContext(_tree(_locked_entry("Infirmary Cap II")))
+
+        result = ResearchWorkflow(
+            policy=ResearchPolicy(priority=(ResearchCategory.DEVELOPMENT,)),
+            checkpoint=self.checkpoint,
+        ).execute(context)
+
+        self.assertEqual(ResearchDisposition.NO_VISIBLE_SUPPORTED_NODE, result.disposition)
+        self.assertEqual(0, context.open_node_calls)
+        self.assertEqual(0, context.start_calls)
+
     def test_empty_or_unsupported_viewport_returns_no_visible_disposition(self) -> None:
         """Does not infer a free or eligible target from an empty or unsupported tree."""
 
@@ -110,7 +147,7 @@ class ResearchCoreWorkflowTests(unittest.TestCase):
         """Refuses incomplete or duplicate Development geometry without opening or starting a node."""
 
         for entries in (
-            (_complete_entry("Construction I"), _complete_entry("Construction II")),
+            (_complete_entry("Construction I"), _complete_entry("Construction I")),
             (_clipped_entry("Construction I"),),
         ):
             with self.subTest(entries=entries):
@@ -140,18 +177,67 @@ class ResearchCoreWorkflowTests(unittest.TestCase):
             workflow.execute(context)
         self.assertEqual(1, context.start_calls)
 
+    def test_unfunded_detail_is_closed_before_a_funded_peer_starts(self) -> None:
+        """Inspects candidate resources without creating an intent for the short node."""
+
+        context = _FakeResearchContext(
+            _tree(
+                _complete_entry("Troop Load II"),
+                _complete_entry("Storage II"),
+            ),
+            detail_resources={"Troop Load II": False, "Storage II": True},
+        )
+
+        result = ResearchWorkflow(
+            policy=ResearchPolicy(priority=(ResearchCategory.DEVELOPMENT,)),
+            checkpoint=self.checkpoint,
+        ).execute(context)
+
+        self.assertEqual(ResearchDisposition.STARTED, result.disposition)
+        self.assertEqual("Storage II", result.node_title)
+        self.assertEqual(2, context.open_node_calls)
+        self.assertEqual(1, context.close_detail_calls)
+        self.assertEqual(1, context.start_calls)
+
+    def test_all_unfunded_details_return_pending_without_start(self) -> None:
+        """Exhausts bounded safe candidates while retaining an unconsumed mutation budget."""
+
+        context = _FakeResearchContext(
+            _tree(
+                _complete_entry("Troop Load II"),
+                _complete_entry("Storage II"),
+            ),
+            detail_resources={"Troop Load II": False, "Storage II": None},
+        )
+
+        result = ResearchWorkflow(
+            policy=ResearchPolicy(priority=(ResearchCategory.DEVELOPMENT,)),
+            checkpoint=self.checkpoint,
+        ).execute(context)
+
+        self.assertEqual(ResearchDisposition.PENDING_CLARIFICATION, result.disposition)
+        self.assertEqual(DailyTargetOutcomeStatus.PENDING_CLARIFICATION, result.outcome.status)
+        self.assertEqual(2, context.open_node_calls)
+        self.assertEqual(2, context.close_detail_calls)
+        self.assertEqual(0, context.start_calls)
+
 
 @dataclass
 class _FakeResearchContext:
     """Supplies only the typed seams owned by the replacement core."""
 
-    tree: Observation
+    tree: Observation | tuple[Observation, ...]
     start_error: Exception | None = None
+    detail_resources: dict[str, bool | None] | None = None
 
     def __post_init__(self) -> None:
         self.calls: list[tuple[object, ...]] = []
         self.open_node_calls = 0
         self.start_calls = 0
+        self.scroll_calls = 0
+        self.close_detail_calls = 0
+        self._trees = self.tree if isinstance(self.tree, tuple) else (self.tree,)
+        self._tree_index = 0
 
     def open_building(self, target: HomeCityObjectId) -> Observation:
         """Records the typed Institute route."""
@@ -169,14 +255,35 @@ class _FakeResearchContext:
         """Returns one fresh typed research tree."""
 
         self.calls.append(("observe", expected_screen))
-        return self.tree
+        return self._trees[self._tree_index]
+
+    def scroll_research_tree(self) -> Observation:
+        """Advance one bounded fake Development viewport."""
+
+        self.scroll_calls += 1
+        self.calls.append(("scroll_research_tree",))
+        self._tree_index = min(self._tree_index + 1, len(self._trees) - 1)
+        return self._trees[self._tree_index]
 
     def open_research_node(self, *, title: str, category: ResearchCategory) -> Observation:
         """Records exact node reacquisition and returns an idle detail proof."""
 
         self.open_node_calls += 1
         self.calls.append(("open_node", title, category))
-        return make_observation(ScreenType.PNC_RESEARCH_TREE, artifact_path=Path("detail.png"))
+        sufficient = True if self.detail_resources is None else self.detail_resources.get(title)
+        return make_observation(
+            ScreenType.PNC_RESEARCH_TREE,
+            artifact_path=Path("detail.png"),
+            research_start_resources_sufficient=sufficient,
+            research_start_queue_available=True,
+        )
+
+    def close_research_detail(self) -> Observation:
+        """Return the current fake viewport after one non-mutating detail Back."""
+
+        self.close_detail_calls += 1
+        self.calls.append(("close_research_detail",))
+        return self._trees[self._tree_index]
 
     def start_research(
         self, checkpoint: DailyTaskCheckpoint,
@@ -200,7 +307,13 @@ def _tree(*entries: DetectedListEntry) -> Observation:
     return make_observation(ScreenType.PNC_RESEARCH_TREE, list_entries=entries, image_size=(540, 960))
 
 
-def _complete_entry(title: str, *, category: ResearchCategory = ResearchCategory.DEVELOPMENT) -> DetectedListEntry:
+def _complete_entry(
+    title: str,
+    *,
+    category: ResearchCategory = ResearchCategory.DEVELOPMENT,
+    current: int = 1,
+    limit: int = 5,
+) -> DetectedListEntry:
     """Build one complete, observed research row with bounded action geometry."""
 
     bounds = Bounds(20, 80, 180, 90)
@@ -211,8 +324,48 @@ def _complete_entry(title: str, *, category: ResearchCategory = ResearchCategory
         title_text=title,
         action_point=action_bounds.center(),
         action_bounds=action_bounds,
-        metadata={"category": category.value},
+        metadata={
+            "category": category.value,
+            "research_access_state": "available",
+            "research_progress_state": "incomplete",
+            "research_progress_current": current,
+            "research_progress_limit": limit,
+        },
         row_status=RowRecognitionStatus.COMPLETE,
+    )
+
+
+def _max_entry(title: str) -> DetectedListEntry:
+    """Build one fully observed node whose progression is complete."""
+
+    entry = _complete_entry(title)
+    return DetectedListEntry(
+        kind=entry.kind,
+        bounds=entry.bounds,
+        title_text=entry.title_text,
+        action_point=entry.action_point,
+        action_bounds=entry.action_bounds,
+        metadata={
+            "category": "development",
+            "research_access_state": "available",
+            "research_progress_state": "max",
+        },
+        row_status=entry.row_status,
+    )
+
+
+def _locked_entry(title: str) -> DetectedListEntry:
+    """Build one incomplete node whose client prerequisite badge is visible."""
+
+    entry = _complete_entry(title)
+    return DetectedListEntry(
+        kind=entry.kind,
+        bounds=entry.bounds,
+        title_text=entry.title_text,
+        action_point=entry.action_point,
+        action_bounds=entry.action_bounds,
+        metadata={**entry.metadata, "research_access_state": "locked"},
+        row_status=entry.row_status,
     )
 
 
@@ -223,7 +376,11 @@ def _clipped_entry(title: str) -> DetectedListEntry:
         kind=ListEntryKind.RESEARCH,
         bounds=Bounds(20, 80, 180, 90),
         title_text=title,
-        metadata={"category": ResearchCategory.DEVELOPMENT.value},
+        metadata={
+            "category": ResearchCategory.DEVELOPMENT.value,
+            "research_access_state": "available",
+            "research_progress_state": "incomplete",
+        },
         row_status=RowRecognitionStatus.CLIPPED,
     )
 

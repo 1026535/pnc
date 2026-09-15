@@ -26,6 +26,8 @@ from pnc_automation.app.pnc.vision.pnc_observation_enricher import (
     PncObservationEnricher,
     _build_matching_text_screen_additions,
     _build_research_tree_additions,
+    _parse_research_node_progress,
+    _research_node_candidates,
 )
 from pnc_automation.app.pnc.vision.navigation_perception import NavigationPerception
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier
@@ -104,11 +106,16 @@ def _development_ocr_lines(*, scale: float = 1.0) -> tuple[OcrLine, ...]:
 
     return (
         _ocr_line("Development", x=scaled(112), y=scaled(14), width=scaled(183), height=scaled(27)),
+        _ocr_line("2/5", x=scaled(233), y=scaled(77), width=scaled(22), height=scaled(12)),
         _ocr_line("Construction", x=scaled(222), y=scaled(183), width=scaled(102), height=scaled(17)),
+        _ocr_line("2/5", x=scaled(233), y=scaled(268), width=scaled(22), height=scaled(12)),
         _ocr_line("Research", x=scaled(239), y=scaled(367), width=scaled(68), height=scaled(15)),
         _ocr_line("Speed I", x=scaled(245), y=scaled(382), width=scaled(57), height=scaled(18)),
+        _ocr_line("1/5", x=scaled(105), y=scaled(457), width=scaled(25), height=scaled(13)),
+        _ocr_line("1/5", x=scaled(359), y=scaled(458), width=scaled(21), height=scaled(12)),
         _ocr_line("TroopLoadi", x=scaled(103), y=scaled(563), width=scaled(93), height=scaled(18)),
         _ocr_line("Storagel", x=scaled(363), y=scaled(562), width=scaled(69), height=scaled(21)),
+        _ocr_line("1/5", x=scaled(234), y=scaled(648), width=scaled(22), height=scaled(13)),
         _ocr_line("Infirmary Cap", x=scaled(219), y=scaled(746), width=scaled(105), height=scaled(19)),
         _ocr_line("Miraculous", x=scaled(231), y=scaled(936), width=scaled(84), height=scaled(19)),
     )
@@ -147,11 +154,9 @@ class ResearchObservationTests(unittest.TestCase):
         complete = tuple(row for row in rows if row.row_status == RowRecognitionStatus.COMPLETE)
         self.assertEqual(
             (
-                "Construction I",
                 "Research Speed I",
                 "Storage I",
                 "Troop Load I",
-                "Infirmary Cap I",
             ),
             tuple(row.title_text for row in complete),
         )
@@ -166,11 +171,58 @@ class ResearchObservationTests(unittest.TestCase):
             self.assertTrue(Bounds(0, 0, *screenshot.image.size).contains_bounds(row.bounds))
             self.assertEqual(screenshot.frame_ref, row.frame_ref)
             self.assertEqual(ScreenType.PNC_RESEARCH_TREE, row.source_screen)
+            self.assertEqual("incomplete", row.metadata["research_progress_state"])
+            self.assertEqual(
+                "locked" if row.title_text == "Infirmary Cap I" else "available",
+                row.metadata["research_access_state"],
+            )
+            self.assertLess(
+                row.metadata["research_progress_current"],
+                row.metadata["research_progress_limit"],
+            )
 
-        clipped = next(row for row in rows if row.title_text == "Miraculous Survival")
-        self.assertEqual(RowRecognitionStatus.CLIPPED, clipped.row_status)
-        self.assertIsNone(clipped.action_bounds)
-        self.assertIsNone(clipped.action_point)
+        for title in ("Construction", "Infirmary Cap", "Miraculous Survival"):
+            clipped = next(row for row in rows if row.title_text == title)
+            self.assertEqual(RowRecognitionStatus.CLIPPED, clipped.row_status)
+            self.assertIsNone(clipped.action_bounds)
+            self.assertIsNone(clipped.action_point)
+
+    def test_progression_parser_accepts_zero_through_limit_and_max_label(self) -> None:
+        """Implements the client contract: i/n for 0..n and MAX at completion."""
+
+        for text, state, current, limit in (
+            ("0/10", "incomplete", 0, 10),
+            ("9 / 10", "incomplete", 9, 10),
+            ("10/10", "max", 10, 10),
+            ("MAX", "max", None, None),
+        ):
+            with self.subTest(text=text):
+                progress = _parse_research_node_progress(text)
+                self.assertIsNotNone(progress)
+                self.assertEqual(state, progress.state)
+                self.assertEqual(current, progress.current)
+                self.assertEqual(limit, progress.limit)
+
+        for text in ("11/10", "-1/10", "1/0", "1 of 10", "MAXIMUM"):
+            with self.subTest(text=text):
+                self.assertIsNone(_parse_research_node_progress(text))
+
+    def test_tier_two_split_label_ignores_interposed_neighbor_column(self) -> None:
+        """Binds stacked tier-II text within a column, not global OCR row order."""
+
+        candidates = _research_node_candidates(
+            (
+                _ocr_line("Research", x=191, y=552, width=111, height=24),
+                _ocr_line("Storage ll", x=603, y=562, width=121, height=30),
+                _ocr_line("Speed Il", x=196, y=574, width=102, height=32),
+                _ocr_line("Food Output II", x=368, y=1196, width=173, height=30),
+            )
+        )
+
+        self.assertEqual(
+            ("Research Speed II", "Storage II", "Food Output II"),
+            tuple(candidate.title_text for candidate in candidates),
+        )
 
     def test_scaled_development_tree_keeps_icon_action_points_in_scaled_boxes(self) -> None:
         """Scales icon-derived action geometry with the 540x960 source fixture."""
@@ -187,8 +239,10 @@ class ResearchObservationTests(unittest.TestCase):
             for row in observation.entries(ListEntryKind.RESEARCH)
             if row.row_status == RowRecognitionStatus.COMPLETE
         }
-        self.assertEqual(set(RESEARCH_ICON_BOXES), set(rows))
-        for title, fixture_icon in RESEARCH_ICON_BOXES.items():
+        expected_titles = {"Research Speed I", "Troop Load I", "Storage I"}
+        self.assertEqual(expected_titles, set(rows))
+        for title in expected_titles:
+            fixture_icon = RESEARCH_ICON_BOXES[title]
             row = rows[title]
             assert row.action_point is not None
             self.assertTrue(
@@ -230,7 +284,10 @@ class ResearchObservationTests(unittest.TestCase):
     def test_duplicate_development_labels_are_ambiguous(self) -> None:
         """Does not expose a tap point when one reviewed label appears twice."""
 
-        lines = (*_development_ocr_lines(), _ocr_line("Construction I", x=80, y=235, width=105, height=18))
+        lines = (
+            *_development_ocr_lines(),
+            _ocr_line("Research Speed I", x=80, y=235, width=125, height=18),
+        )
         observation = _research_perception(lines).build(
             _captured_research_fixture(),
             include_content=True,
@@ -238,7 +295,7 @@ class ResearchObservationTests(unittest.TestCase):
 
         construction_rows = tuple(
             row for row in observation.entries(ListEntryKind.RESEARCH)
-            if row.title_text == "Construction I"
+            if row.title_text == "Research Speed I"
         )
         self.assertEqual(2, len(construction_rows))
         self.assertTrue(all(row.row_status == RowRecognitionStatus.AMBIGUOUS for row in construction_rows))

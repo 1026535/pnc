@@ -310,6 +310,9 @@ _RESEARCH_TREE_HEADER_TEXTS = frozenset(
         "COMBAT",
     }
 )
+_RESEARCH_DETAIL_RESOURCE_RATIO_PATTERN = re.compile(
+    r"^\s*(?P<current>\d[\d,\s]*)\s*/\s*(?P<required>\d[\d,\s]*)\s*$"
+)
 _CAMPAIGN_MAP_CHAPTER_TITLE = "10GRANDIARUINS"
 _CAMPAIGN_CHAPTER_TITLE = "CH10GRANDIARUINS"
 _DAILY_TO_DO_SECTION_TEXTS = frozenset(
@@ -427,9 +430,9 @@ _RESEARCH_TREE_SUPPORT_TOKENS = frozenset(
     }
 )
 _RESEARCH_DEVELOPMENT_NODE_LABELS = {
-    # Live OCR may omit the tier numeral; the visible blue tile must still
-    # provide the geometry before this bounded variant can become actionable.
-    "CONSTRUCTION": ("Construction I", False),
+    # A missing tier numeral cannot distinguish a tier-I node from its tier-II
+    # successor. Publish the base label as partial evidence without a tap.
+    "CONSTRUCTION": ("Construction", True),
     "CONSTRUCTIONI": ("Construction I", False),
     "CONSTRUCTIONL": ("Construction I", False),
     "RESEARCHSPEEDI": ("Research Speed I", False),
@@ -439,13 +442,33 @@ _RESEARCH_DEVELOPMENT_NODE_LABELS = {
     "STORAGEI": ("Storage I", False),
     "STORAGEL": ("Storage I", False),
     "INFIRMARYCAPI": ("Infirmary Cap I", False),
-    # RapidOCR can omit the final roman numeral on this label.  The label is
-    # still complete when its measured blue tile is fully visible.
-    "INFIRMARYCAP": ("Infirmary Cap I", False),
+    "INFIRMARYCAP": ("Infirmary Cap", True),
     "MIRACULOUSSURVIVAL": ("Miraculous Survival", True),
     # Only the first fragment is visible in the reviewed fixture.  Keep it as
     # clipped evidence, never as a complete node-selection target.
     "MIRACULOUS": ("Miraculous Survival", True),
+    # Reviewed tier-II live captures retain two numeral-shaped glyphs even
+    # when RapidOCR confuses one or both capital ``I`` glyphs with ``l``.
+    # Numeral-loss variants are deliberately absent because they cannot
+    # distinguish a tier-I label from its tier-II successor.
+    "CONSTRUCTIONII": ("Construction II", False),
+    "CONSTRUCTIONIL": ("Construction II", False),
+    "CONSTRUCTIONLL": ("Construction II", False),
+    "RESEARCHSPEEDII": ("Research Speed II", False),
+    "RESEARCHSPEEDIL": ("Research Speed II", False),
+    "RESEARCHSPEEDLL": ("Research Speed II", False),
+    "TROOPLOADII": ("Troop Load II", False),
+    "TROOPLOADIL": ("Troop Load II", False),
+    "TROOPLOADLL": ("Troop Load II", False),
+    "STORAGEII": ("Storage II", False),
+    "STORAGEIL": ("Storage II", False),
+    "STORAGELL": ("Storage II", False),
+    "FOODOUTPUTII": ("Food Output II", False),
+    "FOODOUTPUTIL": ("Food Output II", False),
+    "FOODOUTPUTLL": ("Food Output II", False),
+    "STAMINAREPLNII": ("Stamina Repln. II", False),
+    "STAMINAREPLNIL": ("Stamina Repln. II", False),
+    "STAMINAREPLNLL": ("Stamina Repln. II", False),
 }
 _RESEARCH_LABEL_BLUE_MIN_RED_DELTA = 25
 _RESEARCH_LABEL_BLUE_MIN_GREEN_DELTA = 15
@@ -455,6 +478,9 @@ _RESEARCH_LABEL_SCAN_MARGIN_RATIO = 0.05
 _RESEARCH_OCR_BOTTOM_MARGIN_RATIO = 0.04
 _RESEARCH_ICON_WIDTH_RATIO = 0.82
 _RESEARCH_ICON_HEIGHT_RATIO = 1.72
+_RESEARCH_LOCK_BADGE_LEFT_RATIO = 0.70
+_RESEARCH_LOCK_BADGE_TOP_RATIO = 0.68
+_RESEARCH_LOCK_BADGE_MIN_RED_RATIO = 0.04
 _PROGRESS_COUNTER_PATTERN = re.compile(r"^\d+/\d+$")
 _PERCENT_PROGRESS_PATTERN = re.compile(r"^\d{1,3}%$")
 _ACCOUNT_IDENTIFIER_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -576,6 +602,16 @@ class _ResearchNodeCandidate:
     line: OcrLine
     title_text: str
     partial_label: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class _ResearchNodeProgress:
+    """Represents one node-local ``i/n`` or ``MAX`` progression marker."""
+
+    state: str
+    source_text: str
+    current: int | None = None
+    limit: int | None = None
 
 
 _TEXT_SCREEN_DEFINITIONS = (
@@ -2592,6 +2628,7 @@ class PncObservationEnricher:
             research_tree = _build_research_tree_additions(
                 image=image,
                 lines=lines,
+                ocr_context=ocr_context,
                 proved_screen=(
                     screen_type
                     if screen_type == ScreenType.PNC_RESEARCH_TREE
@@ -7803,6 +7840,7 @@ def _build_research_tree_additions(
     image: Image.Image,
     lines: tuple[OcrLine, ...],
     proved_screen: ScreenType | None = None,
+    ocr_context: ObservationOcrContext | None = None,
 ) -> ObservationAdditions | None:
     """Returns Development-tree rows when OCR and visible label geometry agree.
 
@@ -7833,7 +7871,15 @@ def _build_research_tree_additions(
         )
     )
     candidates = _research_node_candidates(body_lines)
-    entries = tuple(_research_node_entry(image=image, candidate=candidate) for candidate in candidates)
+    entries = tuple(
+        _research_node_entry(
+            image=image,
+            candidate=candidate,
+            lines=body_lines,
+            ocr_context=ocr_context,
+        )
+        for candidate in candidates
+    )
     duplicate_titles = {
         title
         for title in (entry.title_text for entry in entries)
@@ -7854,6 +7900,8 @@ def _build_research_tree_additions(
         )
     return ObservationAdditions(
         list_entries=entries,
+        research_start_resources_sufficient=_research_detail_resources_sufficient(lines),
+        research_start_queue_available=_research_detail_queue_available(lines),
         screen_evidence=(
             ()
             if proved_screen is not None
@@ -7865,19 +7913,48 @@ def _build_research_tree_additions(
 def _research_node_candidates(lines: tuple[OcrLine, ...]) -> tuple[_ResearchNodeCandidate, ...]:
     """Extract one candidate per direct or vertically split Development label."""
 
-    candidates: list[_ResearchNodeCandidate] = []
+    unique_lines: dict[tuple[str, Bounds], OcrLine] = {}
     for line in lines:
+        unique_lines.setdefault((normalize_ocr_text(line.text), line.bounds), line)
+    candidate_lines = tuple(
+        sorted(unique_lines.values(), key=lambda line: (line.bounds.y, line.bounds.x))
+    )
+    candidates: list[_ResearchNodeCandidate] = []
+    merged_by_upper: dict[int, list[_ResearchNodeCandidate]] = {}
+    for upper_index, upper_line in enumerate(candidate_lines):
+        for lower_line in candidate_lines[upper_index + 1 :]:
+            merged_line = _merge_text_screen_control_candidate(
+                candidate_lines=(upper_line, lower_line),
+                index=0,
+            )
+            if merged_line is None:
+                continue
+            matched = _match_research_development_label(merged_line.text)
+            if matched is not None:
+                merged_by_upper.setdefault(upper_index, []).append(
+                    _ResearchNodeCandidate(merged_line, matched[0], matched[1])
+                )
+
+    merged_candidates = {
+        upper_index: candidates_for_upper[0]
+        for upper_index, candidates_for_upper in merged_by_upper.items()
+        if len(
+            {
+                (candidate.title_text, candidate.line.bounds)
+                for candidate in candidates_for_upper
+            }
+        )
+        == 1
+    }
+
+    for index, line in enumerate(candidate_lines):
+        merged_candidate = merged_candidates.get(index)
+        if merged_candidate is not None:
+            candidates.append(merged_candidate)
+            continue
         matched = _match_research_development_label(line.text)
         if matched is not None:
             candidates.append(_ResearchNodeCandidate(line, matched[0], matched[1]))
-    for index in range(len(lines) - 1):
-        merged_line = _merge_text_screen_control_candidate(candidate_lines=lines, index=index)
-        if merged_line is None:
-            continue
-        matched = _match_research_development_label(merged_line.text)
-        if matched is None:
-            continue
-        candidates.append(_ResearchNodeCandidate(merged_line, matched[0], matched[1]))
     # Exact geometry removes a direct/merged duplicate, while distinct repeated
     # labels remain visible and are marked ambiguous by the caller.
     unique: dict[tuple[str, Bounds], _ResearchNodeCandidate] = {}
@@ -7886,13 +7963,64 @@ def _research_node_candidates(lines: tuple[OcrLine, ...]) -> tuple[_ResearchNode
     return tuple(sorted(unique.values(), key=lambda item: (item.line.bounds.y, item.line.bounds.x)))
 
 
+def _research_detail_resources_sufficient(lines: tuple[OcrLine, ...]) -> bool | None:
+    """Return whether every fully parsed resource row can fund normal Research."""
+
+    normalized = {normalize_ocr_text(line.text) for line in lines}
+    if not (
+        "RESEARCH" in normalized
+        and "ORIGINALTIME" in normalized
+        and "ACTUALTIME" in normalized
+        and any(text.startswith("INSTITUTELV") for text in normalized)
+    ):
+        return None
+    requirements: list[tuple[int, int]] = []
+    for line in lines:
+        match = _RESEARCH_DETAIL_RESOURCE_RATIO_PATTERN.fullmatch(line.text)
+        if match is None:
+            continue
+        current_text = match.group("current").replace(",", "").replace(" ", "")
+        required_text = match.group("required").replace(",", "").replace(" ", "")
+        try:
+            current = int(current_text)
+            required = int(required_text)
+        except ValueError:
+            return None
+        if required <= 0:
+            return None
+        requirements.append((current, required))
+    if len(requirements) < 2:
+        return None
+    return all(current >= required for current, required in requirements)
+
+
+def _research_detail_queue_available(lines: tuple[OcrLine, ...]) -> bool | None:
+    """Return whether the proved normal Research detail has an idle queue."""
+
+    normalized = {normalize_ocr_text(line.text) for line in lines}
+    if not (
+        "RESEARCH" in normalized
+        and "ORIGINALTIME" in normalized
+        and "ACTUALTIME" in normalized
+        and any(text.startswith("INSTITUTELV") for text in normalized)
+    ):
+        return None
+    return not any(text.startswith("NOIDLEQUEUE") for text in normalized)
+
+
 def _match_research_development_label(text: str) -> tuple[str, bool] | None:
     """Resolve only reviewed Development labels and bounded OCR variants."""
 
     return _RESEARCH_DEVELOPMENT_NODE_LABELS.get(normalize_ocr_text(text))
 
 
-def _research_node_entry(*, image: Image.Image, candidate: _ResearchNodeCandidate) -> DetectedListEntry:
+def _research_node_entry(
+    *,
+    image: Image.Image,
+    candidate: _ResearchNodeCandidate,
+    lines: tuple[OcrLine, ...],
+    ocr_context: ObservationOcrContext | None,
+) -> DetectedListEntry:
     """Build one conservative research row from its OCR label and blue tile."""
 
     label_bounds = _detect_research_label_bounds(image=image, line=candidate.line)
@@ -7931,10 +8059,28 @@ def _research_node_entry(*, image: Image.Image, candidate: _ResearchNodeCandidat
         or _research_ocr_label_near_viewport_edge(candidate.line, image=image)
         or _research_label_is_too_short(label_bounds, image=image)
     )
-    metadata: dict[str, str] = {
+    progress = _research_node_progress(
+        image=image,
+        title=candidate.title_text,
+        action_bounds=action_bounds,
+        lines=lines,
+        ocr_context=ocr_context,
+    )
+    metadata: dict[str, object] = {
         "category": "development",
         "coordinate_provenance": "ocr_node_icon",
+        "research_access_state": _research_node_access_state(
+            image=image,
+            action_bounds=action_bounds,
+        ),
+        "research_progress_state": "unknown" if progress is None else progress.state,
     }
+    if progress is not None:
+        metadata["research_progress_text"] = progress.source_text
+        if progress.current is not None:
+            metadata["research_progress_current"] = progress.current
+        if progress.limit is not None:
+            metadata["research_progress_limit"] = progress.limit
     if clipped:
         metadata["unresolved_reason"] = "clipped_or_partial_node_label"
     return DetectedListEntry(
@@ -7945,6 +8091,94 @@ def _research_node_entry(*, image: Image.Image, candidate: _ResearchNodeCandidat
         action_bounds=None if clipped else action_bounds,
         row_status=RowRecognitionStatus.CLIPPED if clipped else RowRecognitionStatus.COMPLETE,
         metadata=metadata,
+    )
+
+
+def _research_node_progress(
+    *,
+    image: Image.Image,
+    title: str,
+    action_bounds: Bounds,
+    lines: tuple[OcrLine, ...],
+    ocr_context: ObservationOcrContext | None,
+) -> _ResearchNodeProgress | None:
+    """Read one progression marker only from the node icon it describes."""
+
+    candidates = tuple(
+        progress
+        for line in lines
+        if action_bounds.contains_point(line.bounds.center())
+        for progress in (_parse_research_node_progress(line.text),)
+        if progress is not None
+    )
+    if not candidates and ocr_context is not None:
+        local_lines = ocr_context.read_lines(
+            image,
+            action_bounds,
+            reuse_full_frame=False,
+            purpose=OcrReadPurpose.CONTENT,
+            detail=f"research_node_progress:{title}",
+            required_fact="research_node_progress",
+        )
+        candidates = tuple(
+            progress
+            for line in local_lines
+            for progress in (_parse_research_node_progress(line.text),)
+            if progress is not None
+        )
+    unique = {
+        (progress.state, progress.current, progress.limit): progress
+        for progress in candidates
+    }
+    if len(unique) != 1:
+        return None
+    return next(iter(unique.values()))
+
+
+def _parse_research_node_progress(text: str) -> _ResearchNodeProgress | None:
+    """Parse the client-rendered ``MAX`` or bounded numeric progression text."""
+
+    if normalize_ocr_text(text) == "MAX":
+        return _ResearchNodeProgress(state="max", source_text=text)
+    match = re.fullmatch(r"\s*(?P<current>\d+)\s*/\s*(?P<limit>\d+)\s*", text)
+    if match is None:
+        return None
+    current = int(match.group("current"))
+    limit = int(match.group("limit"))
+    if limit <= 0 or current < 0 or current > limit:
+        return None
+    return _ResearchNodeProgress(
+        state="max" if current == limit else "incomplete",
+        source_text=text,
+        current=current,
+        limit=limit,
+    )
+
+
+def _research_node_access_state(*, image: Image.Image, action_bounds: Bounds) -> str:
+    """Detect the client prerequisite-lock badge in its node-local corner."""
+
+    left = action_bounds.x + round(
+        action_bounds.width * _RESEARCH_LOCK_BADGE_LEFT_RATIO
+    )
+    top = action_bounds.y + round(
+        action_bounds.height * _RESEARCH_LOCK_BADGE_TOP_RATIO
+    )
+    right = action_bounds.x + action_bounds.width
+    bottom = action_bounds.y + action_bounds.height
+    rgb_image = image if image.mode == "RGB" else image.convert("RGB")
+    crop = rgb_image.crop((left, top, right, bottom))
+    pixel_count = max(1, crop.width * crop.height)
+    badge_pixels = _count_pixels(
+        crop,
+        predicate=lambda red, green, blue: (
+            red > 190 and green < 100 and blue < 100
+        ),
+    )
+    return (
+        "locked"
+        if badge_pixels / pixel_count >= _RESEARCH_LOCK_BADGE_MIN_RED_RATIO
+        else "available"
     )
 
 

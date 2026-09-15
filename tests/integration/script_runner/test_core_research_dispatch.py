@@ -72,6 +72,9 @@ class CoreResearchDispatchTests(unittest.TestCase):
         runtime = Runtime(self.castle, (make_observation(ScreenType.PNC_RESEARCH_TREE),))
         runtime.close = Mock()
         runtime.navigation.open_building = lambda target, **kwargs: runtime.navigate(ScreenType.PNC_INSTITUTE)
+        runtime.navigation.scroll_research_tree = lambda **kwargs: make_observation(
+            ScreenType.PNC_RESEARCH_TREE
+        )
         factory = Mock(return_value=runtime)
 
         result = self.dispatcher(factory, self.scope).execute(step=self.step(castle=self.castle))

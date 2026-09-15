@@ -11,6 +11,7 @@ from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.app.pnc.domain.building_catalog import (
     HomeCityObjectId,
     build_home_city_object_metadata,
+    home_city_object_definition,
     home_city_object_definition_for_label,
 )
 from pnc_automation.app.pnc.domain.observation import (
@@ -797,6 +798,8 @@ def _classify_home_city_object(
     viewport_offset = _bounds_center_offset(bounds=bounds, origin=viewport_bounds.center())
     viewport_offset_ratio = _bounds_center_offset_ratio(bounds=bounds, viewport_bounds=viewport_bounds)
     object_definition = home_city_object_definition_for_label(line.text)
+    if object_definition is None and normalized_text == "NSTITUTE":
+        object_definition = home_city_object_definition(HomeCityObjectId.INSTITUTE)
     if object_definition is not None:
         action_x, action_y = bounds.center()
         action_y += round(image.height * object_definition.label_tap_offset_y_ratio)

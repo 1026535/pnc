@@ -26,7 +26,9 @@ from tests.contract.workflows.test_core_daily_mutation import Runtime
 from tests.support.pnc.observations import make_observation
 
 
-def research(profile, *, start=False, rows=()):
+def research(
+    profile, *, start=False, rows=(), resources_sufficient=None, queue_available=None,
+):
     return replace(make_observation(
         ScreenType.PNC_RESEARCH_TREE,
         decision=ScreenDecision(
@@ -35,6 +37,8 @@ def research(profile, *, start=False, rows=()):
             evidence=(ScreenEvidence(ScreenType.PNC_RESEARCH_TREE, f"visual_anchor:{profile}"),),
         ),
         list_entries=rows,
+        research_start_resources_sufficient=resources_sufficient,
+        research_start_queue_available=queue_available,
     ), visible_elements={UiElementId.PNC_RESEARCH_START_BUTTON: VisibleElement(
             UiElementId.PNC_RESEARCH_START_BUTTON, Bounds(304, 447, 135, 49), 1.0,
         )} if start else {},
@@ -60,10 +64,22 @@ class CoreResearchMutationTests(unittest.TestCase):
         self.node = DetectedListEntry(
             ListEntryKind.RESEARCH, Bounds(200, 200, 100, 90), title_text="Construction I",
             action_point=(250, 240), action_bounds=Bounds(200, 200, 100, 80),
-            row_status=RowRecognitionStatus.COMPLETE, metadata={"category": "development"},
+            row_status=RowRecognitionStatus.COMPLETE,
+            metadata={
+                "category": "development",
+                "research_access_state": "available",
+                "research_progress_state": "incomplete",
+                "research_progress_current": 2,
+                "research_progress_limit": 5,
+            },
         )
         self.grid = research("research_tree_development", rows=(self.node,))
-        self.idle = research("research_tree_node_detail", start=True)
+        self.idle = research(
+            "research_tree_node_detail",
+            start=True,
+            resources_sufficient=True,
+            queue_available=True,
+        )
         self.active = research("research_tree_node_detail_active")
 
     def context(self, observations):
@@ -110,7 +126,21 @@ class CoreResearchMutationTests(unittest.TestCase):
         self.assertEqual(2, runtime.actuator.execute_action.call_count)
 
     def test_changed_or_ambiguous_node_does_not_tap(self):
-        for rows in ((), (self.node, self.node), (replace(self.node, row_status=RowRecognitionStatus.CLIPPED),)):
+        max_node = replace(
+            self.node,
+            metadata={**self.node.metadata, "research_progress_state": "max"},
+        )
+        locked_node = replace(
+            self.node,
+            metadata={**self.node.metadata, "research_access_state": "locked"},
+        )
+        for rows in (
+            (),
+            (self.node, self.node),
+            (replace(self.node, row_status=RowRecognitionStatus.CLIPPED),),
+            (max_node,),
+            (locked_node,),
+        ):
             runtime, context = self.context((research("research_tree_development", rows=rows),))
             with self.assertRaises(RuntimeError):
                 context.open_research_node("Construction I", ResearchCategory.DEVELOPMENT)
@@ -122,6 +152,37 @@ class CoreResearchMutationTests(unittest.TestCase):
         context.open_research_node("Construction I", ResearchCategory.DEVELOPMENT)
         with self.assertRaisesRegex(RuntimeError, "normal Start"):
             context.start_research(self.checkpoint)
+        self.assertEqual(1, runtime.actuator.execute_action.call_count)
+        self.assertIsNone(self.load())
+
+    def test_insufficient_detail_resources_do_not_create_intent_or_dispatch_start(self):
+        short = research(
+            "research_tree_node_detail",
+            start=True,
+            resources_sufficient=False,
+        )
+        runtime, context = self.context((self.grid, self.idle, self.idle, short))
+        context.open_research_node("Construction I", ResearchCategory.DEVELOPMENT)
+
+        with self.assertRaisesRegex(RuntimeError, "sufficient observed resources"):
+            context.start_research(self.checkpoint)
+
+        self.assertEqual(1, runtime.actuator.execute_action.call_count)
+        self.assertIsNone(self.load())
+
+    def test_busy_research_queue_does_not_create_intent_or_dispatch_start(self):
+        busy = research(
+            "research_tree_node_detail",
+            start=True,
+            resources_sufficient=True,
+            queue_available=False,
+        )
+        runtime, context = self.context((self.grid, self.idle, self.idle, busy))
+        context.open_research_node("Construction I", ResearchCategory.DEVELOPMENT)
+
+        with self.assertRaisesRegex(RuntimeError, "idle queue"):
+            context.start_research(self.checkpoint)
+
         self.assertEqual(1, runtime.actuator.execute_action.call_count)
         self.assertIsNone(self.load())
 
