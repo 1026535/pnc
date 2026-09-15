@@ -651,10 +651,10 @@ upgrade under target-bound operation ids and displayed finite per-operation caps
   behavior.
 - Focused validation passed 5/5 new regressions and 250/250 tests in
   `unit.app.pnc.navigation`; an independent direct run of
-  `tests.unit.app.pnc.navigation.test_navigation_core` passed 70/70. The affected
-  planner selected its mandated 305-module fallback because the public navigation
-  declaration changed; that fallback remains due after the next live-derived
-  observer/route slice rather than being repeated between each small slice.
+  `tests.unit.app.pnc.navigation.test_navigation_core` passed 70/70. The required
+  affected command selected its mandated 305-module fallback because the public
+  navigation declaration changed and passed **2,169 tests, 7 skipped** at commit
+  `91960a9d629d583f5d5b1e3c1feb21e912a76df9`.
 - Two new independent `serious_stuff` preflight groups,
   `.local-data/artifacts/core_resume/20260915T045517Z` and
   `.local-data/artifacts/core_resume/20260915T045551Z`, stopped before input on
