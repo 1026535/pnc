@@ -212,8 +212,11 @@ class NavigationCore:
         previous_captured_at = current.captured_at
         scan_steps = home_city_scan_steps()
         scan_budget = home_city_scan_step_budget()
-        for step_index in range(scan_budget + 1):
-            if step_index > 0 and current.captured_at <= previous_captured_at:
+        gesture_count = 0
+        scan_step_index = 0
+        target_pan_attempted = False
+        while gesture_count <= scan_budget:
+            if gesture_count > 0 and current.captured_at <= previous_captured_at:
                 raise RuntimeError("Home-city scan received a stale capture; no further gesture was sent.")
             resolved = _resolve_observed_building_target(current, target=target)
             if resolved is not None and _is_hud_safe_building_point(
@@ -226,14 +229,26 @@ class NavigationCore:
                     on_target_acquired=on_target_acquired,
                 )
 
-            if step_index == scan_budget:
+            if gesture_count == scan_budget:
                 break
-            action = scan_steps[step_index % len(scan_steps)]
+
+            if resolved is not None and not target_pan_attempted:
+                action = _plan_observed_building_hud_pan(
+                    resolved[1], image_size=_require_building_image_size(current),
+                )
+                target_pan_attempted = True
+                event = "pending_building_target_pan"
+                step = gesture_count + 1
+            else:
+                action = scan_steps[scan_step_index % len(scan_steps)]
+                scan_step_index += 1
+                event = "pending_building_scan"
+                step = scan_step_index
             self.record(
                 {
-                    "event": "pending_building_scan",
+                    "event": event,
                     "target": target.value,
-                    "step": step_index + 1,
+                    "step": step,
                     "action": action.reason,
                     "artifact": None if current.artifact_path is None else str(current.artifact_path),
                 }
@@ -242,12 +257,13 @@ class NavigationCore:
                 action,
                 current,
                 frozenset({ScreenType.PNC_HOME_CITY}),
-                f"core_{self._sequence}_building_scan_{step_index + 1}",
+                f"core_{self._sequence}_building_scan_{gesture_count + 1}",
                 _observe_home_city_scan_content(observe_content),
                 completion_predicate=lambda observation: observation.spatial_surface is not None,
             )
             previous_captured_at = current.captured_at
             current = after
+            gesture_count += 1
         raise RuntimeError("Home-city scan exhausted its canonical gesture budget without finding a safe observed building target.")
 
     def _open_reacquired_building(
@@ -1009,8 +1025,74 @@ def _is_hud_safe_building_point(
     if width <= 0 or height <= 0:
         raise RuntimeError("Building observation has no valid image dimensions; no building tap was sent.")
     return (
-        width * 0.18 <= point[0] <= width * 0.82
-        and height * 0.18 <= point[1] <= height * 0.58
+        width * _BUILDING_HUD_SAFE_LEFT <= point[0] <= width * _BUILDING_HUD_SAFE_RIGHT
+        and height * _BUILDING_HUD_SAFE_TOP <= point[1] <= height * _BUILDING_HUD_SAFE_BOTTOM
+    )
+
+
+_BUILDING_HUD_SAFE_LEFT = 0.18
+_BUILDING_HUD_SAFE_RIGHT = 0.82
+_BUILDING_HUD_SAFE_TOP = 0.18
+_BUILDING_HUD_SAFE_BOTTOM = 0.58
+
+
+def _plan_observed_building_hud_pan(
+    point: tuple[int, int],
+    *,
+    image_size: tuple[int, int],
+) -> SwipeAction:
+    """Plan one bounded pan from an observed target toward the HUD-safe tap band."""
+
+    width, height = image_size
+    if width <= 0 or height <= 0:
+        raise RuntimeError("Building observation has no valid image dimensions; no building pan was sent.")
+    x_ratio = point[0] / width
+    y_ratio = point[1] / height
+    horizontal_overflow = max(
+        _BUILDING_HUD_SAFE_LEFT - x_ratio,
+        x_ratio - _BUILDING_HUD_SAFE_RIGHT,
+        0.0,
+    )
+    vertical_overflow = max(
+        _BUILDING_HUD_SAFE_TOP - y_ratio,
+        y_ratio - _BUILDING_HUD_SAFE_BOTTOM,
+        0.0,
+    )
+    if horizontal_overflow <= 0 and vertical_overflow <= 0:
+        raise RuntimeError("Observed building target is already HUD-safe; no pan was planned.")
+
+    def clamp_ratio(value: float) -> float:
+        return max(0.10, min(0.90, value))
+
+    if horizontal_overflow >= vertical_overflow:
+        moving_left = x_ratio > _BUILDING_HUD_SAFE_RIGHT
+        direction = "left" if moving_left else "right"
+        distance = min(0.40, max(0.18, horizontal_overflow + 0.12))
+        start_x = clamp_ratio(x_ratio)
+        end_x = clamp_ratio(start_x - distance if moving_left else start_x + distance)
+        return SwipeAction(
+            direction=direction,
+            distance_ratio=distance,
+            reason="replacement_pan_observed_building_into_hud_safe_band",
+            start_x_ratio=start_x,
+            start_y_ratio=clamp_ratio(y_ratio),
+            end_x_ratio=end_x,
+            end_y_ratio=clamp_ratio(y_ratio),
+        )
+
+    moving_up = y_ratio > _BUILDING_HUD_SAFE_BOTTOM
+    direction = "up" if moving_up else "down"
+    distance = min(0.40, max(0.18, vertical_overflow + 0.12))
+    start_y = clamp_ratio(y_ratio)
+    end_y = clamp_ratio(start_y - distance if moving_up else start_y + distance)
+    return SwipeAction(
+        direction=direction,
+        distance_ratio=distance,
+        reason="replacement_pan_observed_building_into_hud_safe_band",
+        start_x_ratio=clamp_ratio(x_ratio),
+        start_y_ratio=start_y,
+        end_x_ratio=clamp_ratio(x_ratio),
+        end_y_ratio=end_y,
     )
 
 

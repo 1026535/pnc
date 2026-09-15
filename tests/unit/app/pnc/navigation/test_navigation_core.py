@@ -962,6 +962,185 @@ class NavigationCoreTests(unittest.TestCase):
         self.assertEqual(1, len(actuator.actions))
         self.assertIsInstance(actuator.actions[0], SwipeAction)
 
+    def test_open_building_target_derived_horizontal_pan_reacquires_and_taps_once(self):
+        """A right-edge observed Bank-style target is panned before any tap is authorized."""
+
+        target = home_building_object(HomeCityObjectId.GODDESS_STATUE, action_point=(496, 422))
+        reacquired = replace(target, action_point=(320, 422))
+        now = datetime(2026, 9, 15, tzinfo=UTC)
+        content_frames = iter(
+            (
+                home_building_frame((target,), captured_at=now),
+                home_building_frame((reacquired,), captured_at=now + timedelta(seconds=1)),
+                home_building_frame((reacquired,), captured_at=now + timedelta(seconds=2)),
+                home_building_frame((reacquired,), captured_at=now + timedelta(seconds=3)),
+            )
+        )
+        destination_frames = iter(
+            (
+                replace(observation(ScreenType.PNC_GODDESS_STATUE), captured_at=now + timedelta(seconds=4)),
+                replace(observation(ScreenType.PNC_GODDESS_STATUE), captured_at=now + timedelta(seconds=5)),
+            )
+        )
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator,
+            lambda _: next(destination_frames),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+
+        result = core.open_building(
+            HomeCityObjectId.GODDESS_STATUE,
+            observe_content=lambda _: next(content_frames),
+        )
+
+        self.assertEqual(ScreenType.PNC_GODDESS_STATUE, result.screen_type)
+        self.assertEqual(2, len(actuator.actions))
+        self.assertIsInstance(actuator.actions[0], SwipeAction)
+        self.assertEqual("left", actuator.actions[0].direction)
+        self.assertGreater(actuator.actions[0].start_x_ratio, actuator.actions[0].end_x_ratio)
+        self.assertIsInstance(actuator.actions[1], TapSpatialObjectAction)
+        self.assertEqual(reacquired.action_point, actuator.actions[1].target_point)
+
+    def test_open_building_target_derived_vertical_pan_reacquires_and_taps_once(self):
+        """A bottom-edge observed Pit-style target is panned upward before any tap is authorized."""
+
+        target = home_building_object(HomeCityObjectId.GODDESS_STATUE, action_point=(221, 588))
+        reacquired = replace(target, action_point=(221, 500))
+        now = datetime(2026, 9, 15, tzinfo=UTC)
+        content_frames = iter(
+            (
+                home_building_frame((target,), captured_at=now),
+                home_building_frame((reacquired,), captured_at=now + timedelta(seconds=1)),
+                home_building_frame((reacquired,), captured_at=now + timedelta(seconds=2)),
+                home_building_frame((reacquired,), captured_at=now + timedelta(seconds=3)),
+            )
+        )
+        destination_frames = iter(
+            (
+                replace(observation(ScreenType.PNC_GODDESS_STATUE), captured_at=now + timedelta(seconds=4)),
+                replace(observation(ScreenType.PNC_GODDESS_STATUE), captured_at=now + timedelta(seconds=5)),
+            )
+        )
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator,
+            lambda _: next(destination_frames),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+
+        result = core.open_building(
+            HomeCityObjectId.GODDESS_STATUE,
+            observe_content=lambda _: next(content_frames),
+        )
+
+        self.assertEqual(ScreenType.PNC_GODDESS_STATUE, result.screen_type)
+        self.assertEqual(2, len(actuator.actions))
+        self.assertIsInstance(actuator.actions[0], SwipeAction)
+        self.assertEqual("up", actuator.actions[0].direction)
+        self.assertGreater(actuator.actions[0].start_y_ratio, actuator.actions[0].end_y_ratio)
+        self.assertIsInstance(actuator.actions[1], TapSpatialObjectAction)
+        self.assertEqual(reacquired.action_point, actuator.actions[1].target_point)
+
+    def test_open_building_target_derived_pan_lost_target_fails_without_tap(self):
+        target = home_building_object(HomeCityObjectId.GODDESS_STATUE, action_point=(496, 422))
+        now = datetime(2026, 9, 15, tzinfo=UTC)
+        content_frames = iter(
+            (
+                home_building_frame((target,), captured_at=now),
+                home_building_frame(captured_at=now + timedelta(seconds=1)),
+                home_building_frame(captured_at=now + timedelta(seconds=2)),
+            )
+        )
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator,
+            lambda _: observation(ScreenType.PNC_GODDESS_STATUE),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+
+        with patch(
+            "pnc_automation.app.automation.engine.navigation_core.home_city_scan_step_budget",
+            return_value=1,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "exhausted"):
+                core.open_building(
+                    HomeCityObjectId.GODDESS_STATUE,
+                    observe_content=lambda _: next(content_frames),
+                )
+
+        self.assertEqual(1, len(actuator.actions))
+        self.assertIsInstance(actuator.actions[0], SwipeAction)
+
+    def test_open_building_target_derived_pan_rejects_stale_or_unknown_followup(self):
+        now = datetime(2026, 9, 15, tzinfo=UTC)
+        target = home_building_object(HomeCityObjectId.GODDESS_STATUE, action_point=(496, 422))
+        cases = (
+            home_building_frame((target,), captured_at=now),
+            home_building_frame((target,), captured_at=now),
+            Observation(screen_type=ScreenType.UNKNOWN, captured_at=now + timedelta(seconds=1)),
+        )
+        for follow_up in cases[1:]:
+            with self.subTest(screen=follow_up.screen_type, captured_at=follow_up.captured_at):
+                actuator = Actuator()
+                core = NavigationCore(
+                    actuator,
+                    lambda _: observation(ScreenType.PNC_GODDESS_STATUE),
+                    reviewed_navigation_edges(),
+                    NavigationPolicy(max_observations=4),
+                    sleep=lambda _: None,
+                )
+                content_frames = iter((cases[0], follow_up))
+                with self.assertRaises(RuntimeError):
+                    core.open_building(
+                        HomeCityObjectId.GODDESS_STATUE,
+                        observe_content=lambda _: next(content_frames),
+                    )
+                self.assertEqual(1, len(actuator.actions))
+                self.assertIsInstance(actuator.actions[0], SwipeAction)
+
+    def test_open_building_target_derived_pan_eventual_success_taps_only_reacquired_target(self):
+        target = home_building_object(HomeCityObjectId.GODDESS_STATUE, action_point=(496, 422))
+        reacquired = home_building_object(HomeCityObjectId.GODDESS_STATUE, action_point=(300, 420))
+        now = datetime(2026, 9, 15, tzinfo=UTC)
+        content_frames = iter(
+            (
+                home_building_frame((target,), captured_at=now),
+                home_building_frame((reacquired,), captured_at=now + timedelta(seconds=1)),
+                home_building_frame((reacquired,), captured_at=now + timedelta(seconds=2)),
+                home_building_frame((reacquired,), captured_at=now + timedelta(seconds=3)),
+            )
+        )
+        destination_frames = iter(
+            (
+                replace(observation(ScreenType.PNC_GODDESS_STATUE), captured_at=now + timedelta(seconds=4)),
+                replace(observation(ScreenType.PNC_GODDESS_STATUE), captured_at=now + timedelta(seconds=5)),
+            )
+        )
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator,
+            lambda _: next(destination_frames),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+
+        core.open_building(
+            HomeCityObjectId.GODDESS_STATUE,
+            observe_content=lambda _: next(content_frames),
+        )
+
+        taps = [action for action in actuator.actions if isinstance(action, TapSpatialObjectAction)]
+        self.assertEqual(1, len(taps))
+        self.assertEqual(reacquired.action_point, taps[0].target_point)
+
     def test_open_building_fails_closed_for_unsafe_scan_frames_without_swipe(self):
         target = home_building_object(HomeCityObjectId.GODDESS_STATUE, action_point=(540, 520))
         now = datetime(2026, 9, 12, tzinfo=UTC)
