@@ -21,6 +21,7 @@ Determine whether the plan is sound enough to implement and whether any claimed 
 - Prioritize correctness, unsafe mutation, canonical ownership, likely regressions, and missing acceptance evidence.
 - Preserve explicit user facts unless repository or live evidence materially contradicts them.
 - A screenshot proves visible state, not an unobserved transition. A green test proves a claim only when the test exercises it.
+- Apply `AGENTS.md`'s scope-based Offline Validation policy; do not require the full suite except at the pre-final-review or pre-push gates.
 - Do not demand every target be tested. Require multiple targets only when the contract names them, configuration differs materially, or evidence shows target-dependent behavior.
 - Do not repeat live work to accumulate confidence after the decision is adequately supported.
 - Stop before any state-changing action unless the exact action, target, and budget are authorized.

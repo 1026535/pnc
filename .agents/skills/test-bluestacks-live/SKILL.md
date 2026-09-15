@@ -18,7 +18,7 @@ Use live validation only when its fidelity is needed. Prefer deterministic offli
 
 ## Workflow
 
-1. Run the smallest relevant offline group or affected selection. Do not run the full suite merely because a live test follows.
+1. For implementation work, complete a larger, coherent slice before applying [AGENTS.md](../../AGENTS.md)'s Offline Validation policy; for standalone live validation, apply it to the existing scope. Do not run the full suite merely because a live test follows.
 2. Choose one smoke path that exercises the changed boundary.
 3. Acquire the scoped runtime, verify fresh identity and screen state, and capture a baseline.
 4. Perform one bounded action or workflow and capture the observable postcondition.

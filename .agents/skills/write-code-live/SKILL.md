@@ -23,11 +23,11 @@ This skill never authorizes real-money purchases, unrelated game actions, accoun
 
 ## Workflow
 
-1. Implement the smallest slice and run focused offline tests.
+1. Follow [write-code](../write-code/SKILL.md). Implement a larger, coherent slice before running its scope-appropriate offline validation. Do not run the full suite during normal development.
 2. Resolve the configured instance through the canonical runtime and verify fresh account, castle, screen, and relevant resource state.
 3. Capture pre-action evidence, perform only the authorized action, and capture the post-action result.
 4. On failure, inspect artifacts and fix offline first. Repeat spending only when the authorization includes a retry and the diagnosis changed; otherwise stop at the remaining blocker.
-5. Return to a safe stable screen when the existing flow supports it, then run any proportionate final validation.
+5. Return to a safe stable screen when the existing flow supports it, then run any proportionate final validation. Reserve full-suite execution for the pre-final-review and pre-push gates.
 
 Do not add generalized retry, recovery, or authorization machinery for unlikely cases. The exact budget and fresh precondition are the safety boundary.
 

@@ -13,7 +13,7 @@ Create a plan that another engineer can execute and verify without prescribing w
 2. Inspect the current owner, callers, tests, config, relevant plans, and recent UI/runtime evidence. Research official external documentation only when it affects the design.
 3. Describe the current state and the smallest target design that satisfies the requirement.
 4. Break work into deliverables with concrete acceptance checks and dependencies.
-5. Match validation to risk: focused or affected offline tests for ordinary slices, full validation only for broad integration, and live proof only for behavior that depends on current emulator state.
+5. Plan validation under [`AGENTS.md`](../../AGENTS.md)'s Offline Validation policy. Include live proof only for behavior that depends on current emulator state.
 6. State material assumptions, tradeoffs, migration needs, and unresolved decisions.
 
 ## Proportional Planning

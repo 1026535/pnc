@@ -15,14 +15,15 @@
 - Optimize for normal behavior, explicit contracts, observed failures, and likely regressions.
 - Handle a rare case in code or tests only when an explicit contract requires it, it has been observed, or credible likelihood and impact justify its implementation and maintenance cost. Mere possibility or cheapness is not enough. Otherwise note the residual risk without expanding the implementation.
 - Judge safeguards by realistic likelihood, impact, and cost. Do not add checks, retries, recovery paths, test matrices, or live runs whose expected protection is negligible; retain controls for credible high-impact or irreversible harm.
-- Run the smallest validation that can disprove the change. Once required checks pass, stop unless a failure, broad dependency, or unresolved material risk justifies more.
+- Build a larger, coherent code slice before running tests; validate at logical checkpoints rather than after every small edit.
+- At each checkpoint, run the smallest validation that can disprove the change. Once required checks pass, stop unless a failure, broad dependency, or unresolved material risk justifies more.
 
 ## Working Method
 
 1. Inspect only the code, tests, configs, artifacts, and plans needed to understand the affected behavior and owner.
 2. Research current external behavior only when it can change the answer. Prefer official or primary sources and cite sources that materially shape the result.
 3. Keep plans compact and acceptance-focused. Save a plan only when requested or required by the planning workflow.
-4. Implement small, coherent changes through existing interfaces. After a risky slice, run the narrowest relevant check.
+4. Implement a larger, coherent slice through existing interfaces, then run the narrowest relevant check for that slice.
 5. Inspect actual failure evidence before changing code. Iterate while new evidence or a meaningful fix exists; stop repeated attempts that reproduce the same result without changing the diagnosis.
 6. Report the outcome, changed files, validation results, and any material remaining risk or blocker.
 
@@ -65,10 +66,11 @@
 ## Offline Validation
 
 - Use the repository runner instead of raw discovery; raw `unittest discover` can bypass portable inventory and resource rules.
-- For a known isolated component, start with `py tools/run_tests.py group <name>` or the specific test documented in `tests/README.md`.
-- For ordinary source changes, run `py tools/run_tests.py affected --base origin/main --explain`. Add `--dry-run` first only when the selection or fallback needs inspection.
-- Use `py tools/run_tests.py full` only for broad or cross-cutting changes, shared contracts or schemas, test infrastructure, final integration, an explicit request, or a fail-closed `affected` fallback.
-- Use `measure` commands only for requested timing, coverage, or scheduled dependency-learning work.
+- For a low-level, scoped fix confined to one production module, run only the tests associated with that module: use `py tools/run_tests.py group <name>` or the specific test documented in `tests/README.md`.
+- For a higher-level fix spanning multiple modules, use the Coverage.py-backed affected selection: `py tools/run_tests.py affected --base origin/main --contexts --explain`. Add `--dry-run` first when the selection needs inspection, and ensure valid coverage-context evidence is available.
+- Do not invoke `full` or `measure` during normal development. Reserve full-suite execution for the pre-final-review and pre-push gates.
+- At those gates, use `py tools/run_tests.py full` for broad integration, shared contracts or schemas, test infrastructure, and final integration; rerun it before pushing if the diff changes after review.
+- If Coverage.py-backed affected selection would fail closed to the full suite, stop and report the missing or invalid evidence rather than running the full suite early.
 - Keep portable tests offline and headless. Add deterministic tests for changed behavior and likely regressions; do not test implementation wording, reversible formatting, or speculative low-impact edge cases.
 - Documentation or skill-only changes need the relevant validator, if any, plus `git diff --check`; they do not require unit or live tests.
 

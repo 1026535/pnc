@@ -13,7 +13,7 @@ Find issues that would justify changing the code.
 2. Read the changed code plus enough callers, tests, config, and ownership context to understand its behavior.
 3. Check correctness, security, data integrity, canonical ownership, migration completeness, and likely regressions.
 4. Inspect whether tests exercise the changed contract and would fail for the suspected defect.
-5. Run the smallest relevant static or test command when it materially improves confidence. Use the repository's affected selection for broader changes; do not run the full suite by habit.
+5. Apply `AGENTS.md`'s Offline Validation policy when a test materially improves confidence; do not run the full suite by habit or accept a fail-closed fallback during ordinary review.
 6. Report findings first, ordered by severity.
 
 ## Review Bar
