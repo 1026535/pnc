@@ -60,6 +60,7 @@ from pnc_automation.app.pnc.vision.observation_diagnostics import (
 )
 from pnc_automation.app.pnc.vision.observation_provenance import (
     bind_list_entry,
+    bind_spatial_surface,
     bind_visible_elements,
     select_content_labels,
 )
@@ -794,7 +795,12 @@ class ObservationBuilder:
             decision=decision,
             visible_elements=visible_elements,
             list_entries=bound_list_entries,
-            spatial_surface=additions.spatial_surface,
+            spatial_surface=bind_spatial_surface(
+                additions.spatial_surface,
+                frame_ref=getattr(screenshot, "frame_ref", None),
+                source_screen=decision.effective_screen,
+                source_layout_id=decision.layout_id,
+            ),
             artifact_path=_screenshot_artifact_path(screenshot),
             image_size=screenshot.image.size,
             frame_fingerprint=hashlib.sha256(

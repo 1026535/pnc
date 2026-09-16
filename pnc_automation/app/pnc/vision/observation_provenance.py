@@ -5,8 +5,11 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import replace
 
+from pnc_automation.app.pnc.domain.home_city_camera import HomeCityCameraProof
 from pnc_automation.app.pnc.domain.observation import (
     DetectedListEntry,
+    DetectedSpatialObject,
+    SpatialSurfaceObservation,
     VisibleElement,
     VisibleElementSourceKind,
 )
@@ -125,4 +128,83 @@ def bind_list_entry(
         frame_ref=entry.frame_ref or frame_ref,
         source_screen=entry.source_screen or source_screen,
         source_layout_id=entry.source_layout_id if entry.source_layout_id is not None else source_layout_id,
+    )
+
+
+def bind_spatial_surface(
+    surface: SpatialSurfaceObservation | None,
+    *,
+    frame_ref: FrameRef | None,
+    source_screen: ScreenType,
+    source_layout_id: str | None,
+) -> SpatialSurfaceObservation | None:
+    """Binds a spatial surface's objects and camera proof to the publishing context."""
+
+    if surface is None:
+        return None
+    return replace(
+        surface,
+        objects=tuple(
+            bind_spatial_object(
+                object_,
+                frame_ref=frame_ref,
+                source_screen=source_screen,
+                source_layout_id=source_layout_id,
+            )
+            for object_ in surface.objects
+        ),
+        camera_proof=bind_camera_proof(
+            surface.camera_proof,
+            frame_ref=frame_ref,
+            source_screen=source_screen,
+            source_layout_id=source_layout_id,
+        ),
+    )
+
+
+def bind_spatial_object(
+    object_: DetectedSpatialObject,
+    *,
+    frame_ref: FrameRef | None,
+    source_screen: ScreenType,
+    source_layout_id: str | None,
+) -> DetectedSpatialObject:
+    """Adds missing spatial-object provenance while rejecting contradictory proof."""
+
+    if object_.frame_ref is not None and object_.frame_ref != frame_ref:
+        raise SelectorResolutionError("Spatial object proof belongs to a different capture frame.", object_kind=object_.kind)
+    if object_.source_screen is not None and object_.source_screen != source_screen:
+        raise SelectorResolutionError("Spatial object proof belongs to a different source screen.", object_kind=object_.kind)
+    if object_.source_layout_id is not None and object_.source_layout_id != source_layout_id:
+        raise SelectorResolutionError("Spatial object proof belongs to a different source layout.", object_kind=object_.kind)
+    return replace(
+        object_,
+        frame_ref=object_.frame_ref or frame_ref,
+        source_screen=object_.source_screen or source_screen,
+        source_layout_id=object_.source_layout_id if object_.source_layout_id is not None else source_layout_id,
+    )
+
+
+def bind_camera_proof(
+    proof: HomeCityCameraProof | None,
+    *,
+    frame_ref: FrameRef | None,
+    source_screen: ScreenType,
+    source_layout_id: str | None,
+) -> HomeCityCameraProof | None:
+    """Adds missing camera-proof provenance while rejecting contradictory proof."""
+
+    if proof is None:
+        return None
+    if proof.frame_ref is not None and proof.frame_ref != frame_ref:
+        raise SelectorResolutionError("Camera proof belongs to a different capture frame.")
+    if proof.source_screen is not None and proof.source_screen != source_screen:
+        raise SelectorResolutionError("Camera proof belongs to a different source screen.")
+    if proof.source_layout_id is not None and proof.source_layout_id != source_layout_id:
+        raise SelectorResolutionError("Camera proof belongs to a different source layout.")
+    return replace(
+        proof,
+        frame_ref=proof.frame_ref or frame_ref,
+        source_screen=proof.source_screen or source_screen,
+        source_layout_id=proof.source_layout_id if proof.source_layout_id is not None else source_layout_id,
     )

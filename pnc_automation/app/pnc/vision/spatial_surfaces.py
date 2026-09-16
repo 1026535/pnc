@@ -13,11 +13,16 @@ from pnc_automation.app.pnc.domain.building_catalog import (
     build_home_city_object_metadata,
     home_city_object_definition_for_label,
 )
+from pnc_automation.app.pnc.domain.home_city_camera import (
+    HomeCityCameraProof,
+    HomeCityCameraStatus,
+)
 from pnc_automation.app.pnc.domain.observation import (
     Bounds,
     DetectedSpatialObject,
     SpatialObjectKind,
     SpatialObjectRelationship,
+    SpatialObjectSourceKind,
     SpatialSurfaceObservation,
     SpatialSurfaceType,
     SpatialViewport,
@@ -27,6 +32,10 @@ from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.core.text.normalization import normalize_ocr_text
 from pnc_automation.core.vision.ocr.ocr_lines import merge_ocr_lines
 from pnc_automation.core.vision.ocr.ocr_service import OcrLine
+from pnc_automation.app.pnc.vision.home_city_camera import (
+    HomeCityCameraLocalizer,
+    merge_camera_target_objects,
+)
 from pnc_automation.app.pnc.vision.selectors import SelectorRegistry, SurfaceDefinition
 from pnc_automation.app.pnc.vision.world_map_coordinates import (
     ParsedWorldViewport,
@@ -150,8 +159,15 @@ def build_home_city_spatial_surface(
     image: Image.Image,
     lines: tuple[OcrLine, ...],
     selector_registry: SelectorRegistry | None,
+    camera: HomeCityCameraLocalizer | None = None,
 ) -> SpatialSurfaceObservation:
-    """Builds the canonical home-city spatial surface using camera-relative building parsing."""
+    """Builds the canonical home-city spatial surface using camera-relative building parsing.
+
+    When the camera localizer is supplied, one prepared frame is shared by the
+    landmark votes and the qualified body targets; the measured proof and its
+    projection-agreed objects publish alongside OCR-derived objects without
+    depending on building-name labels.
+    """
 
     surface_definition = None if selector_registry is None else selector_registry.surface_for_screen(ScreenType.PNC_HOME_CITY)
     objects = _attach_home_city_building_levels(
@@ -163,6 +179,22 @@ def build_home_city_spatial_surface(
             surface_definition=surface_definition,
         ),
     )
+    camera_proof: HomeCityCameraProof | None = None
+    if camera is not None:
+        prepared = camera.prepare_frame(image)
+        if prepared is None:
+            camera_proof = HomeCityCameraProof(
+                status=HomeCityCameraStatus.UNSUPPORTED,
+                reason="unsupported_frame_layout",
+                frame_size=image.size,
+            )
+        else:
+            camera_proof = camera.localize(prepared)
+            if camera_proof.localized:
+                objects = merge_camera_target_objects(
+                    objects,
+                    camera.matched_target_objects(prepared, proof=camera_proof),
+                )
     metadata = {} if surface_definition is None else {"surface_id": surface_definition.id}
     active_build_timer_text = _find_home_city_active_build_timer_text(image=image, lines=lines)
     if active_build_timer_text is not None:
@@ -175,6 +207,7 @@ def build_home_city_spatial_surface(
             metadata={"anchor_buildings": anchor_buildings},
         ),
         objects=objects,
+        camera_proof=camera_proof,
         metadata=metadata,
     )
 
@@ -672,6 +705,7 @@ def _detect_unlabeled_home_empty_slots(
                     bounds=bounds,
                     viewport_bounds=viewport_bounds,
                 ),
+                source_kind=SpatialObjectSourceKind.GEOMETRY,
                 metadata=metadata,
             )
         )
@@ -814,6 +848,7 @@ def _classify_home_city_object(
             action_point=(action_x, action_y),
             viewport_offset=viewport_offset,
             viewport_offset_ratio=viewport_offset_ratio,
+            source_kind=SpatialObjectSourceKind.OCR,
             metadata=metadata,
         )
     if normalized_text in _HOME_EMPTY_SLOT_TEXTS and not _looks_like_home_action_label(image=image, line=line):
@@ -825,6 +860,7 @@ def _classify_home_city_object(
             action_point=bounds.center(),
             viewport_offset=viewport_offset,
             viewport_offset_ratio=viewport_offset_ratio,
+            source_kind=SpatialObjectSourceKind.OCR,
         )
     return None
 

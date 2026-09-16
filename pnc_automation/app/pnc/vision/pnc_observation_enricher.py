@@ -99,6 +99,7 @@ from pnc_automation.app.pnc.vision.pnc_ocr_capabilities import (
     can_attempt_screen_family_ocr,
 )
 from pnc_automation.app.pnc.domain.screen_decision import ScreenEvidence
+from pnc_automation.app.pnc.vision.home_city_camera import HomeCityCameraLocalizer
 from pnc_automation.app.pnc.vision.selectors import Region, SelectorRegistry
 from pnc_automation.app.pnc.vision.spatial_surfaces import (
     build_home_city_spatial_surface,
@@ -1865,6 +1866,7 @@ class PncObservationEnricher:
 
     selector_registry: SelectorRegistry | None = None
     text_anchor_detector: TextAnchorDetector = field(default_factory=TextAnchorDetector)
+    home_city_camera: HomeCityCameraLocalizer | None = None
 
     def content_labels(
         self,
@@ -2508,6 +2510,7 @@ class PncObservationEnricher:
                 anchors=anchors,
                 visible_elements=visible_elements,
                 selector_registry=self.selector_registry,
+                home_city_camera=self.home_city_camera,
             )
             if home_city is not None:
                 return home_city
@@ -7464,6 +7467,7 @@ def _build_home_city_additions(
     anchors: tuple[DetectedTextAnchor, ...],
     visible_elements: Mapping[UiElementId, VisibleElement],
     selector_registry: SelectorRegistry | None,
+    home_city_camera: HomeCityCameraLocalizer | None = None,
 ) -> ObservationAdditions | None:
     """Returns home-city classification when bottom navigation OCR has supporting evidence."""
 
@@ -7474,13 +7478,31 @@ def _build_home_city_additions(
         return None
     visible_home_action_elements = _build_home_action_additions(image=image, anchors=anchors)
     if not visible_home_action_elements and _HOME_CITY_EVIDENCE_SELECTOR_IDS.isdisjoint(visible_elements):
-        return None
+        if home_city_camera is None:
+            return None
+        # Independently accepted Home identity plus a measured camera proof can
+        # publish the spatial surface even when building-name OCR is empty or
+        # misspelled. OCR facts still enrich the surface but cannot authorize it.
+        surface = build_home_city_spatial_surface(
+            image=image,
+            lines=lines,
+            selector_registry=selector_registry,
+            camera=home_city_camera,
+        )
+        if surface.camera_proof is None or not surface.camera_proof.localized:
+            return None
+        return ObservationAdditions(
+            visible_elements=visible_nav_elements | visible_home_action_elements,
+            spatial_surface=surface,
+            screen_evidence=(ScreenEvidence(ScreenType.PNC_HOME_CITY, "bottom_nav_and_camera_localization"),),
+        )
     return ObservationAdditions(
         visible_elements=visible_nav_elements | visible_home_action_elements,
         spatial_surface=build_home_city_spatial_surface(
             image=image,
             lines=lines,
             selector_registry=selector_registry,
+            camera=home_city_camera,
         ),
         screen_evidence=(ScreenEvidence(ScreenType.PNC_HOME_CITY, "bottom_nav_and_home_actions"),),
     )

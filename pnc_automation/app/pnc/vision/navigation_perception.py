@@ -20,7 +20,11 @@ from pnc_automation.app.pnc.vision.observation_builder import (
     reconcile_visual_modal_guard,
 )
 from pnc_automation.app.pnc.vision.observation_diagnostics import ObservationDebugArtifactCollector
-from pnc_automation.app.pnc.vision.observation_provenance import bind_list_entry, bind_visible_elements
+from pnc_automation.app.pnc.vision.observation_provenance import (
+    bind_list_entry,
+    bind_spatial_surface,
+    bind_visible_elements,
+)
 from pnc_automation.app.pnc.vision.screen_classifier import ScreenClassifier, partition_guard_evidence
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 from pnc_automation.app.pnc.vision.pnc_observation_enricher import PncObservationEnricher
@@ -246,7 +250,12 @@ class NavigationPerception:
                                      source_layout_id=decision.layout_id)
                 for entry in content.list_entries
             ),
-            spatial_surface=content.spatial_surface,
+            spatial_surface=bind_spatial_surface(
+                content.spatial_surface,
+                frame_ref=screenshot.frame_ref,
+                source_screen=screen,
+                source_layout_id=decision.layout_id,
+            ),
             current_castle=content.current_castle,
             current_castle_evidence=content.current_castle_evidence,
             mailbox_type=content.mailbox_type,

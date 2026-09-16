@@ -43,6 +43,7 @@ from pnc_automation.app.pnc.domain.mail import parse_collect_mail_params
 from pnc_automation.app.pnc.domain.policy_models import ResearchPolicy
 from pnc_automation.core.infra.diagnostics.logging_setup import configure_logging
 from pnc_automation.core.infra.emulator.bluestacks_instance_resolver import BlueStacksInstanceResolver
+from pnc_automation.app.pnc.vision.home_city_camera import HomeCityCameraLocalizer
 from pnc_automation.app.pnc.vision.observation_builder import (
     ObservationBuilder,
     ObservationDebugArtifactCollector,
@@ -428,6 +429,7 @@ def build_observation_builder(selector_registry: SelectorRegistry) -> Observatio
         ocr_service=ocr_service,
         enricher=PncObservationEnricher(
             selector_registry=selector_registry,
+            home_city_camera=HomeCityCameraLocalizer(matcher=template_matcher),
         ),
         debug_artifact_collector=ObservationDebugArtifactCollector(),
         visual_recognizer=load_visual_screen_recognizer(matcher=template_matcher),

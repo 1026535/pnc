@@ -14,6 +14,7 @@ from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.core.infra.emulator.provenance import FrameRef
 from pnc_automation.app.pnc.domain.bag import BagTab
 from pnc_automation.app.pnc.domain.chat import ChatChannel
+from pnc_automation.app.pnc.domain.home_city_camera import HomeCityCameraProof
 from pnc_automation.app.pnc.domain.mail import MailboxType
 from pnc_automation.app.pnc.domain.popup import PopupOverlayObservation
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
@@ -211,6 +212,14 @@ class SpatialObjectRelationship(StrEnum):
     UNKNOWN = "unknown"
 
 
+class SpatialObjectSourceKind(StrEnum):
+    """Identifies which measurement produced one spatial object's geometry."""
+
+    OCR = "ocr"
+    GEOMETRY = "geometry"
+    TEMPLATE = "template"
+
+
 @dataclass(frozen=True, slots=True)
 class SpatialViewport:
     """Stores the active camera or coordinate context for one spatial surface observation."""
@@ -304,7 +313,12 @@ class DetectedSpatialObject:
     viewport_offset_ratio: tuple[float, float] | None = None
     estimated_world_coordinate: tuple[int, int] | None = None
     confirmed_world_coordinate: tuple[int, int] | None = None
+    action_bounds: Bounds | None = None
+    source_kind: SpatialObjectSourceKind | None = None
     metadata: Mapping[str, Any] = field(default_factory=dict)
+    frame_ref: FrameRef | None = None
+    source_screen: ScreenType | None = None
+    source_layout_id: str | None = None
 
     def __post_init__(self) -> None:
         """Rejects invalid typed metadata so spatial parsing fails fast during tests and runtime."""
@@ -351,6 +365,17 @@ class DetectedSpatialObject:
                 object_kind=self.kind,
                 confirmed_world_coordinate=self.confirmed_world_coordinate,
             )
+        if self.action_bounds is not None:
+            if self.action_point is None or not self.action_bounds.contains_point(self.action_point):
+                raise SelectorResolutionError(
+                    "Spatial-object action bounds must contain the published action point.",
+                    object_kind=self.kind,
+                )
+            if not self.bounds.contains_bounds(self.action_bounds):
+                raise SelectorResolutionError(
+                    "Spatial-object action bounds must remain inside the object bounds.",
+                    object_kind=self.kind,
+                )
 
     def require_metadata(self, key: str) -> Any:
         """Returns a required spatial-object metadata field or fails fast."""
@@ -390,6 +415,7 @@ class SpatialSurfaceObservation:
     surface_type: SpatialSurfaceType
     viewport: SpatialViewport
     objects: tuple[DetectedSpatialObject, ...] = ()
+    camera_proof: HomeCityCameraProof | None = None
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def objects_of_kind(self, kind: SpatialObjectKind) -> tuple[DetectedSpatialObject, ...]:

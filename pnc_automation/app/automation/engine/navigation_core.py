@@ -24,11 +24,13 @@ from pnc_automation.app.pnc.domain.building_catalog import (
     primary_screen_type_for_home_city_object,
 )
 from pnc_automation.app.pnc.domain.castle_roster_scan import castle_roster_window_signature
+from pnc_automation.app.pnc.domain.home_city_camera import HomeCityCameraProof
 from pnc_automation.app.pnc.domain.observation import (
     DetectedListEntry,
     DetectedSpatialObject,
     ListEntryKind,
     Observation,
+    SpatialObjectSourceKind,
     SpatialSurfaceType,
     VisibleElementSourceKind,
     RowRecognitionStatus,
@@ -54,11 +56,25 @@ from pnc_automation.app.pnc.domain.mail import (
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.navigation.spatial_navigation import (
+    HOME_CITY_HUD_SAFE_MAX_X_RATIO,
+    HOME_CITY_HUD_SAFE_MAX_Y_RATIO,
+    HOME_CITY_HUD_SAFE_MIN_X_RATIO,
+    HOME_CITY_HUD_SAFE_MIN_Y_RATIO,
     home_city_scan_step_budget,
     home_city_scan_steps,
+    plan_home_city_camera_pan,
 )
 
 _MAX_CASTLE_ROSTER_SWIPES = 6
+_CAMERA_MEASURED_BUILDING_TARGETS = frozenset(
+    {
+        HomeCityObjectId.INSTITUTE,
+        HomeCityObjectId.TOWER_OF_TRIAL,
+    }
+)
+# Consensus fitting is accurate to a few reference pixels; anything at or below
+# this delta after a pan means the camera did not measurably move.
+_CAMERA_STALL_TOLERANCE_REFERENCE_PX = 12
 
 
 class NavigationActuator(Protocol):
@@ -137,13 +153,18 @@ class NavigationCore:
         *,
         observe_content: Callable[[str], Observation],
         on_target_acquired: Callable[[DetectedSpatialObject], None] | None = None,
+        require_measured: bool = False,
     ) -> Observation:
         """Open one observed city object without atlas estimates or camera prediction."""
         destination = _require_reviewed_building_route(target=target, edges=self.edges)
         self._sequence += 1
         label = f"core_{self._sequence}_building"
         before = observe_content(f"{label}_source")
-        resolved = _resolve_observed_building_target(before, target=target)
+        if require_measured:
+            _require_localized_camera(before)
+        resolved = _resolve_observed_building_target(
+            before, target=target, require_measured=require_measured
+        )
         if resolved is None:
             raise RuntimeError("Building is absent or ambiguous; no further gesture or building tap was sent.")
         observed_object, point = resolved
@@ -165,25 +186,17 @@ class NavigationCore:
         observe_content: Callable[[str], Observation],
         on_target_acquired: Callable[[DetectedSpatialObject], None] | None = None,
     ) -> Observation:
-        """Use a reviewed in-game focus route, then require an observed object.
+        """Open one supported building from a fresh, observed Home surface.
 
-        The idle Research Queue Go control focuses Institute in the city. It
-        does not prove the building opened or authorize a predicted camera tap.
-        Other supported buildings use the bounded observed Home-city scan when
-        they are not visible in the current frame.
+        Camera-qualified targets use the measured Home camera: localized proof,
+        at most one bounded pan toward the HUD-safe band, a fresh post-pan
+        measurement, then exactly one reacquired body tap.  Other supported
+        buildings use the bounded observed Home-city scan when they are not
+        visible in the current frame.
         """
         _require_reviewed_building_route(target=target, edges=self.edges)
-        if target == HomeCityObjectId.INSTITUTE:
-            self.navigate(ScreenType.PNC_RESEARCH_QUEUE)
-            focus = next((
-                edge for edge in self.edges
-                if edge.source == ScreenType.PNC_RESEARCH_QUEUE
-                and edge.selector == UiElementId.PNC_RESEARCH_QUEUE_GO
-            ), None)
-            if focus is None:
-                raise ValueError("Institute focus route is missing from the reviewed graph.")
-            self.transition(focus)
-            return self.open_visible_building(
+        if target in _CAMERA_MEASURED_BUILDING_TARGETS:
+            return self._open_building_measured(
                 target,
                 observe_content=observe_content,
                 on_target_acquired=on_target_acquired,
@@ -198,6 +211,59 @@ class NavigationCore:
             current=current,
             observe_content=observe_content,
             on_target_acquired=on_target_acquired,
+        )
+
+    def _open_building_measured(
+        self,
+        target: HomeCityObjectId,
+        *,
+        observe_content: Callable[[str], Observation],
+        on_target_acquired: Callable[[DetectedSpatialObject], None] | None,
+    ) -> Observation:
+        """Acquires a camera-verified target with at most one measured pan step."""
+
+        self._sequence += 1
+        label = f"core_{self._sequence}_building_camera_source"
+        current = observe_content(label)
+        _require_home_city_surface(current)
+        proof = _require_localized_camera(current)
+        resolved = _resolve_observed_building_target(
+            current, target=target, require_measured=True
+        )
+        if resolved is not None and _is_hud_safe_building_point(
+            resolved[1], image_size=current.image_size
+        ):
+            return self._open_reacquired_building(
+                target=target,
+                source=current,
+                observe_content=observe_content,
+                on_target_acquired=on_target_acquired,
+                require_measured=True,
+            )
+        action = plan_home_city_camera_pan(observation=current, target=target)
+        self.record(
+            {
+                "event": "pending_building_pan",
+                "target": target.value,
+                "action": action.reason,
+                "artifact": None if current.artifact_path is None else str(current.artifact_path),
+            }
+        )
+        after = self._execute_content_and_confirm(
+            action,
+            current,
+            frozenset({ScreenType.PNC_HOME_CITY}),
+            f"core_{self._sequence}_building_pan",
+            _observe_home_city_scan_content(observe_content),
+            completion_predicate=lambda observation: observation.spatial_surface is not None,
+        )
+        _require_measured_camera_motion(before_proof=proof, after=after)
+        return self._open_reacquired_building(
+            target=target,
+            source=after,
+            observe_content=observe_content,
+            on_target_acquired=on_target_acquired,
+            require_measured=True,
         )
 
     def _open_building_after_home_scan(
@@ -258,6 +324,7 @@ class NavigationCore:
         source: Observation,
         observe_content: Callable[[str], Observation],
         on_target_acquired: Callable[[DetectedSpatialObject], None] | None,
+        require_measured: bool = False,
     ) -> Observation:
         """Reacquires one safe target frame before delegating the single visible-building tap."""
 
@@ -271,6 +338,7 @@ class NavigationCore:
             target,
             observe_content=observe_reacquired,
             on_target_acquired=on_target_acquired,
+            require_measured=require_measured,
         )
 
     def open_mailbox(
@@ -986,10 +1054,51 @@ def _matching_castle_entries(
     )
 
 
+def _require_localized_camera(observation: Observation) -> HomeCityCameraProof:
+    """Requires a fresh localized camera proof bound to the current observation frame."""
+
+    _require_home_city_surface(observation)
+    proof = observation.spatial_surface.camera_proof
+    if proof is None or not proof.localized or proof.translation is None:
+        raise RuntimeError(
+            "Home camera could not localize the current frame; no gesture or building tap was sent."
+        )
+    if (
+        observation.frame_ref is not None
+        and proof.frame_ref is not None
+        and proof.frame_ref != observation.frame_ref
+    ):
+        raise RuntimeError(
+            "Camera proof does not belong to the current observation frame; no gesture or building tap was sent."
+        )
+    return proof
+
+
+def _require_measured_camera_motion(
+    *,
+    before_proof: HomeCityCameraProof,
+    after: Observation,
+) -> None:
+    """Requires the post-pan frame to prove the camera actually moved."""
+
+    after_proof = _require_localized_camera(after)
+    if before_proof.translation is None or after_proof.translation is None:
+        raise RuntimeError("Measured pan left the camera without a usable translation; no tap sent.")
+    moved = max(
+        abs(after_proof.translation[0] - before_proof.translation[0]),
+        abs(after_proof.translation[1] - before_proof.translation[1]),
+    )
+    if moved <= _CAMERA_STALL_TOLERANCE_REFERENCE_PX:
+        raise RuntimeError(
+            "Measured pan produced no camera movement beyond calibration noise; no tap sent."
+        )
+
+
 def _resolve_observed_building_target(
     observation: Observation,
     *,
     target: HomeCityObjectId,
+    require_measured: bool = False,
 ) -> tuple[DetectedSpatialObject, tuple[int, int]] | None:
     """Finds one exact observed target and validates its point and image dimensions."""
 
@@ -999,6 +1108,12 @@ def _resolve_observed_building_target(
         for item in observation.spatial_surface.objects
         if home_city_object_id_from_metadata(item.metadata) == target
     ]
+    if require_measured:
+        candidates = [
+            item
+            for item in candidates
+            if item.source_kind == SpatialObjectSourceKind.TEMPLATE
+        ]
     if len(candidates) > 1:
         raise RuntimeError("Building is absent or ambiguous; no further gesture or building tap was sent.")
     image_size = _require_building_image_size(observation)
@@ -1048,8 +1163,8 @@ def _is_hud_safe_building_point(
     if width <= 0 or height <= 0:
         raise RuntimeError("Building observation has no valid image dimensions; no building tap was sent.")
     return (
-        width * 0.18 <= point[0] <= width * 0.82
-        and height * 0.18 <= point[1] <= height * 0.58
+        width * HOME_CITY_HUD_SAFE_MIN_X_RATIO <= point[0] <= width * HOME_CITY_HUD_SAFE_MAX_X_RATIO
+        and height * HOME_CITY_HUD_SAFE_MIN_Y_RATIO <= point[1] <= height * HOME_CITY_HUD_SAFE_MAX_Y_RATIO
     )
 
 

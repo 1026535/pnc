@@ -32,11 +32,13 @@ from pnc_automation.app.pnc.domain.observation import (
     DetectedSpatialObject,
     Observation,
     SpatialObjectQuery,
+    SpatialObjectSourceKind,
     SpatialSurfaceObservation,
     SpatialSurfaceType,
 )
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
+from pnc_automation.app.pnc.vision.home_city_camera import home_city_camera_target
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
 
 _WORLD_NAVIGATION_STATE_KEY = "world_map_navigation"
@@ -47,6 +49,18 @@ _HOME_CITY_ATLAS_VERTICAL_SWIPE_X_RATIO = 0.55
 _HOME_CITY_CASTLE_UTILITY_VERTICAL_SWIPE_X_RATIO = 0.69
 _HOME_CITY_RIGHT_VIEW_VERTICAL_SWIPE_X_RATIO = 0.24
 _WORLD_MAP_VERTICAL_SWIPE_X_RATIO = 0.46
+# HUD-safe tap band shared by observed building opens; kept here so the measured
+# camera pan and the tap gate cannot drift apart.
+HOME_CITY_HUD_SAFE_MIN_X_RATIO = 0.18
+HOME_CITY_HUD_SAFE_MAX_X_RATIO = 0.82
+HOME_CITY_HUD_SAFE_MIN_Y_RATIO = 0.18
+HOME_CITY_HUD_SAFE_MAX_Y_RATIO = 0.58
+# Measured on the 2026-09-15 live tour: a unit of finger-travel ratio moves home
+# city content by ~2.33 viewport axes on both axes (pan_07 gesture 0.2223/0.25
+# produced (-468,-931) reference pixels).
+_HOME_CITY_CAMERA_PAN_CONTENT_GAIN = 2.33
+_HOME_CITY_CAMERA_PAN_MIN_DISTANCE_RATIO = 0.10
+_HOME_CITY_CAMERA_PAN_MAX_DISTANCE_RATIO = 0.56
 
 
 @dataclass(frozen=True, slots=True)
@@ -2271,6 +2285,125 @@ def home_city_scan_step_budget() -> int:
     """Returns the canonical bounded number of home-city scan gestures."""
 
     return len(home_city_scan_steps()) * _HOME_CITY_FIXED_MAP_TOUR_PASSES
+
+
+def plan_home_city_camera_pan(
+    *,
+    observation: Observation,
+    target: HomeCityObjectId,
+) -> SwipeAction:
+    """Plans ONE bounded measured pan toward a camera-qualified target's safe band.
+
+    The step uses the current-frame camera proof and the target's measured body
+    position (or its atlas action anchor when the body is off-frame), never a
+    remembered or gesture-derived camera center.  Content must move into the
+    HUD-safe tap band on the dominant axis; the reviewed safe-lane swipe builder
+    keeps the gesture off buildings.
+    """
+
+    surface = observation.spatial_surface
+    if surface is None or surface.surface_type != SpatialSurfaceType.HOME_CITY_SURFACE:
+        raise SelectorResolutionError(
+            "Measured home-city pan requires the canonical home-city surface.",
+            target=target.value,
+        )
+    proof = surface.camera_proof
+    if (
+        proof is None
+        or not proof.localized
+        or proof.translation is None
+        or proof.frame_size is None
+    ):
+        raise SelectorResolutionError(
+            "Measured home-city pan requires a localized current-frame camera proof.",
+            target=target.value,
+        )
+    spec = home_city_camera_target(target)
+    if spec is None:
+        raise SelectorResolutionError(
+            "Building has no camera-qualified target for a measured pan.",
+            target=target.value,
+        )
+    frame_width, frame_height = proof.frame_size
+    reference_width, reference_height = proof.reference_size
+    to_reference_x = reference_width / frame_width
+    to_reference_y = reference_height / frame_height
+    measured_object = next(
+        (
+            item
+            for item in surface.objects
+            if home_city_object_id_from_metadata(item.metadata) == target
+            and item.source_kind == SpatialObjectSourceKind.TEMPLATE
+            and item.action_point is not None
+        ),
+        None,
+    )
+    if measured_object is not None and measured_object.action_point is not None:
+        point_reference = (
+            measured_object.action_point[0] * to_reference_x,
+            measured_object.action_point[1] * to_reference_y,
+        )
+    else:
+        atlas_anchor = spec.atlas_action_point()
+        point_reference = (
+            atlas_anchor[0] + proof.translation[0],
+            atlas_anchor[1] + proof.translation[1],
+        )
+    band_x = (
+        HOME_CITY_HUD_SAFE_MIN_X_RATIO * reference_width,
+        HOME_CITY_HUD_SAFE_MAX_X_RATIO * reference_width,
+    )
+    band_y = (
+        HOME_CITY_HUD_SAFE_MIN_Y_RATIO * reference_height,
+        HOME_CITY_HUD_SAFE_MAX_Y_RATIO * reference_height,
+    )
+    dx_needed = 0.0 if band_x[0] <= point_reference[0] <= band_x[1] else (band_x[0] + band_x[1]) / 2 - point_reference[0]
+    dy_needed = 0.0 if band_y[0] <= point_reference[1] <= band_y[1] else (band_y[0] + band_y[1]) / 2 - point_reference[1]
+    if dx_needed == 0.0 and dy_needed == 0.0:
+        raise SelectorResolutionError(
+            (
+                "Measured target is already inside the HUD-safe band; no pan is needed."
+                if measured_object is not None
+                else "Projected target anchor is inside the HUD-safe band but its body has no current-frame match."
+            ),
+            target=target.value,
+        )
+    axis = (
+        "x"
+        if abs(dx_needed) / reference_width >= abs(dy_needed) / reference_height
+        else "y"
+    )
+    needed = dx_needed if axis == "x" else dy_needed
+    axis_reference_size = reference_width if axis == "x" else reference_height
+    direction = _home_city_atlas_swipe_direction(axis=axis, remaining_delta=int(round(-needed)))
+    distance_ratio = min(
+        _HOME_CITY_CAMERA_PAN_MAX_DISTANCE_RATIO,
+        max(
+            _HOME_CITY_CAMERA_PAN_MIN_DISTANCE_RATIO,
+            abs(needed) / (axis_reference_size * _HOME_CITY_CAMERA_PAN_CONTENT_GAIN),
+        ),
+    )
+    axis_order = (axis, "y" if axis == "x" else "x")
+    action = _build_home_city_atlas_swipe_action(
+        direction=direction,
+        distance_ratio=distance_ratio,
+        reason=f"pan_home_city_camera_{target.value}_{axis}",
+        vertical_swipe_x_ratio=_resolve_home_city_atlas_vertical_swipe_x_ratio(surface, axis_order=axis_order),
+        horizontal_swipe_y_ratio=_HOME_CITY_ATLAS_HORIZONTAL_SWIPE_Y_RATIO,
+    )
+    return SwipeAction(
+        direction=action.direction,
+        distance_ratio=action.distance_ratio,
+        duration_ms=action.duration_ms,
+        reason=action.reason,
+        observe_after=True,
+        follow_up_request=ObservationRequest.source_screen_retry(ScreenType.PNC_HOME_CITY),
+        timing_profile=action.timing_profile,
+        start_x_ratio=action.start_x_ratio,
+        start_y_ratio=action.start_y_ratio,
+        end_x_ratio=action.end_x_ratio,
+        end_y_ratio=action.end_y_ratio,
+    )
 
 
 def _resolve_target_point(*, target: DetectedSpatialObject, use_action_point: bool) -> tuple[int, int]:

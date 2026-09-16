@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "annotation": "Home-city camera localization fixtures from the 2026-09-15 live tour evidence. sha256 is the decoded RGB digest: width.to_bytes(8,big) + height.to_bytes(8,big) + RGB bytes. pan_07 and tower_pan_28 are paired post-pan views of the testing castle; mega_castle is a different castle appearance on the same shared map. Source artifacts live under ignored .local-data and are not redistributed.",
+  "samples": [
+    {
+      "image": "home_city_pan_07.png",
+      "role": "paired_post_pan",
+      "size": [
+        540,
+        960
+      ],
+      "sha256": "9d6e8057b51ec7d488c53a9827e35504e9ffc87fd49e8724b27d02723848499c",
+      "source_artifact": "20260915T160641Z_core_20260915T160413Z_018f500d_0026_07_pan_home_pan_to_lower_right.png",
+      "source_size": [
+        900,
+        1600
+      ],
+      "source_sha256": "12c8d8a3f98090e6c49f879b9d7f3a632ff6d25a63ab2d5d1183f539c65748d0"
+    },
+    {
+      "image": "home_city_tower_pan_28.png",
+      "role": "tower_paired_post_pan",
+      "size": [
+        540,
+        960
+      ],
+      "sha256": "2ac198d98a036686dad30fc78088b16ad8fdcc5d2970cbecdd216c3ded8402eb",
+      "source_artifact": "20260915T162459Z_core_20260915T161857Z_b519129c_0041_28_tower_pan_home_pan_toward_tower.png",
+      "source_size": [
+        900,
+        1600
+      ],
+      "source_sha256": "9cde50f01a5e8f9696a0f33708334b71a12ea44439b692742837ec0c178dc895"
+    },
+    {
+      "image": "home_city_mega_castle.png",
+      "role": "mega_castle_different_appearance",
+      "size": [
+        540,
+        960
+      ],
+      "sha256": "15e83bbf15523d034cacd9b3b47de735a41554d5c9bbeaa724a986f672555e5a",
+      "source_artifact": "20260915T120032Z_core_20260915T115911Z_f1aa1d14_0030_core_8_building_source.png",
+      "source_size": [
+        900,
+        1600
+      ],
+      "source_sha256": "653cf0c0cf822237cba7eb13346b4327666b9993840ba6cdccb474a4a4407d63"
+    }
+  ]
+}
