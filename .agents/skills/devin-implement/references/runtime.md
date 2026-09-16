@@ -8,7 +8,7 @@ The launcher resolves `devin` from PATH or `%LOCALAPPDATA%/devin/cli/bin/devin.e
 
 The authorized defaults are `--permission-mode dangerous` and `--respect-workspace-trust false`, applied after exact Git-root and HEAD validation. Routine commands need no approval grants. Explicit `normal`/`accept-edits` overrides retain workspace trust and support repeated `--allow-rule` arguments. Native Windows has no Devin filesystem sandbox; host and organization restrictions still apply.
 
-A per-turn config replaces the CLI user config, disables imported tool settings and nested subagents, and sets `attribution: false` so worker commits and PRs omit Devin footers. Shared settings are not modified. Project/system rules, hooks, and dedicated MCP configuration can still apply; investigate the specific setting if a conflict occurs.
+A per-turn config replaces the CLI user config, disables imported tool settings and nested subagents, and sets `attribution: false` so worker commits and PRs omit Devin footers. Shared settings are not modified. The per-turn overlay sets `agent.compaction_threshold_tokens` to 100,000. Four SWE-2 sessions on CLI 3000.10.27 failed around 131–134k context tokens despite the catalog advertising 262k; earlier compaction recovered the exact failed session on September 16 (130,770 → 36,425 reported tokens, successful final response). This is an observed workaround, not a claim about the provider’s undocumented limit. The setting is supported by the [official 3000.10.21 changelog](https://docs.devin.ai/cli/changelog/stable). Project/system rules, hooks, and dedicated MCP configuration can still apply; investigate the specific setting if a conflict occurs.
 
 ## Launch independently
 

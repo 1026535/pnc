@@ -175,6 +175,7 @@ export = pathlib.Path(args[args.index('--export') + 1])
 config = json.loads(pathlib.Path(args[args.index('--config') + 1]).read_text())
 assert config['subagents_enabled'] is False
 assert config['attribution'] is False
+assert config['agent']['compaction_threshold_tokens'] == 100_000
 assert os.environ['DEVIN_IMPLEMENT_ROLE'] == 'worker'
 assert args[args.index('--model') + 1] == 'swe-2-max'
 permission = args[args.index('--permission-mode') + 1]
@@ -259,6 +260,8 @@ export.write_text(json.dumps({'session_id':'fixture-session','agent':{'tool_defi
                 return worker.run(self.args)
             arguments = ["run", "--repo", self.args.repo, "--expected-head", self.args.expected_head,
                          "--run-dir", self.args.run_dir, "--brief", self.args.brief]
+            if getattr(self.args, "preamble_file", None):
+                arguments.extend(["--preamble-file", self.args.preamble_file])
             if self.args.resume:
                 arguments.append("--resume")
             if not self.args.console:
@@ -291,6 +294,22 @@ export.write_text(json.dumps({'session_id':'fixture-session','agent':{'tool_defi
         self.assertTrue((self.run_dir / "turn-001/handoff.md").is_file())
         self.assertEqual((self.repo / "existing.txt").read_text(), "user's uncommitted work\n")
         self.assertTrue(state["writers_stopped"])
+
+    def test_custom_preamble_replaces_implementation_role(self):
+        """A specialized worker can replace the default implementation reporting contract."""
+        preamble = self.root / "live-test-preamble.md"
+        preamble.write_text("Return BLOCKED only for required user intervention.", encoding="utf-8")
+        self.args.preamble_file = str(preamble)
+        self.assertEqual(self.invoke(through_cli=True), 0)
+        prompt = (self.run_dir / "turn-001" / "prompt.md").read_text(encoding="utf-8")
+        self.assertTrue(prompt.startswith("Return BLOCKED only for required user intervention.\n\n"))
+        self.assertNotIn("NEEDS_LEAD", prompt)
+        self.args.resume = True
+        self.args.preamble_file = None
+        self.assertEqual(self.invoke(through_cli=True), 0)
+        resumed = (self.run_dir / "turn-002" / "prompt.md").read_text(encoding="utf-8")
+        self.assertTrue(resumed.startswith("Return BLOCKED only for required user intervention.\n\n"))
+        self.assertNotIn("NEEDS_LEAD", resumed)
 
     def test_zero_exit_without_handoff_is_incomplete(self):
         """A rejected final tool call cannot masquerade as completed transport."""

@@ -22,6 +22,15 @@ from windows_job import Job
 MODEL = "swe-2-max"
 ROLE_VARIABLE = "DEVIN_IMPLEMENT_ROLE"
 CANCEL_GRACE_SECONDS = 15
+DEFAULT_PREAMBLE = (
+    "You are the SWE-2 implementation worker. Do not delegate, invoke orchestration skills, "
+    "change model/configuration, or start detached processes. Execute the concrete package "
+    "and its checks; make routine implementation choices within the lead's decisions. Return "
+    "NEEDS_LEAD with evidence when the approach is challenged, complex reasoning or a material "
+    "decision is needed, or repeated attempts yield no useful new evidence. Preserve partial "
+    "work and return at the package boundary rather than expanding into open-ended problem-solving. "
+    "Use the requested compact handoff instead of interactive question tools."
+)
 
 
 def read_json(path):
@@ -407,10 +416,23 @@ def run(args):
             raise RuntimeError(f"Account does not expose the exact {MODEL} variant.")
         write_json(turn_dir / "model.json", {"version": version, "model": selected[0]})
         before = snapshot(repo, turn_dir, "before")
+        preamble_file = getattr(args, "preamble_file", None)
+        requested_preamble = (Path(preamble_file).resolve(strict=True).read_text(encoding="utf-8-sig")
+                              if preamble_file else None)
+        saved_preamble = run_dir / "worker-preamble.md"
+        if prior and saved_preamble.exists():
+            preamble = saved_preamble.read_text(encoding="utf-8")
+            if requested_preamble is not None and requested_preamble.rstrip() != preamble.rstrip():
+                raise RuntimeError("Resume preamble differs from the original worker role.")
+        else:
+            preamble = requested_preamble if requested_preamble is not None else DEFAULT_PREAMBLE
+            saved_preamble.write_text(preamble.rstrip() + "\n", encoding="utf-8")
         prompt = turn_dir / "prompt.md"
-        prompt.write_text("You are the SWE-2 implementation worker. Do not delegate, invoke orchestration skills, change model/configuration, or start detached processes. Execute the concrete package and its checks; make routine implementation choices within the lead's decisions. Return NEEDS_LEAD with evidence when the approach is challenged, complex reasoning or a material decision is needed, or repeated attempts yield no useful new evidence. Preserve partial work and return at the package boundary rather than expanding into open-ended problem-solving. Use the requested compact handoff instead of interactive question tools.\n\n" + brief.read_text(encoding="utf-8-sig"), encoding="utf-8")
+        prompt.write_text(preamble.rstrip() + "\n\n" + brief.read_text(encoding="utf-8-sig"), encoding="utf-8")
         hook_command = 'python "' + Path(__file__).resolve().as_posix() + '" hook'
-        config = {"agent": {"model": MODEL, "show_history_on_continue": False},
+        # Compact before the observed SWE-2 failure boundary near 131k tokens.
+        config = {"agent": {"model": MODEL, "show_history_on_continue": False,
+                            "compaction_threshold_tokens": 100_000},
                   "attribution": False,
                   "subagents_enabled": False, "auto_update": False, "notify": "never",
                   "theme_mode": "nocolor", "shell": {"setup_complete": True},
@@ -523,6 +545,8 @@ def main(argv=None):
     action.add_argument("--expected-head", required=True)
     action.add_argument("--run-dir", required=True)
     action.add_argument("--brief", required=True)
+    action.add_argument("--preamble-file",
+                        help="Optional role preamble, retained across resumes; defaults to implementation.")
     action.add_argument("--resume", action="store_true")
     action.add_argument("--no-console", dest="console", action="store_false",
                         help="Hide the live Devin output console (shown by default).")
