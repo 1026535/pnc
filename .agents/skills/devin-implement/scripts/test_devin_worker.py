@@ -308,14 +308,13 @@ export.write_text(json.dumps({'session_id':'fixture-session','agent':{'tool_defi
         self.assertEqual(state["permission_mode"], "accept-edits")
         self.assertTrue(state["respect_workspace_trust"])
 
-    def test_head_drift_fails_run(self):
-        """A baseline moved mid-run fails closed instead of reporting silent success."""
+    def test_head_drift_is_reported(self):
+        """A baseline moved mid-run is flagged for lead reconciliation, not hidden."""
         try:
-            self.assertEqual(self.invoke("commit"), 1)
+            self.assertEqual(self.invoke("commit"), 0)
             state = worker.read_json(self.run_dir / "state.json")
-            self.assertEqual(state["status"], "failed")
+            self.assertEqual(state["status"], "exited")
             self.assertTrue(state["head_drift"])
-            self.assertIn("HEAD", state["error"])
             self.assertNotEqual(state["final_head"], self.head)
             self.assertTrue((self.repo / "worker.txt").is_file())
         finally:

@@ -51,7 +51,7 @@ On completion, `turn-NNN/result.json` and `handoff.md` hold the result; logs, ex
 
 `exited` means the CLI supplied a final response with valid model evidence. A zero exit without a new final response, including observed headless permission rejections, is `incomplete`. The lead evaluates readiness separately. The launcher does not retry automatically.
 
-`head_drift` in `result.json`/`state.json` reports that the checkout `HEAD` no longer equals the launch's expected baseline; a drifted baseline fails the turn. Worker commits legitimately move `HEAD` — the lead reconciles the handoff's declared commit/ref against the recorded `final_head` before resuming or accepting results.
+`head_drift` in `result.json`/`state.json` reports that the checkout `HEAD` no longer equals the launch's expected baseline. Worker commits legitimately move `HEAD` — the lead reconciles the handoff's declared commit/ref against the recorded `final_head` before resuming or accepting results. Drift is reported, not auto-failed.
 
 ## Side questions through the owned connection
 
