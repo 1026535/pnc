@@ -258,6 +258,11 @@ if behavior in ('sleep', 'graceful-cancel'):
 if behavior == 'failure':
     pathlib.Path('partial.txt').write_text('preserve partial result')
     sys.exit(7)
+if behavior == 'acp-error':
+    pathlib.Path(os.environ['DEVIN_IMPLEMENT_TURN_DIR'], 'acp-error.json').write_text(
+        json.dumps({'error': 'protocol invalid_argument (trace ID: t1)',
+                    'acp_error': {'code': -32013, 'data': {'cognition.ai/retryable': True}}}))
+    sys.exit(1)
 model = 'wrong-model' if behavior == 'model-mismatch' else 'swe-2-max'
 step = {'source':'agent','model_name':model,'message':'READY_FOR_REVIEW: fixture complete.'}
 if behavior == 'denied':
@@ -424,7 +429,15 @@ export.write_text(json.dumps({'session_id':'fixture-session','agent':{'tool_defi
         self.assertEqual(state["context"], {"used_tokens": 36425, "peak_used_tokens": 130770,
                                          "window_tokens": 262000, "compactions_completed": 1})
         self.assertEqual(worker.read_json(self.run_dir / "turn-001/result.json")["context"], state["context"])
+        self.assertIn("exited 7", state["error"])
         self.assertEqual((self.repo / "partial.txt").read_text(), "preserve partial result")
+
+    def test_acp_failure_surfaces_peer_diagnosis(self):
+        """A protocol-level failure returns Devin's structured diagnosis to the lead."""
+        self.assertEqual(self.invoke("acp-error"), 1)
+        state = worker.read_json(self.run_dir / "state.json")
+        self.assertEqual(state["status"], "failed")
+        self.assertIn("invalid_argument", state["error"])
 
     def test_wrong_baseline_prevents_launch(self):
         """Fail before creating a run for a stale revision."""

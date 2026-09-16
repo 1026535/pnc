@@ -82,6 +82,18 @@ class AcpTests(unittest.TestCase):
             "used_tokens": 36425, "peak_used_tokens": 130770,
             "window_tokens": 262000, "compactions_completed": 1})
 
+    def test_protocol_error_persists_peer_diagnosis(self):
+        """A peer JSON-RPC error keeps its structured detail for the supervisor's result."""
+        self.connection.responses[7] = {"error": {"code": -32013, "message": "internal",
+                                        "data": {"cognition.ai/retryable": True}}}
+        with self.assertRaises(acp.ProtocolError) as caught:
+            self.connection.result(7)
+        self.assertEqual(caught.exception.detail["code"], -32013)
+        acp.record_failure(self.turn, caught.exception)
+        record = acp.read_json(self.turn / "acp-error.json")
+        self.assertTrue(record["acp_error"]["data"]["cognition.ai/retryable"])
+        acp.record_failure(None, caught.exception)
+
     def test_interleaved_questions_are_serialized_and_answers_bounded(self):
         """Two requests cannot cross-contaminate each other or consume main output."""
         ids = [acp.ask(self.root, question="progress?", wait_seconds=0)["request_id"] for _ in range(2)]
