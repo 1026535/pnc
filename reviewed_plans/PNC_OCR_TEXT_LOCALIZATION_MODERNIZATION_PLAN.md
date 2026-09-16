@@ -2,7 +2,7 @@
 
 Date: 2026-09-16. Status: planned; implementation is not authorized by this document alone.
 
-Planning baseline: `a73843cebfcee2105d8efd07706dd7fcb94fda10` (`origin/main`). This is a shared infrastructure plan outside the numbered V01–V43 feature packets. It owns OCR backend, model, packaging, and text-localization qualification; feature packets retain their screen semantics, navigation, and action policy.
+Original consultation baseline: `a73843cebfcee2105d8efd07706dd7fcb94fda10`. Integration review baseline: accepted main `f93dd2ab3261f2bca7fd15c3cd4d09f87cffda0f`. This is a shared infrastructure plan outside the numbered V01–V43 feature packets. It owns future OCR backend, model, packaging, and text-localization qualification; feature packets retain their screen semantics, navigation, and action policy. Accepted V13/V18 work is the comparison baseline, not an unmerged candidate to import.
 
 [Vision roadmap](PNC_VISION_ROADMAP.md) · [Shared architecture](PNC_VISION_MODULAR_PLAN.md) · [Campaign packet](vision_modules/V13_CAMPAIGN_MAP_AND_CHAPTERS.md)
 
@@ -35,24 +35,25 @@ Out of scope:
 
 - `pnc_automation/core/vision/ocr/ocr_service.py` owns `OcrWord`, `OcrLine`, `OcrResult`, `OcrService`, `ObservationOcrContext`, and `RapidOcrService`.
 - `ObservationOcrContext` already owns frame binding, bounded-region reads, caching, diagnostics, backend revision, and exact-once projection to global coordinates. Keep it as the single OCR access path.
-- The current dependency is `rapidocr_onnxruntime>=1.2.3,<2.0.0`. RapidOCR returns line quadrilaterals, while `_to_ocr_words()` estimates individual word bounds by distributing line width according to character counts. Those word positions are synthetic rather than measured.
+- The accepted dependency is `rapidocr==3.4.5` with `onnxruntime>=1.24.3,<2.0.0` and a packaged PP-OCRv3 recognizer. Detector-backed reads return line quadrilaterals, while `_to_ocr_words()` estimates individual word bounds from character counts. The thin/wide direct-recognition path returns crop-covering line bounds without running detection. Neither proportional word boxes nor crop-covering lines establish measured text localization.
 - `TextAnchorDetector` consumes `line.words` and forms spans of up to three words, so inaccurate word geometry can become inaccurate anchor geometry even when the recognized phrase is usable.
-- V10 and V15 document observed failures from the accepted backend: a dropped leading digit and a lone `0` that remains unknown.
-- A local, unmerged V13 candidate at `124a435e115bc4f3c782e6439b8013b5a8e75e53` contains two relevant review inputs: commit `18049819c3dec5172e60e83a063547b19a20b9d2` migrates to `rapidocr==3.4.5`, and the later commit vendors a PP-OCRv3 recognizer for thin/wide crops. That candidate improved Campaign recognition but still synthesizes word positions. Review and selectively extract useful hunks with source attribution; do not merge the branch wholesale.
+- V10 and V15 document historical failures of the previous backend: a dropped leading digit and a lone `0`. Reproduce them on the accepted backend before claiming they remain failures; retain their reviewed source annotations either way.
+- V13's backend/model changes were integrated with V18 and Research/Bag corrections in `684c78923641a2c039d16df87979f3637c158152`, accepted and pushed through `f93dd2a`. The combined portable run passed 2,496 tests with 7 skips; required Campaign, Research and Hero Hall menu routes passed live. Do not re-import the older `124a435e` branch or revert these corrections.
+- Preserve explicit `OcrTextOrientation` in service calls and cache identity. Research's upright labels, row grouping and bounded counter retry, Castle's reference-sized preprocessing, tab-owned Bag identities and Hero result fields are regression cases for any new engine. Default orientation elsewhere remains unchanged.
 
 ## Target design and ownership
 
-Keep a single production OCR adapter behind `OcrService`. Its default candidate is current RapidOCR with explicitly pinned PaddleOCR mobile detection and English recognition ONNX assets, initially evaluating the PP-OCRv5 family. Pin the exact compatible RapidOCR release only after the clean-install compatibility probe; GPT-6 Pro suggested `rapidocr==3.9.2` as a candidate, not an assumed answer.
+Keep a single production OCR adapter behind `OcrService`. First measure the accepted stack and its available geometry output; retain it if a small contract correction meets the gates. If model changes are needed, evaluate explicitly pinned PaddleOCR mobile detection and English recognition ONNX assets, initially PP-OCRv5. Pin a compatible RapidOCR release only after a clean-install probe. Current [RapidOCR documentation](https://rapidai.github.io/RapidOCRDocs/main/install_usage/rapidocr/usage/) exposes optional word results and documents changed model defaults in 3.9; package version alone is not a model specification. [PaddleOCR's model catalog](https://github.com/PaddlePaddle/PaddleOCR/blob/main/docs/version3.x/module_usage/text_recognition.en.md) identifies an English PP-OCRv5 mobile recognizer. Neither source establishes accuracy on PNC captures.
 
 The adapter must return:
 
 - normalized line text and confidence;
 - detector-measured line geometry;
-- measured word geometry when the selected engine exposes it;
+- word geometry with explicit provenance when the engine exposes it; audit whether positions are detector-measured or decoder-derived and qualify them against annotations rather than equating `return_word_box` with independent measurement;
 - otherwise, explicit line/phrase geometry without presenting proportional character slicing as measured word localization;
 - deterministic reading order, clamped bounds, and existing global-coordinate projection.
 
-The public `OcrWord`, `OcrLine`, and `OcrResult` contracts may be extended only when necessary to distinguish measured from derived geometry. Callers must not infer provenance from backend-specific dictionaries or string conventions. `ObservationOcrContext` remains the owner of regions, caching, projection, and diagnostics. Feature producers remain responsible for screen identity and independently approved control interiors.
+The public `OcrWord`, `OcrLine`, and `OcrResult` contracts need an explicit distinction between detected, decoder-derived and crop-assigned geometry where those paths coexist. Callers must not infer provenance from backend dictionaries or string conventions. Crop-assigned geometry remains valid for a bounded numeric/content read but cannot be promoted as localized label geometry. `ObservationOcrContext` remains the owner of regions, caching, projection, and diagnostics. Feature producers remain responsible for screen identity and independently approved control interiors.
 
 Do not add a permanent fallback router. If the primary candidate misses a material gate, compare one bounded challenger at a time:
 
@@ -71,7 +72,7 @@ A typed label/content profile is justified only by benchmark evidence showing th
 
 ## Phase 2 — Bounded engine comparison
 
-1. Capture the current `rapidocr_onnxruntime==1.2.3` baseline on the complete corpus, including latency, cold initialization, peak RSS, missing values, wrong values, false positives, localization error, and downstream anchor matches.
+1. Capture the accepted `rapidocr==3.4.5` plus packaged PP-OCRv3 baseline on the complete corpus, including latency, cold initialization, peak RSS, missing/wrong values, false positives, localization error and downstream anchors. Record installed dependency versions, all model hashes and actual preprocessing/orientation settings. The retired 1.2.3 backend is historical evidence, not the promotion baseline.
 2. Evaluate the primary RapidOCR/Paddle mobile candidate with an explicit dependency lock, detector/recognizer asset hashes, dictionaries, licenses, preprocessing, decoder settings, and backend revision.
 3. Run the same corpus and environment for each justified challenger. No challenger proceeds merely because it is newer; it must address a named failure left by the primary.
 4. Select the smallest candidate that passes every mandatory gate. Archive the comparison report under ignored `.local-data/`; keep only stable fixtures, manifests, and test expectations in Git.
@@ -80,7 +81,7 @@ A typed label/content profile is justified only by benchmark evidence showing th
 
 1. Adapt `RapidOcrService` or replace its internals without creating a second public OCR path. Preserve dependency injection and the existing disabled/fake services used by tests.
 2. Remove proportional word-box synthesis from actionable label localization. When only line boxes are available, publish a line/phrase anchor with honest geometry or use detector output plus deterministic grouping; do not fabricate glyph-level precision.
-3. Preserve exact-once coordinate projection and cache identity. Include backend/model revision and any behavior-affecting profile in cache and diagnostic identity.
+3. Preserve exact-once coordinate projection and cache identity, including the accepted orientation dimension. Include backend/model revision and any behavior-affecting profile in cache and diagnostic identity; retain bounded region demand and concurrent engine serialization.
 4. Migrate `TextAnchorDetector` and affected publishers to the clarified geometry contract. An OCR match may propose an anchor only inside the requested region; action eligibility still requires the feature producer's screen identity, semantic match, and approved control geometry.
 5. Exercise both publication paths that currently consume OCR and add regression coverage for multiword spans, clipped regions, hard negatives, repeated labels, and stale-frame/cache boundaries.
 
@@ -103,7 +104,7 @@ All mandatory fixtures must run; a missing engine or fixture cannot be counted a
 | Action safety | Every proposed actionable anchor must also lie inside the feature's independently approved control interior; zero actionable false positives on hard negatives. OCR geometry alone never authorizes a click. |
 | Typed anchors | 100% correct for critical anchors and at least 98% overall after grouping and normalization. |
 | Numeric/content regression | Preserve 100% of previously correct reviewed values, introduce no increase in missing values, and produce zero new wrong values on the corpus. |
-| Determinism | Identical normalized output and geometry across 20 repeated runs and three fresh processes, subject only to explicitly documented numeric tolerance. |
+| Determinism | Identical normalized output and geometry across two fresh-process corpus runs, with five warm repetitions of representative critical cases; document numeric tolerance. Expand only when a discrepancy or measured nondeterminism warrants it. |
 | Warm performance | End-to-end p95 OCR latency no more than 1.25× the accepted baseline on the same machine and corpus. |
 | Startup and memory | Cold initialization no more than baseline +2 seconds; peak RSS no more than 1 GiB and no more than baseline +256 MiB. |
 | Offline packaging | Clean install and first inference succeed with network disabled; all required asset hashes and licenses are verified. |
@@ -112,16 +113,14 @@ The IoU gate measures whether returned text geometry overlaps the annotated text
 
 ## Validation sequence
 
-Use the repository runner from a clean environment, with the exact planning base retained for affected-test selection:
+Use the repository runner in the candidate's isolated environment. Record its actual implementation base for affected selection and comparison. Start with the narrowest changed owner; run affected checks after integration. A backend/shared geometry change warrants one full portable gate, including when affected selection already falls back to full; do not run that gate twice.
 
 ```powershell
 $Python = ".\.venv\Scripts\python.exe"
-$Base = "a73843cebfcee2105d8efd07706dd7fcb94fda10"
+$Base = "f93dd2ab3261f2bca7fd15c3cd4d09f87cffda0f" # Replace with the recorded implementation base if newer.
 & $Python tools/run_tests.py group unit.core.vision
-& $Python tools/run_tests.py group unit.app.pnc.vision
-& $Python tools/run_tests.py group vision
 & $Python tools/run_tests.py affected --base $Base --explain
-& $Python tools/run_tests.py full
+# Run full only if the required shared-contract gate was not already selected above.
 git diff --check
 ```
 
@@ -142,7 +141,7 @@ Accuracy qualification is offline and fixture-driven. First verify fresh-process
 - [ ] Word/phrase geometry provenance is explicit; proportional boxes are not used for actionable localization.
 - [ ] Both observation publishers and `TextAnchorDetector` pass focused regression tests.
 - [ ] Offline packaging, hashes, dictionaries, and licenses are complete.
-- [ ] Narrow groups, affected selection, full suite, and `git diff --check` pass.
+- [ ] Relevant focused checks, affected selection, one required full integration gate and `git diff --check` pass without duplicate broad runs.
 - [ ] Any required bounded live composition smoke is recorded with zero spending and no unauthorized actions.
 - [ ] Roadmap and feature notes report the integrated commit and qualification evidence.
 
@@ -151,3 +150,5 @@ Accuracy qualification is offline and fixture-driven. First verify fresh-process
 GPT-6 Pro in Chat mode produced the initial plan against verified GitHub commit `a73843cebfcee2105d8efd07706dd7fcb94fda10`. Consultation status: complete on 2026-09-16. No repository overlay was attached. The prompt separately disclosed the local-only V13 candidate commits as Codex-verified facts because they were not accessible from GitHub.
 
 The active Codex task audited the proposal against the repository before saving it. The audit retained Pro's single-adapter design, staged engine comparison, corpus structure, atomic promotion unit, and quantitative gates. It corrected a non-repository placeholder link, made candidate package versions conditional on compatibility proof, and separated text-overlap measurement from safe target/control containment.
+
+The implementation lead reconciled this plan on September 16 after V13/V18 acceptance: the landed 3.4.5 stack replaces the obsolete 1.2.3 baseline; direct-recognition crop geometry is explicitly non-localized; upright/cache and downstream fixes must be preserved; engine changes require measured need; and repeated validation is bounded. This plan remains planned work and does not change the 14/43 feature acceptance count.

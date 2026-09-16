@@ -8,7 +8,7 @@ Date: 2026-09-15. Status: prepared for implementation; no implementation is auth
 
 ## Outcome and design
 
-Recognize and navigate the supported Home, research, Bag, Campaign, Trial and building interfaces through one production observation and navigation path. Each numbered packet is a coherent assignment for one Luna xhigh agent. A packet owns its feature from screenshot to typed facts, measured controls, navigation, callers and focused proof.
+Recognize and navigate the supported Home, research, Bag, Campaign, Trial and building interfaces through one production observation and navigation path. Each numbered packet is a coherent assignment for one assigned implementation worker. A packet owns its feature from screenshot to typed facts, measured controls, navigation, callers and focused proof.
 
 - **Home:** reuse the fixed city atlas; locate the camera with OpenCV landmarks, then verify the current target region. Re-localize after panning. Building artwork and OCR names support identity; they do not define the map.
 - **Menus and popups:** use the existing OpenCV screen/control matcher, feature-specific layout/icon parsers, and cropped OCR for changing content. The result answers “which node/item, where can it be clicked, and what state is it in?”

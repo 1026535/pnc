@@ -9,7 +9,7 @@ recognizes Chapter6 and its bottom-right Home portal on `4d317db`; its exact
 runtime changes and fixtures are ported after `ff38127`. Preserve that baseline
 and reconcile newer Campaign work before extending content. In `pnc_observation_enricher.py`, `_build_campaign_additions` still publishes only the reviewed Chapter10/Grandia Ruins and stage3 cases. `campaign_ocr_regions.py` contains those bounded regions. `navigation_core.py` and `tasks/campaign_task.py` own navigation and consumption.
 
-V13 owns Campaign semantics, profiles, and routes. Its local backend/model candidate is evidence for the shared [OCR text recognition and localization modernization plan](../PNC_OCR_TEXT_LOCALIZATION_MODERNIZATION_PLAN.md), which owns backend selection, model packaging, measured text positions, and cross-surface qualification. Reuse qualified pieces with source-commit attribution; do not make Campaign the permanent owner of the shared OCR stack.
+V13 owns Campaign semantics, profiles and routes. Its accepted shared backend/model integration at `f93dd2a` is the baseline for the [OCR text recognition and localization modernization plan](../PNC_OCR_TEXT_LOCALIZATION_MODERNIZATION_PLAN.md), which owns future model selection, packaging, measured text positions and cross-surface qualification. Preserve the integrated Research/Bag corrections; do not re-import the old candidate or make Campaign the permanent OCR owner.
 
 Use tour15, the Chapter6 pulse validation fixture, and the saved Chapter10/path/stage evidence in the [Campaign note](../../docs/game-reference/workflows/campaign-navigation.md). Old source-build conclusions do not prove today's visible control semantics.
 

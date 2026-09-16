@@ -16,7 +16,7 @@ remaining content and routes; these packets are not completed by the small fix.
 
 Continue with V09, V13 and V16 to establish Bag, Campaign and shared building-menu contracts. Their dependent features then reuse those contracts. This is the execution-order document; the individual packets remain authoritative for detailed scope, owners, evidence and validation.
 
-The [OCR text recognition and localization modernization plan](PNC_OCR_TEXT_LOCALIZATION_MODERNIZATION_PLAN.md) is planned cross-cutting infrastructure outside the 43-packet count. It owns the shared backend/model/localization comparison and qualification. V10, V13, V15 and other feature packets retain their domain semantics and consume the qualified service.
+The [OCR text recognition and localization modernization plan](PNC_OCR_TEXT_LOCALIZATION_MODERNIZATION_PLAN.md) is planned cross-cutting infrastructure outside the 43-packet count. It owns the shared backend/model/localization comparison and qualification. V10, V13, V15 and other feature packets retain their domain semantics and consume the qualified service. The accepted V13/V18 stack at `f93dd2a` is its baseline. Corpus and benchmark preparation can proceed independently; serialize any runtime promotion with feature integration and reuse unchanged acceptance evidence. This work does not block unrelated ready packets or change the 43-packet count.
 
 The roadmap has **five delivery waves containing 39 packets**, plus **four packets on an availability-dependent track**. Every packet appears once in the tables below. Wave numbers express priority, not a barrier requiring every earlier packet to finish. Start a later packet when its own prerequisites are integrated and its work is the next useful available assignment.
 
