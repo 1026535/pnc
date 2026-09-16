@@ -178,7 +178,27 @@ Predicted landings no longer populate remembered tap coordinates, including
 focus-coordinate plans. Route planning leaves the destination tap attempt
 available; an unchanged observed route signature stops with a diagnostic.
 The measured NavigationCore building-camera path and its provenance guards
-remain canonical and unchanged. Focused309 navigation tests passed; affected
-and delegated live qualification are pending. No live action was repeated by
-the lead. Build unknown; code cause and captured rejection are high confidence,
-camera non-convergence cause remains unresolved.
+remain canonical and unchanged. Focused navigation checks passed 309 tests;
+affected selection passed 1,152 with two skips (run
+`2ab484f103b54897b78582db46e8334d`, candidate `54c036a`).
+
+**Live observed:** Devin's `home-atlas-route-refresh` turn 002 on `3xx_spies`
+started from a Castle/Infantry Home view at 23:25:29Z. The offscreen Alliance
+Hall approach emitted three swipes and no tap. The last swipe requested a
+fresh Home observation; the next plan consumed exactly that returned artifact
+and fingerprint at 23:26:01Z with the same navigation state. The lead reviewed
+the source/action/result records and the post-route/final images. Subsequent
+anchorless views emitted no predicted coordinate taps. Evidence: the ignored
+`vision-v01-foundation/.local-data/devin-live-test/runs/home-atlas-route-refresh/`
+turn-002 manifest and `harness_run_log_turn002.json`; native frames under
+`artifacts/2026-09-16/3xx_spies/20260916T232601Z_live_alliance_hall_route_alliance_hall_open_step_0_post_action_3.png`
+and `20260916T232819Z_live_alliance_hall_route_restore_start.png`.
+
+The run ended on clear Home at the existing flow-budget stop, with no spending,
+alliance action or tap on an unobserved point; the lease released and the
+instance was preserved. It did not reach Alliance Hall, so this accepts only
+the swipe/reobserve/replan correction, not that building's route or V22.
+The repeated-coarse-view diagnostic remains covered offline; live views had
+different signatures. No further live repetition is required for this fix.
+Build unknown; the route-refresh behavior is high confidence, while remaining
+route non-convergence and Blacksmith availability are unresolved.
