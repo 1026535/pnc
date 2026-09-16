@@ -1,0 +1,3809 @@
+{
+  "activity": {
+    "assist_cost": 2,
+    "assist_level": 999,
+    "buy_add_productivity": 1,
+    "buy_costs": [
+      {
+        "count": -10,
+        "type": 1001
+      }
+    ],
+    "buy_count": 0,
+    "cooldown_ms": 20000,
+    "cooldown_skip_cost": 50,
+    "description": "",
+    "energy_capacity": 200,
+    "energy_item_id": 44009010,
+    "energy_regen_ms": 300000,
+    "item_limit_raw": "8_5|7_5",
+    "item_time_ms": 120000,
+    "production_energy_cost": 1
+  },
+  "board": {
+    "columns": 7,
+    "rows": 9
+  },
+  "drop_groups": {
+    "1": [
+      {
+        "item_id": 10101,
+        "weight": 1000
+      },
+      {
+        "item_id": 10102,
+        "weight": 0
+      },
+      {
+        "item_id": 10103,
+        "weight": 0
+      },
+      {
+        "item_id": 10201,
+        "weight": 0
+      },
+      {
+        "item_id": 10202,
+        "weight": 0
+      },
+      {
+        "item_id": 10203,
+        "weight": 0
+      }
+    ],
+    "11": [
+      {
+        "item_id": 20101,
+        "weight": 1000
+      },
+      {
+        "item_id": 20102,
+        "weight": 0
+      },
+      {
+        "item_id": 20103,
+        "weight": 0
+      },
+      {
+        "item_id": 20201,
+        "weight": 0
+      },
+      {
+        "item_id": 20202,
+        "weight": 0
+      },
+      {
+        "item_id": 20203,
+        "weight": 0
+      },
+      {
+        "item_id": 20204,
+        "weight": 0
+      },
+      {
+        "item_id": 20205,
+        "weight": 0
+      }
+    ],
+    "12": [
+      {
+        "item_id": 20101,
+        "weight": 550
+      },
+      {
+        "item_id": 20102,
+        "weight": 0
+      },
+      {
+        "item_id": 20103,
+        "weight": 0
+      },
+      {
+        "item_id": 20201,
+        "weight": 450
+      },
+      {
+        "item_id": 20202,
+        "weight": 0
+      },
+      {
+        "item_id": 20203,
+        "weight": 0
+      },
+      {
+        "item_id": 20204,
+        "weight": 0
+      },
+      {
+        "item_id": 20205,
+        "weight": 0
+      }
+    ],
+    "13": [
+      {
+        "item_id": 20101,
+        "weight": 468
+      },
+      {
+        "item_id": 20102,
+        "weight": 82
+      },
+      {
+        "item_id": 20103,
+        "weight": 0
+      },
+      {
+        "item_id": 20201,
+        "weight": 360
+      },
+      {
+        "item_id": 20202,
+        "weight": 90
+      },
+      {
+        "item_id": 20203,
+        "weight": 0
+      },
+      {
+        "item_id": 20204,
+        "weight": 0
+      },
+      {
+        "item_id": 20205,
+        "weight": 0
+      }
+    ],
+    "14": [
+      {
+        "item_id": 20101,
+        "weight": 440
+      },
+      {
+        "item_id": 20102,
+        "weight": 83
+      },
+      {
+        "item_id": 20103,
+        "weight": 27
+      },
+      {
+        "item_id": 20201,
+        "weight": 315
+      },
+      {
+        "item_id": 20202,
+        "weight": 90
+      },
+      {
+        "item_id": 20203,
+        "weight": 45
+      },
+      {
+        "item_id": 20204,
+        "weight": 0
+      },
+      {
+        "item_id": 20205,
+        "weight": 0
+      }
+    ],
+    "2": [
+      {
+        "item_id": 10101,
+        "weight": 700
+      },
+      {
+        "item_id": 10102,
+        "weight": 0
+      },
+      {
+        "item_id": 10103,
+        "weight": 0
+      },
+      {
+        "item_id": 10201,
+        "weight": 300
+      },
+      {
+        "item_id": 10202,
+        "weight": 0
+      },
+      {
+        "item_id": 10203,
+        "weight": 0
+      }
+    ],
+    "21": [
+      {
+        "item_id": 30101,
+        "weight": 1000
+      },
+      {
+        "item_id": 30102,
+        "weight": 0
+      },
+      {
+        "item_id": 30103,
+        "weight": 0
+      }
+    ],
+    "22": [
+      {
+        "item_id": 30101,
+        "weight": 900
+      },
+      {
+        "item_id": 30102,
+        "weight": 100
+      },
+      {
+        "item_id": 30103,
+        "weight": 0
+      }
+    ],
+    "23": [
+      {
+        "item_id": 30101,
+        "weight": 800
+      },
+      {
+        "item_id": 30102,
+        "weight": 200
+      },
+      {
+        "item_id": 30103,
+        "weight": 0
+      }
+    ],
+    "24": [
+      {
+        "item_id": 30101,
+        "weight": 700
+      },
+      {
+        "item_id": 30102,
+        "weight": 200
+      },
+      {
+        "item_id": 30103,
+        "weight": 100
+      }
+    ],
+    "3": [
+      {
+        "item_id": 10101,
+        "weight": 525
+      },
+      {
+        "item_id": 10102,
+        "weight": 175
+      },
+      {
+        "item_id": 10103,
+        "weight": 0
+      },
+      {
+        "item_id": 10201,
+        "weight": 225
+      },
+      {
+        "item_id": 10202,
+        "weight": 75
+      },
+      {
+        "item_id": 10203,
+        "weight": 0
+      }
+    ],
+    "31": [
+      {
+        "item_id": 31101,
+        "weight": 700
+      },
+      {
+        "item_id": 31102,
+        "weight": 200
+      },
+      {
+        "item_id": 31103,
+        "weight": 100
+      },
+      {
+        "item_id": 31104,
+        "weight": 0
+      },
+      {
+        "item_id": 31105,
+        "weight": 0
+      }
+    ],
+    "4": [
+      {
+        "item_id": 10101,
+        "weight": 490
+      },
+      {
+        "item_id": 10102,
+        "weight": 140
+      },
+      {
+        "item_id": 10103,
+        "weight": 70
+      },
+      {
+        "item_id": 10201,
+        "weight": 210
+      },
+      {
+        "item_id": 10202,
+        "weight": 60
+      },
+      {
+        "item_id": 10203,
+        "weight": 30
+      }
+    ],
+    "41": [
+      {
+        "item_id": 40101,
+        "weight": 1000
+      },
+      {
+        "item_id": 40102,
+        "weight": 0
+      },
+      {
+        "item_id": 40103,
+        "weight": 0
+      },
+      {
+        "item_id": 40201,
+        "weight": 0
+      },
+      {
+        "item_id": 40202,
+        "weight": 0
+      },
+      {
+        "item_id": 40203,
+        "weight": 0
+      },
+      {
+        "item_id": 40204,
+        "weight": 0
+      },
+      {
+        "item_id": 40205,
+        "weight": 0
+      }
+    ],
+    "42": [
+      {
+        "item_id": 40101,
+        "weight": 550
+      },
+      {
+        "item_id": 40102,
+        "weight": 0
+      },
+      {
+        "item_id": 40103,
+        "weight": 0
+      },
+      {
+        "item_id": 40201,
+        "weight": 450
+      },
+      {
+        "item_id": 40202,
+        "weight": 0
+      },
+      {
+        "item_id": 40203,
+        "weight": 0
+      },
+      {
+        "item_id": 40204,
+        "weight": 0
+      },
+      {
+        "item_id": 40205,
+        "weight": 0
+      }
+    ],
+    "43": [
+      {
+        "item_id": 40101,
+        "weight": 468
+      },
+      {
+        "item_id": 40102,
+        "weight": 82
+      },
+      {
+        "item_id": 40103,
+        "weight": 0
+      },
+      {
+        "item_id": 40201,
+        "weight": 383
+      },
+      {
+        "item_id": 40202,
+        "weight": 67
+      },
+      {
+        "item_id": 40203,
+        "weight": 0
+      },
+      {
+        "item_id": 40204,
+        "weight": 0
+      },
+      {
+        "item_id": 40205,
+        "weight": 0
+      }
+    ],
+    "44": [
+      {
+        "item_id": 40101,
+        "weight": 440
+      },
+      {
+        "item_id": 40102,
+        "weight": 83
+      },
+      {
+        "item_id": 40103,
+        "weight": 27
+      },
+      {
+        "item_id": 40201,
+        "weight": 315
+      },
+      {
+        "item_id": 40202,
+        "weight": 90
+      },
+      {
+        "item_id": 40203,
+        "weight": 45
+      },
+      {
+        "item_id": 40204,
+        "weight": 0
+      },
+      {
+        "item_id": 40205,
+        "weight": 0
+      }
+    ],
+    "51": [
+      {
+        "item_id": 41101,
+        "weight": 350
+      },
+      {
+        "item_id": 41102,
+        "weight": 85
+      },
+      {
+        "item_id": 41103,
+        "weight": 50
+      },
+      {
+        "item_id": 41104,
+        "weight": 15
+      },
+      {
+        "item_id": 41201,
+        "weight": 350
+      },
+      {
+        "item_id": 41202,
+        "weight": 100
+      },
+      {
+        "item_id": 41203,
+        "weight": 50
+      }
+    ],
+    "64": [
+      {
+        "item_id": 50101,
+        "weight": 650
+      },
+      {
+        "item_id": 50102,
+        "weight": 200
+      },
+      {
+        "item_id": 50103,
+        "weight": 100
+      },
+      {
+        "item_id": 50104,
+        "weight": 50
+      },
+      {
+        "item_id": 50105,
+        "weight": 0
+      }
+    ],
+    "66": [
+      {
+        "item_id": 60101,
+        "weight": 185
+      },
+      {
+        "item_id": 60102,
+        "weight": 50
+      },
+      {
+        "item_id": 60103,
+        "weight": 15
+      },
+      {
+        "item_id": 60201,
+        "weight": 185
+      },
+      {
+        "item_id": 60202,
+        "weight": 50
+      },
+      {
+        "item_id": 60203,
+        "weight": 15
+      }
+    ]
+  },
+  "grid_cells": [
+    {
+      "cell_id": 1,
+      "position": 1,
+      "seed_item_ids": [
+        30101
+      ],
+      "unlock_level": 0,
+      "unlock_type": 2
+    },
+    {
+      "cell_id": 2,
+      "position": 2,
+      "seed_item_ids": [
+        20104,
+        10104
+      ],
+      "unlock_level": 0,
+      "unlock_type": 2
+    },
+    {
+      "cell_id": 3,
+      "position": 3,
+      "seed_item_ids": [
+        50101
+      ],
+      "unlock_level": 5,
+      "unlock_type": 1
+    },
+    {
+      "cell_id": 4,
+      "position": 4,
+      "seed_item_ids": [],
+      "unlock_level": 5,
+      "unlock_type": 1
+    },
+    {
+      "cell_id": 5,
+      "position": 5,
+      "seed_item_ids": [],
+      "unlock_level": 5,
+      "unlock_type": 1
+    },
+    {
+      "cell_id": 6,
+      "position": 6,
+      "seed_item_ids": [
+        20204
+      ],
+      "unlock_level": 0,
+      "unlock_type": 2
+    },
+    {
+      "cell_id": 7,
+      "position": 7,
+      "seed_item_ids": [
+        20103
+      ],
+      "unlock_level": 0,
+      "unlock_type": 2
+    },
+    {
+      "cell_id": 8,
+      "position": 8,
+      "seed_item_ids": [
+        10203
+      ],
+      "unlock_level": 0,
+      "unlock_type": 2
+    },
+    {
+      "cell_id": 9,
+      "position": 9,
+      "seed_item_ids": [
+        20201
+      ],
+      "unlock_level": 0,
+      "unlock_type": 2
+    },
+    {
+      "cell_id": 10,
+      "position": 10,
+      "seed_item_ids": [
+        10204
+      ],
+      "unlock_level": 0,
+      "unlock_type": 2
+    },
+    {
+      "cell_id": 11,
+      "position": 11,
+      "seed_item_ids": [
+        20201
+      ],
+      "unlock_level": 4,
+      "unlock_type": 1
+    },
+    {
+      "cell_id": 12,
+      "position": 12,
+      "seed_item_ids": [
+        20102
+      ],
+      "unlock_level": 4,
+      "unlock_type": 1
+    },
+    {
+      "cell_id": 13,
+      "position": 13,
+      "seed_item_ids": [
+        20204
+      ],
+      "unlock_level": 3,
+      "unlock_type": 1
+    },
+    {
+      "cell_id": 14,
+      "position": 14,
+      "seed_item_ids": [
+        20103
+      ],
+      "unlock_level": 3,
+      "unlock_type": 1
+    },
+    {
+      "cell_id": 15,
+      "position": 15,
+      "seed_item_ids": [
+        31106
+      ],
+      "unlock_level": 0,
+      "unlock_type": 2
+    },
+    {
+      "cell_id": 16,
+      "position": 16,
+      "seed_item_ids": [],
+      "unlock_level": 7,
+      "unlock_type": 1
+    },
+    {
+      "cell_id": 17,
+      "position": 17,
+      "seed_item_ids": [
+        10103
+      ],
+      "unlock_level": 0,
+      "unlock_type": 2
+    },
+    {
+      "cell_id": 18,
+      "position": 18,
+      "seed_item_ids": [
+        10201
+      ],
+      "unlock_level": 0,
+      "unlock_type": 2
+    },
+    {
+      "cell_id": 19,
+      "position": 19,
+      "seed_item_ids": [
+        10202
+      ],
+      "unlock_level": 0,
+      "unlock_type": 2
+    },
+    {
+      "cell_id": 20,
+      "position": 20,
+      "seed_item_ids": [
+        20101
+      ],
+      "unlock_level": 3,
+      "unlock_type": 1
+    },
+    {
+      "cell_id": 21,
+      "position": 21,
+      "seed_item_ids": [
+        20103
+      ],
+      "unlock_level": 3,
+      "unlock_type": 1
+    },
+    {
+      "cell_id": 22,
+      "position": 22,
+      "seed_item_ids": [
+        31101
+      ],
+      "unlock_level": 0,
+      "unlock_type": 2
+    },
+    {
+      "cell_id": 23,
+      "position": 23,
+      "seed_item_ids": [
+        30101
+      ],
+      "unlock_level": 7,
+      "unlock_type": 1
+    },
+    {
+      "cell_id": 24,
+      "position": 24,
+      "seed_item_ids": [
+        10101
+      ],
+      "unlock_level": 0,
+      "unlock_type": 2
+    },
+    {
+      "cell_id": 25,
+      "position": 25,
+      "seed_item_ids": [
+        10102
+      ],
+      "unlock_level": 0,
+      "unlock_type": 2
+    },
+    {
+      "cell_id": 26,
+      "position": 26,
+      "seed_item_ids": [
+        10103
+      ],
+      "unlock_level": 0,
+      "unlock_type": 2
+    },
+    {
+      "cell_id": 27,
+      "position": 27,
+      "seed_item_ids": [
+        20101
+      ],
+      "unlock_level": 2,
+      "unlock_type": 1
+    },
+    {
+      "cell_id": 28,
+      "position": 28,
+      "seed_item_ids": [
+        31101
+      ],
+      "unlock_level": 6,
+      "unlock_type": 1
+    },
+    {
+      "cell_id": 29,
+      "position": 29,
+      "seed_item_ids": [],
+      "unlock_level": 8,
+      "unlock_type": 1
+    },
+    {
+      "cell_id": 30,
+      "position": 30,
+      "seed_item_ids": [
+        10001
+      ],
+      "unlock_level": 0,
+      "unlock_type": 0
+    },
+    {
+      "cell_id": 31,
+      "position": 31,
+      "seed_item_ids": [],
+      "unlock_level": 0,
+      "unlock_type": 0
+    },
+    {
+      "cell_id": 32,
+      "position": 32,
+      "seed_item_ids": [],
+      "unlock_level": 0,
+      "unlock_type": 0
+    },
+    {
+      "cell_id": 33,
+      "position": 33,
+      "seed_item_ids": [
+        10102
+      ],
+      "unlock_level": 0,
+      "unlock_type": 0
+    },
+    {
+      "cell_id": 34,
+      "position": 34,
+      "seed_item_ids": [
+        20201
+      ],
+      "unlock_level": 2,
+      "unlock_type": 1
+    },
+    {
+      "cell_id": 35,
+      "position": 35,
+      "seed_item_ids": [
+        30101
+      ],
+      "unlock_level": 6,
+      "unlock_type": 1
+    },
+    {
+      "cell_id": 36,
+      "position": 36,
+      "seed_item_ids": [],
+      "unlock_level": 8,
+      "unlock_type": 1
+    },
+    {
+      "cell_id": 37,
+      "position": 37,
+      "seed_item_ids": [],
+      "unlock_level": 7,
+      "unlock_type": 1
+    },
+    {
+      "cell_id": 38,
+      "position": 38,
+      "seed_item_ids": [
+        10203
+      ],
+      "unlock_level": 0,
+      "unlock_type": 2
+    },
+    {
+      "cell_id": 39,
+      "position": 39,
+      "seed_item_ids": [
+        10103
+      ],
+      "unlock_level": 2,
+      "unlock_type": 2
+    },
+    {
+      "cell_id": 40,
+      "position": 40,
+      "seed_item_ids": [
+        10102
+      ],
+      "unlock_level": 2,
+      "unlock_type": 2
+    },
+    {
+      "cell_id": 41,
+      "position": 41,
+      "seed_item_ids": [
+        31103
+      ],
+      "unlock_level": 6,
+      "unlock_type": 1
+    },
+    {
+      "cell_id": 42,
+      "position": 42,
+      "seed_item_ids": [
+        30102
+      ],
+      "unlock_level": 6,
+      "unlock_type": 1
+    },
+    {
+      "cell_id": 43,
+      "position": 43,
+      "seed_item_ids": [
+        40101
+      ],
+      "unlock_level": 9,
+      "unlock_type": 1
+    },
+    {
+      "cell_id": 44,
+      "position": 44,
+      "seed_item_ids": [],
+      "unlock_level": 9,
+      "unlock_type": 1
+    },
+    {
+      "cell_id": 45,
+      "position": 45,
+      "seed_item_ids": [
+        20103
+      ],
+      "unlock_level": 7,
+      "unlock_type": 1
+    },
+    {
+      "cell_id": 46,
+      "position": 46,
+      "seed_item_ids": [
+        10103,
+        10202
+      ],
+      "unlock_level": 0,
+      "unlock_type": 2
+    },
+    {
+      "cell_id": 47,
+      "position": 47,
+      "seed_item_ids": [
+        10201,
+        10101
+      ],
+      "unlock_level": 0,
+      "unlock_type": 2
+    },
+    {
+      "cell_id": 48,
+      "position": 48,
+      "seed_item_ids": [
+        30102
+      ],
+      "unlock_level": 0,
+      "unlock_type": 2
+    },
+    {
+      "cell_id": 49,
+      "position": 49,
+      "seed_item_ids": [
+        31101
+      ],
+      "unlock_level": 0,
+      "unlock_type": 2
+    },
+    {
+      "cell_id": 50,
+      "position": 50,
+      "seed_item_ids": [
+        40203
+      ],
+      "unlock_level": 0,
+      "unlock_type": 2
+    },
+    {
+      "cell_id": 51,
+      "position": 51,
+      "seed_item_ids": [
+        41202
+      ],
+      "unlock_level": 0,
+      "unlock_type": 2
+    },
+    {
+      "cell_id": 52,
+      "position": 52,
+      "seed_item_ids": [
+        40103
+      ],
+      "unlock_level": 0,
+      "unlock_type": 2
+    },
+    {
+      "cell_id": 53,
+      "position": 53,
+      "seed_item_ids": [],
+      "unlock_level": 9,
+      "unlock_type": 1
+    },
+    {
+      "cell_id": 54,
+      "position": 54,
+      "seed_item_ids": [],
+      "unlock_level": 10,
+      "unlock_type": 1
+    },
+    {
+      "cell_id": 55,
+      "position": 55,
+      "seed_item_ids": [],
+      "unlock_level": 10,
+      "unlock_type": 1
+    },
+    {
+      "cell_id": 56,
+      "position": 56,
+      "seed_item_ids": [
+        41201
+      ],
+      "unlock_level": 0,
+      "unlock_type": 2
+    },
+    {
+      "cell_id": 57,
+      "position": 57,
+      "seed_item_ids": [
+        20205
+      ],
+      "unlock_level": 0,
+      "unlock_type": 2
+    },
+    {
+      "cell_id": 58,
+      "position": 58,
+      "seed_item_ids": [
+        40204
+      ],
+      "unlock_level": 0,
+      "unlock_type": 2
+    },
+    {
+      "cell_id": 59,
+      "position": 59,
+      "seed_item_ids": [
+        41103
+      ],
+      "unlock_level": 0,
+      "unlock_type": 2
+    },
+    {
+      "cell_id": 60,
+      "position": 60,
+      "seed_item_ids": [
+        31105
+      ],
+      "unlock_level": 0,
+      "unlock_type": 2
+    },
+    {
+      "cell_id": 61,
+      "position": 61,
+      "seed_item_ids": [
+        10204
+      ],
+      "unlock_level": 0,
+      "unlock_type": 2
+    },
+    {
+      "cell_id": 62,
+      "position": 62,
+      "seed_item_ids": [],
+      "unlock_level": 11,
+      "unlock_type": 1
+    },
+    {
+      "cell_id": 63,
+      "position": 63,
+      "seed_item_ids": [],
+      "unlock_level": 11,
+      "unlock_type": 1
+    }
+  ],
+  "items": [
+    {
+      "exp": 0,
+      "get_type": 1,
+      "icon": "pic_hctb_01",
+      "id": 10001,
+      "merge_successor_id": 10002,
+      "name": "Map 1",
+      "recoverable": false,
+      "recycle_reward": null,
+      "sort": 1,
+      "sub_type": 1,
+      "tier": 1,
+      "tips": "Tap to generate items",
+      "type": 1,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 1,
+      "icon": "pic_hctb_02",
+      "id": 10002,
+      "merge_successor_id": 10003,
+      "name": "Map 2",
+      "recoverable": false,
+      "recycle_reward": null,
+      "sort": 1,
+      "sub_type": 1,
+      "tier": 2,
+      "tips": "Tap to generate items",
+      "type": 1,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 1,
+      "icon": "pic_hctb_03",
+      "id": 10003,
+      "merge_successor_id": 10004,
+      "name": "Map 3",
+      "recoverable": false,
+      "recycle_reward": null,
+      "sort": 1,
+      "sub_type": 1,
+      "tier": 3,
+      "tips": "Tap to generate items",
+      "type": 1,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 1,
+      "icon": "pic_hctb_04",
+      "id": 10004,
+      "merge_successor_id": null,
+      "name": "Map 4",
+      "recoverable": false,
+      "recycle_reward": null,
+      "sort": 1,
+      "sub_type": 1,
+      "tier": 4,
+      "tips": "(Max level) Tap to generate items",
+      "type": 1,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 11,
+      "icon": "pic_hctb_17",
+      "id": 10101,
+      "merge_successor_id": 10102,
+      "name": "Treasure 1",
+      "recoverable": true,
+      "recycle_reward": null,
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 1,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 11,
+      "icon": "pic_hctb_18",
+      "id": 10102,
+      "merge_successor_id": 10103,
+      "name": "Treasure 2",
+      "recoverable": true,
+      "recycle_reward": null,
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 2,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 11,
+      "icon": "pic_hctb_19",
+      "id": 10103,
+      "merge_successor_id": 10104,
+      "name": "Treasure 3",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 2,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 3,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 11,
+      "icon": "pic_hctb_20",
+      "id": 10104,
+      "merge_successor_id": 10105,
+      "name": "Treasure 4",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 4,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 4,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 11,
+      "icon": "pic_hctb_21",
+      "id": 10105,
+      "merge_successor_id": 10106,
+      "name": "Treasure 5",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 8,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 5,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 11,
+      "icon": "pic_hctb_22",
+      "id": 10106,
+      "merge_successor_id": 10107,
+      "name": "Treasure 6",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 16,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 6,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 11,
+      "icon": "pic_hctb_23",
+      "id": 10107,
+      "merge_successor_id": 10108,
+      "name": "Treasure 7",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 32,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 7,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 11,
+      "icon": "pic_hctb_24",
+      "id": 10108,
+      "merge_successor_id": 10109,
+      "name": "Treasure 8",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 64,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 8,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 1820
+    },
+    {
+      "exp": 0,
+      "get_type": 11,
+      "icon": "pic_hctb_25",
+      "id": 10109,
+      "merge_successor_id": 10110,
+      "name": "Treasure 9",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 128,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 9,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 3650
+    },
+    {
+      "exp": 0,
+      "get_type": 11,
+      "icon": "pic_hctb_26",
+      "id": 10110,
+      "merge_successor_id": null,
+      "name": "Treasure 10",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 256,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 10,
+      "tips": "Max level reached",
+      "type": 2,
+      "unlock_cost": 7310
+    },
+    {
+      "exp": 0,
+      "get_type": 12,
+      "icon": "pic_hctb_48",
+      "id": 10201,
+      "merge_successor_id": 10202,
+      "name": "Statue 1",
+      "recoverable": true,
+      "recycle_reward": null,
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 1,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 12,
+      "icon": "pic_hctb_49",
+      "id": 10202,
+      "merge_successor_id": 10203,
+      "name": "Statue 2",
+      "recoverable": true,
+      "recycle_reward": null,
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 2,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 12,
+      "icon": "pic_hctb_50",
+      "id": 10203,
+      "merge_successor_id": 10204,
+      "name": "Statue 3",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 2,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 3,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 12,
+      "icon": "pic_hctb_51",
+      "id": 10204,
+      "merge_successor_id": 10205,
+      "name": "Statue 4",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 4,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 4,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 260
+    },
+    {
+      "exp": 0,
+      "get_type": 12,
+      "icon": "pic_hctb_52",
+      "id": 10205,
+      "merge_successor_id": null,
+      "name": "Statue 5",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 8,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 5,
+      "tips": "Max level reached",
+      "type": 2,
+      "unlock_cost": 530
+    },
+    {
+      "exp": 0,
+      "get_type": 2,
+      "icon": "pic_hctb_09",
+      "id": 20001,
+      "merge_successor_id": 20002,
+      "name": "Tree 1",
+      "recoverable": false,
+      "recycle_reward": null,
+      "sort": 2,
+      "sub_type": 2,
+      "tier": 1,
+      "tips": "Tap to generate items",
+      "type": 1,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 2,
+      "icon": "pic_hctb_10",
+      "id": 20002,
+      "merge_successor_id": 20003,
+      "name": "Tree 2",
+      "recoverable": false,
+      "recycle_reward": null,
+      "sort": 2,
+      "sub_type": 2,
+      "tier": 2,
+      "tips": "Tap to generate items",
+      "type": 1,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 2,
+      "icon": "pic_hctb_11",
+      "id": 20003,
+      "merge_successor_id": 20004,
+      "name": "Tree 3",
+      "recoverable": false,
+      "recycle_reward": null,
+      "sort": 2,
+      "sub_type": 2,
+      "tier": 3,
+      "tips": "Tap to generate items",
+      "type": 1,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 2,
+      "icon": "pic_hctb_12",
+      "id": 20004,
+      "merge_successor_id": null,
+      "name": "Tree 4",
+      "recoverable": false,
+      "recycle_reward": null,
+      "sort": 2,
+      "sub_type": 2,
+      "tier": 4,
+      "tips": "(Max level) Tap to generate items",
+      "type": 1,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 21,
+      "icon": "pic_hctb_37",
+      "id": 20101,
+      "merge_successor_id": 20102,
+      "name": "Fruit 1",
+      "recoverable": true,
+      "recycle_reward": null,
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 1,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 21,
+      "icon": "pic_hctb_38",
+      "id": 20102,
+      "merge_successor_id": 20103,
+      "name": "Fruit 2",
+      "recoverable": true,
+      "recycle_reward": null,
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 2,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 21,
+      "icon": "pic_hctb_39",
+      "id": 20103,
+      "merge_successor_id": 20104,
+      "name": "Fruit 3",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 2,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 3,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 21,
+      "icon": "pic_hctb_40",
+      "id": 20104,
+      "merge_successor_id": 20105,
+      "name": "Fruit 4",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 4,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 4,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 140
+    },
+    {
+      "exp": 0,
+      "get_type": 21,
+      "icon": "pic_hctb_41",
+      "id": 20105,
+      "merge_successor_id": null,
+      "name": "Fruit 5",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 8,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 5,
+      "tips": "Max level reached",
+      "type": 2,
+      "unlock_cost": 290
+    },
+    {
+      "exp": 0,
+      "get_type": 22,
+      "icon": "pic_hctb_53",
+      "id": 20201,
+      "merge_successor_id": 20202,
+      "name": "Wood 1",
+      "recoverable": true,
+      "recycle_reward": null,
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 1,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 22,
+      "icon": "pic_hctb_54",
+      "id": 20202,
+      "merge_successor_id": 20203,
+      "name": "Wood 2",
+      "recoverable": true,
+      "recycle_reward": null,
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 2,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 22,
+      "icon": "pic_hctb_55",
+      "id": 20203,
+      "merge_successor_id": 20204,
+      "name": "Wood 3",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 2,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 3,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 22,
+      "icon": "pic_hctb_56",
+      "id": 20204,
+      "merge_successor_id": 20205,
+      "name": "Wood 4",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 4,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 4,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 170
+    },
+    {
+      "exp": 0,
+      "get_type": 22,
+      "icon": "pic_hctb_57",
+      "id": 20205,
+      "merge_successor_id": 20206,
+      "name": "Wood 5",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 8,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 5,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 350
+    },
+    {
+      "exp": 0,
+      "get_type": 22,
+      "icon": "pic_hctb_58",
+      "id": 20206,
+      "merge_successor_id": 20207,
+      "name": "Wood 6",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 16,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 6,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 710
+    },
+    {
+      "exp": 0,
+      "get_type": 22,
+      "icon": "pic_hctb_59",
+      "id": 20207,
+      "merge_successor_id": 20208,
+      "name": "Wood 7",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 32,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 7,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 1420
+    },
+    {
+      "exp": 0,
+      "get_type": 22,
+      "icon": "pic_hctb_60",
+      "id": 20208,
+      "merge_successor_id": 20209,
+      "name": "Wood 8",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 64,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 8,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 2840
+    },
+    {
+      "exp": 0,
+      "get_type": 22,
+      "icon": "pic_hctb_61",
+      "id": 20209,
+      "merge_successor_id": 20210,
+      "name": "Wood 9",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 128,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 9,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 5680
+    },
+    {
+      "exp": 0,
+      "get_type": 22,
+      "icon": "pic_hctb_62",
+      "id": 20210,
+      "merge_successor_id": null,
+      "name": "Wood 10",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 256,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 10,
+      "tips": "Max level reached",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 3,
+      "icon": "pic_hctb_73",
+      "id": 30001,
+      "merge_successor_id": 30002,
+      "name": "Clay 1",
+      "recoverable": false,
+      "recycle_reward": null,
+      "sort": 3,
+      "sub_type": 3,
+      "tier": 1,
+      "tips": "Tap to generate items",
+      "type": 1,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 3,
+      "icon": "pic_hctb_74",
+      "id": 30002,
+      "merge_successor_id": 30003,
+      "name": "Clay 2",
+      "recoverable": false,
+      "recycle_reward": null,
+      "sort": 3,
+      "sub_type": 3,
+      "tier": 2,
+      "tips": "Tap to generate items",
+      "type": 1,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 3,
+      "icon": "pic_hctb_75",
+      "id": 30003,
+      "merge_successor_id": 30004,
+      "name": "Clay 3",
+      "recoverable": false,
+      "recycle_reward": null,
+      "sort": 3,
+      "sub_type": 3,
+      "tier": 3,
+      "tips": "Tap to generate items",
+      "type": 1,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 3,
+      "icon": "pic_hctb_76",
+      "id": 30004,
+      "merge_successor_id": null,
+      "name": "Clay 4",
+      "recoverable": false,
+      "recycle_reward": null,
+      "sort": 3,
+      "sub_type": 3,
+      "tier": 4,
+      "tips": "(Max level) Tap to generate items",
+      "type": 1,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 31,
+      "icon": "pic_hctb_86",
+      "id": 30101,
+      "merge_successor_id": 30102,
+      "name": "Bowl 1",
+      "recoverable": true,
+      "recycle_reward": null,
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 1,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 31,
+      "icon": "pic_hctb_87",
+      "id": 30102,
+      "merge_successor_id": 30103,
+      "name": "Bowl 2",
+      "recoverable": true,
+      "recycle_reward": null,
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 2,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 31,
+      "icon": "pic_hctb_88",
+      "id": 30103,
+      "merge_successor_id": 30104,
+      "name": "Bowl 3",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 2,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 3,
+      "tips": "Can be merged with identical items or used to unlock traps.",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 31,
+      "icon": "pic_hctb_89",
+      "id": 30104,
+      "merge_successor_id": 30105,
+      "name": "Bowl 4",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 4,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 4,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 31,
+      "icon": "pic_hctb_90",
+      "id": 30105,
+      "merge_successor_id": null,
+      "name": "Bowl 5",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 4,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 4,
+      "sub_type": 4,
+      "tier": 5,
+      "tips": "Tap to generate items upon reaching the highest level. Disappears after attempts are depleted",
+      "type": 1,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 41,
+      "icon": "pic_hctb_110",
+      "id": 31101,
+      "merge_successor_id": 31102,
+      "name": "Food 1",
+      "recoverable": true,
+      "recycle_reward": null,
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 1,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 41,
+      "icon": "pic_hctb_111",
+      "id": 31102,
+      "merge_successor_id": 31103,
+      "name": "Food 2",
+      "recoverable": true,
+      "recycle_reward": null,
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 2,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 30
+    },
+    {
+      "exp": 0,
+      "get_type": 41,
+      "icon": "pic_hctb_112",
+      "id": 31103,
+      "merge_successor_id": 31104,
+      "name": "Food 3",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 2,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 3,
+      "tips": "Can be merged with identical items, or used to [c][a56306]unlock traps[-][/c][/u].",
+      "type": 2,
+      "unlock_cost": 70
+    },
+    {
+      "exp": 0,
+      "get_type": 41,
+      "icon": "pic_hctb_113",
+      "id": 31104,
+      "merge_successor_id": 31105,
+      "name": "Food 4",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 4,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 4,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 140
+    },
+    {
+      "exp": 0,
+      "get_type": 41,
+      "icon": "pic_hctb_114",
+      "id": 31105,
+      "merge_successor_id": 31106,
+      "name": "Food 5",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 8,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 5,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 290
+    },
+    {
+      "exp": 0,
+      "get_type": 41,
+      "icon": "pic_hctb_115",
+      "id": 31106,
+      "merge_successor_id": 31107,
+      "name": "Food 6",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 16,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 6,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 590
+    },
+    {
+      "exp": 0,
+      "get_type": 41,
+      "icon": "pic_hctb_116",
+      "id": 31107,
+      "merge_successor_id": 31108,
+      "name": "Food 7",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 32,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 7,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 1180
+    },
+    {
+      "exp": 0,
+      "get_type": 41,
+      "icon": "pic_hctb_117",
+      "id": 31108,
+      "merge_successor_id": 31109,
+      "name": "Food 8",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 64,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 8,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 2370
+    },
+    {
+      "exp": 0,
+      "get_type": 41,
+      "icon": "pic_hctb_118",
+      "id": 31109,
+      "merge_successor_id": 31110,
+      "name": "Food 9",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 128,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 9,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 4750
+    },
+    {
+      "exp": 0,
+      "get_type": 41,
+      "icon": "pic_hctb_119",
+      "id": 31110,
+      "merge_successor_id": null,
+      "name": "Food 10",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 256,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 10,
+      "tips": "Max level reached",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 5,
+      "icon": "pic_hctb_13",
+      "id": 40001,
+      "merge_successor_id": 40002,
+      "name": "Bag 1",
+      "recoverable": false,
+      "recycle_reward": null,
+      "sort": 5,
+      "sub_type": 5,
+      "tier": 1,
+      "tips": "Tap to generate items",
+      "type": 1,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 5,
+      "icon": "pic_hctb_14",
+      "id": 40002,
+      "merge_successor_id": 40003,
+      "name": "Bag 2",
+      "recoverable": false,
+      "recycle_reward": null,
+      "sort": 5,
+      "sub_type": 5,
+      "tier": 2,
+      "tips": "Tap to generate items",
+      "type": 1,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 5,
+      "icon": "pic_hctb_15",
+      "id": 40003,
+      "merge_successor_id": 40004,
+      "name": "Bag 3",
+      "recoverable": false,
+      "recycle_reward": null,
+      "sort": 5,
+      "sub_type": 5,
+      "tier": 3,
+      "tips": "Tap to generate items",
+      "type": 1,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 5,
+      "icon": "pic_hctb_16",
+      "id": 40004,
+      "merge_successor_id": null,
+      "name": "Bag 4",
+      "recoverable": false,
+      "recycle_reward": null,
+      "sort": 5,
+      "sub_type": 5,
+      "tier": 4,
+      "tips": "(Max level) Tap to generate items",
+      "type": 1,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 51,
+      "icon": "pic_hctb_42",
+      "id": 40101,
+      "merge_successor_id": 40102,
+      "name": "Lighting 1",
+      "recoverable": true,
+      "recycle_reward": null,
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 1,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 51,
+      "icon": "pic_hctb_43",
+      "id": 40102,
+      "merge_successor_id": 40103,
+      "name": "Lighting 2",
+      "recoverable": true,
+      "recycle_reward": null,
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 2,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 30
+    },
+    {
+      "exp": 0,
+      "get_type": 51,
+      "icon": "pic_hctb_44",
+      "id": 40103,
+      "merge_successor_id": 40104,
+      "name": "Lighting 3",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 2,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 3,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 70
+    },
+    {
+      "exp": 0,
+      "get_type": 51,
+      "icon": "pic_hctb_45",
+      "id": 40104,
+      "merge_successor_id": 40105,
+      "name": "Lighting 4",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 4,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 4,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 140
+    },
+    {
+      "exp": 0,
+      "get_type": 51,
+      "icon": "pic_hctb_46",
+      "id": 40105,
+      "merge_successor_id": 40106,
+      "name": "Lighting 5",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 8,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 5,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 290
+    },
+    {
+      "exp": 0,
+      "get_type": 51,
+      "icon": "pic_hctb_47",
+      "id": 40106,
+      "merge_successor_id": null,
+      "name": "Lighting 6",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 16,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 6,
+      "tips": "Max level reached",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 52,
+      "icon": "pic_hctb_77",
+      "id": 40201,
+      "merge_successor_id": 40202,
+      "name": "Fishing Tool 1",
+      "recoverable": true,
+      "recycle_reward": null,
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 1,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 52,
+      "icon": "pic_hctb_78",
+      "id": 40202,
+      "merge_successor_id": 40203,
+      "name": "Fishing Tool 2",
+      "recoverable": true,
+      "recycle_reward": null,
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 2,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 40
+    },
+    {
+      "exp": 0,
+      "get_type": 52,
+      "icon": "pic_hctb_79",
+      "id": 40203,
+      "merge_successor_id": 40204,
+      "name": "Fishing Tool 3",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 2,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 3,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 80
+    },
+    {
+      "exp": 0,
+      "get_type": 52,
+      "icon": "pic_hctb_80",
+      "id": 40204,
+      "merge_successor_id": 40205,
+      "name": "Fishing Tool 4",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 4,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 4,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 170
+    },
+    {
+      "exp": 0,
+      "get_type": 52,
+      "icon": "pic_hctb_81",
+      "id": 40205,
+      "merge_successor_id": 40206,
+      "name": "Fishing Tool 5",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 8,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 5,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 350
+    },
+    {
+      "exp": 0,
+      "get_type": 52,
+      "icon": "pic_hctb_82",
+      "id": 40206,
+      "merge_successor_id": 40207,
+      "name": "Fishing Tool 6",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 16,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 6,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 710
+    },
+    {
+      "exp": 0,
+      "get_type": 52,
+      "icon": "pic_hctb_83",
+      "id": 40207,
+      "merge_successor_id": 40208,
+      "name": "Fishing Tool 7",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 32,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 7,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 1420
+    },
+    {
+      "exp": 0,
+      "get_type": 52,
+      "icon": "pic_hctb_84",
+      "id": 40208,
+      "merge_successor_id": 40209,
+      "name": "Fishing Tool 8",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 64,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 8,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 2840
+    },
+    {
+      "exp": 0,
+      "get_type": 52,
+      "icon": "pic_hctb_85",
+      "id": 40209,
+      "merge_successor_id": null,
+      "name": "Fishing Tool 9",
+      "recoverable": false,
+      "recycle_reward": null,
+      "sort": 6,
+      "sub_type": 6,
+      "tier": 9,
+      "tips": "Tap to generate items upon reaching the highest level. After the attempts are depleted, it becomes a fishing tool6",
+      "type": 1,
+      "unlock_cost": 5680
+    },
+    {
+      "exp": 0,
+      "get_type": 61,
+      "icon": "pic_hctb_63",
+      "id": 41101,
+      "merge_successor_id": 41102,
+      "name": "Sea Creature 1",
+      "recoverable": true,
+      "recycle_reward": null,
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 1,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 61,
+      "icon": "pic_hctb_64",
+      "id": 41102,
+      "merge_successor_id": 41103,
+      "name": "Sea Creature 2",
+      "recoverable": true,
+      "recycle_reward": null,
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 2,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 150
+    },
+    {
+      "exp": 0,
+      "get_type": 61,
+      "icon": "pic_hctb_65",
+      "id": 41103,
+      "merge_successor_id": 41104,
+      "name": "Sea Creature 3",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 2,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 3,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 300
+    },
+    {
+      "exp": 0,
+      "get_type": 61,
+      "icon": "pic_hctb_66",
+      "id": 41104,
+      "merge_successor_id": 41105,
+      "name": "Sea Creature 4",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 4,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 4,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 610
+    },
+    {
+      "exp": 0,
+      "get_type": 61,
+      "icon": "pic_hctb_67",
+      "id": 41105,
+      "merge_successor_id": 41106,
+      "name": "Sea Creature 5",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 8,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 5,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 1230
+    },
+    {
+      "exp": 0,
+      "get_type": 61,
+      "icon": "pic_hctb_68",
+      "id": 41106,
+      "merge_successor_id": 41107,
+      "name": "Sea Creature 6",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 16,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 6,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 2460
+    },
+    {
+      "exp": 0,
+      "get_type": 61,
+      "icon": "pic_hctb_69",
+      "id": 41107,
+      "merge_successor_id": 41108,
+      "name": "Sea Creature 7",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 32,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 7,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 4930
+    },
+    {
+      "exp": 0,
+      "get_type": 61,
+      "icon": "pic_hctb_70",
+      "id": 41108,
+      "merge_successor_id": 41109,
+      "name": "Sea Creature 8",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 64,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 8,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 9870
+    },
+    {
+      "exp": 0,
+      "get_type": 61,
+      "icon": "pic_hctb_71",
+      "id": 41109,
+      "merge_successor_id": 41110,
+      "name": "Sea Creature 9",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 128,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 9,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 19740
+    },
+    {
+      "exp": 0,
+      "get_type": 61,
+      "icon": "pic_hctb_72",
+      "id": 41110,
+      "merge_successor_id": null,
+      "name": "Sea Creature 10",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 256,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 10,
+      "tips": "Max level reached",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 62,
+      "icon": "pic_hctb_105",
+      "id": 41201,
+      "merge_successor_id": 41202,
+      "name": "Ocean Drifter 1",
+      "recoverable": true,
+      "recycle_reward": null,
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 1,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 62,
+      "icon": "pic_hctb_106",
+      "id": 41202,
+      "merge_successor_id": 41203,
+      "name": "Ocean Drifter 2",
+      "recoverable": true,
+      "recycle_reward": null,
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 2,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 150
+    },
+    {
+      "exp": 0,
+      "get_type": 62,
+      "icon": "pic_hctb_107",
+      "id": 41203,
+      "merge_successor_id": 41204,
+      "name": "Ocean Drifter 3",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 2,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 3,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 300
+    },
+    {
+      "exp": 0,
+      "get_type": 62,
+      "icon": "pic_hctb_108",
+      "id": 41204,
+      "merge_successor_id": 41205,
+      "name": "Ocean Drifter 4",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 4,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 4,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 610
+    },
+    {
+      "exp": 0,
+      "get_type": 62,
+      "icon": "pic_hctb_109",
+      "id": 41205,
+      "merge_successor_id": null,
+      "name": "Ocean Drifter 5",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 8,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 5,
+      "tips": "Max level reached",
+      "type": 2,
+      "unlock_cost": 1230
+    },
+    {
+      "exp": 0,
+      "get_type": 7,
+      "icon": "pic_hctb_08",
+      "id": 50004,
+      "merge_successor_id": null,
+      "name": "Trap",
+      "recoverable": false,
+      "recycle_reward": null,
+      "sort": 7,
+      "sub_type": 7,
+      "tier": 4,
+      "tips": "Tap to generate items. Disappears after the attempts are depleted",
+      "type": 1,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 71,
+      "icon": "pic_hctb_27",
+      "id": 50101,
+      "merge_successor_id": 50102,
+      "name": "Animal 1",
+      "recoverable": true,
+      "recycle_reward": null,
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 1,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 71,
+      "icon": "pic_hctb_28",
+      "id": 50102,
+      "merge_successor_id": 50103,
+      "name": "Animal 2",
+      "recoverable": true,
+      "recycle_reward": null,
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 2,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 71,
+      "icon": "pic_hctb_29",
+      "id": 50103,
+      "merge_successor_id": 50104,
+      "name": "Animal 3",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 2,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 3,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 71,
+      "icon": "pic_hctb_30",
+      "id": 50104,
+      "merge_successor_id": 50105,
+      "name": "Animal 4",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 4,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 4,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 71,
+      "icon": "pic_hctb_31",
+      "id": 50105,
+      "merge_successor_id": 50106,
+      "name": "Animal 5",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 7,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 5,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 71,
+      "icon": "pic_hctb_32",
+      "id": 50106,
+      "merge_successor_id": 50107,
+      "name": "Animal 6",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 14,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 6,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 71,
+      "icon": "pic_hctb_33",
+      "id": 50107,
+      "merge_successor_id": 50108,
+      "name": "Animal 7",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 28,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 7,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 71,
+      "icon": "pic_hctb_34",
+      "id": 50108,
+      "merge_successor_id": 50109,
+      "name": "Animal 8",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 55,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 8,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 71,
+      "icon": "pic_hctb_35",
+      "id": 50109,
+      "merge_successor_id": 50110,
+      "name": "Animal 9",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 110,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 9,
+      "tips": "Can be merged with identical items to create a higher-level item.",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 71,
+      "icon": "pic_hctb_36",
+      "id": 50110,
+      "merge_successor_id": null,
+      "name": "Animal 10",
+      "recoverable": true,
+      "recycle_reward": {
+        "count": 220,
+        "item_id": 44009010,
+        "reward_type": 9
+      },
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 10,
+      "tips": "Max level reached",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 8,
+      "icon": "pic_hctb_126",
+      "id": 60001,
+      "merge_successor_id": null,
+      "name": "Item Chest",
+      "recoverable": false,
+      "recycle_reward": null,
+      "sort": 9,
+      "sub_type": 8,
+      "tier": 1,
+      "tips": "Tap to obtain AP or Diamond items.",
+      "type": 1,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 81,
+      "icon": "pic_hctb_100",
+      "id": 60101,
+      "merge_successor_id": 60102,
+      "name": "AP 1",
+      "recoverable": false,
+      "recycle_reward": null,
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 1,
+      "tips": "Tap to use and get 1 AP.",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 81,
+      "icon": "pic_hctb_101",
+      "id": 60102,
+      "merge_successor_id": 60103,
+      "name": "AP 2",
+      "recoverable": false,
+      "recycle_reward": null,
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 2,
+      "tips": "Tap to use and get 4 AP.",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 81,
+      "icon": "pic_hctb_102",
+      "id": 60103,
+      "merge_successor_id": 60104,
+      "name": "AP 3",
+      "recoverable": false,
+      "recycle_reward": null,
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 3,
+      "tips": "Tap to use and get 10 AP.",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 81,
+      "icon": "pic_hctb_103",
+      "id": 60104,
+      "merge_successor_id": 60105,
+      "name": "AP 4",
+      "recoverable": false,
+      "recycle_reward": null,
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 4,
+      "tips": "Tap to use and get 25 AP.",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 81,
+      "icon": "pic_hctb_104",
+      "id": 60105,
+      "merge_successor_id": null,
+      "name": "AP 5",
+      "recoverable": false,
+      "recycle_reward": null,
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 5,
+      "tips": "Tap to use and get 50 AP.",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 82,
+      "icon": "pic_hctb_120",
+      "id": 60201,
+      "merge_successor_id": 60202,
+      "name": "Diamond 1",
+      "recoverable": false,
+      "recycle_reward": null,
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 1,
+      "tips": "Tap to use and get 1 Diamond.",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 82,
+      "icon": "pic_hctb_121",
+      "id": 60202,
+      "merge_successor_id": 60203,
+      "name": "Diamond 2",
+      "recoverable": false,
+      "recycle_reward": null,
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 2,
+      "tips": "Tap to use and get 4 Diamonds",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 82,
+      "icon": "pic_hctb_122",
+      "id": 60203,
+      "merge_successor_id": 60204,
+      "name": "Diamond 3",
+      "recoverable": false,
+      "recycle_reward": null,
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 3,
+      "tips": "Tap to use and get 10 Diamonds.",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 82,
+      "icon": "pic_hctb_123",
+      "id": 60204,
+      "merge_successor_id": 60205,
+      "name": "Diamond 4",
+      "recoverable": false,
+      "recycle_reward": null,
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 4,
+      "tips": "Tap to use and get 25 Diamonds",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 82,
+      "icon": "pic_hctb_124",
+      "id": 60205,
+      "merge_successor_id": null,
+      "name": "Diamond 5",
+      "recoverable": false,
+      "recycle_reward": null,
+      "sort": 0,
+      "sub_type": 0,
+      "tier": 5,
+      "tips": "Tap to use and get 50 Diamonds",
+      "type": 2,
+      "unlock_cost": 0
+    },
+    {
+      "exp": 0,
+      "get_type": 0,
+      "icon": "pic_hctb_125",
+      "id": 100001,
+      "merge_successor_id": null,
+      "name": "Omni Card",
+      "recoverable": false,
+      "recycle_reward": null,
+      "sort": 8,
+      "sub_type": 0,
+      "tier": 1,
+      "tips": "Can be merged with any common items.",
+      "type": 0,
+      "unlock_cost": 0
+    }
+  ],
+  "producers": [
+    {
+      "assist": 0,
+      "change_item_id": null,
+      "cooldown_ms": 30000,
+      "feed_item_id": null,
+      "group_id": 1,
+      "item_id": 10001,
+      "max_num": 0,
+      "num": 50,
+      "worker_type": 1
+    },
+    {
+      "assist": 0,
+      "change_item_id": null,
+      "cooldown_ms": 30000,
+      "feed_item_id": null,
+      "group_id": 2,
+      "item_id": 10002,
+      "max_num": 0,
+      "num": 50,
+      "worker_type": 1
+    },
+    {
+      "assist": 0,
+      "change_item_id": null,
+      "cooldown_ms": 30000,
+      "feed_item_id": null,
+      "group_id": 3,
+      "item_id": 10003,
+      "max_num": 0,
+      "num": 50,
+      "worker_type": 1
+    },
+    {
+      "assist": 0,
+      "change_item_id": null,
+      "cooldown_ms": 30000,
+      "feed_item_id": null,
+      "group_id": 4,
+      "item_id": 10004,
+      "max_num": 0,
+      "num": 50,
+      "worker_type": 1
+    },
+    {
+      "assist": 0,
+      "change_item_id": null,
+      "cooldown_ms": 10000,
+      "feed_item_id": null,
+      "group_id": 11,
+      "item_id": 20001,
+      "max_num": 0,
+      "num": 40,
+      "worker_type": 1
+    },
+    {
+      "assist": 0,
+      "change_item_id": null,
+      "cooldown_ms": 10000,
+      "feed_item_id": null,
+      "group_id": 12,
+      "item_id": 20002,
+      "max_num": 0,
+      "num": 40,
+      "worker_type": 1
+    },
+    {
+      "assist": 0,
+      "change_item_id": null,
+      "cooldown_ms": 10000,
+      "feed_item_id": null,
+      "group_id": 13,
+      "item_id": 20003,
+      "max_num": 0,
+      "num": 40,
+      "worker_type": 1
+    },
+    {
+      "assist": 0,
+      "change_item_id": null,
+      "cooldown_ms": 10000,
+      "feed_item_id": null,
+      "group_id": 14,
+      "item_id": 20004,
+      "max_num": 0,
+      "num": 40,
+      "worker_type": 1
+    },
+    {
+      "assist": 0,
+      "change_item_id": null,
+      "cooldown_ms": 20000,
+      "feed_item_id": null,
+      "group_id": 21,
+      "item_id": 30001,
+      "max_num": 0,
+      "num": 30,
+      "worker_type": 1
+    },
+    {
+      "assist": 0,
+      "change_item_id": null,
+      "cooldown_ms": 20000,
+      "feed_item_id": null,
+      "group_id": 22,
+      "item_id": 30002,
+      "max_num": 0,
+      "num": 30,
+      "worker_type": 1
+    },
+    {
+      "assist": 0,
+      "change_item_id": null,
+      "cooldown_ms": 20000,
+      "feed_item_id": null,
+      "group_id": 23,
+      "item_id": 30003,
+      "max_num": 0,
+      "num": 30,
+      "worker_type": 1
+    },
+    {
+      "assist": 0,
+      "change_item_id": null,
+      "cooldown_ms": 20000,
+      "feed_item_id": null,
+      "group_id": 24,
+      "item_id": 30004,
+      "max_num": 0,
+      "num": 30,
+      "worker_type": 1
+    },
+    {
+      "assist": 0,
+      "change_item_id": null,
+      "cooldown_ms": 0,
+      "feed_item_id": null,
+      "group_id": 31,
+      "item_id": 30105,
+      "max_num": 10,
+      "num": 0,
+      "worker_type": 3
+    },
+    {
+      "assist": 0,
+      "change_item_id": null,
+      "cooldown_ms": 30000,
+      "feed_item_id": null,
+      "group_id": 41,
+      "item_id": 40001,
+      "max_num": 0,
+      "num": 30,
+      "worker_type": 1
+    },
+    {
+      "assist": 0,
+      "change_item_id": null,
+      "cooldown_ms": 30000,
+      "feed_item_id": null,
+      "group_id": 42,
+      "item_id": 40002,
+      "max_num": 0,
+      "num": 30,
+      "worker_type": 1
+    },
+    {
+      "assist": 0,
+      "change_item_id": null,
+      "cooldown_ms": 30000,
+      "feed_item_id": null,
+      "group_id": 43,
+      "item_id": 40003,
+      "max_num": 0,
+      "num": 30,
+      "worker_type": 1
+    },
+    {
+      "assist": 0,
+      "change_item_id": null,
+      "cooldown_ms": 30000,
+      "feed_item_id": null,
+      "group_id": 44,
+      "item_id": 40004,
+      "max_num": 0,
+      "num": 30,
+      "worker_type": 1
+    },
+    {
+      "assist": 0,
+      "change_item_id": 40206,
+      "cooldown_ms": 3000,
+      "feed_item_id": null,
+      "group_id": 51,
+      "item_id": 40209,
+      "max_num": 20,
+      "num": 10,
+      "worker_type": 3
+    },
+    {
+      "assist": 0,
+      "change_item_id": null,
+      "cooldown_ms": 20000,
+      "feed_item_id": 31103,
+      "group_id": 64,
+      "item_id": 50004,
+      "max_num": 20,
+      "num": 0,
+      "worker_type": 4
+    },
+    {
+      "assist": 0,
+      "change_item_id": null,
+      "cooldown_ms": 0,
+      "feed_item_id": null,
+      "group_id": 66,
+      "item_id": 60001,
+      "max_num": 10,
+      "num": 0,
+      "worker_type": 1
+    }
+  ],
+  "provenance": {
+    "board_layout": {
+      "columns": 7,
+      "note": "current observed layout; cell id = (row-1)*7+column; corroborated by 63 area-grid rows",
+      "rows": 9
+    },
+    "generator": "decoded client tables; defaults/shared tables resolved as data; no Lua executed",
+    "packaged_build": "5.0.203",
+    "source_tables": {
+      "ComposeAct": {
+        "decode": "bytewise XOR 0x2c; strict UTF-8; no code executed",
+        "decoded_sha256": "f2e35c2e42b851d7440dc767d00847df9a856b3c6cedc9b6ed88ea91ceb0b0e4",
+        "packaged_build": "5.0.203",
+        "rows": 1,
+        "source_sha256": "58e7160b52d62d1096d1a3dd41df1eaafbdbe9d9a184582597432293923bb135"
+      },
+      "ComposeActAreaGrid": {
+        "decode": "bytewise XOR 0x2c; strict UTF-8; no code executed",
+        "decoded_sha256": "fda47ffb26622206a619e29758930ce72d0e86df8cc15273fb43b621441a5cd7",
+        "packaged_build": "5.0.203",
+        "rows": 63,
+        "source_sha256": "74599a9e1e67f45c2bb86a67f1cfdba023388f5d1f37481bbd93f2f19e5b8425"
+      },
+      "ComposeActItemLevel": {
+        "decode": "bytewise XOR 0x2c; strict UTF-8; no code executed",
+        "decoded_sha256": "ef6c0be313c1c3b8b21d6273b72abe6fe755e5895bc6c0b0b95a142a29583e7e",
+        "packaged_build": "5.0.203",
+        "rows": 114,
+        "source_sha256": "3bd04bfe86fc5b7f219138432655f2140f89044ad6a3bb7ec33a3c3908028c87"
+      },
+      "ComposeActItemLevel English localization": {
+        "decode": "strict UTF-8; no code executed",
+        "decoded_sha256": "0bf3cc279b0ea59f9b5f05e207a82d9987b323101ff607efd9f623a8f5100760",
+        "packaged_build": "5.0.203",
+        "rows": 114,
+        "source_sha256": "0bf3cc279b0ea59f9b5f05e207a82d9987b323101ff607efd9f623a8f5100760"
+      },
+      "ComposeActLevel": {
+        "decode": "bytewise XOR 0x2c; strict UTF-8; no code executed",
+        "decoded_sha256": "69fe253bcc496a781b5e1935b3422a09354338f35ca23d62f6712e9247f2223a",
+        "packaged_build": "5.0.203",
+        "rows": 21,
+        "source_sha256": "16a3d4d2615af0fde41973da1f7c12adf5de52496af0248e266130110ff449eb"
+      },
+      "ComposeActWorker": {
+        "decode": "bytewise XOR 0x2c; strict UTF-8; no code executed",
+        "decoded_sha256": "77a78180a264aa9edb05cd3ab431c5ff477437b585e2e57f59aab7b2827abe49",
+        "packaged_build": "5.0.203",
+        "rows": 20,
+        "source_sha256": "885f21ef7aaaac6e31e0259deafcab95fcb346d1ffd9a22f5df5447f901be816"
+      },
+      "ComposeActWorkerItemGroup": {
+        "decode": "bytewise XOR 0x2c; strict UTF-8; no code executed",
+        "decoded_sha256": "e4ec4e218db5837e589b8991f576923338b0fa35bf98bfd08ed92ceed5bc92a1",
+        "packaged_build": "5.0.203",
+        "rows": 123,
+        "source_sha256": "bc183c3003b3505ef48569f8f5e1f87e0b90b21e4deddbb809b9c68dd7c63875"
+      }
+    }
+  },
+  "workshop_levels": [
+    {
+      "exp": 0,
+      "level": 1,
+      "productivity": 0,
+      "rewards": []
+    },
+    {
+      "exp": 25,
+      "level": 2,
+      "productivity": 30,
+      "rewards": [
+        {
+          "count": 1,
+          "item_id": 10001
+        }
+      ]
+    },
+    {
+      "exp": 65,
+      "level": 3,
+      "productivity": 30,
+      "rewards": [
+        {
+          "count": 1,
+          "item_id": 20001
+        },
+        {
+          "count": 1,
+          "item_id": 10002
+        }
+      ]
+    },
+    {
+      "exp": 120,
+      "level": 4,
+      "productivity": 30,
+      "rewards": [
+        {
+          "count": 1,
+          "item_id": 20001
+        },
+        {
+          "count": 1,
+          "item_id": 60001
+        }
+      ]
+    },
+    {
+      "exp": 180,
+      "level": 5,
+      "productivity": 40,
+      "rewards": [
+        {
+          "count": 1,
+          "item_id": 20002
+        },
+        {
+          "count": 1,
+          "item_id": 10003
+        },
+        {
+          "count": 1,
+          "item_id": 100001
+        }
+      ]
+    },
+    {
+      "exp": 250,
+      "level": 6,
+      "productivity": 40,
+      "rewards": [
+        {
+          "count": 1,
+          "item_id": 20003
+        },
+        {
+          "count": 2,
+          "item_id": 60001
+        }
+      ]
+    },
+    {
+      "exp": 330,
+      "level": 7,
+      "productivity": 40,
+      "rewards": [
+        {
+          "count": 1,
+          "item_id": 30001
+        },
+        {
+          "count": 2,
+          "item_id": 60001
+        }
+      ]
+    },
+    {
+      "exp": 420,
+      "level": 8,
+      "productivity": 50,
+      "rewards": [
+        {
+          "count": 1,
+          "item_id": 30001
+        },
+        {
+          "count": 2,
+          "item_id": 60001
+        }
+      ]
+    },
+    {
+      "exp": 520,
+      "level": 9,
+      "productivity": 50,
+      "rewards": [
+        {
+          "count": 1,
+          "item_id": 30002
+        },
+        {
+          "count": 2,
+          "item_id": 60001
+        },
+        {
+          "count": 1,
+          "item_id": 100001
+        }
+      ]
+    },
+    {
+      "exp": 620,
+      "level": 10,
+      "productivity": 50,
+      "rewards": [
+        {
+          "count": 1,
+          "item_id": 40001
+        },
+        {
+          "count": 1,
+          "item_id": 30003
+        },
+        {
+          "count": 3,
+          "item_id": 60001
+        }
+      ]
+    },
+    {
+      "exp": 730,
+      "level": 11,
+      "productivity": 60,
+      "rewards": [
+        {
+          "count": 1,
+          "item_id": 40001
+        },
+        {
+          "count": 3,
+          "item_id": 60001
+        },
+        {
+          "count": 1,
+          "item_id": 100001
+        }
+      ]
+    },
+    {
+      "exp": 850,
+      "level": 12,
+      "productivity": 60,
+      "rewards": [
+        {
+          "count": 1,
+          "item_id": 40002
+        },
+        {
+          "count": 1,
+          "item_id": 50004
+        },
+        {
+          "count": 3,
+          "item_id": 60001
+        }
+      ]
+    },
+    {
+      "exp": 970,
+      "level": 13,
+      "productivity": 60,
+      "rewards": [
+        {
+          "count": 1,
+          "item_id": 40003
+        },
+        {
+          "count": 1,
+          "item_id": 50004
+        },
+        {
+          "count": 3,
+          "item_id": 60001
+        }
+      ]
+    },
+    {
+      "exp": 1090,
+      "level": 14,
+      "productivity": 70,
+      "rewards": [
+        {
+          "count": 1,
+          "item_id": 50004
+        },
+        {
+          "count": 3,
+          "item_id": 60001
+        },
+        {
+          "count": 1,
+          "item_id": 100001
+        }
+      ]
+    },
+    {
+      "exp": 1210,
+      "level": 15,
+      "productivity": 70,
+      "rewards": [
+        {
+          "count": 1,
+          "item_id": 50004
+        },
+        {
+          "count": 4,
+          "item_id": 60001
+        }
+      ]
+    },
+    {
+      "exp": 1330,
+      "level": 16,
+      "productivity": 70,
+      "rewards": [
+        {
+          "count": 1,
+          "item_id": 50004
+        },
+        {
+          "count": 4,
+          "item_id": 60001
+        },
+        {
+          "count": 1,
+          "item_id": 100001
+        }
+      ]
+    },
+    {
+      "exp": 1450,
+      "level": 17,
+      "productivity": 90,
+      "rewards": [
+        {
+          "count": 1,
+          "item_id": 50004
+        },
+        {
+          "count": 4,
+          "item_id": 60001
+        }
+      ]
+    },
+    {
+      "exp": 1570,
+      "level": 18,
+      "productivity": 90,
+      "rewards": [
+        {
+          "count": 1,
+          "item_id": 50004
+        },
+        {
+          "count": 4,
+          "item_id": 60001
+        },
+        {
+          "count": 1,
+          "item_id": 100001
+        }
+      ]
+    },
+    {
+      "exp": 1690,
+      "level": 19,
+      "productivity": 100,
+      "rewards": [
+        {
+          "count": 2,
+          "item_id": 50004
+        },
+        {
+          "count": 4,
+          "item_id": 60001
+        }
+      ]
+    },
+    {
+      "exp": 1810,
+      "level": 20,
+      "productivity": 100,
+      "rewards": [
+        {
+          "count": 2,
+          "item_id": 50004
+        },
+        {
+          "count": 1,
+          "item_id": 100001
+        },
+        {
+          "count": 4,
+          "item_id": 60001
+        }
+      ]
+    },
+    {
+      "exp": 1930,
+      "level": 21,
+      "productivity": 100,
+      "rewards": [
+        {
+          "count": 2,
+          "item_id": 50004
+        },
+        {
+          "count": 1,
+          "item_id": 100001
+        },
+        {
+          "count": 4,
+          "item_id": 60001
+        }
+      ]
+    }
+  ]
+}
