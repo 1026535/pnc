@@ -22,6 +22,7 @@ from pnc_automation.app.pnc.domain.building_catalog import (
     HomeCityObjectId,
     home_city_object_id_for_screen,
 )
+from pnc_automation.app.pnc.domain.building_details import BuildingDetailPhase
 from pnc_automation.app.pnc.domain.building_operations import (
     BuildingActionIdentity,
     BuildingConstructionTarget,
@@ -296,6 +297,7 @@ class BuildingUpgradeWorkflow(CoreWorkflow[BuildingMutationResult]):
                 raise TaskVerificationError(
                     "Building upgrade target instance changed before opening its detail screen."
                 )
+            source = context.open_building_upgrade_detail(target.building)
             _validate_target_observation(source, target)
         action = (
             resume_action
@@ -337,6 +339,7 @@ def _select_priority_upgrade_target(
     ineligible_reasons: list[str] = []
     for index, building in enumerate(priorities):
         source, instance_key = context.open_building_with_identity(building)
+        source = context.open_building_upgrade_detail(building)
         target = _target_from_observation(
             source,
             building,
@@ -361,14 +364,34 @@ def _ineligible_upgrade_reason(
 ) -> str | None:
     """Classify only safe skip cases; explicit advanced branches remain fail-closed."""
 
-    if building_requirement_is_visible(observation):
+    detail = observation.building_detail
+    requirement_row = None if detail is None else detail.requirement
+    requirement_actionable = (
+        requirement_row.go_bounds is not None
+        if requirement_row is not None
+        else building_requirement_is_visible(observation)
+    )
+    if requirement_actionable:
         if target.prerequisite_mode.value == "queue" or target.allow_premium_material_purchases:
             return None
-        return building_requirement_text(observation) or "unmet prerequisite"
+        return (
+            requirement_row.target_text
+            if requirement_row is not None and requirement_row.target_text
+            else building_requirement_text(observation)
+        ) or "unmet prerequisite"
     if observation.has(UiElementId.PNC_BUILDING_SPEEDUP_BUTTON):
         if target.allow_speedups:
             return None
         return "an upgrade is already active"
+    if (
+        detail is not None
+        and detail.current_level is not None
+        and detail.max_level is not None
+        and detail.current_level >= detail.max_level
+    ):
+        return "already at maximum level"
+    if detail is not None and detail.phase is not BuildingDetailPhase.UPGRADE:
+        return "the building's upgrade detail is not proved"
     if not observation.has(UiElementId.PNC_BUILDING_UPGRADE_BUTTON):
         return "normal Upgrade is unavailable"
     return None
@@ -389,22 +412,20 @@ def _target_from_observation(
     *,
     instance_key: str,
 ) -> BuildingUpgradeTarget:
-    """Build an upgrade target from a Home identity and detail-level fact."""
+    """Build an upgrade target from a Home identity and the typed detail facts."""
 
     _require_target_detail_ownership(observation, building)
-    level_element = observation.get(UiElementId.PNC_BUILDING_LEVEL_LABEL)
-    level_text = None if level_element is None else level_element.extracted_text
-    if level_text is None:
-        raise TaskVerificationError("Building upgrade requires a current level label.")
-    try:
-        current_level = int(level_text.replace("Lv.", "").replace("LV", "").strip())
-    except ValueError as error:
-        raise TaskVerificationError("Building level label is not an exact integer.") from error
+    detail = observation.building_detail
+    if detail is None or detail.current_level is None:
+        raise TaskVerificationError(
+            "Building upgrade requires the observed current/max level pair; "
+            "a missing level cannot authorize a target."
+        )
     return BuildingUpgradeTarget(
         building=building,
         instance_key=instance_key,
-        current_level=current_level,
-        next_level=current_level + 1,
+        current_level=detail.current_level,
+        next_level=detail.current_level + 1,
         prerequisite_mode=policy.prerequisite_mode,
         allow_speedups=policy.allow_speedups,
         allow_premium_material_purchases=policy.allow_premium_material_purchases,
@@ -416,22 +437,25 @@ def _validate_target_observation(observation: Observation, target: BuildingUpgra
     """Require an explicit target to remain the exact observed instance and level."""
 
     _require_target_detail_ownership(observation, target.building)
-    level_element = observation.get(UiElementId.PNC_BUILDING_LEVEL_LABEL)
-    level_text = None if level_element is None else level_element.extracted_text
-    if level_text is None:
-        raise TaskVerificationError("Building upgrade requires a current level label.")
-    try:
-        current_level = int(level_text.replace("Lv.", "").replace("LV", "").strip())
-    except ValueError as error:
-        raise TaskVerificationError("Building level label is not an exact integer.") from error
-    if current_level != target.current_level:
+    detail = observation.building_detail
+    if detail is None or detail.current_level is None:
+        raise TaskVerificationError(
+            "Building upgrade requires the observed current/max level pair; "
+            "a missing level cannot authorize the target."
+        )
+    if detail.current_level != target.current_level:
         raise TaskVerificationError("Building upgrade target no longer matches the observed level.")
 
 
 def _require_target_detail_ownership(observation: Observation, building: HomeCityObjectId) -> None:
-    """Require the typed detail screen to name the exact Home building owner."""
+    """Require the observation to prove the exact Home building owner."""
 
-    owner = home_city_object_id_for_screen(observation.screen_type)
+    detail = observation.building_detail
+    owner = (
+        detail.building_id
+        if detail is not None and detail.building_id is not None
+        else home_city_object_id_for_screen(observation.screen_type)
+    )
     if owner != building:
         raise TaskVerificationError(
             "Building upgrade requires an exact building-owned detail screen; "

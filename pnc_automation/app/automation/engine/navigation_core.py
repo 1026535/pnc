@@ -23,7 +23,9 @@ from pnc_automation.app.pnc.domain.building_catalog import (
     HomeCityObjectId,
     home_city_object_id_from_metadata,
     primary_screen_type_for_home_city_object,
+    upgrade_entry_selector_for_screen,
 )
+from pnc_automation.app.pnc.domain.building_details import BuildingDetailPhase
 from pnc_automation.app.pnc.domain.castle_roster_scan import castle_roster_window_signature
 from pnc_automation.app.pnc.domain.home_city_camera import HomeCityCameraProof
 from pnc_automation.app.pnc.domain.observation import (
@@ -367,6 +369,81 @@ class NavigationCore:
             observe_content=observe_reacquired,
             on_target_acquired=on_target_acquired,
             require_measured=require_measured,
+        )
+
+    def open_building_upgrade_detail(
+        self,
+        target: HomeCityObjectId,
+        *,
+        observe_content: Callable[[str], Observation],
+    ) -> Observation:
+        """Open the internal upgrade detail of one already-opened building panel.
+
+        The source must be a fresh, CLEAR observation of a building-owned panel
+        whose typed detail identifies ``target``. A frame already proved as the
+        matching UPGRADE detail returns its fresh content observation with no
+        extra tap. Otherwise at most one entry tap on the phase-owned Upgrade
+        control is sent, and completion requires a fresh CLEAR same-building
+        UPGRADE detail — the same ScreenType alone is never sufficient. The
+        spending Upgrade control is never used as a navigation entry here.
+        """
+
+        if not isinstance(target, HomeCityObjectId):
+            raise ValueError("Upgrade detail navigation requires a known HomeCityObjectId target.")
+        self._sequence += 1
+        label = f"core_{self._sequence}_building_upgrade_detail"
+        before = observe_content(f"{label}_source")
+        _require_building_panel_for_target(before, target=target)
+        if before.building_detail.phase is BuildingDetailPhase.UPGRADE:
+            return before
+        entry = _building_upgrade_entry_selector(before)
+        if entry is None:
+            raise RuntimeError("Building primary shows no measured upgrade entry; no tap sent.")
+        self.record({"event": "pending_upgrade_detail", "target": target.value,
+                     "selector": entry.value, "artifact": str(before.artifact_path)})
+        return self._execute_content_and_confirm(
+            TapAction(selector_id=entry, reason="open_building_upgrade_detail"),
+            before,
+            frozenset({before.screen_type, ScreenType.PNC_BUILDING_DETAILS}),
+            label,
+            observe_content,
+            completion_predicate=lambda frame: _building_upgrade_detail_matches(frame, target=target),
+        )
+
+    def close_building_upgrade_detail(
+        self,
+        target: HomeCityObjectId,
+        *,
+        observe_content: Callable[[str], Observation],
+    ) -> Observation:
+        """Return the qualified Institute upgrade panel to its same-building primary.
+
+        This internal Back changes phase without changing ScreenType. Other
+        buildings need their own observed return evidence before using it.
+        """
+        if target is not HomeCityObjectId.INSTITUTE:
+            raise ValueError("Only the Institute internal upgrade return is qualified.")
+        self._sequence += 1
+        label = f"core_{self._sequence}_building_upgrade_close"
+        before = observe_content(f"{label}_source")
+        _require_building_panel_for_target(before, target=target)
+        if before.building_detail.phase is BuildingDetailPhase.PRIMARY:
+            return before
+        if not _template_control(before, UiElementId.PNC_BACK_BUTTON_TOP_LEFT):
+            raise RuntimeError("Building upgrade detail has no measured Back; no tap sent.")
+        return self._execute_content_and_confirm(
+            TapAction(selector_id=UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+                      reason="close_building_upgrade_detail"),
+            before,
+            frozenset({ScreenType.PNC_INSTITUTE}),
+            label,
+            observe_content,
+            completion_predicate=lambda frame: (
+                frame.decision.guard is GuardVerdict.CLEAR
+                and frame.building_detail is not None
+                and frame.building_detail.building_id is target
+                and frame.building_detail.phase is BuildingDetailPhase.PRIMARY
+            ),
         )
 
     def open_mailbox(
@@ -1204,6 +1281,46 @@ class NavigationCore:
         if self.observe_ready is not None:
             return self.observe_ready(label)
         return self.observe(label)
+
+
+def _require_building_panel_for_target(observation: Observation, target: HomeCityObjectId) -> None:
+    """Require a CLEAR building-owned panel whose typed detail proves the requested owner and phase."""
+
+    detail = observation.building_detail
+    if (
+        observation.blocking_popup
+        or observation.decision.guard != GuardVerdict.CLEAR
+        or detail is None
+        or detail.building_id != target
+        or detail.phase not in (BuildingDetailPhase.PRIMARY, BuildingDetailPhase.UPGRADE)
+    ):
+        raise RuntimeError("Building panel is absent, foreign, interrupted, or unphased; no action sent.")
+
+
+def _building_upgrade_entry_selector(observation: Observation) -> UiElementId | None:
+    """Resolve the published primary-panel Upgrade entry control for this frame."""
+
+    named = upgrade_entry_selector_for_screen(observation.screen_type)
+    for selector_id in (UiElementId.PNC_BUILDING_DETAILS_UPGRADE_BUTTON, named):
+        if selector_id is None:
+            continue
+        element = observation.get(selector_id)
+        if element is not None and element.source_kind is VisibleElementSourceKind.TEMPLATE:
+            return selector_id
+    return None
+
+
+def _building_upgrade_detail_matches(frame: Observation, *, target: HomeCityObjectId) -> bool:
+    """Require a fresh CLEAR typed UPGRADE detail owned by the requested building."""
+
+    detail = frame.building_detail
+    return (
+        not frame.blocking_popup
+        and frame.decision.guard == GuardVerdict.CLEAR
+        and detail is not None
+        and detail.phase is BuildingDetailPhase.UPGRADE
+        and detail.building_id == target
+    )
 
 
 def require_resource_inventory_surface(observation: Observation) -> None:

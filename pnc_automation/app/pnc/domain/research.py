@@ -11,7 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
-from pnc_automation.app.pnc.domain.policy_models import ResearchCategory, ResourceType
+from pnc_automation.app.pnc.domain.policy_models import ResearchCategory
+from pnc_automation.app.pnc.domain.resource_cost import ResourceCost
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.core.errors import SelectorResolutionError
 from pnc_automation.core.infra.emulator.provenance import FrameRef
@@ -147,31 +148,6 @@ class ResearchTextRecord:
 
 
 @dataclass(frozen=True, slots=True)
-class ResearchResourceCost:
-    """One resource requirement row measured inside the research detail panel."""
-
-    resource_type: ResourceType | None
-    available: int | None
-    required: int | None
-    text_bounds: Bounds
-
-    def __post_init__(self) -> None:
-        """Keep cost rows numeric and bounded; resource type stays optional."""
-
-        if self.resource_type is not None and not isinstance(self.resource_type, ResourceType):
-            raise TypeError("ResearchResourceCost.resource_type must be a ResourceType or None.")
-        for field_name in ("available", "required"):
-            value = getattr(self, field_name)
-            if value is not None and (not isinstance(value, int) or isinstance(value, bool) or value < 0):
-                raise SelectorResolutionError(
-                    f"ResearchResourceCost.{field_name} must be a non-negative integer or None.",
-                    value=value,
-                )
-        if not isinstance(self.text_bounds, Bounds):
-            raise TypeError("ResearchResourceCost.text_bounds must be Bounds.")
-
-
-@dataclass(frozen=True, slots=True)
 class ResearchDetail:
     """Typed facts measured on the research node-detail panel.
 
@@ -188,7 +164,7 @@ class ResearchDetail:
     max_level: int | None = None
     effect_records: tuple[ResearchTextRecord, ...] = ()
     prerequisite_record: ResearchTextRecord | None = None
-    costs: tuple[ResearchResourceCost, ...] = ()
+    costs: tuple[ResourceCost, ...] = ()
     original_time_text: str | None = None
     actual_time_text: str | None = None
     premium_gem_cost: int | None = None

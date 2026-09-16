@@ -1256,6 +1256,19 @@
             ],
             "threshold": 0.97
           }
+        },
+        {
+          "selector": "PNC_INSTITUTE_UPGRADE_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/institute_primary_upgrade_button.png",
+            "search_region": [
+              378,
+              247,
+              145,
+              58
+            ],
+            "threshold": 0.93
+          }
         }
       ],
       "layout_id": "institute"
@@ -1451,6 +1464,19 @@
         }
       ],
       "controls": [
+        {
+          "selector": "PNC_HOME_BUILD_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/core_home_city_identity_1.png",
+            "search_region": [
+              12,
+              210,
+              45,
+              22
+            ],
+            "threshold": 0.93
+          }
+        },
         {
           "selector": "PNC_HOME_WORLD_SWITCH",
           "anchor": {
@@ -3411,6 +3437,19 @@
               38
             ],
             "threshold": 0.86
+          }
+        },
+        {
+          "selector": "PNC_BUILDING_DETAILS_UPGRADE_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/farm_upgrade_button.png",
+            "search_region": [
+              378,
+              247,
+              139,
+              55
+            ],
+            "threshold": 0.95
           }
         },
         {

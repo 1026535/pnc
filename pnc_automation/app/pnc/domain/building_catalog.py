@@ -879,6 +879,52 @@ def home_city_object_id_for_screen(screen_type: ScreenType) -> HomeCityObjectId 
     return _OWNING_HOME_CITY_OBJECT_ID_BY_SCREEN.get(screen_type)
 
 
+# Accepted building-detail/construction layouts that prove one owning building
+# where the shared screen type alone cannot (the generic Farm detail and
+# construction panels carry no per-building screen type).
+_HOME_CITY_OBJECT_ID_BY_DETAIL_LAYOUT_ID = {
+    "building_detail_farm": HomeCityObjectId.FARM,
+    "building_construction_farm": HomeCityObjectId.FARM,
+}
+
+
+def home_city_object_id_for_layout(layout_id: str | None) -> HomeCityObjectId | None:
+    """Returns the owning building proved by one accepted building-detail layout."""
+
+    if layout_id is None:
+        return None
+    return _HOME_CITY_OBJECT_ID_BY_DETAIL_LAYOUT_ID.get(layout_id)
+
+
+# Primary-panel Upgrade controls that open the internal upgrade detail. They
+# are navigation entries, never the mutation surface; the upgrade panel's own
+# ordinary Upgrade is the canonical PNC_BUILDING_UPGRADE_BUTTON.
+_UPGRADE_ENTRY_SELECTOR_BY_PRIMARY_SCREEN = {
+    ScreenType.PNC_CASTLE: UiElementId.PNC_CASTLE_UPGRADE_BUTTON,
+    ScreenType.PNC_HALL_OF_WAR: UiElementId.PNC_HALL_OF_WAR_UPGRADE_BUTTON,
+    ScreenType.PNC_INFANTRY_BARRACKS: UiElementId.PNC_BARRACKS_UPGRADE_BUTTON,
+    ScreenType.PNC_CAVALRY_BARRACKS: UiElementId.PNC_BARRACKS_UPGRADE_BUTTON,
+    ScreenType.PNC_RANGED_BARRACKS: UiElementId.PNC_BARRACKS_UPGRADE_BUTTON,
+    ScreenType.PNC_SIEGE_FACTORY: UiElementId.PNC_BARRACKS_UPGRADE_BUTTON,
+    ScreenType.PNC_WALL: UiElementId.PNC_WALL_UPGRADE_BUTTON,
+    ScreenType.PNC_SAUROI_LAIR: UiElementId.PNC_SAUROI_LAIR_UPGRADE_BUTTON,
+    ScreenType.PNC_GODDESS_STATUE: UiElementId.PNC_GODDESS_STATUE_UPGRADE_BUTTON,
+    ScreenType.PNC_INSTITUTE: UiElementId.PNC_INSTITUTE_UPGRADE_BUTTON,
+    ScreenType.PNC_WAREHOUSE: UiElementId.PNC_WAREHOUSE_UPGRADE_BUTTON,
+    ScreenType.PNC_TRAP_WORKSHOP: UiElementId.PNC_TRAP_WORKSHOP_UPGRADE_BUTTON,
+    ScreenType.PNC_WATCHTOWER: UiElementId.PNC_WATCHTOWER_UPGRADE_BUTTON,
+    ScreenType.PNC_BLACKSMITH: UiElementId.PNC_BLACKSMITH_UPGRADE_BUTTON,
+    ScreenType.PNC_ALLIANCE_HALL: UiElementId.PNC_ALLIANCE_HALL_UPGRADE_BUTTON,
+    ScreenType.PNC_MARKET: UiElementId.PNC_MARKET_UPGRADE_BUTTON,
+}
+
+
+def upgrade_entry_selector_for_screen(screen_type: ScreenType) -> UiElementId | None:
+    """Returns the primary-panel Upgrade entry control for one building-owned screen."""
+
+    return _UPGRADE_ENTRY_SELECTOR_BY_PRIMARY_SCREEN.get(screen_type)
+
+
 def build_menu_screen_type_for_home_city_object(home_city_object_id: HomeCityObjectId) -> ScreenType | None:
     """Returns the build-menu screen family that proves one unbuilt home-city target was opened."""
 

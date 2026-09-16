@@ -29,9 +29,9 @@ from pnc_automation.app.pnc.domain.building_operations import (
 from pnc_automation.app.pnc.domain.building_catalog import (
     home_city_object_id_for_screen,
     is_repeatable_home_city_object,
-    is_upgradeable_primary_screen,
     require_building_construction_source,
 )
+from pnc_automation.app.pnc.domain.building_details import BuildingDetailPhase, parse_building_level_pair
 from pnc_automation.app.automation.tasks.building_workflow_support import (
     building_requirement_is_visible,
     building_requirement_text,
@@ -405,16 +405,17 @@ class CoreMutationBoundary:
                     "Authorized building speedup requires a typed item, quantity, availability, "
                     "and cost before Auto can be journaled; no speedup input was sent."
                 )
-            target_screen = home_city_object_id_for_screen(source.screen_type)
-            valid_primary = (
-                source.screen_type == expected_screen
-                or (
-                    is_upgradeable_primary_screen(source.screen_type)
-                    and target_screen == target.building
+            target_detail = source.building_detail
+            if (
+                source.decision.guard != GuardVerdict.CLEAR
+                or target_detail is None
+                or target_detail.phase is not BuildingDetailPhase.UPGRADE
+                or target_detail.building_id != target.building
+            ):
+                raise RuntimeError(
+                    "Building upgrade requires a fresh, CLEAR, same-building typed upgrade "
+                    "detail; a primary menu Upgrade cannot authorize the mutation."
                 )
-            )
-            if not valid_primary and selector == UiElementId.PNC_BUILDING_UPGRADE_BUTTON:
-                raise RuntimeError("Building upgrade requires a fresh target-specific normal control.")
             if not source.has(selector):
                 raise RuntimeError("Building upgrade requires a fresh target-specific normal control.")
 
@@ -518,7 +519,9 @@ class CoreMutationBoundary:
                         )
             return MutationReconciliation(
                 postcondition_proven=proof,
-                original_precondition_proven=(after.screen_type == expected_screen and after.has(selector)),
+                original_precondition_proven=_building_precondition_still_valid(
+                    identity, after, expected_screen=expected_screen, selector=selector
+                ),
                 artifact_paths=(() if after.artifact_path is None else (str(after.artifact_path),)),
                 metadata={"receipt_status": status.value, "target": identity.target.as_metadata()},
             )
@@ -879,8 +882,21 @@ def _require_upgrade_policy_state(
         raise RuntimeError(
             "Building upgrade requires a positive current-frame Home build-control queue proof."
         )
-    if building_requirement_is_visible(observation):
-        requirement = building_requirement_text(observation) or "unknown prerequisite"
+    detail = observation.building_detail
+    requirement_row = None if detail is None else detail.requirement
+    # A published row without its own measured Go records the requirement fact
+    # but does not prove an actionable unmet prerequisite.
+    requirement_actionable = (
+        requirement_row.go_bounds is not None
+        if requirement_row is not None
+        else building_requirement_is_visible(observation)
+    )
+    if requirement_actionable:
+        requirement = (
+            requirement_row.target_text
+            if requirement_row is not None and requirement_row.target_text
+            else building_requirement_text(observation)
+        ) or "unknown prerequisite"
         if target.allow_premium_material_purchases:
             raise RuntimeError(
                 "Premium-material purchase was requested, but no target-bound purchase control "
@@ -888,7 +904,12 @@ def _require_upgrade_policy_state(
             )
         if target.prerequisite_mode.value == "fail":
             raise RuntimeError(f"Building upgrade prerequisite is unmet: {requirement}.")
-        if not observation.has(UiElementId.PNC_BUILDING_REQUIREMENT_GO_BUTTON):
+        has_go = (
+            requirement_row.go_bounds is not None
+            if requirement_row is not None
+            else observation.has(UiElementId.PNC_BUILDING_REQUIREMENT_GO_BUTTON)
+        )
+        if not has_go:
             raise RuntimeError(
                 f"Building upgrade prerequisite '{requirement}' has no typed Go control."
             )
@@ -1021,18 +1042,23 @@ def _building_receipt_proof(
             return True, BuildingReceiptStatus.STARTED
     if identity.kind is BuildingMutationKind.UPGRADE:
         assert isinstance(target, BuildingUpgradeTarget)
+        detail = observation.building_detail
+        if (
+            detail is not None
+            and detail.building_id == target.building
+            and detail.current_level is not None
+            and detail.current_level >= target.next_level
+        ):
+            return True, BuildingReceiptStatus.LEVEL_INCREASED
         level_element = observation.get(UiElementId.PNC_BUILDING_LEVEL_LABEL)
         if (
             home_city_object_id_for_screen(observation.screen_type) == target.building
             and level_element is not None
             and level_element.extracted_text is not None
         ):
-            raw_level = level_element.extracted_text.replace("Lv.", "").replace("LV", "").strip()
-            try:
-                if int(raw_level) >= target.next_level:
-                    return True, BuildingReceiptStatus.LEVEL_INCREASED
-            except ValueError:
-                pass
+            pair = parse_building_level_pair(level_element.extracted_text)
+            if pair is not None and pair[0] >= target.next_level:
+                return True, BuildingReceiptStatus.LEVEL_INCREASED
         for object_ in observation.spatial_objects():
             metadata = object_.metadata
             if metadata.get("home_city_object_id") != target.building.value:
@@ -1042,6 +1068,27 @@ def _building_receipt_proof(
             if object_.level is not None and object_.level >= target.next_level:
                 return True, BuildingReceiptStatus.LEVEL_INCREASED
     return False, BuildingReceiptStatus.PENDING_CLARIFICATION
+
+
+def _building_precondition_still_valid(
+    identity: BuildingActionIdentity,
+    observation: Observation,
+    *,
+    expected_screen: ScreenType,
+    selector: UiElementId,
+) -> bool:
+    """Report whether the dispatch surface still shows the target-bound normal control."""
+
+    if not observation.has(selector):
+        return False
+    if identity.kind is BuildingMutationKind.UPGRADE:
+        detail = observation.building_detail
+        if detail is not None:
+            return (
+                detail.phase is BuildingDetailPhase.UPGRADE
+                and detail.building_id == identity.target.building
+            )
+    return observation.screen_type == expected_screen
 
 
 def _spatial_object_matches_upgrade_target(

@@ -5,6 +5,7 @@ from __future__ import annotations
 import unittest
 from PIL import Image
 
+from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
@@ -56,6 +57,20 @@ class InstitutePrerequisiteCapturedTests(unittest.TestCase):
                     else:
                         self.assertFalse(observation.has(UiElementId.PNC_BUILDING_REQUIREMENT_GO_BUTTON))
                         self.assertFalse(observation.has(UiElementId.PNC_BUILDING_REQUIREMENT_HEADER))
+                    if name in ("visible", "erased_go"):
+                        detail = observation.building_detail
+                        self.assertIsNotNone(detail)
+                        assert detail is not None and detail.requirement is not None
+                        self.assertEqual(detail.requirement.target_building, HomeCityObjectId.CASTLE)
+                        self.assertEqual(detail.requirement.target_level, 23)
+                        if name == "visible":
+                            # The typed row's actionable bounds are exactly the
+                            # measured template Go associated with the row.
+                            self.assertEqual(detail.requirement.go_bounds, control.bounds)
+                        else:
+                            # The erased measured Go cannot be replaced by the
+                            # surviving OCR Go text: the row stays non-actionable.
+                            self.assertIsNone(detail.requirement.go_bounds)
                     for selector in (UiElementId.PNC_BUILDING_UPGRADE_BUTTON,
                                      UiElementId.PNC_INSTITUTE_DEVELOPMENT_BUTTON):
                         self.assertFalse(observation.has(selector))

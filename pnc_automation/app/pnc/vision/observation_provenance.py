@@ -15,6 +15,7 @@ from pnc_automation.app.pnc.domain.observation import (
     VisibleElement,
     VisibleElementSourceKind,
 )
+from pnc_automation.app.pnc.domain.building_details import BuildingDetail, BuildingRequirementRow
 from pnc_automation.app.pnc.domain.research import ResearchDetail, ResearchQueueRow
 from pnc_automation.app.pnc.domain.trial_challenge import (
     TrialApplicableStatsDetail,
@@ -307,6 +308,53 @@ def bind_bag_preview(
     )
 
 
+def bind_building_detail(
+    detail: BuildingDetail,
+    *,
+    frame_ref: FrameRef | None,
+    source_screen: ScreenType,
+    source_layout_id: str | None,
+) -> BuildingDetail:
+    """Adds missing building-detail provenance while rejecting contradictory proof."""
+
+    bound = _bind_typed_fact(
+        detail,
+        frame_ref=frame_ref,
+        source_screen=source_screen,
+        source_layout_id=source_layout_id,
+        label="Building detail",
+    )
+    if bound.requirement is None:
+        return bound
+    return replace(
+        bound,
+        requirement=bind_building_requirement_row(
+            bound.requirement,
+            frame_ref=frame_ref,
+            source_screen=source_screen,
+            source_layout_id=source_layout_id,
+        ),
+    )
+
+
+def bind_building_requirement_row(
+    row: BuildingRequirementRow,
+    *,
+    frame_ref: FrameRef | None,
+    source_screen: ScreenType,
+    source_layout_id: str | None,
+) -> BuildingRequirementRow:
+    """Adds missing requirement-row provenance while rejecting contradictory proof."""
+
+    return _bind_typed_fact(
+        row,
+        frame_ref=frame_ref,
+        source_screen=source_screen,
+        source_layout_id=source_layout_id,
+        label="Building requirement row",
+    )
+
+
 _TypedFactT = TypeVar(
     "_TypedFactT",
     ResearchDetail,
@@ -314,6 +362,8 @@ _TypedFactT = TypeVar(
     TrialChallengeSummary,
     TrialApplicableStatsDetail,
     BagChestPreviewFacts,
+    BuildingDetail,
+    BuildingRequirementRow,
 )
 
 

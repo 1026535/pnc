@@ -268,7 +268,9 @@ def compile_screen_content_ocr_region_plans(
     if resolved_screen == ScreenType.PNC_INSTITUTE and layout_id == "institute_upgrade_detail":
         regions = (
             ("building_level_and_actions", 0.18, 0.24, 0.76, 0.075),
+            ("building_upgrade_times", 0.06, 0.34, 0.64, 0.075),
             ("unmet_building_prerequisite", 0.04, 0.44, 0.92, 0.085),
+            ("building_upgrade_materials", 0.055, 0.612, 0.47, 0.235),
         )
     if resolved_screen == ScreenType.PNC_RESEARCH_TREE:
         if layout_id == "research_tree_node_detail":

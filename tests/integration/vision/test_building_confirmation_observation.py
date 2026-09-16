@@ -8,6 +8,7 @@ import unittest
 
 from PIL import Image
 
+from pnc_automation.app.pnc.domain.building_details import BuildingDetailPhase
 from pnc_automation.app.pnc.domain.observation import VisibleElementSourceKind
 from pnc_automation.app.pnc.domain.popup import PopupControlKind
 from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
@@ -198,7 +199,12 @@ class BuildingConfirmationParserTests(unittest.TestCase):
             ),
         )
 
-        additions = _build_building_detail_additions(image=image, lines=lines, anchors=anchors)
+        additions = _build_building_detail_additions(
+            image=image,
+            lines=lines,
+            anchors=anchors,
+            phase=BuildingDetailPhase.UPGRADE,
+        )
 
         self.assertIsNotNone(additions)
         assert additions is not None
