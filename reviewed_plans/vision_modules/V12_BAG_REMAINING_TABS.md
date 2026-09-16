@@ -104,7 +104,7 @@ post-V16 full fallback passed 2,427 tests with 7 skipped (run
 209b64c5ea854893b0d1565b3304ee1c, base 10decf7, 2026-09-16T17:03Z).
 
 Live evidence: mega_old_acc, active K157 / NPC 2 / level22. Runtime
-20260916T171915Z_3b9a2d96 captured Military frame0030 and Misc frame0035;
+20260916T171915Z_3b9a2d96 captured Military frame0030 and Misc frame0034;
 all twelve identities, current quantities and NO_ACTION rows matched the
 visually inspected native sources. The Misc shovel count is now56, whereas the
 reference capture had60; no cause of that change is inferred. A stale reference
