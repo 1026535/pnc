@@ -1313,6 +1313,8 @@ def _merge_observation_additions(
         chat_draft_text=primary.chat_draft_text or fallback.chat_draft_text,
         research_detail=primary.research_detail or fallback.research_detail,
         research_queue_rows=primary.research_queue_rows or fallback.research_queue_rows,
+        trial_summary=primary.trial_summary or fallback.trial_summary,
+        trial_stats_detail=primary.trial_stats_detail or fallback.trial_stats_detail,
     )
 
 

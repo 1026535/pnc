@@ -31,10 +31,10 @@ game-service request was made, and nothing here authorizes a mutation.
   (Rune); a locked card can still show its weekday. No availability is
   computed from schedule text or card order.
 - The toolbar wing counter beside Exchange publishes once at screen level as
-  an observed integer (`12712` on mega_old_acc); a lone `0` glyph is honestly
-  unreadable and the counter stays unknown rather than guessed. It is not a
+  an observed integer (`12712` on mega_old_acc); the accepted 1.2.3 OCR backend cannot read the reference lone `0`
+  glyph, so it stays unknown pending the separately owned backend correction. It is not a
   named currency.
-- Only the Gear card's measured Stats chip is actionable (row `complete` with
+- Only an unlocked Gear card's measured Stats chip is actionable (row `complete` with
   chip bounds/action point); every other category row is `no_action`
   regardless of visible chips. Duplicate resolved categories mark rows
   `ambiguous` with no action. Trial, Rank, Exchange, Mall, Progress and
@@ -62,3 +62,16 @@ The reviewed graph edge `PNC_BACK_BUTTON_TOP_LEFT` returns to
 inspection — they are not force-fit to the Gear detail. Trial entry, battle,
 stamina/resource use, Exchange purchases and claims remain outside this
 contract.
+
+
+## Production live proof, September 16
+
+Live-observed with the accepted V15 route on `mega_old_acc`, active castle,
+runtime `20260916T102239Z_f31a49a3`: Home → Tower → six fresh typed Trial cards →
+Gear Stats → nine matching label/percent rows → Trial → Home. Source `0029`,
+Stats `0032` and final Home `0041` are retained under
+`.local-data/devin-v15/live_candidate_content/` in the `vision-v01-foundation`
+checkout. The lead compared the published values to the actual screen. Infantry
+ATK/DEF/HP were 48/114/104%, Ranged 48/82/72%, and Cavalry 176/96/96% in this
+capture; these are account observations, not constants. No game resources were
+spent. The canonical lease released and the pre-existing instance was preserved.

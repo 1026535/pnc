@@ -16,10 +16,16 @@ from pnc_automation.app.pnc.domain.trial_challenge import (
     TrialApplicableStatsDetail,
     TrialCardFacts,
     TrialCategory,
+    TrialChallengeSummary,
     trial_category_for_label,
     trial_category_title,
 )
+from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
+from pnc_automation.app.pnc.vision.observation_builder import (
+    ObservationAdditions,
+    _merge_observation_additions,
+)
 from pnc_automation.app.pnc.vision.trial_challenge import (
     TRIAL_CHALLENGE_LAYOUT_ID,
     TRIAL_STATS_LAYOUT_ID,
@@ -36,7 +42,7 @@ from pnc_automation.app.pnc.vision.trial_challenge import (
     _weekday_text,
 )
 from pnc_automation.core.errors import SelectorResolutionError
-from pnc_automation.core.vision.image.models import Bounds
+from pnc_automation.core.vision.image.models import Bounds, TemplateMatch
 from pnc_automation.core.vision.ocr.ocr_service import OcrLine
 
 
@@ -166,8 +172,12 @@ class StatsDetailParsingTests(unittest.TestCase):
 
     def test_percent_value_tolerates_misread_sign(self) -> None:
         self.assertEqual(48, _percent_value("48%"))
+        self.assertEqual(48, _percent_value("+48%"))
         self.assertEqual(96, _percent_value("%96"))
         self.assertIsNone(_percent_value("abc"))
+        for unsupported in ("12.5%", "-5%", "48% 96%"):
+            with self.subTest(value=unsupported):
+                self.assertIsNone(_percent_value(unsupported))
 
     def test_footer_category_comes_only_from_the_bounded_sentence(self) -> None:
         footer = (_line("In Gear Trial, only gear stats are applicable.", Bounds(30, 1480, 700, 30)),)
@@ -182,6 +192,38 @@ class StatsDetailParsingTests(unittest.TestCase):
 
 class ProducerDispatchTests(unittest.TestCase):
     """Trial content only publishes under its own proved screen and layout."""
+
+    def test_locked_gear_card_with_a_stats_chip_does_not_publish_a_tap(self) -> None:
+        matcher = Mock()
+        matcher.find_best_match.side_effect = lambda frame, path, **kwargs: (
+            TemplateMatch(Bounds(359, 1047, 74, 73), 0.99)
+            if path.name == "trial_stats_chip.png"
+            else TemplateMatch(Bounds(730, 960, 50, 50), 0.99)
+            if path.name == "trial_lock_glyph.png"
+            else None
+        )
+        context = Mock()
+        context.read_lines.return_value = (_line("Gear Trial", Bounds(260, 960, 180, 32)),)
+        entry = TrialContentProducer(matcher=matcher)._card_entry(
+            image=Image.new("RGB", (900, 1600)), prepared=Mock(),
+            slot=Bounds(23, 936, 852, 206), slot_index=3, ocr_context=context,
+        )
+        self.assertTrue(entry.trial_card_facts.locked)
+        self.assertTrue(entry.trial_card_facts.stats_button_present)
+        self.assertEqual(RowRecognitionStatus.NO_ACTION, entry.row_status)
+        self.assertIsNone(entry.action_bounds)
+        self.assertIsNone(entry.action_point)
+
+    def test_guard_merge_preserves_owned_trial_facts(self) -> None:
+        summary = TrialChallengeSummary(observed_counter=0, counter_bounds=Bounds(55, 140, 20, 30))
+        detail = TrialApplicableStatsDetail(category=TrialCategory.GEAR)
+        merged = _merge_observation_additions(
+            ObservationAdditions(guard_verdict=GuardVerdict.BLOCKED),
+            ObservationAdditions(trial_summary=summary, trial_stats_detail=detail),
+        )
+        self.assertIs(summary, merged.trial_summary)
+        self.assertIs(detail, merged.trial_stats_detail)
+        self.assertEqual(GuardVerdict.BLOCKED, merged.guard_verdict)
 
     def test_dispatch_requires_the_trial_screens_and_layouts(self) -> None:
         producer = TrialContentProducer()

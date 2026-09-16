@@ -101,7 +101,7 @@ _PROGRESS_SEARCH = re.compile(r"(\d+)\s*/\s*(\d+)")
 _REQUIRED_LEVEL_SEARCH = re.compile(r"REQUIRESLV(\d+)CASTLE")
 _COUNTDOWN_PATTERN = re.compile(r"^\d{1,2}:\d{2}:\d{2}$")
 _COUNTER_PATTERN = re.compile(r"^\d+$")
-_PERCENT_SEARCH = re.compile(r"(\d+)\s*%|%\s*(\d+)")
+_PERCENT_SEARCH = re.compile(r"\+?\s*(\d+)\s*%|%\s*(\d+)")
 _FOOTER_CATEGORY_SEARCH = re.compile(r"IN([A-Z]+)TRIALONLY")
 _WEEKDAY_TOKENS = frozenset({"MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"})
 
@@ -251,7 +251,7 @@ class TrialContentProducer:
         )
         if category is None:
             row_status = RowRecognitionStatus.UNREADABLE
-        elif category == TrialCategory.GEAR and stats_match is not None:
+        elif category == TrialCategory.GEAR and facts.locked is False and stats_match is not None:
             row_status = RowRecognitionStatus.COMPLETE
         else:
             row_status = RowRecognitionStatus.NO_ACTION
@@ -468,9 +468,9 @@ def _parse_stat_rows(
 
 
 def _percent_value(text: str) -> int | None:
-    """Parse one literal percent token, tolerating a misread leading sign."""
+    """Parse a whole integer percentage; retain unsupported literal values as unknown."""
 
-    match = _PERCENT_SEARCH.search(text)
+    match = _PERCENT_SEARCH.fullmatch(text.strip())
     if match is None:
         return None
     return int(next(group for group in match.groups() if group is not None))
