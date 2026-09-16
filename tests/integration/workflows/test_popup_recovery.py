@@ -495,6 +495,19 @@ class PopupRecoveryTests(unittest.TestCase):
 
         self.assertEqual(len(self.session.taps), 1)
 
+    def test_build_queue_inspection_is_not_automatically_dismissed(self) -> None:
+        queue = make_observation(
+            ScreenType.PNC_BUILD_QUEUE,
+            visible_ids=(UiElementId.PNC_POPUP_CLOSE_BUTTON,),
+        )
+        result = self.executor.recover_interruption_if_required(
+            queue,
+            label_prefix="owned-build-queue",
+            observe=lambda *_args, **_kwargs: self.fail("queue inspection must stay with its workflow"),
+        )
+        self.assertIsNone(result)
+        self.assertEqual([], self.session.taps)
+
     def test_missing_fingerprint_fails_before_dispatch(self) -> None:
         popup = replace(
             make_observation(

@@ -37,6 +37,11 @@ from pnc_automation.app.pnc.domain.building_catalog import (
     home_city_object_supports_action,
     is_repeatable_home_city_object,
     is_upgradeable_primary_screen,
+    upgrade_entry_selector_for_screen,
+)
+from pnc_automation.app.pnc.domain.building_details import (
+    BuildingDetailPhase,
+    parse_building_level_pair,
 )
 from pnc_automation.app.pnc.domain.observation import (
     DetectedSpatialObject,
@@ -280,10 +285,11 @@ class BuildingUpgradeTask(BaseAutomationTask):
                         observe_after=True,
                     )
                 ]
-            if observation.has(UiElementId.PNC_BUILDING_UPGRADE_BUTTON):
+            upgrade_selector = _surface_upgrade_selector(observation)
+            if upgrade_selector is not None:
                 return [
                     TapAction(
-                        selector_id=UiElementId.PNC_BUILDING_UPGRADE_BUTTON,
+                        selector_id=upgrade_selector,
                         reason="start_building_upgrade",
                     ),
                     WaitAction(
@@ -505,7 +511,7 @@ class BuildingUpgradeTask(BaseAutomationTask):
                         if queue_error is not None:
                             return queue_error
                     return TaskResult.replan(_unmet_requirement_replan_message(after))
-                if after.has(UiElementId.PNC_BUILDING_UPGRADE_BUTTON):
+                if _surface_upgrade_selector(after) is not None:
                     _clear_focus_pending(context.runtime_state)
                     _clear_upgrade_confirmation_pending(context.runtime_state)
                     return TaskResult.replan("Opened building details and confirmed the upgrade button is available.")
@@ -557,7 +563,7 @@ class BuildingUpgradeTask(BaseAutomationTask):
             if _is_upgrade_context_screen(after.screen_type):
                 return TaskResult.replan("Building upgrade is still leaving the building screen for home-city verification.")
             return TaskResult.failure("Building upgrade could not return home for verification.", retryable=True)
-        if _is_upgrade_context_screen(before.screen_type) and before.has(UiElementId.PNC_BUILDING_UPGRADE_BUTTON):
+        if _is_upgrade_context_screen(before.screen_type) and _surface_upgrade_selector(before) is not None:
             if after.screen_type == ScreenType.PNC_BUILDING_UPGRADE_WARNING:
                 return TaskResult.replan("Building upgrade opened a task-owned warning that still needs confirmation.")
             if _is_upgrade_context_screen(after.screen_type) and _building_requirement_is_visible(after):
@@ -711,13 +717,16 @@ def _record_pending_starting_level_from_screen(
 
 
 def _building_level_from_screen(observation: Observation) -> int | None:
-    """Returns the numerator from an exact building-screen level label such as `8/45`."""
+    """Returns the observed current building level from the typed detail fact."""
 
+    detail = observation.building_detail
+    if detail is not None and detail.current_level is not None:
+        return detail.current_level
     level_label = observation.get(UiElementId.PNC_BUILDING_LEVEL_LABEL)
     if level_label is None or level_label.extracted_text is None:
         return None
-    match = re.fullmatch(r"\s*(?P<level>\d+)\s*/\s*\d+\s*", level_label.extracted_text)
-    return None if match is None else int(match.group("level"))
+    pair = parse_building_level_pair(level_label.extracted_text)
+    return None if pair is None else pair[0]
 
 
 def _clear_pending_target(runtime_state: dict[str, Any]) -> None:
@@ -989,6 +998,40 @@ def _building_priority_is_repeatable(priority: BuildingPriority) -> bool:
     """Returns whether the requested building priority can have multiple distinct home-city instances."""
 
     return is_repeatable_home_city_object(HomeCityObjectId(priority.value))
+
+
+def _surface_upgrade_selector(observation: Observation) -> UiElementId | None:
+    """Return the phase-owned upgrade control published for this frame.
+
+    On a proved UPGRADE panel the only upgrade control is the canonical
+    mutation selector. On a proved PRIMARY panel the entry control is the
+    generic details Upgrade or the screen's named Upgrade. An unphased frame
+    keeps the legacy candidates so named primaries remain inspectable.
+    """
+
+    detail = observation.building_detail
+    phase = None if detail is None else detail.phase
+    if phase is BuildingDetailPhase.UPGRADE:
+        return (
+            UiElementId.PNC_BUILDING_UPGRADE_BUTTON
+            if observation.has(UiElementId.PNC_BUILDING_UPGRADE_BUTTON)
+            else None
+        )
+    if phase is BuildingDetailPhase.PRIMARY:
+        if observation.has(UiElementId.PNC_BUILDING_DETAILS_UPGRADE_BUTTON):
+            return UiElementId.PNC_BUILDING_DETAILS_UPGRADE_BUTTON
+        named = upgrade_entry_selector_for_screen(observation.screen_type)
+        if named is not None and observation.has(named):
+            return named
+        return None
+    if observation.has(UiElementId.PNC_BUILDING_UPGRADE_BUTTON):
+        return UiElementId.PNC_BUILDING_UPGRADE_BUTTON
+    if observation.has(UiElementId.PNC_BUILDING_DETAILS_UPGRADE_BUTTON):
+        return UiElementId.PNC_BUILDING_DETAILS_UPGRADE_BUTTON
+    named = upgrade_entry_selector_for_screen(observation.screen_type)
+    if named is not None and observation.has(named):
+        return named
+    return None
 
 
 def _is_upgrade_context_screen(screen_type: ScreenType) -> bool:

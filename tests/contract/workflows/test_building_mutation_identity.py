@@ -30,8 +30,13 @@ from pnc_automation.app.automation.daily_maintenance.mutation_dispatcher import 
     MutationOperation,
     MutationReconciliation,
 )
-from pnc_automation.app.pnc.domain.action_requests import KeyEventAction, TapAction, TapSpatialObjectAction
+from pnc_automation.app.pnc.domain.action_requests import TapAction, TapSpatialObjectAction
 from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
+from pnc_automation.app.pnc.domain.building_details import (
+    BuildingDetail,
+    BuildingDetailPhase,
+    BuildingRequirementRow,
+)
 from pnc_automation.app.pnc.domain.building_operations import (
     BuildingActionIdentity,
     BuildingConstructionTarget,
@@ -66,12 +71,37 @@ from pnc_automation.app.pnc.domain.observation import (
     SpatialViewport,
     SpatialViewportAddressingKind,
     VisibleElement,
+    VisibleElementSourceKind,
 )
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.persistence.daily_run_journal_store import DailyRunJournalStore
 from pnc_automation.core.vision.image.models import Bounds
 from pnc_automation.core.errors import ScriptValidationError, TaskVerificationError
+
+
+def _typed_building_detail(
+    building: HomeCityObjectId,
+    *,
+    phase: BuildingDetailPhase = BuildingDetailPhase.UPGRADE,
+    current_level: int | None = 7,
+    max_level: int | None = 45,
+    requirement: BuildingRequirementRow | None = None,
+) -> BuildingDetail:
+    """Build the canonical typed fact the vision producer publishes for a detail panel."""
+
+    return BuildingDetail(
+        building_id=building,
+        phase=phase,
+        current_level=current_level,
+        max_level=max_level,
+        level_text=(
+            None
+            if current_level is None or max_level is None
+            else f"{current_level}/{max_level}"
+        ),
+        requirement=requirement,
+    )
 
 
 class BuildingMutationIdentityTests(unittest.TestCase):
@@ -353,15 +383,34 @@ class BuildingMutationIdentityTests(unittest.TestCase):
             selector_id=UiElementId.PNC_BUILDING_LEVEL_LABEL,
             bounds=Bounds(10, 10, 30, 20),
             confidence=1.0,
-            extracted_text="Lv. 7",
+            extracted_text="7/45",
         )
         with self.assertRaisesRegex(TaskVerificationError, "building-owned detail"):
             _validate_target_observation(
                 Observation(screen_type=ScreenType.PNC_BUILDING_DETAILS, visible_elements={level.selector_id: level}),
                 target,
             )
+        # A generic level label cannot substitute the typed N/M pair either.
+        with self.assertRaisesRegex(TaskVerificationError, "current/max level pair"):
+            _validate_target_observation(
+                Observation(screen_type=ScreenType.PNC_INSTITUTE, visible_elements={level.selector_id: level}),
+                target,
+            )
+        # A typed detail owned by a different building is rejected.
+        with self.assertRaisesRegex(TaskVerificationError, "building-owned detail"):
+            _validate_target_observation(
+                Observation(
+                    screen_type=ScreenType.PNC_BUILDING_DETAILS,
+                    building_detail=_typed_building_detail(HomeCityObjectId.FARM),
+                ),
+                target,
+            )
         _validate_target_observation(
-            Observation(screen_type=ScreenType.PNC_INSTITUTE, visible_elements={level.selector_id: level}),
+            Observation(
+                screen_type=ScreenType.PNC_INSTITUTE,
+                visible_elements={level.selector_id: level},
+                building_detail=_typed_building_detail(HomeCityObjectId.INSTITUTE),
+            ),
             target,
         )
 
@@ -515,12 +564,17 @@ class BuildingMutationIdentityTests(unittest.TestCase):
             selector_id=UiElementId.PNC_BUILDING_LEVEL_LABEL,
             bounds=Bounds(10, 10, 30, 20),
             confidence=1.0,
-            extracted_text="Lv. 7",
+            extracted_text="7/45",
         )
         upgrade = VisibleElement(
             selector_id=UiElementId.PNC_BUILDING_UPGRADE_BUTTON,
             bounds=Bounds(10, 40, 30, 20),
             confidence=1.0,
+        )
+        upgrade_detail = Observation(
+            screen_type=ScreenType.PNC_INSTITUTE,
+            visible_elements={level.selector_id: level, upgrade.selector_id: upgrade},
+            building_detail=_typed_building_detail(HomeCityObjectId.INSTITUTE),
         )
 
         class Context:
@@ -536,10 +590,20 @@ class BuildingMutationIdentityTests(unittest.TestCase):
 
             def open_building_with_identity(self, building, *, expected_instance_key=None):
                 self.opened_building = (building, expected_instance_key)
-                return Observation(
-                    screen_type=ScreenType.PNC_INSTITUTE,
-                    visible_elements={level.selector_id: level, upgrade.selector_id: upgrade},
-                ), expected_instance_key
+                return (
+                    Observation(
+                        screen_type=ScreenType.PNC_INSTITUTE,
+                        building_detail=_typed_building_detail(
+                            HomeCityObjectId.INSTITUTE,
+                            phase=BuildingDetailPhase.PRIMARY,
+                        ),
+                    ),
+                    expected_instance_key,
+                )
+
+            def open_building_upgrade_detail(self, building):
+                self.opened_detail = building
+                return upgrade_detail
 
             def execute_building(self, action, resumed_checkpoint, _source):
                 self.executed = (action, resumed_checkpoint)
@@ -565,7 +629,7 @@ class BuildingMutationIdentityTests(unittest.TestCase):
         self.assertIs(context.executed[1], checkpoint)
         self.assertEqual("started", result.disposition.value)
 
-    def test_building_queue_proof_uses_current_home_control_and_back_action(self) -> None:
+    def test_building_queue_proof_uses_current_home_control_and_measured_close(self) -> None:
         """Queue availability is proven by the production Home control, never atlas geometry."""
 
         home_build = VisibleElement(
@@ -580,6 +644,14 @@ class BuildingMutationIdentityTests(unittest.TestCase):
         )
         queue = Observation(
             screen_type=ScreenType.PNC_BUILD_QUEUE,
+            visible_elements={
+                UiElementId.PNC_POPUP_CLOSE_BUTTON: VisibleElement(
+                    selector_id=UiElementId.PNC_POPUP_CLOSE_BUTTON,
+                    bounds=Bounds(777, 407, 81, 86),
+                    confidence=1.0,
+                    source_kind=VisibleElementSourceKind.TEMPLATE,
+                ),
+            },
             list_entries=(
                 DetectedListEntry(
                     kind=ListEntryKind.BUILDING,
@@ -618,9 +690,9 @@ class BuildingMutationIdentityTests(unittest.TestCase):
 
         self.assertIs(queue, opened)
         self.assertIsInstance(actions[0], TapAction)
-        self.assertIsInstance(actions[1], KeyEventAction)
+        self.assertIsInstance(actions[1], TapAction)
         self.assertEqual(UiElementId.PNC_HOME_BUILD_BUTTON, actions[0].selector_id)
-        self.assertEqual("KEYCODE_BACK", actions[1].key_code)
+        self.assertEqual(UiElementId.PNC_POPUP_CLOSE_BUTTON, actions[1].selector_id)
 
     def test_home_receipt_proof_correlates_geometry_without_instance_metadata(self) -> None:
         home_object = DetectedSpatialObject(
@@ -679,11 +751,12 @@ class BuildingMutationIdentityTests(unittest.TestCase):
             selector_id=UiElementId.PNC_BUILDING_LEVEL_LABEL,
             bounds=Bounds(10, 10, 30, 20),
             confidence=1.0,
-            extracted_text="Lv. 7",
+            extracted_text="7/45",
         )
         typed_detail = Observation(
             screen_type=ScreenType.PNC_INSTITUTE,
             visible_elements={level.selector_id: level},
+            building_detail=_typed_building_detail(HomeCityObjectId.INSTITUTE),
         )
         opened: list[HomeCityObjectId] = []
 
@@ -694,6 +767,9 @@ class BuildingMutationIdentityTests(unittest.TestCase):
             def open_building_with_identity(self, building, *, expected_instance_key=None):
                 opened.append(building)
                 return typed_detail, expected_instance_key
+
+            def open_building_upgrade_detail(self, building):
+                return typed_detail
 
             def execute_building(self, _identity, _checkpoint, _source):
                 return checkpoint, None, SimpleNamespace(committed=True)
@@ -729,30 +805,36 @@ class BuildingMutationIdentityTests(unittest.TestCase):
             visible_elements={
                 UiElementId.PNC_BUILDING_LEVEL_LABEL: element(
                     UiElementId.PNC_BUILDING_LEVEL_LABEL,
-                    "Lv. 7",
-                ),
-                UiElementId.PNC_BUILDING_REQUIREMENT_HEADER: element(
-                    UiElementId.PNC_BUILDING_REQUIREMENT_HEADER,
-                    "Requirement",
-                ),
-                UiElementId.PNC_BUILDING_REQUIREMENT_TARGET_LABEL: element(
-                    UiElementId.PNC_BUILDING_REQUIREMENT_TARGET_LABEL,
-                    "Castle : Lv.18",
+                    "7/45",
                 ),
             },
+            building_detail=_typed_building_detail(
+                HomeCityObjectId.WATCHTOWER,
+                requirement=BuildingRequirementRow(
+                    target_text="Castle : Lv.18",
+                    target_bounds=Bounds(10, 40, 100, 20),
+                    target_building=HomeCityObjectId.CASTLE,
+                    target_level=18,
+                    go_bounds=Bounds(120, 40, 40, 20),
+                ),
+            ),
         )
         institute = Observation(
             screen_type=ScreenType.PNC_INSTITUTE,
             visible_elements={
                 UiElementId.PNC_BUILDING_LEVEL_LABEL: element(
                     UiElementId.PNC_BUILDING_LEVEL_LABEL,
-                    "Lv. 6",
+                    "6/45",
                 ),
                 UiElementId.PNC_BUILDING_UPGRADE_BUTTON: element(
                     UiElementId.PNC_BUILDING_UPGRADE_BUTTON,
                     "Upgrade",
                 ),
             },
+            building_detail=_typed_building_detail(
+                HomeCityObjectId.INSTITUTE,
+                current_level=6,
+            ),
         )
         opened: list[HomeCityObjectId] = []
         returned: list[ScreenType] = []
@@ -764,6 +846,9 @@ class BuildingMutationIdentityTests(unittest.TestCase):
                 opened.append(building)
                 observation = watchtower if building is HomeCityObjectId.WATCHTOWER else institute
                 return observation, f"home:{building.value}:10,20,30,40:25,40"
+
+            def open_building_upgrade_detail(self, building):
+                return watchtower if building is HomeCityObjectId.WATCHTOWER else institute
 
             def navigate(self, screen):
                 returned.append(screen)

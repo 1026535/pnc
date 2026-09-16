@@ -34,6 +34,7 @@ if TYPE_CHECKING:
         BagItemFacts,
         BagPreviewRewardFacts,
     )
+    from pnc_automation.app.pnc.domain.building_details import BuildingDetail
     from pnc_automation.app.pnc.domain.research import (
         ResearchDetail,
         ResearchNodeFacts,
@@ -524,6 +525,7 @@ class Observation:
     trial_summary: TrialChallengeSummary | None = None
     trial_stats_detail: TrialApplicableStatsDetail | None = None
     bag_preview: BagChestPreviewFacts | None = None
+    building_detail: BuildingDetail | None = None
     frame_ref: FrameRef | None = None
 
     def __init__(
@@ -557,6 +559,7 @@ class Observation:
         trial_summary: TrialChallengeSummary | None = None,
         trial_stats_detail: TrialApplicableStatsDetail | None = None,
         bag_preview: BagChestPreviewFacts | None = None,
+        building_detail: BuildingDetail | None = None,
         frame_ref: FrameRef | None = None,
         *,
         screen_type: ScreenType | None = None,
@@ -613,6 +616,7 @@ class Observation:
             "trial_summary": trial_summary,
             "trial_stats_detail": trial_stats_detail,
             "bag_preview": bag_preview,
+            "building_detail": building_detail,
             "frame_ref": frame_ref,
         }
         for field_name, value in values.items():

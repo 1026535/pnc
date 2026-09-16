@@ -356,7 +356,7 @@
           "threshold": 0.93
         }
       ],
-      "revision": 3,
+      "revision": 4,
       "source": {
         "fixture": "bag.png",
         "decoded_sha256": "16d09ecbd0383d86d1e29566008499ee81977227cf13c70b9ddb65e4a2a2f1a8",
@@ -364,7 +364,7 @@
       },
       "review": {
         "reference_manifest": "tests/data/screen_recognition/manifest.json",
-        "description": "Reviewed PNC_BAG identity anchor group from the frozen reference fixture. Subtab control crops are badge-trimmed slot material qualified on the saved Resource, Speedup and Treasure tab captures (capture_group 2026-09-13/mega_old_acc_manual_update).",
+        "description": "Reviewed PNC_BAG identity anchor group from the frozen reference fixture. Subtab control crops are badge-trimmed slot material qualified on the saved Resource, Speedup and Treasure tab captures (capture_group 2026-09-13/mega_old_acc_manual_update). Military and Misc unselected text labels qualified from bag_variants/bag_treasure_victory_tab.png with Speedup and current Resource holdouts; selected-state entry is intentionally unnecessary.",
         "build": null,
         "locale": null,
         "qualification": "guarded_reference_only"
@@ -456,6 +456,32 @@
               321,
               123,
               107,
+              39
+            ],
+            "threshold": 0.95
+          }
+        },
+        {
+          "selector": "PNC_BAG_SUBTAB_MILITARY",
+          "anchor": {
+            "image": "screen_anchors/bag_subtab_military_unselected.png",
+            "search_region": [
+              214,
+              123,
+              108,
+              39
+            ],
+            "threshold": 0.95
+          }
+        },
+        {
+          "selector": "PNC_BAG_SUBTAB_MISC",
+          "anchor": {
+            "image": "screen_anchors/bag_subtab_misc_unselected.png",
+            "search_region": [
+              429,
+              123,
+              110,
               39
             ],
             "threshold": 0.95
@@ -1256,6 +1282,19 @@
             ],
             "threshold": 0.97
           }
+        },
+        {
+          "selector": "PNC_INSTITUTE_UPGRADE_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/institute_primary_upgrade_button.png",
+            "search_region": [
+              378,
+              247,
+              145,
+              58
+            ],
+            "threshold": 0.93
+          }
         }
       ],
       "layout_id": "institute"
@@ -1451,6 +1490,19 @@
         }
       ],
       "controls": [
+        {
+          "selector": "PNC_HOME_BUILD_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/core_home_city_identity_1.png",
+            "search_region": [
+              12,
+              210,
+              45,
+              22
+            ],
+            "threshold": 0.93
+          }
+        },
         {
           "selector": "PNC_HOME_WORLD_SWITCH",
           "anchor": {
@@ -3411,6 +3463,19 @@
               38
             ],
             "threshold": 0.86
+          }
+        },
+        {
+          "selector": "PNC_BUILDING_DETAILS_UPGRADE_BUTTON",
+          "anchor": {
+            "image": "screen_anchors/farm_upgrade_button.png",
+            "search_region": [
+              378,
+              247,
+              139,
+              55
+            ],
+            "threshold": 0.95
           }
         },
         {

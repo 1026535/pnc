@@ -54,6 +54,14 @@ from pnc_automation.app.pnc.navigation.world_map_overview_projection import (
     project_world_coordinate_to_overview_point,
 )
 from pnc_automation.core.text.normalization import normalize_ocr_text
+from pnc_automation.app.pnc.domain.building_details import BuildingDetailPhase
+from pnc_automation.app.pnc.vision.building_details import (
+    BuildingContentProducer,
+    find_building_requirement_go_line,
+    find_building_requirement_header_line,
+    find_building_requirement_target_line,
+    find_building_title_line,
+)
 from pnc_automation.app.pnc.vision.observation_builder import ObservationAdditions
 from pnc_automation.app.pnc.vision.observation_provenance import select_content_labels
 from pnc_automation.app.pnc.vision.research import ResearchContentProducer
@@ -275,29 +283,6 @@ _BUILDING_DETAIL_CONFLICT_ANCHOR_IDS = frozenset(
         TextAnchorId.LABEL_TROOP_SKILL,
     }
 )
-_BUILDING_DETAIL_TITLE_TEXTS = frozenset(
-    {
-        "ACADEMY",
-        "BARRACKS",
-        "CASTLE",
-        "EMBASSY",
-        "FARM",
-        "HALLOFWAR",
-        "HOSPITAL",
-        "IRONMINE",
-        "LUMBERMILL",
-        "LUMBERYARD",
-        "QUARRY",
-        "SHOOTINGRANGE",
-        "STABLE",
-        "TRAININGGROUNDS",
-        "WALL",
-        "WAREHOUSE",
-        "WATCHTOWER",
-    }
-)
-_BUILDING_REQUIREMENT_HEADER_TEXTS = frozenset({"REQUIREMENT"})
-_BUILDING_REQUIREMENT_SECTION_TERMINATORS = frozenset({"MATERIALSREQUIRED", "EFFECT"})
 _BUILDING_UPGRADE_CONFIRMATION_REQUIRED_SECTION_TEXTS = frozenset({"TIME"})
 _BUILDING_UPGRADE_CONFIRMATION_SUPPORT_SECTION_TEXTS = frozenset({"REQUIREMENT", "MATERIALSREQUIRED", "EFFECT"})
 _BUILD_QUEUE_HEADER_TEXTS = frozenset({"BUILDQUEUE"})
@@ -554,7 +539,6 @@ _TEXT_SCREEN_DEFINITIONS = (
                 texts=frozenset({"UPGRADE"}),
                 min_x_ratio=0.55,
                 max_y_ratio=0.45,
-                alias_selector_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
             ),
             _TextScreenControlSpec(
                 selector_id=UiElementId.PNC_BUILDING_SPEEDUP_BUTTON,
@@ -593,7 +577,6 @@ _TEXT_SCREEN_DEFINITIONS = (
                 texts=frozenset({"UPGRADE"}),
                 min_x_ratio=0.55,
                 max_y_ratio=0.45,
-                alias_selector_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
             ),
             _TextScreenControlSpec(
                 selector_id=UiElementId.PNC_HALL_OF_WAR_JOIN_RALLY_ATTACK_GO_BUTTON,
@@ -725,7 +708,6 @@ _TEXT_SCREEN_DEFINITIONS = (
                 texts=frozenset({"UPGRADE"}),
                 min_x_ratio=0.55,
                 max_y_ratio=0.45,
-                alias_selector_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
             ),
             _TextScreenControlSpec(
                 selector_id=UiElementId.PNC_GODDESS_STATUE_SPEEDUP_BUTTON,
@@ -760,7 +742,6 @@ _TEXT_SCREEN_DEFINITIONS = (
                 texts=frozenset({"UPGRADE"}),
                 min_x_ratio=0.55,
                 max_y_ratio=0.45,
-                alias_selector_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
             ),
         ),
         minimum_control_matches=3,
@@ -775,7 +756,6 @@ _TEXT_SCREEN_DEFINITIONS = (
                 texts=frozenset({"UPGRADE"}),
                 min_x_ratio=0.55,
                 max_y_ratio=0.45,
-                alias_selector_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
             ),
             _TextScreenControlSpec(
                 selector_id=UiElementId.PNC_WAREHOUSE_GLORY_LEVEL_BUTTON,
@@ -829,7 +809,6 @@ _TEXT_SCREEN_DEFINITIONS = (
                 texts=frozenset({"UPGRADE"}),
                 min_x_ratio=0.55,
                 max_y_ratio=0.45,
-                alias_selector_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
             ),
         ),
         minimum_control_matches=1,
@@ -875,7 +854,6 @@ _TEXT_SCREEN_DEFINITIONS = (
                 texts=frozenset({"UPGRADE"}),
                 min_x_ratio=0.55,
                 max_y_ratio=0.45,
-                alias_selector_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
             ),
         ),
         minimum_control_matches=1,
@@ -905,7 +883,6 @@ _TEXT_SCREEN_DEFINITIONS = (
                 texts=frozenset({"UPGRADE"}),
                 min_x_ratio=0.55,
                 max_y_ratio=0.45,
-                alias_selector_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
             ),
         ),
         minimum_control_matches=1,
@@ -969,7 +946,6 @@ _TEXT_SCREEN_DEFINITIONS = (
                 texts=frozenset({"UPGRADE"}),
                 min_x_ratio=0.55,
                 max_y_ratio=0.45,
-                alias_selector_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
             ),
         ),
         minimum_control_matches=1,
@@ -995,7 +971,6 @@ _TEXT_SCREEN_DEFINITIONS = (
                 texts=frozenset({"UPGRADE"}),
                 min_x_ratio=0.55,
                 max_y_ratio=0.45,
-                alias_selector_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
             ),
         ),
         minimum_control_matches=1,
@@ -1054,7 +1029,6 @@ _TEXT_SCREEN_DEFINITIONS = (
                 texts=frozenset({"UPGRADE"}),
                 min_x_ratio=0.55,
                 max_y_ratio=0.45,
-                alias_selector_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
             ),
         ),
         minimum_control_matches=1,
@@ -1085,7 +1059,6 @@ _TEXT_SCREEN_DEFINITIONS = (
                 texts=frozenset({"UPGRADE"}),
                 min_x_ratio=0.55,
                 max_y_ratio=0.45,
-                alias_selector_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
             ),
         ),
         minimum_control_matches=1,
@@ -1116,7 +1089,6 @@ _TEXT_SCREEN_DEFINITIONS = (
                 texts=frozenset({"UPGRADE"}),
                 min_x_ratio=0.55,
                 max_y_ratio=0.45,
-                alias_selector_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
             ),
         ),
         minimum_control_matches=1,
@@ -1147,7 +1119,6 @@ _TEXT_SCREEN_DEFINITIONS = (
                 texts=frozenset({"UPGRADE"}),
                 min_x_ratio=0.55,
                 max_y_ratio=0.45,
-                alias_selector_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
             ),
         ),
         minimum_control_matches=1,
@@ -1162,7 +1133,6 @@ _TEXT_SCREEN_DEFINITIONS = (
                 texts=frozenset({"UPGRADE"}),
                 min_x_ratio=0.55,
                 max_y_ratio=0.45,
-                alias_selector_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
             ),
         ),
     ),
@@ -1224,7 +1194,6 @@ _TEXT_SCREEN_DEFINITIONS = (
                 texts=frozenset({"UPGRADE"}),
                 min_x_ratio=0.55,
                 max_y_ratio=0.45,
-                alias_selector_ids=(UiElementId.PNC_BUILDING_UPGRADE_BUTTON,),
             ),
         ),
         minimum_control_matches=1,
@@ -1467,12 +1436,12 @@ def _build_upgrade_confirmation_visible_elements(
         definition=definition,
         header=header,
     )
-    _add_text_screen_control_visible_elements(
-        visible_elements=visible_elements,
-        control=upgrade_control,
+    # The confirmation panel's Upgrade control is the mutation surface, so it
+    # publishes the canonical upgrade selector rather than the screen's
+    # primary-panel entry selector.
+    visible_elements[UiElementId.PNC_BUILDING_UPGRADE_BUTTON] = _make_visible_from_line(
+        selector_id=UiElementId.PNC_BUILDING_UPGRADE_BUTTON,
         line=upgrade_line,
-        image=image,
-        selector_registry=selector_registry,
     )
     panel_lines = [header, upgrade_line, *required_section_lines, *support_section_lines]
     confirm_line = _find_building_upgrade_confirm_line(image=image, lines=lines)
@@ -1545,10 +1514,10 @@ def _add_text_screen_control_visible_elements(
 
 
 def _find_shared_upgrade_control(definition: _TextScreenDefinition) -> _TextScreenControlSpec | None:
-    """Returns the shared exact-screen control that aliases the canonical building upgrade button."""
+    """Returns the shared exact-screen `Upgrade` control candidate for the definition."""
 
     for control in definition.controls:
-        if UiElementId.PNC_BUILDING_UPGRADE_BUTTON in control.alias_selector_ids:
+        if control.texts == frozenset({"UPGRADE"}):
             return control
     return None
 
@@ -1628,17 +1597,17 @@ def _add_upgrade_requirement_controls(
 
     if not is_upgradeable_primary_screen(screen_type):
         return
-    header = _find_building_requirement_header_line(image=image, lines=lines)
+    header = find_building_requirement_header_line(image=image, lines=lines)
     if header is None:
         return
-    go_line = _find_building_requirement_go_line(
+    go_line = find_building_requirement_go_line(
         image=image,
         lines=lines,
         header=header,
     )
     if go_line is None:
         return
-    requirement_line = _find_building_requirement_target_line(
+    requirement_line = find_building_requirement_target_line(
         image=image,
         lines=lines,
         header=header,
@@ -1656,48 +1625,6 @@ def _add_upgrade_requirement_controls(
     visible_elements[UiElementId.PNC_BUILDING_REQUIREMENT_GO_BUTTON] = _make_visible_from_line(
         selector_id=UiElementId.PNC_BUILDING_REQUIREMENT_GO_BUTTON,
         line=go_line,
-    )
-
-
-def _find_building_requirement_header_line(*, image: Image.Image, lines: tuple[OcrLine, ...]) -> OcrLine | None:
-    """Returns the shared unmet-requirement section header when one upgrade gate is visible."""
-
-    max_x = int(image.width * 0.35)
-    return _find_line_matching(
-        lines=lines,
-        predicate=lambda line: normalize_ocr_text(line.text) in _BUILDING_REQUIREMENT_HEADER_TEXTS and line.bounds.x <= max_x,
-        min_y=int(image.height * 0.35),
-    )
-
-
-def _find_building_requirement_target_line(
-    *,
-    image: Image.Image,
-    lines: tuple[OcrLine, ...],
-    header: OcrLine,
-    go_line: OcrLine,
-) -> OcrLine | None:
-    """Returns the prerequisite label horizontally aligned with the actionable `Go` row."""
-
-    header_bottom = header.bounds.y + header.bounds.height
-    max_y = min(image.height, header_bottom + int(image.height * 0.14))
-    max_x = int(image.width * 0.65)
-    candidates: list[OcrLine] = []
-    for line in lines:
-        normalized_text = normalize_ocr_text(line.text)
-        if normalized_text in {"", "GO"} or normalized_text in _BUILDING_REQUIREMENT_SECTION_TERMINATORS:
-            continue
-        if line.bounds.y <= header_bottom or line.bounds.y > max_y:
-            continue
-        if line.bounds.x > max_x:
-            continue
-        candidates.append(line)
-    if not candidates:
-        return None
-    go_center_y = go_line.bounds.y + (go_line.bounds.height // 2)
-    return min(
-        candidates,
-        key=lambda line: abs((line.bounds.y + (line.bounds.height // 2)) - go_center_y),
     )
 
 
@@ -1769,28 +1696,6 @@ def _add_shared_building_level_label(
     )
 
 
-def _find_building_requirement_go_line(
-    *,
-    image: Image.Image,
-    lines: tuple[OcrLine, ...],
-    header: OcrLine,
-) -> OcrLine | None:
-    """Returns the right-side `Go` affordance associated with one unmet-requirement row when visible."""
-
-    min_y = header.bounds.y
-    max_y = min(image.height, header.bounds.y + header.bounds.height + int(image.height * 0.14))
-    min_x = int(image.width * 0.6)
-    for line in lines:
-        if normalize_ocr_text(line.text) != "GO":
-            continue
-        if line.bounds.x < min_x:
-            continue
-        if line.bounds.y < min_y or line.bounds.y > max_y:
-            continue
-        return line
-    return None
-
-
 def _find_building_upgrade_confirm_line(*, image: Image.Image, lines: tuple[OcrLine, ...]) -> OcrLine | None:
     """Returns the shared `Upgrade Now` confirmation affordance shown after the first upgrade tap."""
 
@@ -1818,6 +1723,7 @@ class PncObservationEnricher:
     research_producer: ResearchContentProducer = field(default_factory=ResearchContentProducer)
     trial_producer: TrialContentProducer = field(default_factory=TrialContentProducer)
     bag_item_producer: BagItemContentProducer = field(default_factory=BagItemContentProducer)
+    building_producer: BuildingContentProducer = field(default_factory=BuildingContentProducer)
 
     def content_labels(
         self,
@@ -2191,6 +2097,22 @@ class PncObservationEnricher:
             layout_id=layout_id,
         )
         if not content_plans and screen_type != ScreenType.PNC_CHAT:
+            if request.allows_screen(screen_type) and (
+                screen_type == ScreenType.PNC_BUILDING_DETAILS
+                or is_upgradeable_primary_screen(screen_type)
+            ):
+                # Building-owned primaries without owned OCR regions still carry
+                # typed identity; phase and OCR facts stay unproved.
+                return ObservationAdditions(
+                    building_detail=self.building_producer.detail(
+                        image=image,
+                        lines=(),
+                        screen_type=screen_type,
+                        layout_id=layout_id,
+                        measured_elements=visible_elements,
+                        content_elements={},
+                    )
+                )
             return ObservationAdditions()
         content_reads = execute_ocr_region_plans(
             image=image, plans=content_plans, ocr_context=ocr_context,
@@ -2361,7 +2283,23 @@ class PncObservationEnricher:
                             ocr_context=ocr_context,
                             visible_elements=building_elements,
                         )
-                return replace(building_construction, visible_elements=building_elements)
+                building_detail = (
+                    self.building_producer.detail(
+                        image=image,
+                        lines=lines,
+                        screen_type=screen_type,
+                        layout_id=layout_id,
+                        measured_elements=visible_elements,
+                        content_elements=building_elements,
+                    )
+                    if screen_type == ScreenType.PNC_BUILDING_CONSTRUCTION
+                    else None
+                )
+                return replace(
+                    building_construction,
+                    visible_elements=building_elements,
+                    building_detail=building_detail,
+                )
         if request.allows_screen(ScreenType.PNC_BUILD_SPEEDUP) and can_attempt_screen_family_ocr(
             request_screen=ScreenType.PNC_BUILD_SPEEDUP,
             observed_screen=screen_type,
@@ -2389,8 +2327,17 @@ class PncObservationEnricher:
             or is_upgradeable_primary_screen(screen_type)
         ):
             additions = text_screen
+            phase = self.building_producer.phase_for(
+                image=image,
+                screen_type=screen_type,
+                layout_id=layout_id,
+                lines=lines,
+                measured_elements=visible_elements,
+            )
             if additions is None and screen_type == ScreenType.PNC_BUILDING_DETAILS:
-                additions = _build_building_detail_additions(image=image, lines=lines, anchors=anchors)
+                additions = _build_building_detail_additions(
+                    image=image, lines=lines, anchors=anchors, phase=phase,
+                )
             if additions is None:
                 additions = ObservationAdditions()
             building_elements = dict(additions.visible_elements)
@@ -2416,7 +2363,19 @@ class PncObservationEnricher:
                         ocr_context=ocr_context,
                         visible_elements=building_elements,
                     )
-            return replace(additions, visible_elements=building_elements)
+            building_detail = self.building_producer.detail(
+                image=image,
+                lines=lines,
+                screen_type=screen_type,
+                layout_id=layout_id,
+                measured_elements=visible_elements,
+                content_elements=building_elements,
+            )
+            return replace(
+                additions,
+                visible_elements=building_elements,
+                building_detail=building_detail,
+            )
         if text_screen is not None:
             return text_screen
         if request.allows_screen(ScreenType.PNC_BUILDING_DETAILS) and can_attempt_screen_family_ocr(
@@ -6905,6 +6864,7 @@ def _build_building_detail_additions(
     image: Image.Image,
     lines: tuple[OcrLine, ...],
     anchors: tuple[DetectedTextAnchor, ...],
+    phase: BuildingDetailPhase | None,
 ) -> ObservationAdditions | None:
     """Returns derived selectors when OCR matches a building-detail screen."""
 
@@ -6923,7 +6883,7 @@ def _build_building_detail_additions(
     )
     if upgrade_anchor is None:
         return None
-    title_line = _find_building_title_line(image=image, lines=lines)
+    title_line = find_building_title_line(image=image, lines=lines)
     if title_line is None:
         return None
     support_line = _find_building_detail_support_line(
@@ -6933,9 +6893,20 @@ def _build_building_detail_additions(
     )
     if support_line is None:
         return None
-    visible_elements = {
-        UiElementId.PNC_BUILDING_UPGRADE_BUTTON: _make_visible(
-            selector_id=UiElementId.PNC_BUILDING_UPGRADE_BUTTON,
+    # The same Upgrade pixels mean "open the upgrade panel" on a primary frame
+    # and "spend on the upgrade" on an upgrade frame; only the proved phase may
+    # name the control. An unproved phase publishes neither.
+    upgrade_selector = (
+        UiElementId.PNC_BUILDING_UPGRADE_BUTTON
+        if phase is BuildingDetailPhase.UPGRADE
+        else UiElementId.PNC_BUILDING_DETAILS_UPGRADE_BUTTON
+        if phase is BuildingDetailPhase.PRIMARY
+        else None
+    )
+    visible_elements: dict[UiElementId, VisibleElement] = {}
+    if upgrade_selector is not None:
+        visible_elements[upgrade_selector] = _make_visible(
+            selector_id=upgrade_selector,
             x=max(0, upgrade_anchor.bounds.x - max(12, upgrade_anchor.bounds.width // 2)),
             y=max(0, upgrade_anchor.bounds.y - max(10, upgrade_anchor.bounds.height)),
             width=min(
@@ -6946,31 +6917,31 @@ def _build_building_detail_additions(
                 image.height,
                 upgrade_anchor.bounds.height + max(20, upgrade_anchor.bounds.height),
             ),
-        ),
-    }
-    confirm_line = _find_building_upgrade_confirm_line(image=image, lines=lines)
-    required_section_lines = _find_text_lines_in_texts(
-        lines=lines,
-        texts=_BUILDING_UPGRADE_CONFIRMATION_REQUIRED_SECTION_TEXTS,
-        min_y=int(image.height * 0.3),
-    )
-    support_section_lines = _find_text_lines_in_texts(
-        lines=lines,
-        texts=_BUILDING_UPGRADE_CONFIRMATION_SUPPORT_SECTION_TEXTS,
-        min_y=int(image.height * 0.35),
-    )
-    if required_section_lines and support_section_lines:
-        panel_lines = [title_line, upgrade_anchor, *required_section_lines, *support_section_lines]
-        if confirm_line is not None:
-            panel_lines.append(confirm_line)
-            visible_elements[UiElementId.PNC_BUILDING_UPGRADE_CONFIRM_BUTTON] = _make_visible_from_line(
-                selector_id=UiElementId.PNC_BUILDING_UPGRADE_CONFIRM_BUTTON,
-                line=confirm_line,
-            )
-        visible_elements[UiElementId.PNC_BUILDING_UPGRADE_CONFIRMATION_PANEL] = _make_visible_from_lines(
-            selector_id=UiElementId.PNC_BUILDING_UPGRADE_CONFIRMATION_PANEL,
-            lines=tuple(panel_lines),
         )
+    if phase is BuildingDetailPhase.UPGRADE:
+        confirm_line = _find_building_upgrade_confirm_line(image=image, lines=lines)
+        required_section_lines = _find_text_lines_in_texts(
+            lines=lines,
+            texts=_BUILDING_UPGRADE_CONFIRMATION_REQUIRED_SECTION_TEXTS,
+            min_y=int(image.height * 0.3),
+        )
+        support_section_lines = _find_text_lines_in_texts(
+            lines=lines,
+            texts=_BUILDING_UPGRADE_CONFIRMATION_SUPPORT_SECTION_TEXTS,
+            min_y=int(image.height * 0.35),
+        )
+        if required_section_lines and support_section_lines:
+            panel_lines = [title_line, upgrade_anchor, *required_section_lines, *support_section_lines]
+            if confirm_line is not None:
+                panel_lines.append(confirm_line)
+                visible_elements[UiElementId.PNC_BUILDING_UPGRADE_CONFIRM_BUTTON] = _make_visible_from_line(
+                    selector_id=UiElementId.PNC_BUILDING_UPGRADE_CONFIRM_BUTTON,
+                    line=confirm_line,
+                )
+            visible_elements[UiElementId.PNC_BUILDING_UPGRADE_CONFIRMATION_PANEL] = _make_visible_from_lines(
+                selector_id=UiElementId.PNC_BUILDING_UPGRADE_CONFIRMATION_PANEL,
+                lines=tuple(panel_lines),
+            )
     return ObservationAdditions(
         visible_elements=visible_elements,
         screen_evidence=(ScreenEvidence(ScreenType.PNC_BUILDING_DETAILS, "ocr_building_detail"),),
@@ -7806,9 +7777,10 @@ def _build_bag_additions(
         ),
     }
     active_tab = detect_selected_bag_tab(image)
-    if active_tab in {BagTab.SPEEDUP, BagTab.TREASURE}:
-        # The dedicated item producer owns Speedup/Treasure card semantics under
-        # the same shared card geometry; Resource keeps its inventory scanner.
+    if active_tab in {BagTab.SPEEDUP, BagTab.MILITARY, BagTab.TREASURE, BagTab.MISC}:
+        # The dedicated item producer owns Speedup/Military/Treasure/Misc card
+        # semantics under the same shared card geometry; Resource keeps its
+        # inventory scanner.
         item_additions = bag_item_producer.tab_additions(
             image=image,
             tab=active_tab,
@@ -8526,21 +8498,6 @@ def _has_building_detail_conflicts(
         and anchor.bounds.y >= int(image.height * 0.86)
         for anchor in anchors
     )
-
-
-def _find_building_title_line(*, image: Image.Image, lines: tuple[OcrLine, ...]) -> OcrLine | None:
-    """Returns a conservative building-title candidate from the screen header."""
-
-    for line in lines:
-        normalized_text = normalize_ocr_text(line.text)
-        if normalized_text not in _BUILDING_DETAIL_TITLE_TEXTS:
-            continue
-        if line.bounds.y > int(image.height * 0.09):
-            continue
-        if line.bounds.x > int(image.width * 0.35):
-            continue
-        return line
-    return None
 
 
 def _find_building_detail_support_line(

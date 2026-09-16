@@ -1016,10 +1016,8 @@ selectors:
   screens:
   - PNC_BAG
   status: screenshot_seeded
-  detection_kind: unsupported
+  detection_kind: semantic
   materialize_relative_bounds: false
-  notes:
-  - 'Proposed unsupported strategy: No Bag-subtab producer.'
 - id: PNC_BAG_SUBTAB_TREASURE
   screens:
   - PNC_BAG
@@ -1030,10 +1028,8 @@ selectors:
   screens:
   - PNC_BAG
   status: screenshot_seeded
-  detection_kind: unsupported
+  detection_kind: semantic
   materialize_relative_bounds: false
-  notes:
-  - 'Proposed unsupported strategy: No Bag-subtab producer.'
 - id: PNC_BAG_ITEM_ROW
   screens:
   - PNC_BAG
@@ -2308,8 +2304,25 @@ selectors:
 - id: PNC_BUILDING_UPGRADE_BUTTON
   screens:
   - PNC_BUILDING_DETAILS
+  - PNC_INSTITUTE
   status: planned
   detection_kind: semantic
+  materialize_relative_bounds: false
+- id: PNC_BUILDING_DETAILS_UPGRADE_BUTTON
+  screens:
+  - PNC_BUILDING_DETAILS
+  status: planned
+  detection_kind: semantic
+  interaction_kind: navigation
+  click:
+    anchor: center
+    outcomes:
+    - safe_to_click: true
+      monetized: false
+      target_screen: PNC_BUILDING_DETAILS
+  notes:
+  - Primary-panel control that opens the internal upgrade detail; it is never
+    the mutation surface. Published only under a proved PRIMARY phase.
   materialize_relative_bounds: false
 - id: PNC_BUILDING_SPEEDUP_BUTTON
   screens:

@@ -31,6 +31,8 @@ from pnc_automation.app.pnc.domain.bag import BagTab
 from pnc_automation.app.pnc.domain.bag_items import BagChestPreviewFacts
 from pnc_automation.app.pnc.domain.chat import ChatChannel
 from pnc_automation.app.pnc.domain.mail import MailboxType, compose_text_field_selector_ids
+from pnc_automation.app.pnc.domain.building_details import BuildingDetail
+from pnc_automation.app.pnc.vision.building_details import filter_building_detail_controls
 from pnc_automation.app.pnc.domain.research import ResearchDetail, ResearchQueueRow
 from pnc_automation.app.pnc.domain.trial_challenge import (
     TrialApplicableStatsDetail,
@@ -65,6 +67,7 @@ from pnc_automation.app.pnc.vision.observation_diagnostics import (
     ObservationDebugArtifactCollector as ObservationDebugArtifactCollector,
 )
 from pnc_automation.app.pnc.vision.observation_provenance import (
+    bind_building_detail,
     bind_list_entry,
     bind_spatial_surface,
     bind_bag_preview,
@@ -170,6 +173,7 @@ class ObservationAdditions:
     trial_summary: TrialChallengeSummary | None = None
     trial_stats_detail: TrialApplicableStatsDetail | None = None
     bag_preview: BagChestPreviewFacts | None = None
+    building_detail: BuildingDetail | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -783,6 +787,10 @@ class ObservationBuilder:
             decision=decision,
             additions=additions,
         )
+        visible_elements = filter_building_detail_controls(
+            visible_elements,
+            additions.building_detail,
+        )
         content_labels = select_content_labels(
             visible_elements,
             selector_registry=self.selector_registry,
@@ -886,6 +894,16 @@ class ObservationBuilder:
                     source_layout_id=decision.layout_id,
                 )
                 if additions.bag_preview is not None
+                else None
+            ),
+            building_detail=(
+                bind_building_detail(
+                    additions.building_detail,
+                    frame_ref=getattr(screenshot, "frame_ref", None),
+                    source_screen=decision.effective_screen,
+                    source_layout_id=decision.layout_id,
+                )
+                if additions.building_detail is not None
                 else None
             ),
             frame_ref=getattr(screenshot, "frame_ref", None),
@@ -1329,6 +1347,7 @@ def _merge_observation_additions(
         trial_summary=primary.trial_summary or fallback.trial_summary,
         trial_stats_detail=primary.trial_stats_detail or fallback.trial_stats_detail,
         bag_preview=primary.bag_preview or fallback.bag_preview,
+        building_detail=primary.building_detail or fallback.building_detail,
     )
 
 

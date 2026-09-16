@@ -9,6 +9,7 @@ import unittest
 
 from PIL import Image
 
+from pnc_automation.app.pnc.domain.building_catalog import HomeCityObjectId
 from pnc_automation.app.pnc.domain.observation import VisibleElementSourceKind
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
@@ -117,8 +118,12 @@ def _wire(ocr: _CropHonoringOcrService) -> tuple[ObservationBuilder, NavigationP
 class FarmVisualProfileTests(unittest.TestCase):
     """Keep Farm identity independent from OCR and premium action controls."""
 
-    def test_profile_matches_both_detail_levels_and_only_measured_upgrade(self) -> None:
-        """The exact Farm title/description pair identifies both 1/45 and 7/45 details."""
+    def test_profile_matches_both_detail_levels_and_measures_phase_controls(self) -> None:
+        """The exact Farm title/description pair identifies both 1/45 and 7/45 details.
+
+        The shared button pixels measure both phase-owned selectors; the typed
+        phase filter at publish time keeps only the one the frame proves.
+        """
 
         registry = build_default_selector_registry()
         upgrade_selector = registry.require(UiElementId.PNC_BUILDING_UPGRADE_BUTTON)
@@ -139,6 +144,7 @@ class FarmVisualProfileTests(unittest.TestCase):
                     set(controls),
                     {
                         UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+                        UiElementId.PNC_BUILDING_DETAILS_UPGRADE_BUTTON,
                         UiElementId.PNC_BUILDING_UPGRADE_BUTTON,
                     },
                 )
@@ -146,16 +152,24 @@ class FarmVisualProfileTests(unittest.TestCase):
                     controls[UiElementId.PNC_BACK_BUTTON_TOP_LEFT].source_kind,
                     VisibleElementSourceKind.TEMPLATE,
                 )
-                self.assertEqual(
-                    controls[UiElementId.PNC_BUILDING_UPGRADE_BUTTON].source_kind,
-                    VisibleElementSourceKind.TEMPLATE,
-                )
+                for selector_id in (
+                    UiElementId.PNC_BUILDING_DETAILS_UPGRADE_BUTTON,
+                    UiElementId.PNC_BUILDING_UPGRADE_BUTTON,
+                ):
+                    self.assertEqual(
+                        controls[selector_id].source_kind,
+                        VisibleElementSourceKind.TEMPLATE,
+                    )
                 back_center = controls[UiElementId.PNC_BACK_BUTTON_TOP_LEFT].bounds.center()
                 self.assertTrue(35 <= back_center[0] <= 135)
                 self.assertTrue(15 <= back_center[1] <= 85)
                 upgrade_center = controls[UiElementId.PNC_BUILDING_UPGRADE_BUTTON].bounds.center()
                 self.assertTrue(630 <= upgrade_center[0] <= 860)
                 self.assertTrue(410 <= upgrade_center[1] <= 510)
+                self.assertEqual(
+                    controls[UiElementId.PNC_BUILDING_DETAILS_UPGRADE_BUTTON].bounds,
+                    controls[UiElementId.PNC_BUILDING_UPGRADE_BUTTON].bounds,
+                )
 
     def test_real_builder_and_navigation_keep_farm_identity_and_current_level(self) -> None:
         """Both production perception paths retain frame-local OCR level facts."""
@@ -230,6 +244,62 @@ class FarmVisualProfileTests(unittest.TestCase):
                     self.assertEqual(control.source_screen, ScreenType.PNC_BUILDING_DETAILS)
                     self.assertEqual(control.source_layout_id, navigation_observation.decision.layout_id)
 
+    def test_level_only_ocr_proves_no_phase_and_suppresses_phase_controls(self) -> None:
+        """A degraded level-only read cannot turn the spending panel into an entry."""
+
+        capture = _capture("farm_upgrade_available.png")
+        ocr = _CropHonoringOcrService(
+            lines=(
+                OcrLine("Farm", Bounds(172, 14, 139, 61), 1.0),
+                OcrLine("7/45", Bounds(203, 412, 64, 24), 1.0),
+                OcrLine("Upgrade", Bounds(668, 436, 153, 44), 1.0),
+            )
+        )
+        builder, navigation = _wire(ocr)
+        for observation in (
+            builder.build(
+                capture,
+                request=ObservationRequest.source_screen_retry(ScreenType.PNC_BUILDING_DETAILS),
+            ),
+            navigation.build(capture, include_content=True),
+        ):
+            detail = observation.building_detail
+            self.assertIsNotNone(detail)
+            assert detail is not None
+            self.assertEqual(detail.building_id, HomeCityObjectId.FARM)
+            self.assertIsNone(detail.phase)
+            self.assertEqual((detail.current_level, detail.max_level), (7, 45))
+            # Neither generic phase-owned control may publish unproved, so no
+            # navigation or mutation input can be derived from this frame.
+            self.assertFalse(observation.has(UiElementId.PNC_BUILDING_UPGRADE_BUTTON))
+            self.assertFalse(observation.has(UiElementId.PNC_BUILDING_DETAILS_UPGRADE_BUTTON))
+
+    def test_food_output_alone_cannot_prove_primary(self) -> None:
+        """`Food Output` without `Overall Hourly Output` leaves phase unproved."""
+
+        capture = _capture("farm_level_one_detail.png")
+        ocr = _CropHonoringOcrService(
+            lines=(
+                OcrLine("Farm", Bounds(173, 14, 139, 62), 1.0),
+                OcrLine("1/45", Bounds(202, 410, 66, 27), 1.0),
+                OcrLine("Food Output", Bounds(465, 574, 170, 30), 1.0),
+            )
+        )
+        builder, navigation = _wire(ocr)
+        for observation in (
+            builder.build(
+                capture,
+                request=ObservationRequest.source_screen_retry(ScreenType.PNC_BUILDING_DETAILS),
+            ),
+            navigation.build(capture, include_content=True),
+        ):
+            detail = observation.building_detail
+            self.assertIsNotNone(detail)
+            assert detail is not None
+            self.assertIsNone(detail.phase)
+            self.assertFalse(observation.has(UiElementId.PNC_BUILDING_UPGRADE_BUTTON))
+            self.assertFalse(observation.has(UiElementId.PNC_BUILDING_DETAILS_UPGRADE_BUTTON))
+
     def test_navigation_without_content_keeps_visual_controls_only(self) -> None:
         """The default navigation pass does not publish OCR labels."""
 
@@ -239,10 +309,8 @@ class FarmVisualProfileTests(unittest.TestCase):
         observation = navigation.build(capture, include_content=False)
         self.assertEqual(observation.screen_type, ScreenType.PNC_BUILDING_DETAILS)
         self.assertFalse(observation.has(UiElementId.PNC_BUILDING_LEVEL_LABEL))
-        self.assertEqual(
-            observation.require(UiElementId.PNC_BUILDING_UPGRADE_BUTTON).source_kind,
-            VisibleElementSourceKind.TEMPLATE,
-        )
+        self.assertFalse(observation.has(UiElementId.PNC_BUILDING_UPGRADE_BUTTON))
+        self.assertFalse(observation.has(UiElementId.PNC_BUILDING_DETAILS_UPGRADE_BUTTON))
 
     def test_missing_level_keeps_independent_upgrade_control(self) -> None:
         """A missing level remains unknown while the visually measured Upgrade stays available."""
