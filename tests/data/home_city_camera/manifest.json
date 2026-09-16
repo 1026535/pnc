@@ -142,6 +142,22 @@
       ],
       "source_sha256": "6a681e7e20c63bbfc47171d559703ae2ff213ab91a89386f37b7850f1ffb4764",
       "annotation": "2026-09-16 mega_old_acc active castle. A measured vertical pan moved content(0,+359) from T(-1423,-843) to T(-1423,-484). Eastern cliff/parapet crops were occluded by fixed HUD. Aqueduct, previously calibrated ridge-wall and Alliance Hall structure agree on the new camera. Campaign pedestal .92164 agrees at(589,600), verified action(660,637). No building tap was sent before camera qualification."
+    },
+    {
+      "image": "home_city_west_holdout_20260916.png",
+      "role": "independent_west_camera_live_holdout",
+      "size": [
+        900,
+        1600
+      ],
+      "sha256": "3bdf30c18054a92d5589d608d92cbe418b05c4156d99ff19a137d78f7902632e",
+      "source_artifact": "20260916T163414Z_core_20260916T163112Z_b7342adf_0023_core_6_building_camera_source.png",
+      "source_size": [
+        900,
+        1600
+      ],
+      "source_sha256": "a6d2a3e0a846f4a092b30215960772974a9eb4b2694054d8f066f92e2d4ee993",
+      "annotation": "2026-09-16 mega_old_acc active castle. Raw source stopped safely with only Tower body correspondence. New Tower wall and Sanctum column references are crops of the separately localized 06:34 Tower-lower source, not this holdout. All three agree on image translation(458,-1034), atlas(-74,-812). Only chat band y1390:1485 is masked; scene geometry is unchanged."
     }
   ]
 }

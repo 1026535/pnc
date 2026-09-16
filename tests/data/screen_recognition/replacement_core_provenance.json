@@ -1127,5 +1127,19 @@
     "crop": [0, 123, 107, 162],
     "capture_group": "2026-08-30/mega_old_acc",
     "notes": "Measured selected-gold Resource subtab crop; independent 900px Bag evidence is covered by the focused visual publication tests."
+  },
+  {"asset": "screen_anchors/research_tree_economy_title.png", "source": "tests/data/screen_recognition/research_tree_economy_20260916.png", "source_sha256": "b4db5392d7a52369748df98559b151342d6e878a88012f62c83327cfab6e2ac8", "reference_size": [540, 960], "crop": [111, 12, 242, 40], "review": "Lead visually reviewed initial Economy tree; title positive and foreign-menu negatives measured. Reference-only. Shared Master Researcher chrome and Back independently measured on native source."},
+  {"asset": "screen_anchors/research_tree_military_title.png", "source": "tests/data/screen_recognition/research_tree_military_20260916.png", "source_sha256": "b315cf7ce1a794a0ebfd03cb4cf14550823544a2d99dee30e0fc0bc5e5d1e3d9", "reference_size": [540, 960], "crop": [111, 12, 216, 40], "review": "Lead visually reviewed initial Military tree; title positive and foreign-menu negatives measured. Reference-only. Shared Master Researcher chrome and Back independently measured on native source."},
+  {"asset": "screen_anchors/research_tree_fortification_title.png", "source": "tests/data/screen_recognition/research_tree_fortification_20260916.png", "source_sha256": "8339865883d6f11cad3d05859d4883619f7087fa6dd0706ea4d9985497d9ed6f", "reference_size": [540, 960], "crop": [111, 12, 278, 40], "review": "Lead visually reviewed initial Fortification tree; title positive and foreign-menu negatives measured. Reference-only. Shared Master Researcher chrome and Back independently measured on native source."},
+  {
+    "asset": "tests/data/screen_recognition/research_tree_economy_holdout_20260916.png",
+    "source": ".local-data/devin-v05-v07/live_candidate_corrected/artifacts/2026-09-16/mega_old_acc/20260916T171214Z_core_20260916T171016Z_a02dbcf6_0033_core_8_research_category_after_1.png",
+    "source_sha256": "67c55fc963167b81e10051820e69009cedc5bb7bc1636fca307ad1a88eb04b46",
+    "reference_size": [
+      900,
+      1600
+    ],
+    "capture_group": "2026-09-16/mega_old_acc/research_acceptance_a02dbcf6",
+    "review": "Independent live acceptance frame 0033, captured 2026-09-16T17:12:13.738736Z. Lead visually inspected the unmodified native Economy tree. No private HUD or chat appears. Different vertical placement makes the Iron Harvest I row complete; unresolved Iron Output OCR must remain non-actionable."
   }
 ]

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Any
 
@@ -40,6 +40,7 @@ from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
 from pnc_automation.app.pnc.vision.home_city_camera import home_city_camera_target
 from pnc_automation.app.pnc.vision.observation_request import ObservationRequest
+from pnc_automation.core.vision.image.models import Bounds
 
 _WORLD_NAVIGATION_STATE_KEY = "world_map_navigation"
 _HOME_CITY_NAVIGATION_STATE_KEY = "home_city_navigation"
@@ -61,6 +62,11 @@ HOME_CITY_HUD_SAFE_MAX_Y_RATIO = 0.58
 _HOME_CITY_CAMERA_PAN_CONTENT_GAIN = 2.33
 _HOME_CITY_CAMERA_PAN_MIN_DISTANCE_RATIO = 0.10
 _HOME_CITY_CAMERA_PAN_MAX_DISTANCE_RATIO = 0.56
+# Measured courtyard strip between Tower of Trial and Blacksmith, in atlas
+# coordinates. On the lower-Tower view the old x=.69 lane crosses Blacksmith
+# and opens it instead of panning. This ground strip is visible in
+# home_city_tower_lower_20260916.png and the native 20260916T131327Z capture.
+_HOME_CITY_TOWER_BLACKSMITH_GROUND_LANE = Bounds(1042, 1510, 60, 265)
 # Measured southern corridor for the eastern Campaign acquisition: at the
 # northern/default Home camera a dominant horizontal pan leaves every supported
 # landmark behind before the eastern landmarks enter below the viewport, so a
@@ -2419,6 +2425,21 @@ def plan_home_city_camera_pan(
         vertical_swipe_x_ratio=_resolve_home_city_atlas_vertical_swipe_x_ratio(surface, axis_order=axis_order),
         horizontal_swipe_y_ratio=_HOME_CITY_ATLAS_HORIZONTAL_SWIPE_Y_RATIO,
     )
+    if axis == "y":
+        # Use the scene-owned ground lane only when the entire current gesture
+        # fits inside its measured extent. Camera translation moves the lane;
+        # a fixed screen x would become unsafe on another city viewport.
+        lane = _HOME_CITY_TOWER_BLACKSMITH_GROUND_LANE
+        lane_x = (lane.x + lane.width / 2 + proof.translation[0]) / reference_width
+        lane_top = lane.y + proof.translation[1]
+        lane_bottom = lane_top + lane.height
+        assert action.start_y_ratio is not None and action.end_y_ratio is not None
+        if (
+            HOME_CITY_HUD_SAFE_MIN_X_RATIO <= lane_x <= HOME_CITY_HUD_SAFE_MAX_X_RATIO
+            and lane_top <= min(action.start_y_ratio, action.end_y_ratio) * reference_height
+            and max(action.start_y_ratio, action.end_y_ratio) * reference_height <= lane_bottom
+        ):
+            action = replace(action, start_x_ratio=lane_x, end_x_ratio=lane_x)
     return SwipeAction(
         direction=action.direction,
         distance_ratio=action.distance_ratio,

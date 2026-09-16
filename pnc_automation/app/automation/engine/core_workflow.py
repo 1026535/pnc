@@ -288,6 +288,17 @@ class WorkflowContext:
         require_resource_inventory_surface(observation)
         return observation
 
+    def open_research_category(self, category: ResearchCategory) -> Observation:
+        """Open one measured category and invalidate any mutation priming."""
+
+        self._research_node = None
+        try:
+            return self._runtime.navigation.open_research_category(
+                category, observe_content=self._observe_research_content,
+            )
+        finally:
+            self._sync_from_runtime()
+
     def open_research_node(self, title: str, category: ResearchCategory) -> Observation:
         """Reacquire one exact supported node before proving its idle detail."""
 
@@ -297,14 +308,17 @@ class WorkflowContext:
                 title, category, observe_content=self._observe_research_content,
             )
             start = observation.get(UiElementId.PNC_RESEARCH_START_BUTTON)
-            if start is not None and start.source_kind == VisibleElementSourceKind.TEMPLATE:
+            if (
+                category == ResearchCategory.DEVELOPMENT and start is not None
+                and start.source_kind == VisibleElementSourceKind.TEMPLATE
+            ):
                 self._research_node = title
             return observation
         finally:
             self._sync_from_runtime()
 
     def scroll_research_tree(self) -> Observation:
-        """Swipe the proved Development grid once and invalidate node priming."""
+        """Swipe the proved category grid once and invalidate node priming."""
 
         self._research_node = None
         try:
@@ -314,13 +328,13 @@ class WorkflowContext:
         finally:
             self._sync_from_runtime()
 
-    def close_research_detail(self) -> Observation:
+    def close_research_detail(self, category: ResearchCategory | None = None) -> Observation:
         """Back out of the proved detail and invalidate node priming."""
 
         self._research_node = None
         try:
             return self._runtime.navigation.close_research_detail(
-                observe_content=self._observe_research_content,
+                observe_content=self._observe_research_content, category=category,
             )
         finally:
             self._sync_from_runtime()

@@ -5048,6 +5048,171 @@
           }
         }
       ]
+    },
+    {
+      "id": "research_tree_economy",
+      "screen": "PNC_RESEARCH_TREE",
+      "anchors": [
+        {
+          "image": "screen_anchors/research_tree_economy_title.png",
+          "search_region": [
+            104,
+            6,
+            151,
+            44
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/research_tree_development_1.png",
+          "search_region": [
+            463,
+            80,
+            67,
+            40
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/core_institute_pnc_back_button_top_left.png",
+            "search_region": [
+              22,
+              8,
+              58,
+              38
+            ],
+            "threshold": 0.93
+          }
+        }
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "research_tree_economy_20260916.png",
+        "decoded_sha256": "b4db5392d7a52369748df98559b151342d6e878a88012f62c83327cfab6e2ac8",
+        "capture_group": "2026-09-16/mega_old_acc/research_inventory_e369463f"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Lead-qualified Economy title plus shared Master Researcher tree chrome and measured Back. Reference-only initial tree; node semantics pending V05.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "layout_id": "research_tree_economy"
+    },
+    {
+      "id": "research_tree_military",
+      "screen": "PNC_RESEARCH_TREE",
+      "anchors": [
+        {
+          "image": "screen_anchors/research_tree_military_title.png",
+          "search_region": [
+            104,
+            6,
+            125,
+            44
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/research_tree_development_1.png",
+          "search_region": [
+            463,
+            80,
+            67,
+            40
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/core_institute_pnc_back_button_top_left.png",
+            "search_region": [
+              22,
+              8,
+              58,
+              38
+            ],
+            "threshold": 0.93
+          }
+        }
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "research_tree_military_20260916.png",
+        "decoded_sha256": "b315cf7ce1a794a0ebfd03cb4cf14550823544a2d99dee30e0fc0bc5e5d1e3d9",
+        "capture_group": "2026-09-16/mega_old_acc/research_inventory_71d988ee"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Lead-qualified Military title plus shared Master Researcher tree chrome and measured Back. Reference-only initial tree; node semantics pending V06.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "layout_id": "research_tree_military"
+    },
+    {
+      "id": "research_tree_fortification",
+      "screen": "PNC_RESEARCH_TREE",
+      "anchors": [
+        {
+          "image": "screen_anchors/research_tree_fortification_title.png",
+          "search_region": [
+            104,
+            6,
+            190,
+            44
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/research_tree_development_1.png",
+          "search_region": [
+            463,
+            80,
+            67,
+            40
+          ],
+          "threshold": 0.93
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_BACK_BUTTON_TOP_LEFT",
+          "anchor": {
+            "image": "screen_anchors/core_institute_pnc_back_button_top_left.png",
+            "search_region": [
+              22,
+              8,
+              58,
+              38
+            ],
+            "threshold": 0.93
+          }
+        }
+      ],
+      "revision": 1,
+      "source": {
+        "fixture": "research_tree_fortification_20260916.png",
+        "decoded_sha256": "8339865883d6f11cad3d05859d4883619f7087fa6dd0706ea4d9985497d9ed6f",
+        "capture_group": "2026-09-16/mega_old_acc/research_inventory_3e26f8ff"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Lead-qualified Fortification title plus shared Master Researcher tree chrome and measured Back. Reference-only initial tree; node semantics pending V07.",
+        "build": null,
+        "locale": null,
+        "qualification": "guarded_reference_only"
+      },
+      "layout_id": "research_tree_fortification"
     }
   ]
 }

@@ -26,7 +26,9 @@ from pnc_automation.app.pnc.domain.observation import (
     VisibleElementSourceKind,
 )
 from pnc_automation.app.pnc.domain.policy_models import ResearchCategory, ResearchPolicy
-from pnc_automation.app.pnc.domain.research import ResearchDetail, ResearchNodeId
+from pnc_automation.app.pnc.domain.research import (
+    ResearchDetail, ResearchNodeId, research_category_definition,
+)
 from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
@@ -327,14 +329,6 @@ def _is_active_research_detail(observation: Observation) -> bool:
     )
 
 
-_INSTITUTE_CATEGORY_SELECTOR_BY_RESEARCH_CATEGORY = {
-    ResearchCategory.DEVELOPMENT: UiElementId.PNC_INSTITUTE_DEVELOPMENT_BUTTON,
-    ResearchCategory.ECONOMY: UiElementId.PNC_INSTITUTE_ECONOMY_BUTTON,
-    ResearchCategory.MILITARY: UiElementId.PNC_INSTITUTE_MILITARY_BUTTON,
-    ResearchCategory.FORTIFICATION: UiElementId.PNC_INSTITUTE_FORTIFICATION_BUTTON,
-}
-
-
 def _choose_institute_category_selector(
     observation: Observation,
     priority: tuple[ResearchCategory, ...],
@@ -342,7 +336,7 @@ def _choose_institute_category_selector(
     """Returns the highest-priority visible institute category selector."""
 
     for category in priority:
-        selector_id = _INSTITUTE_CATEGORY_SELECTOR_BY_RESEARCH_CATEGORY.get(category)
-        if selector_id is not None and observation.has(selector_id):
+        selector_id = research_category_definition(category).entry_selector
+        if observation.has(selector_id):
             return selector_id
     return None

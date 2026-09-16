@@ -174,6 +174,26 @@ def _wire(
 class HomeCameraPublicationTests(unittest.TestCase):
     """Replayed Home captures qualify the camera contract on both publishers."""
 
+    def test_west_holdout_publishes_camera_and_tower_through_both_paths(self) -> None:
+        """A current west view localizes without inventing the offscreen Institute."""
+        backend = _BoundedRapidOcrService(_require_rapid_ocr_service(self))
+        builder, navigation = _wire(backend)
+        capture = _capture(
+            "home_city_west_holdout_20260916.png", session_id="v02-west-camera", capture_sequence=1,
+        )
+        observations = self._build_both(builder, navigation, backend, capture)
+        for path, observation in enumerate(observations):
+            with self.subTest(publisher=path):
+                self._assert_camera_publication(
+                    observation, capture, (-74, -812), {HomeCityObjectId.TOWER_OF_TRIAL: (757, 680)},
+                )
+                self.assertFalse(any(
+                    home_city_object_id_from_metadata(item.metadata) is HomeCityObjectId.INSTITUTE
+                    and item.source_kind is SpatialObjectSourceKind.TEMPLATE
+                    for item in observation.spatial_surface.objects
+                ))
+        self.assertEqual(observations[0].spatial_surface, observations[1].spatial_surface)
+
     def _build_both(
         self,
         builder: ObservationBuilder,

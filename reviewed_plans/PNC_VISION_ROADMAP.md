@@ -1,6 +1,6 @@
 # PNC vision roadmap — 43 implementation packets
 
-Updated: 2026-09-16. Status: **8/43 accepted for stated coverage: V01, V02, V04, V09, V10, V11, V15 and V16. V12 and V13 remain in correction/integration; the shared V05–V07 research package is next.**
+Updated: 2026-09-16. Status: **12/43 accepted for stated coverage: V01, V02, V04–V07, V09–V12, V15 and V16. V13 passed candidate review/live proof and awaits final integration. V18 is prepared, but worker execution is currently failing before implementation.**
 
 [Scope and architecture](PNC_VISION_MODULAR_PLAN.md) · [Building coverage](vision_modules/BUILDING_MENU_COVERAGE.md) · [Evidence](vision_modules/CONTEXT_AND_EVIDENCE.md) · [Dropped-plan replacements](vision_modules/PLAN_RETIREMENT.md)
 

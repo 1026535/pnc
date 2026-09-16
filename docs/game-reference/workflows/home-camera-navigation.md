@@ -100,3 +100,63 @@ Confidence is high for these current routes and captured states. Other Home
 appearances, Arena's separate residual and Trial-card content/eligibility
 require their owning packets; these runs prove neither a general appearance
 catalog nor Trial eligibility.
+
+## Western camera coverage, September 16
+
+The V05–V07 live route stopped before its first building action at
+`20260916T163414Z_core_20260916T163112Z_b7342adf_0023_core_6_building_camera_source.png`.
+Home identity was clear, but only the Tower body matched (0.98152). The camera
+correctly rejected that single group. The active castle remained K157/NPC2/22;
+the build version was not read. No building tap or pan was sent.
+
+The independently localized `home_city_tower_lower_20260916.png` reference
+supplies two additional static scene patches. Its six existing correspondences
+in five groups agree on image translation (0,-1065). In its normalized native
+frame, Tower retaining wall (110,810,120,140) maps to reference
+(110,1875,120,140), and Sanctum column (50,940,80,105) maps to
+(50,2005,80,105). Both crops exclude text, HUD and promotion controls.
+
+Against the later live west capture, the wall scored 0.98505 and the column
+0.97685; both use a 0.95 floor. Together with the existing Tower body, they agree
+exactly on image translation (458,-1034), atlas translation (-74,-812).
+The wall remains in the Tower structure group; the column belongs to Sanctum.
+The catalog now contains 18 patches in 11 groups and retains its three-match,
+two-group requirement. A courtyard candidate scored only 0.655 and was excluded.
+
+The tracked independent west holdout preserves native 900×1600 geometry and
+masks only the chat band. Its manifest records source and derivative hashes.
+The corrected leased runtime20260916T171016Z_a02dbcf6 localized this western
+view, made two measured Home pans, freshly acquired Institute and completed
+Economy, Military and Fortification detail/return routes. Final Home frame0089
+was captured at17:16:15Z. No resource action occurred; the lease released and
+the existing instance was preserved. The camera correction is accepted.
+
+Distribution verification also found that the built wheel omitted the camera
+PNG directory. The package-data glob now includes it; a rebuilt wheel contains
+all19 camera images.
+
+## Lower-Tower ground lane, 2026-09-16
+
+**Live observed:** on camera translation (-532,-840), the old Institute pan
+from native (621,710) to (621,889) intersected Blacksmith and opened its menu.
+The navigation guard stopped immediately. Source: research inventory runtime
+20260916T131246Z_8676bbd3, frames0022/0023, under ignored
+`.local-data/research-inventory/economy/artifacts/` in the V05–V07 checkout.
+This disproves the fixed x=.69 lane for this otherwise qualified Home view.
+
+The measured courtyard between Tower and Blacksmith defines the atlas strip
+Bounds(1042,1510,60,265). Use its translated center only when the whole vertical
+gesture fits inside the visible strip and its x lies within the HUD-safe band.
+The saved `home_city_tower_lower_20260916.png` also shows this ground. Other
+views retain their existing lane; this is not a generalized obstacle detector.
+
+**Live observed:** corrected runtime20260916T132437Z_e369463f first returned
+from Blacksmith using its current template Back control, then performed the
+same Institute acquisition with ground-lane pan (540,710) to (540,889).
+Post-pan frames0027/0028 remained Home; fresh body acquisition reached Institute
+frame0032. Its measured Economy category opened the actual Economy tree0033,
+where capture stopped because category identity is not yet qualified. No
+research, upgrade or item action occurred; the scoped lease released. Build
+unknown; confidence high for the measured strip and this transition. Full
+integration validation passed in the V13 full run (2449 passed,7 skipped) and
+the final Research live route45be2a99 reached Wood Output I and returned Home.

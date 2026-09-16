@@ -34,6 +34,7 @@ from pnc_automation.app.pnc.domain.observation import (
 )
 from pnc_automation.app.pnc.domain.policy_models import ResearchCategory, ResourceType
 from pnc_automation.app.pnc.domain.research import (
+    RESEARCH_CATEGORY_DEFINITIONS,
     ResearchDetail,
     ResearchNodeFacts,
     ResearchNodeId,
@@ -41,6 +42,7 @@ from pnc_automation.app.pnc.domain.research import (
     ResearchQueueState,
     ResearchTextRecord,
     research_entry_category_metadata,
+    research_category_for_layout,
     research_node_for_label,
     research_node_for_title,
     research_node_title,
@@ -58,7 +60,6 @@ from pnc_automation.core.vision.ocr.ocr_service import (
 from pnc_automation.core.vision.template.template_matcher import OpenCvTemplateMatcher, PreparedFrame
 
 
-_RESEARCH_TREE_LAYOUT_ID = "research_tree_development"
 _RESEARCH_DETAIL_LAYOUT_ID = "research_tree_node_detail"
 _RESEARCH_MAX_DETAIL_LAYOUT_ID = "research_tree_node_detail_max"
 
@@ -93,10 +94,8 @@ _ICON_FRAME_BORDER_RATIO = 0.07
 _ICON_FRAME_MIN_BLUE_FRACTION = 0.20
 
 _RESEARCH_CATEGORY_BY_HEADER = {
-    "DEVELOPMENT": ResearchCategory.DEVELOPMENT,
-    "ECONOMY": ResearchCategory.ECONOMY,
-    "MILITARY": ResearchCategory.MILITARY,
-    "FORTIFICATION": ResearchCategory.FORTIFICATION,
+    normalize_ocr_text(item.title): item.category
+    for item in RESEARCH_CATEGORY_DEFINITIONS
 }
 # The "Master Researcher" badge is achievement chrome next to the header, not
 # a node tile; never publish it as a row even if a stray component matches.
@@ -162,7 +161,7 @@ class ResearchContentProducer:
         """Parse the accepted research-tree layout into typed screen facts.
 
         ``layout_id`` is supplied by the independent visual decision: the
-        Development grid publishes row entries, the shared node-detail layout
+        category grids publish row entries, the shared node-detail layout
         publishes detail facts, and anything else stays empty.
         """
 
@@ -171,8 +170,11 @@ class ResearchContentProducer:
                 image=image, lines=lines, ocr_context=ocr_context,
                 max_level_panel=layout_id == _RESEARCH_MAX_DETAIL_LAYOUT_ID,
             )
-        if layout_id == _RESEARCH_TREE_LAYOUT_ID:
-            return self.tree_additions(image=image, lines=lines, ocr_context=ocr_context)
+        category = research_category_for_layout(layout_id)
+        if category is not None:
+            return self.tree_additions(
+                image=image, lines=lines, ocr_context=ocr_context, category=category,
+            )
         return ObservationAdditions()
 
     def tree_additions(
@@ -181,10 +183,15 @@ class ResearchContentProducer:
         image: Image.Image,
         lines: tuple[OcrLine, ...],
         ocr_context: ObservationOcrContext,
+        category: ResearchCategory | None = None,
     ) -> ObservationAdditions:
-        """Publish measured Development-tree rows from label components."""
+        """Publish measured tree rows under the independently proved category."""
 
-        category = _header_category(lines, image=image)
+        header_category = _header_category(lines, image=image)
+        if category is None:
+            category = header_category
+        elif header_category is not None and header_category != category:
+            return ObservationAdditions()
         rgb = np.asarray(image.convert("RGB"), dtype=np.int16)
         prepared = self.matcher.prepare_frame(image, reference_size=_GLYPH_REFERENCE_SIZE)
         candidates = tuple(
@@ -194,6 +201,7 @@ class ResearchContentProducer:
                 image=image,
                 component=component,
                 ocr_context=ocr_context,
+                category=category,
             ))
             is not None
         )
@@ -234,6 +242,7 @@ class ResearchContentProducer:
         image: Image.Image,
         component: Bounds,
         ocr_context: ObservationOcrContext,
+        category: ResearchCategory | None,
     ) -> _NodeCandidate | None:
         """Resolve one measured label component to a node candidate or drop chrome."""
 
@@ -248,8 +257,21 @@ class ResearchContentProducer:
         normalized = normalize_ocr_text(raw_text)
         if any(normalized.startswith(prefix) for prefix in _DECORATION_LABEL_PREFIXES):
             return None
-        node_id = research_node_for_label(raw_text)
+        node_id = research_node_for_label(raw_text, category=category)
         clipped = _component_is_partial(component, image=image)
+        if node_id is None and not clipped:
+            # Native Economy borders caused rotated/fragmented OCR on Wood/Iron
+            # Output. A bounded 2x text crop restores the observed label words.
+            label_result = ocr_context.read_preprocessed_result(
+                image, _inset_bounds(component, padding=6, image=image),
+                preprocessing_id="research_node_label_rgb_2x",
+                prepare=_prepare_research_text_2x,
+                purpose=OcrReadPurpose.CONTENT, detail="research_node_label_inset",
+                required_fact="research_node_label",
+            )
+            label_lines = () if label_result is None else label_result.lines
+            raw_text = _join_label_text(label_lines) or raw_text
+            node_id = research_node_for_label(raw_text, category=category)
         return _NodeCandidate(
             label_bounds=component,
             raw_text=raw_text,
@@ -319,9 +341,10 @@ class ResearchContentProducer:
             node_id=candidate.node_id,
             current_level=None if levels is None else levels[0],
             max_level=None if levels is None else levels[1],
+            maximum_reached=None if levels is None else levels[2],
             locked=locked,
         )
-        if candidate.node_id is None:
+        if candidate.node_id is None or category is None:
             metadata["unresolved_reason"] = "unknown_or_partial_node_label"
             return DetectedListEntry(
                 kind=ListEntryKind.RESEARCH,
@@ -348,8 +371,8 @@ class ResearchContentProducer:
         image: Image.Image,
         icon_bounds: Bounds,
         ocr_context: ObservationOcrContext,
-    ) -> tuple[int, int] | None:
-        """Read the node's own n/m counter; unreadable text stays unknown."""
+    ) -> tuple[int | None, int | None, bool] | None:
+        """Read one coherent n/m or MAX badge without inventing a numeric cap."""
 
         level_region = _clip_bounds(
             Bounds(
@@ -360,6 +383,7 @@ class ResearchContentProducer:
             ),
             Bounds(0, 0, image.width, image.height),
         )
+        readings: set[tuple[int | None, int | None, bool]] = set()
         for line in ocr_context.read_lines(
             image,
             level_region,
@@ -369,8 +393,12 @@ class ResearchContentProducer:
         ):
             match = _LEVEL_PATTERN.match(line.text.strip())
             if match is not None:
-                return int(match.group(1)), int(match.group(2))
-        return None
+                current, maximum = int(match.group(1)), int(match.group(2))
+                if current <= maximum:
+                    readings.add((current, maximum, current == maximum))
+            elif normalize_ocr_text(line.text) == "MAX":
+                readings.add((None, None, True))
+        return next(iter(readings)) if len(readings) == 1 else None
 
     def _detect_node_lock(
         self, *, image: Image.Image, prepared: PreparedFrame | None, icon_bounds: Bounds,
@@ -420,6 +448,30 @@ class ResearchContentProducer:
         elif lines:
             title_text = lines[0].text.strip() or None
         node_id = None if title_text is None else research_node_for_title(title_text)
+        if node_id is None and title_line is not None:
+            # The small chart icon was read as an "il" prefix on real Economy
+            # and Military headers. Re-read only the measured header text band.
+            left = max(title_line.bounds.x, round(image.width * 0.10))
+            right = title_line.bounds.x + title_line.bounds.width + 6
+            title_region = _clip_bounds(
+                Bounds(left, max(0, title_line.bounds.y - 6), max(1, right - left),
+                       max(round(image.height * 0.04), title_line.bounds.height + 12)),
+                Bounds(0, 0, image.width, image.height),
+            )
+            title_result = ocr_context.read_preprocessed_result(
+                image, title_region, preprocessing_id="research_title_rgb_2x",
+                prepare=_prepare_research_text_2x, purpose=OcrReadPurpose.CONTENT,
+                detail="research_detail_title", required_fact="research_detail_title",
+            )
+            title_parts = () if title_result is None else title_result.lines
+            measured_title = " ".join(part.text for part in sorted(title_parts, key=lambda part: part.bounds.x))
+            match = _DETAIL_TITLE_PATTERN.match(measured_title.strip())
+            if match is not None:
+                measured_node = research_node_for_title(match.group("title"))
+                if measured_node is not None:
+                    title_text = match.group("title").strip()
+                    node_id = measured_node
+                    current_level, max_level = int(match.group("cur")), int(match.group("max"))
         effect_records = tuple(
             ResearchTextRecord(line.text.strip(), line.bounds)
             for line in lines
@@ -635,6 +687,12 @@ class ResearchContentProducer:
         return ObservationAdditions(research_queue_rows=tuple(rows))
 
 
+def _prepare_research_text_2x(image: Image.Image, region: Bounds) -> Image.Image:
+    """Enlarge one bounded text region; the OCR context restores native bounds."""
+    crop = image.crop((region.x, region.y, region.x + region.width, region.y + region.height))
+    return crop.convert("RGB").resize((crop.width * 2, crop.height * 2), Image.Resampling.BICUBIC)
+
+
 def _header_category(lines: tuple[OcrLine, ...], *, image: Image.Image) -> ResearchCategory | None:
     """Resolve the proved tree's category from its bounded header read."""
 
@@ -678,7 +736,9 @@ def _discover_label_components(array: np.ndarray) -> tuple[Bounds, ...]:
     return tuple(
         Bounds(int(stat[0]), int(stat[1]), int(stat[2]), int(stat[3]))
         for stat in stats[1:]
-        if width * 0.14 <= stat[2] <= width * 0.27 and height * 0.008 <= stat[3] <= height * 0.07
+        # Qualified labels span about 20% of the viewport at either size.
+        # Narrower blue components belong to Military/Fortification icon art.
+        if width * 0.19 <= stat[2] <= width * 0.27 and height * 0.008 <= stat[3] <= height * 0.07
     )
 
 

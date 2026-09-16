@@ -263,6 +263,20 @@ def load_home_city_camera_catalog() -> HomeCityCameraCatalog:
                 reference_bounds=Bounds(1197, 1675, 140, 80),
                 min_score=0.90,
             ),
+            HomeCityCameraLandmark(
+                id="west_trial_wall",
+                group_id="tower_structure",
+                file_name="west_trial_wall.png",
+                reference_bounds=Bounds(110, 1875, 120, 140),
+                min_score=0.95,
+            ),
+            HomeCityCameraLandmark(
+                id="west_sanctum_column",
+                group_id="sanctum_structure",
+                file_name="west_sanctum_column.png",
+                reference_bounds=Bounds(50, 2005, 80, 105),
+                min_score=0.95,
+            ),
         ),
         targets=(
             HomeCityCameraTarget(
