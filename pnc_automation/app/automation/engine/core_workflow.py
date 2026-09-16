@@ -242,6 +242,17 @@ class WorkflowContext:
 
         return self._observe_operation_content(label, operation="Hero Hall")
 
+    def acknowledge_hero_recruit_result(self) -> Observation:
+        """Use fresh result content and the shared phase-owned acknowledgment."""
+
+        before = self._observe_hero_hall("hero_result_acknowledgment_source")
+        try:
+            return self._runtime.navigation.acknowledge_hero_recruit_result(
+                before, observe_content=self._observe_hero_hall,
+            )
+        finally:
+            self._sync_from_runtime()
+
     def use_resource_item(
         self, checkpoint: DailyTaskCheckpoint, *, allow_empty_skip: bool = False,
     ) -> tuple[DailyTaskCheckpoint, DailyTargetOutcome]:

@@ -65,6 +65,7 @@ from pnc_automation.app.pnc.vision.building_details import (
 from pnc_automation.app.pnc.vision.observation_builder import ObservationAdditions
 from pnc_automation.app.pnc.vision.observation_provenance import select_content_labels
 from pnc_automation.app.pnc.vision.research import ResearchContentProducer
+from pnc_automation.app.pnc.vision.hero_recruit_result import HeroRecruitResultProducer
 from pnc_automation.app.pnc.vision.trial_challenge import TrialContentProducer
 from pnc_automation.app.pnc.vision.bag_items import BagItemContentProducer
 from pnc_automation.app.pnc.vision.ocr_region_plan import (
@@ -1721,6 +1722,7 @@ class PncObservationEnricher:
     text_anchor_detector: TextAnchorDetector = field(default_factory=TextAnchorDetector)
     home_city_camera: HomeCityCameraLocalizer | None = None
     research_producer: ResearchContentProducer = field(default_factory=ResearchContentProducer)
+    hero_result_producer: HeroRecruitResultProducer = field(default_factory=HeroRecruitResultProducer)
     trial_producer: TrialContentProducer = field(default_factory=TrialContentProducer)
     bag_item_producer: BagItemContentProducer = field(default_factory=BagItemContentProducer)
     building_producer: BuildingContentProducer = field(default_factory=BuildingContentProducer)
@@ -2084,6 +2086,11 @@ class PncObservationEnricher:
         )
         if bag_item_additions is not None:
             return bag_item_additions
+        hero_result = self.hero_result_producer.additions_for_screen(
+            image=image, screen_type=screen_type, ocr_context=ocr_context, layout_id=layout_id,
+        )
+        if hero_result is not None:
+            return hero_result
         trial_additions = self.trial_producer.additions_for_screen(
             image=image,
             screen_type=screen_type,

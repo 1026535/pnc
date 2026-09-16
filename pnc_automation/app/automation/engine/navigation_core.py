@@ -28,6 +28,10 @@ from pnc_automation.app.pnc.domain.building_catalog import (
 from pnc_automation.app.pnc.domain.building_details import BuildingDetailPhase
 from pnc_automation.app.pnc.domain.castle_roster_scan import castle_roster_window_signature
 from pnc_automation.app.pnc.domain.home_city_camera import HomeCityCameraProof
+from pnc_automation.app.pnc.domain.hero_recruit_result import (
+    HERO_RECRUIT_RESULT_LAYOUTS,
+    HeroRecruitResultPhase,
+)
 from pnc_automation.app.pnc.domain.observation import (
     DetectedListEntry,
     DetectedSpatialObject,
@@ -629,6 +633,58 @@ class NavigationCore:
             source, frozenset({ScreenType.PNC_BAG_CHEST_PREVIEW}), label, observe_content,
             completion_predicate=lambda frame: _bag_chest_preview_matches(
                 frame, identity=identity, layout_id=bag_chest_preview_layout(identity),
+            ),
+        )
+
+    def acknowledge_hero_recruit_result(
+        self, before: Observation, *, observe_content: Callable[[str], Observation],
+    ) -> Observation:
+        """Acknowledge one retained result through its phase-owned safe control.
+
+        The caller supplies its fresh content observation so it can retain the
+        result before input. This route never exposes the paid Recruit control.
+        """
+
+        result = before.hero_recruit_result
+        if (
+            before.screen_type != ScreenType.PNC_HERO_RECRUIT_RESULT
+            or before.blocking_popup or before.decision.guard != GuardVerdict.CLEAR
+            or result is None or before.frame_ref is None
+            or result.frame_ref != before.frame_ref
+            or result.source_screen != before.screen_type
+            or result.source_layout_id != before.decision.layout_id
+            or HERO_RECRUIT_RESULT_LAYOUTS.get(before.decision.layout_id) != result.phase
+        ):
+            raise RuntimeError("Hero result acknowledgment requires current, qualified phase facts.")
+        presentation = result.phase == HeroRecruitResultPhase.HERO_PRESENTATION
+        selector = (UiElementId.PNC_HERO_RESULT_CONFIRM if presentation
+                    else UiElementId.PNC_HERO_RESULT_CLOSE)
+        element = before.visible_elements.get(selector)
+        if (
+            element is None or element.source_kind != VisibleElementSourceKind.TEMPLATE
+            or element.frame_ref != before.frame_ref
+            or element.source_layout_id != before.decision.layout_id
+            or element.source_screen != before.screen_type
+            or element.action_point is None or not element.bounds.contains_point(element.action_point)
+        ):
+            raise RuntimeError("Hero result acknowledgment lacks its fresh phase-owned control; no tap sent.")
+        self._sequence += 1
+        label = f"core_{self._sequence}_hero_result_acknowledge"
+        destination = (ScreenType.PNC_HERO_RECRUIT_RESULT if presentation else ScreenType.PNC_HERO_HALL)
+        self.record({"event": "pending_hero_result_acknowledgment", "phase": result.phase.value,
+                     "selector": selector.value, "artifact": str(before.artifact_path)})
+        return self._execute_content_and_confirm(
+            TapAction(selector_id=selector, reason="acknowledge_hero_recruit_result"),
+            before, frozenset({destination}), label, observe_content,
+            completion_predicate=lambda frame: (
+                frame.decision.guard == GuardVerdict.CLEAR
+                and (not presentation or (
+                    frame.hero_recruit_result is not None
+                    and frame.hero_recruit_result.phase == HeroRecruitResultPhase.FRAGMENT_RESULT
+                    and frame.hero_recruit_result.frame_ref == frame.frame_ref
+                    and HERO_RECRUIT_RESULT_LAYOUTS.get(frame.decision.layout_id)
+                    == HeroRecruitResultPhase.FRAGMENT_RESULT
+                ))
             ),
         )
 

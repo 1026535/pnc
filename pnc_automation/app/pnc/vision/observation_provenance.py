@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from dataclasses import replace
 from typing import TypeVar
 
+from pnc_automation.app.pnc.domain.hero_recruit_result import HeroRecruitResult
 from pnc_automation.app.pnc.domain.bag_items import BagChestPreviewFacts
 from pnc_automation.app.pnc.domain.home_city_camera import HomeCityCameraProof
 from pnc_automation.app.pnc.domain.observation import (
@@ -290,6 +291,24 @@ def bind_trial_stats_detail(
     )
 
 
+def bind_hero_recruit_result(
+    preview: HeroRecruitResult,
+    *,
+    frame_ref: FrameRef | None,
+    source_screen: ScreenType,
+    source_layout_id: str | None,
+) -> HeroRecruitResult:
+    """Adds missing chest-preview provenance while rejecting contradictory proof."""
+
+    return _bind_typed_fact(
+        preview,
+        frame_ref=frame_ref,
+        source_screen=source_screen,
+        source_layout_id=source_layout_id,
+        label="Hero recruit result",
+    )
+
+
 def bind_bag_preview(
     preview: BagChestPreviewFacts,
     *,
@@ -362,6 +381,7 @@ _TypedFactT = TypeVar(
     TrialChallengeSummary,
     TrialApplicableStatsDetail,
     BagChestPreviewFacts,
+    HeroRecruitResult,
     BuildingDetail,
     BuildingRequirementRow,
 )

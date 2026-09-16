@@ -1141,5 +1141,85 @@
     ],
     "capture_group": "2026-09-16/mega_old_acc/research_acceptance_a02dbcf6",
     "review": "Independent live acceptance frame 0033, captured 2026-09-16T17:12:13.738736Z. Lead visually inspected the unmodified native Economy tree. No private HUD or chat appears. Different vertical placement makes the Iron Harvest I row complete; unresolved Iron Output OCR must remain non-actionable."
+  },
+  {
+    "asset": "screen_anchors/hero_recruit_presentation_platform.png",
+    "source": "tests/data/screen_recognition/hero_recruit_presentation_20260913.png",
+    "source_sha256": "795b4c876b663e76bcb951481543ca7aed17a5fd5a81690f47f6ceff07e2a5b2",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      18,
+      616,
+      120,
+      690
+    ],
+    "review": "Lead-reviewed native historical result; same-run reference, no independent holdout. Exact crop, no UI reconstruction."
+  },
+  {
+    "asset": "screen_anchors/hero_recruit_presentation_confirm.png",
+    "source": "tests/data/screen_recognition/hero_recruit_presentation_20260913.png",
+    "source_sha256": "795b4c876b663e76bcb951481543ca7aed17a5fd5a81690f47f6ceff07e2a5b2",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      181,
+      847,
+      360,
+      894
+    ],
+    "review": "Lead-reviewed native historical result; same-run reference, no independent holdout. Exact crop, no UI reconstruction."
+  },
+  {
+    "asset": "screen_anchors/hero_recruit_fragments_platform.png",
+    "source": "tests/data/screen_recognition/hero_recruit_fragments_20260913.png",
+    "source_sha256": "bbb51151edb1f8c42a7518e00a634d12cb2aa1fe516e9e4851092a16de0dd627",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      18,
+      771,
+      126,
+      830
+    ],
+    "review": "Lead-reviewed native historical result; same-run reference, no independent holdout. Exact crop, no UI reconstruction."
+  },
+  {
+    "asset": "screen_anchors/hero_recruit_fragments_items_label.png",
+    "source": "tests/data/screen_recognition/hero_recruit_fragments_20260913.png",
+    "source_sha256": "bbb51151edb1f8c42a7518e00a634d12cb2aa1fe516e9e4851092a16de0dd627",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      303,
+      829,
+      389,
+      850
+    ],
+    "review": "Lead-reviewed native historical result; same-run reference, no independent holdout. Exact crop, no UI reconstruction."
+  },
+  {
+    "asset": "screen_anchors/hero_recruit_fragments_close.png",
+    "source": "tests/data/screen_recognition/hero_recruit_fragments_20260913.png",
+    "source_sha256": "bbb51151edb1f8c42a7518e00a634d12cb2aa1fe516e9e4851092a16de0dd627",
+    "reference_size": [
+      540,
+      960
+    ],
+    "crop": [
+      53,
+      866,
+      228,
+      910
+    ],
+    "review": "Lead-reviewed native historical result; same-run reference, no independent holdout. Exact crop, no UI reconstruction."
   }
 ]

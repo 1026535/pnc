@@ -1242,6 +1242,40 @@
       "expected_visual_screens": [
         "PNC_RESEARCH_TREE"
       ]
+    },
+    {
+      "image": "hero_recruit_presentation_20260913.png",
+      "screen": "PNC_HERO_RECRUIT_RESULT",
+      "split": "reference",
+      "group": "2026-09-13/mega_old_acc/manual_update_hero_result",
+      "sha256": "4457eec968ee5bcd6fbc766e01e67c16d3612aca849ebb1a8bc4e9cdeaf73484",
+      "expected_visual_screens": [
+        "PNC_HERO_RECRUIT_RESULT"
+      ],
+      "provenance": {
+        "source": "C:\\Users\\lebel\\pnc\\.local-data\\worktrees\\workflow-recognition-integration\\.local-data\\artifacts\\core_resume\\manual_update_20260913T214455Z\\2026-09-13\\mega_old_acc_manual_update\\20260913T215253Z_core_20260913T214457Z_b39f74f1_0080_hero_result_diagnostic.png",
+        "source_sha256": "795b4c876b663e76bcb951481543ca7aed17a5fd5a81690f47f6ceff07e2a5b2",
+        "derivative": "Unmodified native capture; no account/HUD/chat fields present."
+      },
+      "build": "5.2.77 / AppVersion 5.0.204.235",
+      "locale": "English"
+    },
+    {
+      "image": "hero_recruit_fragments_20260913.png",
+      "screen": "PNC_HERO_RECRUIT_RESULT",
+      "split": "reference",
+      "group": "2026-09-13/mega_old_acc/manual_update_hero_result",
+      "sha256": "814837f528e504c16d0e31450b06e8e975abe1149357a9eac608b574aebcce7c",
+      "expected_visual_screens": [
+        "PNC_HERO_RECRUIT_RESULT"
+      ],
+      "provenance": {
+        "source": "C:\\Users\\lebel\\pnc\\.local-data\\worktrees\\workflow-recognition-integration\\.local-data\\artifacts\\core_resume\\manual_update_20260913T214455Z\\2026-09-13\\mega_old_acc_manual_update\\20260913T215425Z_core_20260913T214457Z_b39f74f1_0081_hero_after_manual_confirm.png",
+        "source_sha256": "bbb51151edb1f8c42a7518e00a634d12cb2aa1fe516e9e4851092a16de0dd627",
+        "derivative": "Unmodified native capture; no account/HUD/chat fields present."
+      },
+      "build": "5.2.77 / AppVersion 5.0.204.235",
+      "locale": "English"
     }
   ]
 }

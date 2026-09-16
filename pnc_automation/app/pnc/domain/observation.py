@@ -29,6 +29,7 @@ from pnc_automation.core.vision.image.models import Bounds
 
 
 if TYPE_CHECKING:
+    from pnc_automation.app.pnc.domain.hero_recruit_result import HeroRecruitResult
     from pnc_automation.app.pnc.domain.bag_items import (
         BagChestPreviewFacts,
         BagItemFacts,
@@ -524,6 +525,7 @@ class Observation:
     research_queue_rows: tuple[ResearchQueueRow, ...] = ()
     trial_summary: TrialChallengeSummary | None = None
     trial_stats_detail: TrialApplicableStatsDetail | None = None
+    hero_recruit_result: HeroRecruitResult | None = None
     bag_preview: BagChestPreviewFacts | None = None
     building_detail: BuildingDetail | None = None
     frame_ref: FrameRef | None = None
@@ -558,6 +560,7 @@ class Observation:
         research_queue_rows: tuple[ResearchQueueRow, ...] = (),
         trial_summary: TrialChallengeSummary | None = None,
         trial_stats_detail: TrialApplicableStatsDetail | None = None,
+        hero_recruit_result: HeroRecruitResult | None = None,
         bag_preview: BagChestPreviewFacts | None = None,
         building_detail: BuildingDetail | None = None,
         frame_ref: FrameRef | None = None,
@@ -615,6 +618,7 @@ class Observation:
             "research_queue_rows": research_queue_rows,
             "trial_summary": trial_summary,
             "trial_stats_detail": trial_stats_detail,
+            "hero_recruit_result": hero_recruit_result,
             "bag_preview": bag_preview,
             "building_detail": building_detail,
             "frame_ref": frame_ref,

@@ -28,6 +28,7 @@ from pnc_automation.core.infra.capture.screenshot_service import CapturedScreens
 from pnc_automation.app.pnc.persistence.castle_roster_store import CastleRosterStore
 from pnc_automation.core.infra.emulator.session import BlueStacksSession
 from pnc_automation.app.pnc.domain.bag import BagTab
+from pnc_automation.app.pnc.domain.hero_recruit_result import HeroRecruitResult
 from pnc_automation.app.pnc.domain.bag_items import BagChestPreviewFacts
 from pnc_automation.app.pnc.domain.chat import ChatChannel
 from pnc_automation.app.pnc.domain.mail import MailboxType, compose_text_field_selector_ids
@@ -70,6 +71,7 @@ from pnc_automation.app.pnc.vision.observation_provenance import (
     bind_building_detail,
     bind_list_entry,
     bind_spatial_surface,
+    bind_hero_recruit_result,
     bind_bag_preview,
     bind_research_detail,
     bind_research_queue_row,
@@ -172,6 +174,7 @@ class ObservationAdditions:
     research_queue_rows: tuple[ResearchQueueRow, ...] = ()
     trial_summary: TrialChallengeSummary | None = None
     trial_stats_detail: TrialApplicableStatsDetail | None = None
+    hero_recruit_result: HeroRecruitResult | None = None
     bag_preview: BagChestPreviewFacts | None = None
     building_detail: BuildingDetail | None = None
 
@@ -886,6 +889,16 @@ class ObservationBuilder:
                 if additions.trial_stats_detail is not None
                 else None
             ),
+            hero_recruit_result=(
+                bind_hero_recruit_result(
+                    additions.hero_recruit_result,
+                    frame_ref=getattr(screenshot, "frame_ref", None),
+                    source_screen=decision.effective_screen,
+                    source_layout_id=decision.layout_id,
+                )
+                if additions.hero_recruit_result is not None
+                else None
+            ),
             bag_preview=(
                 bind_bag_preview(
                     additions.bag_preview,
@@ -1346,6 +1359,7 @@ def _merge_observation_additions(
         research_queue_rows=primary.research_queue_rows or fallback.research_queue_rows,
         trial_summary=primary.trial_summary or fallback.trial_summary,
         trial_stats_detail=primary.trial_stats_detail or fallback.trial_stats_detail,
+        hero_recruit_result=primary.hero_recruit_result or fallback.hero_recruit_result,
         bag_preview=primary.bag_preview or fallback.bag_preview,
         building_detail=primary.building_detail or fallback.building_detail,
     )

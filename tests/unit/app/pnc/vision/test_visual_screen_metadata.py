@@ -35,7 +35,7 @@ class VisualScreenMetadataTests(unittest.TestCase):
             for sample in manifest["samples"]
             if sample["split"] == "reference"
         }
-        self.assertEqual(76, len(catalog["profiles"]))
+        self.assertEqual(78, len(catalog["profiles"]))
         for profile in catalog["profiles"]:
             with self.subTest(profile=profile["id"]):
                 source = profile["source"]
@@ -78,6 +78,9 @@ class VisualScreenMetadataTests(unittest.TestCase):
                         profile["review"]["build"],
                     )
                     self.assertEqual("English", profile["review"]["locale"])
+                elif profile["id"] in {"hero_recruit_presentation", "hero_recruit_fragments"}:
+                    self.assertEqual("5.2.77 / AppVersion 5.0.204.235", profile["review"]["build"])
+                    self.assertEqual("English", profile["review"]["locale"])
                 else:
                     self.assertIsNone(profile["review"]["build"])
                     self.assertIsNone(profile["review"]["locale"])
@@ -112,7 +115,7 @@ class VisualScreenMetadataTests(unittest.TestCase):
                 return object()
 
         recognition = load_visual_screen_recognizer(matcher=_MatchAll()).recognize(Image.new("RGB", (540, 960)))
-        self.assertEqual(51, len({item.screen_type for item in recognition.evidence}))
+        self.assertEqual(52, len({item.screen_type for item in recognition.evidence}))
         # Alternate appearances can share a layout and retain separate source
         # revisions; each evidence item must preserve its matched profile's one.
         revisions = {f"visual_anchor:{profile['id']}": profile["revision"] for profile in catalog["profiles"]}

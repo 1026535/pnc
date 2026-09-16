@@ -76,6 +76,7 @@ class ScreenType(StrEnum):
     PNC_WAREHOUSE = "pnc_warehouse"
     PNC_TRAP_WORKSHOP = "pnc_trap_workshop"
     PNC_TRAP_WORKSHOP_EFFECT_TABLE = "pnc_trap_workshop_effect_table"
+    PNC_HERO_RECRUIT_RESULT = "pnc_hero_recruit_result"
     PNC_HERO_HALL = "pnc_hero_hall"
     PNC_WATCHTOWER = "pnc_watchtower"
     PNC_BLACKSMITH = "pnc_blacksmith"

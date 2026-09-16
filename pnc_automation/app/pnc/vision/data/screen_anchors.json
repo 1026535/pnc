@@ -5239,6 +5239,116 @@
         "qualification": "guarded_reference_only"
       },
       "layout_id": "research_tree_fortification"
+    },
+    {
+      "id": "hero_recruit_presentation",
+      "layout_id": "hero_recruit_presentation",
+      "screen": "PNC_HERO_RECRUIT_RESULT",
+      "revision": 1,
+      "source": {
+        "fixture": "hero_recruit_presentation_20260913.png",
+        "decoded_sha256": "4457eec968ee5bcd6fbc766e01e67c16d3612aca849ebb1a8bc4e9cdeaf73484",
+        "capture_group": "2026-09-13/mega_old_acc/manual_update_hero_result"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Phase-owned platform plus Confirm or Items-left label; common backdrop alone is insufficient.",
+        "build": "5.2.77 / AppVersion 5.0.204.235",
+        "locale": "English",
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/hero_recruit_presentation_platform.png",
+          "search_region": [
+            15,
+            613,
+            108,
+            80
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/hero_recruit_presentation_confirm.png",
+          "search_region": [
+            178,
+            844,
+            185,
+            53
+          ],
+          "threshold": 0.95
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_HERO_RESULT_CONFIRM",
+          "anchor": {
+            "image": "screen_anchors/hero_recruit_presentation_confirm.png",
+            "search_region": [
+              178,
+              844,
+              185,
+              53
+            ],
+            "threshold": 0.95
+          }
+        }
+      ]
+    },
+    {
+      "id": "hero_recruit_fragments",
+      "layout_id": "hero_recruit_fragments",
+      "screen": "PNC_HERO_RECRUIT_RESULT",
+      "revision": 1,
+      "source": {
+        "fixture": "hero_recruit_fragments_20260913.png",
+        "decoded_sha256": "814837f528e504c16d0e31450b06e8e975abe1149357a9eac608b574aebcce7c",
+        "capture_group": "2026-09-13/mega_old_acc/manual_update_hero_result"
+      },
+      "review": {
+        "reference_manifest": "tests/data/screen_recognition/manifest.json",
+        "description": "Phase-owned platform plus Confirm or Items-left label; common backdrop alone is insufficient.",
+        "build": "5.2.77 / AppVersion 5.0.204.235",
+        "locale": "English",
+        "qualification": "guarded_reference_only"
+      },
+      "anchors": [
+        {
+          "image": "screen_anchors/hero_recruit_fragments_platform.png",
+          "search_region": [
+            15,
+            768,
+            114,
+            65
+          ],
+          "threshold": 0.95
+        },
+        {
+          "image": "screen_anchors/hero_recruit_fragments_items_label.png",
+          "search_region": [
+            300,
+            826,
+            92,
+            27
+          ],
+          "threshold": 0.95
+        }
+      ],
+      "controls": [
+        {
+          "selector": "PNC_HERO_RESULT_CLOSE",
+          "anchor": {
+            "image": "screen_anchors/hero_recruit_fragments_close.png",
+            "search_region": [
+              50,
+              863,
+              181,
+              50
+            ],
+            "threshold": 0.95
+          }
+        }
+      ]
     }
   ]
 }

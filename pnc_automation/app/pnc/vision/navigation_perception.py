@@ -25,6 +25,7 @@ from pnc_automation.app.pnc.vision.observation_provenance import (
     bind_building_detail,
     bind_list_entry,
     bind_spatial_surface,
+    bind_hero_recruit_result,
     bind_bag_preview,
     bind_research_detail,
     bind_research_queue_row,
@@ -326,6 +327,16 @@ class NavigationPerception:
                     source_layout_id=decision.layout_id,
                 )
                 if content.trial_stats_detail is not None
+                else None
+            ),
+            hero_recruit_result=(
+                bind_hero_recruit_result(
+                    content.hero_recruit_result,
+                    frame_ref=screenshot.frame_ref,
+                    source_screen=screen,
+                    source_layout_id=decision.layout_id,
+                )
+                if content.hero_recruit_result is not None
                 else None
             ),
             bag_preview=(
