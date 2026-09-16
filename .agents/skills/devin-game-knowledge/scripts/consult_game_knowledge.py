@@ -83,7 +83,7 @@ Consultation contract:
 - Work read-only. Do not edit files, change Git state, commit, push, open a PR, install dependencies, or create project configuration.
 - Inspect repository instructions, source, deterministic tests, saved artifacts, screenshots, logs, and fixtures before making claims.
 - Do not use credentials, secrets, ignored local configuration, account data, emulator, ADB, or live-game actions unless the question itself explicitly authorizes one exact non-spending observation and target. Never spend resources.
-- Distinguish findings as user-confirmed, repository-proven, artifact-observed, live-observed, inferred, or unknown, each with high, medium, or low confidence. Cite exact paths, commands, or artifact identifiers.
+- Distinguish findings as user-confirmed, repository-proven, artifact-observed, live-observed, inferred, or unknown, each with high, medium, or low confidence.
 - If evidence is insufficient or the question crosses an authorization boundary, return NEEDS_LEAD with the smallest missing observation or decision; do not guess.
 
 Return a compact memo with exactly these sections:

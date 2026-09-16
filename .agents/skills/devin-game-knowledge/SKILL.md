@@ -45,12 +45,12 @@ For a longer question, use `--question-file` rather than putting sensitive or co
 Ask Devin to return a compact memo with these sections:
 
 - `Answer`: the best-supported answer in plain language.
-- `Findings`: each claim labeled `user-confirmed`, `repository-proven`, `artifact-observed`, `live-observed`, `inferred`, or `unknown`, with high/medium/low confidence and the exact evidence path or command.
+- `Findings`: each claim labeled `user-confirmed`, `repository-proven`, `artifact-observed`, `live-observed`, `inferred`, or `unknown`, with high/medium/low confidence.
 - `Automation implications`: selectors, navigation/postcondition implications, reconciliation needs, mutation risk, and what must remain lead-owned.
 - `Next smallest observation`: only if the evidence is insufficient; specify the exact read-only observation and why it resolves the uncertainty.
 - `Handback`: `READY_FOR_REVIEW`, `NEEDS_LEAD`, `BLOCKED`, or `FAILED`, followed by limitations and any untouched worktree warning.
 
-Treat the memo as a research input, not acceptance. The lead independently checks the cited artifacts and reconciles conflicts using the repository's evidence hierarchy. Do not convert an inferred game rule into an automation contract until the required observation or deterministic regression evidence exists.
+Treat the memo as a research input, not acceptance. The lead independently verifies findings and reconciles conflicts using the repository's evidence hierarchy. Do not convert an inferred game rule into an automation contract until the required observation or deterministic regression evidence exists.
 
 Devin has its own CLI and skill system. This Codex skill supplies the consultation contract and question; it does not assume Devin has loaded Codex skills or Codex-only tools.
 

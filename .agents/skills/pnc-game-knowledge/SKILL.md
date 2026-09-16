@@ -20,7 +20,7 @@ The primary source is `.local-data/apk-exploration/` under the repository root â
 
 ## Evidence discipline
 
-- Label every finding `user-confirmed`, `repository-proven`, `artifact-observed`, `live-observed`, `inferred`, or `unknown`, with high/medium/low confidence and the exact evidence path (file:line, artifact, or command).
+- Label every finding `user-confirmed`, `repository-proven`, `artifact-observed`, `live-observed`, `inferred`, or `unknown`, with high/medium/low confidence. Exact paths or commands are optional â€” cite them only when they materially speed the lead's verification.
 - Cite the packaged build (`5.0.203`, versionCode 233) when a claim is version-sensitive; downloaded updates may diverge from packaged behavior.
 - A recovered name or symbol is a lead, not proof of runtime behavior â€” say so when a claim rests on names alone.
 
@@ -36,7 +36,7 @@ The primary source is `.local-data/apk-exploration/` under the repository root â
 Return a compact memo with exactly these sections:
 
 - `Answer`: the best-supported answer in plain language.
-- `Findings`: each claim labeled with its evidence tier and confidence, citing the exact path or command.
+- `Findings`: each claim labeled with its evidence tier and confidence.
 - `Automation implications`: selectors, navigation/postcondition implications, reconciliation needs, mutation risk, and what must remain lead-owned.
 - `Next smallest observation`: `None`, or the exact read-only observation that resolves remaining uncertainty and why.
 - `Handback`: `READY_FOR_REVIEW`, `NEEDS_LEAD`, `BLOCKED`, or `FAILED`, followed by limitations and any untouched-worktree warning.
