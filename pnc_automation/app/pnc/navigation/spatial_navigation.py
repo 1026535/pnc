@@ -1286,7 +1286,8 @@ class HomeCityNavigator(SpatialSurfaceNavigator):
         )
         if not route_plan.actions:
             return []
-        _remember_home_city_viewport_center(state=state, center=route_plan.predicted_center)
+        # A predicted landing is useful for routing, never for a later tap.
+        state.pop("known_viewport_center", None)
         return list(route_plan.actions)
 
     def plan_focus_object(
@@ -1383,12 +1384,9 @@ class HomeCityNavigator(SpatialSurfaceNavigator):
             return [map_tap_action]
         map_actions = _plan_home_city_map_open_route_actions(
             navigator=self,
-            observation=observation,
             surface=surface,
             query=query,
             state=state,
-            observe_after=observe_after,
-            final_follow_up_request=final_follow_up_request,
         )
         if map_actions is not None:
             return map_actions
@@ -1624,14 +1622,11 @@ def _plan_home_city_map_tap_action(
 def _plan_home_city_map_open_route_actions(
     *,
     navigator: HomeCityNavigator,
-    observation: Observation,
     surface: SpatialSurfaceObservation,
     query: SpatialObjectQuery,
     state: dict[str, Any],
-    observe_after: bool,
-    final_follow_up_request: ObservationRequest | None,
 ) -> list[ActionRequest] | None:
-    """Returns one precomputed atlas-guided swipe series plus final tap for one offscreen recorded home-city object."""
+    """Route toward an offscreen object, then require fresh localization before tapping."""
 
     target_object_id = _query_home_city_object_id(query)
     if target_object_id is None:
@@ -1650,12 +1645,18 @@ def _plan_home_city_map_open_route_actions(
         target_coordinate=target_coordinate,
     )
     route_attempt_id = f"atlas_route_{target_object_id.value}"
-    if desired_center == estimate.center or not _remember_guided_view_attempt(
+    if desired_center == estimate.center:
+        return None
+    if not _remember_guided_view_attempt(
         state=state,
         attempt_id=route_attempt_id,
         view_signature=current_view_signature,
     ):
-        return None
+        raise SelectorResolutionError(
+            "Home-city atlas route did not reach a new observed view; no repeated route was sent.",
+            target_object_id=target_object_id.value,
+            viewport_center=(estimate.center.x, estimate.center.y),
+        )
     axis_order = _resolve_home_city_atlas_axis_order(
         surface=surface,
         start_center=estimate.center,
@@ -1669,40 +1670,15 @@ def _plan_home_city_map_open_route_actions(
         reason_prefix=f"focus_{target_object_id.value}_from_home_city_atlas",
         axis_order=axis_order,
         vertical_swipe_x_ratio=_resolve_home_city_atlas_vertical_swipe_x_ratio(surface, axis_order=axis_order),
+        observe_after_last_swipe=True,
+        final_follow_up_request=ObservationRequest.source_screen_retry(ScreenType.PNC_HOME_CITY),
     )
     if not route_plan.actions:
         return None
-    _remember_home_city_viewport_center(state=state, center=route_plan.predicted_center)
-    predicted_view_signature = _home_city_estimate_signature(route_plan.predicted_center)
-    if not _remember_guided_view_attempt(
-        state=state,
-        attempt_id=f"atlas_tap_{target_object_id.value}",
-        view_signature=predicted_view_signature,
-    ):
-        return None
-    tap_point = _resolve_home_city_open_tap_point(
-        navigator=navigator,
-        observation=observation,
-        viewport_center=route_plan.predicted_center,
-        target_coordinate=target_coordinate,
-    )
-    if tap_point is None:
-        raise SelectorResolutionError(
-            "Atlas route planning produced a final home-city viewport that still cannot tap the requested building.",
-            target_object_id=target_object_id.value,
-            predicted_center=(route_plan.predicted_center.x, route_plan.predicted_center.y),
-            target_coordinate=(target_coordinate.x, target_coordinate.y),
-        )
-    return [
-        *route_plan.actions,
-        TapPointAction(
-            x=tap_point[0],
-            y=tap_point[1],
-            reason=f"open_{target_object_id.value}_from_home_city_atlas",
-            observe_after=observe_after,
-            follow_up_request=final_follow_up_request,
-        ),
-    ]
+    # Replan from the landed frame. Do not consume its tap attempt while routing,
+    # or allow an anchorless frame to inherit the predicted viewport center.
+    state.pop("known_viewport_center", None)
+    return list(route_plan.actions)
 
 
 def _plan_guided_home_city_open_action(

@@ -160,3 +160,25 @@ research, upgrade or item action occurred; the scoped lease released. Build
 unknown; confidence high for the measured strip and this transition. Full
 integration validation passed in the V13 full run (2449 passed,7 skipped) and
 the final Research live route45be2a99 reached Wood Output I and returned Home.
+
+## Atlas open-route observation boundary — 2026-09-16
+
+Devin's V22 acquisition on 3xx_spies (active K303 level5 castle) exposed a
+precomputed route that appended a coordinate tap derived from the pre-swipe
+frame. The observed executor rejected that tap with FrameProvenanceError;
+run20260916T213633Z_df961556 is the captured failure. Route planning also
+consumed the predicted destination's tap attempt before a fresh frame arrived.
+The later run20260916T215006Z_f0d0ee29 repeatedly returned the same Wall/Alliance
+Hall view. The quest guide is visible; whether it pinned the camera or the
+swipe lane failed is unknown. These reports do not establish Blacksmith absence.
+
+The atlas planner now returns only its route swipes, requests a Home observation
+after the last swipe, and plans any tap on the next freshly localized frame.
+Predicted landings no longer populate remembered tap coordinates, including
+focus-coordinate plans. Route planning leaves the destination tap attempt
+available; an unchanged observed route signature stops with a diagnostic.
+The measured NavigationCore building-camera path and its provenance guards
+remain canonical and unchanged. Focused309 navigation tests passed; affected
+and delegated live qualification are pending. No live action was repeated by
+the lead. Build unknown; code cause and captured rejection are high confidence,
+camera non-convergence cause remains unresolved.

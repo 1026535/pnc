@@ -157,13 +157,11 @@ class HomeCityAtlasEntryTests(FlowAndTaskFixtures, unittest.TestCase):
             reason="open_infantry_barracks",
         )
 
-        self.assertEqual(len(actions), 2)
+        self.assertEqual(len(actions), 1)
         self.assertIsInstance(actions[0], SwipeAction)
         self.assertEqual(actions[0].direction, "right")
         self.assertEqual(actions[0].reason, "focus_infantry_barracks_from_home_city_atlas_x")
-        self.assertIsInstance(actions[1], TapPointAction)
-        self.assertEqual((actions[1].x, actions[1].y), (180, 699))
-        self.assertEqual(actions[1].reason, "open_infantry_barracks_from_home_city_atlas")
+        self.assertTrue(actions[0].observe_after)
 
     def test_build_home_city_object_metadata_exposes_static_atlas_coordinate(self) -> None:
         """Keeps the atlas coordinate on canonical building metadata so runtime inference only consumes static data."""

@@ -25,7 +25,7 @@ class HomeCityAtlasSafeBandTests(FlowAndTaskFixtures, unittest.TestCase):
     """Proves home city atlas safe band."""
 
     def test_open_home_city_object_routes_exactly_to_the_safe_band_for_final_taps(self) -> None:
-        """Uses exact atlas routing for open actions so the final blind tap never stops just outside the safe band."""
+        """Routes to the safe band and requires a fresh observation before the tap."""
 
         observation = make_observation(
             ScreenType.PNC_HOME_CITY,
@@ -50,16 +50,15 @@ class HomeCityAtlasSafeBandTests(FlowAndTaskFixtures, unittest.TestCase):
             runtime_state=runtime_state,
         )
 
-        self.assertEqual(len(actions), 3)
+        self.assertEqual(len(actions), 2)
         self.assertIsInstance(actions[0], SwipeAction)
         self.assertEqual(actions[0].direction, "up")
         self.assertEqual(actions[0].reason, "focus_trap_workshop_from_home_city_atlas_y")
         self.assertIsInstance(actions[1], SwipeAction)
         self.assertEqual(actions[1].direction, "right")
         self.assertEqual(actions[1].reason, "focus_trap_workshop_from_home_city_atlas_x")
-        self.assertIsInstance(actions[2], TapPointAction)
-        self.assertEqual((actions[2].x, actions[2].y), (180, 1085))
-        self.assertEqual(actions[2].reason, "open_trap_workshop_from_home_city_atlas")
+        self.assertTrue(actions[1].observe_after)
+        self.assertIsNotNone(actions[1].follow_up_request)
 
     def test_open_home_city_object_prioritizes_the_x_axis_before_vertical_motion_in_the_sauroi_band(self) -> None:
         """Keeps blind routes through the Sauroi/Campaign skyline deterministic by shifting horizontally before vertical motion."""
@@ -145,8 +144,9 @@ class HomeCityAtlasSafeBandTests(FlowAndTaskFixtures, unittest.TestCase):
             runtime_state={},
         )
 
-        self.assertGreaterEqual(len(actions), 2)
+        self.assertEqual(len(actions), 1)
         self.assertIsInstance(actions[0], SwipeAction)
+        self.assertTrue(actions[0].observe_after)
         self.assertEqual(actions[0].direction, "up")
         self.assertEqual(actions[0].reason, "focus_trap_workshop_from_home_city_atlas_y")
         self.assertEqual(actions[0].start_x_ratio, 0.69)
