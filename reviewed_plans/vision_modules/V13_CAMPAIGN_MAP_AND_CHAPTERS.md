@@ -84,4 +84,16 @@ with both category returns and Home verified. The lead inspected the saved
 detail screens. The first March detail frame was transitional UNKNOWN; the
 existing bounded wait accepted the settled layout without a repeated selection.
 No research or spending occurred. Previous Campaign map/Chapter 5 return evidence
-is unchanged. The combined full check remains the final acceptance gate.
+is unchanged.
+
+## Acceptance — 2026-09-16
+
+Accepted for the stated coverage after review and live validation. Combined
+source commit `684c78923641a2c039d16df87979f3637c158152` passed
+`tools/run_tests.py affected --base origin/main --explain`; shared contracts
+selected the full portable suite: 2,496 passed, 7 skipped, no failures/errors,
+1,507.468 seconds including selection and reporting. Run ID is
+`1598ae0a7e6b49f0aec8c8bebcac9e48`; machine evidence is
+`.test-impact/v13-v18-final-results.json` in the vision-v01-foundation worktree.
+This supersedes the earlier pending integration gate. The reviewed Campaign
+and corrected Research live evidence above applies unchanged to this commit.

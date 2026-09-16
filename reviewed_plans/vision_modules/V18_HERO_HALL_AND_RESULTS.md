@@ -40,7 +40,19 @@ next Recruit cost 1. Cross-phase/menu and missing-control negatives pass.
 Home → Hero Hall → Home passed on mega_old_acc, K157 / NPC 2 / level 22,
 in runtime `20260916T185736Z_14d3e76b`. The lead inspected menu frame 0079 and
 final Home frame 0084. No recruitment or spending occurred; the canonical
-reservation was released and the pre-existing instance preserved. The combined
-affected/full check remains pending. This is
-an implementation record, not acceptance. The saved result boundaries have no
-new live result or independent holdout; no recruitment will create one.
+reservation was released and the pre-existing instance preserved. The saved
+result boundaries have no new live result or independent holdout; no recruitment
+will create one.
+
+## Acceptance — 2026-09-16
+
+Accepted for the stated saved-result and live-menu coverage. Architecture and
+caller review is complete, including canonical publication/provenance, result
+retention before acknowledgment, phase ownership, and terminal receipt handling.
+Integrated source `684c78923641a2c039d16df87979f3637c158152` passed the
+combined affected/full portable gate: 2,496 passed, 7 skipped, no failures/errors.
+Run `1598ae0a7e6b49f0aec8c8bebcac9e48` completed in 1,507.468 seconds
+including selection/reporting; machine evidence is
+`.test-impact/v13-v18-final-results.json` in the vision-v01-foundation worktree.
+The saved-result checks and non-spending live route above satisfy this packet's
+proof contract; a fresh live recruitment result remains explicitly untested.
