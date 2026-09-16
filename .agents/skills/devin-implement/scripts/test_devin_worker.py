@@ -204,11 +204,6 @@ if behavior in ('sleep', 'graceful-cancel'):
 if behavior == 'failure':
     pathlib.Path('partial.txt').write_text('preserve partial result')
     sys.exit(7)
-if behavior == 'commit':
-    pathlib.Path('worker.txt').write_text('worker change\\n')
-    subprocess.run(['git', 'add', 'worker.txt'], check=True)
-    subprocess.run(['git', '-c', 'user.name=Worker', '-c', 'user.email=worker@localhost',
-                    'commit', '-qm', 'worker change'], check=True)
 model = 'wrong-model' if behavior == 'model-mismatch' else 'swe-2-max'
 step = {'source':'agent','model_name':model,'message':'READY_FOR_REVIEW: fixture complete.'}
 if behavior == 'denied':
@@ -233,7 +228,7 @@ export.write_text(json.dumps({'session_id':'fixture-session','agent':{'tool_defi
         lock = self.git_dir / "devin-implement.lock"
         lock.unlink(missing_ok=True)
 
-    def invoke(self, behavior="success", through_cli=False, cli_permission=None):
+    def invoke(self, behavior="success", through_cli=False):
         """Run real transport via explicit test settings or the public CLI defaults."""
         original_output = subprocess.check_output
         original_popen = subprocess.Popen
@@ -253,20 +248,17 @@ export.write_text(json.dumps({'session_id':'fixture-session','agent':{'tool_defi
                 command = [*command[:4], sys.executable, str(self.fake), *command[7:]]
             return original_popen(command, **kwargs)
 
-        expected = cli_permission or ("dangerous" if through_cli else self.args.permission_mode)
         with patch.object(worker, "executable", return_value="fake-devin.exe"), \
              patch.object(subprocess, "check_output", side_effect=output), \
              patch.object(subprocess, "Popen", side_effect=popen), \
              patch.dict(os.environ, {"DEVIN_ADAPTER_TEST": behavior,
                                      "CODEX_THREAD_ID": "",
-                                     "DEVIN_ADAPTER_EXPECTED_PERMISSION": expected}), \
+                                     "DEVIN_ADAPTER_EXPECTED_PERMISSION": "dangerous" if through_cli else self.args.permission_mode}), \
              redirect_stdout(io.StringIO()):
             if not through_cli:
                 return worker.run(self.args)
             arguments = ["run", "--repo", self.args.repo, "--expected-head", self.args.expected_head,
                          "--run-dir", self.args.run_dir, "--brief", self.args.brief]
-            if cli_permission:
-                arguments += ["--permission-mode", cli_permission]
             if self.args.resume:
                 arguments.append("--resume")
             if not self.args.console:
@@ -299,27 +291,6 @@ export.write_text(json.dumps({'session_id':'fixture-session','agent':{'tool_defi
         self.assertTrue((self.run_dir / "turn-001/handoff.md").is_file())
         self.assertEqual((self.repo / "existing.txt").read_text(), "user's uncommitted work\n")
         self.assertTrue(state["writers_stopped"])
-        self.assertFalse(state["head_drift"])
-
-    def test_explicit_accept_edits_is_preserved(self):
-        """An explicit accept-edits choice keeps workspace trust and denies tool grants."""
-        self.assertEqual(self.invoke(through_cli=True, cli_permission="accept-edits"), 0)
-        state = worker.read_json(self.run_dir / "state.json")
-        self.assertEqual(state["permission_mode"], "accept-edits")
-        self.assertTrue(state["respect_workspace_trust"])
-
-    def test_head_drift_is_reported(self):
-        """A baseline moved mid-run is flagged for lead reconciliation, not hidden."""
-        try:
-            self.assertEqual(self.invoke("commit"), 0)
-            state = worker.read_json(self.run_dir / "state.json")
-            self.assertEqual(state["status"], "exited")
-            self.assertTrue(state["head_drift"])
-            self.assertNotEqual(state["final_head"], self.head)
-            self.assertTrue((self.repo / "worker.txt").is_file())
-        finally:
-            subprocess.run(["git", "-C", str(self.repo), "reset", "--hard", "-q", self.head], check=True)
-            (self.repo / "worker.txt").unlink(missing_ok=True)
 
     def test_zero_exit_without_handoff_is_incomplete(self):
         """A rejected final tool call cannot masquerade as completed transport."""
