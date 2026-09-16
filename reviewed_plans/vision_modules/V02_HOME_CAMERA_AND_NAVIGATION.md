@@ -25,41 +25,35 @@ Start groups `unit.app.pnc.vision` and `unit.app.pnc.navigation`, then affected 
 
 ## Execution status
 
-**In progress, 2026-09-16 UTC.** Base: accepted V01 commit
-`f1ecc683e06c0da7b6d46e21d18e40ba3d39bc65`; branch
-`codex/vision-v02-home-camera`. The persistent V01 Devin worker owns the
-concrete measurement and subsequent implementation packages; the lead retains
-uncertain calibration/design, integration review and live acceptance.
+**In progress, 2026-09-16 UTC; not merged.** The implementation checkout is
+`codex/vision-v02-home-camera`, integrated with accepted V01/V09 base
+`32a03492a2b83684582cb1868928d531c2064180`. The shared producer, both publishers,
+current-frame body targets and bounded measured-pan route are implemented.
 
-The first handback measures production template matches across the saved Home
-pair and a separate validation capture, rejects World/HUD matches, and checks
-the existing atlas's origin/scale against fixed building positions. Its ignored
-evidence lives under `.local-data/devin-v02/` in the implementation checkout.
-Production changes wait for the lead's calibration decision. Gesture-based
-camera estimates and unverified atlas projections cannot authorize a tap.
+Lead architectural/caller review corrected the worker's one-pan-only route to
+replan from fresh proof within the canonical scan budget. Live testing exposed
+HUD occlusion and loss of northern camera landmarks; the catalog now includes
+the qualified south-plaza and Tower-body evidence (eight crops, five groups).
+The Trial Challenge identity profile now uses its fixed toolbar instead of a
+mutable Hero card. Body geometry has one canonical reference per asset.
 
-The existing `tests/test_live_home_city_map_smoke.py` uses the legacy flow
-planner and is not the required replacement-core route proof. Final V02 live
-acceptance must use the core runtime on the configured testing instance's
-active castle, under one canonical reservation, without research or spending.
-The user requires this live proof after lead code/architecture review and
-before merge/push. If the required observable boundary is unavailable, record
-the exact blocker and hold V02 integration while independent packets continue.
+**Live passed:** Home -> measured pan -> Institute -> Home, and measured Home
+Tower body -> Trial Challenge -> Home. Tests used the explicitly authorized
+mega_old_acc active castle, configured DAILY_CANARY role, canonical scoped
+lease and keep-warm cleanup. No account/castle switch, research, Trial challenge
+or spending occurred. See the [workflow evidence](../../docs/game-reference/workflows/home-camera-navigation.md).
+The legacy Home-city-map smoke does not prove these new core paths.
 
-**Implementation package ready for lead review, 2026-09-16 UTC.** The measured
-camera path is implemented end to end: typed `HomeCityCameraProof` and
-`HomeCityCameraLocalizer` (package-data landmark catalog: p2/p3/p4/p5/p6/t5 in
-four independent scene groups, Castle/Barracks atlas basis (-532,+222)),
-camera-qualified Institute/Tower body targets with measured action geometry,
-surface merge preserving OCR facts, provenance binding for spatial objects and
-proofs through both publishers, the one-step measured pan planner
-(`plan_home_city_camera_pan`), and the NavigationCore measured route with
-stall/stale/wrong-destination rejection. The Institute Research-Queue focus
-detour is removed from the building-open path. Offline evidence: 27 camera
-unit tests, 7 pan-planner tests, 6 measured-route navigation tests, 5
-dual-publisher integration tests on new tracked fixtures
-(`tests/data/home_city_camera/`, 540x960 downscales of tour 07_pan, 28_tower,
-mega castle with source hashes in `manifest.json`). Pending before V02
-acceptance: lead review, Campaign region calibration (c42-c45 has no reliable
-overlap; one bounded core-runtime intermediate-pan observation may be needed),
-and the live route proof above.
+Focused lead checks passed: 75 navigation tests; 41 camera/pan/both-publisher
+checks before the Tower correction; then 33 camera/profile/publication checks
+covering the final Tower correction. The original worker full run was2231passed
++7skipped before V09 integration and lead corrections. Final combined affected
+integration checks remain due after the remaining Campaign changes.
+
+**Remaining gate:** Campaign Home-portal calibration and target/route proof.
+Worker turn004's bidirectional saved-scene comparison found no reliable bridge.
+The lead is capturing one bounded horizontal Home pan from an already measured
+camera to supply overlap. Its translation must be measured from scene pixels;
+gesture displacement, Campaign/Arena OCR coordinates and the worker's suggested
+intermediate coordinates are not proof. Keep V02 unmerged while independent
+Research and Campaign-map work continues.

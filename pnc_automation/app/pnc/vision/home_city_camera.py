@@ -146,6 +146,8 @@ class _CameraVote:
 def load_home_city_camera_catalog() -> HomeCityCameraCatalog:
     """Loads the reviewed landmark catalog once and validates every packaged crop."""
 
+    institute_body_bounds = Bounds(700, 1240, 80, 75)
+    tower_body_bounds = Bounds(240, 1620, 130, 140)
     catalog = HomeCityCameraCatalog(
         landmarks=(
             HomeCityCameraLandmark(
@@ -187,7 +189,7 @@ def load_home_city_camera_catalog() -> HomeCityCameraCatalog:
                 id="p6_path_right",
                 group_id="institute_structure",
                 file_name="p6_path_right.png",
-                reference_bounds=Bounds(700, 1240, 80, 75),
+                reference_bounds=institute_body_bounds,
                 min_score=0.90,
             ),
             HomeCityCameraLandmark(
@@ -197,13 +199,20 @@ def load_home_city_camera_catalog() -> HomeCityCameraCatalog:
                 reference_bounds=Bounds(121, 990, 140, 110),
                 min_score=0.80,
             ),
+            HomeCityCameraLandmark(
+                id="tower_of_trial_body",
+                group_id="tower_structure",
+                file_name="tower_of_trial_body.png",
+                reference_bounds=tower_body_bounds,
+                min_score=0.90,
+            ),
         ),
         targets=(
             HomeCityCameraTarget(
                 object_id=HomeCityObjectId.INSTITUTE,
                 landmark_id="p6_path_right",
                 file_name="p6_path_right.png",
-                reference_bounds=Bounds(700, 1240, 80, 75),
+                reference_bounds=institute_body_bounds,
                 reference_action_bounds=Bounds(712, 1244, 30, 18),
                 reference_action_point=(724, 1253),
                 min_score=0.90,
@@ -213,7 +222,7 @@ def load_home_city_camera_catalog() -> HomeCityCameraCatalog:
                 object_id=HomeCityObjectId.TOWER_OF_TRIAL,
                 landmark_id="tower_of_trial_body",
                 file_name="tower_of_trial_body.png",
-                reference_bounds=Bounds(240, 1620, 130, 140),
+                reference_bounds=tower_body_bounds,
                 reference_action_bounds=Bounds(272, 1680, 56, 50),
                 reference_action_point=(299, 1714),
                 min_score=0.90,

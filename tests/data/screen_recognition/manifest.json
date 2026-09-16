@@ -1107,6 +1107,19 @@
       "expected_visual_screens": [
         "PNC_CAMPAIGN_MAP"
       ]
+    },
+    {
+      "image": "trial_challenge_completed_20260916.png",
+      "screen": "PNC_TRIAL_CHALLENGE",
+      "split": "validation",
+      "group": "2026-09-16/mega_old_acc/v02_tower_live",
+      "sha256": "5c67967455429f230a18d0d9d5c8da888377e6982c02f560940ec6e3f16fc823",
+      "expected_visual_screens": [
+        "PNC_TRIAL_CHALLENGE"
+      ],
+      "source_artifact": "20260916T063840Z_core_20260916T063720Z_bd76a1da_0031_core_7_building_after_7.png",
+      "source_sha256": "9652e12763a6d601d0fc43d40cedfd8fb2d2102b1bc975594318b56b6d90564a",
+      "annotation": "Real live completion variant: Hero Trial card is darkened and completed, Gear Trial is active. Title and fixed Progress/Total Rank toolbar are unchanged; the mutable Hero card cannot own screen identity."
     }
   ]
 }

@@ -62,6 +62,22 @@
       ],
       "source_sha256": "8cf16f5e8368441907593d9bd8dd6fbe88978555b7f403a5211b7e1cf2815a2e",
       "annotation": "2026-09-16 mega_old_acc active castle. Castle and Infantry Barracks remain at the reference camera. Only garden and barracks matched the original six landmarks; t6 plaza restores three independent regions. Institute body is occluded and must stay non-actionable."
+    },
+    {
+      "image": "home_city_tower_lower_20260916.png",
+      "role": "live_regression_tower_pan",
+      "size": [
+        540,
+        960
+      ],
+      "sha256": "ff9695b946c4d2202a70fec7a29d9d1ff52386347616d5d4852ed1e5f6ad35ef",
+      "source_artifact": "20260916T063410Z_core_20260916T063257Z_98d6b799_0024_core_6_building_pan_1_after_1.png",
+      "source_size": [
+        900,
+        1600
+      ],
+      "source_sha256": "3623775820bdbe9c1ac43417957fec20bcc27d854bdff8d34fd2835d229832cd",
+      "annotation": "2026-09-16 mega_old_acc active castle. Post-pan p3, t6 and the previously qualified Tower body agree exactly on image translation(0,-1065), atlas translation(-532,-843). Camera must remain localized after the other northern landmarks leave view."
     }
   ]
 }

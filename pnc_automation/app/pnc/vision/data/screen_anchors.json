@@ -3080,12 +3080,12 @@
           "threshold": 0.95
         },
         {
-          "image": "screen_anchors/trial_challenge_hero_card.png",
+          "image": "screen_anchors/trial_challenge_toolbar.png",
           "search_region": [
-            10,
-            156,
-            170,
-            125
+            260,
+            75,
+            280,
+            55
           ],
           "threshold": 0.95
         }
@@ -3105,7 +3105,7 @@
           }
         }
       ],
-      "revision": 1,
+      "revision": 2,
       "source": {
         "fixture": "tests/data/screen_recognition/trial_challenge.png",
         "decoded_sha256": "a8eda616ad18961844c1763a01cb506e557ec390ff6dccadaf322042b6a48c24",
@@ -3113,7 +3113,7 @@
       },
       "review": {
         "reference_manifest": "tests/data/screen_recognition/manifest.json",
-        "description": "Observed Tower of Trial destination opened directly as the Trial Challenge category list; only the measured top-left return arrow is owned.",
+        "description": "Observed Tower of Trial destination: title and fixed Progress/Total Rank toolbar identify the category list independently of active or completed cards. Only the measured top-left return arrow is owned. Qualified against the 2026-09-16 completed-card live regression.",
         "build": "5.2.80",
         "locale": "English",
         "qualification": "guarded_reference_only"

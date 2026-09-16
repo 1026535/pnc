@@ -1525,6 +1525,7 @@ class NavigationPerceptionTests(unittest.TestCase):
             ("campaign_map_chapter_6.png", ScreenType.PNC_CAMPAIGN_MAP, UiElementId.PNC_CAMPAIGN_HOME_PORTAL),
             ("campaign_map_chapter_6_pulse.png", ScreenType.PNC_CAMPAIGN_MAP, UiElementId.PNC_CAMPAIGN_HOME_PORTAL),
             ("trial_challenge.png", ScreenType.PNC_TRIAL_CHALLENGE, UiElementId.PNC_BACK_BUTTON_TOP_LEFT),
+            ("trial_challenge_completed_20260916.png", ScreenType.PNC_TRIAL_CHALLENGE, UiElementId.PNC_BACK_BUTTON_TOP_LEFT),
             ("bag_arena_chest_preview.png", ScreenType.PNC_BAG_CHEST_PREVIEW, UiElementId.PNC_BAG_CHEST_PREVIEW_CLOSE),
         ):
             with self.subTest(fixture=fixture):

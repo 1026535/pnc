@@ -123,11 +123,11 @@ class HomeCityCameraCatalogTests(unittest.TestCase):
             (HomeCityObjectId.CASTLE, HomeCityObjectId.INFANTRY_BARRACKS),
             catalog.anchor_object_ids,
         )
-        self.assertEqual(7, len(catalog.landmarks))
+        self.assertEqual(8, len(catalog.landmarks))
         self.assertEqual(2, len(catalog.targets))
         groups = {landmark.group_id for landmark in catalog.landmarks}
         self.assertEqual(
-            {"institute_structure", "garden_terrace", "plaza_low", "barracks_roofs"},
+            {"institute_structure", "garden_terrace", "plaza_low", "barracks_roofs", "tower_structure"},
             groups,
         )
         # Institute-correlated crops share one group so they cannot outvote
@@ -176,6 +176,19 @@ class HomeCityCameraLocalizationTests(unittest.TestCase):
             proof.matched_group_ids,
         )
         self.assertFalse(localizer.matched_target_objects(prepared, proof=proof))
+
+    def test_live_tower_pan_localizes_after_northern_landmarks_leave_view(self) -> None:
+        """The qualified Tower body extends camera proof beyond the Institute region."""
+        localizer = _localizer()
+        prepared = localizer.prepare_frame(_fixture(_CAMERA_FIXTURES / "home_city_tower_lower_20260916.png"))
+        proof = localizer.localize(prepared)
+        self.assertEqual(HomeCityCameraStatus.LOCALIZED, proof.status)
+        self.assertEqual((-532, -843), proof.translation)
+        self.assertIn("tower_structure", proof.matched_group_ids)
+        target = localizer.catalog.target_for(HomeCityObjectId.TOWER_OF_TRIAL)
+        match = localizer.match_target(prepared, target, translation=proof.translation)
+        self.assertIsNotNone(match)
+        self.assertEqual((179, 389), match.action_point)
 
     def test_pan_pair_localizes_at_the_measured_image_translation(self) -> None:
         proof = _localizer().localize(_fixture(_CAMERA_FIXTURES / "home_city_pan_07.png"))
