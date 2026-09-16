@@ -189,8 +189,8 @@ class NavigationCore:
         """Open one supported building from a fresh, observed Home surface.
 
         Camera-qualified targets use the measured Home camera: localized proof,
-        at most one bounded pan toward the HUD-safe band, a fresh post-pan
-        measurement, then exactly one reacquired body tap.  Other supported
+        one bounded pan at a time toward the HUD-safe band, a fresh post-pan
+        measurement, then exactly one reacquired body tap. Other supported
         buildings use the bounded observed Home-city scan when they are not
         visible in the current frame.
         """
@@ -220,50 +220,54 @@ class NavigationCore:
         observe_content: Callable[[str], Observation],
         on_target_acquired: Callable[[DetectedSpatialObject], None] | None,
     ) -> Observation:
-        """Acquires a camera-verified target with at most one measured pan step."""
+        """Replans each pan from fresh proof within the canonical gesture budget."""
 
         self._sequence += 1
         label = f"core_{self._sequence}_building_camera_source"
         current = observe_content(label)
         _require_home_city_surface(current)
-        proof = _require_localized_camera(current)
-        resolved = _resolve_observed_building_target(
-            current, target=target, require_measured=True
-        )
-        if resolved is not None and _is_hud_safe_building_point(
-            resolved[1], image_size=current.image_size
-        ):
-            return self._open_reacquired_building(
-                target=target,
-                source=current,
-                observe_content=observe_content,
-                on_target_acquired=on_target_acquired,
-                require_measured=True,
+        budget = home_city_scan_step_budget()
+        for step_index in range(budget + 1):
+            proof = _require_localized_camera(current)
+            resolved = _resolve_observed_building_target(
+                current, target=target, require_measured=True
             )
-        action = plan_home_city_camera_pan(observation=current, target=target)
-        self.record(
-            {
-                "event": "pending_building_pan",
-                "target": target.value,
-                "action": action.reason,
-                "artifact": None if current.artifact_path is None else str(current.artifact_path),
-            }
-        )
-        after = self._execute_content_and_confirm(
-            action,
-            current,
-            frozenset({ScreenType.PNC_HOME_CITY}),
-            f"core_{self._sequence}_building_pan",
-            _observe_home_city_scan_content(observe_content),
-            completion_predicate=lambda observation: observation.spatial_surface is not None,
-        )
-        _require_measured_camera_motion(before_proof=proof, after=after)
-        return self._open_reacquired_building(
-            target=target,
-            source=after,
-            observe_content=observe_content,
-            on_target_acquired=on_target_acquired,
-            require_measured=True,
+            if resolved is not None and _is_hud_safe_building_point(
+                resolved[1], image_size=current.image_size
+            ):
+                return self._open_reacquired_building(
+                    target=target,
+                    source=current,
+                    observe_content=observe_content,
+                    on_target_acquired=on_target_acquired,
+                    require_measured=True,
+                )
+            if step_index == budget:
+                break
+            action = plan_home_city_camera_pan(observation=current, target=target)
+            self.record(
+                {
+                    "event": "pending_building_pan",
+                    "target": target.value,
+                    "step": step_index + 1,
+                    "action": action.reason,
+                    "artifact": None if current.artifact_path is None else str(current.artifact_path),
+                }
+            )
+            after = self._execute_content_and_confirm(
+                action,
+                current,
+                frozenset({ScreenType.PNC_HOME_CITY}),
+                f"core_{self._sequence}_building_pan_{step_index + 1}",
+                _observe_home_city_scan_content(observe_content),
+                completion_predicate=lambda observation: observation.spatial_surface is not None,
+            )
+            if after.captured_at <= current.captured_at:
+                raise RuntimeError("Measured pan received a stale capture; no further gesture or tap was sent.")
+            _require_measured_camera_motion(before_proof=proof, after=after)
+            current = after
+        raise RuntimeError(
+            "Measured Home-city pan exhausted its canonical gesture budget without a safe body target."
         )
 
     def _open_building_after_home_scan(

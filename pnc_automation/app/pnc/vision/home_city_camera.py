@@ -177,6 +177,13 @@ def load_home_city_camera_catalog() -> HomeCityCameraCatalog:
                 min_score=0.80,
             ),
             HomeCityCameraLandmark(
+                id="t6_plaza_south",
+                group_id="plaza_low",
+                file_name="t6_plaza_south.png",
+                reference_bounds=Bounds(540, 1340, 130, 50),
+                min_score=0.90,
+            ),
+            HomeCityCameraLandmark(
                 id="p6_path_right",
                 group_id="institute_structure",
                 file_name="p6_path_right.png",

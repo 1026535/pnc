@@ -123,7 +123,7 @@ class HomeCityCameraCatalogTests(unittest.TestCase):
             (HomeCityObjectId.CASTLE, HomeCityObjectId.INFANTRY_BARRACKS),
             catalog.anchor_object_ids,
         )
-        self.assertEqual(6, len(catalog.landmarks))
+        self.assertEqual(7, len(catalog.landmarks))
         self.assertEqual(2, len(catalog.targets))
         groups = {landmark.group_id for landmark in catalog.landmarks}
         self.assertEqual(
@@ -163,6 +163,19 @@ class HomeCityCameraLocalizationTests(unittest.TestCase):
         self.assertGreaterEqual(len(proof.evidence), 5)
         self.assertGreaterEqual(len(proof.matched_group_ids), 3)
         self.assertTrue(all(item.residual <= 3.0 for item in proof.evidence))
+
+    def test_live_hud_occlusion_keeps_camera_but_does_not_invent_institute_body(self) -> None:
+        """The live offer rail hides Institute; three other scene regions still locate Home."""
+        localizer = _localizer()
+        prepared = localizer.prepare_frame(_fixture(_CAMERA_FIXTURES / "home_city_hud_occluded_20260916.png"))
+        proof = localizer.localize(prepared)
+        self.assertEqual(HomeCityCameraStatus.LOCALIZED, proof.status)
+        self.assertEqual((-532, 222), proof.translation)
+        self.assertEqual(
+            frozenset({"plaza_low", "garden_terrace", "barracks_roofs"}),
+            proof.matched_group_ids,
+        )
+        self.assertFalse(localizer.matched_target_objects(prepared, proof=proof))
 
     def test_pan_pair_localizes_at_the_measured_image_translation(self) -> None:
         proof = _localizer().localize(_fixture(_CAMERA_FIXTURES / "home_city_pan_07.png"))

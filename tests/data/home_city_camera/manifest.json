@@ -46,6 +46,22 @@
         1600
       ],
       "source_sha256": "653cf0c0cf822237cba7eb13346b4327666b9993840ba6cdccb474a4a4407d63"
+    },
+    {
+      "image": "home_city_hud_occluded_20260916.png",
+      "role": "live_regression_hud_occludes_institute",
+      "size": [
+        540,
+        960
+      ],
+      "sha256": "a391c4728fd0c32aa1d2e1576a89e8602c16ad2c4b63891bdd2d244b724f5d2a",
+      "source_artifact": "20260916T062514Z_core_20260916T062444Z_c26a0b7a_0021_v02_baseline.png",
+      "source_size": [
+        900,
+        1600
+      ],
+      "source_sha256": "8cf16f5e8368441907593d9bd8dd6fbe88978555b7f403a5211b7e1cf2815a2e",
+      "annotation": "2026-09-16 mega_old_acc active castle. Castle and Infantry Barracks remain at the reference camera. Only garden and barracks matched the original six landmarks; t6 plaza restores three independent regions. Institute body is occluded and must stay non-actionable."
     }
   ]
 }

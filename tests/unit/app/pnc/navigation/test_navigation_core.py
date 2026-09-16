@@ -1208,6 +1208,35 @@ class NavigationCoreTests(unittest.TestCase):
         self.assertEqual((154, 193), actuator.actions[1].target_point)
         self.assertIn("pending_building_pan", {event["event"] for event in records})
 
+    def test_open_building_measured_replans_after_partial_pan_before_single_tap(self):
+        """A partial first movement requires another measured pan before acquisition."""
+        target = measured_building_object(HomeCityObjectId.INSTITUTE)
+        now = datetime(2026, 9, 15, tzinfo=UTC)
+        frames = iter((
+            camera_home_frame(captured_at=now),
+            camera_home_frame(translation=(-732, -78), captured_at=now + timedelta(seconds=1)),
+            camera_home_frame(translation=(-732, -78), captured_at=now + timedelta(seconds=2)),
+            camera_home_frame((target,), translation=(-1000, -710), captured_at=now + timedelta(seconds=3)),
+            camera_home_frame((target,), translation=(-1000, -710), captured_at=now + timedelta(seconds=4)),
+            camera_home_frame((target,), translation=(-1000, -710), captured_at=now + timedelta(seconds=5)),
+        ))
+        actuator = Actuator()
+        core = NavigationCore(
+            actuator,
+            lambda _: observation(ScreenType.PNC_INSTITUTE),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+        result = core.open_building(
+            HomeCityObjectId.INSTITUTE, observe_content=lambda _: next(frames)
+        )
+        self.assertEqual(ScreenType.PNC_INSTITUTE, result.screen_type)
+        self.assertEqual(3, len(actuator.actions))
+        self.assertTrue(all(isinstance(action, SwipeAction) for action in actuator.actions[:2]))
+        self.assertLess(actuator.actions[1].distance_ratio, actuator.actions[0].distance_ratio)
+        self.assertIsInstance(actuator.actions[2], TapSpatialObjectAction)
+
     def test_open_building_measured_requires_camera_localization_before_any_gesture(self):
         core, actuator, _ = self.make_core([])
         observed = Mock(return_value=home_building_frame())
