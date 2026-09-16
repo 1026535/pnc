@@ -83,7 +83,7 @@ Consultation contract:
 - Work read-only. Do not edit files, change Git state, commit, push, open a PR, install dependencies, or create project configuration.
 - Inspect repository instructions, source, deterministic tests, saved artifacts, screenshots, logs, and fixtures before making claims.
 - Do not use credentials, secrets, ignored local configuration, account data, emulator, ADB, or live-game actions unless the question itself explicitly authorizes one exact non-spending observation and target. Never spend resources.
-- Distinguish findings as user-confirmed, repository-proven, artifact-observed, live-observed, inferred, or unknown. Cite exact paths, commands, or artifact identifiers.
+- Distinguish findings as user-confirmed, repository-proven, artifact-observed, live-observed, inferred, or unknown, each with high, medium, or low confidence. Cite exact paths, commands, or artifact identifiers.
 - If evidence is insufficient or the question crosses an authorization boundary, return NEEDS_LEAD with the smallest missing observation or decision; do not guess.
 
 Return a compact memo with exactly these sections:
@@ -95,11 +95,43 @@ Handback: READY_FOR_REVIEW, NEEDS_LEAD, BLOCKED, or FAILED
 """
 
 
-def snapshot(repo: Path) -> dict[str, str]:
-    """Capture the Git state needed to detect consultation edits."""
+VOLATILE_IGNORED_PREFIXES = (
+    ".local-data/",
+    ".test-impact/",
+    ".venv/",
+    "venv/",
+    "artifacts/",
+    "__pycache__/",
+    ".pytest_cache/",
+    ".mypy_cache/",
+    ".ruff_cache/",
+)
+
+
+def ignored_hashes(repo: Path, run_dir: Path) -> dict[str, str]:
+    """Hash ignored files outside volatile runtime trees; .local-data evidence stays unverified."""
+    listed = subprocess.check_output(
+        ["git", "-C", str(repo), "ls-files", "--others", "--ignored", "--exclude-standard", "-z"],
+    ).decode("utf-8").split("\0")
+    try:
+        excluded_run = run_dir.relative_to(repo).as_posix() + "/"
+    except ValueError:
+        excluded_run = ""
+    hashes = {}
+    for item in listed:
+        if not item or item.startswith(VOLATILE_IGNORED_PREFIXES) or (excluded_run and item.startswith(excluded_run)):
+            continue
+        path = repo / item
+        hashes[item] = hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else "non-file"
+    return hashes
+
+
+def snapshot(repo: Path, run_dir: Path) -> dict:
+    """Capture the Git state needed to detect consultation edits, including ignored config."""
     return {
         "head": git(repo, "rev-parse", "HEAD"),
         "status": git(repo, "status", "--porcelain=v1", "-uall"),
+        "ignored": ignored_hashes(repo, run_dir),
     }
 
 
@@ -122,12 +154,12 @@ def main() -> int:
     arguments = parse_arguments()
     repo = exact_repository(arguments.repo)
     question = question_text(arguments)
-    before = snapshot(repo)
     now = datetime.now(UTC)
     digest = hashlib.sha256(question.encode("utf-8")).hexdigest()[:10]
     default_root = repo / ".local-data" / "devin-game-knowledge"
     run_root = Path(arguments.run_dir).resolve() if arguments.run_dir else default_root
     run_dir = run_root / f"{now:%Y%m%d-%H%M%S}-{slug(question)}-{digest}"
+    before = snapshot(repo, run_dir)
     run_dir.mkdir(parents=True, exist_ok=False)
 
     prompt_path = run_dir / "prompt.txt"
@@ -159,7 +191,7 @@ def main() -> int:
     )
     response_path.write_text(completed.stdout, encoding="utf-8")
     stderr_path.write_text(completed.stderr, encoding="utf-8")
-    after = snapshot(repo)
+    after = snapshot(repo, run_dir)
     unchanged = before == after
     status = "completed" if completed.returncode == 0 and unchanged else "failed"
     if completed.returncode == 0 and not unchanged:
