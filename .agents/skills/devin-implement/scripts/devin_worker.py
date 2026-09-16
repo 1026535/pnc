@@ -403,6 +403,17 @@ def run(args):
         raise RuntimeError("No verified session identity. Reconcile saved identity events before recovery.")
     if not args.resume and run_dir.exists():
         raise RuntimeError("A fresh --run-dir must not exist; this prevents accidental evidence overwrite.")
+    preamble_file = getattr(args, "preamble_file", None)
+    requested_preamble = (Path(preamble_file).resolve(strict=True).read_text(encoding="utf-8-sig")
+                          if preamble_file else None)
+    saved_preamble = run_dir / "worker-preamble.md"
+    retain_preamble = bool(prior and saved_preamble.exists())
+    if retain_preamble:
+        preamble = saved_preamble.read_text(encoding="utf-8")
+        if requested_preamble is not None and requested_preamble.rstrip() != preamble.rstrip():
+            raise RuntimeError("Resume preamble differs from the original worker role.")
+    else:
+        preamble = requested_preamble if requested_preamble is not None else DEFAULT_PREAMBLE
     run_dir.mkdir(parents=True, exist_ok=True)
     with writer_lock(repo, run_dir):
         if prior and prior.get("status") == "running":
@@ -419,16 +430,7 @@ def run(args):
             raise RuntimeError(f"Account does not expose the exact {MODEL} variant.")
         write_json(turn_dir / "model.json", {"version": version, "model": selected[0]})
         before = snapshot(repo, turn_dir, "before")
-        preamble_file = getattr(args, "preamble_file", None)
-        requested_preamble = (Path(preamble_file).resolve(strict=True).read_text(encoding="utf-8-sig")
-                              if preamble_file else None)
-        saved_preamble = run_dir / "worker-preamble.md"
-        if prior and saved_preamble.exists():
-            preamble = saved_preamble.read_text(encoding="utf-8")
-            if requested_preamble is not None and requested_preamble.rstrip() != preamble.rstrip():
-                raise RuntimeError("Resume preamble differs from the original worker role.")
-        else:
-            preamble = requested_preamble if requested_preamble is not None else DEFAULT_PREAMBLE
+        if not retain_preamble:
             saved_preamble.write_text(preamble.rstrip() + "\n", encoding="utf-8")
         prompt = turn_dir / "prompt.md"
         prompt.write_text(preamble.rstrip() + "\n\n" + brief.read_text(encoding="utf-8-sig"), encoding="utf-8")

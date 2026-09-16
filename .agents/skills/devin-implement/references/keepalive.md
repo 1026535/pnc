@@ -5,7 +5,7 @@ Create or reuse one native `automation_update` heartbeat in the current task, pr
 Start one Python monitor in an ignored directory, supplying the existing automation ID. It uses the existing native app-tools MCP bridge for subsequent timer updates; no alternate scheduler or additional model is involved. It runs hidden, tails newly appended lifecycle records from the verified lead rollout, and checks registered workers every 15 minutes. Startup requires an acknowledged active timer. An OS lock prevents two monitors for the same lead, even across monitor directories.
 
 ```powershell
-$devinMonitorDirectory = Join-Path $PWD '.local/devin-monitor'
+$devinMonitorDirectory = Join-Path $PWD '.local-data/devin-monitor'
 python "$devinSkill/scripts/devin_monitor.py" start --monitor-dir $devinMonitorDirectory --thread-id $env:CODEX_THREAD_ID --automation-id <existing-heartbeat-id> --run-dir $devinRunDirectory
 # Register another worker without starting another monitor:
 python "$devinSkill/scripts/devin_monitor.py" register --monitor-dir $devinMonitorDirectory --run-dir <absolute-run-directory>
