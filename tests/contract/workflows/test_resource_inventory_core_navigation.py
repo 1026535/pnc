@@ -116,14 +116,14 @@ class BagTabSelectionTests(unittest.TestCase):
             sleep=lambda _: None,
         )
 
-    def _bag(self, tab: BagTab | None, *, seconds: int = 0):
+    def _bag(self, tab: BagTab | None, *, seconds: int = 0, extra_ids=()):
         observation = make_observation(
             ScreenType.PNC_BAG,
             visible_ids=(
                 UiElementId.PNC_BAG_SUBTAB_RESOURCE,
                 UiElementId.PNC_BAG_SUBTAB_SPEEDUP,
                 UiElementId.PNC_BAG_SUBTAB_TREASURE,
-            ),
+            ) + extra_ids,
             active_bag_tab=tab,
         )
         if seconds:
@@ -200,6 +200,27 @@ class BagTabSelectionTests(unittest.TestCase):
                 BagTab.RESOURCE, observe_content=self._observer(before, before),
             )
         self.assertEqual(1, self.actuator.execute_action.call_count)
+
+    def test_military_and_misc_select_with_measured_controls(self):
+        for tab, selector in (
+            (BagTab.MILITARY, UiElementId.PNC_BAG_SUBTAB_MILITARY),
+            (BagTab.MISC, UiElementId.PNC_BAG_SUBTAB_MISC),
+        ):
+            with self.subTest(tab=tab):
+                self.actuator.execute_action.reset_mock()
+                before = self._bag(BagTab.TREASURE, extra_ids=(selector,))
+                after_one = self._bag(tab, seconds=1, extra_ids=(selector,))
+                after_two = self._bag(tab, seconds=2, extra_ids=(selector,))
+                result = self.navigation.select_bag_tab(
+                    tab, observe_content=self._observer(before, after_one, after_two),
+                )
+                action, observed = self.actuator.execute_action.call_args.args
+                self.assertIsInstance(action, TapAction)
+                self.assertEqual(selector, action.selector_id)
+                self.assertIs(before, observed)
+                self.assertIs(after_two, result)
+                self.assertEqual(tab, result.active_bag_tab)
+                self.assertEqual(1, self.actuator.execute_action.call_count)
 
     def test_unsupported_tab_has_no_measured_control(self):
         before = self._bag(BagTab.SPEEDUP)

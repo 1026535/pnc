@@ -9,11 +9,13 @@ from PIL import Image
 from pnc_automation.app.pnc.domain.observation import VisibleElementSourceKind
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.enums.ui_element_id import UiElementId
+from pnc_automation.app.pnc.vision.building_details import (
+    find_building_requirement_go_line,
+    find_building_requirement_header_line,
+    find_building_requirement_target_line,
+)
 from pnc_automation.app.pnc.vision.pnc_observation_enricher import (
     _add_upgrade_requirement_controls,
-    _find_building_requirement_go_line,
-    _find_building_requirement_header_line,
-    _find_building_requirement_target_line,
 )
 from pnc_automation.core.vision.image.models import Bounds
 from pnc_automation.core.vision.ocr.ocr_service import OcrLine
@@ -50,13 +52,13 @@ class BuildingRequirementParserTests(unittest.TestCase):
 
         image = Image.new("RGB", VIEWPORT)
         lines = _requirement_lines(include_go=True)
-        header = _find_building_requirement_header_line(image=image, lines=lines)
+        header = find_building_requirement_header_line(image=image, lines=lines)
         self.assertIsNotNone(header)
         assert header is not None
-        go_line = _find_building_requirement_go_line(image=image, lines=lines, header=header)
+        go_line = find_building_requirement_go_line(image=image, lines=lines, header=header)
         self.assertIsNotNone(go_line)
         assert go_line is not None
-        target_line = _find_building_requirement_target_line(
+        target_line = find_building_requirement_target_line(
             image=image,
             lines=lines,
             header=header,

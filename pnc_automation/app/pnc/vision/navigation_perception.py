@@ -20,9 +20,12 @@ from pnc_automation.app.pnc.vision.observation_builder import (
     reconcile_visual_modal_guard,
 )
 from pnc_automation.app.pnc.vision.observation_diagnostics import ObservationDebugArtifactCollector
+from pnc_automation.app.pnc.vision.building_details import filter_building_detail_controls
 from pnc_automation.app.pnc.vision.observation_provenance import (
+    bind_building_detail,
     bind_list_entry,
     bind_spatial_surface,
+    bind_bag_preview,
     bind_research_detail,
     bind_research_queue_row,
     bind_trial_stats_detail,
@@ -234,6 +237,12 @@ class NavigationPerception:
             or not decision.action_eligible
             or (interrupted and not allows_guarded_field_enrichment(content_request, interruption))
         ):
+            # Without content there is no building phase proof. Shared Upgrade
+            # pixels cannot advertise either phase-owned generic action yet.
+            observation = replace(
+                observation,
+                visible_elements=filter_building_detail_controls(observation.visible_elements, None),
+            )
             return self._finish(screenshot, observation, ocr_context, visual.profile_ids)
         content = self.guard.enrich(
             image, screen, controls, content_request,
@@ -253,7 +262,10 @@ class NavigationPerception:
         # transition. Keep the existing typed content parsers during migration.
         observation = replace(
             observation,
-            visible_elements={**observation.visible_elements, **content_labels},
+            visible_elements=filter_building_detail_controls(
+                {**observation.visible_elements, **content_labels},
+                content.building_detail,
+            ),
             list_entries=tuple(
                 bind_list_entry(entry, frame_ref=screenshot.frame_ref, source_screen=screen,
                                      source_layout_id=decision.layout_id)
@@ -314,6 +326,26 @@ class NavigationPerception:
                     source_layout_id=decision.layout_id,
                 )
                 if content.trial_stats_detail is not None
+                else None
+            ),
+            bag_preview=(
+                bind_bag_preview(
+                    content.bag_preview,
+                    frame_ref=screenshot.frame_ref,
+                    source_screen=screen,
+                    source_layout_id=decision.layout_id,
+                )
+                if content.bag_preview is not None
+                else None
+            ),
+            building_detail=(
+                bind_building_detail(
+                    content.building_detail,
+                    frame_ref=screenshot.frame_ref,
+                    source_screen=screen,
+                    source_layout_id=decision.layout_id,
+                )
+                if content.building_detail is not None
                 else None
             ),
         )

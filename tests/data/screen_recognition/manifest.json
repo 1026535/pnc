@@ -1182,6 +1182,26 @@
       "source_artifact": "20260916T085752Z_core_20260916T085620Z_8e5a65ab_0030_v15_stats_destination_2.png",
       "source_sha256": "afa0a7e91acec62fb6a2398d0a436c6d1e994465e2428e06c1551ba690521869",
       "annotation": "Lead single freshly measured Gear Stats tap; Applicable Stats table, Gear-only footer, nine displayed troop boosts. No trial or reward action."
+    },
+    {
+      "image": "bag_common_victory_preview_20260916.png",
+      "screen": "PNC_BAG_CHEST_PREVIEW",
+      "split": "reference",
+      "group": "2026-09-16/mega_old_acc/v11_common_preview_1483bb20",
+      "sha256": "fe09bed643c671ecc1403d4e61d9aa555f321b1ecbc27809545f7e6d679a5129",
+      "expected_visual_screens": [
+        "PNC_BAG_CHEST_PREVIEW"
+      ]
+    },
+    {
+      "image": "bag_arena_chest_preview_holdout_20260915.png",
+      "screen": "PNC_BAG_CHEST_PREVIEW",
+      "split": "validation",
+      "group": "2026-09-15/testing/vision_navigation_fix_bc0f132a",
+      "sha256": "44212be5af0a8ffb6a0d6db9d2127cd979808fd9cc1ef10c156d19c311f76fb5",
+      "expected_visual_screens": [
+        "PNC_BAG_CHEST_PREVIEW"
+      ]
     }
   ]
 }

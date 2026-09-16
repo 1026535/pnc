@@ -23,7 +23,9 @@ from pnc_automation.app.pnc.domain.building_catalog import (
     HomeCityObjectId,
     home_city_object_id_from_metadata,
     primary_screen_type_for_home_city_object,
+    upgrade_entry_selector_for_screen,
 )
+from pnc_automation.app.pnc.domain.building_details import BuildingDetailPhase
 from pnc_automation.app.pnc.domain.castle_roster_scan import castle_roster_window_signature
 from pnc_automation.app.pnc.domain.home_city_camera import HomeCityCameraProof
 from pnc_automation.app.pnc.domain.observation import (
@@ -39,6 +41,12 @@ from pnc_automation.app.pnc.domain.observation import (
     castle_entry_identity_matches,
 )
 from pnc_automation.app.pnc.domain.bag import BagTab, bag_tab_selector_id
+from pnc_automation.app.pnc.domain.bag_items import (
+    TreasureIdentity,
+    bag_chest_preview_layout,
+    bag_item_identity_key,
+    bag_item_inspection_supported,
+)
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.domain.policy_models import ResearchCategory
 from pnc_automation.app.pnc.domain.research import (
@@ -363,6 +371,81 @@ class NavigationCore:
             require_measured=require_measured,
         )
 
+    def open_building_upgrade_detail(
+        self,
+        target: HomeCityObjectId,
+        *,
+        observe_content: Callable[[str], Observation],
+    ) -> Observation:
+        """Open the internal upgrade detail of one already-opened building panel.
+
+        The source must be a fresh, CLEAR observation of a building-owned panel
+        whose typed detail identifies ``target``. A frame already proved as the
+        matching UPGRADE detail returns its fresh content observation with no
+        extra tap. Otherwise at most one entry tap on the phase-owned Upgrade
+        control is sent, and completion requires a fresh CLEAR same-building
+        UPGRADE detail — the same ScreenType alone is never sufficient. The
+        spending Upgrade control is never used as a navigation entry here.
+        """
+
+        if not isinstance(target, HomeCityObjectId):
+            raise ValueError("Upgrade detail navigation requires a known HomeCityObjectId target.")
+        self._sequence += 1
+        label = f"core_{self._sequence}_building_upgrade_detail"
+        before = observe_content(f"{label}_source")
+        _require_building_panel_for_target(before, target=target)
+        if before.building_detail.phase is BuildingDetailPhase.UPGRADE:
+            return before
+        entry = _building_upgrade_entry_selector(before)
+        if entry is None:
+            raise RuntimeError("Building primary shows no measured upgrade entry; no tap sent.")
+        self.record({"event": "pending_upgrade_detail", "target": target.value,
+                     "selector": entry.value, "artifact": str(before.artifact_path)})
+        return self._execute_content_and_confirm(
+            TapAction(selector_id=entry, reason="open_building_upgrade_detail"),
+            before,
+            frozenset({before.screen_type, ScreenType.PNC_BUILDING_DETAILS}),
+            label,
+            observe_content,
+            completion_predicate=lambda frame: _building_upgrade_detail_matches(frame, target=target),
+        )
+
+    def close_building_upgrade_detail(
+        self,
+        target: HomeCityObjectId,
+        *,
+        observe_content: Callable[[str], Observation],
+    ) -> Observation:
+        """Return the qualified Institute upgrade panel to its same-building primary.
+
+        This internal Back changes phase without changing ScreenType. Other
+        buildings need their own observed return evidence before using it.
+        """
+        if target is not HomeCityObjectId.INSTITUTE:
+            raise ValueError("Only the Institute internal upgrade return is qualified.")
+        self._sequence += 1
+        label = f"core_{self._sequence}_building_upgrade_close"
+        before = observe_content(f"{label}_source")
+        _require_building_panel_for_target(before, target=target)
+        if before.building_detail.phase is BuildingDetailPhase.PRIMARY:
+            return before
+        if not _template_control(before, UiElementId.PNC_BACK_BUTTON_TOP_LEFT):
+            raise RuntimeError("Building upgrade detail has no measured Back; no tap sent.")
+        return self._execute_content_and_confirm(
+            TapAction(selector_id=UiElementId.PNC_BACK_BUTTON_TOP_LEFT,
+                      reason="close_building_upgrade_detail"),
+            before,
+            frozenset({ScreenType.PNC_INSTITUTE}),
+            label,
+            observe_content,
+            completion_predicate=lambda frame: (
+                frame.decision.guard is GuardVerdict.CLEAR
+                and frame.building_detail is not None
+                and frame.building_detail.building_id is target
+                and frame.building_detail.phase is BuildingDetailPhase.PRIMARY
+            ),
+        )
+
     def open_mailbox(
         self, mailbox: MailboxType, *, observe_content: Callable[[str], Observation],
     ) -> MailboxAvailability:
@@ -491,6 +574,59 @@ class NavigationCore:
             completion_predicate=lambda observation: (
                 observation.decision.guard == GuardVerdict.CLEAR
                 and observation.active_bag_tab == tab
+            ),
+        )
+
+    def open_bag_chest_preview(
+        self, identity: TreasureIdentity, *,
+        observe_content: Callable[[str], Observation],
+    ) -> Observation:
+        """Open one qualified Treasure magnifier and require the matching read-only preview.
+
+        Only Treasure identities whose preview destination family is qualified
+        (Arena Surprise Chest, Common 1st Victory Chest) are supported; other
+        recognized magnifiers stay observation-only and are rejected before any
+        tap. Completion requires fresh preview frames whose independently parsed
+        title identity agrees with the requested source.
+        """
+
+        if not isinstance(identity, TreasureIdentity):
+            raise ValueError("Bag chest preview requires a TreasureIdentity.")
+        if not bag_item_inspection_supported(identity):
+            raise ValueError("Treasure identity is not a qualified inspection target.")
+        self._sequence += 1
+        label = f"core_{self._sequence}_bag_chest_preview"
+        source = observe_content(f"{label}_source")
+        if (
+            source.screen_type != ScreenType.PNC_BAG or source.blocking_popup
+            or source.decision.guard != GuardVerdict.CLEAR
+            or source.decision.layout_id != "bag"
+            or source.active_bag_tab != BagTab.TREASURE
+        ):
+            raise RuntimeError("Chest preview requires a freshly observed, unblocked Bag Treasure tab.")
+        key = bag_item_identity_key(identity)
+        matches = tuple(
+            entry for entry in source.entries(ListEntryKind.BAG_ITEM)
+            if entry.bag_item_facts is not None
+            and entry.bag_item_facts.identity is not None
+            and bag_item_identity_key(entry.bag_item_facts.identity) == key
+        )
+        if (
+            len(matches) != 1 or matches[0].row_status != RowRecognitionStatus.COMPLETE
+            or matches[0].action_point is None or matches[0].action_bounds is None
+            or not matches[0].action_bounds.contains_point(matches[0].action_point)
+            or not matches[0].bounds.contains_bounds(matches[0].action_bounds)
+        ):
+            raise RuntimeError("Qualified chest item is missing, changed or ambiguous; no tap sent.")
+        return self._execute_content_and_confirm(
+            TapListEntryAction(
+                entry_kind=ListEntryKind.BAG_ITEM,
+                metadata_key="identity", metadata_value=key,
+                use_action_point=True, reason="open_bag_chest_preview",
+            ),
+            source, frozenset({ScreenType.PNC_BAG_CHEST_PREVIEW}), label, observe_content,
+            completion_predicate=lambda frame: _bag_chest_preview_matches(
+                frame, identity=identity, layout_id=bag_chest_preview_layout(identity),
             ),
         )
 
@@ -1147,6 +1283,46 @@ class NavigationCore:
         return self.observe(label)
 
 
+def _require_building_panel_for_target(observation: Observation, target: HomeCityObjectId) -> None:
+    """Require a CLEAR building-owned panel whose typed detail proves the requested owner and phase."""
+
+    detail = observation.building_detail
+    if (
+        observation.blocking_popup
+        or observation.decision.guard != GuardVerdict.CLEAR
+        or detail is None
+        or detail.building_id != target
+        or detail.phase not in (BuildingDetailPhase.PRIMARY, BuildingDetailPhase.UPGRADE)
+    ):
+        raise RuntimeError("Building panel is absent, foreign, interrupted, or unphased; no action sent.")
+
+
+def _building_upgrade_entry_selector(observation: Observation) -> UiElementId | None:
+    """Resolve the published primary-panel Upgrade entry control for this frame."""
+
+    named = upgrade_entry_selector_for_screen(observation.screen_type)
+    for selector_id in (UiElementId.PNC_BUILDING_DETAILS_UPGRADE_BUTTON, named):
+        if selector_id is None:
+            continue
+        element = observation.get(selector_id)
+        if element is not None and element.source_kind is VisibleElementSourceKind.TEMPLATE:
+            return selector_id
+    return None
+
+
+def _building_upgrade_detail_matches(frame: Observation, *, target: HomeCityObjectId) -> bool:
+    """Require a fresh CLEAR typed UPGRADE detail owned by the requested building."""
+
+    detail = frame.building_detail
+    return (
+        not frame.blocking_popup
+        and frame.decision.guard == GuardVerdict.CLEAR
+        and detail is not None
+        and detail.phase is BuildingDetailPhase.UPGRADE
+        and detail.building_id == target
+    )
+
+
 def require_resource_inventory_surface(observation: Observation) -> None:
     """Require a guarded Bag whose typed selection is the measured Resource tab."""
 
@@ -1398,6 +1574,25 @@ def _trial_stats_detail_matches(frame: Observation, *, category: TrialCategory) 
         )
         and detail is not None
         and detail.category == category
+    )
+
+
+def _bag_chest_preview_matches(
+    frame: Observation, *, identity: TreasureIdentity, layout_id: str | None,
+) -> bool:
+    """Prove the fresh chest preview belongs to the requested Treasure identity.
+
+    The qualified layout and the independently parsed title identity must both
+    agree; an unreadable title never confirms the wrong popup was not opened.
+    """
+
+    preview = frame.bag_preview
+    return (
+        frame.decision.guard == GuardVerdict.CLEAR
+        and layout_id is not None
+        and frame.decision.layout_id == layout_id
+        and preview is not None
+        and preview.source_identity == identity
     )
 
 

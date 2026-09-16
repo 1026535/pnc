@@ -29,6 +29,12 @@ from pnc_automation.core.vision.image.models import Bounds
 
 
 if TYPE_CHECKING:
+    from pnc_automation.app.pnc.domain.bag_items import (
+        BagChestPreviewFacts,
+        BagItemFacts,
+        BagPreviewRewardFacts,
+    )
+    from pnc_automation.app.pnc.domain.building_details import BuildingDetail
     from pnc_automation.app.pnc.domain.research import (
         ResearchDetail,
         ResearchNodeFacts,
@@ -87,6 +93,8 @@ class ListEntryKind(StrEnum):
     RESOURCE_INVENTORY_EXCLUSION = "resource_inventory_exclusion"
     RESOURCE_INVENTORY_UNRESOLVED = "resource_inventory_unresolved"
     TRIAL_CATEGORY = "trial_category"
+    BAG_ITEM = "bag_item"
+    BAG_PREVIEW_REWARD = "bag_preview_reward"
 
 
 class RowRecognitionStatus(StrEnum):
@@ -162,6 +170,8 @@ class DetectedListEntry:
     action_bounds: Bounds | None = None
     research_facts: ResearchNodeFacts | None = None
     trial_card_facts: TrialCardFacts | None = None
+    bag_item_facts: BagItemFacts | None = None
+    bag_reward_facts: BagPreviewRewardFacts | None = None
     frame_ref: FrameRef | None = None
     source_screen: ScreenType | None = None
     source_layout_id: str | None = None
@@ -514,6 +524,8 @@ class Observation:
     research_queue_rows: tuple[ResearchQueueRow, ...] = ()
     trial_summary: TrialChallengeSummary | None = None
     trial_stats_detail: TrialApplicableStatsDetail | None = None
+    bag_preview: BagChestPreviewFacts | None = None
+    building_detail: BuildingDetail | None = None
     frame_ref: FrameRef | None = None
 
     def __init__(
@@ -546,6 +558,8 @@ class Observation:
         research_queue_rows: tuple[ResearchQueueRow, ...] = (),
         trial_summary: TrialChallengeSummary | None = None,
         trial_stats_detail: TrialApplicableStatsDetail | None = None,
+        bag_preview: BagChestPreviewFacts | None = None,
+        building_detail: BuildingDetail | None = None,
         frame_ref: FrameRef | None = None,
         *,
         screen_type: ScreenType | None = None,
@@ -601,6 +615,8 @@ class Observation:
             "research_queue_rows": research_queue_rows,
             "trial_summary": trial_summary,
             "trial_stats_detail": trial_stats_detail,
+            "bag_preview": bag_preview,
+            "building_detail": building_detail,
             "frame_ref": frame_ref,
         }
         for field_name, value in values.items():

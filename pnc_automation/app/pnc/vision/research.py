@@ -39,13 +39,13 @@ from pnc_automation.app.pnc.domain.research import (
     ResearchNodeId,
     ResearchQueueRow,
     ResearchQueueState,
-    ResearchResourceCost,
     ResearchTextRecord,
     research_entry_category_metadata,
     research_node_for_label,
     research_node_for_title,
     research_node_title,
 )
+from pnc_automation.app.pnc.domain.resource_cost import ResourceCost
 from pnc_automation.app.pnc.enums.screen_type import ScreenType
 from pnc_automation.app.pnc.vision.observation_builder import ObservationAdditions
 from pnc_automation.core.text.normalization import normalize_ocr_text
@@ -456,7 +456,7 @@ class ResearchContentProducer:
             and "/" in line.text
             and ":" not in line.text
             for cost in (
-                ResearchResourceCost(
+                ResourceCost(
                     resource_type=self._match_cost_resource(image=image, prepared=prepared, line=line),
                     available=int(match.group(1).replace(",", "")),
                     required=int(match.group(2).replace(",", "")),

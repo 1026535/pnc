@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from pnc_automation.app.pnc.domain.bag import BagTab
+from pnc_automation.app.pnc.domain.building_details import BuildingDetail
 from pnc_automation.app.pnc.domain.castles import CastleIdentity, PncAccountCastleRosterConfig
 from pnc_automation.app.pnc.domain.chat import ChatChannel
 from pnc_automation.app.pnc.domain.mail import MailboxType
@@ -130,6 +131,7 @@ def make_observation(
     decision: ScreenDecision | None = None,
     research_detail: ResearchDetail | None = None,
     research_queue_rows: tuple[ResearchQueueRow, ...] = (),
+    building_detail: BuildingDetail | None = None,
 ) -> Observation:
     """Builds a typed observation with synthetic visible elements."""
 
@@ -221,6 +223,7 @@ def make_observation(
         popup_overlay=popup_overlay,
         research_detail=research_detail,
         research_queue_rows=research_queue_rows,
+        building_detail=building_detail,
         frame_ref=resolved_frame_ref,
     )
 

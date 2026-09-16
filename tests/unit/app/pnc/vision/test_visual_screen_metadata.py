@@ -35,7 +35,7 @@ class VisualScreenMetadataTests(unittest.TestCase):
             for sample in manifest["samples"]
             if sample["split"] == "reference"
         }
-        self.assertEqual(72, len(catalog["profiles"]))
+        self.assertEqual(73, len(catalog["profiles"]))
         for profile in catalog["profiles"]:
             with self.subTest(profile=profile["id"]):
                 source = profile["source"]
@@ -82,7 +82,7 @@ class VisualScreenMetadataTests(unittest.TestCase):
                     self.assertIsNone(profile["review"]["build"])
                     self.assertIsNone(profile["review"]["locale"])
                 expected_revision = (
-                    3
+                    4
                     if profile["id"] == "bag"
                     else 2
                     if profile["id"] in {

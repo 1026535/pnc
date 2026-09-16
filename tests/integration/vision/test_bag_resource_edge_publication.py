@@ -51,7 +51,10 @@ _EDGE_CONTROLS = {
     UiElementId.PNC_BACK_BUTTON_TOP_LEFT: Bounds(42, 18, 86, 54),
     UiElementId.PNC_BAG_SUBTAB_RESOURCE: Bounds(2, 207, 146, 60),
     UiElementId.PNC_BAG_SUBTAB_SPEEDUP: Bounds(182, 207, 146, 60),
+    # V12 unselected text-label anchors: measured crops, not slot material.
+    UiElementId.PNC_BAG_SUBTAB_MILITARY: Bounds(383, 215, 134, 42),
     UiElementId.PNC_BAG_SUBTAB_TREASURE: Bounds(542, 207, 146, 60),
+    UiElementId.PNC_BAG_SUBTAB_MISC: Bounds(753, 215, 114, 42),
 }
 _BAG_LAYOUT_ID = "bag"
 
@@ -227,7 +230,20 @@ class BagResourceEdgePublicationTests(unittest.TestCase):
                             hashlib.sha256(resource_capture.image.tobytes()).hexdigest(),
                             observation.frame_fingerprint,
                         )
-                        self.assertEqual((), observation.list_entries)
+                        # The tab gate still keeps Resource rows and actions off
+                        # neighbouring tabs; V10/V11 BAG_ITEM rows on those tabs
+                        # are their own typed content, not stale Resource facts.
+                        self.assertEqual(
+                            (),
+                            tuple(
+                                entry for entry in observation.list_entries
+                                if entry.kind in {
+                                    ListEntryKind.RESOURCE_ITEM,
+                                    ListEntryKind.RESOURCE_INVENTORY_EXCLUSION,
+                                    ListEntryKind.RESOURCE_INVENTORY_UNRESOLVED,
+                                }
+                            ),
+                        )
                         # Measured Bag navigation controls, including the
                         # unselected Resource button, stay available on the
                         # neighbouring tabs; Resource rows/actions/body reads

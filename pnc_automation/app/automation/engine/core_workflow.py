@@ -24,6 +24,7 @@ from pnc_automation.app.pnc.domain.daily_quest_catalog import DailyQuestCatalog
 from pnc_automation.app.pnc.domain.screen_decision import GuardVerdict
 from pnc_automation.app.pnc.domain.policy_models import ResearchCategory
 from pnc_automation.app.pnc.domain.trial_challenge import TrialCategory
+from pnc_automation.app.pnc.domain.building_details import BuildingDetailPhase
 from pnc_automation.app.pnc.domain.building_catalog import (
     HomeCityObjectId,
     require_building_construction_source,
@@ -38,6 +39,7 @@ from pnc_automation.app.pnc.domain.building_operations import (
     observable_construction_slot_key,
 )
 from pnc_automation.app.pnc.domain.bag import BagTab
+from pnc_automation.app.pnc.domain.bag_items import TreasureIdentity
 from pnc_automation.app.pnc.domain.castles import CastleIdentity
 from pnc_automation.app.pnc.domain.chat import ChatChannel
 from pnc_automation.app.pnc.domain.observation import Observation, VisibleElementSourceKind
@@ -417,6 +419,13 @@ class WorkflowContext:
         if not isinstance(target, ScreenType) or target == ScreenType.UNKNOWN:
             raise ValueError("Workflow navigation requires a known screen target.")
         self._research_node = None
+        detail = None if self._last_observation is None else self._last_observation.building_detail
+        if (
+            detail is not None
+            and detail.building_id is HomeCityObjectId.INSTITUTE
+            and detail.phase is BuildingDetailPhase.UPGRADE
+        ):
+            self.close_building_upgrade_detail(HomeCityObjectId.INSTITUTE)
         observation = self._runtime.navigation.navigate(target)
         self._last_navigation_count = self._runtime.observation_count
         self._last_observation = observation
@@ -491,6 +500,27 @@ class WorkflowContext:
         self._last_navigation_count = self._runtime.observation_count
         self._last_observation = observation
         return observation, acquired[0]
+
+    def open_building_upgrade_detail(self, target: HomeCityObjectId) -> Observation:
+        """Open the internal upgrade detail of the currently displayed building panel.
+
+        Must follow a fresh same-building primary/detail observation (for
+        example ``open_building_with_identity``); the exact Home instance proof
+        is carried by the uninterrupted observation chain, since detail panels
+        do not re-identify the spatial instance. Returns the fresh typed
+        UPGRADE detail observation.
+        """
+
+        if not isinstance(target, HomeCityObjectId):
+            raise ValueError("Upgrade detail navigation requires a known HomeCityObjectId target.")
+        self._research_node = None
+        observation = self._runtime.navigation.open_building_upgrade_detail(
+            target,
+            observe_content=lambda label: self._runtime.observe(label, include_content=True),
+        )
+        self._last_navigation_count = self._runtime.observation_count
+        self._last_observation = observation
+        return observation
 
     def open_construction_slot(self, target: object) -> tuple[Observation, str]:
         """Acquire one exact Home empty slot, then return its typed construction menu."""
@@ -663,10 +693,13 @@ class WorkflowContext:
                 "Building queue availability was not positively observed: "
                 "the first queue slot is not proven idle."
             )
+        close = opened.get(UiElementId.PNC_POPUP_CLOSE_BUTTON)
+        if close is None or close.source_kind is not VisibleElementSourceKind.TEMPLATE:
+            raise RuntimeError("Build Queue has no measured close control; no return action sent.")
         returned = executor.execute_actions(
             (
-                KeyEventAction(
-                    key_code="KEYCODE_BACK",
+                TapAction(
+                    selector_id=UiElementId.PNC_POPUP_CLOSE_BUTTON,
                     reason="building_upgrade_leave_queue_after_availability",
                     observe_after=True,
                     follow_up_request=ObservationRequest.build_queue_follow_up(),
@@ -683,6 +716,16 @@ class WorkflowContext:
         self._last_observation = returned
         self._building_queue_available = True
         return opened
+
+    def close_building_upgrade_detail(self, target: HomeCityObjectId) -> Observation:
+        """Close the qualified internal upgrade panel before graph navigation."""
+        observation = self._runtime.navigation.close_building_upgrade_detail(
+            target,
+            observe_content=lambda label: self._runtime.observe(label, include_content=True),
+        )
+        self._last_navigation_count = self._runtime.observation_count
+        self._last_observation = observation
+        return observation
 
     def reconcile_building_operation(
         self,
@@ -829,6 +872,19 @@ class WorkflowContext:
         try:
             return self._runtime.navigation.select_bag_tab(
                 tab,
+                observe_content=self._observe_bag_content,
+            )
+        finally:
+            self._sync_from_runtime()
+
+    def open_bag_chest_preview(self, identity: TreasureIdentity) -> Observation:
+        """Open one qualified Treasure magnifier and return its fresh preview observation."""
+
+        if not isinstance(identity, TreasureIdentity):
+            raise ValueError("Bag chest preview requires a TreasureIdentity.")
+        try:
+            return self._runtime.navigation.open_bag_chest_preview(
+                identity,
                 observe_content=self._observe_bag_content,
             )
         finally:

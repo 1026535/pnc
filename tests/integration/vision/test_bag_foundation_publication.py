@@ -64,13 +64,19 @@ _BAG_CONTROL_BOUNDS = {
         UiElementId.PNC_BACK_BUTTON_TOP_LEFT: Bounds(25, 11, 52, 32),
         UiElementId.PNC_BAG_SUBTAB_RESOURCE: Bounds(1, 124, 88, 36),
         UiElementId.PNC_BAG_SUBTAB_SPEEDUP: Bounds(109, 124, 88, 36),
+        # V12 unselected text-label anchors: measured crops, not slot material.
+        UiElementId.PNC_BAG_SUBTAB_MILITARY: Bounds(230, 129, 80, 25),
         UiElementId.PNC_BAG_SUBTAB_TREASURE: Bounds(325, 124, 88, 36),
+        UiElementId.PNC_BAG_SUBTAB_MISC: Bounds(452, 129, 68, 25),
     },
     "bag_current_testing.png": {
         UiElementId.PNC_BACK_BUTTON_TOP_LEFT: Bounds(42, 18, 86, 54),
         UiElementId.PNC_BAG_SUBTAB_RESOURCE: Bounds(2, 207, 146, 60),
         UiElementId.PNC_BAG_SUBTAB_SPEEDUP: Bounds(182, 207, 146, 60),
+        # V12 unselected text-label anchors: measured crops, not slot material.
+        UiElementId.PNC_BAG_SUBTAB_MILITARY: Bounds(383, 215, 134, 42),
         UiElementId.PNC_BAG_SUBTAB_TREASURE: Bounds(542, 207, 146, 60),
+        UiElementId.PNC_BAG_SUBTAB_MISC: Bounds(753, 215, 114, 42),
     },
 }
 

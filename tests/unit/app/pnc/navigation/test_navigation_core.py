@@ -49,6 +49,7 @@ from pnc_automation.app.pnc.domain.observation import (
     SpatialViewportAddressingKind,
     VisibleElement,
     VisibleElementSourceKind,
+    list_entry_matches,
 )
 from pnc_automation.app.pnc.domain.policy_models import ResearchCategory
 from pnc_automation.app.pnc.domain.research import (
@@ -56,6 +57,15 @@ from pnc_automation.app.pnc.domain.research import (
     ResearchNodeFacts,
     ResearchNodeId,
     research_node_title,
+)
+from pnc_automation.app.pnc.domain.bag import BagTab
+from pnc_automation.app.pnc.domain.bag_items import (
+    BagChestPreviewFacts,
+    BagItemFacts,
+    TreasureIdentity,
+    TreasureKind,
+    bag_item_identity_key,
+    treasure_identity_title,
 )
 from pnc_automation.app.pnc.domain.trial_challenge import (
     TrialApplicableStatsDetail,
@@ -447,6 +457,99 @@ def trial_stats_detail_frame(
         image_size=(540, 960),
         captured_at=captured_at or datetime.now(UTC),
         trial_stats_detail=TrialApplicableStatsDetail(category=category),
+    )
+
+
+def bag_item_entry(
+    identity: TreasureIdentity = TreasureIdentity(TreasureKind.ARENA_SURPRISE_CHEST),
+    *,
+    status: RowRecognitionStatus = RowRecognitionStatus.COMPLETE,
+    title: str | None = None,
+) -> DetectedListEntry:
+    """Build one typed Treasure card row with measured magnifier geometry."""
+
+    action_bounds = Bounds(150, 290, 50, 45)
+    complete = status == RowRecognitionStatus.COMPLETE
+    return DetectedListEntry(
+        kind=ListEntryKind.BAG_ITEM,
+        bounds=Bounds(9, 286, 882, 202),
+        title_text=title if title is not None else treasure_identity_title(identity),
+        action_point=action_bounds.center() if complete else None,
+        action_bounds=action_bounds if complete else None,
+        metadata={"identity": bag_item_identity_key(identity)},
+        row_status=status,
+        bag_item_facts=BagItemFacts(
+            selected_tab=BagTab.TREASURE,
+            identity=identity,
+            owned_count=5,
+            inspection_glyph_present=True,
+        ),
+    )
+
+
+def bag_treasure_frame(
+    entries: tuple[DetectedListEntry, ...] = (),
+    *,
+    layout_id: str | None = "bag",
+    tab: BagTab | None = BagTab.TREASURE,
+    captured_at: datetime | None = None,
+    blocked: bool = False,
+) -> Observation:
+    """Build one Bag Treasure-tab frame with the reviewed bag layout id."""
+
+    return Observation(
+        decision=ScreenDecision(
+            base_screen=ScreenType.PNC_BAG,
+            effective_screen=ScreenType.PNC_BAG,
+            guard=GuardVerdict.BLOCKED if blocked else GuardVerdict.CLEAR,
+            layout_id=layout_id,
+            evidence=(
+                (ScreenEvidence(ScreenType.PNC_BAG, "visual_anchor:bag_treasure_tab", layout_id="bag"),)
+                if layout_id == "bag"
+                else ()
+            ),
+        ),
+        list_entries=entries,
+        active_bag_tab=tab,
+        image_size=(900, 1600),
+        captured_at=captured_at or datetime.now(UTC),
+        blocking_popup=blocked,
+    )
+
+
+def bag_preview_frame(
+    identity: TreasureIdentity = TreasureIdentity(TreasureKind.ARENA_SURPRISE_CHEST),
+    *,
+    layout_id: str = "bag_arena_chest_preview",
+    proved: bool = True,
+    captured_at: datetime | None = None,
+) -> Observation:
+    """Build one chest preview frame with independently read title identity."""
+
+    return Observation(
+        decision=ScreenDecision(
+            base_screen=ScreenType.PNC_BAG_CHEST_PREVIEW,
+            effective_screen=ScreenType.PNC_BAG_CHEST_PREVIEW,
+            guard=GuardVerdict.CLEAR,
+            layout_id=layout_id,
+            evidence=(
+                (
+                    ScreenEvidence(
+                        ScreenType.PNC_BAG_CHEST_PREVIEW,
+                        f"visual_anchor:{layout_id}",
+                        layout_id=layout_id,
+                    ),
+                )
+                if proved
+                else ()
+            ),
+        ),
+        image_size=(900, 1600),
+        captured_at=captured_at or datetime.now(UTC),
+        bag_preview=BagChestPreviewFacts(
+            source_identity=identity,
+            title_text=treasure_identity_title(identity) if identity is not None else None,
+        ),
     )
 
 
@@ -2749,6 +2852,200 @@ class TrialNavigationCoreTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "stale capture"):
             self.make_core(actuator).open_trial_stats(
                 TrialCategory.GEAR,
+                observe_content=lambda _: next(frames),
+            )
+        self.assertEqual(1, len(actuator.actions))
+
+
+class BagChestPreviewNavigationCoreTests(unittest.TestCase):
+    """Prove the read-only chest inspection route through typed content proof."""
+
+    def make_core(self, actuator=None):
+        return NavigationCore(
+            actuator or Actuator(),
+            lambda _: observation(ScreenType.PNC_HOME_CITY),
+            reviewed_navigation_edges(),
+            NavigationPolicy(max_observations=4),
+            sleep=lambda _: None,
+        )
+
+    def test_open_bag_chest_preview_taps_unique_row_once_for_matching_preview(self):
+        """One qualified magnifier tap followed by two stable matching preview frames."""
+
+        identity = TreasureIdentity(TreasureKind.ARENA_SURPRISE_CHEST)
+        now = datetime(2026, 9, 16, tzinfo=UTC)
+        frames = iter((
+            bag_treasure_frame((bag_item_entry(identity),), captured_at=now),
+            bag_preview_frame(identity, captured_at=now + timedelta(seconds=1)),
+            bag_preview_frame(identity, captured_at=now + timedelta(seconds=2)),
+        ))
+        actuator = Actuator()
+        result = self.make_core(actuator).open_bag_chest_preview(
+            identity,
+            observe_content=lambda _: next(frames),
+        )
+
+        self.assertIsNotNone(result.bag_preview)
+        self.assertEqual(identity, result.bag_preview.source_identity)
+        self.assertEqual(1, len(actuator.actions))
+        action = actuator.actions[0]
+        self.assertIsInstance(action, TapListEntryAction)
+        self.assertEqual(ListEntryKind.BAG_ITEM, action.entry_kind)
+        self.assertIsNone(action.title_text)
+        self.assertEqual("identity", action.metadata_key)
+        self.assertEqual("treasure:arena_surprise_chest", action.metadata_value)
+        self.assertTrue(action.use_action_point)
+
+    def test_open_bag_chest_preview_supports_common_identity(self):
+        """The typed identity resolves despite OCR omitting display-title spaces."""
+
+        identity = TreasureIdentity(TreasureKind.COMMON_FIRST_VICTORY_CHEST)
+        now = datetime(2026, 9, 16, tzinfo=UTC)
+        row = bag_item_entry(identity, title="Common1stVictoryChest")
+        frames = iter((
+            bag_treasure_frame((row,), captured_at=now),
+            bag_preview_frame(
+                identity, layout_id="bag_common_victory_preview",
+                captured_at=now + timedelta(seconds=1),
+            ),
+            bag_preview_frame(
+                identity, layout_id="bag_common_victory_preview",
+                captured_at=now + timedelta(seconds=2),
+            ),
+        ))
+        actuator = Actuator()
+        result = self.make_core(actuator).open_bag_chest_preview(
+            identity,
+            observe_content=lambda _: next(frames),
+        )
+
+        self.assertEqual(identity, result.bag_preview.source_identity)
+        action = actuator.actions[0]
+        self.assertTrue(list_entry_matches(
+            row, title_text=action.title_text, metadata_key=action.metadata_key,
+            metadata_value=action.metadata_value, selected=action.selected,
+        ))
+        self.assertEqual(1, len(actuator.actions))
+
+    def test_open_bag_chest_preview_rejects_unsupported_identities_without_any_tap(self):
+        """Only Arena and Common are qualified; other magnifiers send no action."""
+
+        for identity in (
+            TreasureIdentity(TreasureKind.RARE_FIRST_VICTORY_CHEST),
+            TreasureIdentity(TreasureKind.PINBALL),
+            TreasureIdentity(TreasureKind.STARNA_DICE),
+            TreasureIdentity(TreasureKind.DIAMOND_CHEST),
+            TreasureIdentity(TreasureKind.OATH_RUNE_CHEST, 23),
+            TreasureIdentity(TreasureKind.DEMON_CHEST, 21),
+        ):
+            with self.subTest(identity=identity):
+                actuator = Actuator()
+                with self.assertRaises(ValueError):
+                    self.make_core(actuator).open_bag_chest_preview(
+                        identity,
+                        observe_content=lambda _: bag_treasure_frame((bag_item_entry(),)),
+                    )
+                self.assertEqual(0, len(actuator.actions))
+
+    def test_open_bag_chest_preview_rejects_unqualified_sources_without_any_tap(self):
+        """Wrong tab/layout, missing, duplicated, or unreadable rows send no action."""
+
+        identity = TreasureIdentity(TreasureKind.ARENA_SURPRISE_CHEST)
+        cases = (
+            ("unproved_layout", bag_treasure_frame((bag_item_entry(identity),), layout_id=None)),
+            ("wrong_tab", bag_treasure_frame((bag_item_entry(identity),), tab=BagTab.SPEEDUP)),
+            ("missing_row", bag_treasure_frame(())),
+            (
+                "unknown_identity_row",
+                bag_treasure_frame((
+                    bag_item_entry(TreasureIdentity(TreasureKind.PINBALL)),
+                )),
+            ),
+            (
+                "ambiguous",
+                bag_treasure_frame((bag_item_entry(identity), bag_item_entry(identity))),
+            ),
+            (
+                "unreadable",
+                bag_treasure_frame((bag_item_entry(identity, status=RowRecognitionStatus.UNREADABLE),)),
+            ),
+            (
+                "no_action",
+                bag_treasure_frame((bag_item_entry(identity, status=RowRecognitionStatus.NO_ACTION),)),
+            ),
+            ("blocked", bag_treasure_frame((bag_item_entry(identity),), blocked=True)),
+            ("wrong_screen", observation(ScreenType.PNC_HOME_CITY)),
+        )
+        for name, source in cases:
+            with self.subTest(reason=name):
+                actuator = Actuator()
+                with self.assertRaises(RuntimeError):
+                    self.make_core(actuator).open_bag_chest_preview(
+                        identity,
+                        observe_content=lambda _: source,
+                    )
+                self.assertEqual(0, len(actuator.actions))
+
+    def test_open_bag_chest_preview_rejects_wrong_preview_without_replaying_tap(self):
+        """A preview whose title names another Treasure cannot prove completion."""
+
+        identity = TreasureIdentity(TreasureKind.ARENA_SURPRISE_CHEST)
+        wrong = TreasureIdentity(TreasureKind.COMMON_FIRST_VICTORY_CHEST)
+        now = datetime(2026, 9, 16, tzinfo=UTC)
+        frames = iter((
+            bag_treasure_frame((bag_item_entry(identity),), captured_at=now),
+            *(
+                bag_preview_frame(
+                    wrong, layout_id="bag_common_victory_preview",
+                    captured_at=now + timedelta(seconds=index),
+                )
+                for index in range(1, 5)
+            ),
+        ))
+        actuator = Actuator()
+        with self.assertRaisesRegex(RuntimeError, "unexpected screen"):
+            self.make_core(actuator).open_bag_chest_preview(
+                identity,
+                observe_content=lambda _: next(frames),
+            )
+        self.assertEqual(1, len(actuator.actions))
+
+    def test_open_bag_chest_preview_rejects_unreadable_preview_without_replaying_tap(self):
+        """A preview with an unparsed title never confirms the route."""
+
+        identity = TreasureIdentity(TreasureKind.ARENA_SURPRISE_CHEST)
+        now = datetime(2026, 9, 16, tzinfo=UTC)
+        frames = iter((
+            bag_treasure_frame((bag_item_entry(identity),), captured_at=now),
+            *(
+                bag_preview_frame(
+                    None,
+                    captured_at=now + timedelta(seconds=index),
+                )
+                for index in range(1, 5)
+            ),
+        ))
+        actuator = Actuator()
+        with self.assertRaisesRegex(RuntimeError, "unexpected screen"):
+            self.make_core(actuator).open_bag_chest_preview(
+                identity,
+                observe_content=lambda _: next(frames),
+            )
+        self.assertEqual(1, len(actuator.actions))
+
+    def test_open_bag_chest_preview_rejects_stale_preview_without_replaying_tap(self):
+        """A preview frame no newer than the source is a stale capture."""
+
+        identity = TreasureIdentity(TreasureKind.ARENA_SURPRISE_CHEST)
+        now = datetime(2026, 9, 16, tzinfo=UTC)
+        frames = iter((
+            bag_treasure_frame((bag_item_entry(identity),), captured_at=now),
+            bag_preview_frame(identity, captured_at=now),
+        ))
+        actuator = Actuator()
+        with self.assertRaisesRegex(RuntimeError, "stale capture"):
+            self.make_core(actuator).open_bag_chest_preview(
+                identity,
                 observe_content=lambda _: next(frames),
             )
         self.assertEqual(1, len(actuator.actions))

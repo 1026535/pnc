@@ -80,6 +80,7 @@ _SCREEN_FAMILIES = frozenset({
     ScreenType.PNC_BUILD_QUEUE,
     ScreenType.PNC_POPUP,
     ScreenType.PNC_BAG,
+    ScreenType.PNC_BAG_CHEST_PREVIEW,
     ScreenType.PNC_QUEST_MAIN,
     ScreenType.PNC_QUEST_DAILY,
     ScreenType.PNC_ALLIANCE_JOIN,
